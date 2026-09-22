@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import net from "node:net";
-import { connectIpcClient } from "../src/client";
+import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcProtocolError } from "../src/errors";
 import { deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
@@ -58,15 +58,18 @@ describe("IPC client transport edges", () => {
   });
 
   test("an error after connect marks the client disconnected", async () => {
+    const entered = deferred();
     let connectedSocket!: net.Socket;
     const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (
       this: net.Socket,
     ) {
       connectedSocket = this;
+      entered.resolve();
       return this;
     });
     try {
       const connecting = connectIpcClient("ignored");
+      await within(entered.promise, "connect listener registration");
       connectedSocket.emit("connect");
       const client = await connecting;
       clients.push(client);

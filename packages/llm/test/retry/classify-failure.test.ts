@@ -1,14 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { APIError } from "../../src/error";
-import { Run } from "../../src/run";
+import { APIError, coerceApiError } from "../../src/error";
+import { type Run, LlmRunFailure } from "../helpers/native";
 import { Retry } from "../../src/retry";
 
 import { sdkError } from "../helpers/retry";
 
 function runFailure(cause: Error): Run.Failure {
-  return new Run.FailureError(
+  const api = coerceApiError(cause);
+  return new LlmRunFailure(
     {
-      message: "the model call failed",
+      message: api?.message ?? "the model call failed",
+      statusCode: api?.statusCode,
+      isRetryable: api?.isRetryable,
+      responseHeaders: api?.responseHeaders,
+      responseBody: api?.responseBody,
+      cause: String(cause),
       usage: {
         inputTokens: 0,
         outputTokens: 0,
@@ -18,8 +24,8 @@ function runFailure(cause: Error): Run.Failure {
       },
       aborted: false,
       contextOverflow: false,
+      visibleOutput: false,
     },
-    { cause },
   );
 }
 

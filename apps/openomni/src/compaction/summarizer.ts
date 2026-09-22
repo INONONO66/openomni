@@ -1,15 +1,16 @@
-import type { CompactionOptions } from "@openomni/agent";
-import { Run, type RunInput } from "@openomni/llm";
+import { ForeignFailure, type CompactionOptions } from "@openomni/agent";
+import type { RunInput } from "@openomni/llm";
+import { Effect, Either } from "effect";
 import type { Message, PlainObject } from "@openomni/protocol";
-import { runResolvedText, type LlmIo } from "../tools/completion";
+import { runResolvedText, type LlmIo } from "../composition/completion";
 
 export type SummarizerErrorKind = "empty" | "overflow";
 
-export class SummarizerError extends Error {
+export class SummarizerError extends ForeignFailure {
   readonly kind: SummarizerErrorKind;
 
   constructor(kind: SummarizerErrorKind, message: string) {
-    super(message);
+    super({ operation: `compaction.${kind}`, cause: message });
     this.name = "SummarizerError";
     this.kind = kind;
   }
@@ -56,18 +57,21 @@ function messageWithText(input: Message.WithParts[], text: string): Message.With
   ];
 }
 
+function nonemptySummary(answer: string) {
+  return answer.trim().length === 0
+    ? Effect.fail(new SummarizerError("empty", "compaction summarizer returned empty text"))
+    : Effect.succeed(answer);
+}
+
 export function createCompactionSummarizer(
   config: SummarizerConfig,
 ): NonNullable<CompactionOptions["onSummarize"]> {
-  return async (messages, previousAnchor, budget, signal) => {
+  return (messages, previousAnchor, budget, signal) => Effect.gen(function* () {
     const anchor = previousAnchor ?? "(none)";
     const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
     let working = messages;
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= 2; attempt += 1) {
-      try {
-        const answer = await runResolvedText(
+    for (let attempt = 0; ; attempt += 1) {
+      const answer = yield* Effect.either(runResolvedText(
           {
             model: config.model,
             messages: messageWithText(working, prompt),
@@ -81,27 +85,13 @@ export function createCompactionSummarizer(
             providerOptions: reasoningOptions(config.model.provider),
           },
           config.io,
-        );
-        if (answer.trim().length === 0) {
-          throw new SummarizerError("empty", "compaction summarizer returned empty text");
-        }
-        return answer;
-      } catch (error) {
-        lastError = error;
-        const contextOverflow = Run.FailureError.isInstance(error) && error.data.contextOverflow;
-        if (contextOverflow && attempt < 2) {
-          working = working.slice(1);
-          continue;
-        }
-        if (contextOverflow) {
-          throw new SummarizerError("overflow", "compaction summarizer context overflow");
-        }
-        throw error;
-      }
+        ));
+      if (Either.isRight(answer)) return yield* nonemptySummary(answer.right);
+      const error = answer.left;
+      if (error._tag !== "LlmRunFailure" || !error.contextOverflow) return yield* Effect.fail(error);
+      if (attempt >= 2)
+        return yield* new SummarizerError("overflow", "compaction summarizer context overflow");
+      working = working.slice(1);
     }
-    throw new SummarizerError(
-      "overflow",
-      `compaction summarizer context overflow: ${String(lastError)}`,
-    );
-  };
+  });
 }

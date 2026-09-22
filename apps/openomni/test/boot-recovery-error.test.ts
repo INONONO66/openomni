@@ -2,34 +2,39 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { Cause, Effect, Exit, Option } from "effect";
+import { gatewayRuntime } from "../src/gateway";
+import { AppLifecycleFailure } from "../src/runtime";
 import { startOpenOmni } from "../src/index";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { approvalRequest } from "./helpers/approval-request";
 import { bounded } from "./helpers/protected-dispatch";
-import { rejected } from "./helpers/rejected";
 
 test("a pending Owner request keeps the server available while failed recovery is reported", async () => {
   const directory = mkdtempSync(join(tmpdir(), "recovery-failure-"));
   const dbPath = join(directory, "storage.sqlite");
-  const reported = Promise.withResolvers<unknown>();
-  const log = spyOn(console, "error").mockImplementation((_message, error) =>
+  const reported = Promise.withResolvers<Error>();
+  const log = spyOn(console, "error").mockImplementation((_message: string, error: Error) =>
     reported.resolve(error),
   );
   let app: Awaited<ReturnType<typeof startOpenOmni>> | undefined;
   try {
-    initialize({ dbPath });
+    const seed = gatewayRuntime({ dbPath });
+    await seed.runPromise(Effect.void);
     seedKernelPolicyRows();
-    SessionHandleStore.materialize({
-      id: "session",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-      actionId: "configure",
-      at: 1,
-    });
+    await seed.runPromise(
+      SessionHandleStore.materialize({
+        id: "session",
+        parentId: null,
+        role: "resident",
+        tools: [],
+        system: { preset: "", blocks: [] },
+        policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+        actionId: "configure",
+        at: 1,
+      }),
+    );
     const actions = Storage.get().actions;
     if (actions === undefined) throw new Error("action storage missing");
     expect(
@@ -65,7 +70,7 @@ test("a pending Owner request keeps the server available while failed recovery i
         2,
       ),
     ).toBeDefined();
-    Storage.reset();
+    await seed.dispose();
     app = await startOpenOmni({
       sessionRuntime: { clock: () => 100 },
       config: {
@@ -78,14 +83,20 @@ test("a pending Owner request keeps the server available while failed recovery i
     const failure = await bounded(reported.promise);
     expect(failure).toBeInstanceOf(Error);
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
-    const shutdown = await rejected(app.stop());
+    const shutdown = await app.runtime.runPromise(Effect.exit(app.runtime.disposeEffect));
+    await app.stop();
     app = undefined;
-    expect(shutdown).toBeInstanceOf(AggregateError);
-    if (!(shutdown instanceof AggregateError)) throw new Error("expected recovery aggregate");
-    const recovery = shutdown.errors[0];
-    expect(recovery).toBeInstanceOf(AggregateError);
-    if (!(recovery instanceof AggregateError)) throw new Error("expected session aggregate");
-    expect(recovery.errors).toContain(failure);
+    expect(Exit.isFailure(shutdown)).toBe(true);
+    if (Exit.isFailure(shutdown)) {
+      expect(Array.from(Cause.defects(shutdown.cause))).toEqual([
+        [
+          Option.none(),
+          Option.some(
+            new AppLifecycleFailure({ operation: "sessions.recovery", cause: String(failure) }),
+          ),
+        ],
+      ]);
+    }
   } finally {
     log.mockRestore();
     if (app !== undefined) await app.stop();

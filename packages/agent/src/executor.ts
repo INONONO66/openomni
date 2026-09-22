@@ -1,745 +1,450 @@
-import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
-import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
-import { findSessionRequest } from "./session-request";
+import { SessionHandleStore } from "@openomni/ledger";
+import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
-
-import { runWaveBodies, waveBodyScope, type WaveControl } from "./core/execution/tool-wave";
-
-const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
+import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
+import { findSessionRequest } from "./session-request";
+import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
-
-class UnregisteredExecutionKindError extends Error {
-  readonly code = "unregistered_execution_kind";
-
-  constructor(readonly kind: string) {
-    super(`unregistered execution kind: ${kind}`);
-    this.name = "UnregisteredExecutionKindError";
-  }
-}
-
-import type {
-  DurableExecutor,
-  ExecutionApprovalRequest,
-  ExecutionBatchItem,
-  ExecutionBatchResult,
-  ExecutionRequest,
-  ExecutionResult,
-  ExecutorOptions,
-  RecoverySite,
-} from "./executor-contract";
 import { createExecutionApprovals } from "./executor-approval";
 import { createExecutionRecovery, recoveryClassification } from "./executor-recovery";
-import { ExecutionApprovalError } from "./executor-contract";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
-export { ExecutionApprovalError } from "./executor-contract";
+import { type CommitFailed, ExecutionApprovalError, ForeignFailure, Interrupted, OutcomeUnknown, type ExecutionError } from "./errors";
+import { causeEvidence } from "./executor-outcome";
+import { createRawSlots, RawToolSlots } from "./executor-raw";
+import { GenerationRawSlots } from "./session-generations";
+import type {
+  DurableExecutor, ExecutionBatchItem, ExecutionRequest,
+  ExecutionResult, ExecutorOptions,
+} from "./executor-contract";
+export { ExecutionApprovalError } from "./errors";
 export type {
-  DurableExecutor,
-  ExecutionLedger,
-  Executor,
-  ExecutionRequest,
-  ExecutionApprovals,
-  ExecutionApprovalRequest,
-  ExecutionBatchResult,
-  ExecutionResult,
-  ExecutorOptions,
+  DurableExecutor, ExecutionLedger, Executor, ExecutionRequest, ExecutionApprovals,
+  ExecutionApprovalRequest, ExecutionBatchResult, ExecutionResult, ExecutorOptions,
 } from "./executor-contract";
 
-type WaveOutcome = Awaited<ReturnType<typeof runWaveBodies>>[number];
-type SettledOutcome = Exclude<WaveOutcome, { readonly status: "cancelled" }>;
-type ApprovalDecision = Awaited<
-  ReturnType<ReturnType<typeof createExecutionApprovals>["awaitApproval"]>
->;
-type PostOutcome = Exclude<ExecutionResult, { readonly terminal: "blocked_pre" }>;
-const RESULT_ECHO_KINDS = new Set<string>(["compaction", "tool", "message"]);
-
-function ambientSignal(): AbortSignal {
-  const scope = waveBodyScope.getStore();
-  return scope === undefined ? new AbortController().signal : scope.signal;
-}
-
-function policyPoint(
-  request: ExecutionRequest,
-  phase: "pre" | "post",
-): { readonly kind: string; readonly phase: "pre" | "post"; readonly op: string } {
-  // Compaction is the existing turn.post/compaction policy operation, even
-  // though its durable evidence has the dedicated compaction kind; its typed
-  // compensation keeps its own op there so a policy can pin a projection.
-  if (request.kind !== "compaction") return { kind: request.kind, phase, op: request.op };
-  return { kind: "turn", phase: "post", op: request.op === "compact" ? "compaction" : request.op };
-}
-
-function messageContext(request: ExecutionRequest): Pick<PolicyEvaluationInput, "message"> {
-  return request.message === undefined ? {} : { message: request.message };
-}
-
-function observedCallId(request: ExecutionRequest): string | null {
-  return request.toolObservation?.callId ?? null;
-}
-
-function deniedReason(decision: PolicyEvaluation): string {
-  return decision.reason ?? "denied";
-}
-
-function approvalRequired(stage: BatchStage): boolean {
-  return stage.pre.verdict === "require_approval" || stage.request.approval?.required === true;
-}
-
-function guardsWave(stage: BatchStage): boolean {
-  return approvalRequired(stage) || stage.request.originalAction !== undefined;
-}
-
-function assertFreshRevisions(
-  request: ExecutionRequest,
-  captured: SessionTransition.Request | undefined,
-): void {
-  if (
-    captured !== undefined &&
-    request.domainRevisions !== undefined &&
-    canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions)
-  )
-    throw new Error("stale_domain_revision");
-}
-
-function refusalOrRethrow(error: Error): "refuse" {
-  if (error instanceof ExecutionApprovalError) return "refuse";
-  throw error;
-}
-
-function positional<T>(values: readonly T[], index: number): T {
-  const value = values[index];
-  if (value === undefined) throw new Error("wave lost positional result");
-  return value;
-}
-
-function singleResult(results: readonly ExecutionBatchResult[]): ExecutionResult {
-  const result = results[0];
-  if (result === undefined) throw new Error("single execution lost its result");
-  if (result.terminal === "failed") throw result.error;
-  if (result.terminal === "cancelled") throw new DOMException("execution cancelled", "AbortError");
-  return result;
-}
-
-interface BatchStage {
-  readonly item: ExecutionBatchItem;
+const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
+type Decision = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
+type Restore = Parameters<Parameters<typeof Effect.uninterruptibleMask>[0]>[0];
+type Stage<R> = {
+  readonly item: ExecutionBatchItem<R>;
   readonly request: ExecutionRequest;
   readonly kind: LedgerAction.Kind;
-  readonly pre: PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
+  readonly pre: Decision;
+  readonly intent: LedgerAction.Receipt | undefined;
+};
+type BodyExit = {
+  readonly exit: Exit.Exit<PlainValue, ExecutionError>;
+  readonly startedAt: number | undefined;
+  readonly rawPending: boolean;
+};
+
+function combinedSignal(controller: AbortSignal, control: AbortSignal, caller: AbortSignal | undefined): AbortSignal {
+  return AbortSignal.any(caller === undefined ? [controller, control] : [controller, control, caller]);
 }
-type AdmittedStage = BatchStage & { readonly intent: LedgerAction.Receipt | undefined };
+
+function outcomeFields(outcome: ExecutionResult): PlainObject {
+  if (outcome.terminal === "executed") return { result: outcome.value, resultHash: canonicalDigest(outcome.value) };
+  return outcome.terminal === "blocked_post" ? { reason: outcome.reason, disposition: outcome.disposition } : { reason: outcome.reason };
+}
+function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionError): ExecutionResult {
+  if (Cause.isInterrupted(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
+  return failure._tag === "OutcomeUnknown"
+    ? { terminal: "outcome_unknown", reason: failure.reason }
+    : { terminal: "executed", value: null, failure };
+}
 
 export function createExecutor(options: ExecutorOptions): DurableExecutor {
-  const {
-    commit,
-    appendFailure,
-    appendIntent,
-    appendResult,
-    publishToolStarted,
-    publishToolTerminal,
-  } = createExecutionRecord(options);
+  const record = createExecutionRecord(options);
   const { approvals, awaitApproval } = createExecutionApprovals(options);
-  const recovery = createExecutionRecovery(options, { appendResult });
-  const kinds = new Set([
-    ...CORE_KINDS,
-    ...(options.extensionKinds ?? []).map((registration) => registration.kind),
-  ]);
+  const recovery = createExecutionRecovery(options, record);
+  const kinds = new Set([...CORE_KINDS, ...(options.extensionKinds ?? []).map((item) => item.kind)]);
+  const turnId = options.identity.turnId ?? options.identity.parentActionId;
 
-  function turnId(): string | null {
-    return options.identity.turnId ?? options.identity.parentActionId;
-  }
-
-  function approvalIdentity(): Pick<
-    ExecutionApprovalRequest,
-    "sessionId" | "turnId" | "toolsHash" | "toolsGeneration"
-  > {
-    const { sessionId, toolsHash, toolsGeneration } = options.identity;
-    return {
-      sessionId,
-      turnId: turnId(),
-      ...(toolsHash === undefined ? {} : { toolsHash }),
-      ...(toolsGeneration === undefined ? {} : { toolsGeneration }),
-    };
-  }
-
-  async function decide(
-    request: ExecutionRequest,
-    phase: "pre" | "post",
-    value: PlainValue,
-    parentId = options.identity.parentActionId,
-  ): Promise<PolicyEvaluation & { readonly receipt: LedgerAction.Receipt }> {
-    const point = policyPoint(request, phase);
-    const input: PolicyEvaluationInput = {
-      ...point,
-      role: options.identity.role,
-      sessionId: options.identity.sessionId,
-      ...messageContext(request),
-      value,
-    };
-    const decision = options.policy.evaluate(input);
-    const receipt = await commit({
-      id: options.entropy(),
-      parentId,
-      sessionId: options.identity.sessionId,
-      kind: "policy.decision",
-      intent: {
-        encodingVersion: 1,
-        value: {
-          hook: `${point.kind}.${point.phase}`,
-          op: request.op,
-          generation: decision.generation,
-          matchedRuleIds: [...decision.matchedRuleIds],
-          verdict: decision.verdict,
-          inputHash: decision.inputHash,
-        },
-      },
-      effect: {
-        encodingVersion: 1,
-        value: {
-          phase: "result",
-          reason: decision.reason ?? null,
-        },
-      },
-      ts: options.clock(),
-      irreversible: true,
+  function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
+    parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
+    return Effect.suspend(() => {
+      const point = policyPoint(request, phase);
+      const decision = options.policy.evaluate({
+        ...point, role: options.identity.role, sessionId: options.identity.sessionId,
+        ...(request.message === undefined ? {} : { message: request.message }), value,
+      });
+      return record.commit({
+        id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
+        intent: { encodingVersion: 1, value: {
+          hook: `${point.kind}.${point.phase}`, op: request.op, generation: decision.generation,
+          matchedRuleIds: [...decision.matchedRuleIds], verdict: decision.verdict, inputHash: decision.inputHash,
+        } },
+        effect: { encodingVersion: 1, value: {
+          phase: "result", reason: decision.reason ?? null,
+          ...(decision.verdict === "deny" ? {
+            terminal: phase === "pre" ? "blocked_pre" : "blocked_post",
+            evidence: { failures: [{ tag: "PolicyDenied", phase, ruleIds: [...decision.matchedRuleIds] }], defects: [], interrupted: false },
+          } : {}),
+        } },
+        ts: options.clock(), irreversible: true,
+      }).pipe(Effect.map((receipt) => ({ ...decision, receipt })));
     });
-    return { ...decision, receipt };
   }
 
-  async function run<T extends PlainValue>(
-    request: ExecutionRequest,
-    body: (intent: LedgerAction.Receipt) => Promise<T>,
-  ): Promise<ExecutionResult> {
-    return singleResult(await runBatch([{ request, body }], { signal: ambientSignal() }));
-  }
-
-  function retainFor(inherited: WaveControl | undefined, control: WaveControl) {
-    // A captured executor keeps its turn's owner outside the ambient scope.
-    return options.retainEffect ?? inherited?.retain ?? control.retain;
-  }
-
-  async function runBatch(
-    items: readonly ExecutionBatchItem[],
-    control: WaveControl,
-  ): Promise<readonly ExecutionBatchResult[]> {
-    const controller = new AbortController();
-    const inherited = waveBodyScope.getStore();
-    const signal = AbortSignal.any([
-      control.signal,
-      controller.signal,
-      ...(options.signal === undefined ? [] : [options.signal]),
-      ...(inherited === undefined ? [] : [inherited.signal]),
-    ]);
-    try {
-      return await executeBatch(items, { signal, retain: retainFor(inherited, control) });
-    } finally {
-      controller.abort();
-    }
-  }
-
-  function stageCallId(stage: BatchStage): string {
-    return stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id;
-  }
-
-  function invocationFor(stage: BatchStage, waveId: string) {
+  function invocationFor<R>(stage: Omit<Stage<R>, "intent">, waveId: string) {
     return {
-      effectHash: canonicalDigest(stage.request.effect),
-      effect: stage.request.effect,
-      callId: stageCallId(stage),
-      turnId: turnId(),
-      waveId,
-      sequential: stage.item.sequential ?? false,
-      approvalRequired: approvalRequired(stage),
-      domainRevisions: { ...stage.request.approval?.domainRevisions },
-      recovery: recoveryClassification(stage.request),
+      effectHash: canonicalDigest(stage.request.effect), effect: stage.request.effect,
+      callId: stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id,
+      turnId, waveId,
+      sequential: stage.item.sequential ?? false, approvalRequired: needsApproval(stage),
+      domainRevisions: { ...stage.request.approval?.domainRevisions }, recovery: recoveryClassification(stage.request),
+      toolsGeneration: options.identity.toolsGeneration ?? null,
+      systemHash: options.identity.systemHash ?? null,
     };
   }
 
-  async function admitStage(stage: BatchStage, waveId: string): Promise<AdmittedStage> {
-    if (stage.pre.verdict === "deny") return { ...stage, intent: undefined };
-    const original = stage.request.originalAction;
-    if (original !== undefined)
-      return { ...stage, intent: { action: original, revision: original.ordinal } };
-    const intent = await appendIntent({
-      parentId: options.identity.parentActionId,
-      kind: stage.kind,
-      op: stage.request.op,
-      value: stage.pre.value,
-      invocation: invocationFor(stage, waveId),
+  function stageAll<R>(items: readonly ExecutionBatchItem<R>[]): Effect.Effect<Stage<R>[], ExecutionError> {
+    const [item] = items;
+    if (items.length === 1 && item !== undefined) {
+      return Effect.suspend<Stage<R>[], ExecutionError, never>(() => {
+        const request = { ...item.request, intent: structuredClone(item.request.intent) };
+        if (!kinds.has(request.kind))
+          return Effect.fail(new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
+        const kind = request.kind as LedgerAction.Kind;
+        return decide(request, "pre", request.intent).pipe(Effect.flatMap((pre) => {
+          const stage = { item, request, kind, pre };
+          const original = request.originalAction;
+          const intent: Effect.Effect<LedgerAction.Receipt | undefined, ExecutionError> = pre.verdict === "deny" ? Effect.succeed(undefined)
+            : original !== undefined ? Effect.succeed({ action: original, revision: original.ordinal })
+            : record.appendIntent({
+              parentId: options.identity.parentActionId, kind, op: request.op, value: pre.value,
+              invocation: invocationFor(stage, pre.receipt.action.id),
+            });
+          return intent.pipe(Effect.map((receipt) => [{ ...stage, intent: receipt }]));
+        }));
+      });
+    }
+    return Effect.gen(function* () {
+      const staged: Omit<Stage<R>, "intent">[] = [];
+      for (const item of items) {
+        const request = { ...item.request, intent: structuredClone(item.request.intent) };
+        if (!kinds.has(request.kind))
+          return yield* new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` });
+        const kind = request.kind as LedgerAction.Kind;
+        const pre = yield* decide(request, "pre", request.intent);
+        staged.push({ item, request, kind, pre });
+      }
+      const admitted: Stage<R>[] = [];
+      for (const stage of staged) {
+        const original = stage.request.originalAction;
+        const intent = stage.pre.verdict === "deny" ? undefined
+          : original !== undefined ? { action: original, revision: original.ordinal }
+          : yield* record.appendIntent({
+          parentId: options.identity.parentActionId, kind: stage.kind, op: stage.request.op, value: stage.pre.value,
+          invocation: invocationFor(stage, staged[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id),
+        });
+        admitted.push({ ...stage, intent });
+      }
+      return admitted;
     });
-    return { ...stage, intent };
   }
 
-  async function stageAll(items: readonly ExecutionBatchItem[]): Promise<BatchStage[]> {
-    // Salvaged staged-pre algorithm: every decision precedes every intent/body.
-    const stages: BatchStage[] = [];
-    for (const item of items) {
-      const request = { ...item.request, intent: clonePlainValue(item.request.intent) };
-      const kind = registeredKind(request);
-      const pre = await decide(request, "pre", request.intent);
-      stages.push({ item, request, kind, pre });
-    }
-    return stages;
-  }
-
-  async function admitAll(stages: readonly BatchStage[]): Promise<AdmittedStage[]> {
-    const admitted: AdmittedStage[] = [];
-    for (const stage of stages) {
-      admitted.push(await admitStage(stage, (stages[0] ?? stage).pre.receipt.action.id));
-    }
-    return admitted;
-  }
-
-  function needsApproval(stage: AdmittedStage, intent: LedgerAction.Receipt): boolean {
-    return approvalRequired(stage) || originalRequest(intent.action.id) !== undefined;
-  }
-
-  function approvalRequestFor(
-    stage: AdmittedStage,
-    intent: LedgerAction.Receipt,
-  ): Omit<ExecutionApprovalRequest, "durable"> {
-    return {
-      id: intent.action.id,
-      ...approvalIdentity(),
+  function approval<R>(stage: Stage<R>, signal: AbortSignal) {
+    const intent = stage.intent;
+    const original = intent === undefined ? undefined : findSessionRequest(options.ledger.actions?.() ?? [], intent.action.id);
+    if (intent === undefined || (!needsApproval(stage) && original === undefined))
+      return Effect.succeed("approve" as const);
+    return awaitApproval({
+      id: intent.action.id, sessionId: options.identity.sessionId, turnId,
+      toolsHash: options.identity.toolsHash, toolsGeneration: options.identity.toolsGeneration,
       callId: stage.request.toolObservation?.callId ?? intent.action.id,
-      inputHash: canonicalDigest(stage.request.intent),
-      generation: stage.pre.generation,
-      revision: stage.pre.receipt.revision,
-      policyDecisionId: stage.pre.receipt.action.id,
-      intent: stage.request.intent,
-    };
-  }
-
-  function approvalBindingFor(stage: AdmittedStage, intent: LedgerAction.Receipt) {
-    return {
-      effect: stage.request.effect,
-      domainRevisions: stage.request.approval?.domainRevisions,
-      revisions: stage.request.domainRevisions,
-      timeoutMs: stage.request.approval?.timeoutMs,
-      original: originalRequest(intent.action.id),
-    };
-  }
-
-  async function decideApproval(
-    stage: AdmittedStage,
-    signal: AbortSignal,
-  ): Promise<ApprovalDecision> {
-    const intent = stage.intent;
-    if (intent === undefined || !needsApproval(stage, intent)) return "approve";
-    return awaitApproval(
-      approvalRequestFor(stage, intent),
-      signal,
-      approvalBindingFor(stage, intent),
-    ).catch(refusalOrRethrow);
-  }
-
-  async function recordApplication(
-    stage: AdmittedStage,
-    intent: LedgerAction.Receipt,
-    guardedWave: boolean,
-  ): Promise<void> {
-    const applicationId = `${intent.action.id}:application`;
-    if (options.ledger.actions?.().some((action) => action.id === applicationId))
-      throw new Error("outcome_unknown");
-    if (!guardedWave) return;
-    await commit({
-      id: applicationId,
-      parentId: intent.action.id,
-      sessionId: options.identity.sessionId,
-      kind: stage.kind,
-      intent: { encodingVersion: 1, value: { phase: "application", op: stage.request.op } },
-      effect: {
-        encodingVersion: 1,
-        value: { phase: "application", inputHash: canonicalDigest(stage.request.intent) },
-      },
-      ts: options.clock(),
-      irreversible: true,
+      inputHash: canonicalDigest(stage.request.intent), generation: stage.pre.generation,
+      revision: stage.pre.receipt.revision, policyDecisionId: stage.pre.receipt.action.id, intent: stage.request.intent,
+    }, signal, {
+      effect: stage.request.effect, domainRevisions: stage.request.approval?.domainRevisions,
+      revisions: stage.request.domainRevisions, timeoutMs: stage.request.approval?.timeoutMs, original,
     });
   }
 
-  function assertApprovalLive(captured: SessionTransition.Request | undefined): void {
-    if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
-      throw new ExecutionApprovalError("stale_approval");
+  function admittedBody<R>(stage: Stage<R>, guarded: boolean, started: () => void) {
+    return Effect.suspend<PlainValue, ExecutionError, R>(() => {
+      const intent = stage.intent;
+      if (intent === undefined) return Effect.die("missing admitted intent");
+      const captured = findSessionRequest(options.ledger.actions?.() ?? [], intent.action.id);
+      assertFresh(stage.request, captured);
+      const enter = (): Effect.Effect<PlainValue, ExecutionError, R> => {
+        assertFresh(stage.request, captured);
+        if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
+          return Effect.fail(new ExecutionApprovalError({ code: "stale_approval" }));
+        started();
+        return stage.item.body(intent);
+      };
+      if (!guarded) return enter();
+      const id = `${intent.action.id}:application`;
+      if (options.ledger.actions?.().some((action) => action.id === id))
+        return Effect.fail(new OutcomeUnknown({ reason: "application_already_entered" }));
+      return record.commit({
+        id, parentId: intent.action.id, sessionId: options.identity.sessionId, kind: stage.kind,
+        intent: { encodingVersion: 1, value: { phase: "application", op: stage.request.op } },
+        effect: { encodingVersion: 1, value: { phase: "application", inputHash: canonicalDigest(stage.request.intent) } },
+        ts: options.clock(), irreversible: true,
+      }).pipe(Effect.flatMap(enter));
+    });
   }
 
-  async function runStageBody(
-    stage: AdmittedStage,
-    decision: ApprovalDecision,
-    guardedWave: boolean,
-    onStart: (startedAt: number | undefined) => void,
-  ): Promise<PlainValue> {
-    const intent = stage.intent;
-    if (intent === undefined || stage.pre.verdict === "deny" || decision !== "approve") return null;
-    const captured = originalRequest(intent.action.id);
-    assertFreshRevisions(stage.request, captured);
-    if (guardedWave) await recordApplication(stage, intent, guardedWave);
-    assertFreshRevisions(stage.request, captured);
-    assertApprovalLive(captured);
-    onStart(publishToolStarted(stage.request));
-    return stage.item.body(intent);
-  }
-
-  async function executeBatch(
-    items: readonly ExecutionBatchItem[],
-    control: WaveControl,
-  ): Promise<readonly ExecutionBatchResult[]> {
-    waveBodyScope.getStore()?.signal.throwIfAborted();
-    const stages = await stageAll(items);
-    const admitted = await admitAll(stages);
-    const guardedWave = stages.some(guardsWave);
-    const decisions = await Promise.all(
-      admitted.map((stage) => decideApproval(stage, control.signal)),
-    );
-    const started = new Map<number, number | undefined>();
-    const outcomes = await runWaveBodies(
-      admitted.map((stage, index) => ({
-        ...(stage.item.sequential ? { sequential: true as const } : {}),
-        run: () =>
-          runStageBody(stage, positional(decisions, index), guardedWave, (startedAt) => {
-            started.set(index, startedAt);
+  function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean, settled: (body: BodyExit) => void) {
+    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
+      Effect.suspend(() => {
+        const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
+        const slots = createRawSlots((settlement) => {
+          if (Option.isSome(generation)) {
+            const release = generation.value.open();
+            void settlement.then(release);
+          }
+          options.retainEffect?.(settlement);
+        });
+        let startedAt: number | undefined;
+        const body = admittedBody(stage, guarded, () => { startedAt = record.publishToolStarted(stage.request); });
+        const owned = Effect.scopedWith((scope) => Effect.provide(
+          body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
+        ));
+        const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        const exitEffect = Effect.exit(Effect.interruptible(owned)).pipe(
+          Effect.flatMap((exit) => {
+            signal.removeEventListener("abort", abort);
+            if (slots.pending() === 0) return Effect.succeed(exit);
+            const grace = Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
+              Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
+            ));
+            return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
           }),
-      })),
-      control,
+        );
+        if (options.retainEffect === undefined)
+          return exitEffect.pipe(Effect.flatMap((exit) => Effect.sync(() => {
+            settled({ exit, startedAt, rawPending: slots.pending() > 0 });
+          })));
+        let completed: BodyExit | undefined;
+        const settle = (body: BodyExit) => {
+          if (completed !== undefined) return;
+          completed = body;
+          settled(body);
+        };
+        return exitEffect.pipe(
+          Effect.flatMap((exit) => Effect.sync(() => {
+            settle({ exit, startedAt, rawPending: slots.pending() > 0 });
+          })),
+          Effect.ensuring(Effect.sync(() => {
+            if (completed === undefined)
+              settle({ exit: Exit.fail(new Interrupted()), startedAt, rawPending: slots.pending() > 0 });
+          })),
+        );
+      }),
+    ));
+  }
+
+  function appendOutcome<R>(stage: Stage<R>, outcome: ExecutionResult, evidence: PlainObject = {}, project = true) {
+    return Effect.suspend(() => {
+      if (stage.intent !== undefined) {
+        return record.appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
+          phase: "result", terminal: outcome.terminal, effect: stage.request.effect,
+          ...evidence,
+          ...outcomeFields(outcome),
+          ...(stage.request.toolObservation === undefined ? {} : { callId: stage.request.toolObservation.callId }),
+          ...(!project || stage.request.toolResult === undefined ? {} : { toolResult: stage.request.toolResult(outcome) }),
+        }, outcome.terminal === "executed" && outcome.failure === undefined ? stage.request.revertData?.() : undefined).pipe(Effect.as(outcome));
+      }
+      return Effect.succeed(outcome);
+    });
+  }
+
+  function finishBody<R>(stage: Stage<R>, body: BodyExit): Effect.Effect<ExecutionResult, ExecutionError> {
+    return Effect.suspend(() => {
+      const { exit } = body;
+      if (body.rawPending) {
+        return appendOutcome(stage, { terminal: "outcome_unknown", reason: "raw_body_unsettled_after_grace" }, {
+          evidence: Exit.isFailure(exit) ? causeEvidence(exit.cause) : { failures: [], defects: [], interrupted: false },
+        });
+      }
+      if (Exit.isFailure(exit)) {
+        const commitFailure = Chunk.toReadonlyArray(Cause.failures(exit.cause)).find((error) => error._tag === "CommitFailed");
+        if (commitFailure !== undefined) return Effect.fail(commitFailure);
+        const failure = Option.getOrElse(Cause.failureOption(exit.cause), () =>
+          new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
+        return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
+      }
+      return complete(stage, exit.value).pipe(
+        Effect.catchAllCause((cause) => completionFailure(stage, exit.value, cause)),
+      );
+    }).pipe(Effect.map((outcome) => {
+      record.publishToolTerminal(stage.request, body.startedAt, terminalStatus(outcome));
+      return outcome;
+    }));
+  }
+
+  function completionFailure<R>(stage: Stage<R>, value: PlainValue, cause: Cause.Cause<ExecutionError>) {
+    const failures = Chunk.toReadonlyArray(Cause.failures(cause));
+    if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
+    const terminalExists = options.ledger.actions?.().some((action) =>
+      action.parentId === stage.intent?.action.id && object(action.effect.value).phase === "result");
+    if (terminalExists) return Effect.failCause(cause);
+    const failure = Option.getOrElse(Cause.failureOption(cause), () =>
+      new ForeignFailure({ operation: `${stage.request.op}.completion`, cause: Cause.pretty(cause) }));
+    return appendOutcome(stage, { terminal: "executed", value, failure }, {
+      disposition: "irreversible", evidence: causeEvidence(cause),
+    }, false);
+  }
+
+  function complete<R>(stage: Stage<R>, raw: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
+    return Effect.gen(function* () {
+      const value = clonePlainValue(raw);
+      const post = yield* decide(stage.request, "post", { intent: stage.request.intent, effect: stage.request.effect, result: value });
+      const outcome = yield* settlePost(stage.request, post, value);
+      if (stage.request.boundary === true && outcome.terminal === "executed" && stage.intent !== undefined) {
+        yield* record.commit({
+          id: `${stage.intent.action.id}:boundary`, parentId: stage.intent.action.id,
+          sessionId: options.identity.sessionId, kind: stage.kind,
+          intent: { encodingVersion: 1, value: { phase: "boundary", op: stage.request.op } },
+          effect: { encodingVersion: 1, value: { phase: "boundary", result: outcome.value, resultHash: canonicalDigest(outcome.value) } },
+          ts: options.clock(), irreversible: true,
+        });
+      }
+      return yield* appendOutcome(stage, outcome);
+    });
+  }
+
+  function finishStage<R>(stage: Stage<R>, decision: "approve" | "refuse" | "timeout" | undefined, body: BodyExit | undefined) {
+    if (stage.pre.verdict !== "deny" && decision === "approve")
+      return body === undefined ? Effect.die("missing action fiber exit") : finishBody(stage, body);
+    return appendOutcome(stage, {
+      terminal: "blocked_pre",
+      reason: stage.pre.verdict === "deny" ? stage.pre.reason ?? "denied"
+        : decision === "timeout" ? "approval_timeout" : "approval_refused",
+    });
+  }
+
+  function runSingle<R>(single: Stage<R>, signal: AbortSignal, controller: AbortController, restore: Restore) {
+    return approval(single, signal).pipe(Effect.flatMap((decision) => {
+      if (single.pre.verdict === "deny" || decision !== "approve")
+        return finishStage(single, decision, undefined).pipe(Effect.map((result) => [result]));
+      let body: BodyExit | undefined;
+      return Effect.fork(executeBody(single, signal, false, (result) => { body = result; })).pipe(
+        Effect.flatMap((fiber) => Effect.exit(restore(Fiber.await(fiber))).pipe(
+          Effect.flatMap((awaited) => Exit.isFailure(awaited)
+            ? Effect.sync(() => controller.abort()).pipe(Effect.flatMap(() => Fiber.await(fiber)))
+            : Effect.void),
+          Effect.flatMap(() => finishStage(single, decision, body)),
+          Effect.map((result) => [result]),
+        )),
+      );
+    }));
+  }
+
+  function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore) {
+    return Effect.gen(function* () {
+      const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
+      const exits = new Map<number, BodyExit>();
+      const group: Fiber.RuntimeFiber<void, never>[] = [];
+      const join = Effect.suspend(() => Effect.gen(function* () {
+        const waiting = Effect.forEach(group, Fiber.await, { discard: true });
+        const exit = yield* Effect.exit(restore(waiting));
+        if (Exit.isFailure(exit)) {
+          controller.abort();
+          yield* waiting;
+        }
+      }));
+      const shouldExecute = (stage: Stage<R>, index: number) => stage.pre.verdict !== "deny" && decisions[index] === "approve";
+      for (const [index, stage] of stages.entries()) {
+        if (!shouldExecute(stage, index)) continue;
+        if (stage.item.sequential) { yield* join; group.length = 0; }
+        const work = executeBody(stage, signal, guarded, (result) => { exits.set(index, result); });
+        const fiber = yield* Effect.fork(work);
+        group.push(fiber);
+        if (stage.item.sequential) { yield* join; group.length = 0; }
+      }
+      yield* join;
+      return yield* Effect.forEach(stages, (stage, index) => finishStage(stage, decisions[index], exits.get(index)));
+    });
+  }
+
+  function runBatch<R>(items: readonly ExecutionBatchItem<R>[], control: WaveControl): Effect.Effect<readonly ExecutionResult[], ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>> {
+    return Effect.uninterruptibleMask((restore) => {
+      const controller = new AbortController();
+      const signal = combinedSignal(controller.signal, control.signal, options.signal);
+      return stageAll(items).pipe(Effect.flatMap((stages) => {
+        const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
+        const single = stages.length === 1 ? stages[0] : undefined;
+        return single !== undefined && !guarded
+          ? runSingle(single, signal, controller, restore)
+          : runStages(stages, signal, controller, guarded, restore);
+      }));
+    });
+  }
+
+  function run<T extends PlainValue, R>(request: ExecutionRequest,
+    body: (intent: LedgerAction.Receipt) => Effect.Effect<T, ExecutionError, R>) {
+    return runBatch([{ request, body }], { signal: options.signal ?? new AbortController().signal }).pipe(
+      Effect.flatMap((results) => {
+        const result = results[0];
+        if (result === undefined) return Effect.die("missing execution outcome");
+        return result.terminal === "executed" && result.failure !== undefined
+          ? Effect.fail(result.failure) : Effect.succeed(result);
+      }),
     );
-    const results: ExecutionBatchResult[] = [];
-    for (const [index, stage] of admitted.entries()) {
-      results.push(
-        await finishStage(
-          stage,
-          positional(outcomes, index),
-          positional(decisions, index),
-          started.get(index),
-        ),
-      );
-    }
-    return results;
   }
 
-  async function finishCancelled(
-    stage: AdmittedStage,
-    startedAt: number | undefined,
-  ): Promise<ExecutionBatchResult> {
-    if (stage.intent !== undefined)
-      await appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
-        phase: "result",
-        terminal: "cancelled",
-        callId: observedCallId(stage.request),
-        ...projectToolResult(stage.request, { terminal: "cancelled" }),
-      });
-    publishToolTerminal(stage.request, startedAt, "error");
-    return { terminal: "cancelled" };
+  function runExisting<T extends PlainValue, R>(request: ExecutionRequest, body: () => Effect.Effect<T, ExecutionError, R>) {
+    return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+      const pre = yield* decide(request, "pre", request.intent);
+      if (pre.verdict !== "allow") return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
+      const exit = yield* Effect.exit(restore(Effect.scoped(body())));
+      if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
+      const value = clonePlainValue(exit.value);
+      const post = yield* decide(request, "post", { intent: request.intent, effect: request.effect, result: value });
+      return yield* settlePost(request, post, value);
+    }));
   }
 
-  function blockedPreReason(stage: AdmittedStage, decision: ApprovalDecision): string {
-    if (stage.pre.verdict === "deny") return deniedReason(stage.pre);
-    return decision === "timeout" ? "approval_timeout" : "approval_refused";
-  }
-
-  async function finishBlockedPre(
-    stage: AdmittedStage,
-    decision: ApprovalDecision,
-  ): Promise<ExecutionBatchResult> {
-    const reason = blockedPreReason(stage, decision);
-    if (stage.intent !== undefined)
-      await appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
-        phase: "result",
-        terminal: "blocked_pre",
-        reason,
-        callId: observedCallId(stage.request),
-        ...projectToolResult(stage.request, { terminal: "blocked_pre", reason }),
-      });
-    return { terminal: "blocked_pre", reason };
-  }
-
-  async function finishRejected(
-    stage: AdmittedStage,
-    intent: LedgerAction.Receipt,
-    error: Error,
-    startedAt: number | undefined,
-  ): Promise<ExecutionBatchResult> {
-    if (error.message === "outcome_unknown") {
-      await appendResult({ kind: stage.kind, op: stage.request.op }, intent.action.id, {
-        phase: "result",
-        terminal: "outcome_unknown",
-        ...projectToolResult(stage.request, { terminal: "failed", error }),
-      });
-    } else
-      await appendFailure(
-        { kind: stage.kind, op: stage.request.op },
-        intent.action.id,
-        stage.request.effect,
-        error,
-        stage.request.toolObservation?.callId,
-        stage.request.toolResult?.({ terminal: "failed", error }),
-      );
-    publishToolTerminal(stage.request, startedAt, "error");
-    return { terminal: "failed", error };
-  }
-
-  async function completeStage(
-    stage: AdmittedStage,
-    intent: LedgerAction.Receipt,
-    value: PlainValue,
-    startedAt: number | undefined,
-  ): Promise<ExecutionBatchResult> {
-    // The body has settled: a completion exception is recovered from that
-    // evidence, never by running the body again or inventing a post verdict.
-    let site: RecoverySite = "post_policy";
-    const complete = async (): Promise<ExecutionBatchResult> => {
-      const post = await decide(stage.request, "post", {
-        intent: stage.request.intent,
-        effect: stage.request.effect,
-        result: value,
-      });
-      site = "reverter";
-      const settled = await settlePost(stage.request, post, value);
-      site = "result_commit";
-      await commitBoundary(stage.request, stage.kind, intent.action.id, settled);
-      return finishRun(stage.request, stage.kind, intent.action.id, startedAt, value, settled);
-    };
-    return complete().catch(async (error: Error) => {
-      const recovered = await recovery.recoverCompletion(
-        intent.action.id,
-        stage.request,
-        site,
-        error,
-        value,
-      );
-      publishToolTerminal(stage.request, startedAt, "error");
-      return recovered;
-    });
-  }
-
-  /**
-   * The durable boundary: summary, successor projection and accounting land in
-   * ONE ledger transaction before any publication or result commit, so a crash
-   * between them recovers the executed value from this child action.
-   */
-  async function commitBoundary(
-    request: ExecutionRequest,
-    kind: LedgerAction.Kind,
-    intentId: string,
-    outcome: PostOutcome,
-  ): Promise<void> {
-    if (request.boundary !== true || outcome.terminal !== "executed") return;
-    await commit({
-      id: `${intentId}:boundary`,
-      parentId: intentId,
-      sessionId: options.identity.sessionId,
-      kind,
-      intent: { encodingVersion: 1, value: { phase: "boundary", op: request.op } },
-      effect: {
-        encodingVersion: 1,
-        value: { phase: "boundary", result: outcome.value, resultHash: canonicalDigest(outcome.value) },
-      },
-      ts: options.clock(),
-      irreversible: true,
-    });
-  }
-
-  async function finishAdmitted(
-    stage: AdmittedStage,
-    outcome: SettledOutcome,
-    startedAt: number | undefined,
-  ): Promise<ExecutionBatchResult> {
-    const intent = stage.intent;
-    if (intent === undefined) throw new Error("wave lost admitted intent");
-    if (outcome.status === "rejected")
-      return finishRejected(stage, intent, outcome.error, startedAt);
-    return completeStage(stage, intent, clonePlainValue(outcome.value), startedAt);
-  }
-
-  async function finishStage(
-    stage: AdmittedStage,
-    outcome: WaveOutcome,
-    decision: ApprovalDecision,
-    startedAt: number | undefined,
-  ): Promise<ExecutionBatchResult> {
-    if (outcome.status === "cancelled") return finishCancelled(stage, startedAt);
-    if (stage.pre.verdict === "deny" || decision !== "approve")
-      return finishBlockedPre(stage, decision);
-    return finishAdmitted(stage, outcome, startedAt);
-  }
-
-  async function runExisting<T extends PlainValue>(
-    request: ExecutionRequest,
-    body: () => Promise<T>,
-  ): Promise<ExecutionResult> {
-    registeredKind(request);
-
-    const pre = await decide(request, "pre", request.intent);
-    const refusal = preRefusal(pre, true);
-    if (refusal !== undefined) return refusal;
-
-    return applyPostPolicy(request, clonePlainValue(await body()));
-  }
-
-  const runAttempts = createAttemptRunner(
-    options,
-    { appendIntent, appendResult, appendFailure },
-    (request, parent) =>
-      decide({ kind: "llm", ...request }, "pre", request.intent, parent.action.id),
-    (request, intent, admission) =>
-      awaitApproval(
-        {
-          id: intent.action.id,
-          ...approvalIdentity(),
-          callId: intent.action.id,
-          inputHash: canonicalDigest(request.intent),
-          generation: admission.generation,
-          revision: admission.receipt.revision,
-          policyDecisionId: admission.receipt.action.id,
-          intent: request.intent,
-        },
-        options.signal ?? ambientSignal(),
-        { effect: request.effect },
-      ),
-  );
-
-  function originalRequest(id: string): SessionTransition.Request | undefined {
-    return findSessionRequest(options.ledger.actions?.() ?? [], id);
-  }
-
-  function registeredKind(request: ExecutionRequest): LedgerAction.Kind {
-    if (!kinds.has(request.kind)) throw new UnregisteredExecutionKindError(request.kind);
-    return request.kind as LedgerAction.Kind;
-  }
-
-  async function finishRun(
-    request: ExecutionRequest,
-    kind: LedgerAction.Kind,
-    intentId: string,
-    startedAt: number | undefined,
-    resultValue: PlainValue,
-    outcome: PostOutcome,
-  ): Promise<ExecutionResult> {
-    await appendResult(
-      { kind, op: request.op },
-      intentId,
-      { ...resultEffect(request, resultValue, outcome), ...projectToolResult(request, outcome) },
-      revertDataFor(request, outcome),
-    );
-    publishToolTerminal(request, startedAt, terminalStatus(outcome));
-    return outcome;
-  }
-
-  async function applyPostPolicy(
-    request: ExecutionRequest,
-    resultValue: PlainValue,
-  ): Promise<PostOutcome> {
-    const post = await decide(request, "post", {
-      intent: request.intent,
-      effect: request.effect,
-      result: resultValue,
-    });
-    return settlePost(request, post, resultValue);
-  }
-
-  const judgeStop = createStopJudge(
-    options,
-    (op, value) => decide({ kind: "turn", op, intent: value, effect: {} }, "post", value),
-    commit,
-  );
-  return {
-    run,
-    runAttempts,
-    runExisting,
-    runBatch,
-    approvals,
-    judgeStop,
-    recover: recovery.recover,
-  };
+  const runAttempts = createAttemptRunner(options, record,
+    (request, parent) => decide({ kind: "llm", ...request }, "pre", request.intent, parent.action.id),
+    (request, intent, pre) => awaitApproval({
+      id: intent.action.id, sessionId: options.identity.sessionId, turnId,
+      toolsHash: options.identity.toolsHash, toolsGeneration: options.identity.toolsGeneration,
+      callId: intent.action.id, inputHash: canonicalDigest(request.intent), generation: pre.generation,
+      revision: pre.receipt.revision, policyDecisionId: pre.receipt.action.id, intent: request.intent,
+    }, options.signal ?? new AbortController().signal, { effect: request.effect }));
+  const judgeStop = createStopJudge(options,
+    (op, value) => decide({ kind: "turn", op, intent: value, effect: {} }, "post", value), record.commit);
+  return { run, runBatch, runExisting, runAttempts, judgeStop, approvals, recover: recovery.recover };
 }
 
-function resultEffect(
-  request: ExecutionRequest,
-  resultValue: PlainValue,
-  outcome: PostOutcome,
-): PlainObject {
-  if (outcome.terminal === "blocked_post") {
-    return {
-      phase: "result",
-      terminal: outcome.terminal,
-      disposition: outcome.disposition,
-      reason: outcome.reason,
-      effect: request.effect,
-      resultHash: canonicalDigest(resultValue),
-    };
-  }
-  return {
-    phase: "result",
-    terminal: outcome.terminal,
-    effect: request.effect,
-    resultHash: canonicalDigest(outcome.value),
-    ...(RESULT_ECHO_KINDS.has(request.kind) ? { result: outcome.value } : {}),
-    ...(request.toolObservation === undefined ? {} : { callId: request.toolObservation.callId }),
-  };
+function policyPoint(request: ExecutionRequest, phase: "pre" | "post"): Pick<PolicyEvaluationInput, "kind" | "phase" | "op"> {
+  return request.kind === "compaction"
+    ? { kind: "turn", phase: "post", op: request.op === "compact" ? "compaction" : request.op }
+    : { kind: request.kind, phase, op: request.op };
 }
-
-function revertDataFor(request: ExecutionRequest, outcome: PostOutcome) {
-  return outcome.terminal === "executed" ? request.revertData?.() : undefined;
+function needsApproval(stage: { readonly pre: PolicyEvaluation; readonly request: ExecutionRequest }) {
+  return stage.pre.verdict === "require_approval" || stage.request.approval?.required === true;
 }
-
-function terminalStatus(outcome: PostOutcome): ToolObservationStatus {
-  return outcome.terminal === "blocked_post" ? "error" : toolObservationStatus(outcome.value);
+function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof findSessionRequest>): void {
+  if (captured !== undefined && request.domainRevisions !== undefined &&
+      canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions))
+    throw new ExecutionApprovalError({ code: "stale_approval" });
 }
-
-async function settlePost(
-  request: ExecutionRequest,
-  post: PolicyEvaluation,
-  resultValue: PlainValue,
-): Promise<PostOutcome> {
-  const transformed = resultFromEvaluation(post, resultValue);
-  if (!blocks(post) && transformed.ok) return { terminal: "executed", value: transformed.value };
-  return blockPost(request, transformed.ok ? deniedReason(post) : "invalid_output");
-}
-
-async function blockPost(request: ExecutionRequest, reason: string): Promise<PostOutcome> {
-  if (request.revert === undefined)
-    return { terminal: "blocked_post", disposition: "irreversible", reason };
-  await request.revert();
-  return { terminal: "blocked_post", disposition: "reverted", reason };
-}
-
-function projectToolResult(request: ExecutionRequest, outcome: ExecutionBatchResult): PlainObject {
-  return request.toolResult === undefined ? {} : { toolResult: request.toolResult(outcome) };
-}
-
-function blocks(decision: PolicyEvaluation): boolean {
-  return decision.verdict === "deny" || decision.verdict === "require_approval";
-}
-
-function preRefusal(
-  decision: PolicyEvaluation,
-  rejectTransform: boolean,
-): Extract<ExecutionResult, { readonly terminal: "blocked_pre" }> | undefined {
-  if (blocks(decision)) return { terminal: "blocked_pre", reason: deniedReason(decision) };
-  if (rejectTransform && decision.verdict === "transform") {
-    return { terminal: "blocked_pre", reason: "invalid_input" };
-  }
-  return undefined;
-}
-
+/** Body results cross the durable boundary as canonical JSON: non-finite numbers become null. */
 function clonePlainValue(value: PlainValue): PlainValue {
   return JSON.parse(JSON.stringify(value)) as PlainValue;
 }
-
-function plainRecord(value: PlainValue): PlainObject | undefined {
-  if (value === null || Array.isArray(value) || typeof value !== "object") return undefined;
-  return value;
+function settlePost(request: ExecutionRequest, post: PolicyEvaluation, value: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
+  const transformed = post.verdict === "transform" ? object(post.value).result : value;
+  if (post.verdict !== "deny" && post.verdict !== "require_approval" && transformed !== undefined)
+    return Effect.succeed({ terminal: "executed", value: transformed });
+  const outcome = { terminal: "blocked_post", disposition: request.revert === undefined ? "irreversible" : "reverted",
+    reason: transformed === undefined ? "invalid_output" : post.reason ?? "denied" } as const;
+  return request.revert === undefined ? Effect.succeed(outcome) : Effect.as(Effect.suspend(request.revert), outcome);
 }
-
-function resultFromEvaluation(
-  evaluation: PolicyEvaluation,
-  fallback: PlainValue,
-): { readonly ok: true; readonly value: PlainValue } | { readonly ok: false } {
-  if (evaluation.verdict !== "transform") return { ok: true, value: fallback };
-  const result = plainRecord(evaluation.value)?.result;
-  if (result === undefined) return { ok: false };
-  return { ok: true, value: result };
+function object(value: PlainValue): PlainObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-
-function toolObservationStatus(value: PlainValue): ToolObservationStatus {
-  const status = plainRecord(value)?.status;
-  if (status === "success" || status === "timed_out") return status;
-  return "error";
+function terminalStatus(outcome: ExecutionResult): ToolObservationStatus {
+  if (outcome.terminal !== "executed" || outcome.failure !== undefined) return "error";
+  const status = object(outcome.value).status;
+  return status === "success" || status === "timed_out" ? status : "error";
 }

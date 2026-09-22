@@ -68,11 +68,14 @@ test("duplicate terminal identities and stale revisions leave the entire action 
   expectCommitted(commit([terminal]));
   const before = SessionHandleStore.tree(request.sessionId);
   const row = SessionHandleStore.row(request.sessionId);
-  expect(commit([terminal]).ok).toBe(false);
-  expect(commit([{ ...terminal, id: "loser" }], row.revision - 1)).toMatchObject({
-    ok: false,
-    reason: "revision",
-  });
+  expect(() => commit([terminal])).toThrow(expect.objectContaining({ _tag: "CommitRefused" }));
+  expect(() => commit([{ ...terminal, id: "loser" }], row.revision - 1)).toThrow(
+    expect.objectContaining({
+      _tag: "CommitRefused",
+
+      reason: "revision",
+    }),
+  );
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
   expect(SessionHandleStore.row(request.sessionId)).toEqual(row);
 });

@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LedgerSession, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -35,22 +36,41 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(commit([original]));
     materializeSession("other");
     expect(
-      SessionHandleStore.acquireLease({
-        sessionId: "other",
-        owner: "writer",
-        expectedFence: 0,
-        now: 2,
-        expiresAt: 1002,
-      }).ok,
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.acquireLease({
+              sessionId: "other",
+              owner: "writer",
+              expectedFence: 0,
+              now: 2,
+              expiresAt: 1002,
+            }),
+          ),
+        ),
+        (error) => error,
+      ).ok,
     ).toBe(true);
     const other = { ...request, sessionId: "other", requestId: "other-original" };
     expectCommitted(
-      SessionHandleStore.commit({
-        ...proposal(other, 0),
-        actions: [
-          { ...original, id: other.requestId, sessionId: "other", parentId: "other:configure" },
-        ],
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              ...proposal(other, 0),
+              actions: [
+                {
+                  ...original,
+                  id: other.requestId,
+                  sessionId: "other",
+                  parentId: "other:configure",
+                },
+              ],
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
     const pending = proposal(request, 0);
     const before = {
@@ -59,22 +79,42 @@ describe("SQLite global request count CAS", () => {
       inbox: SessionHandleStore.inboxRows(request.sessionId),
       alarms: Storage.get().alarms?.due(100),
     };
-    expectCommitted(SessionHandleStore.commit(proposal(other, 0)));
+    expectCommitted(
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(SessionHandleStore.commit(proposal(other, 0)))),
+        (error) => error,
+      ),
+    );
     expect(SessionHandleStore.row(request.sessionId)).toEqual(before.row);
     const alarms = Storage.get().alarms?.due(100);
-    expect(SessionHandleStore.commit(pending)).toEqual({
-      ok: false,
-      reason: "revision",
-      currentFence: 1,
-      currentRevision: before.row.revision,
-    });
+    expect(() =>
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(SessionHandleStore.commit(pending))),
+        (error) => error,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        _tag: "CommitRefused",
+
+        reason: "revision",
+        currentFence: 1,
+        currentRevision: before.row.revision,
+      }),
+    );
     expect(SessionHandleStore.row(request.sessionId)).toEqual(before.row);
     expect(SessionHandleStore.tree(request.sessionId)).toEqual(before.actions);
     expect(SessionHandleStore.inboxRows(request.sessionId)).toEqual(before.inbox);
     expect(Storage.get().alarms?.due(100)).toEqual(alarms);
     expect(SessionHandleStore.requestById(request.requestId)).toBeUndefined();
     expectCommitted(
-      SessionHandleStore.commit({ ...pending, requestCount: { since: 0, count: 1 } }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({ ...pending, requestCount: { since: 0, count: 1 } }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
   });
 
@@ -83,10 +123,17 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(commit([original, requestStateAction(request)]));
     expectCommitted(commit([requestStateAction(request, "duplicate-open")]));
     expectCommitted(
-      SessionHandleStore.commit({
-        ...proposal(request, 1),
-        actions: [],
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              ...proposal(request, 1),
+              actions: [],
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
     expectCommitted(
       commit([
@@ -102,18 +149,32 @@ describe("SQLite global request count CAS", () => {
       ]),
     );
     expectCommitted(
-      SessionHandleStore.commit({
-        ...proposal(request, 0),
-        actions: [],
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              ...proposal(request, 0),
+              actions: [],
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
     expectCommitted(commit([requestStateAction(request, "reopened")]));
     expectCommitted(
-      SessionHandleStore.commit({
-        ...proposal(request, 0),
-        actions: [],
-        requestCount: { since: request.createdAt, count: 0 },
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              ...proposal(request, 0),
+              actions: [],
+              requestCount: { since: request.createdAt, count: 0 },
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
     expectCommitted(
       commit([
@@ -128,10 +189,17 @@ describe("SQLite global request count CAS", () => {
       ]),
     );
     expectCommitted(
-      SessionHandleStore.commit({
-        ...proposal(request, 0),
-        actions: [],
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              ...proposal(request, 0),
+              actions: [],
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
   });
 });

@@ -1,12 +1,15 @@
+import { Effect, Scope, Exit, Either } from "effect";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
-import { monitorTool } from "../src/tools/monitor";
-import { messageFixture } from "./helpers/message-fixture";
+import { createMonitorTool } from "../src/tools/monitor";
+import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
+import { nativeMessageFixture } from "./helpers/native-message-fixture";
 import { actorPolicy } from "./helpers/message-scenarios";
+import { runEffect } from "./helpers/effect";
 
 function alarmStore() {
   const alarms = Storage.get().alarms;
@@ -18,10 +21,12 @@ for (const status of ["armed", "fired"] as const) {
   for (const op of ["cancel", "rearm"] as const) {
     test(`monitor refuses ${op} of a real ${status} message deadline; scans survive SQLite reopen`, () =>
       Storage.withIsolation(async () => {
-        const fixture = messageFixture("resident", {
+        const fixture = await nativeMessageFixture("resident", {
           deliveryRoutes: new Map([["ws", async () => ({ value: "accepted" as const })]]),
           ...actorPolicy("peer", 10),
         });
+        const appRuntime = gatewayRuntime({ dbPath: fixture.dbPath });
+        const monitorTool = createMonitorTool(await createMonitorPorts(appRuntime));
         ActorRegistry.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });
         ActorRegistry.registerEndpoint({
           id: "ws:peer",
@@ -40,17 +45,18 @@ for (const status of ["armed", "fired"] as const) {
           observations.push(event);
           if (event.kind === "message.timed_out") timedOut.resolve();
         });
-        const makeWorker = () =>
+        const scope = await runEffect(Scope.make());
+        const makeWorker = () => runEffect(Scope.extend(
           createAlarmWorker({
             alarms: alarmStore(),
             requestTimeout: createSessionRequests({ observations: Bus, clock: () => at }).timeout,
             observations: Bus,
             clock: () => at,
             schedule: () => () => undefined,
-            wake: async () => undefined,
-            failure: (error) => errors.push(error),
-          });
-        let worker = makeWorker();
+            wake: () => Effect.void,
+            failure: (error: Error) => errors.push(error),
+          }), scope));
+        let worker = await makeWorker();
         try {
           const sent = await fixture.send({
             to: { kind: "actor", actorId: "peer" },
@@ -62,10 +68,10 @@ for (const status of ["armed", "fired"] as const) {
           const alarm = alarmStore().due(200)[0];
           if (alarm === undefined) throw new Error("message admission did not arm its deadline");
           expect(alarm.kind).toBe("at");
-          worker.start();
+          await runEffect(worker.start());
           if (status === "fired") {
             at = 200;
-            worker.tick();
+            await runEffect(worker.tick());
           }
           const before = alarmStore().get(alarm.id);
           expect(before?.status).toBe(status);
@@ -88,16 +94,23 @@ for (const status of ["armed", "fired"] as const) {
 
           // A refused control must preserve both the pending timeout and shared scan.
           expect(
-            alarmStore().arm({
-              id: "later-alarm",
-              sessionId: "sender",
-              kind: "at",
-              fireAt: 201,
-            }),
+            Either.getOrThrowWith(
+              await runEffect(
+                Effect.either(
+                  alarmStore().arm({
+                    id: "later-alarm",
+                    sessionId: "sender",
+                    kind: "at",
+                    fireAt: 201,
+                  }),
+                ),
+              ),
+              (error) => error,
+            ),
           ).toBeDefined();
           at = 201;
-          worker.tick();
-          worker.tick();
+          await runEffect(worker.tick());
+          await runEffect(worker.tick());
           expect(alarmStore().get(alarm.id)?.status).toBe("fired");
           expect(alarmStore().get("later-alarm")?.status).toBe("fired");
           await timedOut.promise;
@@ -107,26 +120,37 @@ for (const status of ["armed", "fired"] as const) {
           expect(SessionHandleStore.inboxRows("sender")).toHaveLength(2);
 
           expect(
-            alarmStore().arm({
-              id: "reopen-alarm",
-              sessionId: "sender",
-              kind: "at",
-              fireAt: 202,
-            }),
+            Either.getOrThrowWith(
+              await runEffect(
+                Effect.either(
+                  alarmStore().arm({
+                    id: "reopen-alarm",
+                    sessionId: "sender",
+                    kind: "at",
+                    fireAt: 202,
+                  }),
+                ),
+              ),
+              (error) => error,
+            ),
           ).toBeDefined();
-          await worker.close();
-          Storage.reset();
+          await runEffect(worker.close());
+          await fixture.close();
+          await appRuntime.dispose();
           Storage.initialize({ dbPath: fixture.dbPath });
-          worker = makeWorker();
+          worker = await makeWorker();
           at = 202;
-          worker.start();
-          worker.tick();
+          await runEffect(worker.start());
+          await runEffect(worker.tick());
           expect(alarmStore().get(alarm.id)).toMatchObject({ status: "fired", epoch: 1 });
           expect(alarmStore().get("reopen-alarm")?.status).toBe("fired");
           expect(SessionHandleStore.inboxRows("sender")).toHaveLength(3);
           expect(errors).toEqual([]);
         } finally {
-          await worker.close();
+          await runEffect(worker.close());
+          await runEffect(Scope.close(scope, Exit.void));
+          await fixture.close();
+          await appRuntime.dispose();
           unsubscribe();
           bound.removeEventListener("abort", abort);
           Storage.reset();

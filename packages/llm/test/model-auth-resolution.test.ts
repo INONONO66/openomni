@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { runEffect } from "./helpers/native";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { Auth, Provider } from "../src";
 import { ModelsDev } from "../src/model";
@@ -16,10 +18,10 @@ afterEach(() => mock.restore());
 
 describe("canonical model and provider-bound credentials", () => {
   test("trusted catalog identity is exact and needs no discovery I/O", async () => {
-    const catalogRead = spyOn(ModelsDev, "get").mockResolvedValue(catalog);
-    const authRead = spyOn(Auth, "get").mockResolvedValue(undefined);
+    const catalogRead = spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
+    const authRead = spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const fetch = spyOn(globalThis, "fetch");
-    expect(await Provider.resolveModel({ provider: "anthropic", id: "trusted" })).toMatchObject({
+    expect(await runEffect(Provider.resolveModel({ provider: "anthropic", id: "trusted" }))).toMatchObject({
       id: "trusted",
       providerID: "anthropic",
       api: { npm: "@ai-sdk/anthropic" },
@@ -30,81 +32,81 @@ describe("canonical model and provider-bound credentials", () => {
   });
 
   test("invalid provider and absent model fail with typed identity before provider I/O", async () => {
-    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
-    spyOn(Auth, "get").mockResolvedValue(undefined);
+    spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
+    spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const fetch = spyOn(globalThis, "fetch");
     for (const [provider, id, reason] of [
       ["missing", "trusted", "provider_not_found"],
       ["anthropic", "absent", "model_not_found"],
     ] as const) {
-      await expect(Provider.resolveModel({ provider, id })).rejects.toMatchObject({
+      await expect(runEffect(Provider.resolveModel({ provider, id }))).rejects.toMatchObject({
         name: "ModelResolutionError",
-        data: { provider, model: id, reason },
+        provider, model: id, reason,
       });
     }
     expect(fetch).not.toHaveBeenCalled();
   });
 
   test("proxy discovery keeps valid IDs when entries are malformed", async () => {
-    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
-    spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://mixed-proxy.example" });
+    spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
+    spyOn(Auth, "get").mockReturnValue(Effect.succeed({ type: "proxy", baseURL: "https://mixed-proxy.example" }));
     spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({ data: [{ id: "wanted" }, { id: 42 }, { other: "ignored" }] }),
     );
-    expect(await Provider.resolveModel({ provider: "anthropic", id: "wanted" })).toMatchObject({
+    expect(await runEffect(Provider.resolveModel({ provider: "anthropic", id: "wanted" }))).toMatchObject({
       id: "wanted",
       providerID: "anthropic",
     });
   });
 
   test("positive proxy discovery retains model identity and reports listing failure", async () => {
-    spyOn(ModelsDev, "get").mockResolvedValue(catalog);
-    spyOn(Auth, "get").mockResolvedValue({ type: "proxy", baseURL: "https://proxy.example" });
+    spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
+    spyOn(Auth, "get").mockReturnValue(Effect.succeed({ type: "proxy", baseURL: "https://proxy.example" }));
     const fetch = spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({ data: [{ id: "proxy-only" }] }),
     );
-    expect(await Provider.resolveModel({ provider: "anthropic", id: "proxy-only" })).toMatchObject({
+    expect(await runEffect(Provider.resolveModel({ provider: "anthropic", id: "proxy-only" }))).toMatchObject({
       id: "proxy-only",
       providerID: "anthropic",
     });
-    spyOn(Auth, "get").mockResolvedValue({
+    spyOn(Auth, "get").mockReturnValue(Effect.succeed({
       type: "proxy",
       baseURL: "https://broken-proxy.example",
-    });
+    }));
     fetch.mockRejectedValue(new Error("connection refused"));
     await expect(
-      Provider.resolveModel({ provider: "anthropic", id: "absent" }),
+      runEffect(Provider.resolveModel({ provider: "anthropic", id: "absent" })),
     ).rejects.toMatchObject({
-      data: { reason: "proxy_listing_failed" },
-      cause: { name: "ProxyModelsError", cause: { message: "connection refused" } },
+      reason: "proxy_listing_failed",
+      cause: expect.stringContaining("connection refused"),
     });
   });
 
   test("cross-provider fallback reads its own credential, never the primary key", async () => {
     const primary = { type: "api", key: "primary-key" } as const;
     const fallback = { type: "api", key: "fallback-key" } as const;
-    const get = spyOn(Auth, "get").mockResolvedValue(fallback);
-    expect(await Auth.resolve("anthropic", primary, "anthropic")).toEqual(primary);
+    const get = spyOn(Auth, "get").mockReturnValue(Effect.succeed(fallback));
+    expect(await runEffect(Auth.resolve("anthropic", primary, "anthropic"))).toEqual(primary);
     expect(get).not.toHaveBeenCalled();
-    expect(await Auth.resolve("openai", primary, "anthropic")).toEqual(fallback);
+    expect(await runEffect(Auth.resolve("openai", primary, "anthropic"))).toEqual(fallback);
     expect(get.mock.calls).toEqual([["openai"]]);
   });
 
   test("missing, invalid and forbidden fallback credentials fail before I/O", async () => {
-    const get = spyOn(Auth, "get").mockResolvedValue(undefined);
+    const get = spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const fetch = spyOn(globalThis, "fetch");
-    await expect(Auth.resolve("anthropic", { type: "api", key: "" })).rejects.toMatchObject({
+    await expect(runEffect(Auth.resolve("anthropic", { type: "api", key: "" }))).rejects.toMatchObject({
       name: "AuthResolutionError",
-      data: { reason: "invalid_auth", provider: "anthropic" },
+      reason: "invalid_auth", provider: "anthropic",
     });
     await expect(
-      Auth.resolve("openai", { type: "api", key: "primary" }, "anthropic", false),
+      runEffect(Auth.resolve("openai", { type: "api", key: "primary" }, "anthropic", false)),
     ).rejects.toMatchObject({
-      data: { reason: "missing_auth", provider: "openai" },
+      reason: "missing_auth", provider: "openai",
     });
     expect(get).not.toHaveBeenCalled();
-    await expect(Auth.resolve("openai")).rejects.toMatchObject({
-      data: { reason: "missing_auth" },
+    await expect(runEffect(Auth.resolve("openai"))).rejects.toMatchObject({
+      reason: "missing_auth",
     });
     expect(get.mock.calls).toEqual([["openai"]]);
     expect(fetch).not.toHaveBeenCalled();

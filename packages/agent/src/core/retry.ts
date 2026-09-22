@@ -1,4 +1,4 @@
-import { Run } from "@openomni/llm";
+import { LlmRunFailure } from "@openomni/llm";
 import { z } from "zod";
 
 export type RetryReason =
@@ -36,13 +36,12 @@ export function isAbort(error: Error, signal?: AbortSignal): boolean {
   return (
     signal?.aborted === true ||
     error.name === "AbortError" ||
-    asLlmFailure(error)?.data.aborted === true
+    asLlmFailure(error)?.aborted === true
   );
 }
 
-function asLlmFailure(error: Error): Pick<Run.Failure, "data"> | undefined {
-  if (!Run.FailureError.isInstance(error)) return undefined;
-  return Run.FailureError.Schema.parse(error);
+function asLlmFailure(error: Error): LlmRunFailure | undefined {
+  return error instanceof LlmRunFailure ? error : undefined;
 }
 
 /**

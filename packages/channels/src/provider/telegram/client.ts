@@ -1,3 +1,4 @@
+import { TelegramApiError } from "../../errors";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
@@ -24,16 +25,6 @@ const EnvelopeSchema = z.object({
 const SentMessageSchema = z.object({
   message_id: z.union([z.number(), z.string()]).optional(),
 });
-
-export class TelegramApiError extends Error {
-  constructor(
-    message: string,
-    readonly rejected = false,
-  ) {
-    super(message);
-    this.name = "TelegramApiError";
-  }
-}
 
 export class TelegramClient implements ChannelClient {
   private readonly baseUrl: string;
@@ -132,10 +123,10 @@ export class TelegramClient implements ChannelClient {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new TelegramApiError(
-        `Telegram API ${method} failed (${response.status}): ${body}`,
-        response.status >= 400 && response.status < 500,
-      );
+      throw new TelegramApiError({
+        message: `Telegram API ${method} failed (${response.status}): ${body}`,
+        rejected: response.status >= 400 && response.status < 500,
+      });
     }
 
     const envelope = EnvelopeSchema.safeParse(await response.json());
@@ -143,10 +134,10 @@ export class TelegramClient implements ChannelClient {
       throw new Error(`Telegram API ${method} returned a malformed envelope`);
     }
     if (!envelope.data.ok) {
-      throw new TelegramApiError(
-        `Telegram API ${method}: ${envelope.data.description ?? "Unknown error"}`,
-        true,
-      );
+      throw new TelegramApiError({
+        message: `Telegram API ${method}: ${envelope.data.description ?? "Unknown error"}`,
+        rejected: true,
+      });
     }
     const result = schema.safeParse(envelope.data.result);
     if (!result.success) {

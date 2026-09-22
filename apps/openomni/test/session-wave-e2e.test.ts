@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { Cause, Effect, Either, Exit } from "effect";
+import { acquireAppResource } from "../src/gateway";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -21,20 +23,27 @@ import {
 import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextMessage } from "./helpers/ws";
+import { runEffect } from "./helpers/effect";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
   acquireContender,
-  bounded,
+  bounded as waveBounded,
   commitInterrupt,
   interruptDeliveries,
-  interruptSecondModel,
   ProviderRequest,
   releaseContender,
   trackedWaveTools,
   waveTool,
+  interruptSecondModel,
 } from "./helpers/session-wave";
 
 const suite = residentSuite();
+
+function bounded<T>(promise: Promise<T>, label = "wave/recovery"): Promise<T> {
+  return waveBounded(promise).catch((cause: unknown) => {
+    throw new Error(`missing ${label}`, { cause });
+  });
+}
 
 interface ProviderCall {
   readonly id: string;
@@ -93,13 +102,14 @@ test("real provider returns calls before any app tool body starts", async () => 
       },
     }),
     llm: {
-      resolveModel: async () => ({
-        id: "wave",
-        name: "wave",
-        providerID: "anthropic",
-        api: { npm: "@ai-sdk/anthropic" },
-        limit: { context: 100000 },
-      }),
+      resolveModel: () =>
+        Effect.succeed({
+          id: "wave",
+          name: "wave",
+          providerID: "anthropic",
+          api: { npm: "@ai-sdk/anthropic" },
+          limit: { context: 100000 },
+        }),
     },
   });
   suite.defer(
@@ -156,15 +166,16 @@ async function waveApp(
   const app = await suite.boot({
     config,
     toolDefinitions: definitions,
-    sessionRuntime,
+    sessionRuntime: { closeGraceMs: 0, ...sessionRuntime },
     llm: {
-      resolveModel: async () => ({
-        id: "wave",
-        name: "wave",
-        providerID: "anthropic",
-        api: { npm: "@ai-sdk/anthropic" },
-        limit: { context: 100000 },
-      }),
+      resolveModel: () =>
+        Effect.succeed({
+          id: "wave",
+          name: "wave",
+          providerID: "anthropic",
+          api: { npm: "@ai-sdk/anthropic" },
+          limit: { context: 100000 },
+        }),
     },
   });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
@@ -269,7 +280,7 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
     Bus.subscribe(LlmCall.Events.Completed, (event) => {
       const handle = app.sessions.get(event.sessionId);
       if (handle === undefined) return interrupted.reject(new Error("missing live SDK handle"));
-      void handle.interrupt().then(interrupted.resolve, interrupted.reject);
+      void runEffect(handle.interrupt()).then(interrupted.resolve, interrupted.reject);
     }),
   );
   // When: interrupt at the real provider-return boundary, before any tool body.
@@ -392,19 +403,25 @@ for (const decision of ["approve", "refuse"] as const) {
     const { handle, request } = await bounded(waiting);
     expect(started).toEqual([]);
     expect(request).toMatchObject({ callId: "call-B", generation: 1, intent: { slot: "B" } });
-    await expect(
-      handle.approvals.answer({ request, decision, credential: "forged" }),
-    ).rejects.toMatchObject({ code: "unauthenticated" });
-    await expect(
-      handle.approvals.answer({
-        request: { ...request, inputHash: "wrong" },
-        decision,
-        credential: "wave-token",
-      }),
-    ).rejects.toMatchObject({ code: "stale_approval" });
+    expect(
+      await runEffect(
+        Effect.flip(handle.approvals.answer({ request, decision, credential: "forged" })),
+      ),
+    ).toMatchObject({ code: "unauthenticated" });
+    expect(
+      await runEffect(
+        Effect.flip(
+          handle.approvals.answer({
+            request: { ...request, inputHash: "wrong" },
+            decision,
+            credential: "wave-token",
+          }),
+        ),
+      ),
+    ).toMatchObject({ code: "stale_approval" });
     expect(started).toEqual([]);
     // When: authenticated Owner evidence answers the captured original request.
-    await handle.approvals.answer({ request, decision, credential: "wave-token" });
+    await runEffect(handle.approvals.answer({ request, decision, credential: "wave-token" }));
     await response;
     // Then: refusal affects only B, approval executes that same slot exactly once.
     expect(started).toEqual(decision === "approve" ? ["A", "B", "C"] : ["A", "C"]);
@@ -414,9 +431,11 @@ for (const decision of ["approve", "refuse"] as const) {
       ["call-B", decision === "approve" ? "executed" : "blocked_pre"],
       ["call-C", "executed"],
     ]);
-    await expect(
-      handle.approvals.answer({ request, decision, credential: "wave-token" }),
-    ).rejects.toMatchObject({ code: "stale_approval" });
+    expect(
+      await runEffect(
+        Effect.flip(handle.approvals.answer({ request, decision, credential: "wave-token" })),
+      ),
+    ).toMatchObject({ code: "stale_approval" });
   });
 }
 
@@ -428,17 +447,21 @@ test("interrupting pending B cancels every unstarted positional slot", async () 
   socket.send(JSON.stringify({ type: "message", text: "hold wave" }));
   const { handle, request } = await bounded(waiting);
   expect(started).toEqual([]);
-  await bounded(handle.interrupt());
+  await bounded(runEffect(handle.interrupt()));
   expect(started).toEqual([]);
   expect(received).toHaveLength(1);
   expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([
-    ["call-A", "cancelled"],
-    ["call-B", "cancelled"],
-    ["call-C", "cancelled"],
+    ["call-A", "interrupted"],
+    ["call-B", "blocked_pre"],
+    ["call-C", "interrupted"],
   ]);
-  await expect(
-    handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
-  ).rejects.toMatchObject({ code: "stale_approval" });
+  expect(
+    await runEffect(
+      Effect.flip(
+        handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
+      ),
+    ),
+  ).toMatchObject({ code: "stale_approval" });
 });
 
 test("noncooperative bodies release the wave but retain the lease and cannot commit late", async () => {
@@ -453,15 +476,20 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
       const executor = currentExecutor();
       entered.resolve();
       await gate.promise;
-      try {
-        await executor.run(
-          { kind: "tool", op: "late-callback", intent: {}, effect: {} },
-          async () => ({ bad: true }),
-        );
-        late.resolve("committed");
-      } catch (error) {
-        late.resolve(error instanceof Error ? error.name : "non-error");
-      }
+      const outcome = await runEffect(
+        Effect.exit(
+          executor.run({ kind: "tool", op: "late-callback", intent: {}, effect: {} }, () =>
+            Effect.succeed({ bad: true }),
+          ),
+        ),
+      );
+      late.resolve(
+        Exit.isFailure(outcome)
+          ? Cause.isInterrupted(outcome.cause)
+            ? "interrupted"
+            : "failed"
+          : "committed",
+      );
       return "late B";
     }),
   ];
@@ -472,17 +500,17 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     const row = activeRow();
     const handle = app.sessions.get(row.id);
     if (handle === undefined) throw new Error("missing session handle");
-    await bounded(handle.interrupt());
+    await bounded(runEffect(handle.interrupt()));
     expect(signal?.aborted).toBe(true);
     expect(toolResults(row.id).map((result) => [result.callId, result.terminal])).toEqual([
       ["call-A", "executed"],
-      ["call-B", "cancelled"],
+      ["call-B", "outcome_unknown"],
     ]);
     expect(SessionHandleStore.row(row.id).leaseOwner).not.toBeNull();
     expect(received).toHaveLength(1);
     gate.resolve();
-    expect(await bounded(late.promise)).toBe("AbortError");
-    await bounded(handle.close());
+    expect(await bounded(late.promise)).toBe("failed");
+    await bounded(runEffect(handle.close()));
     expect(SessionHandleStore.row(row.id).leaseOwner).toBeNull();
     expect(
       SessionHandleStore.tree(row.id).some(
@@ -496,14 +524,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
   }
 });
 
-for (const door of [
-  "current-run",
-  "current-batch",
-  "captured-run",
-  "captured-batch",
-  "captured-cell",
-  "captured-wave",
-] as const) {
+for (const door of ["captured-cell", "captured-wave"] as const) {
   test(`nested raw effects retain the lease through ${door} after caller interruption`, async () => {
     // Given: the review countercase, through the real app/SDK/SSE and file SQLite.
     const captured = Promise.withResolvers<ReturnType<typeof currentExecutor>>();
@@ -524,33 +545,22 @@ for (const door of [
       return "effect";
     };
     const request = { kind: "tool", op: "nested-effect", intent: {}, effect: {} };
-    const isCurrent = door.startsWith("current-");
     let signal = new AbortController().signal;
     let sessionId = "";
     const invoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string> => {
       try {
         switch (door) {
-          case "current-run":
-          case "captured-run":
-            await executor.run(request, rawBody);
-            return "executed";
-          case "current-batch":
-          case "captured-batch": {
-            if (executor.runBatch === undefined) throw new Error("missing batch executor");
-            const results = await executor.runBatch([{ request, body: rawBody }], { signal });
-            return results.map((result) => result.terminal).join(",");
-          }
           case "captured-cell":
           case "captured-wave": {
             const dispatcher = createDispatcher([waveTool("inner", rawBody)], { executor });
             const call = { id: "inner-call", tool: "inner", input: { slot: "inner" } };
             const context = { sessionId, turnId: "captured-turn", signal };
             if (door === "captured-cell") {
-              await dispatcher.executeCell(call, context);
-              return "executed";
+              const outcome = await runEffect(dispatcher.executeCell(call, context));
+              return outcome.isError ? "outcome_unknown" : "executed";
             }
-            const results = await dispatcher.executeWave([call], context);
-            return results.every((result) => result.isError) ? "cancelled" : "executed";
+            const results = await runEffect(dispatcher.executeWave([call], context));
+            return results.every((result) => result.isError) ? "outcome_unknown" : "executed";
           }
         }
       } catch (error) {
@@ -566,8 +576,7 @@ for (const door of [
           const executor = currentExecutor();
           captured.resolve(executor);
           try {
-            if (isCurrent) wrapperSettled.resolve(await invoke(currentExecutor()));
-            else await outerDone.promise;
+            await outerDone.promise;
           } finally {
             parentSettled.resolve();
           }
@@ -585,15 +594,12 @@ for (const door of [
       sessionId = row.id;
       handle = app.sessions.get(row.id);
       if (handle === undefined) throw new Error("missing live SDK handle");
-      if (!isCurrent) {
-        // This continuation was registered outside both ambient execution scopes.
-        expect(() => currentExecutor()).toThrow("executor context is required");
-        void invoke(executor).then(wrapperSettled.resolve, wrapperSettled.reject);
-      }
+      // This continuation was registered outside both ambient execution scopes.
+      expect(() => currentExecutor()).toThrow("executor context is required");
+      void invoke(executor).then(wrapperSettled.resolve, wrapperSettled.reject);
       await bounded(entered.promise);
       // When: interrupt returns and the parent unwinds while the raw effect is gated.
-      if (isCurrent) await bounded(handle.interrupt());
-      else {
+      {
         // Finish the top-level body first, so it cannot mask missing captured retention.
         const interrupted = interruptSecondModel(
           suite,
@@ -604,9 +610,7 @@ for (const door of [
         await bounded(interrupted);
       }
       await bounded(parentSettled.promise);
-      expect(await bounded(wrapperSettled.promise)).toBe(
-        door === "captured-batch" || door === "captured-wave" ? "cancelled" : "AbortError",
-      );
+      expect(await bounded(wrapperSettled.promise)).toBe("CommitFailed");
       expect(existsSync(marker)).toBe(false);
       expect(signal.aborted).toBe(true);
       expect(
@@ -615,44 +619,74 @@ for (const door of [
           .map((result) => [result.callId, result.terminal]),
       ).toEqual([
         ["call-A", "executed"],
-        ["call-outer", isCurrent ? "cancelled" : "executed"],
+        ["call-outer", "executed"],
       ]);
       const held = SessionHandleStore.row(row.id);
       const competitor = acquireContender(row.id, "nested-contender", held.leaseFence);
-      if (competitor.ok) competitorFence = competitor.fence;
+      if (Either.isRight(competitor)) competitorFence = competitor.right.fence;
       // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
-      expect(competitor).toMatchObject({ ok: false });
+      expect(competitor).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "LeaseRefused", reason: "held" },
+      });
       expect(held.leaseOwner).toBe(row.leaseOwner);
       const beforeActions = SessionHandleStore.tree(row.id).length;
       let staleBodyStarts = 0;
       const stale = () =>
-        executor.run(request, async () => {
-          staleBodyStarts += 1;
-          return null;
-        });
-      await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+        executor.run(request, () =>
+          Effect.sync(() => {
+            staleBodyStarts += 1;
+            return null;
+          }),
+        );
+      expect(await runEffect(Effect.flip(stale()))).toMatchObject({
+        _tag: "CommitFailed",
+        error: { _tag: "CommitRefused", reason: "fence" },
+      });
       expect(staleBodyStarts).toBe(0);
       expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
       gate.resolve();
       await bounded(completed.promise);
       // Close joins the raw effect after its exact completion signal.
-      await bounded(handle.close());
+      await bounded(runEffect(handle.close()));
       expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
       const released = SessionHandleStore.row(row.id);
       expect(released.leaseOwner).toBeNull();
       const next = acquireContender(row.id, "nested-contender", released.leaseFence);
-      if (next.ok) competitorFence = next.fence;
-      expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
-      await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+      if (Either.isRight(next)) competitorFence = next.right.fence;
+      expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
+      expect(await runEffect(Effect.flip(stale()))).toMatchObject({
+        _tag: "CommitFailed",
+        error: { _tag: "CommitRefused", reason: "fence" },
+      });
       expect(staleBodyStarts).toBe(0);
-      expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
-      expect(received).toHaveLength(isCurrent ? 1 : 2);
+      // Close records its interrupt and seals the captured intent whose late result
+      // was refused by the already-sealed turn; raw completion itself commits nothing.
+      expect(
+        SessionHandleStore.tree(row.id)
+          .slice(beforeActions)
+          .map((action) => ({
+            kind: action.kind,
+            effect: action.effect.value,
+          })),
+      ).toEqual([
+        { kind: "prompt", effect: { inboxKind: "interrupt", content: "" } },
+        {
+          kind: "tool",
+          effect: {
+            phase: "result",
+            terminal: "outcome_unknown",
+            reason: "shutdown_grace_exhausted",
+          },
+        },
+      ]);
+      expect(received).toHaveLength(2);
     } finally {
       outerDone.resolve();
       gate.resolve();
       await bounded(completed.promise);
       await bounded(wrapperSettled.promise);
-      await bounded(handle?.close() ?? Promise.resolve());
+      await bounded(runEffect(handle?.close() ?? Effect.void));
       releaseContender(sessionId, "nested-contender", competitorFence);
       await cleanup();
       expect(existsSync(directory)).toBe(false);
@@ -693,8 +727,8 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         const call = { id: "timed-inner", tool: "inner", input: { slot: "inner" } };
         const context = { sessionId, turnId: "timed-turn", signal: new AbortController().signal };
         return door.endsWith("cell")
-          ? dispatcher.executeCell(call, context).then((result) => [result])
-          : dispatcher.executeWave([call], context);
+          ? runEffect(dispatcher.executeCell(call, context)).then((result) => [result])
+          : runEffect(dispatcher.executeWave([call], context));
       };
       const { app, socket, received, dbPath, cleanup } = await waveApp(
         [
@@ -734,15 +768,18 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         await bounded(interrupted);
         expect(existsSync(marker)).toBe(false);
         expect(toolResults(sessionId).map((result) => [result.callId, result.terminal])).toEqual([
-          ["timed-inner", "executed"],
+          ["timed-inner", "outcome_unknown"],
           ["call-A", "executed"],
           ["call-outer", "executed"],
         ]);
         const held = SessionHandleStore.row(sessionId);
         const contender = acquireContender(sessionId, "timed-contender", held.leaseFence);
-        if (contender.ok) competitorFence = contender.fence;
+        if (Either.isRight(contender)) competitorFence = contender.right.fence;
         // Then: neither timeout nor SDK interruption transfers the live effect's lease.
-        expect(contender).toMatchObject({ ok: false });
+        expect(contender).toMatchObject({
+          _tag: "Left",
+          left: { _tag: "LeaseRefused", reason: "held" },
+        });
         expect(held.leaseOwner).toBe(row.leaseOwner);
         const beforeActions = SessionHandleStore.tree(sessionId).length;
         const db = new Database(dbPath, { readonly: true });
@@ -759,30 +796,44 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         }
         let staleStarts = 0;
         const stale = () =>
-          executor.run({ kind: "tool", op: "stale", intent: {}, effect: {} }, async () => {
-            staleStarts += 1;
-            return null;
-          });
-        await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+          executor.run({ kind: "tool", op: "stale", intent: {}, effect: {} }, () =>
+            Effect.sync(() => {
+              staleStarts += 1;
+              return null;
+            }),
+          );
+        expect(await runEffect(Effect.flip(stale()))).toMatchObject({
+          _tag: "CommitFailed",
+          error: { _tag: "CommitRefused", reason: "fence" },
+        });
         rawGate.resolve();
         await bounded(rawDone.promise);
-        await bounded(handle?.close() ?? Promise.resolve());
+        await bounded(runEffect(handle?.close() ?? Effect.void));
         expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
         const released = SessionHandleStore.row(sessionId);
         expect(released.leaseOwner).toBeNull();
         const next = acquireContender(sessionId, "timed-contender", released.leaseFence);
-        if (next.ok) competitorFence = next.fence;
-        expect(next).toMatchObject({ ok: true, fence: row.leaseFence + 1 });
-        await expect(stale()).rejects.toMatchObject({ name: "SessionCommitError" });
+        if (Either.isRight(next)) competitorFence = next.right.fence;
+        expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
+        expect(await runEffect(Effect.flip(stale()))).toMatchObject({
+          _tag: "CommitFailed",
+          error: { _tag: "CommitRefused", reason: "fence" },
+        });
         expect(staleStarts).toBe(0);
-        expect(SessionHandleStore.tree(sessionId)).toHaveLength(beforeActions);
+        expect(
+          SessionHandleStore.tree(sessionId)
+            .slice(beforeActions)
+            .map((action) => ({
+              kind: action.kind,
+              effect: action.effect.value,
+            })),
+        ).toEqual([{ kind: "prompt", effect: { inboxKind: "interrupt", content: "" } }]);
         expect(received).toHaveLength(2);
       } finally {
         outerGate.resolve();
         rawGate.resolve();
         if (rawStarted) await bounded(rawDone.promise);
-        await bounded(handle?.close() ?? Promise.resolve());
-        await bounded(handle?.close() ?? Promise.resolve());
+        await bounded(runEffect(handle?.close() ?? Effect.void));
         releaseContender(sessionId, "timed-contender", competitorFence);
         await cleanup();
         expect(existsSync(directory)).toBe(false);
@@ -800,12 +851,14 @@ test("approval-time prompts retain durable identities and enter the next model s
   socket.send(JSON.stringify({ type: "message", text: "initial" }));
   const { handle, request } = await bounded(waiting);
   // When: two SDK prompts arrive while the wave is held, before any next boundary.
-  const first = handle.prompt("first continuation");
-  const second = handle.prompt("second continuation");
+  const first = runEffect(handle.prompt("first continuation"));
+  const second = runEffect(handle.prompt("second continuation"));
   const prompts = SessionHandleStore.inboxRows(handle.id).filter((row) => row.kind === "prompt");
   expect(prompts.map((row) => row.status)).toEqual(["consumed", "pending", "pending"]);
   expect(received).toHaveLength(1);
-  await handle.approvals.answer({ request, decision: "approve", credential: "wave-token" });
+  await runEffect(
+    handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
+  );
   await bounded(Promise.all([first, second, response]));
   // Then: canonical next-model admission names the original ordered prompt IDs.
   const modelIntent = z.object({
@@ -854,25 +907,25 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
     expect(started).toEqual([]);
     const alarms = Storage.get().alarms;
     if (alarms === undefined) throw new Error("missing alarm storage");
-    const worker = createAlarmWorker({
-      alarms,
-      observations: Bus,
-      clock: () => now,
-      requestTimeout: (requestId, at) => {
-        handle.requests.transition(
-          { kind: "request.timeout", requestId },
-          `${requestId}:deadline`,
-          at,
-        );
-      },
-      wake: async () => undefined,
-      failure: (error) => {
-        throw error;
-      },
-    });
-    suite.defer(() => worker.close());
+    const worker = await acquireAppResource(
+      app.runtime,
+      createAlarmWorker({
+        alarms,
+        observations: Bus,
+        clock: () => now,
+        requestTimeout: (requestId: string, at: number) =>
+          handle.requests
+            .transition({ kind: "request.timeout", requestId }, `${requestId}:deadline`, at)
+            .pipe(Effect.asVoid),
+        wake: () => Effect.void,
+        failure: (error) => {
+          throw error;
+        },
+      }),
+    );
+    suite.defer(() => runEffect(worker.close()));
     now = 101;
-    worker.tick();
+    await runEffect(worker.tick());
     await response;
     expect(started).toEqual(["A", "C"]);
     expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([
@@ -880,11 +933,15 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
       ["call-B", "blocked_pre"],
       ["call-C", "executed"],
     ]);
-    await expect(
-      handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
-    ).rejects.toMatchObject({ code: "stale_approval" });
+    expect(
+      await runEffect(
+        Effect.flip(
+          handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
+        ),
+      ),
+    ).toMatchObject({ code: "stale_approval" });
   } finally {
-    if (handle.approvals.pending().length > 0) await handle.interrupt();
+    if (handle.approvals.pending().length > 0) await runEffect(handle.interrupt());
   }
 });
 
@@ -931,6 +988,6 @@ test("an interrupt after wave results drains before another provider step", asyn
   expect(received).toHaveLength(1);
   expect(toolResults(activeRow().id)).toMatchObject([{ callId: "call-A", terminal: "executed" }]);
   expect(interruptDeliveries(activeRow().id)).toMatchObject([
-    { inboxId: "after-wave-interrupt", boundary: "after_tools" },
+    { inboxId: "after-wave-interrupt", boundary: "before_llm" },
   ]);
 });

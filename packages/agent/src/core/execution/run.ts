@@ -1,7 +1,10 @@
+import { Cause, Context, Effect, Scope } from "effect";
+import { ForeignFailure, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
+import type { LlmError } from "@openomni/llm";
 import {
   Provider,
   Retry as LlmRetry,
-  Run,
+  LlmRunFailure,
   observeRetry,
   run as llmRun,
   type Sink,
@@ -11,10 +14,12 @@ import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
 import { estimateMessagesTokens } from "../../compaction/estimate";
+import { ExecutorContext } from "../../executor-context";
+import type { Executor } from "../../executor";
 import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
-import * as Retry from "../retry";
 import { evaluateBudget, publishBudgetTelemetry } from "../budget";
 import { restoreModelSelection } from "../../model-selection";
+import { failureFacts } from "../retry";
 import { AgentStopError } from "./stop-chain";
 import { assertToolExecutor, assertUnambiguousToolMetadata } from "./tools";
 import { buildTurn, handleContinue, handleStop, drainStepBoundary } from "./turn";
@@ -40,15 +45,17 @@ import {
 } from "./state";
 
 /** Stateless L3 orchestration; the session supplies the only execution authority. */
-export async function runAgent(
+export function runAgent(
   input: ChatAgentInput,
   config: ChatAgentConfig,
   sink?: Sink,
-): Promise<AgentResult> {
+): Effect.Effect<AgentResult, ExecutionError> {
+  return Effect.scopedWith((scope) => Effect.suspend(() => {
   const trace = requireTrace("agent run", input.traceContext);
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
-  if (config.executor === undefined || config.execution === undefined)
+  const durableExecutor = config.executor;
+  if (durableExecutor === undefined || config.execution === undefined)
     throw new Error("agent run requires session execution authority");
   const state = createRunState({ ...input, traceContext: trace });
   const base = {
@@ -59,64 +66,66 @@ export async function runAgent(
   };
   const compaction = createCompactionSession(config);
   emitRunStarted(config.events, trace, config.model.id);
-  try {
-    state.modelChainStart = await restoreModelSelection(config.executor, config.pinnedModel, [
+  const needsExecutorContext = (config.tools?.length ?? 0) > 0 ||
+    config.toolExecutor !== undefined || config.toolWave !== undefined;
+  const runContext = needsExecutorContext
+    ? Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))
+    : Context.make(Scope.Scope, scope);
+  return Effect.gen(function* () {
+    state.modelChainStart = yield* restoreModelSelection(durableExecutor, config.pinnedModel, [
       config.model,
       ...(config.modelFallbacks ?? []),
     ]);
     for (;;) {
-      await drainStepBoundary(state, config, "before_llm");
+      yield* drainStepBoundary(state, config, "before_llm");
       if (
         publishBudgetTelemetry(state.budgetState, base, config.events, config.budget) === "exceeded"
       ) {
-        throw new AgentStopError("budget");
+        return yield* new AgentStopError({ reason: "budget" });
       }
-      const result = await runModelStep(state, config, sink, trace, base, compaction);
+      const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor);
       if (result !== undefined) return finish(result);
     }
-  } catch (error) {
-    const cause = error instanceof Error ? error : new Error(String(error));
-    const facts = {
-      reason: Retry.isAbort(cause, config.signal)
-        ? ("aborted" as const)
-        : LlmRetry.attemptReason(cause),
-      attempt: state.attempt,
-      maxAttempts: LlmRetry.MAX_ATTEMPTS,
-    };
-    emitRunFailed(config.events, base, cause.message, facts);
-    const llmFailure: boolean = Run.FailureError.isInstance(error);
-    if (llmFailure) Retry.attachFailureFacts(cause, { ...facts, llm: true });
-    throw error;
-  } finally {
-    compaction?.abort();
-  }
+  }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
+    const error = Cause.squash(cause);
+    const facts = failureFacts(error);
+    const interrupted = Cause.isInterrupted(cause) || error instanceof Interrupted ||
+      (error instanceof LlmRunFailure && error.aborted);
+    emitRunFailed(config.events, base, String(error), {
+      reason: interrupted ? "aborted" : facts?.reason ?? "transient_error",
+      attempt: facts?.attempt ?? state.attempt,
+      maxAttempts: facts?.maxAttempts ?? LlmRetry.MAX_ATTEMPTS,
+    });
+  })), (effect) => compaction === undefined ? effect : Effect.ensuring(effect, compaction.abort()));
 
   function finish(result: AgentResult): AgentResult {
     emitRunCompleted(config.events, state, base, result.finishReason);
     return result;
   }
+  }));
 }
 
-async function runModelStep(
+function runModelStep(
   state: RunState,
   config: ChatAgentConfig,
   sink: Sink | undefined,
   trace: RunTrace,
   base: AgentRunBase,
   compaction: CompactionSession | undefined,
-): Promise<AgentResult | undefined> {
-  const executor = config.executor;
+  durableExecutor: Executor,
+): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope> {
+  return Effect.gen(function* () {
+  const executor = durableExecutor;
   const execution = config.execution;
-  if (executor === undefined || execution === undefined)
-    throw new Error("missing session execution authority");
+  if (execution === undefined) return yield* new ForeignFailure({ operation: "agent.execution", cause: "missing" });
   let turn: TurnArtifacts | undefined;
   const priorFailures = [...state.modelFailureReasons];
   let provider = config.model.provider;
-  const prepareAttempt = async (attempt: number, failures: readonly string[]) => {
+  const prepareAttempt = (attempt: number, failures: readonly string[]) => Effect.gen(function* () {
     recordRunAttempt(state, attempt);
     const chain = [config.model, ...(config.modelFallbacks ?? [])].slice(state.modelChainStart);
     const selected = selectModel(chain, [...priorFailures, ...failures]);
-    const model = await (config.llm?.resolveModel ?? Provider.resolveModel)(selected.model);
+    const model = yield* (config.llm?.resolveModel ?? Provider.resolveModel)(selected.model).pipe(Effect.mapError(modelFailure));
     const modelKey = `${model.providerID}/${model.id}`;
     if (state.modelKey !== undefined && state.modelKey !== modelKey) resetModelWindowGuards(state);
     state.modelKey = modelKey;
@@ -126,11 +135,11 @@ async function runModelStep(
       state.contextWindowTokens !== undefined &&
       estimateMessagesTokens(state.messages) > state.contextWindowTokens
     ) {
-      await applyCompaction(state, config, base, compaction, "yield");
+      yield* applyCompaction(state, config, base, compaction, "yield");
     }
     emitTurnStart(config.events, state, base);
-    const built = await buildTurn(state, config, model, config.toolChoice, trace, sink);
-    if (built.type !== "ready") throw new Error("model context admission produced no turn");
+    const built = buildTurn(state, config, model, config.toolChoice, trace, sink);
+    if (built.type !== "ready") return yield* new ForeignFailure({ operation: "agent.turn", cause: "not_ready" });
     turn = built.turn;
     const prepared = turn;
     return {
@@ -145,53 +154,56 @@ async function runModelStep(
         },
         effect: {},
       },
-      admit: async () => {
-        config.signal?.throwIfAborted();
+      admit: () => Effect.suspend<void, ExecutionError, never>(() => {
+        if (config.signal?.aborted) return Effect.fail(new Interrupted());
         if (
           evaluateBudget(
             { ...state.budgetState, turns: Math.max(0, state.budgetState.turns - 1) },
             config.budget,
           ).status === "exceeded"
         )
-          throw new AgentStopError("budget");
+          return Effect.fail(new AgentStopError({ reason: "budget" }));
         if (
           state.contextWindowTokens !== undefined &&
           estimateMessagesTokens(state.messages) > state.contextWindowTokens
         ) {
-          throw new Error("model context admission exceeded");
+          return Effect.fail(new ContextAdmissionError());
         }
-      },
-      body: async () => {
-        const result = await (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink);
-        if (result.type === "aborted") throw result.error ?? Retry.abortError();
-        if (result.type === "error") throw result.error;
-        return {
-          type: successfulOutcome({ type: result.type }),
-          evidence: PlainValueSchema.parse(
-            result.type === "stop" ? (result.evidence ?? null) : null,
-          ),
-        };
-      },
+        return Effect.void;
+      }),
+      body: () => Effect.suspend(() => (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink)).pipe(
+        Effect.mapError(modelFailure),
+        Effect.flatMap((result) => {
+          if (result.type === "aborted") return Effect.fail(result.error ?? new Interrupted());
+          if (result.type === "error") return Effect.fail(result.error);
+          return Effect.succeed({
+            type: successfulOutcome({ type: result.type }),
+            evidence: PlainValueSchema.parse(
+              result.type === "stop" ? (result.evidence ?? null) : null,
+            ),
+          });
+        }),
+      ),
     };
-  };
-  const initial = await prepareAttempt(1, []);
-  const outcome = await executor.run(
+  });
+  const initial = yield* prepareAttempt(1, []);
+  const outcome = yield* executor.run(
     {
       kind: "llm",
       op: "chat",
       intent: initial.request.intent,
       effect: {},
     },
-    (parent) =>
+    (parent: import("@openomni/protocol").LedgerAction.Receipt) =>
       execution.runAttempts(parent, {
-        prepare: async (attempt, failures) =>
-          attempt === 1 ? initial : prepareAttempt(attempt, failures),
+        prepare: (attempt, failures) =>
+          attempt === 1 ? Effect.succeed(initial) : prepareAttempt(attempt, failures),
         evidence: (result) => result.evidence,
-        recoverOverflow: async () => {
+        recoverOverflow: () => Effect.gen(function* () {
           if (state.overflowCompactionAttempted) return false;
           state.overflowCompactionAttempted = true;
-          return (await applyCompaction(state, config, base, compaction, "yield")) === "compacted";
-        },
+          return (yield* applyCompaction(state, config, base, compaction, "yield")) === "compacted";
+        }),
         onRetry: (decision) => {
           state.modelFailureReasons.push(decision.reason);
           emitErrorRetry(config.events, base, {
@@ -212,17 +224,25 @@ async function runModelStep(
         },
       }),
   );
+  if (outcome.terminal === "interrupted") return yield* new Interrupted();
   if (outcome.terminal !== "executed")
-    throw new Error(`llm execution ${outcome.terminal}: ${outcome.reason}`);
-  if (turn === undefined) throw new Error("llm execution lost its prepared turn");
+    return yield* new ForeignFailure({ operation: "agent.llm", cause: `execution_${outcome.terminal}` });
+  if (turn === undefined) return yield* new ForeignFailure({ operation: "agent.llm", cause: "missing_turn" });
   const type = successfulOutcome(outcome.value);
   if (type === "continue") {
     handleContinue(config.events, state, base, turn.turnUsage);
-    prepareCompactionAfterContinue(state, config, compaction);
+    yield* prepareCompactionAfterContinue(state, config, compaction);
     return undefined;
   }
-  const result = await handleStop(state, config, base, turn, compaction);
+  const result = yield* handleStop(state, config, base, turn, compaction);
   return result === "continue" ? undefined : result;
+  });
+}
+
+function modelFailure(error: LlmError): ExecutionError {
+  return error instanceof LlmRunFailure ? error : new ForeignFailure({
+    operation: "llm", cause: error.message,
+  });
 }
 
 /** Only successful machine outcomes can cross the executor's encoded result boundary. */

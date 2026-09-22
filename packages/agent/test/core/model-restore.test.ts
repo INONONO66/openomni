@@ -1,10 +1,13 @@
+import { Effect } from "effect";
+import { isolated } from "../helpers/isolated";
+import { recordingLedger } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { LedgerAction, Model, PlainObject, PolicyRow } from "@openomni/protocol";
 import { runAgent } from "../../src/core/execution/run";
 import { createAssistantMessage } from "../../src/core/message-factory";
 import { createExecutor } from "../../src/executor";
-import { compiledPolicy, opPhaseOf, recordingLedger } from "../helpers/compiled-policy";
+import { compiledPolicy, opPhaseOf } from "../helpers/compiled-policy";
 import { createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 
@@ -50,27 +53,36 @@ async function turn(options: {
       turnId: "turn-2",
     },
   });
-  const result = await runAgent(runInput([{ role: "user", content: "go" }]), {
-    executor,
-    execution: executor,
-    events: { publish: () => undefined },
-    model: primary,
-    ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
-    ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
-    llm: {
-      run: async (_input, sink: Sink) => {
-        sink.onMessage(createAssistantMessage("done", "", "session"));
-        return createStopOutcome();
+  const result = await isolated(
+    runAgent(runInput([{ role: "user", content: "go" }]), {
+      executor,
+      execution: executor,
+      events: { publish: () => undefined },
+      model: primary,
+      ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
+      ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
+      llm: {
+        run: (_input: import("@openomni/llm").RunInput, sink: Sink) =>
+          Effect.promise(async () => {
+            sink.onMessage(createAssistantMessage("done", "", "session"));
+            return createStopOutcome();
+          }),
+        resolveModel: (model: Model.Ref) =>
+          Effect.promise(async () => {
+            resolved.push(model);
+            return { id: model.id, name: model.id, providerID: model.provider };
+          }),
       },
-      resolveModel: async (model: Model.Ref) => {
-        resolved.push(model);
-        return { id: model.id, name: model.id, providerID: model.provider };
-      },
-    },
-  });
-  const llm = recording.committed.filter((action) => action.kind === "llm");
+    }),
+  );
+  const llm = recording.committed.filter(
+    (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === "llm",
+  );
   const decisions = recording.committed
-    .filter((action) => action.kind === "policy.decision")
+    .filter(
+      (action: import("@openomni/protocol").LedgerAction.Append) =>
+        action.kind === "policy.decision",
+    )
     .map(intentOf);
   return { result, resolved, llm, decisions, intents: llm.map(opPhaseOf) };
 }

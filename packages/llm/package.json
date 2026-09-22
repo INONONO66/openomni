@@ -14,6 +14,7 @@
     "@ai-sdk/openai": "^3.0.48",
     "@openomni/protocol": "workspace:*",
     "ai": "^6.0.141",
+    "effect": "3.22.2",
     "zod": "^4.5.4"
   },
   "devDependencies": {

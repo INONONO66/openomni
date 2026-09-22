@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 import { defineTool, ToolRefused } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { type LedgerError, SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { Alarm, LedgerAction } from "@openomni/protocol";
 import { z } from "zod";
@@ -56,64 +56,90 @@ const operation = z.discriminatedUnion("op", [
 // Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
 
-export const monitorTool = defineTool({
-  name: "monitor",
-  category: "mutation",
-  description:
-    "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
-  input,
-  output: Alarm.Row,
-  visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
-  sequential: true,
-  async execute(request, context) {
-    const args = request.operation;
-    const alarms = Storage.get().alarms;
-    if (alarms === undefined) throw new ToolRefused("monitor", "alarm storage unavailable");
-    context.signal.throwIfAborted();
-    const at = Date.now();
-    if (args.op !== "create") {
-      const row = alarms[args.op](args.id, context.sessionId, at);
-      if (row === undefined) throw new ToolRefused("monitor", "alarm control refused");
-      return row;
-    }
-    const { kind, ...fields } = args.source;
-    const watch = Alarm.Watch.parse({ ...fields, description: args.description });
-    const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(context.turnId));
-    if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
-    const policy = compilePolicySnapshot({
-      generation: turn.policyGeneration,
-      rows: SessionHandleStore.policyRows(turn.policyGeneration),
-      kinds: LedgerAction.Kind.options,
-    });
-    const evaluation = policy.evaluate({
-      kind: "tool",
-      phase: "pre",
-      op: "monitor",
-      role: SessionHandleStore.row(context.sessionId).role,
-      sessionId: context.sessionId,
-      value: watch,
-    });
-    const limits = evaluation.obligations.filter(
-      (obligation) => obligation.metric === "notifications",
-    );
-    if (evaluation.verdict === "deny" || evaluation.error !== undefined || limits.length === 0)
-      throw new ToolRefused("monitor", "captured wake budget unavailable");
-    const row = alarms.arm({
-      id: crypto.randomUUID(),
-      sessionId: context.sessionId,
-      kind: "watch",
-      fireAt: at,
-      spec: {
-        encodingVersion: 1,
-        value: {
-          watch,
-          policyGeneration: turn.policyGeneration,
-          notificationLimit: Math.min(...limits.map((limit) => limit.limit)),
+export interface MonitorPorts {
+  readonly arm: (input: Alarm.Arm, signal: AbortSignal) => Promise<Alarm.Row>;
+  readonly cancel: (
+    id: string,
+    sessionId: string,
+    at: number,
+    signal: AbortSignal,
+  ) => Promise<Alarm.Row>;
+  readonly rearm: (
+    id: string,
+    sessionId: string,
+    at: number,
+    signal: AbortSignal,
+  ) => Promise<Alarm.Row>;
+  readonly clock: () => number;
+  readonly entropy: () => string;
+}
+
+export class MonitorRefused extends ToolRefused {
+  readonly _tag = "MonitorRefused";
+
+  constructor(readonly failure: LedgerError) {
+    super("monitor", failure._tag);
+  }
+}
+
+export function createMonitorTool(ports?: MonitorPorts) {
+  return defineTool({
+    name: "monitor",
+    category: "mutation",
+    description:
+      "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+    input,
+    output: Alarm.Row,
+    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    sequential: true,
+    async execute(request, context) {
+      const args = request.operation;
+      if (ports === undefined) throw new ToolRefused("monitor", "alarm port unavailable");
+      context.signal.throwIfAborted();
+      const at = ports.clock();
+      if (args.op !== "create") {
+        return ports[args.op](args.id, context.sessionId, at, context.signal);
+      }
+      const { kind, ...fields } = args.source;
+      const watch = Alarm.Watch.parse({ ...fields, description: args.description });
+      const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(context.turnId));
+      if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
+      const policy = compilePolicySnapshot({
+        generation: turn.policyGeneration,
+        rows: SessionHandleStore.policyRows(turn.policyGeneration),
+        kinds: LedgerAction.Kind.options,
+      });
+      const evaluation = policy.evaluate({
+        kind: "tool",
+        phase: "pre",
+        op: "monitor",
+        role: SessionHandleStore.row(context.sessionId).role,
+        sessionId: context.sessionId,
+        value: watch,
+      });
+      const limits = evaluation.obligations.filter(
+        (obligation) => obligation.metric === "notifications",
+      );
+      if (evaluation.verdict === "deny" || evaluation.error !== undefined || limits.length === 0)
+        throw new ToolRefused("monitor", "captured wake budget unavailable");
+      return ports.arm(
+        {
+          id: ports.entropy(),
+          sessionId: context.sessionId,
+          kind: "watch",
+          fireAt: at,
+          spec: {
+            encodingVersion: 1,
+            value: {
+              watch,
+              policyGeneration: turn.policyGeneration,
+              notificationLimit: Math.min(...limits.map((limit) => limit.limit)),
+            },
+          },
         },
-      },
-    });
-    if (row === undefined) throw new ToolRefused("monitor", "alarm arm refused");
-    return row;
-  },
-  render: (_args, row) => JSON.stringify({ id: row.id, status: row.status, epoch: row.epoch }),
-});
+        context.signal,
+      );
+    },
+    render: (_args, row) => JSON.stringify({ id: row.id, status: row.status, epoch: row.epoch }),
+  });
+}

@@ -1,4 +1,5 @@
-import { Run, type RunInput, type Sink } from "@openomni/llm";
+import { LlmRunFailure, type Run, type RunInput, type Sink } from "@openomni/llm";
+import { Effect } from "effect";
 import type { ChatAgentConfig } from "../../src/core/types";
 import { createAssistantMessage } from "../../src/core/message-factory";
 
@@ -42,8 +43,13 @@ export function providerFailure(
     statusCode: options.statusCode ?? 529,
     responseHeaders: { "retry-after-ms": "0" },
   });
-  return new Run.FailureError(
-    {
+  return new LlmRunFailure({
+      cause: String(cause),
+      providerErrorName: cause.name,
+      isRetryable: cause.isRetryable,
+      statusCode: cause.statusCode,
+      responseHeaders: cause.responseHeaders,
+      retryAfterMs: 0,
       message,
       aborted: options.aborted ?? false,
       contextOverflow: options.contextOverflow ?? false,
@@ -55,9 +61,7 @@ export function providerFailure(
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
-    },
-    { cause },
-  );
+  });
 }
 
 export const mockProviderData = {
@@ -103,24 +107,24 @@ export function createMockLlmConfig(options: {
   readonly run: MockLlmFn;
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
-    run: options.run,
-    resolveModel: async () => {
+    run: (input, sink) => Effect.promise(() => options.run(input, sink)),
+    resolveModel: () => Effect.promise(async () => {
       await options.getModels();
       return options.fromModelsDevModel();
-    },
+    }),
   };
 }
 
 /** An llm config whose resolved "provider/model" advertises a `context`-token window. */
 export function windowedLlm(run: MockLlmFn, context = 1000): ChatAgentConfig["llm"] {
   return {
-    resolveModel: async () => ({
+    resolveModel: () => Effect.succeed({
       id: "model",
       name: "model",
       providerID: "provider",
       limit: { context, output: 100 },
     }),
-    run,
+    run: (input, sink) => Effect.promise(() => run(input, sink)),
   };
 }
 

@@ -1,17 +1,19 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import type { LlmIo } from "../src/tools/completion";
-import { Run } from "@openomni/llm";
+import type { LlmIo } from "../src/composition/completion";
+import { LlmRunFailure, type Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import {
   createCompactionSummarizer as summarizer,
   SummarizerError,
 } from "../src/compaction/summarizer";
-import { admittedOperation } from "./helpers/admitted-operation";
-import { rejected } from "./helpers/rejected";
+import { ExecutorContext } from "@openomni/agent";
+import { executor } from "./helpers/executor";
+import { runEffect } from "./helpers/effect";
 
 function createCompactionSummarizer(config: Parameters<typeof summarizer>[0]) {
   const run = summarizer(config);
-  return (...args: Parameters<typeof run>) => admittedOperation(() => run(...args));
+  return (...args: Parameters<typeof run>) => Effect.provideService(run(...args), ExecutorContext, executor);
 }
 
 const MODEL = { provider: "fake", id: "summary-model", apiKey: "key" };
@@ -41,14 +43,15 @@ function answer(text: string): Message.WithParts {
   return message("answer", text);
 }
 
-const resolveModel: NonNullable<LlmIo["resolveModel"]> = async (model) => ({
+const resolveModel: NonNullable<LlmIo["resolveModel"]> = (model) => Effect.succeed({
   id: model.id,
   name: model.id,
   providerID: model.provider,
 });
 
 function runFailure(contextOverflow: boolean, message: string): Run.Failure {
-  return new Run.FailureError({
+  return new LlmRunFailure({
+    visibleOutput: false,
     message,
     usage: {
       inputTokens: 0,
@@ -65,14 +68,14 @@ function runFailure(contextOverflow: boolean, message: string): Run.Failure {
 describe("production compaction summarizer", () => {
   it("merges the previous anchor without tools and bounds output tokens", async () => {
     let captured: Parameters<NonNullable<LlmIo["run"]>>[0] | undefined;
-    const run: NonNullable<LlmIo["run"]> = async (input, sink) => {
+    const run: NonNullable<LlmIo["run"]> = (input, sink) => Effect.sync(() => {
       captured = input;
       sink.onMessage(answer("dense merged summary"));
       return { type: "stop" };
-    };
+    });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    await expect(summarize([message("m1", "new span")], "prior anchor", BUDGET)).resolves.toBe(
+    await expect(runEffect(summarize([message("m1", "new span")], "prior anchor", BUDGET))).resolves.toBe(
       "dense merged summary",
     );
     expect(captured?.tools).toEqual([]);
@@ -84,67 +87,69 @@ describe("production compaction summarizer", () => {
   });
 
   it("throws a typed empty error for an empty model response", async () => {
-    const run: NonNullable<LlmIo["run"]> = async (_input, sink) => {
+    const run: NonNullable<LlmIo["run"]> = (_input, sink) => Effect.sync(() => {
       sink.onMessage(answer("   "));
       return { type: "stop" };
-    };
+    });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await rejected(summarize([message("m1", "span")], undefined, BUDGET));
+    const error = await runEffect(Effect.flip(summarize([message("m1", "span")], undefined, BUDGET)));
     expect(error).toBeInstanceOf(SummarizerError);
-    expect((error as SummarizerError).kind).toBe("empty");
+    expect(error).toMatchObject({ _tag: "ForeignFailure", kind: "empty" });
   });
 
   it("uses the typed overflow flag to shrink twice before a typed overflow error", async () => {
     const inputLengths: number[] = [];
     const failure = runFailure(true, "opaque upstream failure");
-    const run: NonNullable<LlmIo["run"]> = async (input) => {
+    const run: NonNullable<LlmIo["run"]> = (input) => Effect.sync(() => {
       inputLengths.push(input.messages.length);
       return { type: "error", error: failure };
-    };
+    });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize(
+    const error = await runEffect(Effect.flip(summarize(
       [message("m1", "oldest"), message("m2", "middle"), message("m3", "newest")],
       undefined,
       BUDGET,
-    ).catch((caught: unknown) => caught);
+    )));
     expect(inputLengths).toEqual([4, 3, 2]);
     expect(error).toBeInstanceOf(SummarizerError);
-    expect((error as SummarizerError).kind).toBe("overflow");
+    expect(error).toMatchObject({ _tag: "ForeignFailure", kind: "overflow" });
   });
 
   it("does not retry overflow prose when the typed flag is false", async () => {
     let calls = 0;
     const failure = runFailure(false, "context window has been exceeded");
-    const run: NonNullable<LlmIo["run"]> = async () => {
+    const run: NonNullable<LlmIo["run"]> = () => Effect.sync(() => {
       calls += 1;
       return { type: "error", error: failure };
-    };
+    });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await rejected(summarize([message("m1", "span")], undefined, BUDGET));
+    const error = await runEffect(Effect.flip(summarize([message("m1", "span")], undefined, BUDGET)));
     expect(calls).toBe(1);
     expect(error).toBe(failure);
   });
 
-  it("surfaces an aborted run as AbortError", async () => {
+  it.each([false, true])("surfaces an aborted run as Interrupted (pre-aborted=%s)", async (preAborted) => {
     const controller = new AbortController();
-    controller.abort();
-    const run: NonNullable<LlmIo["run"]> = async (input) => {
+    if (preAborted) controller.abort();
+    let calls = 0;
+    const run: NonNullable<LlmIo["run"]> = (input) => Effect.sync(() => {
+      calls += 1;
       expect(input.signal).toBe(controller.signal);
       return { type: "aborted" };
-    };
+    });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
-    const error = await summarize(
+    const error = await runEffect(Effect.flip(summarize(
       [message("m1", "span")],
       undefined,
       BUDGET,
       controller.signal,
-    ).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).name).toBe("AbortError");
+    )));
+    expect(error).toMatchObject({ _tag: "Interrupted" });
+    expect(calls).toBe(preAborted ? 0 : 1);
     expect(error).not.toBeInstanceOf(SummarizerError);
   });
 });

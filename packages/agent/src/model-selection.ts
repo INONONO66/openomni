@@ -1,4 +1,6 @@
 import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
+import { Effect } from "effect";
+import type { ExecutionError } from "./errors";
 import type { Executor } from "./executor-contract";
 
 function record(value: PlainValue | undefined): PlainObject {
@@ -38,18 +40,19 @@ export function pinnedModelSelection(
  * when nothing was pinned or the restoration executed, the pinned fallback when
  * the policy refused it.
  */
-export async function restoreModelSelection(
+export function restoreModelSelection(
   executor: Pick<Executor, "run">,
   pinned: Model.Ref | undefined,
   chain: readonly Model.Ref[],
-): Promise<number> {
+): Effect.Effect<number, ExecutionError> {
+  return Effect.suspend(() => {
   const primary = chain[0];
-  if (pinned === undefined || primary === undefined) return 0;
+  if (pinned === undefined || primary === undefined) return Effect.succeed(0);
   const index = chain.findIndex(
     (model) => model.provider === pinned.provider && model.id === pinned.id,
   );
-  if (index <= 0) return 0;
-  const outcome = await executor.run(
+  if (index <= 0) return Effect.succeed(0);
+  return executor.run(
     {
       kind: "llm",
       op: "restore_model_selection",
@@ -60,7 +63,7 @@ export async function restoreModelSelection(
       effect: { model: { provider: primary.provider, id: primary.id } },
       recovery: "local_transactional",
     },
-    async () => ({ restored: true }),
-  );
-  return outcome.terminal === "executed" ? 0 : index;
+    () => Effect.succeed({ restored: true }),
+  ).pipe(Effect.map((outcome) => outcome.terminal === "executed" ? 0 : index));
+  });
 }

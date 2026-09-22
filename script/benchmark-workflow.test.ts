@@ -16,13 +16,14 @@ const Job = z.object({
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   steps: z.array(Step),
 });
+const WorkflowInput = z.object({ description: z.string(), required: z.boolean(), default: z.string() });
 const Workflow = z.object({
   permissions: z.object({ contents: z.string() }),
   on: z.object({
     push: z.object({ branches: z.array(z.string()), paths: z.array(z.string()).optional() }),
     pull_request: z.object({ paths: z.array(z.string()) }),
     schedule: z.array(z.object({ cron: z.string() })),
-    workflow_dispatch: z.object({ inputs: z.record(z.string(), z.object({ default: z.string() })) }),
+    workflow_dispatch: z.object({ inputs: z.record(z.string(), WorkflowInput) }),
   }),
   concurrency: z.object({ group: z.string(), "cancel-in-progress": z.string() }),
   jobs: z.object({ benchmark: Job, memory: Job, publish: Job }),
@@ -105,9 +106,20 @@ test("all events collect the accepted SHA and head on one runner before the sole
   const decision = "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
   expect(steps[gate]?.run).toContain(decision);
   expect(steps.filter((step) => step.run?.includes(decision))).toHaveLength(1);
-  expect(workflow.jobs.benchmark.env).toEqual({ BENCHMARK_REGRESSION_PERCENT: "20" });
+  expect(workflow.jobs.benchmark.env).toEqual({
+    BENCHMARK_REGRESSION_PERCENT: "20",
+    BENCHMARK_ACCEPT_BASELINE: [
+      "$",
+      "{{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark:accept-baseline')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.accept_baseline == 'true') }}",
+    ].join(""),
+  });
   expect(steps[reference]?.run).toContain('REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"');
   expect(steps[reference]?.run).toContain('printf \'REFERENCE_WORKTREE=%s\\n\' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"');
+  expect(workflow.on.workflow_dispatch.inputs.accept_baseline).toEqual({
+    description: "Owner-approved baseline reset: accept regressions above the limit and publish the new reference",
+    required: false,
+    default: "false",
+  });
   expect(workflow.on.workflow_dispatch.inputs["regression-percent"]).toBeUndefined();
   expect(workflow.permissions.contents).toBe("read");
   expect(workflow.jobs.benchmark.permissions).toBeUndefined();

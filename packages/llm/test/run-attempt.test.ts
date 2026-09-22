@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { run } from "../src/run";
+import { run } from "./helpers/native";
 import type { StreamEvent } from "../src/processor/stream-events";
 
 for (const visible of ["none", "text", "tool"] as const) {
@@ -37,10 +37,7 @@ for (const visible of ["none", "text", "tool"] as const) {
     expect(outcome).toMatchObject({
       type: "error",
       error: {
-        data: {
-          visibleOutput: visible !== "none",
-          usage: { inputTokens: 17, outputTokens: 2 },
-        },
+        visibleOutput: visible !== "none", usage: { inputTokens: 17, outputTokens: 2 },
       },
     });
   });

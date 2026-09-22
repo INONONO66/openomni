@@ -1,6 +1,9 @@
+import { Effect } from "effect";
+import { acquireEffect, runEffect } from "./helpers/effect";
+import { decodeChannelFailure } from "@openomni/channels";
 import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { Auth } from "@openomni/llm";
+import { Auth, ForeignFailure } from "@openomni/llm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,7 +41,7 @@ describe("Resident model fallback wiring", () => {
     const sessionId = openSession("openomni-resident-fallback-");
     const resolved: Model.Ref[] = [];
     const auths: Auth.Info[] = [];
-    const credentials = spyOn(Auth, "get").mockResolvedValue({ type: "api", key: "fallback-key" });
+    const credentials = spyOn(Auth, "get").mockReturnValue(Effect.succeed({ type: "api", key: "fallback-key" }));
     const resident = createResident({
       model: PRIMARY,
       modelFallbacks: [FALLBACK],
@@ -77,12 +80,12 @@ describe("Resident model fallback wiring", () => {
 describe("Resident terminal LLM failure surfacing", () => {
   function alwaysFailing(error: Error) {
     return {
-      resolveModel: async (model: Model.Ref) => ({
+      resolveModel: (model: Model.Ref) => Effect.succeed({
         id: model.id,
         name: model.id,
         providerID: model.provider,
       }),
-      run: async () => ({ type: "error" as const, error: providerFailure(error.message, error) }),
+      run: () => Effect.succeed({ type: "error" as const, error: providerFailure(error.message, error) }),
     };
   }
 
@@ -169,12 +172,12 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = residentThatAlwaysFails(
       providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
     );
-    const gateway = createResidentGateway({
-      inbox: { commit: commitMessageInbox },
+    const gateway = await runEffect(createResidentGateway({
+      inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
       prepare: prepareMessage(resident.materialize),
-    });
+    }));
 
-    const result = await gateway.ingest(
+    const result = await runEffect(gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
       {
         eventId: "inbound-resilience-gateway",
@@ -185,13 +188,13 @@ describe("Resident terminal LLM failure surfacing", () => {
         payload: {},
         render: "please answer",
       },
-    );
+    ));
     if (result.status !== "executed") throw new Error("gateway did not commit");
-    const completed = await wakeSession(
+    const completed = await acquireEffect(wakeSession(
       result.handle.target,
       resident.runnerFor(SessionHandleStore.row(result.handle.target)),
       resident.runtime,
-    );
+    ));
     expect(completed?.text).toContain("rate limited upstream");
     expect(SessionHandleStore.getSnapshot(result.handle.target).turns.at(-1)?.terminal?.kind).toBe(
       "error",
@@ -205,16 +208,19 @@ describe("Resident terminal LLM failure surfacing", () => {
       apiKey: "test-key",
       tools: {},
       llm: {
-        resolveModel: async () => {
-          throw new Error("catalog invariant failed");
-        },
+        resolveModel: () => Effect.fail(new ForeignFailure({ operation: "resolveModel", cause: "catalog invariant failed" })),
       },
     });
 
     const result = await resident.prompt(sessionId, "please answer");
     expect(result.kind).toBe("error");
     if (result.kind !== "error") throw new Error("configuration fault was not an error");
-    expect(result.cause?.message).toBe("catalog invariant failed");
+    expect(result.cause).toMatchObject({
+      _tag: "ForeignFailure",
+      operation: "llm",
+      cause: "catalog invariant failed",
+    });
+    expect(result.reported).not.toBe(true);
   });
 
   it("records the classified reply in session history so the turn is auditable", async () => {

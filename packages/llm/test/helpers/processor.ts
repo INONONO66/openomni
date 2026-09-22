@@ -1,7 +1,7 @@
 import { beforeEach, mock, type Mock } from "bun:test";
 import { Operational, type Message, type Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
-import { Processor } from "../../src/processor";
+import { Processor } from "./native";
 import type { StreamEvent } from "../../src/processor/stream-events";
 import { collector } from "./observation";
 import { anthropicModel, assistantMessage } from "./fixtures";

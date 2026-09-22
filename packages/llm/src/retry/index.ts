@@ -1,5 +1,6 @@
+import { Effect } from "effect";
 import { z } from "zod";
-import { type ApiFailure, apiFailure, coerceApiError, declaredContextOverflow } from "../error";
+import { type ApiFailure, coerceApiError, declaredContextOverflow } from "../error";
 import { headerDelay } from "./delay";
 
 const Payload = z.object({
@@ -49,33 +50,25 @@ export namespace Retry {
     api: ApiFailure | undefined,
   ): "timeout" | "transient_error" | "validation_error" {
     if (api === undefined) return "transient_error";
-    if (api.data.statusCode === 408) return "timeout";
-    return api.data.isRetryable ? "transient_error" : "validation_error";
+    if (api.statusCode === 408) return "timeout";
+    return api.isRetryable ? "transient_error" : "validation_error";
   }
   export const RETRY_INITIAL_DELAY = 2000;
   export const RETRY_BACKOFF_FACTOR = 2;
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000;
   export const RETRY_MAX_DELAY = 2_147_483_647;
 
-  export async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
-
-    return new Promise((resolve, reject) => {
-      const abortHandler = () => {
-        clearTimeout(timeout);
-        reject(new DOMException("Aborted", "AbortError"));
-      };
-      const timeout = setTimeout(
-        () => {
-          signal?.removeEventListener("abort", abortHandler);
-          resolve();
-        },
-        Math.min(ms, RETRY_MAX_DELAY),
-      );
-      signal?.addEventListener("abort", abortHandler, { once: true });
+  export function sleep(ms: number, signal?: AbortSignal): Effect.Effect<void> {
+    const timer = Effect.sleep(Math.min(ms, RETRY_MAX_DELAY));
+    if (signal === undefined) return timer;
+    if (signal.aborted) return Effect.interrupt;
+    const abort = Effect.async<never>((resume) => {
+      const onAbort = () => resume(Effect.interrupt);
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+      return Effect.sync(() => signal.removeEventListener("abort", onAbort));
     });
+    return Effect.raceFirst(timer, abort);
   }
 
   /**
@@ -101,11 +94,11 @@ export namespace Retry {
   export function isInstantTransportFailure<E>(error: E, elapsedMs: number): boolean {
     if (elapsedMs >= INSTANT_FAILURE_WINDOW_MS) return false;
     const providerError = apiCause(error);
-    return providerError !== undefined && answeredByTransport(providerError.data);
+    return providerError !== undefined && answeredByTransport(providerError);
   }
 
   /** A status code or response headers prove the endpoint answered: HTTP, not transport. */
-  function answeredByTransport(data: ApiFailure["data"]): boolean {
+  function answeredByTransport(data: ApiFailure): boolean {
     return data.isRetryable && data.statusCode === undefined && data.responseHeaders === undefined;
   }
 
@@ -182,7 +175,7 @@ export namespace Retry {
     providerError: ApiFailure | undefined,
     fallbackAvailable: boolean,
   ): Decision {
-    if (fallbackAvailable && providerError?.data.statusCode === 400)
+    if (fallbackAvailable && providerError?.statusCode === 400)
       return { retry: true, reason: "validation_error", delayMs: 0 };
     return { retry: false, reason: "non_retryable" };
   }
@@ -236,7 +229,7 @@ export namespace Retry {
 
   /** Provider-directed delay retained on the terminal typed failure. */
   export function retryAfterMs<E>(error: E): number | undefined {
-    return headerDelay(apiFailure(error))?.ms;
+    return headerDelay(coerceApiError(error))?.ms;
   }
 
   /** Bound traversal even for cyclic cause chains. */
@@ -266,10 +259,10 @@ export namespace Retry {
   function classify(error: ApiFailure | undefined): Reason {
     if (error === undefined) return "non_retryable";
     // Billing and moderation outrank the provider's retryable flag.
-    return terminalClass(error.data) ?? retryableClass(error.data);
+    return terminalClass(error) ?? retryableClass(error);
   }
 
-  function terminalClass(data: ApiFailure["data"]): Reason | undefined {
+  function terminalClass(data: ApiFailure): Reason | undefined {
     const payloads = [data.message, data.responseBody];
     if (payloads.some(isBillingExhaustion)) return "billing";
     if (payloads.some((payload) => isContentPolicyRefusal(data.statusCode, payload)))
@@ -283,7 +276,7 @@ export namespace Retry {
    * x-should-retry, network failures) share the server_error bucket since no
    * consumer distinguishes them.
    */
-  function retryableClass(data: ApiFailure["data"]): RetryableReason {
+  function retryableClass(data: ApiFailure): RetryableReason {
     const sniffed = classifyErrorPayload(data.message) ?? classifyErrorPayload(data.responseBody);
     return sniffed ?? (data.statusCode === 429 ? "rate_limit" : "server_error");
   }

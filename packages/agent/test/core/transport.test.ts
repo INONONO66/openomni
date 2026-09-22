@@ -1,4 +1,6 @@
-import { createTestAgent } from "../helpers/test-agent";
+import { Effect } from "effect";
+import { isolated } from "../helpers/isolated";
+import { createTestAgent } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
 import type { RunInput } from "@openomni/llm";
 import { collector } from "../helpers/observation-collector";
@@ -12,11 +14,12 @@ function transportHarness(transport?: RunInput["transport"]) {
     model: { provider: "anthropic", id: mockProviderModel.id },
     ...(transport === undefined ? {} : { transport }),
     llm: {
-      resolveModel: async () => mockProviderModel,
-      run: async (input, sink) => {
-        seen.push(input.transport);
-        return completeModel(input, sink);
-      },
+      resolveModel: () => Effect.promise(async () => mockProviderModel),
+      run: (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) =>
+        Effect.promise(async () => {
+          seen.push(input.transport);
+          return completeModel(input, sink);
+        }),
     },
   });
   return { agent, seen };
@@ -29,13 +32,13 @@ describe("operator transport config threading", () => {
       headers: { "x-tenant": "acme" },
     };
     const { agent, seen } = transportHarness(transport);
-    await agent.run(runInput([{ role: "user", content: "hi" }]));
+    await isolated(agent.run(runInput([{ role: "user", content: "hi" }])));
     expect(seen).toEqual([transport]);
   });
 
   it("leaves transport absent when the host configured none", async () => {
     const { agent, seen } = transportHarness();
-    await agent.run(runInput([{ role: "user", content: "hi" }]));
+    await isolated(agent.run(runInput([{ role: "user", content: "hi" }])));
     expect(seen).toEqual([undefined]);
   });
 });

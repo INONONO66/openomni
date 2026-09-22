@@ -1,23 +1,32 @@
+import { Effect } from "effect";
+import type { LlmRunFailure } from "@openomni/llm";
+import { isolated } from "../../helpers/isolated";
+import { failure as failed } from "../../helpers/g0-signals";
 import { describe, expect, it } from "bun:test";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/g0-effect";
 import { failureFacts } from "../../../src/core/retry";
 import { Bus } from "../../../src/index";
 import { providerFailure, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
-async function failedRun(failure: Error) {
+async function failedRun(failure: LlmRunFailure) {
   let calls = 0;
-  const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-    events: Bus,
-    model: { provider: "anthropic", id: mockProviderModel.id },
-    llm: {
-      resolveModel: async () => mockProviderModel,
-      run: async () => {
-        calls += 1;
-        throw failure;
-      },
-    },
-  }).catch((error: Error) => error);
+  const result = await isolated(
+    failed(
+      runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model: { provider: "anthropic", id: mockProviderModel.id },
+        llm: {
+          resolveModel: () => Effect.succeed(mockProviderModel),
+          run: () =>
+            Effect.suspend(() => {
+              calls += 1;
+              return Effect.fail(failure);
+            }),
+        },
+      }),
+    ),
+  );
   return { result, calls };
 }
 
@@ -58,15 +67,17 @@ describe("terminal failure facts", () => {
   });
   it("does not attribute catalog, policy, storage or unrelated failures to the provider", async () => {
     const failure = new Error("catalog invariant failed");
-    const result = await runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-      events: Bus,
-      model: { provider: "anthropic", id: "model" },
-      llm: {
-        resolveModel: async () => {
-          throw failure;
-        },
-      },
-    }).catch((error: Error) => error);
+    const result = await isolated(
+      failed(
+        runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+          events: Bus,
+          model: { provider: "anthropic", id: "model" },
+          llm: {
+            resolveModel: () => Effect.die(failure),
+          },
+        }),
+      ),
+    );
     expect(result).toBe(failure);
     expect(failureFacts(result)).toBeUndefined();
     expect(failureFacts(undefined)).toBeUndefined();

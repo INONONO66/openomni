@@ -1,6 +1,6 @@
 import { afterEach } from "bun:test";
 import net from "node:net";
-import type { IpcClient, IpcServer } from "../../src/index";
+import type { IpcClient, IpcServer } from "./native";
 import { within } from "./signal";
 
 /** Call inside the owning describe so cleanup follows that suite's lifecycle. */

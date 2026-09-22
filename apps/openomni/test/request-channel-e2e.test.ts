@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { Bus } from "@openomni/agent";
@@ -40,7 +41,7 @@ test("real external WebSocket reply wakes its original idle request owner withou
     sessionRuntime: { clock: () => 100 },
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         if (!sent) {
           const result = requestToolStep(input, sink, {
             id: "external-request",
@@ -63,7 +64,7 @@ test("real external WebSocket reply wakes its original idle request owner withou
           }),
         );
         return { type: "stop" };
-      },
+      }),
     },
   });
   const owner = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [

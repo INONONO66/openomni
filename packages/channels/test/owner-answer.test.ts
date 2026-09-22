@@ -1,4 +1,9 @@
+import { channelRequests } from "./helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { runEffect } from "./helpers/effect";
+import { Effect } from "effect";
+import { decodeChannelFailure } from "../src/errors";
+import { websocketCallbacks } from "./helpers/websocket-server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,6 +41,7 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "owner-answer-"));
   dbPath = join(directory, "ledger.sqlite");
   at = 10;
+  Storage.reset();
   Storage.initialize({ dbPath });
 });
 
@@ -45,7 +51,7 @@ afterEach(async () => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-function approval() {
+async function approval() {
   originalAction("protected-call", "owner-session", { person: "alice", trustTier: "trusted" });
   const row = SessionHandleStore.row("owner-session");
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id));
@@ -66,13 +72,13 @@ function approval() {
     correlation: {},
   });
   request.bindingDigest = requestBindingDigest(request);
-  const lease = SessionHandleStore.acquireLease({
+  const lease = await runEffect(SessionHandleStore.acquireLease({
     sessionId: row.id,
     owner: "fixture",
     expectedFence: row.leaseFence,
     now: 2,
     expiresAt: 100,
-  });
+  }));
   if (!lease.ok) throw new Error("fixture lease refused");
   const decision = decideRequestTransition(
     {
@@ -87,7 +93,7 @@ function approval() {
     { row: SessionHandleStore.row(row.id), actions: SessionHandleStore.tree(row.id) },
   );
   expect(decision.resolution).toBe("opened");
-  const result = SessionHandleStore.commitRequestTransition({
+  const result = await runEffect(SessionHandleStore.commitRequestTransition({
     sessionId: row.id,
     owner: "fixture",
     fence: lease.fence,
@@ -97,7 +103,7 @@ function approval() {
     consumeInboxIds: [],
     state: row.state,
     releaseLease: true,
-  });
+  }));
   if (!result.ok) throw new Error("fixture request refused");
   return request;
 }
@@ -122,16 +128,19 @@ function router(
 ) {
   return makeRouter({
     clock: () => at,
-    requests: createSessionRequests({
+    requests: channelRequests(createSessionRequests({
       clock: () => at,
       observations: { publish: () => undefined },
       requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
+    })),
+    authenticateAnswer: (who: Gateway.IngestSender & { kind: "external" }, proof: string, requestId: string) => Effect.try({
+      try: () => {
+        options.authenticated?.(who, proof, requestId);
+        if (proof !== credential) throw new Error(`invalid secret: ${proof}`);
+        return options.principal ?? principal;
+      },
+      catch: decodeChannelFailure("fixture.authenticate_answer"),
     }),
-    authenticateAnswer: async (who, proof, requestId) => {
-      options.authenticated?.(who, proof, requestId);
-      if (proof !== credential) throw new Error(`invalid secret: ${proof}`);
-      return options.principal ?? principal;
-    },
     prepare() {
       throw new Error("typed answer reached message preparation");
     },
@@ -142,7 +151,7 @@ function router(
 }
 
 function event<T extends Event>(target: EventTarget, name: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+  return new Promise<T>((resolve: (value: T | PromiseLike<T>) => void, reject: (reason?: unknown) => void) => {
     const timeout = setTimeout(() => {
       target.removeEventListener(name, received);
       reject(new Error(`missing websocket ${name}`));
@@ -161,22 +170,22 @@ async function connect(
   logs: string[] = [],
 ) {
   const handler = new WebSocketHandler(
-    async (message) => {
+    (message: Channel.InboundMessage) => Effect.sync(() => {
       messages.push(message);
-    },
-    (_event, data) => {
+    }),
+    <T>(_event: import("@openomni/protocol").BusEvent.Descriptor<T>, data: T) => {
       logs.push(JSON.stringify(data));
     },
     {
       token: "upgrade-secret",
-      onRequestAnswer: (who, answer) => gateway.ingest(who, answer),
+      onRequestAnswer: (who: Gateway.IngestSender, answer: Gateway.RequestAnswer) => gateway.ingest(who, answer),
     },
   );
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request, instance) => handler.handleUpgrade(request, instance),
-    websocket: handler.ws,
+    fetch: (request: Request, instance: Bun.Server<import("../src/websocket").WsConnectionData>) => handler.handleUpgrade(request, instance),
+    websocket: websocketCallbacks(handler),
   });
   stops.push(() => server.stop(true));
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws?actor=owner-console`, [
@@ -201,11 +210,11 @@ async function frame(socket: WebSocket, value: object) {
 test.each([
   "approve",
   "refuse",
-] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision) => {
-  const request = approval();
+] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision: "approve" | "refuse") => {
+  const request = await approval();
   const authenticated: object[] = [];
   const gateway = router({
-    authenticated: (who, proof, requestId) => {
+    authenticated: (who: { kind: "external"; surface: string; externalId: string; } | { kind: "session"; id: string; }, proof: string, requestId: string) => {
       authenticated.push({ who, proof, requestId });
     },
   });
@@ -227,7 +236,7 @@ test.each([
     decision === "approve" ? "resolved" : "refused",
   );
   const actions = SessionHandleStore.tree(request.sessionId);
-  expect(actions.find((action) => action.kind === "reply")?.effect.value).toMatchObject({
+  expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply")?.effect.value).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
   expect(JSON.stringify(actions)).not.toContain(credential);
@@ -238,7 +247,7 @@ test.each([
 });
 
 test("same typed answer survives SQLite and gateway restart with a fresh owner clock", async () => {
-  const request = approval();
+  const request = await approval();
   const first = await connect(router());
   const answer = wireAnswer(request);
   const wire = { type: "request_answer", ...answer };
@@ -253,13 +262,13 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
   expect(
     SessionHandleStore.tree(request.sessionId).filter(
-      (action) => action.id === `${request.requestId}:resolution`,
+      (action: import("@openomni/protocol").LedgerAction.Node) => action.id === `${request.requestId}:resolution`,
     ),
   ).toHaveLength(1);
 });
 
 test("wrong frame credential is refused without recording or leaking it", async () => {
-  const request = approval();
+  const request = await approval();
   const before = SessionHandleStore.tree(request.sessionId);
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
@@ -276,7 +285,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
 });
 
 test("session sender, malformed input, missing authenticator, and non-Owner evidence fail closed", async () => {
-  const request = approval();
+  const request = await approval();
   let calls = 0;
   const gateway = router({
     authenticated: () => {
@@ -284,22 +293,22 @@ test("session sender, malformed input, missing authenticator, and non-Owner evid
     },
   });
   expect(
-    await gateway.ingest({ kind: "session", id: request.sessionId }, envelope(request)),
+    await runEffect(gateway.ingest({ kind: "session", id: request.sessionId }, envelope(request))),
   ).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.session_sender",
   });
-  expect(await gateway.ingest(sender, { ...envelope(request), inputId: "" })).toEqual({
+  expect(await runEffect(gateway.ingest(sender, { ...envelope(request), inputId: "" }))).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.invalid",
   });
   expect(calls).toBe(0);
-  expect(await makeRouter().ingest(sender, envelope(request))).toEqual({
+  expect(await runEffect(makeRouter().ingest(sender, envelope(request)))).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.unauthenticated",
   });
   expect(
-    await router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request)),
+    await runEffect(router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request))),
   ).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.unauthenticated",
@@ -312,8 +321,8 @@ test.each([
   "bindingDigest",
   "generation",
   "domainRevisions",
-] as const)("canonical kernel rejects altered %s", async (field) => {
-  const request = approval();
+] as const)("canonical kernel rejects altered %s", async (field: "inputHash" | "generation" | "domainRevisions" | "bindingDigest") => {
+  const request = await approval();
   const altered = {
     ...request,
     ...(field === "generation"
@@ -322,7 +331,7 @@ test.each([
         ? { domainRevisions: { persons: 999 } }
         : { [field]: "altered" }),
   };
-  expect(await router().ingest(sender, envelope(altered))).toEqual({
+  expect(await runEffect(router().ingest(sender, envelope(altered)))).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.rejected",
   });
@@ -330,13 +339,13 @@ test.each([
 });
 
 test("current domain revision and captured owner receipt time remain kernel gates", async () => {
-  const request = approval();
-  expect(await router({ domainRevision: 2 }).ingest(sender, envelope(request))).toMatchObject({
+  const request = await approval();
+  expect(await runEffect(router({ domainRevision: 2 }).ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.rejected",
   });
   at = request.deadline;
-  expect(await router().ingest(sender, { ...envelope(request), inputId: "late" })).toMatchObject({
+  expect(await runEffect(router().ingest(sender, { ...envelope(request), inputId: "late" }))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.late_unknown",
   });
@@ -344,13 +353,13 @@ test("current domain revision and captured owner receipt time remain kernel gate
 });
 
 test("Owner authentication finishing at the deadline cannot approve into the past", async () => {
-  const request = approval();
+  const request = await approval();
   const gateway = router({
     authenticated: () => {
       at = request.deadline;
     },
   });
-  expect(await gateway.ingest(sender, envelope(request))).toMatchObject({
+  expect(await runEffect(gateway.ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.late_unknown",
   });
@@ -358,10 +367,10 @@ test("Owner authentication finishing at the deadline cannot approve into the pas
 });
 
 test("an authenticated Owner answer cannot bypass the absolute blacklist", async () => {
-  const request = approval();
+  const request = await approval();
   BlacklistStore.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
   const before = SessionHandleStore.tree(request.sessionId);
-  expect(await router().ingest(sender, envelope(request))).toMatchObject({
+  expect(await runEffect(router().ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.blacklisted",
   });
@@ -369,7 +378,7 @@ test("an authenticated Owner answer cannot bypass the absolute blacklist", async
 });
 
 test("plain text preserves stable driver event ID and cannot enter Owner authentication", async () => {
-  const request = approval();
+  const request = await approval();
   const messages: Channel.InboundMessage[] = [];
   let calls = 0;
   const { socket } = await connect(
@@ -399,7 +408,7 @@ test("plain text preserves stable driver event ID and cannot enter Owner authent
 });
 
 test("typed frames reject missing input identity and untrusted principal fields", async () => {
-  const request = approval();
+  const request = await approval();
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
   for (const value of [
@@ -409,14 +418,14 @@ test("typed frames reject missing input identity and untrusted principal fields"
   ]) {
     expect(await frame(socket, { type: "request_answer", ...value })).toEqual({
       type: "error",
-      message: "invalid request_answer frame",
+      reason: "InvalidInbound",
     });
   }
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
 });
 
 test("actual WebSocket upgrade rejects the wrong transport token", async () => {
-  approval();
+  await approval();
   const { server } = await connect(router());
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, ["auth", "wrong-upgrade"]);
   const failed = event<ErrorEvent>(socket, "error");
@@ -424,8 +433,8 @@ test("actual WebSocket upgrade rejects the wrong transport token", async () => {
   expect(socket.readyState).not.toBe(WebSocket.OPEN);
 });
 
-test("typed public schema rejects caller-supplied trust or receipt time", () => {
-  const request = approval();
+test("typed public schema rejects caller-supplied trust or receipt time", async () => {
+  const request = await approval();
   expect(Gateway.RequestAnswer.safeParse(envelope(request)).success).toBe(true);
   for (const extra of [{ trustTier: "owner" }, { receivedAt: 0 }, { principal }]) {
     expect(Gateway.RequestAnswer.safeParse({ ...envelope(request), ...extra }).success).toBe(false);

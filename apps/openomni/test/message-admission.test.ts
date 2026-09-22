@@ -1,3 +1,4 @@
+import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
@@ -89,7 +90,7 @@ test("app ingress applies the channel default tier as policy facts, not top-leve
     createdBy: "owner",
   });
   expect(
-    await fixture.gateway.ingest(
+    await runEffect(fixture.gateway.ingest(
       { kind: "external", surface: "discord", externalId: "guest" },
       {
         eventId: "guest",
@@ -100,7 +101,7 @@ test("app ingress applies the channel default tier as policy facts, not top-leve
         payload: "instruction",
         render: "instruction",
       },
-    ),
+    )),
   ).toEqual({ status: "blocked_pre", reasonCode: "message.external.grant_tier" });
   expect(
     SessionHandleStore.listRows().flatMap((row) => SessionHandleStore.inboxRows(row.id)),

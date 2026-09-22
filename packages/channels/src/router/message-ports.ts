@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+import type { ChannelError } from "../errors";
 import type { PolicyEvaluationInput } from "@openomni/policy";
 import type {
   BusEvent,
@@ -26,6 +28,7 @@ interface MessageExecution {
 type MessageExecutionResult = { readonly matchedRuleIds: readonly string[] } & (
   | { readonly terminal: "blocked_pre"; readonly reason: string }
   | { readonly terminal: "executed"; readonly value: PlainValue }
+  | { readonly terminal: "interrupted" | "outcome_unknown"; readonly reason: string }
   | { readonly terminal: "blocked_post"; readonly reason: string }
 );
 
@@ -58,36 +61,38 @@ interface MessagingGrantSources {
 }
 
 export interface GatewayRouterPorts {
+  /** The app edge executes this synchronous ledger unit without an asynchronous escape. */
+  readonly transaction: <A>(operation: Effect.Effect<A, ChannelError>) => Effect.Effect<A, ChannelError>;
   /** Authenticate explicit Owner evidence; never infer it from driver trust fields. */
   readonly authenticateAnswer?: (
     sender: Gateway.IngestSender & { kind: "external" },
     credential: string,
     requestId: string,
-  ) => Promise<SessionTransition.Principal>;
+  ) => Effect.Effect<SessionTransition.Principal, ChannelError>;
   readonly requests: {
     list(): readonly SessionTransition.Request[];
-    open(input: RequestOpenInput): SessionTransition.Request;
-    answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
-    receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
+    open(input: RequestOpenInput): Effect.Effect<SessionTransition.Request, ChannelError>;
+    answer(input: SessionTransition.Answer): Effect.Effect<SessionTransition.Resolution, ChannelError>;
+    receipt(input: SessionTransition.DeliveryReceipt): Effect.Effect<SessionTransition.Request, ChannelError>;
   };
   readonly sink: BusEvent.Sink["publish"];
   readonly observe?: (
     sender: Gateway.IngestSender,
     observation: Gateway.MessageObservation,
   ) => void;
-  readonly inbox: Inbox.Port;
+  readonly inbox: { readonly commit: (input: Inbox.Commit) => Effect.Effect<Inbox.Row, ChannelError> };
   /** L1 supplies authenticated facts; the gateway never reads session state. */
   readonly prepare: (
     sender: Gateway.IngestSender,
     message: Gateway.SendMessage,
     target: string,
     messageId: string,
-  ) => PreparedMessage;
+  ) => Effect.Effect<PreparedMessage, ChannelError>;
   readonly run: (
     sender: Gateway.IngestSender,
     request: MessageExecution,
-    body: (intent: LedgerAction.Receipt) => Promise<PlainValue>,
-  ) => Promise<MessageExecutionResult>;
+    body: (intent: LedgerAction.Receipt) => Effect.Effect<PlainValue, ChannelError>,
+  ) => Effect.Effect<MessageExecutionResult, ChannelError>;
   readonly committed?: (row: Inbox.Row) => void;
   readonly clock?: () => number;
   readonly messaging?: MessagingGrantSources & {
@@ -100,5 +105,5 @@ export interface GatewayRouter {
   ingest(
     sender: Gateway.IngestSender,
     message: Gateway.SendMessage | Gateway.IngressFacts | Gateway.RequestAnswer,
-  ): Promise<Gateway.IngestResult>;
+  ): Effect.Effect<Gateway.IngestResult, ChannelError>;
 }

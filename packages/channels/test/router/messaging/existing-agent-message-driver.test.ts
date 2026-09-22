@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+
 import { z } from "zod";
 import { runExistingAgentMessageDriver } from "../../harness/existing-agent-message-driver.js";
 
@@ -116,7 +117,7 @@ describe("existing-agent-message-driver", () => {
   test.each([
     [new Error("serialization fault"), "Error"],
     ["serialization fault", "NonError"],
-  ] as const)("converts an unexpected %s into the driver error receipt", async (fault, errorType) => {
+  ] as const)("converts an unexpected %s into the driver error receipt", async (fault: Error | string, errorType: "Error" | "NonError") => {
     const stringify = spyOn(JSON, "stringify").mockImplementationOnce(() => {
       throw fault;
     });

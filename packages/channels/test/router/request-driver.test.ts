@@ -1,4 +1,8 @@
+type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
+import { channelTransaction } from "../helpers/channel-transaction";
+import { channelRequests } from "../helpers/channel-requests";
 import { afterEach, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { TelegramAdapter } from "../../src/provider/telegram/surface";
 import { TelegramNormalizer } from "../../src/provider/telegram/normalizer";
@@ -26,7 +30,7 @@ test("router opens the immutable original message action before real Telegram de
   resetStores();
   registerTelegramTarget();
   let observedRequestId: string | undefined;
-  globalThis.fetch = (async (input) => {
+  globalThis.fetch = (async (input: string | Request | URL) => {
     if (!String(input).endsWith("/sendMessage")) throw new Error("unexpected transport request");
     const request = SessionHandleStore.requestRows()[0];
     expect(request?.state).toBe("open");
@@ -44,7 +48,7 @@ test("router opens the immutable original message action before real Telegram de
       deliveryRoutes: new Map([["telegram", driver.deliver.bind(driver)]]),
     },
   });
-  const result = await router.ingest(
+  const result = await runEffect(router.ingest(
     { kind: "session", id: "source" },
     {
       to: { kind: "actor", actorId: "target" },
@@ -52,7 +56,7 @@ test("router opens the immutable original message action before real Telegram de
       content: "original question",
       deadline: 100,
     },
-  );
+  ));
   expect(result).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
@@ -61,7 +65,7 @@ test("router opens the immutable original message action before real Telegram de
   expect(observedRequestId).toBeDefined();
   expect(observedRequestId).not.toBe(result.handle.messageId);
   expect(
-    SessionHandleStore.tree("source").find((action) => action.id === observedRequestId)?.intent
+    SessionHandleStore.tree("source").find((action: import("@openomni/protocol").LedgerAction.Node) => action.id === observedRequestId)?.intent
       .value,
   ).toMatchObject({ phase: "intent", value: { content: "original question" } });
 });
@@ -69,7 +73,7 @@ test("router opens the immutable original message action before real Telegram de
 test.each([
   "all",
   "quorum",
-] as const)("real Telegram delivery and normalized replies preserve %s request ownership and pins", async (resolution) => {
+] as const)("real Telegram delivery and normalized replies preserve %s request ownership and pins", async (resolution: "all" | "quorum") => {
   resetStores();
   for (const id of ["target", "r1", "r2", "r3"]) {
     ActorRegistry.registerIdentity({ id, kind: "human", trustTier: "assigned_worker" });
@@ -82,19 +86,20 @@ test.each([
   }
   originalAction("original-message-action", "source-session", { content: "verdict" });
   let posted = 0;
-  globalThis.fetch = (async (input) => {
+  globalThis.fetch = (async (input: string | Request | URL) => {
     if (!String(input).endsWith("/sendMessage")) throw new Error("unexpected Telegram request");
     posted += 1;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
   const driver = new TelegramAdapter("token", {}, () => undefined);
-  const requests = requestPort(() => 10);
+  const requests = channelRequests(requestPort(() => 10));
   const messaging = createExistingAgentMessaging({
+    transaction: channelTransaction,
     requests,
     grants: () => [
       { id: "grant", senderId: "source-session", targetActorId: "target", operations: ["awaited"] },
     ],
-    deliver: (message) =>
+    deliver: (message: OutboundMessage) =>
       driver.deliver(message.target.externalId, message.body, message.idempotencyKey),
     publish: () => undefined,
   });
@@ -117,7 +122,7 @@ test.each([
       correlation: { channelId: "-100" },
     },
   };
-  const receipt = await messaging.send(input);
+  const receipt = await runEffect(messaging.send(input));
   expect(receipt).toMatchObject({
     kind: "sent",
     delivery: "accepted",
@@ -126,12 +131,12 @@ test.each([
       correlation: { replyToMessageId: "77" },
     },
   });
-  expect(await messaging.send({ ...input, at: 11 })).toEqual({ ...receipt, at: 11 });
+  expect(await runEffect(messaging.send({ ...input, at: 11 }))).toEqual({ ...receipt, at: 11 });
   expect(posted).toBe(1);
   expect(
     SessionHandleStore.tree("source-session")
-      .filter((action) => action.kind === "request")
-      .map((action) => action.effect.value),
+      .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request")
+      .map((action: import("@openomni/protocol").LedgerAction.Node) => action.effect.value),
   ).toMatchObject([
     { request: { createdAt: 10 } },
     { receipt: { at: 10, value: "accepted", externalMessageId: "77" } },
@@ -152,7 +157,7 @@ test.each([
       reply_to_message: { message_id: 77, date: 1, chat: { id: -100, type: "group" } },
     });
     if (!inbound) throw new Error("normalizer dropped reply");
-    expect(await router.ingest(inbound.sender, inbound.facts)).toMatchObject({
+    expect(await runEffect(router.ingest(inbound.sender, inbound.facts))).toMatchObject({
       status: "executed",
       handle: { target: "source-session" },
     });
@@ -163,7 +168,7 @@ test.each([
   expect(SessionHandleStore.inboxRows("source-session")).toHaveLength(input.requestSpec.threshold);
   expect(
     SessionHandleStore.requestById("original-message-action")?.replies.map(
-      (reply) => reply.responderId,
+      (reply: { replyId: string; responderId: string; content: string; receivedAt: number; }) => reply.responderId,
     ),
   ).toEqual(["r1", "r2", "r3"].slice(0, input.requestSpec.threshold));
 });
@@ -171,13 +176,14 @@ test.each([
 test.each([
   "unknown",
   "rejected",
-] as const)("%s receipt with external id never becomes accepted on retry", async (value) => {
+] as const)("%s receipt with external id never becomes accepted on retry", async (value: "rejected" | "unknown") => {
   resetStores();
   registerTelegramTarget();
   originalAction("original", "source");
   let attempts = 0;
-  const requests = requestPort();
+  const requests = channelRequests(requestPort());
   const messaging = createExistingAgentMessaging({
+    transaction: channelTransaction,
     requests,
     grants: () => [
       { id: "grant", senderId: "source", targetActorId: "target", operations: ["awaited"] },
@@ -206,8 +212,8 @@ test.each([
       deadline: 100,
     },
   };
-  expect(await messaging.send(input)).toMatchObject({ kind: "sent", delivery: value });
-  expect(await messaging.send(input)).toMatchObject({ kind: "sent", delivery: value });
+  expect(await runEffect(messaging.send(input))).toMatchObject({ kind: "sent", delivery: value });
+  expect(await runEffect(messaging.send(input))).toMatchObject({ kind: "sent", delivery: value });
   expect(attempts).toBe(2);
   expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe(
     "uncertain-id",

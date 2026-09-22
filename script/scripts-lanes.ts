@@ -23,6 +23,9 @@ export const scriptsLanes = {
     "tool-target-deletion.test.ts",
     "verify-ledger-rename.test.ts",
     "verify-tsconfig-inheritance.test.ts",
+    "check-effect-boundaries.test.ts",
+    "effect-error-contract.test.ts",
+    "effect-service-contract.test.ts",
   ],
   "scripts-tooling": [
     "check-quality-python.test.ts",
@@ -86,6 +89,7 @@ export const scriptContracts = [
   ["check-import-cycles.ts", "--self-test"],
   ["verify-ledger-rename.ts"],
   ["check-ledger-schema-drift.ts"],
+  ["check-effect-boundaries.ts"],
 ] as const;
 /** Python analyzer self-tests: explicit inventory, run by the first tooling shard. */
 export const pythonSelfTests = ["quality-mutation/python-engine.test.py"] as const;

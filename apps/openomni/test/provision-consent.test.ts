@@ -1,3 +1,4 @@
+import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { createDispatcher, eraseTool } from "@openomni/agent";
@@ -53,10 +54,10 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
   for (const operation of forged) {
     expect(
       (
-        await dispatcher.execute(
+        await runEffect(dispatcher.execute(
           { id: "forged", tool: "provision", input: { operation } },
           { sessionId: "test", turnId: "turn" },
-        )
+        ))
       ).errorKind,
     ).toBe("invalid_input");
   }
@@ -152,13 +153,13 @@ it("invalidates a merge when the source identity changes without moving its endp
   }
 });
 it("refuses malformed output at the real dispatcher boundary", async () => {
-  const result = await createDispatcher(
+  const result = await runEffect(createDispatcher(
     [{ ...provision(), execute: async () => ({ op: "contact_promote" }) }],
     { executor },
   ).execute(
     { id: "bad-output", tool: "provision", input: { operation: PROMOTE } },
     { sessionId: "test", turnId: "turn" },
-  );
+  ));
   expect(result.errorKind).toBe("invalid_output");
 });
 it("bounds pending Owner requests across sessions without applying a ninth act", async () => {
@@ -171,7 +172,9 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
     }
     const ninth = protectedDispatch(provision(), { operation: PROMOTE });
     pending.push(ninth);
-    expect((await bounded(ninth.running)).errorKind).toBe("precondition_failed");
+    const ninthResult = await bounded(ninth.outcome);
+    expect(ninthResult._tag).toBe("Left");
+    expect(ninthResult._tag === "Left" && ninthResult.left).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
     expect(
       SessionHandleStore.requestRows().filter((request) => request.state === "open"),
     ).toHaveLength(8);

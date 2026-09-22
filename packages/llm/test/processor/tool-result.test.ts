@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Message, Tool } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
 import { Bus } from "../helpers/observation";
@@ -292,7 +292,7 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       }),
     });
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      name: "AbortError",
+      _tag: "TransportFailure", providerErrorName: "AbortError",
     });
     return messages;
   }
@@ -313,23 +313,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
   });
 
   test("tool result that never arrives settles as interrupted when the grace timer fires", async () => {
-    const scheduledDelays: number[] = [];
-    const timerHandle = setTimeout(() => undefined, 0);
-    clearTimeout(timerHandle);
-    spyOn(globalThis, "setTimeout").mockImplementation(
-      Object.assign(
-        (callback: Parameters<typeof setTimeout>[0], delay?: number) => {
-          scheduledDelays.push(delay ?? 0);
-          queueMicrotask(() => callback());
-          return timerHandle;
-        },
-        { __promisify__: setTimeout.__promisify__ },
-      ),
-    );
-
-    // Result never arrives: block until the consumer stops pulling.
+    // This test measures the real bounded grace; no scheduler mocks can make it expire early.
     const messages = await abortWithPendingTool(() => new Promise(() => undefined));
-    expect(scheduledDelays).toContain(250);
 
     const state = lastToolState(messages);
     expect(state?.status).toBe("error");

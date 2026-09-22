@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+import type { ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type { CompactionYield } from "./geometry";
 import type { ToolOutputElision } from "./reduce";
@@ -31,7 +33,7 @@ export interface CompactionOptions {
     previousAnchor: string | undefined,
     budget: SummarizationBudget,
     signal?: AbortSignal,
-  ) => Promise<string>;
+  ) => Effect.Effect<string, ExecutionError>;
   /**
    * Budget (chars) of most-recent user messages carried verbatim through a
    * cut. The newest user message is always preserved even when it alone

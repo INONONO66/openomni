@@ -1,15 +1,16 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialize } from "@openomni/ledger";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput } from "@openomni/llm";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { createCompletionPort } from "../src/tools/completion";
+import { createCompletionPort } from "../src/composition/completion";
 import { assistantMessage } from "./helpers/assistant-message";
-import { admittedOperation } from "./helpers/admitted-operation";
+import { admittedEffect } from "./helpers/admitted-effect";
 
 import { storageDirectories } from "./helpers/storage-directories";
 
@@ -20,7 +21,7 @@ const OPERATOR_TRANSPORT = {
   headers: { "x-tenant": "acme" },
 } as const;
 
-const resolveModel = async (model: { provider: string; id: string }) => ({
+const resolveModel = (model: { provider: string; id: string }) => Effect.succeed({
   id: model.id,
   name: model.id,
   providerID: model.provider,
@@ -71,11 +72,11 @@ describe("operator transport reaches every model caller", () => {
       tools: {},
       llm: {
         resolveModel,
-        run: async (input, sink: Sink) => {
+        run: (input, sink) => Effect.sync(() => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1 }));
-          return { type: "stop" };
-        },
+          return { type: "stop" as const };
+        }),
       },
     });
 
@@ -90,15 +91,15 @@ describe("operator transport reaches every model caller", () => {
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
         resolveModel,
-        run: async (input, sink) => {
+        run: (input, sink) => Effect.sync(() => {
           seen = input;
           sink.onMessage(assistantMessage(input, { call: 1, text: "answered" }));
-          return { type: "stop" };
-        },
+          return { type: "stop" as const };
+        }),
       },
     );
 
-    await admittedOperation(() => port({ prompt: "summarize" }));
+    await admittedEffect(port({ prompt: "summarize" }));
 
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });

@@ -2,11 +2,23 @@ import type { Dirent } from "node:fs";
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { ToolRefused } from "@openomni/agent";
-import { MachineRefusalError, type MachineHost } from "@openomni/machines";
+import { MachineRefusalError } from "@openomni/machines";
+import type { Machine } from "@openomni/protocol";
 import { parseLocus, type Locus } from "../locus";
 
+type FsValue<Op extends Machine.FsValue["op"]> = Extract<Machine.FsValue, { op: Op }>;
+interface ToolMachine {
+  readonly fs: {
+    read(path: string, window?: { offset?: number; limit?: number }): Promise<Omit<FsValue<"read">, "data"> & { readonly data: Uint8Array }>;
+    write(path: string, data: Uint8Array): Promise<FsValue<"write">>;
+    list(path: string): Promise<FsValue<"list">>;
+    stat(path: string): Promise<FsValue<"stat">>;
+  };
+  exec(cmd: string, cwd: string): Promise<Exclude<Machine.ExecResult, { status: "completed" }> | (Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & { readonly stdout: Uint8Array; readonly stderr: Uint8Array })>;
+}
+
 export interface FilePorts {
-  readonly machines?: Pick<MachineHost, "get">;
+  readonly machines?: { readonly get: (id: string) => ToolMachine };
 }
 
 /** Translate endpoint failures once; authority remains at tool.pre and the daemon. */
@@ -21,7 +33,7 @@ function fileRefusal(name: string, error: Error): Error {
   if (error instanceof ToolRefused) return error;
   const { code } = error as NodeJS.ErrnoException;
   if (code !== undefined) return new ToolRefused(name, `${code}: ${error.message}`);
-  if (error instanceof MachineRefusalError) return new ToolRefused(name, error.data.message);
+  if (error instanceof MachineRefusalError) return new ToolRefused(name, error.message);
   return error;
 }
 

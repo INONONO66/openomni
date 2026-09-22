@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type Inbox, type LedgerSession, L0Observation } from "@openomni/protocol";
@@ -26,28 +27,35 @@ function openRequest() {
     state: "resolved" | "expired",
     overrides: Partial<LedgerSession.Commit> = {},
   ) =>
-    SessionHandleStore.commitRequestTransition({
-      sessionId: fixture.request.sessionId,
-      owner: "writer",
-      fence: fixture.lease.fence,
-      now: state === "expired" ? 100 : 99,
-      expectedRevision: SessionHandleStore.row(fixture.request.sessionId).revision,
-      actions: [
-        requestStateAction(
-          {
-            ...fixture.request,
-            state,
-            outcome: state === "expired" ? "outcome_unknown" : "answered",
-          },
-          "original:resolution",
-          state === "resolved" ? "reply" : "request",
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitRequestTransition({
+            sessionId: fixture.request.sessionId,
+            owner: "writer",
+            fence: fixture.lease.fence,
+            now: state === "expired" ? 100 : 99,
+            expectedRevision: SessionHandleStore.row(fixture.request.sessionId).revision,
+            actions: [
+              requestStateAction(
+                {
+                  ...fixture.request,
+                  state,
+                  outcome: state === "expired" ? "outcome_unknown" : "answered",
+                },
+                "original:resolution",
+                state === "resolved" ? "reply" : "request",
+              ),
+            ],
+            consumeInboxIds: [],
+            state: "idle",
+            releaseLease: false,
+            ...overrides,
+          }),
         ),
-      ],
-      consumeInboxIds: [],
-      state: "idle",
-      releaseLease: false,
-      ...overrides,
-    });
+      ),
+      (error) => error,
+    );
   return { ...fixture, transition };
 }
 
@@ -74,7 +82,9 @@ describe("SQLite canonical request deadline", () => {
     expect(Storage.get().alarms?.due(100)).toEqual([]);
     expect(SessionHandleStore.requestById("original")?.outcome).toBe("outcome_unknown");
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
-    expect(transition("expired")).toMatchObject({ ok: false, reason: "revision" });
+    expect(() => transition("expired")).toThrow(
+      expect.objectContaining({ _tag: "CommitRefused", reason: "revision" }),
+    );
   });
 
   test("answer and receiving inbox commit together, and timeout loses the terminal CAS", () => {
@@ -88,23 +98,28 @@ describe("SQLite canonical request deadline", () => {
     expect(SessionHandleStore.inboxRows("request-session").map(({ id }) => id)).toEqual(["reply"]);
     expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
     expect(Storage.get().alarms?.due(100)).toEqual([]);
-    expect(transition("expired")).toMatchObject({ ok: false, reason: "revision" });
+    expect(() => transition("expired")).toThrow(
+      expect.objectContaining({ _tag: "CommitRefused", reason: "revision" }),
+    );
   });
 
   test("timeout winner refuses a late answer and its receiving inbox", () => {
     const { transition } = openRequest();
     expectCommitted(transition("expired"));
     const before = SessionHandleStore.tree("request-session");
-    expect(transition("resolved", { receive: reply() })).toMatchObject({
-      ok: false,
-      reason: "revision",
-    });
+    expect(() => transition("resolved", { receive: reply() })).toThrow(
+      expect.objectContaining({
+        _tag: "CommitRefused",
+
+        reason: "revision",
+      }),
+    );
     expect(SessionHandleStore.tree("request-session")).toEqual(before);
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
   });
 
   test.each([
-    { owner: "foreign", reason: "stale" },
+    { owner: "foreign", reason: "fence" },
     { expectedRevision: 1, reason: "revision" },
     { receive: { ...reply(), sessionId: "other" }, reason: "inbox" },
     { receive: { ...reply(), parentActionId: "missing" }, reason: "inbox" },
@@ -115,7 +130,9 @@ describe("SQLite canonical request deadline", () => {
     const before = SessionHandleStore.row("request-session");
     const tree = SessionHandleStore.tree("request-session");
     const alarms = Storage.get().alarms?.due(100);
-    expect(transition("resolved", overrides)).toMatchObject({ ok: false, reason });
+    expect(() => transition("resolved", overrides)).toThrow(
+      expect.objectContaining({ _tag: "CommitRefused", reason }),
+    );
     expect(SessionHandleStore.row("request-session")).toEqual(before);
     expect(SessionHandleStore.tree("request-session")).toEqual(tree);
     expect(Storage.get().alarms?.due(100)).toEqual(alarms);
@@ -125,29 +142,49 @@ describe("SQLite canonical request deadline", () => {
 
   test("idempotent receive keeps the original receipt even after consumption", () => {
     const { commit } = openRequest();
-    const first = SessionHandleStore.commitReceivedMessage(reply());
-    const duplicate = SessionHandleStore.commitReceivedMessage({
-      ...reply(),
-      createdAt: 100,
-      parentActionId: null,
-      origin: { encodingVersion: 1, value: { responderId: "alice", requestId: "original" } },
-    });
+    const first = Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      (error) => error,
+    );
+    const duplicate = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commitReceivedMessage({
+            ...reply(),
+            createdAt: 100,
+            parentActionId: null,
+            origin: { encodingVersion: 1, value: { responderId: "alice", requestId: "original" } },
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     expect(duplicate).toEqual(first);
     expectCommitted(commit([]));
     expectCommitted(
-      SessionHandleStore.commit({
-        sessionId: "request-session",
-        owner: "writer",
-        fence: 1,
-        now: 101,
-        expectedRevision: first.receipt.revision,
-        actions: [],
-        consumeInboxIds: ["reply"],
-        state: "idle",
-        releaseLease: false,
-      }),
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(
+            SessionHandleStore.commit({
+              sessionId: "request-session",
+              owner: "writer",
+              fence: 1,
+              now: 101,
+              expectedRevision: first.receipt.revision,
+              actions: [],
+              consumeInboxIds: ["reply"],
+              state: "idle",
+              releaseLease: false,
+            }),
+          ),
+        ),
+        (error) => error,
+      ),
     );
-    const consumed = SessionHandleStore.commitReceivedMessage(reply());
+    const consumed = Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      (error) => error,
+    );
     expect(consumed.row.status).toBe("consumed");
     expect(consumed.receipt).toEqual(first.receipt);
     expect(SessionHandleStore.row("request-session").revision).toBe(first.receipt.revision);
@@ -161,11 +198,19 @@ describe("SQLite canonical request deadline", () => {
     { origin: { encodingVersion: 1 as const, value: { requestId: "different" } } },
   ])("receive rejects changed durable identity fields: %j", (change) => {
     openRequest();
-    SessionHandleStore.commitReceivedMessage(reply());
-    const before = SessionHandleStore.tree("request-session");
-    expect(() => SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })).toThrow(
-      "message identity reused with different payload",
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      (error) => error,
     );
+    const before = SessionHandleStore.tree("request-session");
+    expect(() =>
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })),
+        ),
+        (error) => error,
+      ),
+    ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
     expect(SessionHandleStore.tree("request-session")).toEqual(before);
     expect(SessionHandleStore.inboxRows("request-session")).toHaveLength(1);
   });
@@ -219,7 +264,9 @@ describe("durable request projection", () => {
       BEGIN SELECT RAISE(ABORT, 'projection fault'); END`);
     const before = SessionHandleStore.row("request-session");
     const tree = SessionHandleStore.tree("request-session");
-    expect(() => transition("resolved", { receive: reply() })).toThrow("projection fault");
+    expect(() => transition("resolved", { receive: reply() })).toThrow(
+      expect.objectContaining({ _tag: "ForeignFailure" }),
+    );
     expect(SessionHandleStore.row("request-session")).toEqual(before);
     expect(SessionHandleStore.tree("request-session")).toEqual(tree);
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
@@ -230,10 +277,13 @@ describe("durable request projection", () => {
     expectCommitted(transition("expired"));
     Storage.reset();
     Storage.initialize({ dbPath, observationSink: Bus });
-    expect(transition("resolved", { receive: reply() })).toMatchObject({
-      ok: false,
-      reason: "revision",
-    });
+    expect(() => transition("resolved", { receive: reply() })).toThrow(
+      expect.objectContaining({
+        _tag: "CommitRefused",
+
+        reason: "revision",
+      }),
+    );
     expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
     expect(raw.query("SELECT status FROM alarm WHERE id='original:deadline'").get()).toEqual({
@@ -243,10 +293,20 @@ describe("durable request projection", () => {
 
   test("receive retry after restart returns the same durable action receipt", () => {
     openRequest();
-    const first = SessionHandleStore.commitReceivedMessage(reply());
+    const first = Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      (error) => error,
+    );
     Storage.reset();
     Storage.initialize({ dbPath });
-    expect(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })).toEqual(first);
+    expect(
+      Either.getOrThrowWith(
+        Effect.runSync(
+          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })),
+        ),
+        (error) => error,
+      ),
+    ).toEqual(first);
     expect(SessionHandleStore.inboxRows("request-session")).toHaveLength(1);
   });
 });

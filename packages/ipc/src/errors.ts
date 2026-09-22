@@ -1,45 +1,16 @@
-import { NamedError } from "@openomni/protocol";
+import { Data } from "effect";
 import { z } from "zod";
 
-const MessageData = z.object({ message: z.string() });
-const IpcConnectionErrorBase = NamedError.create("IpcConnectionError", MessageData);
-const IpcTimeoutErrorBase = NamedError.create("IpcTimeoutError", MessageData);
-const IpcProtocolErrorBase = NamedError.create("IpcProtocolError", MessageData);
-const IpcRemoteErrorBase = NamedError.create(
-  "IpcRemoteError",
-  z.object({ message: z.string(), code: z.number() }),
-);
-
-export class IpcConnectionError extends IpcConnectionErrorBase {
-  constructor(message: string, cause?: unknown) {
-    super({ message }, cause === undefined ? undefined : { cause });
-  }
+const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
+export class ForeignFailure extends Data.TaggedError("ForeignFailure")<z.infer<typeof Diagnostic>> {
+  override get message(): string { return this.cause; }
 }
+const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
+export class IpcConnectionError extends Data.TaggedError("IpcConnectionError")<z.infer<typeof MessageFields>> {}
+const RequestFields = MessageFields.extend({ requestId: z.string(), method: z.string() });
+export class IpcTimeoutError extends Data.TaggedError("IpcTimeoutError")<z.infer<typeof RequestFields>> {}
+export class IpcProtocolError extends Data.TaggedError("IpcProtocolError")<z.infer<typeof MessageFields>> {}
+const RemoteFields = RequestFields.extend({ code: z.number() });
+export class IpcRemoteError extends Data.TaggedError("IpcRemoteError")<z.infer<typeof RemoteFields>> {}
 
-export class IpcTimeoutError extends IpcTimeoutErrorBase {
-  constructor(message: string) {
-    super({ message });
-  }
-}
-
-export class IpcProtocolError extends IpcProtocolErrorBase {
-  constructor(message: string, cause?: unknown) {
-    super({ message }, cause === undefined ? undefined : { cause });
-  }
-}
-
-/**
- * The REMOTE handler failed (an error frame came back over a healthy
- * connection). Distinct from IpcConnectionError on purpose: a supervisor
- * deciding between "reconnect" and "the remote refused" must be able to
- * tell them apart by class (#606 audit).
- */
-export class IpcRemoteError extends IpcRemoteErrorBase {
-  constructor(code: number, message: string) {
-    super({ code, message: `IPC error ${code}: ${message}` });
-  }
-
-  get code(): number {
-    return this.data.code;
-  }
-}
+export type IpcError = ForeignFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;

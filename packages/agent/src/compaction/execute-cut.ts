@@ -1,11 +1,12 @@
+import { Effect } from "effect";
+import type { ExecutionError } from "../errors";
+import type { CompactionResult } from "./contract";
 import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/protocol";
 import type { Executor } from "../executor";
-import { activeExecutor } from "../executor-context";
 import { RunEvents } from "../core/execution/events";
 import { Compaction } from "./compact";
 
 type CompactionArguments = Parameters<typeof Compaction.compact>;
-type CompactionResult = Awaited<ReturnType<typeof Compaction.compact>>;
 
 interface CompactionExecution {
   readonly history: CompactionArguments[0];
@@ -26,7 +27,8 @@ class CompactionExecutionError extends Error {
 }
 
 /** Execute the existing strategy under admission; only the receipt releases observations. */
-export async function executeCompaction(input: CompactionExecution): Promise<CompactionResult> {
+export function executeCompaction(input: CompactionExecution): Effect.Effect<CompactionResult, ExecutionError> {
+  return Effect.gen(function* () {
   const snapshot = structuredClone(input.history);
   const completed: (() => void)[] = [];
   const events: BusEvent.Sink = {
@@ -35,20 +37,20 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
       else completed.push(() => input.events.publish(event, data));
     },
   };
-  const calculate = async () => {
-    input.signal?.throwIfAborted();
-    const result = await Compaction.compact(snapshot, input.options, input.identity, events, {
+  const calculate = () => Effect.gen(function* () {
+    if (input.signal?.aborted) return yield* Effect.interrupt;
+    const result = yield* Compaction.compact(snapshot, input.options, input.identity, events, {
       ...input.dispatch,
       signal: input.signal,
     });
-    input.signal?.throwIfAborted();
+    if (input.signal?.aborted) return yield* Effect.interrupt;
     return result;
-  };
+  });
   let result: CompactionResult | undefined;
   if (input.executor === undefined) {
-    result = await calculate();
+    result = yield* calculate();
   } else {
-    const execution = await input.executor.run(
+    const execution = yield* input.executor.run(
       {
         kind: "compaction",
         op: "compact",
@@ -58,12 +60,12 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
         revertData: () =>
           result?.record === undefined ? undefined : PlainValueSchema.parse(result.record.revert),
       },
-      async () => {
-        result = await activeExecutor.run(input.executor as Executor, calculate);
+      () => Effect.gen(function* () {
+        result = yield* calculate();
         return PlainValueSchema.parse(
           result.record === undefined ? null : { ...result.record, projection: result.messages },
         );
-      },
+      }),
     );
     if (execution.terminal !== "executed") throw new CompactionExecutionError(execution.reason);
     if (
@@ -78,4 +80,5 @@ export async function executeCompaction(input: CompactionExecution): Promise<Com
   }
   for (const publish of completed) publish();
   return result;
+  });
 }

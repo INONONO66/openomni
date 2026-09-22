@@ -12,6 +12,11 @@
       "note": "The provider body returned, but its attempt result did not commit. Recovery records outcome_unknown without replaying the body."
     },
     {
+      "crashPoint": "fiber_exit_after_execute_before_action_commit",
+      "recovery": "lost",
+      "note": "SIGKILL follows the exact executor fiber-exit/action-commit barrier and an independently observed single external effect. A fresh process reconciles the open intent as outcome_unknown without reexecution; the receipt-present variant resumes from its committed boundary. This tests process crash, not power loss."
+    },
+    {
       "crashPoint": "llm_result_committed",
       "recovery": "resumed_without_reexecution",
       "note": "Executor recovery preserves the already committed logical model result and does not append or execute it again. This is not a claim about replaying the whole chat loop."

@@ -224,3 +224,39 @@ test("CLI exposes failing status, artifact and job summary without changing the 
     rmSync(root, { recursive: true, force: true });
   }
 }, 15000);
+
+test("owner baseline acceptance is explicit and remains structurally validated", async () => {
+  const root = mkdtempSync(join(tmpdir(), "benchmark-acceptance-"));
+  const cwd = process.cwd(), env = { ...process.env };
+  try {
+    process.chdir(root);
+    mkdirSync(join(root, "bench-results"));
+    await Bun.write(join(root, "bench-results/reference.js"), JSON.stringify(history(100)));
+    await Bun.write(join(root, "bench-results/statistics.json"), JSON.stringify(metrics(121)));
+    const summary = join(root, "summary.md");
+    process.env.BENCHMARK_REGRESSION_PERCENT = "20";
+    process.env.GITHUB_STEP_SUMMARY = summary;
+
+    process.env.BENCHMARK_ACCEPT_BASELINE = "true";
+    expect(await main([])).toBe(0);
+    expect(await Bun.file(summary).text()).toContain("Baseline reset accepted by Owner (BENCHMARK_ACCEPT_BASELINE=true)");
+    expect(await Bun.file(summary).text()).toContain("ACCEPTED");
+
+    for (const value of ["1", "yes"] as const) {
+      process.env.BENCHMARK_ACCEPT_BASELINE = value;
+      expect(await main([])).toBe(1);
+      expect(await Bun.file(summary).text()).toContain("FAIL");
+    }
+
+    process.env.BENCHMARK_ACCEPT_BASELINE = "true";
+    await Bun.write(join(root, "bench-results/statistics.json"), JSON.stringify([]));
+    await expect(main([])).rejects.toThrow();
+    await Bun.write(join(root, "bench-results/statistics.json"), JSON.stringify(metrics(121)));
+    await Bun.write(join(root, "bench-results/reference.js"), JSON.stringify(history()));
+    await expect(main([])).rejects.toThrow();
+  } finally {
+    process.chdir(cwd);
+    process.env = env;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

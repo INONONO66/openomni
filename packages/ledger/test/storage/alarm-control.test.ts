@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Alarm, LedgerSession, type L0Observation } from "@openomni/protocol";
@@ -22,17 +23,24 @@ type Status = Alarm.Status;
 /** One backend with an owner session and a capture of every committed action. */
 function openOwner(db: Database) {
   const { adapter, observations } = observedL0Adapters(db);
-  adapter.sessions.create(
-    LedgerSession.Row.parse({
-      id: "owner",
-      parentId: null,
-      role: "resident",
-      state: "idle",
-      revision: 0,
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-    }),
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        adapter.sessions.create(
+          LedgerSession.Row.parse({
+            id: "owner",
+            parentId: null,
+            role: "resident",
+            state: "idle",
+            revision: 0,
+            leaseOwner: null,
+            leaseFence: 0,
+            leaseExpiresAt: null,
+          }),
+        ),
+      ),
+    ),
+    (error) => error,
   );
   return { adapter, observations };
 }
@@ -63,22 +71,34 @@ const cases = Alarm.Kind.options.flatMap((kind) =>
 );
 
 function fireOnce(adapter: Adapter, id: string, sourceKey: string, terminal: boolean) {
-  return adapter.alarms.fire({
-    id,
-    epoch: 1,
-    fence: 0,
-    sourceKey,
-    at: 101,
-    content: "event",
-    terminal,
-  })?.row.status;
+  return Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        adapter.alarms.fire({
+          id,
+          epoch: 1,
+          fence: 0,
+          sourceKey,
+          at: 101,
+          content: "event",
+          terminal,
+        }),
+      ),
+    ),
+    (error) => error,
+  )?.row.status;
 }
 
 /** Drives a freshly armed alarm into each persisted status. */
 const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
   armed: () => undefined,
   cancelled: (adapter, id) => {
-    expect(adapter.alarms.cancel(id, "owner", 101)?.status).toBe("cancelled");
+    expect(
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.alarms.cancel(id, "owner", 101))),
+        (error) => error,
+      )?.status,
+    ).toBe("cancelled");
   },
   fired: (adapter, id) => {
     expect(fireOnce(adapter, id, "second", true)).toBe("fired");
@@ -92,13 +112,20 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
 
 function seedAlarm(adapter: Adapter, id: string, kind: Kind, status: Status): void {
   expect(
-    adapter.alarms.arm({
-      id,
-      sessionId: "owner",
-      kind,
-      fireAt: 100,
-      ...(kind === "watch" ? { spec: watchSpec } : {}),
-    }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          adapter.alarms.arm({
+            id,
+            sessionId: "owner",
+            kind,
+            fireAt: 100,
+            ...(kind === "watch" ? { spec: watchSpec } : {}),
+          }),
+        ),
+      ),
+      (error) => error,
+    ),
   ).toBeDefined();
   driveTo[status](adapter, id);
 }
@@ -125,15 +152,27 @@ for (const op of ["cancel", "rearm"] as const) {
     using db = new Database(":memory:");
     initializeSqliteDatabase(db);
     const { adapter, observations } = openOwner(db);
-    expect(adapter.alarms[op]("missing", "owner", 100)).toBeUndefined();
+    expect(() =>
+      Either.getOrThrowWith(
+        Effect.runSync(Effect.either(adapter.alarms[op]("missing", "owner", 100))),
+        (error) => error,
+      ),
+    ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
     for (const { id, kind, status, sessionId } of cases) {
       seedAlarm(adapter, id, kind, status);
       const before = snapshot(adapter, observations, id);
-      const result = adapter.alarms[op](id, sessionId, 102);
+      const result = Effect.runSync(Effect.either(adapter.alarms[op](id, sessionId, 102)));
       if (controlAdmitted(kind, status, sessionId, op)) {
-        expectTransition(op, before.fence, result);
+        expectTransition(
+          op,
+          before.fence,
+          Either.getOrThrowWith(result, (error) => error),
+        );
       } else {
-        expect(result).toBeUndefined();
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: { _tag: "AlarmRefused", alarmId: id, operation: op },
+        });
         expect(snapshot(adapter, observations, id)).toEqual(before);
       }
     }

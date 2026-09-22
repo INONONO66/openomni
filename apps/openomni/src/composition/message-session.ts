@@ -1,24 +1,33 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import { Effect, FiberRef } from "effect";
+import { ForeignFailure } from "@openomni/agent";
+import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
-import type { createGatewayRouter } from "@openomni/channels";
+import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import { outboundMessage } from "./terminal-message";
 
 type Ports = Parameters<typeof createGatewayRouter>[0];
 
-export function commitMessageInbox(input: Inbox.Commit): Inbox.Row {
-  const outbound = outboundMessage.getStore();
-  const message = outbound?.input.message;
-  if (
-    message !== undefined &&
-    (input.id !== message.messageId ||
-      input.sessionId !== message.destinationSessionId ||
-      input.content !== message.content)
-  ) {
-    throw new Error("outbound inbox binding mismatch");
-  }
-  const received = SessionHandleStore.commitReceivedMessage(input);
-  if (outbound !== undefined) outbound.receipt = received.receipt;
-  return received.row;
+export function commitMessageInbox(
+  input: Inbox.Commit,
+): Effect.Effect<Inbox.Row, LedgerError | ForeignFailure> {
+  return Effect.gen(function* () {
+    const outbound = yield* FiberRef.get(outboundMessage);
+    const message = outbound?.input.message;
+    if (
+      message !== undefined &&
+      (input.id !== message.messageId ||
+        input.sessionId !== message.destinationSessionId ||
+        input.content !== message.content)
+    ) {
+      return yield* new ForeignFailure({
+        operation: "message.commit",
+        cause: "outbound inbox binding mismatch",
+      });
+    }
+    const received = yield* SessionHandleStore.commitReceivedMessage(input);
+    if (outbound !== undefined) outbound.receipt = received.receipt;
+    return received.row;
+  });
 }
 
 export function messageMaterialization(input: {
@@ -107,7 +116,7 @@ function prepareExternal(
   send: Parameters<Ports["prepare"]>[1],
   target: string,
   messageId: string,
-): ReturnType<Ports["prepare"]> {
+): Effect.Effect.Success<ReturnType<Ports["prepare"]>> {
   const exists = SessionHandleStore.listRows().some((row) => row.id === target);
   const source =
     exists && send.replyTo !== undefined
@@ -162,6 +171,18 @@ function admissionBounds(
   });
 }
 
+function withinDeadline(
+  outbound: boolean,
+  parentDeadline: number | undefined,
+  sendDeadline: number | undefined,
+): boolean {
+  return (
+    outbound ||
+    parentDeadline === undefined ||
+    (sendDeadline !== undefined && sendDeadline <= parentDeadline)
+  );
+}
+
 export function prepareMessage(
   materialize: (
     id: string,
@@ -170,56 +191,59 @@ export function prepareMessage(
     runner: string,
   ) => LedgerSession.Materialize,
 ): Ports["prepare"] {
-  return (sender, send, target, messageId) => {
-    if (sender.kind === "external") {
-      return prepareExternal(materialize, send, target, messageId);
-    }
-    const source = SessionHandleStore.row(sender.id);
-    if (source.leaseOwner === null) throw new Error("session sender has no active lease");
-    const rows = SessionHandleStore.listRows();
-    const recipient = send.to.kind === "session" ? SessionHandleStore.row(target) : undefined;
-    const origins = SessionHandleStore.inboxRows(source.id).flatMap((row) => {
-      const parsed = Inbox.MessageOrigin.safeParse(row.origin.value);
-      return parsed.success ? [parsed.data] : [];
+  return (sender, send, target, messageId) =>
+    Effect.gen(function* () {
+      if (sender.kind === "external") {
+        return prepareExternal(materialize, send, target, messageId);
+      }
+      const source = SessionHandleStore.row(sender.id);
+      if (source.leaseOwner === null)
+        return yield* new SendAdmissionConflict({ message: "session sender has no active lease" });
+      const rows = SessionHandleStore.listRows();
+      const recipient = send.to.kind === "session" ? SessionHandleStore.row(target) : undefined;
+      const origins = SessionHandleStore.inboxRows(source.id).flatMap((row) => {
+        const parsed = Inbox.MessageOrigin.safeParse(row.origin.value);
+        return parsed.success ? [parsed.data] : [];
+      });
+      const parentDeadline = origins.at(-1)?.deadline;
+      const outbound = yield* FiberRef.get(outboundMessage);
+      const bounds = admissionBounds(source, send);
+      const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
+      const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
+      if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
+        return yield* new SendAdmissionConflict({ message: "child admission bounds missing from pinned policy" });
+      const depth = sessionDepth(source.parentId, rows);
+      return {
+        target,
+        ...(outbound === undefined
+          ? {}
+          : {
+              messageId: outbound.input.message.messageId,
+              origin: outbound.input.message,
+            }),
+        sender: { sessionId: sender.id, owner: source.leaseOwner, fence: source.leaseFence },
+        ...(send.to.kind === "new_session"
+          ? {
+              createSession: materialize(target, sender.id, send.to.role, send.to.runner),
+              limits: { fanout: Math.min(...fanout), depth: Math.min(...depths) },
+            }
+          : {}),
+        message: {
+          sender: "session",
+          senderRole: source.role,
+          targetKind: send.to.kind,
+          ...recipientRelation(source, recipient, send),
+          type: send.type,
+          fanout: SessionHandleStore.openChildCount(source.id),
+          depth,
+          // Mandatory terminal mail answers the original request. Its existing
+          // alarm/answer CAS owns the bound; a reply must not open another alarm.
+          withinParentDeadline: withinDeadline(
+            outbound !== undefined,
+            parentDeadline,
+            send.deadline,
+          ),
+        },
+      };
     });
-    const parentDeadline = origins.at(-1)?.deadline;
-    const outbound = outboundMessage.getStore();
-    const bounds = admissionBounds(source, send);
-    const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
-    const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
-    if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
-      throw new Error("child admission bounds missing from pinned policy");
-    const depth = sessionDepth(source.parentId, rows);
-    return {
-      target,
-      ...(outbound === undefined
-        ? {}
-        : {
-            messageId: outbound.input.message.messageId,
-            origin: outbound.input.message,
-          }),
-      sender: { sessionId: sender.id, owner: source.leaseOwner, fence: source.leaseFence },
-      ...(send.to.kind === "new_session"
-        ? {
-            createSession: materialize(target, sender.id, send.to.role, send.to.runner),
-            limits: { fanout: Math.min(...fanout), depth: Math.min(...depths) },
-          }
-        : {}),
-      message: {
-        sender: "session",
-        senderRole: source.role,
-        targetKind: send.to.kind,
-        ...recipientRelation(source, recipient, send),
-        type: send.type,
-        fanout: SessionHandleStore.openChildCount(source.id),
-        depth,
-        // Mandatory terminal mail answers the original request. Its existing
-        // alarm/answer CAS owns the bound; a reply must not open another alarm.
-        withinParentDeadline:
-          outbound !== undefined ||
-          parentDeadline === undefined ||
-          (send.deadline !== undefined && send.deadline <= parentDeadline),
-      },
-    };
-  };
 }

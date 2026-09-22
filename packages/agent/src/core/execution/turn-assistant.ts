@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { ExecutionError } from "../../errors";
 import { accumulateUsage, type Sink } from "@openomni/llm";
 import { Message, PlainValueSchema } from "@openomni/protocol";
 import { measuredContextTokens } from "../../compaction/measure";
@@ -71,16 +73,18 @@ export function createTrackingSink(
   };
 }
 
-export async function recordAssistant(
+export function recordAssistant(
   config: ChatAgentConfig,
   message: Message.WithParts,
-): Promise<Message.WithParts> {
+): Effect.Effect<Message.WithParts, ExecutionError> {
+  return Effect.gen(function* () {
   if (config.executor === undefined) throw new Error("missing message authority");
-  const result = await config.executor.run(
+  const result = yield* config.executor.run(
     { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
-    async () => PlainValueSchema.parse(message),
+    () => Effect.sync(() => PlainValueSchema.parse(message)),
   );
   if (result.terminal !== "executed")
     throw new Error(`assistant persistence refused: ${result.reason}`);
   return Message.WithParts.parse(result.value);
+  });
 }

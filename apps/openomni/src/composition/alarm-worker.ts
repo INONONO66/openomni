@@ -1,12 +1,10 @@
-import { AsyncResource } from "node:async_hooks";
+import { Effect, Fiber, Queue } from "effect";
+import type { AlarmWriteAdapter, LedgerError } from "@openomni/ledger";
+import type { ExecutionError, SessionError } from "@openomni/agent";
+import { AppLifecycleFailure } from "../runtime";
+import { canonicalDigest, L0Observation, Alarm, type ObservationSink } from "@openomni/protocol";
 import {
-  canonicalDigest,
-  L0Observation,
-  Alarm,
-  type ObservationSink,
-  type Storage,
-} from "@openomni/protocol";
-import {
+  AlarmRuntimeError,
   AlarmSourceError,
   assertAlarmRuntime,
   commandSource,
@@ -14,242 +12,253 @@ import {
   type AlarmSource,
 } from "./alarm-sources";
 
+type Failure = LedgerError | SessionError | AlarmSourceError;
 interface Running {
   readonly row: Alarm.Row;
   readonly source: AlarmSource;
 }
 
-/** One app-owned band; session release has no connection to source lifetime. */
+/** Native source ownership. Foreign callbacks only enqueue work in the app-owned scope. */
 export function createAlarmWorker(options: {
-  readonly alarms: Storage.AlarmSubAdapter;
+  readonly alarms: AlarmWriteAdapter;
   readonly observations: Required<Pick<ObservationSink, "subscribe">>;
-  readonly wake: (sessionId: string) => Promise<void>;
-  readonly requestTimeout: (requestId: string, at: number) => void;
+  readonly wake: (sessionId: string) => Effect.Effect<void, SessionError>;
+  readonly requestTimeout: (requestId: string, at: number) => Effect.Effect<void, ExecutionError>;
   readonly failure: (error: Error) => void;
   readonly clock?: () => number;
   readonly schedule?: (tick: () => void) => () => void;
 }) {
-  assertAlarmRuntime();
-  const now = options.clock ?? Date.now;
-  const running = new Map<string, Running>();
-  const settling = new Set<Promise<void>>();
-  let stopped = false;
-  let scanning = false;
-  let recovering = true;
-  let cancelTick: (() => void) | undefined;
-  let unsubscribe: (() => void) | undefined;
-
-  function track(operation: Promise<void>) {
-    settling.add(operation);
-    void operation.then(
-      () => settling.delete(operation),
-      (error: Error) => {
-        settling.delete(operation);
-        options.failure(error);
-      },
+  return Effect.gen(function* () {
+    yield* Effect.try({ try: assertAlarmRuntime, catch: () => new AlarmRuntimeError() });
+    const scope = yield* Effect.scope;
+    const queue = yield* Queue.unbounded<Effect.Effect<void, Failure>>();
+    const now = options.clock ?? Date.now;
+    const running = new Map<string, Running>();
+    let stopped = false;
+    let recovering = true;
+    let cancelTick: (() => void) | undefined;
+    let unsubscribe: (() => void) | undefined;
+    const report = (work: Effect.Effect<void, Failure>) =>
+      work.pipe(Effect.catchAll((error) => Effect.sync(() => options.failure(error))));
+    const offer = (work: Effect.Effect<void, Failure>) => {
+      if (!stopped) queue.unsafeOffer(work);
+    };
+    const consumer = yield* Effect.forkIn(
+      Effect.forever(Queue.take(queue).pipe(Effect.flatMap(report))),
+      scope,
     );
-  }
 
-  function release(row: Alarm.Row) {
-    const current = running.get(row.id);
-    if (current === undefined || current.row.fence !== row.fence) return;
-    running.delete(row.id);
-    track(current.source.close());
-  }
-
-  // The ledger owns admission: identity, fence, dedupe, deadline and budget are
-  // decided from the committed row. This band only reports what a source saw.
-  function deliver(
-    row: Alarm.Row,
-    sourceKey: string,
-    content: string,
-    terminal: boolean,
-    batchHash?: string,
-  ) {
-    if (stopped) return;
-    const fired = options.alarms.fire({
-      id: row.id,
-      epoch: row.epoch,
-      fence: row.fence,
-      sourceKey,
-      at: now(),
-      content,
-      terminal,
-      ...(batchHash === undefined ? {} : { batchHash }),
-    });
-    if (fired === undefined) return;
-    if (fired.row.status !== "armed") release(row);
-    // Session shutdown owns runner settlement; this band owns only its sources.
-    void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
-  }
-
-  function summary(
-    row: Alarm.Row,
-    reason: "exit" | "timeout" | "restart" | "source_error",
-    exitCode: number | null,
-  ) {
-    deliver(
-      row,
-      `${reason}:${row.fence}`,
-      JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason, exitCode }),
-      true,
-    );
-  }
-
-  function sourceFailure(row: Alarm.Row, error: Error) {
-    try {
-      summary(row, "source_error", null);
-    } finally {
-      release(row);
-      options.failure(error);
+    function release(row: Alarm.Row): Effect.Effect<void, AlarmSourceError> {
+      return Effect.suspend(() => {
+        const current = running.get(row.id);
+        if (current === undefined || current.row.fence !== row.fence) return Effect.void;
+        running.delete(row.id);
+        return Effect.tryPromise({
+          try: () => current.source.close(),
+          catch: () => new AlarmSourceError("source.close"),
+        });
+      });
     }
-  }
-
-  // A due retry schedule is consumed exactly once by the fenced cancel CAS and
-  // only wakes the session: the open turn re-runs the model attempt itself, so
-  // no inbox prompt is injected into the resumed model input.
-  function consumeRetrySchedule(row: Alarm.Row) {
-    const consumed = options.alarms.cancel(row.id, row.sessionId, now());
-    if (consumed === undefined) return;
-    void options.wake(row.sessionId).catch((error: Error) => options.failure(error));
-  }
-
-  function startWatch(owned: Alarm.Row, preAcquireFence: number) {
-    const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
-    if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms) {
-      summary(owned, "timeout", null);
-      return;
+    function wake(id: string) {
+      return Effect.forkIn(report(options.wake(id)), scope).pipe(Effect.asVoid);
     }
-    if (recovering && preAcquireFence > 0 && watch.persistent !== true) {
-      summary(owned, "restart", null);
-      return;
+    function deliver(
+      row: Alarm.Row,
+      sourceKey: string,
+      content: string,
+      terminal: boolean,
+      batchHash?: string,
+    ): Effect.Effect<void, Failure> {
+      return Effect.gen(function* () {
+        if (stopped) return;
+        const fired = yield* options.alarms
+          .fire({
+            id: row.id,
+            epoch: row.epoch,
+            fence: row.fence,
+            sourceKey,
+            at: now(),
+            content,
+            terminal,
+            ...(batchHash === undefined ? {} : { batchHash }),
+          })
+          .pipe(
+            Effect.catchTag("AlarmRefused", (error) =>
+              error.reason === "prompt" ? Effect.fail(error) : Effect.succeed(undefined),
+            ),
+          );
+        if (fired === undefined) return;
+        if (fired.row.status !== "armed") yield* release(row);
+        yield* wake(row.sessionId);
+      });
     }
-    try {
-      const source =
-        "command" in watch
-          ? startCommandWatch(owned, watch)
-          : pathSource(
-              watch,
-              (content, identity) => deliver(owned, `path:${identity}`, content, false),
-              (error) => sourceFailure(owned, error),
-            );
-      running.set(owned.id, { row: owned, source });
-    } catch {
-      sourceFailure(owned, new AlarmSourceError("source.start"));
-    }
-  }
-
-  function startCommandWatch(
-    owned: Alarm.Row,
-    watch: Extract<Alarm.Watch, { command: string }>,
-  ): AlarmSource {
-    const filter = watch.filter === undefined ? undefined : new RegExp(watch.filter);
-    let lines = 0;
-    return commandSource(
-      watch.command,
-      (content) => {
-        lines += 1;
-        if (filter === undefined || filter.test(content))
-          deliver(owned, `line:${owned.fence}:${lines}`, content, false, canonicalDigest(content));
-      },
-      (code) => summary(owned, "exit", code),
-      (error) => sourceFailure(owned, error),
-    );
-  }
-
-  function start(row: Alarm.Row) {
-    const deadline = Alarm.RequestDeadline.safeParse(row.spec?.value);
-    if (row.kind === "at" && deadline.success) {
-      options.requestTimeout(deadline.data.requestId, now());
-      return;
-    }
-    if (row.kind === "at" && Alarm.RetrySchedule.safeParse(row.spec?.value).success) {
-      consumeRetrySchedule(row);
-      return;
-    }
-    const owned = options.alarms.acquire(row.id, row.fence);
-    if (owned === undefined) return;
-    if (owned.kind === "at") {
-      deliver(
-        owned,
-        `timer:${owned.fireAt}`,
-        owned.spec === undefined
-          ? "Alarm due"
-          : typeof owned.spec.value === "string"
-            ? owned.spec.value
-            : JSON.stringify(owned.spec.value),
+    function summary(
+      row: Alarm.Row,
+      reason: "exit" | "timeout" | "restart" | "source_error",
+      exitCode: number | null,
+    ) {
+      return deliver(
+        row,
+        `${reason}:${row.fence}`,
+        JSON.stringify({ alarmId: row.id, epoch: row.epoch, reason, exitCode }),
         true,
       );
-      return;
     }
-    startWatch(owned, row.fence);
-  }
-
-  function tick() {
-    if (stopped || scanning) return;
-    scanning = true;
-    try {
-      for (const [id, entry] of running) {
-        const current = options.alarms.get(id);
-        if (current?.status !== "armed" || current.fence !== entry.row.fence) {
-          release(entry.row);
-          continue;
-        }
+    function sourceFailure(row: Alarm.Row, error: Error) {
+      offer(
+        summary(row, "source_error", null).pipe(
+          Effect.ensuring(release(row).pipe(Effect.orDie)),
+          Effect.ensuring(Effect.sync(() => options.failure(error))),
+        ),
+      );
+    }
+    function startCommandWatch(
+      owned: Alarm.Row,
+      watch: Extract<Alarm.Watch, { command: string }>,
+    ): AlarmSource {
+      const filter = watch.filter === undefined ? undefined : new RegExp(watch.filter);
+      let lines = 0;
+      return commandSource(
+        watch.command,
+        (content) => {
+          lines += 1;
+          if (filter === undefined || filter.test(content))
+            offer(
+              deliver(
+                owned,
+                `line:${owned.fence}:${lines}`,
+                content,
+                false,
+                canonicalDigest(content),
+              ),
+            );
+        },
+        (code) => offer(summary(owned, "exit", code)),
+        (error) => sourceFailure(owned, error),
+      );
+    }
+    function startWatch(owned: Alarm.Row, preAcquireFence: number): Effect.Effect<void, Failure> {
+      return Effect.gen(function* () {
+        const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
+        if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms)
+          return yield* summary(owned, "timeout", null);
+        if (recovering && preAcquireFence > 0 && watch.persistent !== true)
+          return yield* summary(owned, "restart", null);
+        const source = yield* Effect.try({
+          try: () =>
+            "command" in watch
+              ? startCommandWatch(owned, watch)
+              : pathSource(
+                  watch,
+                  (content, identity) => offer(deliver(owned, `path:${identity}`, content, false)),
+                  (error) => sourceFailure(owned, error),
+                ),
+          catch: () => new AlarmSourceError("source.start"),
+        }).pipe(
+          Effect.tapError((error) =>
+            summary(owned, "source_error", null).pipe(
+              Effect.ensuring(Effect.sync(() => options.failure(error))),
+            ),
+          ),
+        );
+        running.set(owned.id, { row: owned, source });
+      });
+    }
+    function consumeRetry(row: Alarm.Row) {
+      return options.alarms.cancel(row.id, row.sessionId, now()).pipe(
+        Effect.catchTag("AlarmRefused", () => Effect.succeed(undefined)),
+        Effect.flatMap((consumed) => (consumed === undefined ? Effect.void : wake(row.sessionId))),
+      );
+    }
+    function timerContent(row: Alarm.Row): string {
+      if (row.spec === undefined) return "Alarm due";
+      return typeof row.spec.value === "string" ? row.spec.value : JSON.stringify(row.spec.value);
+    }
+    function start(row: Alarm.Row): Effect.Effect<void, Failure> {
+      return Effect.gen(function* () {
+        const deadline = Alarm.RequestDeadline.safeParse(row.spec?.value);
+        if (row.kind === "at" && deadline.success)
+          return yield* options.requestTimeout(deadline.data.requestId, now());
+        if (row.kind === "at" && Alarm.RetrySchedule.safeParse(row.spec?.value).success)
+          return yield* consumeRetry(row);
+        const owned = yield* options.alarms
+          .acquire(row.id, row.fence)
+          .pipe(Effect.catchTag("AlarmRefused", () => Effect.succeed(undefined)));
+        if (owned === undefined) return;
+        if (owned.kind === "at")
+          return yield* deliver(owned, `timer:${owned.fireAt}`, timerContent(owned), true);
+        yield* startWatch(owned, row.fence);
+      });
+    }
+    function observe(entry: Running): Effect.Effect<void, Failure> {
+      return Effect.gen(function* () {
+        const current = options.alarms.get(entry.row.id);
+        if (current?.status !== "armed" || current.fence !== entry.row.fence)
+          return yield* release(entry.row);
         const { watch } = Alarm.WatchSpec.parse(current.spec?.value);
         if (watch.timeout_ms !== undefined && now() >= current.fireAt + watch.timeout_ms)
-          summary(current, "timeout", null);
+          yield* summary(current, "timeout", null);
         else entry.source.observe?.();
-      }
-      for (const row of options.alarms.due(now())) if (!running.has(row.id)) start(row);
-    } finally {
-      scanning = false;
-      recovering = false;
+      });
     }
-  }
-
-  // A bus publication can originate inside an executor wave. Never inherit its
-  // abort/authority scope into a long-lived source or a future session wake.
-  const evaluate = AsyncResource.bind(tick);
-  return {
-    tick: evaluate,
-    start() {
-      if (cancelTick !== undefined) throw new Error("alarm worker already started");
-      unsubscribe = options.observations.subscribe(
-        L0Observation.ActionCommittedEvent,
-        (payload) => {
-          if (payload.kind !== "alarm.arm") return;
-          try {
-            evaluate();
-          } catch {
-            options.failure(new AlarmSourceError("bus.scan"));
-          }
-        },
+    const serial = yield* Effect.makeSemaphore(1);
+    const tick = () =>
+      serial.withPermits(1)(
+        Effect.gen(function* () {
+          if (stopped) return;
+          yield* Effect.forEach(running.values(), observe, { discard: true });
+          for (const row of options.alarms.due(now())) if (!running.has(row.id)) yield* start(row);
+          recovering = false;
+        }),
       );
-      evaluate();
-      cancelTick = (
-        options.schedule ??
-        ((callback) => {
-          const timer = setInterval(() => {
-            try {
-              callback();
-            } catch {
-              options.failure(new AlarmSourceError("timer.scan"));
-            }
-          }, 1000);
-          return () => clearInterval(timer);
-        })
-      )(evaluate);
-    },
-    async close() {
-      stopped = true;
-      cancelTick?.();
-      unsubscribe?.();
-      for (const [id, entry] of running) {
-        // Persist invalidation before physical shutdown. This preserves takeover dedupe.
-        options.alarms.acquire(id, entry.row.fence);
-        release(entry.row);
-      }
-      await Promise.all([...settling]);
-    },
-  };
+    const close = () =>
+      Effect.gen(function* () {
+        stopped = true;
+        cancelTick?.();
+        unsubscribe?.();
+        yield* Fiber.interrupt(consumer);
+        for (const [id, entry] of running) {
+          yield* options.alarms
+            .acquire(id, entry.row.fence)
+            .pipe(Effect.catchTag("AlarmRefused", () => Effect.void));
+          yield* release(entry.row);
+        }
+        yield* Queue.shutdown(queue);
+      });
+    yield* Effect.addFinalizer(() => close().pipe(Effect.orDie));
+    return {
+      tick,
+      close,
+      start: () =>
+        Effect.gen(function* () {
+          if (cancelTick !== undefined)
+            return yield* new AppLifecycleFailure({ operation: "alarm.start", cause: "already_started" });
+          unsubscribe = options.observations.subscribe(
+            L0Observation.ActionCommittedEvent,
+            (payload) => {
+              if (payload.kind === "alarm.arm")
+                offer(
+                  tick().pipe(
+                    Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("bus.scan"))),
+                  ),
+                );
+            },
+          );
+          yield* tick();
+          cancelTick = (
+            options.schedule ??
+            ((callback) => {
+              const timer = setInterval(callback, 1000);
+              return () => clearInterval(timer);
+            })
+          )(() =>
+            offer(
+              tick().pipe(
+                Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("timer.scan"))),
+              ),
+            ),
+          );
+        }),
+    };
+  });
 }

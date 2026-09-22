@@ -1,6 +1,9 @@
+import type { RunInput, Sink } from "@openomni/llm";
+import { isolated } from "../helpers/isolated";
+import { bounded } from "../helpers/bounded";
 import { providerFailure } from "../helpers/mock-llm";
-import { createTestAgent } from "../helpers/test-agent";
-import { describe, expect, it, jest } from "bun:test";
+import { createTestAgent } from "../helpers/g0-effect";
+import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../src/core/execution/events";
 import { stepSnapshot } from "../helpers/messages";
 import { Bus } from "../../src/index";
@@ -14,20 +17,22 @@ describe("mid-turn steering", () => {
     let pending = true;
     const yielded: Array<boolean | undefined> = [];
     let calls = 0;
-    const result = await createTestAgent({
-      events: Bus,
-      model,
-      steeringPending: () => pending,
-      llm: mockLlm(async (input, sink) => {
-        calls += 1;
-        yielded.push(input.shouldYield?.());
-        if (calls === 1) {
-          pending = false;
-          sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
-        } else sink.onMessage(stepSnapshot("second", "done", "stop"));
-        return createStopOutcome();
-      }),
-    }).run(runInput([{ role: "user", content: "start" }]));
+    const result = await isolated(
+      createTestAgent({
+        events: Bus,
+        model,
+        steeringPending: () => pending,
+        llm: mockLlm(async (input: RunInput, sink: Sink) => {
+          calls += 1;
+          yielded.push(input.shouldYield?.());
+          if (calls === 1) {
+            pending = false;
+            sink.onMessage(stepSnapshot("first", "working", "tool-calls"));
+          } else sink.onMessage(stepSnapshot("second", "done", "stop"));
+          return createStopOutcome();
+        }),
+      }).run(runInput([{ role: "user", content: "start" }])),
+    );
     expect(result.finishReason).toBe("stop");
     expect(result.text).toBe("done");
     expect(calls).toBe(2);
@@ -36,45 +41,55 @@ describe("mid-turn steering", () => {
 
   it("passes no steering callback when steering is absent", async () => {
     let callback: (() => boolean) | undefined;
-    await createTestAgent({
-      events: Bus,
-      model,
-      llm: mockLlm(async (input, sink) => {
-        callback = input.shouldYield;
-        return completeModel(input, sink);
-      }),
-    }).run(runInput([{ role: "user", content: "start" }]));
+    await isolated(
+      createTestAgent({
+        events: Bus,
+        model,
+        llm: mockLlm(async (input: RunInput, sink: Sink) => {
+          callback = input.shouldYield;
+          return completeModel(input, sink);
+        }),
+      }).run(runInput([{ role: "user", content: "start" }])),
+    );
     expect(callback).toBeUndefined();
   });
 
   it("keeps the same turn index when retrying the provider", async () => {
-    jest.useFakeTimers();
     const indices: number[] = [];
     const retry = Promise.withResolvers<void>();
-    const unsubscribeTurn = Bus.subscribe(RunEvents.TurnStart, (event) =>
-      indices.push(event.turnIndex),
+    const unsubscribeTurn = Bus.subscribe(
+      RunEvents.TurnStart,
+      (event: {
+        traceId: string;
+        sessionId: string;
+        time: number;
+        turnIndex: number;
+        agentId?: string | undefined;
+        runId?: string | undefined;
+        actorId?: string | undefined;
+      }) => indices.push(event.turnIndex),
     );
     const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, () => retry.resolve());
     let calls = 0;
     try {
-      const running = createTestAgent({
-        events: Bus,
-        model,
-        llm: mockLlm(async (input, sink) => {
-          calls += 1;
-          return calls === 1
-            ? { type: "error", error: providerFailure("transient blip") }
-            : completeModel(input, sink);
-        }),
-      }).run(runInput([{ role: "user", content: "start" }]));
-      await retry.promise;
-      jest.advanceTimersByTime(1_000);
+      const running = isolated(
+        createTestAgent({
+          events: Bus,
+          model,
+          llm: mockLlm(async (input: RunInput, sink: Sink) => {
+            calls += 1;
+            return calls === 1
+              ? { type: "error", error: providerFailure("transient blip") }
+              : completeModel(input, sink);
+          }),
+        }).run(runInput([{ role: "user", content: "start" }])),
+      );
+      await bounded(retry.promise);
       await running;
       expect(indices).toEqual([0, 0]);
     } finally {
       unsubscribeRetry();
       unsubscribeTurn();
-      jest.useRealTimers();
     }
   });
 });

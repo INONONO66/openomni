@@ -1,3 +1,4 @@
+import { runEffect } from "./helpers/native";
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ import { newTraceId } from "./helpers/observation";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
-type RunModule = typeof import("../src/run");
+type RunModule = typeof import("./helpers/native");
 let run: RunModule["run"];
 
 type StreamTextArgs = Parameters<typeof streamText>[0];
@@ -61,7 +62,7 @@ describe("run", () => {
   let capturedToolResults: Tool.Result[];
 
   beforeAll(async () => {
-    ({ run } = await import("../src/run"));
+    ({ run } = await import("./helpers/native"));
   });
 
   beforeEach(() => {
@@ -170,13 +171,13 @@ describe("run", () => {
       throw new Error("expected a typed failure");
     }
     const failure = outcome.error;
-    expect(failure.data).toMatchObject({
+    expect(failure).toMatchObject({
       retryAfterMs: 1_234,
       usage: { inputTokens: 17, outputTokens: 5 },
       aborted: false,
       contextOverflow: true,
     });
-    expect(failure.cause).toMatchObject({ cause: source });
+    expect(failure.cause).toContain(source.message);
   });
 
   test("preserves a provider abort fact in the aborted outcome", async () => {
@@ -193,8 +194,8 @@ describe("run", () => {
 
     expect(outcome.type).toBe("aborted");
     if (outcome.type !== "aborted") throw new Error("expected an aborted outcome");
-    expect(outcome.error?.data.aborted).toBe(true);
-    expect(outcome.error?.cause).toMatchObject({ cause: source });
+    expect(outcome.error?.aborted).toBe(true);
+    expect(outcome.error?.cause).toContain(source.message);
   });
 
   test("publishes LlmCall.Events.Failed on error so every Started call terminates", async () => {
@@ -241,7 +242,7 @@ describe("run", () => {
     const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
     process.env.OPENOMNI_AUTH_FILE = authFile;
     try {
-      await Auth.set("stored-auth-provider", testAuth);
+      await runEffect(Auth.set("stored-auth-provider", testAuth));
 
       const outcome = await run(
         {
@@ -396,7 +397,7 @@ describe("run", () => {
 
     expect(outcome).toMatchObject({
       type: "error",
-      error: { data: { usage: { inputTokens: 100, outputTokens: 40 } } },
+      error: { usage: { inputTokens: 100, outputTokens: 40 } },
     });
     expect(call).toBe(1);
     const second = await run(

@@ -1,89 +1,23 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import type { Message, PlainValue } from "@openomni/protocol";
+import { Effect } from "effect";
+import type { Message } from "@openomni/protocol";
+import type { ExecutionError } from "../../errors";
 import type { ChatAgentConfig } from "../types";
 import { recordToolCall } from "../budget";
 import type { RunState, TurnArtifacts } from "./state";
-
-/** Nested calls inherit ownership as well as cancellation after a body detaches. */
-export const waveBodyScope = new AsyncLocalStorage<WaveControl>();
-
-type WaveBodyOutcome =
-  | { readonly status: "fulfilled"; readonly value: PlainValue }
-  | { readonly status: "rejected"; readonly error: Error }
-  | { readonly status: "cancelled" };
-
-interface WaveBody {
-  readonly sequential?: true;
-  run(): Promise<PlainValue>;
-}
 
 export interface WaveControl {
   readonly signal: AbortSignal;
   readonly retain?: (effect: Promise<void>) => void;
 }
 
-/** Scheduling only: the executor stages pre decisions and commits ordered settlements. */
-export async function runWaveBodies(
-  items: readonly WaveBody[],
-  control: WaveControl,
-): Promise<readonly WaveBodyOutcome[]> {
-  const outcomes = new Map<number, WaveBodyOutcome>();
-  const aborted = Promise.withResolvers<void>();
-  const abort = () => {
-    for (const index of items.keys()) {
-      if (!outcomes.has(index)) outcomes.set(index, { status: "cancelled" });
-    }
-    aborted.resolve();
-  };
-  control.signal.addEventListener("abort", abort, { once: true });
-  if (control.signal.aborted) abort();
-  const start = (item: WaveBody, index: number): Promise<void> => {
-    const effect = waveBodyScope.run(control, async () => {
-      try {
-        control.signal.throwIfAborted();
-        const value = await item.run();
-        if (!outcomes.has(index)) outcomes.set(index, { status: "fulfilled", value });
-      } catch (error) {
-        if (!outcomes.has(index))
-          outcomes.set(index, {
-            status: "rejected",
-            error: error instanceof Error ? error : new Error(String(error)),
-          });
-      }
-    });
-    control.retain?.(effect);
-    return effect;
-  };
-  const join = (group: readonly Promise<void>[]) =>
-    Promise.race([Promise.all(group), aborted.promise]);
-  try {
-    let group: Promise<void>[] = [];
-    for (const [index, item] of items.entries()) {
-      if (control.signal.aborted) break;
-      if (item.sequential) {
-        await join(group);
-        group = [];
-        if (control.signal.aborted) break;
-        await join([start(item, index)]);
-      } else group.push(start(item, index));
-    }
-    await join(group);
-    return items.map((_item, index) => {
-      const outcome = outcomes.get(index) ?? { status: "cancelled" as const };
-      outcomes.set(index, outcome);
-      return outcome;
-    });
-  } finally {
-    control.signal.removeEventListener("abort", abort);
-  }
-}
 
 /** Assemble tool results on the original assistant slots, never completion order. */
-export async function settleModelTools(
+export function settleModelTools(
   turn: TurnArtifacts,
   config: ChatAgentConfig,
   state: RunState,
-): Promise<number> {
+): Effect.Effect<number, ExecutionError> {
+  return Effect.gen(function* () {
   const assistant = turn.turnAssistant.message;
   const pending =
     assistant?.parts.filter(
@@ -102,23 +36,17 @@ export async function settleModelTools(
     throw new Error("tool wave executor is required");
   const executed =
     config.toolWave !== undefined
-      ? await config.toolWave(calls, config.signal)
-      : await Promise.all(
-          calls.map(async (call) => {
-            if (execute === undefined) throw new Error("tool executor missing");
-            try {
-              return await execute(call, { signal: config.signal });
-            } catch (error) {
-              return {
-                id: call.id,
-                toolCallId: call.id,
-                toolName: call.tool,
-                output: error instanceof Error ? error.message : String(error),
-                isError: true,
-              };
-            }
-          }),
-        );
+      ? yield* config.toolWave(calls, config.signal)
+      : yield* Effect.forEach(calls, (call) => {
+          if (execute === undefined) throw new Error("tool executor missing");
+          return execute(call, { signal: config.signal }).pipe(Effect.catchAll((error) => Effect.succeed({
+            id: call.id,
+            toolCallId: call.id,
+            toolName: call.tool,
+            output: error.message,
+            isError: true,
+          })));
+        }, { concurrency: "unbounded" });
   const results = calls.map((call) => {
     const result = executed.find((result) => result.toolCallId === call.id);
     if (result === undefined) throw new Error(`missing tool result: ${call.id}`);
@@ -154,4 +82,5 @@ export async function settleModelTools(
   for (const result of results) turn.trackingSink.onToolResult(result);
   turn.trackingSink.onMessage(turn.turnAssistant.message);
   return calls.length;
+  });
 }

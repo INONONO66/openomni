@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
 import { z } from "zod";
 import { LineDecoder } from "../src/framing";
-import { createIpcServer } from "../src/server";
+import { createIpcServer } from "./helpers/native";
 import { deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";

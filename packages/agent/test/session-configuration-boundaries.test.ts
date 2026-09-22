@@ -1,5 +1,6 @@
+import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
-import { Storage, SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import {
   session,
   closeSessions,
@@ -8,83 +9,100 @@ import {
 } from "../src/session-handle";
 import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";
-import { bounded } from "./helpers/bounded";
+import { isolated } from "./helpers/isolated";
+import { failure } from "./helpers/effect-g2";
 
-async function withSession(
+function withSession<E, R>(
   authorizeConfigure: NonNullable<SessionRuntime["authorizeConfigure"]>,
-  test: (handle: SessionHandle) => Promise<void>,
+  test: (handle: SessionHandle) => Effect.Effect<void, E, R>,
 ) {
-  let sequence = 0;
-  const runtime: SessionRuntime = {
-    observations: collector(),
-    clock: () => 1000,
-    entropy: () => `configuration-${++sequence}`,
-    processId: "configuration",
-    scheduleHeartbeat: () => () => undefined,
-    authorizeConfigure,
-  };
-  Storage.initialize({ dbPath: ":memory:" });
-  seedPolicy();
-  try {
-    await test(
-      session(
-        {
-          id: "configuration-session",
-          role: "resident",
-          runner: async () => ({ kind: "result", text: "done" }),
-        },
-        runtime,
-      ),
+  return Effect.gen(function* () {
+    let sequence = 0;
+    const runtime: SessionRuntime = {
+      observations: collector(),
+      clock: () => 1000,
+      entropy: () => `configuration-${++sequence}`,
+      processId: "configuration",
+      scheduleHeartbeat: () => () => undefined,
+      authorizeConfigure,
+    };
+    seedPolicy();
+    yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
+    const handle = yield* session(
+      {
+        id: "configuration-session",
+        role: "resident",
+        runner: () => Effect.succeed({ kind: "result", text: "done" }),
+      },
+      runtime,
     );
-  } finally {
-    await closeSessions(runtime);
-    Storage.reset();
-  }
+    yield* test(handle);
+  });
 }
 
-it("does not record a denied configuration", async () => {
-  await withSession(
-    async () => false,
-    async (handle) => {
-      const before = SessionHandleStore.tree(handle.id);
-      await expect(handle.system.blocks.set([])).rejects.toMatchObject({
-        data: { code: "denied" },
-      });
-      expect(SessionHandleStore.tree(handle.id)).toEqual(before);
-    },
-  );
-});
+it("does not record a denied configuration", () =>
+  isolated(
+    Effect.scoped(
+      withSession(
+        () => Effect.succeed(false),
+        (handle: SessionHandle) =>
+          Effect.gen(function* () {
+            const before = SessionHandleStore.tree(handle.id);
+            expect(yield* failure(handle.system.blocks.set([]))).toMatchObject({
+              _tag: "ForeignFailure",
+              operation: "session.configure",
+              cause: "denied",
+            });
+            expect(SessionHandleStore.tree(handle.id)).toEqual(before);
+          }),
+      ),
+    ),
+  ));
 
-it("rejects configuration whose authorization outlives its captured generation", async () => {
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let authorizations = 0;
-  await withSession(
-    async () => {
-      authorizations += 1;
-      if (authorizations === 1) {
-        entered.resolve();
-        await release.promise;
-      }
-      return true;
-    },
-    async (handle) => {
-      const first = handle.system.blocks
-        .set([{ id: "first", source: "test", content: "first" }])
-        .catch((error: Error) => error);
-      await bounded(entered.promise);
-      try {
-        const receipt = await handle.system.blocks.set([
-          { id: "second", source: "test", content: "second" },
-        ]);
-        release.resolve();
-        expect(await bounded(first)).toMatchObject({ data: { code: "stale" } });
-        expect(
-          SessionHandleStore.latestGeneration(SessionHandleStore.tree(handle.id)).generation,
-        ).toBe(receipt.generation);
-      } finally {
-        release.resolve();
-      }
-    },
-  );
-});
+it("rejects configuration whose authorization outlives its captured generation", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let authorizations = 0;
+        yield* withSession(
+          () =>
+            Effect.gen(function* () {
+              authorizations += 1;
+              if (authorizations === 1) {
+                entered.resolve();
+                yield* Effect.promise(() => release.promise);
+              }
+              return true;
+            }),
+          (handle: SessionHandle) =>
+            Effect.gen(function* () {
+              const first = yield* Effect.forkScoped(
+                failure(
+                  handle.system.blocks.set([{ id: "first", source: "test", content: "first" }]),
+                ),
+              );
+              yield* Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds"));
+              try {
+                const receipt = yield* handle.system.blocks.set([
+                  { id: "second", source: "test", content: "second" },
+                ]);
+                release.resolve();
+                expect(yield* Fiber.join(first)).toMatchObject({
+                  _tag: "ForeignFailure",
+                  operation: "session.configure",
+                  cause: "stale",
+                });
+                expect(
+                  SessionHandleStore.latestGeneration(SessionHandleStore.tree(handle.id))
+                    .generation,
+                ).toBe(receipt.generation);
+              } finally {
+                release.resolve();
+              }
+            }),
+        );
+      }),
+    ),
+  ));

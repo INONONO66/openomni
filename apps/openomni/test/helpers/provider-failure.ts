@@ -1,4 +1,4 @@
-import { Run } from "@openomni/llm";
+import { LlmRunFailure, type Run } from "@openomni/llm";
 
 export function providerFailure(
   message: string,
@@ -9,8 +9,7 @@ export function providerFailure(
     responseHeaders: { "retry-after-ms": "0" },
   }),
 ): Run.Failure {
-  return new Run.FailureError(
-    {
+  return new LlmRunFailure({
       message,
       aborted: cause.name === "AbortError",
       contextOverflow: false,
@@ -22,7 +21,10 @@ export function providerFailure(
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
-    },
-    { cause },
-  );
+      cause: String(cause),
+      providerErrorName: cause.name,
+      isRetryable: "isRetryable" in cause && cause.isRetryable === true,
+      statusCode: "statusCode" in cause && typeof cause.statusCode === "number" ? cause.statusCode : undefined,
+      retryAfterMs: 0,
+  });
 }

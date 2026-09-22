@@ -1,3 +1,6 @@
+import { Cause, Effect, Exit, Option } from "effect";
+import { providerFailure } from "../helpers/mock-llm";
+import { isolated } from "../helpers/isolated";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { BusEvent } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
@@ -76,12 +79,16 @@ describe("Compaction bracket", () => {
   it("brackets a cut: one started, one completed(cut), completed last", async () => {
     const capture = captureBracket();
     try {
-      const result = await Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
-        { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        IDENTITY,
-        Bus,
-        { trigger: "threshold" },
+      const result = await isolated(
+        Compaction.compact(
+          Array.from({ length: 12 }, (_unused: undefined, index: number) =>
+            makeUserMessage(`message ${index}`),
+          ),
+          { contextWindowTokens: 1000, protectRecentMessages: 2 },
+          IDENTITY,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       await capture.done;
 
@@ -118,7 +125,7 @@ describe("Compaction bracket", () => {
     const events = collector();
     const publishError = new Error("completion append failed");
     const sink: BusEvent.Sink = {
-      publish(descriptor, data) {
+      publish<T>(descriptor: BusEvent.Descriptor<T>, data: T) {
         if (
           descriptor === RunEvents.CompactionCompleted &&
           (data as { outcome?: string }).outcome !== "failed"
@@ -129,20 +136,27 @@ describe("Compaction bracket", () => {
       },
     };
 
-    await expect(
-      Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeUserMessage(`message ${index}`)),
-        { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        IDENTITY,
-        sink,
-        { trigger: "threshold" },
+    const exit = await isolated(
+      Effect.exit(
+        Compaction.compact(
+          Array.from({ length: 12 }, (_unused: undefined, index: number) =>
+            makeUserMessage(`message ${index}`),
+          ),
+          { contextWindowTokens: 1000, protectRecentMessages: 2 },
+          IDENTITY,
+          sink,
+          { trigger: "threshold" },
+        ),
       ),
-    ).rejects.toBe(publishError);
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) throw new Error("expected completion publishing to fail");
+    expect(Option.getOrThrow(Cause.dieOption(exit.cause))).toBe(publishError);
 
     expect(events.named(RunEvents.CompactionCompleted.name)).toHaveLength(1);
     expect(events.named(RunEvents.CompactionCompleted.name)[0]).toMatchObject({
       outcome: "failed",
-      error: "completion append failed",
+      error: expect.stringContaining("completion append failed"),
     });
   });
 
@@ -151,18 +165,22 @@ describe("Compaction bracket", () => {
     try {
       // Mixed roles: user messages never reach the summarizer (L2), so an
       // all-user span would skip the summarize call this test needs to fail.
-      const result = await Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) =>
-          index % 2 === 0 ? makeUserMessage(`message ${index}`) : makeAssistantMessage(`a${index}`),
+      const result = await isolated(
+        Compaction.compact(
+          Array.from({ length: 12 }, (_unused: undefined, index: number) =>
+            index % 2 === 0
+              ? makeUserMessage(`message ${index}`)
+              : makeAssistantMessage(`a${index}`),
+          ),
+          {
+            contextWindowTokens: 1000,
+            protectRecentMessages: 2,
+            onSummarize: () => Effect.fail(providerFailure("summarizer exploded")),
+          },
+          IDENTITY,
+          Bus,
+          { trigger: "threshold" },
         ),
-        {
-          contextWindowTokens: 1000,
-          protectRecentMessages: 2,
-          onSummarize: () => Promise.reject(new Error("summarizer exploded")),
-        },
-        IDENTITY,
-        Bus,
-        { trigger: "threshold" },
       );
       await capture.done;
 
@@ -183,12 +201,16 @@ describe("Compaction bracket", () => {
   it("brackets the refused cut: completed(no_user_boundary)", async () => {
     const capture = captureBracket();
     try {
-      const result = await Compaction.compact(
-        Array.from({ length: 12 }, (_unused, index) => makeAssistantMessage(`assistant ${index}`)),
-        { contextWindowTokens: 1000, protectRecentMessages: 2 },
-        IDENTITY,
-        Bus,
-        { trigger: "yield" },
+      const result = await isolated(
+        Compaction.compact(
+          Array.from({ length: 12 }, (_unused: undefined, index: number) =>
+            makeAssistantMessage(`assistant ${index}`),
+          ),
+          { contextWindowTokens: 1000, protectRecentMessages: 2 },
+          IDENTITY,
+          Bus,
+          { trigger: "yield" },
+        ),
       );
       await capture.done;
 
@@ -206,12 +228,14 @@ describe("Compaction bracket", () => {
   it("brackets the trivial no-op: completed(nothing_reclaimed)", async () => {
     const capture = captureBracket();
     try {
-      const result = await Compaction.compact(
-        [makeUserMessage("only one")],
-        { contextWindowTokens: 1000, protectRecentMessages: 6 },
-        IDENTITY,
-        Bus,
-        { trigger: "threshold" },
+      const result = await isolated(
+        Compaction.compact(
+          [makeUserMessage("only one")],
+          { contextWindowTokens: 1000, protectRecentMessages: 6 },
+          IDENTITY,
+          Bus,
+          { trigger: "threshold" },
+        ),
       );
       await capture.done;
 

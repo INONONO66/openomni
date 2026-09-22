@@ -1,3 +1,5 @@
+import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
+import { Effect } from "effect";
 import { beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,6 +16,7 @@ import {
 import type { Machine } from "@openomni/protocol";
 import type { CatalogOrigin } from "../src/tools/core/catalog";
 import type { CatalogPorts } from "../src/tools/core/catalog";
+import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
 import { createCodemode } from "@openomni/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
@@ -42,9 +45,9 @@ const suite = residentSuite(async () => {
 
 // Registration occurs before returning to any fallible test or harness work.
 async function createMachineHost(options: Parameters<typeof createHost>[0]) {
-  const host = await createHost(options);
-  suite.defer(() => {
-    host.close();
+  const host = await acquireEffect(createHost(options));
+  suite.defer(async () => {
+    await runEffect(host.close());
     expect(existsSync(options.socketPath)).toBe(false);
     console.log(
       "967-U1 host cleanup",
@@ -60,8 +63,8 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
 async function attachMachineDaemon(
   options: Parameters<typeof attachDaemon>[0],
 ): Promise<MachineDaemon> {
-  const daemon = await attachDaemon({ ...options, runner: createCodemode().runner });
-  suite.defer(() => daemon.close());
+  const daemon = await acquireEffect(attachDaemon({ ...options, runner: acquireSyncEffect(createCodemode()).runner }));
+  suite.defer(() => runEffect(daemon.close()));
   return daemon;
 }
 
@@ -98,7 +101,7 @@ test("app root runs machine read write shell and code through one eval cell", as
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         const call = requestToolStep(input, sink, {
           id: "machine-cell",
           tool: "eval",
@@ -120,7 +123,7 @@ test("app root runs machine read write shell and code through one eval cell", as
         if (call === undefined) return { type: "stop" };
         sink.onMessage(assistantMessage(input, { text: call.output }));
         return { type: "stop" };
-      },
+      }),
     },
   });
   const daemon = await attachMachineDaemon({
@@ -135,7 +138,7 @@ test("app root runs machine read write shell and code through one eval cell", as
       offeredAt: 1,
     },
   });
-  suite.defer(() => daemon.close());
+  suite.defer(() => runEffect(daemon.close()));
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
   ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
@@ -160,7 +163,7 @@ test("a cell creates three child sessions through send_message", async () => {
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
           // Each worker answers with the instruction it was actually given, so
           // a cell that dropped or duplicated one would be visible.
@@ -197,7 +200,7 @@ test("a cell creates three child sessions through send_message", async () => {
           }),
         );
         return { type: "stop" };
-      },
+      }),
     },
   });
 
@@ -252,7 +255,7 @@ test("the catalog remains available while machine execution refuses without atta
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         offered = (input.tools ?? []).map((tool) => tool.name);
         // Availability is an endpoint precondition, not a second catalog gate.
         const forced = requestToolStep(input, sink, {
@@ -267,7 +270,7 @@ test("the catalog remains available while machine execution refuses without atta
           }),
         );
         return { type: "stop" };
-      },
+      }),
     },
   });
 
@@ -318,15 +321,15 @@ test("a cell cannot present another cell's id when calling back", async () => {
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
-    callTool: async (call) => {
+    callTool: (call) => Effect.promise(async () => {
       served.push(`${call.name}@${call.cellId}`);
       if (call.name === "hold") {
         await forgingServed;
-        return { status: "completed", value: "held" };
+        return { status: "completed" as const, value: "held" };
       }
       announceServed();
-      return { status: "completed", value: call.cellId };
-    },
+      return { status: "completed" as const, value: call.cellId };
+    }),
   });
   await attachMachineDaemon({
     socketPath,
@@ -339,19 +342,19 @@ test("a cell cannot present another cell's id when calling back", async () => {
     },
   });
 
-  const slow = host.get(MACHINE_ID).runCode({
+  const slow = runEffect(host.get(MACHINE_ID).runCode({
     cellId: "AAA",
     code: "tool.hold()",
     timeoutMs: 15_000,
     tenant: "tenant-one",
-  });
-  const forging = await host.get(MACHINE_ID).runCode({
+  }));
+  const forging = await runEffect(host.get(MACHINE_ID).runCode({
     cellId: "BBB",
     // The call carries no id of its own; naming one changes nothing.
     code: "tool.send_message(cellId='AAA', instruction='borrow')",
     timeoutMs: 15_000,
     tenant: "tenant-two",
-  });
+  }));
   await slow;
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
@@ -402,7 +405,7 @@ const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
  */
 async function startCellHarness(ports: CatalogPorts) {
   const socketPath = testSocketPath();
-  let cells: ReturnType<typeof composeCodemode>;
+  let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
   const host = await createMachineHost({
     socketPath,
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
@@ -412,9 +415,9 @@ async function startCellHarness(ports: CatalogPorts) {
   });
   const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
-  cells = composeCodemode(host);
-  suite.defer(() => cells.close());
-  const execute = modelToolOutput("eval", { ...ports, cells }, CELL_ORIGIN);
+  cells = acquireSyncEffect(composeCodemode(host));
+  suite.defer(() => runEffect(cells.close()));
+  const execute = modelToolOutput("eval", { ...ports, cells: cellPorts(cells) }, CELL_ORIGIN);
   return {
     socketPath,
     execute,
@@ -422,7 +425,7 @@ async function startCellHarness(ports: CatalogPorts) {
     runWith: (origin: CatalogOrigin, code: string) =>
       modelToolOutput(
         "eval",
-        { ...ports, cells },
+        { ...ports, cells: cellPorts(cells) },
         origin,
       )({
         operation: { op: "run", code, timeout: 15 },
@@ -475,6 +478,7 @@ test("cells from different sessions never share interpreter state", async () => 
  */
 test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
   const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
+  try {
   const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
     started,
@@ -497,10 +501,14 @@ test("eval run answers running after its wait; peek shows the output so far; sto
   release.resolve();
   expect(await run("6 * 7")).toBe("42");
   expect(calls()).toBe(1);
+  } finally {
+    release.resolve();
+  }
 }, 40_000);
 
 test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
   const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
+  try {
   const started = await run("completion('hold')", 1);
   const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
   if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
@@ -514,6 +522,9 @@ test("eval peek and stop racing on one cell: exactly one is answered, the other 
   expect(stopped).toBe("the cell was stopped");
   expect(peeked).toContain("no such cell_id");
   release.resolve();
+  } finally {
+    release.resolve();
+  }
 }, 40_000);
 
 test("eval peek and stop refuse another session's cell id and a forged one", async () => {
@@ -650,7 +661,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
     enrollment: () => ({ ...enrollment, allowedCapabilities: ["fs.read"] }),
     events: Bus,
     now: () => Date.now(),
-    callTool: async () => ({ status: "failed", error: "no tools" }),
+    callTool: () => Effect.succeed({ status: "failed" as const, error: "no tools" }),
   });
   await attachMachineDaemon({
     socketPath,

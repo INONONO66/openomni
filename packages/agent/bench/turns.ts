@@ -1,3 +1,4 @@
+import { Effect, Exit, Scope } from "effect";
 import { Storage } from "@openomni/ledger";
 import { accumulateUsage } from "@openomni/llm";
 import type { ObservationSink, Token } from "@openomni/protocol";
@@ -5,16 +6,20 @@ import type { Bench } from "tinybench";
 import { closeSessions, session, type SessionRuntime } from "../src/session-handle";
 import { createSessionChatRunner } from "../src/session-chat-runner";
 import { createDispatcher, createTurnDispatcher } from "../src/tool-dispatcher";
-import { recordingExecutor } from "../test/helpers/compiled-policy";
+import { recordingExecutor } from "../test/helpers/effect-g2";
 import { assistantWithParts } from "../test/helpers/messages";
 import { completeModel, mockLlm, mockProviderModel } from "../test/helpers/mock-llm";
 import { valueTool } from "../test/helpers/query-tool";
 import { runInput } from "../test/helpers/run-input";
 import { seedPolicy } from "../test/helpers/seed-policy";
-import { createTestAgent } from "../test/helpers/test-agent";
+import { createTestAgent } from "../test/helpers/effect-g2";
 
 const events: ObservationSink = { publish: () => undefined };
 const model = { provider: "anthropic", id: mockProviderModel.id };
+
+export function runBenchEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+  return Effect.runPromise(effect);
+}
 
 export async function firstDelta(now: () => number) {
   const first = Promise.withResolvers<number>();
@@ -27,7 +32,7 @@ export async function firstDelta(now: () => number) {
   };
   const start = now();
   // Drain persistence before another sample starts, but time only the first snapshot.
-  await agent.run(input, sink);
+  await runBenchEffect(agent.run(input, sink));
   return { overriddenDuration: await first.promise };
 }
 
@@ -39,14 +44,14 @@ export function toolDispatch() {
   );
   return {
     committed: recording.committed,
-    run: () => dispatcher.execute(
+    run: () => runBenchEffect(dispatcher.execute(
       { id: "call-1", tool: "echo", input: { value: "hello" } },
       { sessionId: "session-1", turnId: "turn-1" },
-    ),
+    )),
   };
 }
 
-export function roundTrip() {
+export async function roundTrip() {
   Storage.initialize({ dbPath: ":memory:", observationSink: events });
   seedPolicy();
   const runtime: SessionRuntime = { observations: events };
@@ -65,18 +70,20 @@ export function roundTrip() {
       },
     }),
   });
-  const handle = session({ id: "bench-turn", role: "resident", runner }, runtime);
-  return {
-    handle,
-    run: () => handle.prompt("hello"),
-    async close() {
-      try {
-        await closeSessions(runtime);
-      } finally {
-        Storage.reset();
-      }
-    },
-  };
+  const scope = await runBenchEffect(Scope.make());
+  const close = () => runBenchEffect(closeSessions(runtime).pipe(
+    Effect.ensuring(Scope.close(scope, Exit.void)),
+    Effect.ensuring(Effect.sync(() => Storage.reset())),
+  ));
+  try {
+    const handle = await runBenchEffect(
+      session({ id: "bench-turn", role: "resident", runner }, runtime).pipe(Scope.extend(scope)),
+    );
+    return { handle, run: () => runBenchEffect(handle.prompt("hello")), close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 const message = assistantWithParts("usage", "bench-turn", [], 512, 128);
@@ -103,10 +110,10 @@ export function addTurnBenchmarks(bench: Bench): void {
     beforeEach: () => { dispatch = toolDispatch(); },
   });
 
-  let turn: ReturnType<typeof roundTrip>;
+  let turn: Awaited<ReturnType<typeof roundTrip>>;
   bench.add("turn/round-trip", () => turn.run(), {
     async: true,
-    beforeEach: () => { turn = roundTrip(); },
+    beforeEach: async () => { turn = await roundTrip(); },
     afterEach: () => turn.close(),
   });
 

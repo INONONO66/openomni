@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "@openomni/ledger";
 import { type PlainObject, Provisioning } from "@openomni/protocol";
@@ -89,7 +91,7 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
-    const result = await createDispatcher([{ ...tool, execute: async () => ({ op: "status" }) }], {
+    const result = await runEffect(createDispatcher([{ ...tool, execute: async () => ({ op: "status" }) }], {
       executor,
     }).execute(
       {
@@ -98,7 +100,7 @@ describe("provision output boundary", () => {
         input: { operation: { op: "status", args: {} } },
       },
       { sessionId: "provision-session", turnId: "provision-turn" },
-    );
+    ));
 
     expect(result).toEqual({
       toolCallId: "provision-invalid-output",
@@ -556,7 +558,7 @@ describe("refusal branches", () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
     for (const approvalId of ["contact-approval", "another-person-approval"]) {
-      const result = await createDispatcher([tool], { executor }).execute(
+      const result = await runEffect(createDispatcher([tool], { executor }).execute(
         {
           id: approvalId,
           tool: "provision",
@@ -565,7 +567,7 @@ describe("refusal branches", () => {
           },
         },
         { sessionId: "test", turnId: "turn" },
-      );
+      ));
       expect(result.errorKind).toBe("invalid_input");
     }
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
@@ -573,7 +575,7 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await createDispatcher([eraseTool(createProvisionTool(port))], {
+    const result = await runEffect(Effect.either(createDispatcher([eraseTool(createProvisionTool(port))], {
       executor,
     }).execute(
       {
@@ -582,8 +584,9 @@ describe("refusal branches", () => {
         input: { operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } } },
       },
       { sessionId: "test", turnId: "turn" },
-    );
-    expect(result.errorKind).toBe("precondition_failed");
+    )));
+    expect(result._tag).toBe("Left");
+    expect(result._tag === "Left" && result.left).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 

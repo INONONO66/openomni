@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { ownerStart } from "./helpers/owner-start";
@@ -38,10 +39,10 @@ test.each([
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         sink.onMessage(assistantMessage(input, { text: "FINAL_SENTINEL" }));
         return { type: "stop" };
-      },
+      }),
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws${query}`, ["auth", "token"]);
@@ -102,7 +103,7 @@ test("a child session terminal commits exactly one parent reply with the origina
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
           sink.onMessage(assistantMessage(input, { text: "CHILD_SENTINEL" }));
           return { type: "stop" };
@@ -119,7 +120,7 @@ test("a child session terminal commits exactly one parent reply with the origina
         }
         sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
         return { type: "stop" };
-      },
+      }),
     },
   });
   await ownerStart(app, "initial");

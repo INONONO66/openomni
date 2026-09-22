@@ -1,19 +1,27 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
-  SessionHandleStore.materialize({
-    id: "source",
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: "configure",
-    at: 1,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.materialize({
+          id: "source",
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: "configure",
+          at: 1,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 });
 afterEach(() => Storage.reset());
 

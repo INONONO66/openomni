@@ -1,4 +1,6 @@
 import type { Ipc } from "@openomni/protocol";
+import type { Effect } from "effect";
+import type { IpcError } from "./errors";
 import type { IpcClient } from "./client";
 
 type MethodTable = typeof Ipc.Methods;
@@ -17,6 +19,6 @@ export function typedCall<Method extends MethodName>(
   method: Method,
   params: MethodParams<Method>,
   timeoutMs?: number,
-): Promise<MethodResult<Method>> {
-  return caller.call(method, params, timeoutMs) as Promise<MethodResult<Method>>;
+): Effect.Effect<MethodResult<Method>, IpcError> {
+  return caller.call(method, params, timeoutMs) as Effect.Effect<MethodResult<Method>, IpcError>;
 }

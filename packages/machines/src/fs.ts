@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { FilesystemFailure, type MachineError } from "./errors";
+import { decodeMachineFailure } from "./failure";
 import { CString, FFIType, dlopen, toArrayBuffer, type Pointer } from "bun:ffi";
 import {
   closeSync,
@@ -16,8 +19,8 @@ type Refusal = Extract<Machine.FsResult, { status: "refused" }>;
 type OpenedTarget = { readonly fd: number; readonly symlinkStat?: ReturnType<typeof fstatSync> };
 type WalkResult = OpenedTarget | Refusal;
 
-type FsDriver = ((request: Machine.FsRequest) => Promise<Machine.FsResult>) & {
-  close(): void;
+type FsDriver = ((request: Machine.FsRequest) => Effect.Effect<Machine.FsResult, MachineError>) & {
+  close(): Effect.Effect<void, MachineError>;
 };
 
 type FsDriverTestHooks = {
@@ -540,7 +543,8 @@ function executeStat(target: OpenedTarget): Machine.FsResult {
 export function createFsDriver(
   exports: ReadonlyMap<string, string>,
   testHooks: FsDriverTestHooks = {},
-): FsDriver {
+): Effect.Effect<FsDriver, MachineError> {
+  return Effect.try({ try: () => {
   const roots = new Map<string, Root>();
   try {
     for (const [name, configuredRoot] of exports) {
@@ -552,7 +556,18 @@ export function createFsDriver(
   }
 
   let closed = false;
-  const driver = (async (request: Machine.FsRequest): Promise<Machine.FsResult> => {
+  function performTarget(request: Machine.FsRequest, target: OpenedTarget, data: Buffer | undefined, shown: string): Machine.FsResult {
+    try {
+      if (data !== undefined) return executeWrite(target, data, shown);
+      if (request.op === "read") return executeRead(target, request, shown);
+      if (request.op === "list") return executeList(target, testHooks);
+      return executeStat(target);
+    } finally {
+      closeSync(target.fd);
+    }
+  }
+
+  function executeRequest(request: Machine.FsRequest): Machine.FsResult {
     const root = roots.get(request.export);
     if (root === undefined) {
       return refused("export_not_available", `export is not available: ${request.export}`);
@@ -580,23 +595,16 @@ export function createFsDriver(
 
     if (isRefusal(target)) return target;
 
-    try {
-      if (data !== undefined) return executeWrite(target, data, shown);
-      if (request.op === "read") return executeRead(target, request, shown);
-      if (request.op === "list") return executeList(target, testHooks);
-      return executeStat(target);
-    } catch {
-      return refused("io_error", `filesystem operation failed for: ${shown}`);
-    } finally {
-      closeSync(target.fd);
-    }
-  }) as FsDriver;
+    return performTarget(request, target, data, shown);
+  }
+  const driver = (request: Machine.FsRequest): Effect.Effect<Machine.FsResult, MachineError> => Effect.try({ try: () => executeRequest(request), catch: decodeMachineFailure("fs.operation") }).pipe(Effect.mapError((error) => new FilesystemFailure({ operation: "fs.operation", message: `filesystem operation failed for: ${displayPath(request.path)}`, cause: String(error) })));
 
-  driver.close = () => {
+  driver.close = () => Effect.try({ try: () => {
     if (closed) return;
     closed = true;
     for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
     roots.clear();
-  };
+  }, catch: decodeMachineFailure("fs.close") });
   return driver;
+  }, catch: decodeMachineFailure("fs.open") });
 }

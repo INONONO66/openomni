@@ -4,13 +4,12 @@ import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
-import { DiscordApiError, DiscordHandlerMissingError } from "./error";
+import { DiscordApiError, DiscordHandlerMissingError, RateLimited } from "../../errors";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import { type DiscordMessage, DiscordMessageSchema } from "./types";
 import type { PublishPort } from "../../types";
 import { sendText } from "../../support/send-text";
-import { RetryExhaustedError } from "../../support/fetch-retry";
 import { DISCORD_RENDER } from "./format";
 
 export class DiscordAdapter implements Channel.Surface {
@@ -105,8 +104,8 @@ export class DiscordAdapter implements Channel.Surface {
         );
       },
       (error) =>
-        (error instanceof DiscordApiError && error.data.rejected === true) ||
-        (error instanceof RetryExhaustedError && error.status === 429),
+        (error instanceof DiscordApiError && error.rejected === true) ||
+        (error instanceof RateLimited && error.status === 429),
       this.publish,
     );
   }

@@ -1,4 +1,8 @@
-import { createTestAgent } from "../helpers/test-agent";
+import type { RunInput } from "@openomni/llm";
+import type { Message } from "@openomni/protocol";
+import { Effect } from "effect";
+import { isolated } from "../helpers/isolated";
+import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it, mock } from "bun:test";
 import type { Sink } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
@@ -18,7 +22,7 @@ let mockRunFn: MockLlmFn = async () => createStopOutcome();
 const mockLlm = createMockLlmConfig({
   getModels: mock(async () => mockProviderData),
   fromModelsDevModel: mock(() => mockProviderModel),
-  run: (input, sink: Sink) => mockRunFn(input, sink),
+  run: (input: RunInput, sink: Sink) => mockRunFn(input, sink),
 });
 
 const defaultConfig = {
@@ -47,19 +51,19 @@ function collectingSink(): Sink & {
     texts,
     toolCalls,
     toolResults,
-    onMessage: (message) => {
+    onMessage: (message: Message.WithParts) => {
       for (const part of message.parts) {
         if (part.type === "text") texts.push(part.text);
       }
     },
-    onToolCall: (call) => toolCalls.push(call),
-    onToolResult: (result) => toolResults.push(result),
+    onToolCall: (call: Tool.Call) => toolCalls.push(call),
+    onToolResult: (result: Tool.Result) => toolResults.push(result),
   };
 }
 
 describe("ChatAgent.run() streaming", () => {
   it("streams assistant text to the sink and returns the result", async () => {
-    mockRunFn = async (_input, sink) => {
+    mockRunFn = async (_input: RunInput, sink: Sink) => {
       sink.onMessage({
         info: streamingAssistantInfo("msg-1", 10, 5),
         parts: [
@@ -76,7 +80,7 @@ describe("ChatAgent.run() streaming", () => {
     };
 
     const sink = collectingSink();
-    const result = await createTestAgent(defaultConfig).run(defaultInput, sink);
+    const result = await isolated(createTestAgent(defaultConfig).run(defaultInput, sink));
 
     expect(sink.texts).toEqual(["Hello world"]);
     expect(result.finishReason).toBe("stop");
@@ -85,7 +89,7 @@ describe("ChatAgent.run() streaming", () => {
 
   it("streams tool calls and their results to the sink", async () => {
     let step = 0;
-    mockRunFn = async (_input, sink) => {
+    mockRunFn = async (_input: RunInput, sink: Sink) => {
       step += 1;
       const call = { id: "call-1", tool: "test_tool", input: { q: "test" } };
       if (step === 1) sink.onToolCall(call);
@@ -119,19 +123,20 @@ describe("ChatAgent.run() streaming", () => {
 
     const agent = createTestAgent({
       ...defaultConfig,
-      toolExecutor: async (call) => ({
-        id: crypto.randomUUID(),
-        toolCallId: call.id,
-        output: "tool result",
-        isError: false,
-      }),
+      toolExecutor: (call: Tool.Call) =>
+        Effect.succeed({
+          id: crypto.randomUUID(),
+          toolCallId: call.id,
+          output: "tool result",
+          isError: false,
+        }),
     });
 
     const sink = collectingSink();
-    const result = await agent.run(defaultInput, sink);
+    const result = await isolated(agent.run(defaultInput, sink));
 
-    expect(sink.toolCalls.map((call) => call.tool)).toEqual(["test_tool"]);
-    expect(sink.toolResults.map((r) => r.output)).toEqual(["tool result"]);
+    expect(sink.toolCalls.map((call: Tool.Call) => call.tool)).toEqual(["test_tool"]);
+    expect(sink.toolResults.map((r: Tool.Result) => r.output)).toEqual(["tool result"]);
     expect(result.finishReason).toBe("stop");
   });
 });

@@ -1,4 +1,8 @@
+import { channelRequests } from "../helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
+import { Effect } from "effect";
+import { effectFailure } from "../helpers/effect-failure";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { answerNativeRequest } from "../../src/router/request/native";
@@ -26,21 +30,21 @@ function outbound(
 }
 
 test("native reply reaches the canonical receiving inbox once and retains its original binding", async () => {
-  await openRequest("original", {
+  await runEffect(await openRequest("original", {
     expectedResponders: [sender.id],
     correlation: {},
     deadline: 100,
-  });
+  }));
   const received: string[] = [];
-  const port = requestPort(
+  const port = channelRequests(requestPort(
     () => 2,
-    (ids) => received.push(...ids),
-  );
+    (ids: readonly string[]) => received.push(...ids),
+  ));
   const message = outbound();
   const gateway = makeRouter({
     clock: () => 2,
     requests: port,
-    prepare: () => ({
+    prepare: () => Effect.succeed({
       target: message.destinationSessionId,
       origin: message,
       message: {
@@ -66,10 +70,10 @@ test("native reply reaches the canonical receiving inbox once and retains its or
       type: "message",
       content: message.content,
     });
-  expect(await deliver()).toMatchObject({ status: "executed", delivery: { kind: "session" } });
+  expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
   const before = SessionHandleStore.tree("request-owner");
-  expect(await deliver()).toMatchObject({ status: "executed", delivery: { kind: "session" } });
+  expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
   expect(received).toEqual(["request-owner"]);
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
@@ -77,35 +81,27 @@ test("native reply reaches the canonical receiving inbox once and retains its or
 });
 
 test("native reply rejects an altered authenticated sender, content, or destination binding", async () => {
-  await openRequest("original", { expectedResponders: [sender.id], correlation: {} });
-  const port = requestPort();
+  await runEffect(await openRequest("original", { expectedResponders: [sender.id], correlation: {} }));
+  const port = channelRequests(requestPort());
   const before = SessionHandleStore.tree("request-owner");
-  await expect(
-    answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2),
-  ).rejects.toThrow("binding mismatch");
-  await expect(answerNativeRequest(port, sender, outbound(), "altered", 2)).rejects.toThrow(
-    "binding mismatch",
-  );
-  await expect(
-    answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2),
-  ).rejects.toThrow("original request is missing");
-  await expect(
-    answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2),
-  ).rejects.toThrow("original request is missing");
-  expect(await answerNativeRequest(port, sender, undefined, "ordinary", 2)).toBe(false);
+  expect(await effectFailure(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2))).toBeInstanceOf(Error);
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound(), "altered", 2))).toBeInstanceOf(Error);
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2))).toBeInstanceOf(Error);
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2))).toBeInstanceOf(Error);
+  expect(await runEffect(answerNativeRequest(port, sender, undefined, "ordinary", 2))).toBe(false);
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
 });
 
 test("a late native answer records the timeout winner without manufacturing new conversational input", async () => {
-  await openRequest("original", { expectedResponders: [sender.id], correlation: {}, deadline: 2 });
+  await runEffect(await openRequest("original", { expectedResponders: [sender.id], correlation: {}, deadline: 2 }));
   expect(
-    await answerNativeRequest(
-      requestPort(() => 2),
+    await runEffect(answerNativeRequest(
+      channelRequests(requestPort(() => 2)),
       sender,
       outbound(),
       "answer",
       2,
-    ),
+    )),
   ).toBe(true);
   expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
   expect(SessionHandleStore.inboxRows("request-owner")).toEqual([]);

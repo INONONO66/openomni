@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { Machine } from "@openomni/protocol";
-import { createFsDriver } from "../src/fs";
+import { createFsDriver } from "./helpers/native";
 import { expectEscape, expectInsideRead } from "./helpers";
 
 function withFixture(
@@ -148,9 +148,8 @@ describe("daemon filesystem driver", () => {
         },
       });
       try {
-        expect(await driver({ op: "list", export: "docs", path: "" })).toMatchObject({
-          status: "refused",
-          reason: "io_error",
+        await expect(driver({ op: "list", export: "docs", path: "" })).rejects.toMatchObject({
+          _tag: "FilesystemFailure", operation: "fs.operation", cause: expect.stringContaining("fdopendir failed"),
         });
         expect(() => fstatSync(duplicate)).toThrow(expect.objectContaining({ code: "EBADF" }));
       } finally {
@@ -363,8 +362,8 @@ describe("daemon filesystem driver", () => {
         thrown = error instanceof Error ? error : new Error("non-Error failure");
       }
 
-      // Invariant 2: the reopen failure itself reaches the caller, by identity.
-      expect(thrown).toBe(reopenFailure);
+      // The foreign diagnostic survives serialization without retaining an Error object.
+      expect(thrown).toMatchObject({ _tag: "ForeignFailure", operation: "fs.open", cause: String(reopenFailure) });
       expect(rootDirectoryOpens).toBe(2);
       // Invariant 1: every acquisition is closed exactly once and none leaks.
       const closes = ledger.closesPerAcquisition();

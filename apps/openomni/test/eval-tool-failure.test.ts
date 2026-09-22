@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import type { createCodemode } from "@openomni/codemode";
 import { ToolRefused } from "@openomni/agent";
 import { createEvalTool } from "../src/tools/eval";
 
@@ -11,7 +10,7 @@ const CONTEXT = {
 };
 
 /** A cell whose every operation rejects with the given failure. */
-function failingCell(failure: Error): ReturnType<typeof createCodemode>["cell"] {
+function failingCell(failure: Error): NonNullable<Parameters<typeof createEvalTool>[0]> {
   const reject = () => Promise.reject(failure);
   return { run: reject, peek: reject, stop: reject };
 }

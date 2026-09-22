@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
+import { runEffect } from "./helpers/effect";
 import { alarmFixture } from "./helpers/alarm";
 
 for (const replyFirst of [false, true]) {
@@ -20,16 +21,18 @@ for (const replyFirst of [false, true]) {
       let at = 1000;
       const requests = createSessionRequests({ observations: fixture.events, clock: () => at });
       try {
-        SessionHandleStore.materialize({
-          id: "request-session",
-          parentId: null,
-          role: "resident",
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: 1,
-          actionId: "configure-request",
-          at,
-        });
+        await runEffect(
+          SessionHandleStore.materialize({
+            id: "request-session",
+            parentId: null,
+            role: "resident",
+            tools: [],
+            system: { preset: "", blocks: [] },
+            policyGeneration: 1,
+            actionId: "configure-request",
+            at,
+          }),
+        );
         expect(
           fixture.storage.actions.append(
             {
@@ -52,7 +55,7 @@ for (const replyFirst of [false, true]) {
             SessionHandleStore.row("request-session").revision,
           ),
         ).toBeDefined();
-        const request = requests.open({
+        const request = await runEffect(requests.open({
           requestId: "request-action",
           sessionId: "request-session",
           expectedResponders: ["peer"],
@@ -62,20 +65,20 @@ for (const replyFirst of [false, true]) {
           threshold: 1,
           deadline: 1050,
           at,
-        });
+        }));
         expect(fixture.storage.alarms.get("request-action:deadline")).toMatchObject({
           kind: "at",
           fireAt: 1050,
           status: "armed",
         });
-        fixture.worker.start();
+        await runEffect(fixture.worker.start());
         at = 1049;
         fixture.advance(at);
-        fixture.worker.tick();
+        await runEffect(fixture.worker.tick());
         expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
         if (replyFirst) {
           expect(
-            await requests.answer({
+            await runEffect(requests.answer({
               inputId: "reply",
               requestId: request.requestId,
               sessionId: request.sessionId,
@@ -90,13 +93,13 @@ for (const replyFirst of [false, true]) {
               decision: "reply",
               allowedAction: "report_result",
               content: "answer",
-            }),
+            })),
           ).toBe("resolved");
         }
         at = 1050;
         fixture.advance(at);
-        fixture.worker.tick();
-        fixture.worker.tick();
+        await runEffect(fixture.worker.tick());
+        await runEffect(fixture.worker.tick());
         expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(
           replyFirst ? "resolved" : "expired",
         );

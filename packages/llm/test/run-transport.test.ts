@@ -1,3 +1,4 @@
+
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { jsonSchema, streamText } from "ai";
 import { z } from "zod";
@@ -32,11 +33,11 @@ function mockAiModule() {
 
 mockAiModule();
 
-type RunModule = typeof import("../src/run");
+type RunModule = typeof import("./helpers/native");
 let run: RunModule["run"];
 
 beforeAll(async () => {
-  ({ run } = await import("../src/run"));
+  ({ run } = await import("./helpers/native"));
 });
 
 const sink: Sink = {

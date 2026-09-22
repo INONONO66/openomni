@@ -1,10 +1,16 @@
-import { expect, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
+import { PassThrough, Readable } from "node:stream";
+import { acquireAppResource, gatewayRuntime } from "../src/gateway";
+import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, sessionTool } from "@openomni/agent";
 import { createTools } from "../src/tools/core/catalog";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
-import { serveProcessSession } from "../src/process-entry";
+import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
+import { bounded } from "./helpers/protected-dispatch";
+import { runEffect } from "./helpers/effect";
+import { z } from "zod";
 import { messageFixture } from "./helpers/message-fixture";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
@@ -37,6 +43,105 @@ function response(target?: string): Response {
   return sseResponse(frames);
 }
 
+test("process entry exits on empty stdin and closes its reply channel", async () => {
+  const stdin = Readable.from([]);
+  const pause = spyOn(stdin, "pause");
+  const log = mock((line: string) => line);
+  const exited = new Error("process exited");
+  let pausesAtExit = 0;
+  const exit = mock((code: number): never => {
+    expect(code).toBe(PROCESS_SESSION_NO_REQUEST_EXIT);
+    pausesAtExit = pause.mock.calls.length;
+    throw exited;
+  });
+  try {
+    await expect(bounded(runProcessEntry({ stdin, log, exit }))).rejects.toBe(exited);
+    expect(exit).toHaveBeenCalledWith(78);
+    expect(log).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalledTimes(pausesAtExit + 1);
+    expect(stdin.listenerCount("data")).toBe(0);
+  } finally {
+    pause.mockRestore();
+    stdin.destroy();
+  }
+});
+
+test("process entry logs committed sessions and disposes its runtime", async () => {
+  const fixture = messageFixture(
+    "resident",
+    undefined,
+    createTools({}, { sessionId: "worker", role: "worker" }).map(sessionTool),
+  );
+  const stdin = new PassThrough();
+  let requests = 0;
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => {
+      requests += 1;
+      return response(requests === 1 ? "sender" : undefined);
+    },
+  });
+  const runtime = gatewayRuntime({ dbPath: fixture.dbPath });
+  const dispose = spyOn(runtime, "dispose");
+  const createRuntime = mock((options: Parameters<typeof gatewayRuntime>[0]) => {
+    expect(options).toEqual({ dbPath: fixture.dbPath });
+    return runtime;
+  });
+  const answerRequested = Promise.withResolvers<SessionTransition.Answer>();
+  const answerFrame = z.object({ kind: z.literal("request_answer"), answer: SessionTransition.Answer });
+  const log = mock((line: string) => {
+    const frame = answerFrame.safeParse(JSON.parse(line));
+    if (frame.success) answerRequested.resolve(frame.data.answer);
+  });
+  const exit = mock((code: number): never => {
+    throw new Error(`unexpected process exit: ${code}`);
+  });
+  try {
+    expect((await fixture.send({
+      to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+      type: "message",
+      content: "work",
+      replyTo: "process-entry-original",
+    })).isError).not.toBe(true);
+    const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+    if (child === undefined) throw new Error("missing commissioned process session");
+    const request: ProcessSessionRequest = {
+      sessionId: child.id,
+      dbPath: fixture.dbPath,
+      model: { provider: "anthropic", id: "claude-opus-4-5" },
+      apiKey: "process-key",
+      transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+    };
+    const running = runProcessEntry({ stdin, log, exit, gatewayRuntime: createRuntime });
+    stdin.write(`${JSON.stringify(request)}\n`);
+    const answer = await bounded(answerRequested.promise);
+    const resolution = await runEffect(fixture.requests.answer(answer));
+    expect(resolution).toBe("resolved");
+    stdin.write(`${JSON.stringify({ ok: true, inputId: answer.inputId, resolution })}\n`);
+    await bounded(running);
+    expect(createRuntime).toHaveBeenCalledTimes(1);
+    expect(requests).toBe(2);
+    expect(log).toHaveBeenCalledWith(JSON.stringify({ sessionIds: ["sender"] }));
+    expect(exit).not.toHaveBeenCalled();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(stdin.isPaused()).toBe(true);
+    expect(stdin.listenerCount("data")).toBe(0);
+    Storage.initialize({ dbPath: fixture.dbPath });
+    expect(SessionHandleStore.inboxRows("sender").some(
+      (row) => row.content === "PROCESS_SENTINEL",
+    )).toBe(true);
+  } finally {
+    dispose.mockRestore();
+    await runtime.dispose();
+    stdin.destroy();
+    await provider.stop(true);
+    Storage.reset();
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
 test.each([
   false,
   true,
@@ -56,6 +161,7 @@ test.each([
     },
   });
   const deadline = Date.now() + 60_000;
+  const runtime = gatewayRuntime({ dbPath: fixture.dbPath });
   try {
     expect(
       (
@@ -71,7 +177,7 @@ test.each([
     const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
     if (child === undefined) throw new Error("missing commissioned process session");
     const notified: string[] = [];
-    await serveProcessSession(
+    await acquireAppResource(runtime, serveProcessSession(
       {
         sessionId: child.id,
         dbPath: fixture.dbPath,
@@ -80,7 +186,9 @@ test.each([
         transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
       },
       (ids) => notified.push(...ids),
-    );
+      undefined,
+      runtime,
+    ));
     Storage.initialize({ dbPath: fixture.dbPath });
     expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
@@ -103,6 +211,7 @@ test.each([
     expect(SessionHandleStore.requestRows("sender")[0]?.state).toBe("resolved");
     expect(Storage.get().alarms?.due(deadline)).toEqual([]);
   } finally {
+    await runtime.dispose();
     await provider.stop(true);
     Storage.reset();
     Bus.reset();
@@ -152,7 +261,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         parentSessionId = input.trace.sessionId;
         if (!commissioned) {
           const output = requestToolStep(input, sink, {
@@ -169,8 +278,8 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
           commissioned = true;
         }
         sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
-        return { type: "stop" };
-      },
+        return { type: "stop" as const };
+      }),
     },
   });
   await ownerStart(app, "initial-process");

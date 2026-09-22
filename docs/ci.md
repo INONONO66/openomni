@@ -86,13 +86,21 @@ The checker diffs `<base>...HEAD` with zero context, keeps changed/added lines
 in `packages/*/src/**`, `apps/*/src/**` and top-level non-test `script/*.ts`,
 and unions `DA:` records across every lcov file (maximum hits per line, with
 each file's repo prefix inferred from the artifact path; an lcov whose
-artifact path lost its workspace ancestor is refused). A changed line that
-every lcov reporting the file knows with zero hits fails the gate; a line
-absent from every lcov record is not executable (types, comments, imports)
-and never counts. Bun reports every line of a never-executed function as
+artifact path lost its workspace ancestor is refused). Before checking hits,
+a TypeScript AST filter skips changed lines containing only imports,
+bodyless exports (including re-exports), type aliases/interfaces/type-only
+members, comments/whitespace, or closing body/list delimiters and terminators.
+Any runtime token on the same line keeps that line gated; child-process
+`import.meta.main` statements are not exempt. The verdict prints the number
+of AST-skipped changed lines for each file, independently of LCOV hits.
+
+Of the remaining changed lines, a line that every lcov reporting the file
+knows with zero hits fails the gate; lines absent from the lcov intersection
+never count. Bun reports every line of a never-executed function as
 `DA:n,0`, braces and comments included, so a line that only such a lane
-records while an executing lane omits it is dropped as non-executable rather
-than reported as uncovered.
+records while an executing lane omits it is still dropped rather than
+reported as uncovered. The AST filter additionally handles Bun zero-hit
+import/type headers and closing delimiters present in every reporting lane.
 A gated file with no `SF:` record in any lcov was never loaded by any test:
 it fails with `<path>: no coverage record` unless type-stripping its source
 emits zero executable lines (pure type-only modules; `.d.ts` is outside the
@@ -174,6 +182,8 @@ test lanes restore the same archive and reject missing outputs. Workspace tests
 run in separate jobs with their own files, ports, and process environments.
 Tests do not wait for unrelated lint or typecheck jobs. Machine integration
 uses Python 3.12.
+
+`script/check-effect-boundaries.ts` is the fail-closed boundary gate. It scans tracked and non-ignored untracked TypeScript under `apps/`, `packages/` and `script/`, resolves Effect runners through imports and repository re-exports, and permits execution only in `apps/openomni/src/cli/main.ts` and `apps/openomni/src/gateway.ts`. It also rejects Effect imports in protocol/UI/desktop/tool surfaces, forbidden excluded-package dependencies and Promise twins; the runner-site JSON (`script/conformance/effect-runner-sites.json`) is a shrink-only ratchet whose live rows are reported without failure and whose stale rows fail. Ratchet rows may name only non-production sites (`packages|apps/<ws>/test|bench/...` or `script/*.test.ts`); a production `src/` row is `R2_INVALID_ALLOWLIST`, so production runners outside the two app edges always fail. The remaining test/helper/bench rows are owed to W5 #1113 (zero target).
 
 `script/scripts-lanes.ts` is the explicit recursive test manifest. Its contract
 test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files.
@@ -330,7 +340,7 @@ writes `bench-results/reference.json`: exactly one freshly measured reference,
 using unrounded p50 values. The normal comparison command receives head
 statistics and that file. The workflow fixes the limit at 20%, with zero
 historical noise band because there is only one reference. A slowdown strictly
-above 20% in even one shared metric fails. This is stricter than both the former PR
+above 20% in even one shared metric fails. An Owner-applied `benchmark:accept-baseline` label lets the PR gate pass with `ACCEPTED` rows. After merge, the Owner runs `gh workflow run benchmark.yml --ref main -f accept_baseline=true` to publish the new accepted reference. Scheduled runs never accept baseline resets. This is stricter than both the former PR
 20%-plus-historical-two-sigma gate and the main publisher's 50% alert.
 
 Only successful paired comparisons permit main push/dispatch history storage;

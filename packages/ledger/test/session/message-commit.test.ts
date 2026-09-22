@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Inbox, LedgerSession, L0Observation, type LedgerAction } from "@openomni/protocol";
@@ -12,13 +13,20 @@ beforeEach(() => {
   Bus.reset();
   Storage.initialize({ dbPath, observationSink: Bus });
   materializeSession("parent");
-  SessionHandleStore.acquireLease({
-    sessionId: "parent",
-    owner: "sender",
-    expectedFence: 0,
-    now: 10,
-    expiresAt: 100,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: "parent",
+          owner: "sender",
+          expectedFence: 0,
+          now: 10,
+          expiresAt: 100,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 });
 afterEach(() => {
   Storage.reset();
@@ -84,7 +92,10 @@ test("child identity and first inbox are visible together at the commit signal",
     if (event.id === "letter") observed.resolve();
   });
   try {
-    const committed = SessionHandleStore.commitInbox(childMessage());
+    const committed = Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      (error) => error,
+    );
     await observed.promise;
     expect(committed.id).toBe("letter");
     expect(observations).toEqual(["child:configure", "letter"]);
@@ -103,7 +114,12 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
     "CREATE TRIGGER refuse_letter BEFORE INSERT ON inbox BEGIN SELECT RAISE(ABORT, 'letter fault'); END",
   );
   // When insertion fails after preparing the child.
-  expect(() => SessionHandleStore.commitInbox(childMessage())).toThrow();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
   // Then no part of the child is visible.
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["parent"]);
   expect(SessionHandleStore.tree("child")).toEqual([]);
@@ -112,15 +128,27 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
 
 test("stale sender fence refuses child allocation before any write", () => {
   // Given a sender whose fence was superseded.
-  SessionHandleStore.acquireLease({
-    sessionId: "parent",
-    owner: "replacement",
-    expectedFence: 1,
-    now: 100,
-    expiresAt: 200,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: "parent",
+          owner: "replacement",
+          expectedFence: 1,
+          now: 100,
+          expiresAt: 200,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   // When the stale sender tries to create a child.
-  expect(() => SessionHandleStore.commitInbox(childMessage())).toThrow();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
   // Then neither the child nor its inbox exists.
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["parent"]);
   expect(SessionHandleStore.inboxRows("child")).toEqual([]);
@@ -128,7 +156,10 @@ test("stale sender fence refuses child allocation before any write", () => {
 
 test("message id reuse cannot allocate a second child", () => {
   // Given a committed letter.
-  SessionHandleStore.commitInbox(childMessage());
+  Either.getOrThrowWith(
+    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+    (error) => error,
+  );
   const next = childMessage();
   const reused = {
     ...next,
@@ -143,7 +174,12 @@ test("message id reuse cannot allocate a second child", () => {
     },
   };
   // When the source id is reused against a new target.
-  expect(() => SessionHandleStore.commitInbox(reused)).toThrow();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(reused))),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
   // Then it has not allocated the second child.
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["child", "parent"]);
   expect(Inbox.Row.parse(SessionHandleStore.inboxRows("child")[0]).id).toBe("letter");
@@ -152,7 +188,10 @@ test("message id reuse cannot allocate a second child", () => {
 test("the commit transaction rechecks fanout and releases capacity after terminal", () => {
   const first = childMessage();
   first.limits.fanout = 1;
-  SessionHandleStore.commitInbox(first);
+  Either.getOrThrowWith(
+    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(first))),
+    (error) => error,
+  );
   const second = {
     ...first,
     id: "second-letter",
@@ -167,72 +206,111 @@ test("the commit transaction rechecks fanout and releases capacity after termina
     },
   };
   expect(SessionHandleStore.openChildCount("parent")).toBe(1);
-  expect(() => SessionHandleStore.commitInbox(second)).toThrow();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(second))),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["child", "parent"]);
-  SessionHandleStore.acquireLease({
-    sessionId: "child",
-    owner: "worker",
-    expectedFence: 0,
-    now: 30,
-    expiresAt: 100,
-  });
-  expect(
-    SessionHandleStore.commit({
-      sessionId: "child",
-      owner: "worker",
-      fence: 1,
-      now: 40,
-      expectedRevision: 2,
-      consumeInboxIds: ["letter"],
-      state: "idle",
-      releaseLease: true,
-      actions: [
-        {
-          id: "child-result",
-          parentId: "letter",
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
           sessionId: "child",
-          kind: "turn",
-          ts: 40,
-          irreversible: true,
-          intent: { encodingVersion: 1, value: { phase: "terminal", turnId: "child-turn" } },
-          effect: {
-            encodingVersion: 1,
-            value: {
-              phase: "terminal",
-              turnId: "child-turn",
-              kind: "result",
-              text: "done",
-              boundaryActionId: null,
-              resumeCount: 0,
-            },
-          },
-        },
-      ],
-    }).ok,
+          owner: "worker",
+          expectedFence: 0,
+          now: 30,
+          expiresAt: 100,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.commit({
+            sessionId: "child",
+            owner: "worker",
+            fence: 1,
+            now: 40,
+            expectedRevision: 2,
+            consumeInboxIds: ["letter"],
+            state: "idle",
+            releaseLease: true,
+            actions: [
+              {
+                id: "child-result",
+                parentId: "letter",
+                sessionId: "child",
+                kind: "turn",
+                ts: 40,
+                irreversible: true,
+                intent: { encodingVersion: 1, value: { phase: "terminal", turnId: "child-turn" } },
+                effect: {
+                  encodingVersion: 1,
+                  value: {
+                    phase: "terminal",
+                    turnId: "child-turn",
+                    kind: "result",
+                    text: "done",
+                    boundaryActionId: null,
+                    resumeCount: 0,
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      ),
+      (error) => error,
+    ).ok,
   ).toBe(true);
   expect(SessionHandleStore.openChildCount("parent")).toBe(0);
-  expect(SessionHandleStore.commitInbox(second).id).toBe("second-letter");
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(second))),
+      (error) => error,
+    ).id,
+  ).toBe("second-letter");
 });
 
 test("root configuration and first inbox use the same atomic inbox port", () => {
   const root = { ...childMessage(), sender: undefined };
   root.createSession.row.parentId = null;
   root.createSession.row.role = "resident";
-  expect(SessionHandleStore.commitInbox(root).id).toBe("letter");
+  expect(
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(root))),
+      (error) => error,
+    ).id,
+  ).toBe("letter");
   expect(SessionHandleStore.row("child").parentId).toBeNull();
   expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
 });
 
 test("a source terminal and its outbound obligation roll back on the same fault", () => {
   // Given an existing child holding its own fence.
-  SessionHandleStore.commitInbox(childMessage());
-  SessionHandleStore.acquireLease({
-    sessionId: "child",
-    owner: "worker",
-    expectedFence: 0,
-    now: 30,
-    expiresAt: 100,
-  });
+  Either.getOrThrowWith(
+    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+    (error) => error,
+  );
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        SessionHandleStore.acquireLease({
+          sessionId: "child",
+          owner: "worker",
+          expectedFence: 0,
+          now: 30,
+          expiresAt: 100,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
   const terminal: LedgerAction.Append = {
     id: "child:terminal",
     parentId: "letter",
@@ -271,7 +349,12 @@ test("a source terminal and its outbound obligation roll back on the same fault"
     releaseLease: true,
   };
   // When the last write in the terminal unit fails.
-  expect(() => SessionHandleStore.commit(request)).toThrow();
+  expect(() =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(SessionHandleStore.commit(request))),
+      (error) => error,
+    ),
+  ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
   // Source history and consumption roll back; the parent was never part of this transaction.
   expect(SessionHandleStore.tree("child").map((action) => action.id)).toEqual([
     "child:configure",

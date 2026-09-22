@@ -1,9 +1,12 @@
+import { Effect } from "effect";
+import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
 import { createDispatcher, createExecutor, currentExecutor } from "@openomni/agent";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
+import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
 import { createTools } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
@@ -30,11 +33,11 @@ for (const stop of [false, true]) {
     const executor = createExecutor({
       policy: seededPolicy,
       ledger: {
-        async commit(append) {
+        commit(append) {
           const ordinal = actions.length + 1;
           const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
           actions.push(action);
-          return { action, revision: action.ordinal };
+          return Effect.succeed({ action, revision: action.ordinal });
         },
       },
       observations: { publish: () => undefined },
@@ -43,8 +46,8 @@ for (const stop of [false, true]) {
       entropy: () => `${origin.sessionId}-${++nextId}`,
     });
     const path = socketPath();
-    let cells: ReturnType<typeof composeCodemode>;
-    const host = await createMachineHost({
+    let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
+    const host = await acquireEffect(createMachineHost({
       socketPath: path,
       enrollment: (machineId) => ({
         machineId,
@@ -54,28 +57,28 @@ for (const stop of [false, true]) {
       }),
       events: { publish: () => undefined },
       now: () => 1,
-      callTool: async (call) => {
-        const result = await cells.callTool(call).catch((error: Error) => {
+      callTool: (call) => Effect.promise(async () => {
+        const result = await runEffect(cells.callTool(call)).catch((error: Error) => {
           completed.resolve({ error: String(error) });
           throw error;
         });
         completed.resolve({ result });
         return result;
-      },
-    });
-    suite.defer(() => host.close());
-    const daemon = await attachMachineDaemon({
+      }),
+    }));
+    suite.defer(async () => { await runEffect(host.close()); });
+    const daemon = await acquireEffect(attachMachineDaemon({
       ...cellDaemonOptions(path, "completion-test"),
-      runner: createCodemode().runner,
-    });
-    suite.defer(() => daemon.close());
+      runner: acquireSyncEffect(createCodemode()).runner,
+    }));
+    suite.defer(async () => { await runEffect(daemon.close()); });
     expect(daemon.attachment.status).toBe("attached");
-    cells = composeCodemode(host);
-    suite.defer(() => cells.close());
+    cells = acquireSyncEffect(composeCodemode(host));
+    suite.defer(async () => { await runEffect(cells.close()); });
     let calls = 0;
     const definitions = createTools(
       {
-        cells,
+        cells: cellPorts(cells),
         llm: async () => {
           expect(currentExecutor()).toBe(executor);
           calls += 1;
@@ -91,10 +94,10 @@ for (const stop of [false, true]) {
     let nextCall = 0;
     const execute = (operation: PlainObject) =>
       bounded(
-        dispatcher.execute(
+        runEffect(dispatcher.execute(
           { id: `eval-${++nextCall}`, tool: "eval", input: { operation } },
           { sessionId: origin.sessionId, turnId: "completion-turn" },
-        ),
+        )),
       );
     const toolActions = (op: string, phase: string) =>
       actions.filter((action) => {

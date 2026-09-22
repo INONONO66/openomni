@@ -10,14 +10,11 @@ Policy ownership updated on `kernel/s1-authority-cut-2` (2026-09-18): the uncons
 
 Desktop internals cleanup on `refactor/desktop-cleanup` (PR #1047): `state/selectors.ts` owns the session index and read-only derivations, `state/session-actions.ts` owns the session mutations, and `chat/session-content.tsx` binds SDK content while App keeps Chat ownership. Whole-store render/clock cadence, hook order, preference writes, preload validation, the desktop bridge, `SessionRow`, turn-cost mapping and UI contracts are unchanged. No development global is exposed. File inventory: `docs/desktop-shell.md`.
 
+Effect foundation (#1122) is in PR as of 2026-09-21: Effect 3.22.2 is pinned for runtime packages, package-owned error unions and ledger native write ports are introduced, the app owns one runtime, and `script/check-effect-boundaries.ts` enforces the excluded-surface and runner boundary.
+
 ## OVERVIEW
 
-Benchmark admission updated on `fix/benchmark-paired-reference-20260914`,
-2026-09-14: every event measures the latest accepted SHA and head on one runner
-in alternating serial order, with separate frozen dependencies and canonical
-14-metric summaries. The sole 20% gate uses a fresh one-reference history (zero
-historical noise band); only passing main push/dispatch runs publish original
-head timings. Raw paired observations and hashed provenance remain artifacts.
+Benchmark admission updated on `fix/benchmark-paired-reference-20260914`: every event measures the latest accepted SHA and head on one runner in alternating serial order, with separate frozen dependencies and canonical 14-metric summaries. The sole 20% gate uses a fresh one-reference history (zero historical noise band); only passing main push/dispatch runs publish original head timings. Raw paired observations and hashed provenance remain artifacts. An Owner-applied `benchmark:accept-baseline` label lets the PR gate pass with `ACCEPTED` rows. After merge, the Owner runs `gh workflow run benchmark.yml --ref main -f accept_baseline=true` to publish the new accepted reference; scheduled runs never accept baseline resets.
 See `docs/ci.md`; hosted execution and landing remain parent-owned.
 
 Native coverage merge correction on `fix/quality-lcov-union-20260914`: executing
@@ -157,6 +154,7 @@ ui <- apps/desktop
 ## CONVENTIONS
 
 - ESM, strict TypeScript, Zod-first shared contracts, namespace-style public APIs.
+- Effect-native runtime packages; protocol/ui/desktop/tool bodies never import effect (script/check-effect-boundaries.ts).
 - One enforcement layer per invariant; durable writes fail closed. Machine effects enter captured kernel `tool.pre` and daemon negotiated/offered capability/export enforcement; no app VFS policy layer.
 - No deep package imports. Driver-band code stays on published protocol/IPC contracts.
 - Product vocabulary avoids new `runtime`, `task`, and `envelope` nouns in protocol surfaces.

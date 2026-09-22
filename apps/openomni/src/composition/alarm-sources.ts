@@ -25,6 +25,7 @@ export class AlarmSourceError extends Error {
       | "pty.eof"
       | "path.observe"
       | "source.start"
+      | "source.close"
       | "bus.scan"
       | "timer.scan",
   ) {

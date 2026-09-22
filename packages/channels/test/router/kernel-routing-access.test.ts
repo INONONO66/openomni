@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
 import { ActorRegistry } from "@openomni/ledger";
 import { registerChannelGrant } from "../helpers/channel-grant";
 import {
@@ -14,7 +15,7 @@ beforeEach(resetRouterState);
 
 describe("GatewayRouter access routing", () => {
   test("missing channel grant refuses before inbox commit", async () => {
-    expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+    expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
       status: "blocked_pre",
     });
     expect(routingDecisions()[0]).toMatchObject({ stage: "channel_ceiling", outcome: "block" });
@@ -22,7 +23,7 @@ describe("GatewayRouter access routing", () => {
   });
   test("unknown actor on a trusted channel without a default tier is refused", async () => {
     registerChannelGrant();
-    expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+    expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
       status: "blocked_pre",
     });
     expect(routingDecisions()[0]).toMatchObject({ stage: "actor_identity", outcome: "block" });
@@ -30,7 +31,7 @@ describe("GatewayRouter access routing", () => {
   });
   test("default-tier admission never registers a new endpoint", async () => {
     registerChannelGrant({ defaultTier: "owner" });
-    const result = await kernelRouter().ingest(ownerSender, ownerFacts);
+    const result = await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
     expect(result.status).toBe("executed");
     expect(routingDecisions()[0]).toMatchObject({
       stage: "surface_default",
@@ -49,13 +50,13 @@ describe("GatewayRouter access routing", () => {
   test.each([
     undefined,
     "full_access",
-  ] as const)("broadcast treatment %s remains evidence-only", async (inboundTreatment) => {
+  ] as const)("broadcast treatment %s remains evidence-only", async (inboundTreatment: "full_access" | undefined) => {
     registerChannelGrant({
       kind: "broadcast_channel",
       defaultTier: "observer",
       ...(inboundTreatment === undefined ? {} : { inboundTreatment }),
     });
-    expect((await kernelRouter().ingest(ownerSender, ownerFacts)).status).toBe("executed");
+    expect((await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).status).toBe("executed");
     expect(routingDecisions()[0]).toMatchObject({
       outcome: "route",
       trustTier: "observer",
@@ -67,7 +68,7 @@ describe("GatewayRouter access routing", () => {
   });
   test("blocked channel refuses before inbox commit", async () => {
     registerChannelGrant({ kind: "blocked_channel" });
-    expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+    expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
       status: "blocked_pre",
     });
     expect(routingDecisions()[0]).toMatchObject({

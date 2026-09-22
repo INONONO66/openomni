@@ -32,7 +32,7 @@ describe("turn benchmarks", () => {
   });
 
   test("round trip returns only after assistant and terminal turn are committed in SQLite", async () => {
-    const turn = roundTrip();
+    const turn = await roundTrip();
     try {
       expect(await bounded(turn.run(), "durable turn")).toMatchObject({
         kind: "result", finishReason: "stop",

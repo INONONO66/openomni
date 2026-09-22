@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { CommitFailed, type ExecutionError } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
 import {
   canonicalDigest,
@@ -8,15 +10,13 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
-import { SessionLeaseError } from "./session-contract";
 import { getSessionHandle } from "./session-handle";
-import { requireCommit } from "./session-record";
 import { requestBindingDigest } from "./session-request";
 import { commitSessionRequest } from "./session-admission";
 
 export interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
-  timeout(requestId: string, at: number): void;
+  timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError>;
   open(input: {
     requestId: string;
     sessionId: string;
@@ -28,9 +28,9 @@ export interface SessionRequestPort {
     deadline: number;
     at: number;
     admission?: Inbox.Commit;
-  }): SessionTransition.Request;
-  answer(input: SessionTransition.Answer): Promise<SessionTransition.Resolution>;
-  receipt(input: SessionTransition.DeliveryReceipt): Promise<SessionTransition.Request>;
+  }): Effect.Effect<SessionTransition.Request, ExecutionError>;
+  answer(input: SessionTransition.Answer): Effect.Effect<SessionTransition.Resolution, ExecutionError>;
+  receipt(input: SessionTransition.DeliveryReceipt): Effect.Effect<SessionTransition.Request, ExecutionError>;
 }
 
 function requestGeneration(
@@ -66,50 +66,31 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
     at: number,
     admission?: Inbox.Commit,
   ) {
+    return Effect.gen(function* () {
     const live = getSessionHandle(sessionId, runtime);
-    if (live !== undefined) return live.requests.transition(payload, inputId, at, admission);
+    if (live !== undefined) return yield* live.requests.transition(payload, inputId, at, admission);
     const owner = `${runtime.processId ?? process.pid}:request:${entropy()}`;
     const row = SessionHandleStore.row(sessionId);
     const now = clock();
-    const lease = SessionHandleStore.acquireLease({
-      sessionId,
-      owner,
-      expectedFence: row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    });
-    if (!lease.ok) throw new SessionLeaseError(lease);
-    try {
-      return commitSessionRequest(
-        sessionId,
-        { owner, fence: lease.fence },
-        payload,
-        inputId,
-        Math.max(at, now),
-        runtime,
-        admission,
-      );
-    } finally {
+    const lease = yield* SessionHandleStore.acquireLease({
+      sessionId, owner, expectedFence: row.leaseFence, now, expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+    }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+    return yield* commitSessionRequest(
+      sessionId, { owner, fence: lease.fence }, payload, inputId, Math.max(at, now), runtime, admission,
+    ).pipe(Effect.onExit(() => Effect.suspend(() => {
       const current = SessionHandleStore.row(sessionId);
-      requireCommit(
-        SessionHandleStore.commit({
-          sessionId,
-          owner,
-          fence: lease.fence,
-          now: clock(),
-          expectedRevision: current.revision,
-          actions: [],
-          consumeInboxIds: [],
-          state: current.state,
-          releaseLease: true,
-        }),
-      );
-    }
+      return SessionHandleStore.commit({
+        sessionId, owner, fence: lease.fence, now: clock(), expectedRevision: current.revision,
+        actions: [], consumeInboxIds: [], state: current.state, releaseLease: true,
+      }).pipe(Effect.orDie, Effect.asVoid);
+    })));
+    });
   }
-  function timeout(requestId: string, at: number): void {
+  function timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError> {
+    return Effect.gen(function* () {
     const request = SessionHandleStore.requestById(requestId);
     if (request === undefined) throw new Error(`deadline request missing: ${requestId}`);
-    const result = transition(
+    const result = yield* transition(
       request.sessionId,
       { kind: "request.timeout", requestId },
       `${requestId}:deadline`,
@@ -121,11 +102,13 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       result.request.state !== "open"
     )
       runtime.onRequestReady?.(request.sessionId);
+    });
   }
   return {
     list: () => SessionHandleStore.requestRows(),
     timeout,
     open(input) {
+      return Effect.gen(function* () {
       const actions = SessionHandleStore.tree(input.sessionId);
       const original = actions.find((action) => action.id === input.requestId);
       const intent = original?.intent.value;
@@ -167,7 +150,7 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
         createdAt: input.at,
       };
       request.bindingDigest = requestBindingDigest(request);
-      const decision = transition(
+      const decision = yield* transition(
         input.sessionId,
         { kind: "request.open", request },
         `${input.requestId}:open`,
@@ -177,9 +160,11 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       if (decision.request === undefined)
         throw new Error(`request open refused: ${input.requestId}`);
       return decision.request;
+      });
     },
-    async answer(answer) {
-      const result = await transition(
+    answer(answer) {
+      return Effect.gen(function* () {
+      const result = yield* transition(
         answer.sessionId,
         { kind: "request.answer", answer },
         answer.inputId,
@@ -193,9 +178,11 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       )
         runtime.onRequestReady?.(answer.sessionId);
       return result.resolution;
+      });
     },
-    async receipt(receipt) {
-      const result = await transition(
+    receipt(receipt) {
+      return Effect.gen(function* () {
+      const result = yield* transition(
         receipt.sessionId,
         { kind: "request.delivery", receipt },
         receipt.inputId,
@@ -204,6 +191,7 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       if (result.request === undefined)
         throw new Error(`request receipt refused: ${receipt.requestId}`);
       return result.request;
+      });
     },
   };
 }

@@ -1,8 +1,10 @@
+import { Effect } from "effect";
 import { expect, it } from "bun:test";
 import { expectFailedToolCommit, expectUncalledBudget } from "./helpers/execution-assertions";
-import { recordingExecutor } from "./helpers/compiled-policy";
+import { recordingExecutor } from "./helpers/effect-g1";
 import { timedQueryTool } from "./helpers/query-tool";
 import { createDispatcher } from "../src/tool-dispatcher";
+import { isolated } from "./helpers/isolated";
 
 it("shared budget assertions reject wrong reasons and unexpected provider calls", () => {
   const stopped = Object.assign(new Error("stopped"), { code: "agent_stop", reason: "budget" });
@@ -11,13 +13,11 @@ it("shared budget assertions reject wrong reasons and unexpected provider calls"
   expect(() => expectUncalledBudget(Object.assign(new Error("other"), { code: "agent_stop", reason: "other" }), 0)).toThrow();
 });
 
-it("shared tool assertions remain sensitive to result and durable commit mutations", async () => {
+it("shared tool assertions remain sensitive to result and durable commit mutations", () => isolated(Effect.gen(function* () {
   const recording = recordingExecutor();
-  const dispatcher = createDispatcher([
-    timedQueryTool("reject before timeout", async () => { throw new Error("failed"); }),
-  ], { executor: recording.executor });
-  const result = await dispatcher.execute({ id: "check", tool: "timed", input: {} }, { sessionId: "session-1", turnId: "turn-1" });
+  const dispatcher = createDispatcher([timedQueryTool("reject before timeout", async () => { throw new Error("failed"); })], { executor: recording.executor });
+  const result = yield* dispatcher.execute({ id: "check", tool: "timed", input: {} }, { sessionId: "session-1", turnId: "turn-1" });
   expectFailedToolCommit(result, recording.committed);
   expect(() => expectFailedToolCommit({ ...result, isError: false }, recording.committed)).toThrow();
   expect(() => expectFailedToolCommit(result, [])).toThrow();
-});
+})));

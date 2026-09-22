@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmdirSync, statSync } from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
-import { z } from "zod";
-import { connectIpcClient } from "../src/client";
+import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcTimeoutError } from "../src/errors";
 import { LineDecoder } from "../src/framing";
-import { createIpcServer } from "../src/server";
+import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";
@@ -48,7 +47,7 @@ describe("server edge branches", () => {
     mkdirSync(path);
     try {
       const error = await captureError(createIpcServer(path, () => undefined));
-      expect(z.object({ code: z.string() }).parse(error).code).toBe("ERR_FS_EISDIR");
+      expect(error).toMatchObject({ _tag: "ForeignFailure", operation: "socket.unlink", cause: expect.stringContaining("EISDIR") });
       expect(statSync(path).isDirectory()).toBe(true);
     } finally {
       rmdirSync(path);

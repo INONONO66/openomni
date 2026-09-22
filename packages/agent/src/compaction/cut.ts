@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type {
   ResolvedCompactionOptions,
@@ -105,7 +107,7 @@ function finishAnchoredCut(
   );
 }
 
-async function chooseAnchoredCut(
+function chooseAnchoredCut(
   working: Message.WithParts[],
   cutoff: number,
   firstRemoved: Message.WithParts,
@@ -114,6 +116,7 @@ async function chooseAnchoredCut(
   },
   candidate: CompactionCandidate | undefined,
 ) {
+  return Effect.gen(function* () {
   const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
   const attempt = (boundary: number, anchor: string | undefined) =>
     attemptAnchoredCut(
@@ -127,17 +130,18 @@ async function chooseAnchoredCut(
       options.onSummarize,
     );
   if (candidate !== undefined && isWarmCandidateValid(candidate, working)) {
-    const promoted = await attempt(candidate.prefixIds.length, candidate.anchorBody);
+    const promoted = yield* attempt(candidate.prefixIds.length, candidate.anchorBody);
     if (promoted.cut !== undefined)
       return { attempt: promoted, candidateOutcome: "promoted" as const };
   }
   return {
-    attempt: await attempt(cutoff, undefined),
+    attempt: yield* attempt(cutoff, undefined),
     candidateOutcome: candidate === undefined ? undefined : ("discarded" as const),
   };
+  });
 }
 
-export async function compactUnbracketed(
+export function compactUnbracketed(
   messages: Message.WithParts[],
   options: ResolvedCompactionOptions,
   measuredContextTokens: number | undefined,
@@ -149,7 +153,8 @@ export async function compactUnbracketed(
     anchored?: boolean,
     summarizerError?: Error,
   ) => CompactionResult,
-): Promise<CompactionResult> {
+): Effect.Effect<CompactionResult, ExecutionError> {
+  return Effect.gen(function* () {
   // A reversible cut names original content as its kept boundary. Even a
   // zero-tail strategy must retain one atomic call/result entry unchanged.
   const protectRecent = Math.max(1, options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT);
@@ -181,32 +186,17 @@ export async function compactUnbracketed(
 
   const firstRemoved = toRemove[0];
   if (options.onSummarize !== undefined && firstRemoved !== undefined) {
-    const { attempt, candidateOutcome } = await chooseAnchoredCut(
+    const { attempt, candidateOutcome } = yield* chooseAnchoredCut(
       working,
       toRemove.length,
       firstRemoved,
       { ...options, onSummarize: options.onSummarize },
       candidate,
     );
-    if (attempt.summarizerError !== undefined) {
-      const fallbackCutoff = snapToUserBoundary(working, naturalCutoff);
-      if (fallbackCutoff !== undefined && fallbackCutoff > 0) {
-        return finish(
-          {
-            messages: working.slice(fallbackCutoff),
-            compacted: true,
-            removedCount: fallbackCutoff,
-            summarizerFailed: true,
-            ...(candidateOutcome === undefined ? {} : { candidate: candidateOutcome }),
-          },
-          "cut",
-          elidedChars,
-          false,
-          attempt.summarizerError,
-        );
-      }
-    }
-    return finishAnchoredCut(attempt, candidateOutcome, messages, working, elidedChars, finish);
+    return (
+      finishFallbackCut(attempt, candidateOutcome, working, naturalCutoff, elidedChars, finish) ??
+      finishAnchoredCut(attempt, candidateOutcome, messages, working, elidedChars, finish)
+    );
   }
 
   const compacted = [...toKeep];
@@ -220,6 +210,34 @@ export async function compactUnbracketed(
     "cut",
     elidedChars,
     false,
+  );
+  });
+}
+
+// A failed summarizer falls back to a plain user-boundary cut when one exists.
+function finishFallbackCut(
+  attempt: AnchoredCutAttempt,
+  candidateOutcome: "promoted" | "discarded" | undefined,
+  working: Message.WithParts[],
+  naturalCutoff: number,
+  elidedChars: number,
+  finish: FinishCompaction,
+): CompactionResult | undefined {
+  if (attempt.summarizerError === undefined) return undefined;
+  const fallbackCutoff = snapToUserBoundary(working, naturalCutoff);
+  if (fallbackCutoff === undefined || fallbackCutoff <= 0) return undefined;
+  return finish(
+    {
+      messages: working.slice(fallbackCutoff),
+      compacted: true,
+      removedCount: fallbackCutoff,
+      summarizerFailed: true,
+      ...(candidateOutcome === undefined ? {} : { candidate: candidateOutcome }),
+    },
+    "cut",
+    elidedChars,
+    false,
+    attempt.summarizerError,
   );
 }
 

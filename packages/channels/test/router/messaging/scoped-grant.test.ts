@@ -1,3 +1,6 @@
+import { channelRequests } from "../../helpers/channel-requests";
+import { channelTransaction } from "../../helpers/channel-transaction";
+import { runEffect } from "../../helpers/effect";
 import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
@@ -102,8 +105,9 @@ describe("send kernel over reply-scoped instances", () => {
 
   function messaging() {
     return createExistingAgentMessaging({
-      requests: seededRequests(),
-      deliver: (message) => {
+      requests: channelRequests(seededRequests()),
+      transaction: channelTransaction,
+      deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };
       },
@@ -122,7 +126,7 @@ describe("send kernel over reply-scoped instances", () => {
   });
 
   test("a send into the initiating container is granted by the scoped instance", async () => {
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
 
     expect(receipt.kind).toBe("sent");
     if (receipt.kind !== "sent") throw new Error("expected sent");
@@ -140,11 +144,11 @@ describe("send kernel over reply-scoped instances", () => {
       updatedAt: messagingNow,
     });
 
-    const receipt = await messaging().send(
+    const receipt = await runEffect(messaging().send(
       buildSendInput({
         target: { actorId: "actor:target", endpointId: "endpoint:target-discord" },
       }),
-    );
+    ));
 
     const denial = expectDenied(receipt, "ungranted");
     expect(denial.reason).toContain("replies stay inside the initiating container");
@@ -154,7 +158,7 @@ describe("send kernel over reply-scoped instances", () => {
   test("with only a scoped candidate, an unresolvable target still yields its typed target denial", async () => {
     grants = [scopedInstance({ targetActorId: "actor:ghost" })];
 
-    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
+    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
 
     expectDenied(receipt, "target_missing");
   });
@@ -162,7 +166,7 @@ describe("send kernel over reply-scoped instances", () => {
   test("no candidate at all keeps the ungranted denial ahead of any registry lookup", async () => {
     grants = [];
 
-    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
+    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
 
     expectDenied(receipt, "ungranted");
   });

@@ -10,6 +10,8 @@ import {
 import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
 import { inboxAppend } from "./l0-action-builders.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
+import { CorruptRecord, InboxCommitRefused } from "../errors";
+import type { RefuseWrite } from "./write-effect";
 
 export const sessionSelect = `SELECT id, parent_id, role, lease_owner, lease_fence,
   lease_expires_at, revision, state, tools_generation, system_hash, policy_generation FROM session`;
@@ -163,6 +165,7 @@ function commitPreconditionRefusal(
 export function commitSession(
   db: Database,
   request: LedgerSession.Commit,
+  refuse: RefuseWrite,
 ): LedgerSession.CommitResult | undefined {
   const current = selectSession(db, request.sessionId);
   if (current === undefined) return undefined;
@@ -188,13 +191,13 @@ export function commitSession(
   }
 
   if (request.receive !== undefined) {
-    const received = commitInbox(db, request.receive);
+    const received = commitInbox(db, request.receive, refuse);
     if (received === undefined) return refusedSessionCommit("inbox", current);
     receipts.push(...received.receipts);
     revision = received.receipts.at(-1)?.revision ?? revision;
   }
   if (request.admit !== undefined) {
-    const admitted = commitInbox(db, request.admit);
+    const admitted = commitInbox(db, request.admit, refuse);
     if (admitted === undefined) return refusedSessionCommit("inbox", current);
     receipts.push(...admitted.receipts);
   }
@@ -221,7 +224,8 @@ export function commitSession(
     );
   if (updated.changes !== 1) return refusedSessionCommit("stale", current);
   const row = selectSession(db, request.sessionId);
-  if (row === undefined) throw new Error("committed session disappeared");
+  if (row === undefined)
+    return refuse(new CorruptRecord({ operation: "session.commit", id: request.sessionId }));
   return { ok: true, row, receipts };
 }
 
@@ -345,17 +349,28 @@ interface InboxCommitResult {
   readonly receipts: LedgerAction.Receipt[];
 }
 
-export function commitInbox(db: Database, row: Inbox.Commit): InboxCommitResult | undefined {
+export function commitInbox(
+  db: Database,
+  row: Inbox.Commit,
+  refuse: RefuseWrite,
+): InboxCommitResult | undefined {
   if (actionExists(db, row.id)) return undefined;
   if (!validInboxSender(db, row)) return undefined;
   const receipts: LedgerAction.Receipt[] = [];
   const child = row.createSession;
   if (child !== undefined) {
     if (!validInboxChild(db, row, child)) return undefined;
-    if (!withinChildLimits(db, child.row.parentId, row.limits)) return undefined;
+    if (!withinChildLimits(db, child.row.parentId, row.limits, refuse)) return undefined;
     if (!insertSession(db, child.row)) return undefined;
     const configured = appendAction(db, child.initialAction, 0);
-    if (configured === undefined) throw new Error("child configuration refused");
+    if (configured === undefined)
+      return refuse(
+        new InboxCommitRefused({
+          sessionId: row.sessionId,
+          inboxId: row.id,
+          reason: "configuration",
+        }),
+      );
     receipts.push(configured);
   }
   const session = z
@@ -365,7 +380,10 @@ export function commitInbox(db: Database, row: Inbox.Commit): InboxCommitResult 
   if (session === null) return undefined;
   const receipt = appendAction(db, inboxAppend(row), session.revision);
   if (receipt === undefined) {
-    if (receipts.length > 0) throw new Error("message inbox commit refused");
+    if (receipts.length > 0)
+      return refuse(
+        new InboxCommitRefused({ sessionId: row.sessionId, inboxId: row.id, reason: "admission" }),
+      );
     return undefined;
   }
   const ordinalRow = z
@@ -445,13 +463,15 @@ function withinChildLimits(
   db: Database,
   parentId: string | null,
   limits: Inbox.Commit["limits"],
+  refuse: RefuseWrite,
 ): boolean {
   if (parentId === null) return true;
   if (limits === undefined || openChildCount(db, parentId) >= limits.fanout) return false;
   let depth = 1;
   let ancestor = selectSession(db, parentId);
   while (ancestor?.parentId !== null) {
-    if (ancestor === undefined) throw new Error("session ancestry is missing");
+    if (ancestor === undefined)
+      return refuse(new CorruptRecord({ operation: "session.ancestry", id: parentId }));
     depth += 1;
     ancestor = selectSession(db, ancestor.parentId);
   }
@@ -479,13 +499,14 @@ function pendingRequestCount(db: Database, since: number): number {
   return row.count;
 }
 
-export function insertInbox(db: Database, row: Inbox.Commit): Inbox.Row {
+export function insertInbox(db: Database, row: Inbox.Commit, refuse: RefuseWrite): Inbox.Row {
   const ordinal = db
     .query<{ ordinal: number }, [string]>(
       "SELECT COALESCE(MAX(ordinal), 0) + 1 AS ordinal FROM inbox WHERE session_id = ?",
     )
     .get(row.sessionId);
-  if (ordinal === null) throw new Error("inbox ordinal unavailable");
+  if (ordinal === null)
+    return refuse(new CorruptRecord({ operation: "inbox.ordinal", id: row.id }));
   const committed = Inbox.Row.parse({
     id: row.id,
     sessionId: row.sessionId,

@@ -1,9 +1,13 @@
-import { CodemodeError, type createCodemode } from "@openomni/codemode";
+import { CodemodeError, type RunOptions } from "@openomni/codemode";
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
 
-type Cell = ReturnType<typeof createCodemode>["cell"];
+export interface Cell {
+  run(code: string, tenant: string, options: RunOptions): Promise<Machine.CellState>;
+  peek(cellId: string, tenant: string): Promise<Machine.CellState>;
+  stop(cellId: string, tenant: string): Promise<Machine.CellState>;
+}
 
 /**
  * A cell left in the background is `timed_out` at this deadline: the model
@@ -57,7 +61,7 @@ function executeOperation(
   signal: AbortSignal | undefined,
 ): Promise<Machine.CellState> {
   return cellOperation(cell, operation, sessionId, signal).catch((error: Error) => {
-    if (error instanceof CodemodeError && error.data.reason === "unknown_cell_id")
+    if (error instanceof CodemodeError && error.reason === "unknown_cell_id")
       throw new ToolRefused("eval", "no such cell_id in this session");
     throw error;
   });

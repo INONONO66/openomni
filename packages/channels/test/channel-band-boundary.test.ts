@@ -7,7 +7,7 @@ import ts from "typescript";
 const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
 // zod is pure schema validation — no I/O, no authority — and providers declare
 // their credential/settings schemas in-band (docs/provisioning-and-providers.md §4).
-const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol", "zod"]);
+const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol", "zod", "effect"]);
 const JUDGMENT_ALLOWED_PACKAGES = new Set(["@openomni/policy", "@openomni/ledger"]);
 const JUDGMENT_DIRS = ["src/router/", "src/authn/"] as const;
 

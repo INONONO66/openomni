@@ -1,7 +1,7 @@
 import { beforeEach, mock } from "bun:test";
 import type { PlainObject } from "@openomni/protocol";
 import type { ModelMessage, ToolSet } from "ai";
-import { run, type RunInput } from "../../src/run";
+import { run, type RunInput } from "./native";
 import type { StreamEvent } from "../../src/processor/stream-events";
 import type { Sink } from "../../src/sink";
 import { collector } from "./observation";

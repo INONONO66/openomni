@@ -3,11 +3,10 @@ import { Dedupe, DedupeWindow } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
-import { RetryExhaustedError } from "../../support/fetch-retry";
 import { SLACK_RENDER } from "./format";
 import type { PublishPort } from "../../types";
 import { SlackClient } from "./client";
-import { SlackApiError, SlackEndpointKeyError, SlackHandlerMissingError } from "./error";
+import { SlackApiError, SlackEndpointKeyError, SlackHandlerMissingError, RateLimited } from "../../errors";
 import { SlackNormalizer } from "./normalizer";
 import { SlackSocket } from "./socket";
 import type { SlackMessageEvent, SocketEnvelope } from "./types";
@@ -100,8 +99,8 @@ export class SlackAdapter implements Channel.Surface {
         );
       },
       (error) =>
-        (error instanceof SlackApiError && error.data.rejected === true) ||
-        (error instanceof RetryExhaustedError && error.status === 429),
+        (error instanceof SlackApiError && error.rejected === true) ||
+        (error instanceof RateLimited && error.status === 429),
       this.publish,
     );
   }

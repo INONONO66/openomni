@@ -1,7 +1,8 @@
+import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../../src/core/execution/events";
 import { Bus, newTraceId } from "../../../src/index";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/effect-g1";
 import type { RunTrace } from "../../../src/core/execution/state";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";
 
@@ -14,7 +15,7 @@ async function observedActorId(trace: RunTrace): Promise<string> {
     if (actorId !== undefined) actorIds.push(actorId);
   });
   try {
-    await runTestAgent(
+    await isolated(runTestAgent(
       {
         messages: [{ role: "user", content: "hi" }],
         traceContext: trace,
@@ -24,7 +25,7 @@ async function observedActorId(trace: RunTrace): Promise<string> {
         model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
         llm: mockLlm(completeModel),
       },
-    );
+    ));
   } finally {
     stop();
   }

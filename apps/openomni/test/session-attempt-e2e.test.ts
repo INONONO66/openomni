@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { runEffect } from "./helpers/effect";
 import { Auth } from "@openomni/llm";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Database } from "bun:sqlite";
@@ -107,7 +108,7 @@ for (const visible of ["none", "text", "tool"] as const) {
       expect(
         db
           .query(
-            "SELECT count(*) AS count FROM action WHERE kind='attempt' AND json_extract(effect,'$.failure.usage.inputTokens') IS NOT NULL",
+            "SELECT count(*) AS count FROM action WHERE kind='attempt' AND json_extract(effect,'$.evidence.failures[0].usage.inputTokens') IS NOT NULL",
           )
           .get(),
       ).toEqual({ count: visible === "none" ? 2 : 1 });
@@ -207,7 +208,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     if (old === undefined) delete process.env.OPENOMNI_AUTH_FILE;
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
-  await Auth.set("openai", { type: "api", key: "fallback-key" });
+  await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }));
   const app = await suite.boot({ config });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
   const reply = nextMessage(socket);

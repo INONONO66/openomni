@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
@@ -41,17 +42,24 @@ function append(id: string, sessionId = "chain"): LedgerAction.Append {
 function fresh() {
   const adapter = new SqliteStorageAdapter(":memory:");
   Storage.configure(adapter);
-  adapter.sessions.create(
-    LedgerSession.Row.parse({
-      id: "chain",
-      parentId: null,
-      role: "resident",
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-      revision: 0,
-      state: "idle",
-    }),
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        adapter.sessions.create(
+          LedgerSession.Row.parse({
+            id: "chain",
+            parentId: null,
+            role: "resident",
+            leaseOwner: null,
+            leaseFence: 0,
+            leaseExpiresAt: null,
+            revision: 0,
+            state: "idle",
+          }),
+        ),
+      ),
+    ),
+    (error) => error,
   );
   for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
     expect(adapter.actions.append(append(`a${ordinal}`), ordinal - 1)?.revision).toBe(ordinal);

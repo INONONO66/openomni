@@ -1,6 +1,13 @@
+import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue } from "@openomni/protocol";
+import { SessionHandleStore, Storage, type LedgerError } from "@openomni/ledger";
+import {
+  LedgerAction,
+  Message,
+  PlainObjectSchema,
+  PlainValueSchema,
+  type PlainValue,
+} from "@openomni/protocol";
 import { z } from "zod";
 import { createExecutor, type ExecutionLedger } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
@@ -15,10 +22,13 @@ import { providerFailure } from "./mock-llm";
 import { stringQueryTool } from "./query-tool";
 import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
+import { isolated } from "./isolated";
+import { CommitFailed, ForeignFailure, type SessionError } from "../../src/errors";
 
 export const crashPoint = z.enum([
   "turn_intent_before_llm_entry",
   "llm_body_before_attempt_result_commit",
+  "fiber_exit_after_execute_before_action_commit",
   "llm_result_committed",
   "tool_wave_between_result_commits",
   "retry_backoff_wait",
@@ -83,8 +93,8 @@ export function checkpointEvidence(
     .parse(result);
   const originalAnswer = z
     .array(Message.WithParts)
-    .parse(messageResults.map((action) => effectOf(action).result))
-    .find((message) => message.info.id === "answer");
+    .parse(messageResults.map((action: LedgerAction.Append) => effectOf(action).result))
+    .find((message: Message.WithParts) => message.info.id === "answer");
   return { committed, originalAnswer };
 }
 
@@ -137,105 +147,119 @@ function intercept(ledger: ExecutionLedger, point: CrashPoint, bodies: string[])
   let toolResults = 0;
   return {
     ...ledger,
-    async commit(action) {
-      const result = effectOf(action).phase === "result";
-      if (action.kind === "tool" && result) toolResults += 1;
-      if (beforeResult(point, action, toolResults)) return stop(point, bodies, action);
-      const receipt = await ledger.commit(action);
-      const after =
-        (point === "llm_result_committed" && action.kind === "llm") ||
-        (committedCompactionPoints.has(point) && action.kind === "compaction");
-      if (after && result) return stop(point, bodies, action);
-      return receipt;
+    commit(action: LedgerAction.Append) {
+      return Effect.gen(function* () {
+        const result = effectOf(action).phase === "result";
+        if (action.kind === "tool" && result) toolResults += 1;
+        if (beforeResult(point, action, toolResults)) return stop(point, bodies, action);
+        const receipt = yield* ledger.commit(action);
+        const after =
+          (point === "llm_result_committed" && action.kind === "llm") ||
+          (committedCompactionPoints.has(point) && action.kind === "compaction");
+        if (after && result) return stop(point, bodies, action);
+        return receipt;
+      });
     },
   };
 }
 
-async function executePoint(point: CrashPoint, bodies: string[]) {
-  const recording = requestLedger({ id: sessionId });
-  if (
-    point === "turn_intent_before_llm_entry" ||
-    point === "recovery_dispatch_identity_committed_before_rpc"
-  )
-    return stop(point, bodies);
-  const ledger = intercept(recording.ledger, point, bodies);
-  const executor = createExecutor({
-    ...recording,
-    ledger,
-    policy: compiledPolicy(),
-    observations,
-    // The durable arm commits before the cut: only the wait itself is lost.
-    retryAlarm: {
-      ...createRetryAlarmPort(sessionId, recording.clock),
-      wait: () => stop(point, bodies),
-    },
-  });
-  if (point === "tool_wave_between_result_commits") {
-    const tools = ["first", "second"].map((name) =>
-      stringQueryTool(name, name, async () => {
-        bodies.push(name);
-        return name;
-      }),
-    );
-    const dispatcher = createTurnDispatcher(
-      tools,
-      {
-        ...recording.identity,
-        actionId: recording.identity.turnId,
-        ledger,
-        policy: compiledPolicy(),
+function executePoint(point: CrashPoint, bodies: string[]) {
+  return Effect.gen(function* () {
+    const recording = requestLedger({ id: sessionId });
+    if (
+      point === "turn_intent_before_llm_entry" ||
+      point === "recovery_dispatch_identity_committed_before_rpc"
+    )
+      return stop(point, bodies);
+    const ledger = intercept(recording.ledger, point, bodies);
+    const executor = createExecutor({
+      ...recording,
+      ledger,
+      policy: compiledPolicy(),
+      observations,
+      // The durable arm commits before the cut: only the wait itself is lost.
+      retryAlarm: {
+        ...createRetryAlarmPort(sessionId, recording.clock),
+        wait: () => stop(point, bodies),
       },
-      { observations, clock: recording.clock, entropy: recording.entropy },
-    );
-    return dispatcher.executeWave(
-      tools.map((tool) => ({ id: tool.name, tool: tool.name, input: {} })),
-      {
-        sessionId,
-        turnId: recording.identity.turnId,
-      },
-    );
-  }
-  if (point === "compaction_summary_before_result_commit" || committedCompactionPoints.has(point)) {
-    const history = [
-      textMessage("assistant", "earlier evidence ".repeat(200), sessionId, "earlier"),
-      textMessage("assistant", "answer", sessionId, "answer"),
-    ];
-    for (const message of history) {
-      await executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, async () =>
-        PlainValueSchema.parse(message),
+    });
+    if (point === "tool_wave_between_result_commits") {
+      const tools = ["first", "second"].map((name: string) =>
+        stringQueryTool(name, name, async () => {
+          bodies.push(name);
+          return name;
+        }),
+      );
+      const dispatcher = createTurnDispatcher(
+        tools,
+        {
+          ...recording.identity,
+          actionId: recording.identity.turnId,
+          ledger,
+          policy: compiledPolicy(),
+        },
+        { observations, clock: recording.clock, entropy: recording.entropy },
+      );
+      return yield* dispatcher.executeWave(
+        tools.map((tool: (typeof tools)[number]) => ({
+          id: tool.name,
+          tool: tool.name,
+          input: {},
+        })),
+        {
+          sessionId,
+          turnId: recording.identity.turnId,
+        },
       );
     }
-    return executeCompaction({
-      history,
-      executor,
-      events: observations,
-      options: {
-        contextWindowTokens: 10_000,
-        protectRecentMessages: 1,
-        onSummarize: async () => {
-          bodies.push("summary");
-          if (point === "compaction_concurrent_tail_committed_before_owner_crash") {
-            SessionHandleStore.commitReceivedMessage({
-              id: "tail",
-              sessionId,
-              kind: "prompt",
-              content: "concurrent tail",
-              createdAt: 100,
-              origin: { encodingVersion: 1, value: {} },
-              parentActionId: null,
-            });
-          }
-          return "checkpoint";
+    if (
+      point === "compaction_summary_before_result_commit" ||
+      committedCompactionPoints.has(point)
+    ) {
+      const history = [
+        textMessage("assistant", "earlier evidence ".repeat(200), sessionId, "earlier"),
+        textMessage("assistant", "answer", sessionId, "answer"),
+      ];
+      for (const message of history) {
+        yield* executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+          Effect.sync(() => PlainValueSchema.parse(message)),
+        );
+      }
+      return yield* executeCompaction({
+        history,
+        executor,
+        events: observations,
+        options: {
+          contextWindowTokens: 10_000,
+          protectRecentMessages: 1,
+          onSummarize: () =>
+            Effect.gen(function* () {
+              bodies.push("summary");
+              if (point === "compaction_concurrent_tail_committed_before_owner_crash") {
+                yield* SessionHandleStore.commitReceivedMessage({
+                  id: "tail",
+                  sessionId,
+                  kind: "prompt",
+                  content: "concurrent tail",
+                  createdAt: 100,
+                  origin: { encodingVersion: 1, value: {} },
+                  parentActionId: null,
+                }).pipe(Effect.mapError((error: LedgerError) => new CommitFailed({ error })));
+              }
+              return "checkpoint";
+            }),
         },
-      },
-      identity: { traceId: "crash", sessionId },
-      dispatch: { trigger: "yield" },
-    });
-  }
-  return runChatAttempts(executor, async () => {
-    bodies.push("llm");
-    if (point === "retry_backoff_wait") throw providerFailure("overloaded");
-    return { type: "stop" };
+        identity: { traceId: "crash", sessionId },
+        dispatch: { trigger: "yield" },
+      });
+    }
+    return yield* runChatAttempts(executor, () =>
+      Effect.gen(function* () {
+        bodies.push("llm");
+        if (point === "retry_backoff_wait") return yield* providerFailure("overloaded");
+        return { type: "stop" };
+      }),
+    );
   });
 }
 
@@ -244,7 +268,10 @@ function workerClock(point: CrashPoint, bodies: string[]) {
   if (
     point === "delivery_ack_committed_before_owner_cleanup" &&
     bodies.includes("accepted") &&
-    SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "delivered")
+    SessionHandleStore.outboundRows(sessionId).some(
+      (item: ReturnType<typeof SessionHandleStore.outboundRows>[number]) =>
+        item.state === "delivered",
+    )
   )
     stop(point, bodies);
   return 100;
@@ -255,93 +282,111 @@ function outboundPort(
   bodies: string[],
   dbPath: string,
 ): SessionRuntime["dispatchOutbound"] {
-  return async ({ message }) => {
-    if (point === "outbound_flood_deadline_before_timer_rearm") {
-      bodies.push("flood");
-      throw new Error("flood");
-    }
-    if (point === "platform_send_ambiguous_without_reconciliation") {
-      appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
-      bodies.push("accepted");
+  return ({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+    Effect.gen(function* () {
+      if (point === "outbound_flood_deadline_before_timer_rearm") {
+        bodies.push("flood");
+        return yield* new ForeignFailure({ operation: "outbound.flood", cause: "flood" });
+      }
+      if (point === "platform_send_ambiguous_without_reconciliation") {
+        appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
+        bodies.push("accepted");
+        return stop(point, bodies);
+      }
+      if (
+        point === "delivery_ack_committed_before_owner_cleanup" ||
+        point === "platform_send_committed_before_local_ack_reconciled_sent"
+      ) {
+        const { receipt } = receiveOutbound(message, 100);
+        bodies.push("accepted");
+        if (point === "platform_send_committed_before_local_ack_reconciled_sent")
+          stop(point, bodies);
+        return receipt;
+      }
       return stop(point, bodies);
-    }
-    if (
-      point === "delivery_ack_committed_before_owner_cleanup" ||
-      point === "platform_send_committed_before_local_ack_reconciled_sent"
-    ) {
-      const { receipt } = receiveOutbound(message, 100);
-      bodies.push("accepted");
-      if (point === "platform_send_committed_before_local_ack_reconciled_sent") stop(point, bodies);
-      return receipt;
-    }
-    return stop(point, bodies);
-  };
+    });
 }
 
-async function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
-  const runtime: SessionRuntime = {
-    observations,
-    clock: () => workerClock(point, bodies),
-    dispatchOutbound: outboundPort(point, bodies, dbPath),
-  };
-  const runner = async () => {
-    bodies.push("reply");
-    return { kind: "result" as const, text: "durable reply" };
-  };
-  if (point === "inbox_admitted_before_turn_open") {
-    session({ id: sessionId, role: "resident", runner }, runtime);
-    SessionHandleStore.commitReceivedMessage({
-      id: "admitted",
-      sessionId,
+function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
+  return Effect.gen(function* () {
+    const runtime: SessionRuntime = {
+      observations,
+      clock: () => workerClock(point, bodies),
+      dispatchOutbound: outboundPort(point, bodies, dbPath),
+    };
+    const runner = () =>
+      Effect.sync(() => {
+        bodies.push("reply");
+        return { kind: "result" as const, text: "durable reply" };
+      });
+    if (point === "inbox_admitted_before_turn_open") {
+      yield* session({ id: sessionId, role: "resident", runner }, runtime);
+      yield* SessionHandleStore.commitReceivedMessage({
+        id: "admitted",
+        sessionId,
+        kind: "prompt",
+        content: "original prompt",
+        createdAt: 100,
+        origin: { encodingVersion: 1, value: {} },
+        parentActionId: null,
+      });
+      return stop(point, bodies);
+    }
+    yield* session({ id: "parent", role: "resident", runner }, runtime);
+    const commission = yield* SessionHandleStore.commitReceivedMessage({
+      id: "commission",
+      sessionId: "parent",
       kind: "prompt",
-      content: "original prompt",
+      content: "commission",
       createdAt: 100,
       origin: { encodingVersion: 1, value: {} },
       parentActionId: null,
     });
-    return stop(point, bodies);
-  }
-  session({ id: "parent", role: "resident", runner }, runtime);
-  const commission = SessionHandleStore.commitReceivedMessage({
-    id: "commission",
-    sessionId: "parent",
-    kind: "prompt",
-    content: "commission",
-    createdAt: 100,
-    origin: { encodingVersion: 1, value: {} },
-    parentActionId: null,
+    const child = yield* session(
+      { id: sessionId, parentId: "parent", role: "worker", runner },
+      runtime,
+    );
+    return yield* child
+      .prompt("work", {
+        encodingVersion: 1,
+        value: {
+          kind: "message",
+          messageId: "commission",
+          senderSessionId: "parent",
+          sourceActionId: commission.receipt.action.id,
+        },
+      })
+      .pipe(
+        Effect.catchAll((error: SessionError) => {
+          if (point !== "outbound_flood_deadline_before_timer_rearm") return Effect.fail(error);
+          if (error._tag !== "ForeignFailure" || error.operation !== "outbound.flood")
+            return Effect.fail(error);
+          return Effect.sync(() => stop(point, bodies));
+        }),
+      );
   });
-  const child = session({ id: sessionId, parentId: "parent", role: "worker", runner }, runtime);
-  return child
-    .prompt("work", {
-      encodingVersion: 1,
-      value: {
-        kind: "message",
-        messageId: "commission",
-        senderSessionId: "parent",
-        sourceActionId: commission.receipt.action.id,
-      },
-    })
-    .catch((error: Error) => {
-      if (point !== "outbound_flood_deadline_before_timer_rearm") throw error;
-      if (z.instanceof(Error).parse(error).message !== "flood") throw error;
-      return stop(point, bodies);
-    });
 }
 
 if (import.meta.main) {
   const [point, dbPath, stage] = z
     .tuple([crashPoint, z.string().min(1), z.enum(["initial", "resume"])])
     .parse(process.argv.slice(2));
-  Storage.initialize({ dbPath });
-  seedPolicy();
-  const bodies: string[] = [];
-  if (stage === "resume") {
-    await wakeSession(sessionId, async () => stop(point, bodies), {
-      observations,
-      clock: () => 100_000,
-    });
-  } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
-    await admissionPoint(point, bodies, dbPath);
-  } else await executePoint(point, bodies);
+  await isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        Storage.reset();
+        Storage.initialize({ dbPath });
+        seedPolicy();
+        const bodies: string[] = [];
+        if (stage === "resume") {
+          yield* wakeSession(sessionId, () => Effect.sync(() => stop(point, bodies)), {
+            observations,
+            clock: () => 100_000,
+          });
+        } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
+          yield* admissionPoint(point, bodies, dbPath);
+        } else yield* executePoint(point, bodies);
+      }),
+    ),
+  );
 }

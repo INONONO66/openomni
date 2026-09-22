@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
@@ -49,51 +50,86 @@ function commitAs(fence: number, actionId: string): LedgerSession.Commit {
 test("a stale fence is rejected at commit time with no partial row, even under the same owner name", () => {
   const { sessions, actions } = stores();
   expect(
-    sessions.create({
-      id: sessionId,
-      parentId: null,
-      role: "resident",
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-      revision: 0,
-      state: "idle",
-      toolsGeneration: 0,
-      systemHash: "",
-      policyGeneration: 0,
-    }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          sessions.create({
+            id: sessionId,
+            parentId: null,
+            role: "resident",
+            leaseOwner: null,
+            leaseFence: 0,
+            leaseExpiresAt: null,
+            revision: 0,
+            state: "idle",
+            toolsGeneration: 0,
+            systemHash: "",
+            policyGeneration: 0,
+          }),
+        ),
+      ),
+      (error) => error,
+    ),
   ).toBe(true);
   expect(
-    sessions.acquireLease({
-      sessionId,
-      owner: "kernel-owner",
-      expectedFence: 0,
-      now: 0,
-      expiresAt: 10_000,
-    }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          sessions.acquireLease({
+            sessionId,
+            owner: "kernel-owner",
+            expectedFence: 0,
+            now: 0,
+            expiresAt: 10_000,
+          }),
+        ),
+      ),
+      (error) => error,
+    ),
   ).toEqual({ ok: true, fence: 1 });
   // Inclusive expiry: the successor reclaims at exactly expiresAt with the same owner name.
   expect(
-    sessions.acquireLease({
-      sessionId,
-      owner: "kernel-owner",
-      expectedFence: 1,
-      now: 10_000,
-      expiresAt: 40_000,
-    }),
+    Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          sessions.acquireLease({
+            sessionId,
+            owner: "kernel-owner",
+            expectedFence: 1,
+            now: 10_000,
+            expiresAt: 40_000,
+          }),
+        ),
+      ),
+      (error) => error,
+    ),
   ).toEqual({ ok: true, fence: 2 });
   const before = sessions.get(sessionId);
   expect(before).toMatchObject({ leaseOwner: "kernel-owner", leaseFence: 2, revision: 0 });
 
   // Owner name matches, the live lease is unexpired, the revision is exact:
   // only the fence is stale, and the rejection is typed with the current fence.
-  const rejected = sessions.commit(commitAs(1, "stale-result"));
-  expect(rejected).toEqual({ ok: false, reason: "stale", currentFence: 2, currentRevision: 0 });
+  const rejected = () =>
+    Either.getOrThrowWith(
+      Effect.runSync(Effect.either(sessions.commit(commitAs(1, "stale-result")))),
+      (error) => error,
+    );
+  expect(rejected).toThrow(
+    expect.objectContaining({
+      _tag: "CommitRefused",
+      reason: "fence",
+      currentFence: 2,
+      currentRevision: 0,
+    }),
+  );
   expect(actions.tree(sessionId)).toEqual([]);
   expect(sessions.get(sessionId)).toEqual(before);
 
   // The successor's fence commits the identical work exactly once.
-  const committed = sessions.commit(commitAs(2, "successor-result"));
+  const committed = Either.getOrThrowWith(
+    Effect.runSync(Effect.either(sessions.commit(commitAs(2, "successor-result")))),
+    (error) => error,
+  );
   expect(committed?.ok).toBe(true);
   if (committed?.ok !== true) throw new Error("successor commit was refused");
   expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2 });

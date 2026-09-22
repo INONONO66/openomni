@@ -1,6 +1,8 @@
+import { Effect } from "effect";
+import { runEffect, runSyncEffect, acquireEffect } from "./helpers/scoped-effect";
 import { Bus, wakeSession } from "@openomni/agent";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { resolveChannelGrant } from "@openomni/channels";
+import { decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
 import {
   ActorRegistry,
@@ -9,7 +11,7 @@ import {
   Storage,
   SurfaceKey,
 } from "@openomni/ledger";
-import { Gateway, type Tool } from "@openomni/protocol";
+import { Gateway, MessagingEvents, type Tool } from "@openomni/protocol";
 import {
   createMountedChannelGrantRegistrar,
   createResidentGateway,
@@ -29,14 +31,14 @@ function testResident(run: ResidentRun) {
     apiKey: "test-key",
     tools: {},
     llm: {
-      resolveModel: async (model) => ({ id: model.id, name: model.id, providerID: model.provider }),
+      resolveModel: (model) => Effect.succeed(({ id: model.id, name: model.id, providerID: model.provider })),
       run,
     },
   });
-  const gateway = createResidentGateway({
-    inbox: { commit: commitMessageInbox },
+  const gateway = runSyncEffect(createResidentGateway({
+    inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(resident.materialize),
-  });
+  }));
   SurfaceKey.claim("ws:ws:dm:evidence", "session:evidence");
   return {
     gateway,
@@ -48,7 +50,7 @@ function testResident(run: ResidentRun) {
         defaultTier: "owner",
         createdBy: "owner",
       });
-      const result = await gateway.ingest(
+      const result = await runEffect(gateway.ingest(
         { kind: "external", surface: "ws", externalId: "observer" },
         {
           eventId: crypto.randomUUID(),
@@ -59,22 +61,22 @@ function testResident(run: ResidentRun) {
           payload: {},
           render: content,
         },
-      );
+      ));
       if (result.status !== "executed") throw new Error("test ingress did not execute");
-      return wakeSession(
+      return acquireEffect(wakeSession(
         result.handle.target,
         resident.runnerFor(SessionHandleStore.row(result.handle.target)),
         resident.runtime,
-      );
+      ));
     },
   };
 }
 function recordingRun(calls: RunInput[]): ResidentRun {
-  return async (input, sink) => {
+  return (input, sink) => Effect.sync(() => {
     calls.push(input);
     sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
     return { type: "stop" };
-  };
+  });
 }
 beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
 afterEach(() => Storage.reset());
@@ -105,9 +107,9 @@ describe("channel grant registration", () => {
   test("named surfaces resolve their mount tier while loopback ws keeps its explicit owner bootstrap", () => {
     // ws authority comes from the real bootstrap path, not a test-authored
     // grant: this is the one call site allowed to name owner tier.
-    testResident(async () => {
+    testResident(() => Effect.sync(() => {
       throw new Error("model must not run");
-    });
+    }));
     const namedSurfaces = ["discord", "github", "slack", "telegram"] as const;
     const revokers = namedSurfaces.map((surface) =>
       registerTrustedChannelGrant({ surface, defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER }),
@@ -179,7 +181,7 @@ describe("channel grant registration", () => {
 
 describe("authenticated gateway ingress", () => {
   test("real gateway observations retain stamped metadata for schema consumers", async () => {
-    const resident = testResident(async () => ({ type: "stop" }));
+    const resident = testResident(() => Effect.succeed(({ type: "stop" })));
     const projected = Promise.withResolvers<Gateway.MessageObservation>();
     const stop = Bus.observe((event, data) => {
       if (event.name !== Gateway.MessageObserved.name) return;
@@ -207,9 +209,9 @@ describe("authenticated gateway ingress", () => {
     }
   });
   test("rejects invalid message types at the boundary without committing inbox state", async () => {
-    testResident(async () => {
+    testResident(() => Effect.sync(() => {
       throw new Error("model must not run");
-    });
+    }));
     expect(() =>
       Gateway.IngressFacts.parse({ eventId: "invalid", surface: "ws", render: "text" }),
     ).toThrow();
@@ -229,7 +231,7 @@ describe("authenticated gateway ingress", () => {
   });
   test("a normal prompt restores tool driving after an evidence-only turn", async () => {
     const outputs: string[] = [];
-    const resident = testResident(async (input, sink) => {
+    const resident = testResident((input, sink) => Effect.sync(() => {
       const result = requestToolStep(input, sink, {
         id: `call:${outputs.length}`,
         tool: "missing",
@@ -239,7 +241,7 @@ describe("authenticated gateway ingress", () => {
       outputs.push(result.output ?? "");
       sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
       return { type: "stop" };
-    });
+    }));
     await resident.ingest("evidence", true);
     await resident.ingest("instruction", false);
     expect(outputs).toHaveLength(2);
@@ -247,7 +249,7 @@ describe("authenticated gateway ingress", () => {
   });
   test("a forced tool call is refused on evidence-only ingress", async () => {
     let execution: Tool.Result | undefined;
-    const resident = testResident(async (input, sink) => {
+    const resident = testResident((input, sink) => Effect.sync(() => {
       execution = requestToolStep(input, sink, {
         id: "forged",
         tool: "provision",
@@ -256,7 +258,7 @@ describe("authenticated gateway ingress", () => {
       if (execution === undefined) return { type: "stop" };
       sink.onMessage(assistantMessage(input, { text: "noted" }));
       return { type: "stop" };
-    });
+    }));
     await resident.ingest("change configuration", true);
     expect(execution?.isError).toBe(true);
     expect(execution?.output).toContain("evidence-only");
@@ -267,6 +269,8 @@ test("cold egress needs a budget but a reply-scoped send remains available", asy
   Storage.reset();
   let reply = false;
   const deliveries: string[] = [];
+  const denials: Gateway.MessageDenialCode[] = [];
+  const unsubscribe = Bus.subscribe(MessagingEvents.Denied, (event) => denials.push(event.code));
   const fixture = messageFixture("resident", {
     deliveryRoutes: new Map([
       [
@@ -303,7 +307,7 @@ test("cold egress needs a budget but a reply-scoped send remains available", asy
       content: "cold",
     });
     expect(cold.isError).toBe(true);
-    expect(cold.output).toContain("budget_exhausted");
+    expect(denials).toEqual(["budget_exhausted"]);
     expect(deliveries).toEqual([]);
     reply = true;
     const warm = await fixture.send({
@@ -314,6 +318,7 @@ test("cold egress needs a budget but a reply-scoped send remains available", asy
     expect(warm.isError).not.toBe(true);
     expect(deliveries).toEqual(["warm"]);
   } finally {
+    unsubscribe();
     Storage.reset();
     rmSync(fixture.directory, { recursive: true, force: true });
   }

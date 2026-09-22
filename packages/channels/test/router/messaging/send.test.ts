@@ -1,8 +1,12 @@
+import { effectFailure } from "../../helpers/effect-failure";
+import { channelRequests } from "../../helpers/channel-requests";
+import { channelTransaction } from "../../helpers/channel-transaction";
 import { seededRequests } from "../../helpers/requests";
+import { runEffect } from "../../helpers/effect";
 import { replaceDecisionFacts } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import type { Gateway } from "@openomni/protocol";
+import type { Gateway, PlainObject } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
@@ -23,7 +27,7 @@ import { resetStores } from "../_router-fixture";
 
 type SenderTargetGrant = Gateway.SenderTargetGrant;
 
-const flushBus = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+import { bounded } from "../../helpers/bounded";
 
 let deliveries: OutboundMessage[];
 let grants: SenderTargetGrant[];
@@ -39,7 +43,7 @@ function inspectDebitCount(): number {
       at: messagingNow,
     },
     0,
-    (state) => {
+    (state: { countInWindow: number; notifyInWindow: number; converseInWindow: number; lastSendAt?: number | undefined; }) => {
       count = state.countInWindow;
       return "inspect" as const;
     },
@@ -50,8 +54,9 @@ function inspectDebitCount(): number {
 
 function messaging() {
   return createExistingAgentMessaging({
-    requests: seededRequests(),
-    deliver: (message) => {
+    transaction: channelTransaction,
+    requests: channelRequests(seededRequests()),
+    deliver: (message: OutboundMessage) => {
       deliveries.push(message);
       return { value: "accepted" as const };
     },
@@ -77,11 +82,11 @@ test("preflight reads authority without debiting, opening requests, or deliverin
 
 test("receipt assertions reject wrong discriminants and denial codes", async () => {
   grants = [];
-  const denied = await messaging().send(buildSendInput());
+  const denied = await runEffect(messaging().send(buildSendInput()));
   expect(() => expectDenied(denied, "target_missing")).toThrow();
   expect(() => expectAwaited(denied)).toThrow();
   grants = [buildGrant("grant:sender->target")];
-  const sent = await messaging().send(buildSendInput());
+  const sent = await runEffect(messaging().send(buildSendInput()));
   expect(() => expectDenied(sent, "ungranted")).toThrow();
   expect(() => expectAwaited(sent)).toThrow();
 });
@@ -90,18 +95,20 @@ describe("sender-target grant (policy plane)", () => {
   test("send without any covering grant is denied ungranted and delivers nothing", async () => {
     grants = [];
     const audits: { code: string; time: number; traceId: string }[] = [];
-    Bus.observe((event, payload) => {
+    const observed = Promise.withResolvers<void>();
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
       if (event.name !== "messaging.denied") return;
       const data = payload as { code: string; time: number; traceId: string };
       audits.push({ code: data.code, time: data.time, traceId: data.traceId });
+      observed.resolve();
     });
 
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
 
     expectDenied(receipt, "ungranted");
     expect(deliveries).toHaveLength(0);
     expect(SessionHandleStore.requestRows()).toHaveLength(0);
-    await flushBus();
+    await bounded(observed.promise);
     // Pin (D11): the denial audit inherits the send input's trace.
     expect(audits).toEqual([{ code: "ungranted", time: messagingNow, traceId: "trace-messaging" }]);
   });
@@ -109,7 +116,7 @@ describe("sender-target grant (policy plane)", () => {
   test("a grant bounds the operation: fire_and_forget-only grant denies awaited delivery", async () => {
     grants = [buildGrant("grant:notify-only", { operations: ["fire_and_forget"] })];
 
-    const receipt = await messaging().send(buildAwaitedSendInput());
+    const receipt = await runEffect(messaging().send(buildAwaitedSendInput()));
 
     expectDenied(receipt, "ungranted");
     expect(SessionHandleStore.requestRows()).toHaveLength(0);
@@ -118,14 +125,14 @@ describe("sender-target grant (policy plane)", () => {
   test("an expired grant is not active — time is an input, denial is ungranted", async () => {
     grants = [buildGrant("grant:expired", { expiresAt: messagingNow - 1 })];
 
-    expectDenied(await messaging().send(buildSendInput()), "ungranted");
+    expectDenied(await runEffect(messaging().send(buildSendInput())), "ungranted");
   });
 });
 
 describe("explicit target resolution (fail closed)", () => {
   test("grant evaluation precedes target resolution: an ungranted sender learns nothing from the registry", async () => {
     expectDenied(
-      await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })),
+      await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }))),
       "ungranted",
     );
   });
@@ -133,7 +140,7 @@ describe("explicit target resolution (fail closed)", () => {
   test("granted but unregistered target actor is denied target_missing", async () => {
     grants = [buildGrant("grant:ghost", { targetActorId: "actor:ghost" })];
 
-    const receipt = await messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } }));
+    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
 
     expectDenied(receipt, "target_missing");
     expect(deliveries).toHaveLength(0);
@@ -143,17 +150,17 @@ describe("explicit target resolution (fail closed)", () => {
     grants = [buildGrant("grant:endpointless", { targetActorId: "actor:endpointless" })];
     registerAgentFixture("actor:endpointless");
 
-    const receipt = await messaging().send(
+    const receipt = await runEffect(messaging().send(
       buildSendInput({ target: { actorId: "actor:endpointless" } }),
-    );
+    ));
 
     expectDenied(receipt, "target_stale");
   });
 
   test("pinned endpoint that no longer exists is denied target_stale", async () => {
-    const receipt = await messaging().send(
+    const receipt = await runEffect(messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:gone" } }),
-    );
+    ));
 
     expectDenied(receipt, "target_stale");
   });
@@ -161,9 +168,9 @@ describe("explicit target resolution (fail closed)", () => {
   test("pinned endpoint re-bound to another actor is denied target_stale", async () => {
     registerAgentFixture("actor:other", [{ id: "endpoint:other", externalId: "other-1" }]);
 
-    const receipt = await messaging().send(
+    const receipt = await runEffect(messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:other" } }),
-    );
+    ));
 
     expectDenied(receipt, "target_stale");
   });
@@ -178,10 +185,10 @@ describe("explicit target resolution (fail closed)", () => {
       updatedAt: messagingNow,
     });
 
-    const unpinned = await messaging().send(buildSendInput());
-    const pinned = await messaging().send(
+    const unpinned = await runEffect(messaging().send(buildSendInput()));
+    const pinned = await runEffect(messaging().send(
       buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:target-b" } }),
-    );
+    ));
 
     expectDenied(unpinned, "target_ambiguous");
     expect(pinned.kind).toBe("sent");
@@ -195,7 +202,8 @@ describe("fire-and-forget delivery", () => {
   test("records one sent audit and creates NO Request", async () => {
     const audits: { operation: string; requestId?: string; grantId: string; traceId: string }[] =
       [];
-    Bus.observe((event, payload) => {
+    const observed = Promise.withResolvers<void>();
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
       if (event.name !== "messaging.sent") return;
       const data = payload as {
         operation: string;
@@ -209,9 +217,10 @@ describe("fire-and-forget delivery", () => {
         traceId: data.traceId,
         ...(data.requestId === undefined ? {} : { requestId: data.requestId }),
       });
+      observed.resolve();
     });
 
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
 
     expect(receipt.kind).toBe("sent");
     if (receipt.kind !== "sent") throw new Error("expected sent");
@@ -233,7 +242,7 @@ describe("fire-and-forget delivery", () => {
         target: receipt.target,
       },
     ]);
-    await flushBus();
+    await bounded(observed.promise);
     expect(audits).toEqual([
       // Pin (D11): the sent audit inherits the send input's trace.
       { operation: "fire_and_forget", grantId: "grant:sender->target", traceId: "trace-messaging" },
@@ -247,7 +256,7 @@ describe("fire-and-forget delivery", () => {
 
 describe("awaited delivery", () => {
   test("appends exactly one owner-correct Request with correlation, responders, policy, and deadline", async () => {
-    const receipt = expectAwaited(await messaging().send(buildAwaitedSendInput()));
+    const receipt = expectAwaited(await runEffect(messaging().send(buildAwaitedSendInput())));
     const stored = SessionHandleStore.requestById("request:test-awaited");
     expect(stored).toEqual(receipt.request);
     expect(stored).toMatchObject({
@@ -269,24 +278,26 @@ describe("awaited delivery", () => {
 
   test("a second awaited send for the same message is denied request_duplicate with an audit event", async () => {
     const audits: string[] = [];
-    Bus.observe((event, payload) => {
+    const observed = Promise.withResolvers<void>();
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
       if (event.name !== "messaging.denied") return;
       audits.push((payload as { code: string }).code);
+      observed.resolve();
     });
-    await messaging().send(buildAwaitedSendInput());
+    await runEffect(messaging().send(buildAwaitedSendInput()));
 
     const secondSpec = buildAwaitedSendInput().requestSpec;
     if (secondSpec === undefined) throw new Error("awaited fixture must carry a requestSpec");
-    const duplicate = await messaging().send(
+    const duplicate = await runEffect(messaging().send(
       buildAwaitedSendInput({
         requestSpec: { ...secondSpec, requestId: "request:test-awaited-2" },
       }),
-    );
+    ));
 
     expectDenied(duplicate, "request_duplicate");
     expect(SessionHandleStore.requestRows()).toHaveLength(1);
     expect(deliveries).toHaveLength(1);
-    await flushBus();
+    await bounded(observed.promise);
     expect(audits).toEqual(["request_duplicate"]);
   });
 
@@ -298,19 +309,20 @@ describe("awaited delivery", () => {
 describe("delivery receipt", () => {
   test("a platform message id from the owner re-keys the request correlation to it", async () => {
     const withReceipt = createExistingAgentMessaging({
-      requests: seededRequests(),
+    transaction: channelTransaction,
+      requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-77" }),
       grants: () => grants,
       publish: Bus.publish,
     });
 
-    const receipt = expectAwaited(await withReceipt.send(buildAwaitedSendInput()));
+    const receipt = expectAwaited(await runEffect(withReceipt.send(buildAwaitedSendInput())));
     // The send receipt carries the receipt-updated record (revision bumped
     // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.request.correlation.replyToMessageId).toBe("platform:msg-77");
     expect(
       SessionHandleStore.tree(receipt.request.sessionId).filter(
-        (action) => action.kind === "request",
+        (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request",
       ),
     ).toHaveLength(2);
     const stored = SessionHandleStore.requestById("request:test-awaited");
@@ -318,31 +330,32 @@ describe("delivery receipt", () => {
     // Correlation now answers the platform id, not the internal message id.
     expect(
       SessionHandleStore.requestRows().filter(
-        (row) => row.correlation.replyToMessageId === "platform:msg-77",
+        (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "platform:msg-77",
       ),
     ).toHaveLength(1);
     expect(
       SessionHandleStore.requestRows().filter(
-        (row) => row.correlation.replyToMessageId === "message:test-awaited",
+        (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "message:test-awaited",
       ),
     ).toHaveLength(0);
   });
 
   test("no receipt from the owner leaves the internal-id correlation unchanged", async () => {
-    const receipt = expectAwaited(await messaging().send(buildAwaitedSendInput()));
+    const receipt = expectAwaited(await runEffect(messaging().send(buildAwaitedSendInput())));
     expect(receipt.request.correlation.replyToMessageId).toBe("message:test-awaited");
     expect(receipt.request.requestId).toBe("request:test-awaited");
   });
 
   test("a fire-and-forget receipt records nothing — there is no request to re-key", async () => {
     const withReceipt = createExistingAgentMessaging({
-      requests: seededRequests(),
+    transaction: channelTransaction,
+      requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-88" }),
       grants: () => grants,
       publish: Bus.publish,
     });
 
-    const receipt = await withReceipt.send(buildSendInput());
+    const receipt = await runEffect(withReceipt.send(buildSendInput()));
 
     expect(receipt.kind).toBe("sent");
     expect(SessionHandleStore.requestRows()).toHaveLength(0);
@@ -353,7 +366,7 @@ describe("durable send admission faults", () => {
   test.each([
     ["unexpected type", "other.fact", {}],
     ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
-  ] as const)("fails closed on an %s", async (_name, type, data) => {
+  ] as const)("fails closed on an %s", async (_name: "unexpected type" | "corrupt payload", type: "other.fact" | "gateway.send.admitted", data: PlainObject | { readonly signature: 7 }) => {
     const input = buildSendInput({ messageId: `message:bad-${_name}` });
     const facts = Storage.get().decisionFacts;
     if (facts === undefined) throw new Error("decision fact sub-adapter missing");
@@ -365,9 +378,7 @@ describe("durable send admission faults", () => {
     });
     expect(recorded.kind).toBe("recorded");
 
-    await expect(messaging().send(input)).rejects.toThrow(
-      type === "other.fact" ? "unexpected fact type" : "corrupt send admission fact",
-    );
+    expect(await effectFailure(messaging().send(input))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -377,8 +388,9 @@ describe("durable send admission faults", () => {
     const detachedFacts = detached.decisionFacts;
     if (detachedFacts === undefined) throw new Error("decision fact sub-adapter missing");
     const reentrant = createExistingAgentMessaging({
-      requests: seededRequests(),
-      deliver: (message) => {
+    transaction: channelTransaction,
+      requests: channelRequests(seededRequests()),
+      deliver: (message: OutboundMessage) => {
         deliveries.push(message);
         return { value: "accepted" as const };
       },
@@ -403,7 +415,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      await expect(reentrant.send(input)).rejects.toThrow();
+      expect(await effectFailure(reentrant.send(input))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
       expect(
         detachedFacts.head(`gateway_send:${encodeURIComponent(input.messageId)}`),
       ).toBeUndefined();
@@ -416,8 +428,9 @@ describe("durable send admission faults", () => {
   test("fails closed when decision facts disappear before admission lookup", async () => {
     const detached = Storage.get();
     const withoutFacts = createExistingAgentMessaging({
-      requests: seededRequests(),
-      deliver: (message) => {
+    transaction: channelTransaction,
+      requests: channelRequests(seededRequests()),
+      deliver: (message: OutboundMessage) => {
         deliveries.push(message);
         return { value: "accepted" as const };
       },
@@ -433,7 +446,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      await expect(withoutFacts.send(buildSendInput())).rejects.toThrow();
+      expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
       expect(deliveries).toEqual([]);
     } finally {
       Storage.configure(detached);
@@ -441,23 +454,23 @@ describe("durable send admission faults", () => {
   });
 
   test("fails closed when a concurrent record returns a corrupt winner", async () => {
-    replaceDecisionFacts((facts) => ({
+    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact) => {
+      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         facts.record({ ...fact, data: { signature: 7 } });
         return facts.record(fact);
       },
     }));
 
-    await expect(messaging().send(buildSendInput())).rejects.toThrow();
+    expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
   test("an incompatible concurrent admission still rejects an awaited send", async () => {
-    replaceDecisionFacts((facts) => ({
+    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact) => {
+      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         const data = z.record(z.string(), z.json()).parse(fact.data);
         expect(facts.record({ ...fact, data: { ...data, signature: "conflicting" } }).kind).toBe(
@@ -466,16 +479,14 @@ describe("durable send admission faults", () => {
         return facts.record(fact);
       },
     }));
-    await expect(messaging().send(buildAwaitedSendInput())).rejects.toThrow(
-      "already admitted with different content",
-    );
+    expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
   test("uses the matching admission that won a concurrent record race", async () => {
-    replaceDecisionFacts((facts) => ({
+    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact) => {
+      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         const result = facts.record(fact);
         expect(result.kind).toBe("recorded");
@@ -483,7 +494,7 @@ describe("durable send admission faults", () => {
       },
     }));
 
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
 
     expect(receipt.kind).toBe("sent");
     expect(deliveries).toHaveLength(1);
@@ -491,32 +502,29 @@ describe("durable send admission faults", () => {
 
   test("propagates an unexpected request-store failure before delivery", async () => {
     const service = createExistingAgentMessaging({
+    transaction: channelTransaction,
       requests: {
-        ...seededRequests(),
+        ...channelRequests(seededRequests()),
         open: () => {
           throw new Error("request commit unavailable");
         },
       },
-      deliver: (message) => {
+      deliver: (message: OutboundMessage) => {
         deliveries.push(message);
         return { value: "accepted" };
       },
       grants: () => grants,
       publish: Bus.publish,
     });
-    await expect(service.send(buildAwaitedSendInput())).rejects.toThrow(
-      "request commit unavailable",
-    );
+    expect(await effectFailure(service.send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
   test("reusing a fire-and-forget message id with different bytes throws before delivery", async () => {
     const first = buildSendInput({ messageId: "message:immutable" });
-    expect((await messaging().send(first)).kind).toBe("sent");
+    expect((await runEffect(messaging().send(first))).kind).toBe("sent");
 
-    await expect(messaging().send({ ...first, body: "mutated body" })).rejects.toThrow(
-      "already admitted with different content",
-    );
+    expect(await effectFailure(messaging().send({ ...first, body: "mutated body" }))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
   });
 
@@ -529,8 +537,8 @@ describe("durable send admission faults", () => {
       requestSpec: { ...spec, correlation: { tokenHash: "second" } },
     });
 
-    expect((await messaging().send(first)).kind).toBe("sent");
-    await expect(messaging().send(second)).rejects.toThrow("request open refused");
+    expect((await runEffect(messaging().send(first))).kind).toBe("sent");
+    expect(await effectFailure(messaging().send(second))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
     expect(SessionHandleStore.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
       "message:first-owner",
@@ -564,7 +572,8 @@ async function probe(point: FaultPoint): Promise<Probe> {
   let failAfterReceipt = point === "after_receipt_cas";
 
   const messaging = createExistingAgentMessaging({
-    requests: seededRequests(),
+    transaction: channelTransaction,
+    requests: channelRequests(seededRequests()),
     deliver: (message: OutboundMessage) => {
       attempts += 1;
       if (failBeforeEffect) {
@@ -586,7 +595,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
     },
     grants: () => [buildGrant("grant:reconciliation")],
     budgets: () => [activeBudget],
-    publish: (event) => {
+    publish: <T>(event: import("@openomni/protocol").BusEvent.Descriptor<T>) => {
       if (event.name === "messaging.sent" && failAfterReceipt) {
         failAfterReceipt = false;
         throw new Error(`fault:${point}`);
@@ -606,8 +615,8 @@ async function probe(point: FaultPoint): Promise<Probe> {
           })(),
         });
 
-  await expect(messaging.send(input)).rejects.toThrow(`fault:${point}`);
-  const resumed = await messaging.send(input);
+  expect(await effectFailure(messaging.send(input))).toMatchObject(point === "after_receipt_cas" ? { name: "Error" } : { _tag: "ForeignFailure", operation: "message.deliver" });
+  const resumed = await runEffect(messaging.send(input));
 
   return {
     receipts: [resumed],
@@ -633,7 +642,7 @@ describe("gateway send crash reconciliation transition table", () => {
     ["after_wait", 2],
     ["after_effect", 2],
     ["after_receipt_cas", 2],
-  ] as const)("%s resumes with one debit and one external effect", async (point, attempts) => {
+  ] as const)("%s resumes with one debit and one external effect", async (point: "after_debit" | "after_wait" | "after_effect" | "after_receipt_cas", attempts: 2) => {
     const result = await probe(point);
 
     expect(result.receipts[0]?.kind).toBe("sent");

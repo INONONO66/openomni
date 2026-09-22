@@ -1,30 +1,35 @@
-import { afterEach, beforeEach, expect, it } from "bun:test";
+import { Effect, Fiber } from "effect";
+import { isolated } from "./helpers/isolated";
+import { ForeignFailure } from "../src/errors";
+import { expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
-import type { LedgerAction, SessionTransition } from "@openomni/protocol";
+import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { createTurnDispatcher, defineTool, eraseTool } from "../src/tool-dispatcher";
 import { createSessionRequests } from "../src/session-requests";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { requestLedger, crashAfterRequestOpen } from "./helpers/request-ledger";
+import { requestLedger, crashAfterRequestOpen, failure, type RequestLedger } from "./helpers/effect-g1";
 import { bounded } from "./helpers/bounded";
 
-let directory: string;
-let dbPath: string;
-beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), "request-recovery-"));
-  dbPath = join(directory, "ledger.sqlite");
-  Storage.initialize({ dbPath });
-});
-afterEach(() => {
-  Storage.reset();
-  rmSync(directory, { recursive: true, force: true });
-});
+function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope>) {
+  return isolated(Effect.scoped(Effect.gen(function* () {
+    const directory = mkdtempSync(join(tmpdir(), "request-recovery-"));
+    const dbPath = join(directory, "ledger.sqlite");
+    Storage.reset();
+    Storage.initialize({ dbPath });
+    yield* Effect.addFinalizer(() => Effect.sync(() => {
+      Storage.reset();
+      rmSync(directory, { recursive: true, force: true });
+    }));
+    return yield* program(dbPath);
+  })));
+}
 const proof = { kind: "owner", principalId: "owner", evidenceId: "authenticated" } as const;
 function definitions(bodies: string[]) {
-  return ["read", "write", "last"].map((name) =>
+  return ["read", "write", "last"].map((name: string) =>
     eraseTool(
       defineTool(
         {
@@ -35,24 +40,24 @@ function definitions(bodies: string[]) {
           output: z.object({ value: z.string() }).strict(),
           visibility: { model: ["resident"], cell: ["resident"] },
           ...(name === "last" ? { sequential: true as const } : {}),
-          execute: async (input) => {
+          execute: async (input: { text: string }) => {
             bodies.push(`${name}:${input.text}`);
             return { value: input.text };
           },
-          render: (_input, result) => result.value,
+          render: (_input: { text: string }, result: { value: string }) => result.value,
         },
         () => ({ required: name === "write", domainRevisions: {} }),
       ),
     ),
   );
 }
-const calls = ["read", "write", "last"].map((tool) => ({
+const calls = ["read", "write", "last"].map((tool: string) => ({
   id: `call:${tool}`,
   tool,
   input: { text: `original:${tool}` },
 }));
 function dispatcher(
-  recording: ReturnType<typeof requestLedger>,
+  recording: RequestLedger,
   bodies: string[],
   ready?: () => void,
 ) {
@@ -74,7 +79,7 @@ function dispatcher(
       clock: recording.clock,
       entropy: recording.entropy,
       observations: { publish: () => undefined },
-      authorizeApproval: async () => proof,
+      authorizeApproval: () => Effect.succeed(proof),
     },
   );
   return result;
@@ -102,54 +107,57 @@ function ownerAnswer(request: SessionTransition.Request): SessionTransition.Answ
     content: "approve",
   };
 }
-it("reopens SQLite and resumes the exact original wave without a model reconstruction", async () => {
+it("reopens SQLite and resumes the exact original wave without a model reconstruction", () => persisted((dbPath: string) => Effect.gen(function* () {
   const bodies: string[] = [];
-  const initial = requestLedger();
+  const initial = yield* requestLedger();
   const crashed = dispatcher(
-    crashAfterRequestOpen(initial, "process lost after durable suspension"), bodies,
+    crashAfterRequestOpen(initial, "process lost after durable suspension"),
+    bodies,
   );
-  await expect(
+  expect(yield* failure(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
-  ).rejects.toThrow("process lost");
+  )).toMatchObject({ _tag: "ForeignFailure", operation: "process lost after durable suspension" });
   const originalId = currentRequest().requestId;
   expect(bodies).toEqual([]);
   Storage.reset();
   Storage.initialize({ dbPath });
   const ready = Promise.withResolvers<void>();
-  const recovered = dispatcher(requestLedger(), bodies, ready.resolve);
-  const recovering = recovered.executor.recover?.();
-  if (recovering === undefined) throw new Error("missing recovery");
-  await bounded(ready.promise);
-  const pending = recovered.executor.approvals?.pending()[0];
-  if (pending === undefined) throw new Error("missing recovered approval");
+  const recovered = dispatcher(yield* requestLedger(), bodies, ready.resolve);
+  const recovery = recovered.executor.recover?.();
+  if (recovery === undefined) throw new Error("missing recovery");
+  const recovering = yield* Effect.forkScoped(recovery);
+  yield* Effect.promise(() => bounded(ready.promise));
+  const approvals = recovered.executor.approvals;
+  const pending = approvals?.pending()[0];
+  if (approvals === undefined || pending === undefined) throw new Error("missing recovered approval");
   expect(pending.id).toBe(originalId);
   expect(pending.durable.parsedInput).toEqual({ text: "original:write" });
-  await recovered.executor.approvals?.answer({
+  yield* approvals.answer({
     request: pending,
     credential: "proof",
     decision: "approve",
   });
-  await bounded(recovering);
+  yield* Fiber.join(recovering);
   expect(bodies).toEqual(["read:original:read", "write:original:write", "last:original:last"]);
-  await recovered.executor.recover?.();
+  yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   expect(
     SessionHandleStore.tree(initial.identity.sessionId).filter(
-      (action) => action.id === `${originalId}:application`,
+      (action: LedgerAction.Node) => action.id === `${originalId}:application`,
     ),
   ).toHaveLength(1);
-});
-it("a committed application claim prevents replay after result persistence fails", async () => {
+})));
+it("a committed application claim prevents replay after result persistence fails", () => persisted((dbPath: string) => Effect.gen(function* () {
   const bodies: string[] = [];
   const ready = Promise.withResolvers<void>();
-  const initial = requestLedger();
+  const initial = yield* requestLedger();
   const commit = initial.ledger.commit;
   const crashed = dispatcher(
     {
       ...initial,
       ledger: {
         ...initial.ledger,
-        async commit(action: LedgerAction.Append) {
+        commit(action: LedgerAction.Append) {
           const effect = action.effect.value;
           if (
             action.kind === "tool" &&
@@ -158,7 +166,7 @@ it("a committed application claim prevents replay after result persistence fails
             !Array.isArray(effect) &&
             effect.phase === "result"
           )
-            throw new Error("process lost before result");
+            return Effect.die(new ForeignFailure({ operation: "result.persist", cause: "crash" }));
           return commit(action);
         },
       },
@@ -170,60 +178,62 @@ it("a committed application claim prevents replay after result persistence fails
     sessionId: initial.identity.sessionId,
     turnId: "turn",
   });
-  const settled = Promise.allSettled([running]);
-  await bounded(ready.promise);
-  const pending = crashed.executor.approvals?.pending()[0];
-  if (pending === undefined) throw new Error("missing approval");
-  await crashed.executor.approvals?.answer({
+  const settled = yield* Effect.forkScoped(failure(running));
+  yield* Effect.promise(() => bounded(ready.promise));
+  const approvals = crashed.executor.approvals;
+  const pending = approvals?.pending()[0];
+  if (approvals === undefined || pending === undefined) throw new Error("missing approval");
+  yield* approvals.answer({
     request: pending,
     credential: "proof",
     decision: "approve",
   });
-  expect(await bounded(settled)).toMatchObject([
-    { status: "rejected", reason: { message: "process lost before result" } },
-  ]);
+  expect(yield* Fiber.join(settled)).toMatchObject({ _tag: "ForeignFailure", operation: "result.persist" });
   expect(bodies).toHaveLength(3);
   Storage.reset();
   Storage.initialize({ dbPath });
-  const recovered = dispatcher(requestLedger(), bodies);
-  await bounded(recovered.executor.recover?.() ?? Promise.reject(new Error("missing recovery")));
+  const recovered = dispatcher(yield* requestLedger(), bodies);
+  yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   const effects = SessionHandleStore.tree(initial.identity.sessionId).map(
-    (action) => action.effect.value,
+    (action: LedgerAction.Node) => action.effect.value,
   );
   expect(
     effects.filter(
-      (effect) =>
+      (effect: PlainValue) =>
         effect !== null &&
         typeof effect === "object" &&
         !Array.isArray(effect) &&
         effect.terminal === "outcome_unknown",
     ),
   ).toHaveLength(3);
-});
-it("a gateway answer cannot borrow another live owner's lease", async () => {
-  const initial = requestLedger();
+})));
+it("a gateway answer cannot borrow another live owner's lease", () => persisted((_dbPath: string) => Effect.gen(function* () {
+  const initial = yield* requestLedger();
   const crashed = dispatcher(crashAfterRequestOpen(initial, "lost"), []);
-  await expect(
+  expect(yield* failure(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
-  ).rejects.toThrow("lost");
+  )).toMatchObject({ _tag: "ForeignFailure", operation: "lost" });
   const request = currentRequest();
   const before = SessionHandleStore.row(request.sessionId);
   const gateway = createSessionRequests({
     clock: () => 200,
     observations: { publish: () => undefined },
   });
-  await expect(gateway.answer(ownerAnswer(request))).rejects.toMatchObject({
-    name: "SessionLeaseError",
-    result: { reason: "held" },
-  });
+  expect(yield* failure(gateway.answer(ownerAnswer(request)))).toMatchObject({
+    _tag: "CommitFailed", error: {
+    _tag: "LeaseRefused",
+    reason: "held",
+    holder: before.leaseOwner,
+    fence: before.leaseFence,
+  } });
   expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
   expect(currentRequest().state).toBe("open");
   const dormant = createSessionRequests({
     clock: () => 40_000,
     observations: { publish: () => undefined },
   });
-  expect(await dormant.answer(ownerAnswer(request))).toBe("resolved");
+  expect(yield* dormant.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");
   expect(SessionHandleStore.row(request.sessionId).leaseOwner).toBeNull();
-});
+})));

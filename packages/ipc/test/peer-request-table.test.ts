@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
 
 import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
-import { classifyIpcMessage, PeerRequestTable } from "../src/peer-request-table";
-import { captureError } from "./helpers/signal";
+import { classifyIpcMessage, PeerRequestTable } from "./helpers/native";
+import { captureError, deferred, within } from "./helpers/signal";
 
 type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
 
@@ -16,12 +16,14 @@ function requestFrom(frames: Frame[], index = 0): Ipc.Request {
 describe("PeerRequestTable", () => {
   test("call issues an id and correlates the matching response", async () => {
     const sent: Frame[] = [];
+    const issued = deferred();
     const table = new PeerRequestTable<string>({
-      send: (_peer, frame) => sent.push(frame),
+      send: (_peer, frame) => { sent.push(frame); issued.resolve(); },
       idSource: () => "request-injected",
     });
 
     const call = table.call("peer-a", "compute", { n: 21 }, 1_000);
+    await within(issued.promise, "request sent");
     const request = requestFrom(sent);
     expect(request.id).toBe("request-injected");
     expect(request.method).toBe("compute");
@@ -31,22 +33,26 @@ describe("PeerRequestTable", () => {
 
   test("a correlated error response rejects as IpcRemoteError", async () => {
     const sent: Frame[] = [];
-    const table = new PeerRequestTable<string>({ send: (_peer, frame) => sent.push(frame) });
+    const issued = deferred();
+    const table = new PeerRequestTable<string>({ send: (_peer, frame) => { sent.push(frame); issued.resolve(); } });
 
-    const call = table.call("peer-a", "refuse", undefined, 1_000);
+    const call = captureError(table.call("peer-a", "refuse", undefined, 1_000));
+    await within(issued.promise, "request sent");
     const request = requestFrom(sent);
     table.dispatch(Ipc.createErrorResponse(request.id, 1000, "no"), "peer-a");
 
-    const error = await captureError(call);
+    const error = await call;
     expect(error).toBeInstanceOf(IpcRemoteError);
     expect(error).toMatchObject({ code: 1000, message: "IPC error 1000: no" });
   });
 
   test("response correlation and disconnect rejection are scoped to the owning peer", async () => {
     const sent: Frame[] = [];
-    const table = new PeerRequestTable<string>({ send: (_peer, frame) => sent.push(frame) });
+    const issued = deferred();
+    const table = new PeerRequestTable<string>({ send: (_peer, frame) => { sent.push(frame); if (sent.length === 2) issued.resolve(); } });
     const callA = table.call("peer-a", "a", undefined, 1_000);
     const callB = table.call("peer-b", "b", undefined, 1_000);
+    await within(issued.promise, "both peer requests sent");
     const requestA = requestFrom(sent, 0);
     const requestB = requestFrom(sent, 1);
     let settledA = false;
@@ -62,7 +68,7 @@ describe("PeerRequestTable", () => {
     table.dispatch(Ipc.createResponse(requestA.id, "wrong peer"), "peer-b");
     expect(settledA).toBe(false);
 
-    const disconnectError = new IpcConnectionError("peer-a closed");
+    const disconnectError = new IpcConnectionError({ message: "peer-a closed" });
     table.disconnect("peer-a", disconnectError);
     await expect(callA).rejects.toBe(disconnectError);
 
@@ -79,14 +85,16 @@ describe("PeerRequestTable", () => {
   });
 
   test("disconnectAll rejects calls across peers", async () => {
-    const table = new PeerRequestTable<string>({ send: () => undefined });
-    const first = table.call("peer-a", "a", undefined, 1_000);
-    const second = table.call("peer-b", "b", undefined, 1_000);
-    const error = new IpcConnectionError("endpoint closed");
-
+    const issued = deferred();
+    let count = 0;
+    const table = new PeerRequestTable<string>({ send: () => { if (++count === 2) issued.resolve(); } });
+    const first = captureError(table.call("peer-a", "a", undefined, 1_000));
+    const second = captureError(table.call("peer-b", "b", undefined, 1_000));
+    const error = new IpcConnectionError({ message: "endpoint closed" });
+    await within(issued.promise, "both requests sent");
     table.disconnectAll(error);
-    await expect(first).rejects.toBe(error);
-    await expect(second).rejects.toBe(error);
+    expect(await first).toBe(error);
+    expect(await second).toBe(error);
   });
 
   test("dispatch invokes inbound request handlers with response and notification senders", () => {

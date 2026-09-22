@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +9,7 @@ import { startOpenOmni } from "../../src/index";
 import { closeSocket, openSocket } from "./ws";
 
 /** The provider-model resolution every fake-llm boot uses. */
-export const fakeProviderModel = async (model: { provider: string; id: string }) => ({
+export const fakeProviderModel = (model: { provider: string; id: string }) => Effect.succeed({
   id: model.id,
   name: model.id,
   providerID: model.provider,

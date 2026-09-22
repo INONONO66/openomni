@@ -1,3 +1,4 @@
+import { runEffect } from "../helpers/native";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -131,7 +132,7 @@ describe("ModelsDev catalog loading", () => {
       globalThis.fetch = fetchSpy;
 
       try {
-        const data = await ModelsDev.get();
+        const data = await runEffect(ModelsDev.get());
         expect(fetchSpy).toHaveBeenCalledTimes(1);
         expect(select(data)).toEqual(expected);
       } finally {
@@ -151,7 +152,7 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      const data = await ModelsDev.get();
+      const data = await runEffect(ModelsDev.get());
       expect(data.cached).toEqual({
         id: "cached",
         name: "Cached Provider",
@@ -174,7 +175,7 @@ describe("ModelsDev catalog loading", () => {
       });
 
       const snapshot = (await import("../../src/model/models-snapshot.json")).default;
-      await expect(ModelsDev.get()).resolves.toEqual(Catalog.parse(snapshot));
+      await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
     });
 
     it("should drop malformed model records from trusted providers", async () => {
@@ -191,7 +192,7 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      const data = await ModelsDev.get();
+      const data = await runEffect(ModelsDev.get());
       expect(data.openai?.models).toEqual({ valid: { id: "valid", name: "Valid Model" } });
     });
 
@@ -204,7 +205,7 @@ describe("ModelsDev catalog loading", () => {
         models: { ["__proto__"]: { id: "bad", name: "Bad" }, safe: { id: "safe", name: "Safe" } },
       };
       await writeCacheCatalog(JSON.stringify({ ["__proto__"]: provider, safe: provider }));
-      const data = await ModelsDev.get();
+      const data = await runEffect(ModelsDev.get());
       expect(Object.keys(data)).toEqual(["safe"]);
       expect(Object.keys(data.safe?.models ?? {})).toEqual(["safe"]);
       expect(Reflect.ownKeys(data).includes("__proto__")).toBe(false);

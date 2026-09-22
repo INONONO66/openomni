@@ -1,4 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
+import { Effect } from "effect";
 import {
   SessionGeneration,
   SessionTurn,
@@ -9,6 +10,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { RunReasonCode } from "./core/policy/reason-codes";
+import { GenerationUnavailable } from "./errors";
 import {
   SessionCommitError,
   SessionPolicyRefusal,
@@ -321,7 +323,7 @@ export function sessionRunnerResultFromValue(value: PlainValue): SessionRunnerRe
   return result.success ? result.data : undefined;
 }
 
-export function generationForOpen(open: SessionHandleStore.OpenTurn): SessionGeneration.Snapshot {
+export function generationForOpen(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionGeneration.Snapshot, GenerationUnavailable> {
   const snapshot = SessionHandleStore.generationByNumber(
     SessionHandleStore.tree(open.action.sessionId),
     open.toolsGeneration,
@@ -332,7 +334,7 @@ export function generationForOpen(open: SessionHandleStore.OpenTurn): SessionGen
     snapshot.systemHash !== open.systemHash ||
     snapshot.policyGeneration !== open.policyGeneration
   ) {
-    throw new Error(`pinned session generation unavailable: ${open.toolsGeneration}`);
+    return Effect.fail(new GenerationUnavailable({ generation: open.toolsGeneration }));
   }
-  return snapshot;
+  return Effect.succeed(snapshot);
 }

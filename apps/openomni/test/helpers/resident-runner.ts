@@ -1,14 +1,17 @@
 import { afterEach } from "bun:test";
 import { Bus, closeSessions, wakeSession, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
-import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/retry-alarm";
+import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
+import { runEffect } from "./effect";
+import { effectScope } from "./effect-scope";
+
 import { commitMessageInbox } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 
-const runtimes: SessionRuntime[] = [];
+const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
-  for (const runtime of runtimes.splice(0)) await closeSessions(runtime);
+  for (const close of cleanups.splice(0)) await close();
 });
 
 export function residentRunner(
@@ -19,7 +22,11 @@ export function residentRunner(
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
   };
-  runtimes.push(runtime);
+  const scope = effectScope();
+  cleanups.push(async () => {
+    await runEffect(closeSessions(runtime));
+    await scope.close();
+  });
   seedKernelPolicyRows();
   const resident = createResident({ ...options, sessionRuntime: runtime });
   return {
@@ -27,7 +34,7 @@ export function residentRunner(
     runtime,
     async prompt(sessionId: string, content: string) {
       const exists = SessionHandleStore.listRows().some((row) => row.id === sessionId);
-      commitMessageInbox({
+      await runEffect(commitMessageInbox({
         id: crypto.randomUUID(),
         sessionId,
         kind: "prompt",
@@ -38,12 +45,12 @@ export function residentRunner(
         ...(exists
           ? {}
           : { createSession: resident.materialize(sessionId, null, "resident", "resident") }),
-      });
-      const result = await wakeSession(
+      }));
+      const result = await scope.run(wakeSession(
         sessionId,
         resident.runnerFor(SessionHandleStore.row(sessionId)),
         runtime,
-      );
+      ));
       if (result === undefined) throw new Error("resident turn returned no result");
       return result;
     },

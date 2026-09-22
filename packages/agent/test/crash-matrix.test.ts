@@ -1,3 +1,6 @@
+import { isolated } from "./helpers/isolated";
+import type { ExecutionError } from "../src/errors";
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,11 +13,12 @@ import { createExecutor } from "../src/executor";
 import { closeSessions, wakeSession, type SessionRuntime } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { bounded } from "./helpers/bounded";
+import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { countingRunner } from "./helpers/counting-runner";
+import { countingRunner } from "./helpers/counting-runner-g1";
 import { nth } from "./helpers/nth";
-import { receiveOutbound } from "./helpers/receive-outbound";
-import { requestLedger } from "./helpers/request-ledger";
+import { receiveOutbound } from "./helpers/effect-g2";
+import { requestLedger } from "./helpers/effect-g1";
 import {
   checkpointEvidence,
   committedCompactionPoints,
@@ -33,7 +37,7 @@ import {
 const matrix = matrixSchema.parse(
   await Bun.file(new URL("../../../script/conformance/crash-matrix.json", import.meta.url)).json(),
 );
-const worker = new URL("./helpers/crash-matrix.ts", import.meta.url).pathname;
+const worker = new URL("./helpers/crash-matrix-g1.ts", import.meta.url).pathname;
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
@@ -83,15 +87,16 @@ async function crash(point: CrashPoint, dbPath: string, stage = "initial"): Prom
   }
 }
 
-async function recoverExecutor(witness: Witness) {
+function recoverExecutor(witness: Witness) {
+  return Effect.gen(function* () {
   const before = actions();
   const history = foldSessionHistory(sessionId, before);
-  const recording = requestLedger({ id: sessionId, clock: () => 100_000 });
+  const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
   const executor = createExecutor({ ...recording, observations, policy: compiledPolicy() });
-  await executor.recover();
+  yield* executor.recover();
   expect(actions().slice(0, before.length)).toEqual(before);
   const recovered = actions();
-  await executor.recover();
+  yield* executor.recover();
   expect(actions()).toEqual(recovered);
   switch (witness.crashPoint) {
     case "llm_body_before_attempt_result_commit":
@@ -152,21 +157,25 @@ async function recoverExecutor(witness: Witness) {
       return terminalClass(nth(results("compaction"), 0));
     }
   }
+  });
 }
 
 /** Wakes the recovered session once and returns the turn terminals; the pre-crash prefix must be untouched. */
-async function wakeAfterCrash(
-  witness: Witness,
+function wakeAfterCrash(
+  _witness: Witness,
   runner: ReturnType<typeof countingRunner>,
   runtime: SessionRuntime,
   before: LedgerAction.Node[],
 ) {
-  await bounded(wakeSession(sessionId, runner, runtime), witness.crashPoint);
+  return Effect.gen(function* () {
+  yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
   expect(actions().slice(0, before.length)).toEqual(before);
   return actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
+  });
 }
 
-async function recoverAdmission(witness: Witness) {
+function recoverAdmission(witness: Witness) {
+  return Effect.gen(function* () {
   const before = actions();
   const originalTurns = SessionHandleStore.openTurns(before);
   const originalInbox = SessionHandleStore.pendingInbox(sessionId);
@@ -176,15 +185,15 @@ async function recoverAdmission(witness: Witness) {
   const runtime: SessionRuntime = {
     observations,
     clock: () => 100_000,
-    dispatchOutbound: async ({ message }) => {
+    dispatchOutbound: ({ message }) => Effect.gen(function* () {
       deliveries += 1;
       expect([message]).toEqual(originalOutbound.map((item) => item.message));
-      return receiveOutbound(message, 100_000).receipt;
-    },
+      return (yield* receiveOutbound(message, 100_000)).receipt;
+    }),
   };
   const runner = countingRunner(runtime, calls);
   try {
-    const terminals = await wakeAfterCrash(witness, runner, runtime, before);
+    const terminals = yield* wakeAfterCrash(witness, runner, runtime, before);
     expect(terminals).toHaveLength(1);
     if (witness.crashPoint === "outbound_reply_before_delivery_settle") {
       expect(witness.bodies).toEqual(["reply"]);
@@ -195,7 +204,7 @@ async function recoverAdmission(witness: Witness) {
       expect(deliveries).toBe(1);
       expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([{ state: "delivered" }]);
       const revision = SessionHandleStore.row(sessionId).revision;
-      await wakeSession(sessionId, runner, runtime);
+      yield* wakeSession(sessionId, runner, runtime);
       expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
       expect(deliveries).toBe(1);
       return "rearmed";
@@ -217,11 +226,13 @@ async function recoverAdmission(witness: Witness) {
     expect(SessionHandleStore.inboxRows(sessionId)).toHaveLength(1);
     return "rearmed";
   } finally {
-    await closeSessions(runtime);
+    yield* closeSessions(runtime);
   }
+  });
 }
 
-async function recoverCommittedCompaction(witness: Witness) {
+function recoverCommittedCompaction(witness: Witness) {
+  return Effect.gen(function* () {
   const before = actions();
   const inbox = SessionHandleStore.pendingInbox(sessionId);
   expect(witness.bodies).toEqual(["summary"]);
@@ -239,18 +250,19 @@ async function recoverCommittedCompaction(witness: Witness) {
     expect(inbox.map((item) => item.id)).toEqual(["tail"]);
     expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
   } else expect(inbox).toEqual([]);
-  const recording = requestLedger({ id: sessionId, clock: () => 100_000 });
+  const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
   const executor = createExecutor({ ...recording, observations, policy: compiledPolicy() });
-  await executor.recover();
+  yield* executor.recover();
   expect(actions()).toEqual(before);
   const recovered = foldSessionHistory(sessionId, actions());
   expect(recovered).toEqual(history);
   expectCompactedProjection(recovered, originalAnswer);
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
-  await executor.recover();
+  yield* executor.recover();
   expect(actions()).toEqual(before);
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
   return terminalClass(result);
+  });
 }
 
 /** Independent of the stored projection: the summary replaced `earlier`, the protected answer survived verbatim. */
@@ -285,7 +297,9 @@ function expectCompactedProjection(
       metadata: {
         compactionAnchor: true,
         anchorBody: "checkpoint",
-        keptWindow: [{ role: "assistant", text: "answer", time: originalAnswer?.info.time.created }],
+        keptWindow: [
+          { role: "assistant", text: "answer", time: originalAnswer?.info.time.created },
+        ],
       },
     },
   ]);
@@ -294,7 +308,8 @@ function expectCompactedProjection(
   expect(texts[1]).toBe("answer");
 }
 
-async function recoverTurn(witness: Witness, resumeCount: number, onModel = () => undefined) {
+function recoverTurn(witness: Witness, resumeCount: number, onModel: () => Effect.Effect<void, ExecutionError> = () => Effect.void) {
+  return Effect.gen(function* () {
   const before = actions();
   const original = crashWitness.shape.openTurns.element.parse(witness.openTurns[0]);
   expect(witness.openTurns).toHaveLength(1);
@@ -302,7 +317,7 @@ async function recoverTurn(witness: Witness, resumeCount: number, onModel = () =
   const runtime: SessionRuntime = { observations, clock: () => 200_000 };
   const runner = countingRunner(runtime, calls, onModel);
   try {
-    const terminals = await wakeAfterCrash(witness, runner, runtime, before);
+    const terminals = yield* wakeAfterCrash(witness, runner, runtime, before);
     expect(terminals.map((action) => action.id)).toEqual([original.resultId]);
     expect(SessionHandleStore.turnTerminal(nth(terminals, 0))).toMatchObject({
       turnId: original.turnId,
@@ -313,20 +328,22 @@ async function recoverTurn(witness: Witness, resumeCount: number, onModel = () =
     expect(calls.model).toBe(1);
     const recovered = actions();
     const revision = SessionHandleStore.row(sessionId).revision;
-    await bounded(wakeSession(sessionId, runner, runtime), "settled turn wake");
+    yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
     expect(actions()).toEqual(recovered);
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
     expect(calls.model).toBe(1);
     return "resumed_without_reexecution";
   } finally {
-    await closeSessions(runtime);
+    yield* closeSessions(runtime);
   }
+  });
 }
 
-async function recoverContinuation(witness: Witness) {
+function recoverContinuation(witness: Witness) {
+  return Effect.gen(function* () {
   expect(witness.bodies).toEqual([]);
   expect(witness.openTurns.map((turn) => turn.resumeCount)).toEqual([1]);
-  const result = await recoverTurn(witness, 2);
+  const result = yield* recoverTurn(witness, 2);
   expect(
     actions()
       .filter((action) => action.kind === "turn" && intentOf(action).phase === "resume")
@@ -336,6 +353,7 @@ async function recoverContinuation(witness: Witness) {
       })),
   ).toEqual([1, 2].map((resumeCount) => ({ turnId: witness.openTurns[0]?.turnId, resumeCount })));
   return result;
+  });
 }
 
 /**
@@ -343,10 +361,14 @@ async function recoverContinuation(witness: Witness) {
  * consumes it exactly once (fenced cancel CAS) and wakes the session, whose open
  * turn re-runs the model attempt exactly once.
  */
-async function recoverRetryAlarm(witness: Witness) {
+function recoverRetryAlarm(witness: Witness) {
+  return Effect.gen(function* () {
   expect(witness.bodies).toEqual(["llm"]);
   const attempts = actions().filter((action) => action.kind === "attempt");
-  expect(attempts.map(intentOf)).toMatchObject([{ phase: "intent", attempt: 1 }, { phase: "result" }]);
+  expect(attempts.map(intentOf)).toMatchObject([
+    { phase: "intent", attempt: 1 },
+    { phase: "result" },
+  ]);
   const alarmId = `${nth(attempts, 0).id}:retry:1`;
   const armed = actions().find((action) => action.id === alarmId);
   expect(armed).toMatchObject({
@@ -355,25 +377,29 @@ async function recoverRetryAlarm(witness: Witness) {
       value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
     },
   });
-  expect(
-    Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason,
-  ).toBe("transient_error");
+  expect(Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason).toBe(
+    "transient_error",
+  );
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
   // Boot alarm owner: fenced consume-once, then wake. A second consume finds nothing.
   const alarms = Storage.get().alarms;
-  const consumed = alarms?.cancel(alarmId, sessionId, 100_000);
+  const consumed = (yield* alarms?.cancel(alarmId, sessionId, 100_000) ??
+          Effect.die("missing test storage capability"));
   expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  expect(alarms?.cancel(alarmId, sessionId, 100_000)).toBeUndefined();
-  expect(await recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
+  const repeatedCancel = yield* Effect.either(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
+  expect(Either.isLeft(repeatedCancel) ? repeatedCancel.left : undefined).toMatchObject({ _tag: "AlarmRefused" });
+  expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
   expect(
     actions().filter((action) => action.kind === "alarm.arm" && action.id.includes(":retry:")),
   ).toHaveLength(1);
   return "rearmed";
+  });
 }
 
-async function recoverStaleOwner(witness: Witness) {
+function recoverStaleOwner(witness: Witness) {
+  return Effect.gen(function* () {
   expect(witness.bodies).toEqual(["llm"]);
   const staleAction = LedgerAction.Append.parse(witness.staleAction);
   expect(staleAction.kind).toBe("attempt");
@@ -382,33 +408,27 @@ async function recoverStaleOwner(witness: Witness) {
   const expiresAt = z.number().parse(witness.lease.expiresAt);
   expect(expiresAt).toBe(100 + SessionHandleStore.LEASE_TTL_MS);
   let refusals = 0;
-  await recoverTurn(witness, 1, () => {
+  yield* recoverTurn(witness, 1, () => Effect.gen(function* () {
     const current = SessionHandleStore.row(sessionId);
     expect(current.leaseOwner).not.toBe(owner);
     expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
     expect(200_000).toBeGreaterThan(expiresAt);
     const before = actions();
-    const refused = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: witness.lease.fence,
-      now: 200_000,
-      expectedRevision: current.revision,
-      actions: [staleAction],
-      consumeInboxIds: [],
-      state: current.state,
-      releaseLease: false,
-    });
-    expect(refused).toMatchObject({ ok: false, reason: "stale" });
+    const refused = yield* Effect.either(SessionHandleStore.commit({
+      sessionId, owner, fence: witness.lease.fence, now: 200_000,
+      expectedRevision: current.revision, actions: [staleAction], consumeInboxIds: [], state: current.state, releaseLease: false,
+    }));
+    expect(Either.isLeft(refused) ? refused.left : undefined).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
     expect(actions()).toEqual(before);
     expect(SessionHandleStore.row(sessionId)).toEqual(current);
     refusals += 1;
     return undefined;
-  });
+  }));
   expect(refusals).toBe(1);
   // The typed rejection is atomic: the stale writer's effect row never appears.
   expect(actions().some((action) => action.id === staleAction.id)).toBe(false);
   return "rejected";
+  });
 }
 
 function assertOutboundCut(witness: Witness) {
@@ -441,37 +461,40 @@ function assertOutboundCut(witness: Witness) {
 }
 
 function reclaimAcknowledgedLease(witness: Witness) {
+  return Effect.gen(function* () {
   const row = SessionHandleStore.row(sessionId);
   expect(row.leaseOwner).toBe(witness.lease.owner);
   expect(row.leaseFence).toBe(witness.lease.fence);
   expect(z.number().parse(row.leaseExpiresAt)).toBeLessThan(200_000);
   const owner = "cleanup-owner";
-  const lease = SessionHandleStore.acquireLease({
-    sessionId,
-    owner,
-    expectedFence: row.leaseFence,
-    now: 200_000,
-    expiresAt: 200_000 + SessionHandleStore.LEASE_TTL_MS,
-  });
+  const lease = (yield* SessionHandleStore.acquireLease({
+          sessionId,
+          owner,
+          expectedFence: row.leaseFence,
+          now: 200_000,
+          expiresAt: 200_000 + SessionHandleStore.LEASE_TTL_MS,
+        }));
   expect(lease.ok).toBe(true);
   if (!lease.ok) throw new Error("acknowledged lease was not reacquirable");
   expect(
-    SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: lease.fence,
-      now: 200_000,
-      expectedRevision: row.revision,
-      actions: [],
-      consumeInboxIds: [],
-      state: row.state,
-      releaseLease: true,
-    }).ok,
+    (yield* SessionHandleStore.commit({
+            sessionId,
+            owner,
+            fence: lease.fence,
+            now: 200_000,
+            expectedRevision: row.revision,
+            actions: [],
+            consumeInboxIds: [],
+            state: row.state,
+            releaseLease: true,
+          })).ok,
   ).toBe(true);
   expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
+  });
 }
 
-async function recoverOutbound(witness: Witness, dbPath: string) {
+function recoverOutbound(witness: Witness, dbPath: string) {
+  return Effect.gen(function* () {
   const before = actions();
   const { item, acked, destination } = assertOutboundCut(witness);
   const external = witness.crashPoint === "platform_send_ambiguous_without_reconciliation";
@@ -482,16 +505,16 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
   const runtime: SessionRuntime = {
     observations,
     clock: () => 200_000,
-    dispatchOutbound: async ({ message }) => {
+    dispatchOutbound: ({ message }) => Effect.gen(function* () {
       deliveries += 1;
       expect(message).toEqual(item.message);
       if (external) appendFileSync(platformPath, `${message.messageId}\n`);
-      return receiveOutbound(message, 200_000).receipt;
-    },
+      return (yield* receiveOutbound(message, 200_000)).receipt;
+    }),
   };
   const runner = countingRunner(runtime, calls);
   try {
-    await wakeAfterCrash(witness, runner, runtime, before);
+    yield* wakeAfterCrash(witness, runner, runtime, before);
     expect(calls.model).toBe(0);
     expect(deliveries).toBe(acked ? 0 : 1);
     expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([
@@ -505,11 +528,11 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
     expect(
       actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined),
     ).toHaveLength(1);
-    if (acked) reclaimAcknowledgedLease(witness);
+    if (acked) yield* reclaimAcknowledgedLease(witness);
     expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
     const revision = SessionHandleStore.row(sessionId).revision;
     const recovered = actions();
-    await bounded(wakeSession(sessionId, runner, runtime), "settled outbound wake");
+    yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
     expect(actions()).toEqual(recovered);
     expect(deliveries).toBe(acked ? 0 : 1);
@@ -521,28 +544,31 @@ async function recoverOutbound(witness: Witness, dbPath: string) {
     if (acked) return "resumed_without_reexecution";
     return external || destination.length === 1 ? "replayed" : "rearmed";
   } finally {
-    await closeSessions(runtime);
+    yield* closeSessions(runtime);
   }
+  });
 }
 
-async function recoverCell(witness: Witness, dbPath: string) {
-  if (committedCompactionPoints.has(witness.crashPoint)) return recoverCommittedCompaction(witness);
+function recoverCell(witness: Witness, dbPath: string) {
+  return Effect.gen(function* () {
+  if (committedCompactionPoints.has(witness.crashPoint)) return yield* recoverCommittedCompaction(witness);
   if (witness.crashPoint === "outbound_reply_before_delivery_settle")
-    return recoverAdmission(witness);
-  if (outboundPoints.has(witness.crashPoint)) return recoverOutbound(witness, dbPath);
+    return yield* recoverAdmission(witness);
+  if (outboundPoints.has(witness.crashPoint)) return yield* recoverOutbound(witness, dbPath);
   switch (witness.crashPoint) {
     case "recovery_dispatch_identity_committed_before_rpc":
-      return recoverContinuation(witness);
+      return yield* recoverContinuation(witness);
     case "retry_backoff_wait":
-      return recoverRetryAlarm(witness);
+      return yield* recoverRetryAlarm(witness);
     case "owner_reclaimed_before_stale_transcript_flush":
-      return recoverStaleOwner(witness);
+      return yield* recoverStaleOwner(witness);
     case "turn_intent_before_llm_entry":
     case "inbox_admitted_before_turn_open":
-      return recoverAdmission(witness);
+      return yield* recoverAdmission(witness);
     default:
-      return recoverExecutor(witness);
+      return yield* recoverExecutor(witness);
   }
+  });
 }
 
 async function crashCell(point: CrashPoint, dbPath: string) {
@@ -568,20 +594,23 @@ for (const row of matrix.rows) {
   test(`SQLite crash recovery matches the authoritative matrix cell ${row.crashPoint}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "crash-matrix-"));
     try {
-      const result = await Storage.withIsolation(async () => {
+      const result = await isolated(Effect.scoped(Effect.gen(function* () {
         const dbPath = join(directory, "kernel.sqlite");
-        const witness = await crashCell(row.crashPoint, dbPath);
+        if (row.crashPoint === "fiber_exit_after_execute_before_action_commit")
+          return yield* Effect.promise(() => fiberCrashCell(dbPath));
+        const witness = yield* Effect.promise(() => crashCell(row.crashPoint, dbPath));
+        Storage.reset();
         Storage.initialize({ dbPath });
         const persisted = actions();
         Storage.reset();
         Storage.initialize({ dbPath });
         try {
           expect(actions()).toEqual(persisted);
-          return await recoverCell(witness, dbPath);
+          return yield* recoverCell(witness, dbPath);
         } finally {
           Storage.reset();
         }
-      });
+      })));
       expect(recovery.parse(result)).toBe(row.recovery);
     } finally {
       rmSync(directory, { recursive: true, force: true });

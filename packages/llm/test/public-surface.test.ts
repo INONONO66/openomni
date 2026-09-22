@@ -1,10 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 import type { Sink } from "../src";
+import { Llm } from "../src/services";
+import { APIError, ForeignFailure } from "../src/errors";
+import { Context } from "effect";
+
+test("LLM service and error values retain their machine tags", () => {
+  const service = { run: (): never => { throw new Error("fixture"); }, resolveModel: (): never => { throw new Error("fixture"); } };
+  expect(Llm.key).toBe("@openomni/llm/Llm");
+  expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
+  expect(new APIError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
+  expect(new ForeignFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
+});
 
 describe("@openomni/llm root public surface", () => {
   test("967 public sink excludes fact tap", async () => {
-    // Given: the public type and its machine-readable declaration.
     const callbacks = {
       onMessage: true,
       onToolCall: true,
@@ -38,11 +48,20 @@ describe("@openomni/llm root public surface", () => {
     // Then: only package-level namespaces and entry points are exposed.
     // #500 C1: `Run` (Outcome vocabulary) moved here from protocol; `Sink` is type-only.
     expect(publicKeys).toEqual([
+      "APIError",
       "Auth",
+      "AuthInvalidFileError",
+      "AuthResolutionError",
+      "ForeignFailure",
+      "InvalidProviderData",
+      "Llm",
+      "LlmRunFailure",
+      "ModelResolutionError",
       "ModelsDev",
       "Provider",
+      "ProxyModelsError",
       "Retry",
-      "Run",
+      "TransportFailure",
       "accumulateUsage",
       "observeRetry",
       "run",
@@ -67,7 +86,6 @@ describe("@openomni/llm root public surface", () => {
       // imported these from the root barrel (internals still use them —
       // e.g. the stream fold reaches TokenTracker by deep import, per the
       // #606 re-audit).
-      "APIError",
       "NamedError",
       "TokenTracker",
     ] as const;

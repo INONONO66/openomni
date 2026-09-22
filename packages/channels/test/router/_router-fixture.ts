@@ -1,3 +1,7 @@
+import { Effect } from "effect";
+import { runEffect } from "../helpers/effect";
+import { channelRequests } from "../helpers/channel-requests";
+import { channelTransaction } from "../helpers/channel-transaction";
 import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
@@ -9,6 +13,7 @@ import {
   Storage,
   SurfaceKey,
 } from "@openomni/ledger";
+import { decodeChannelFailure } from "../../src/errors";
 import { Bus } from "../helpers/observation";
 import {
   createGatewayRouter,
@@ -76,8 +81,8 @@ export function kernelRouter(): GatewayRouter {
 export async function ownerMessageTargets(
   secondFacts: Gateway.IngressFacts = { ...ownerFacts, eventId: "second" },
 ) {
-  const first = await kernelRouter().ingest(ownerSender, ownerFacts);
-  const second = await kernelRouter().ingest(ownerSender, secondFacts);
+  const first = await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
+  const second = await runEffect(kernelRouter().ingest(ownerSender, secondFacts));
   if (first.status !== "executed" || second.status !== "executed")
     throw new Error("owner fixture was not admitted");
   return [first.handle.target, second.handle.target] as const;
@@ -123,7 +128,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
         match: { encodingVersion: 1, value: { op: "compaction" } },
         verdict: { encodingVersion: 1, value: { type: "allow" } },
       },
-      ...Gateway.RuleTableA.shape.check.options.map((check) => ({
+      ...Gateway.RuleTableA.shape.check.options.map((check: "identity" | "grant_tier" | "egress_budget" | "event_id_dedupe" | "reply_correlation") => ({
         generation: 1,
         name: `message.external.${check}`,
         kind: "message",
@@ -149,24 +154,25 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     ],
   });
   router = createGatewayRouter({
-    requests: requestPort(overrides.clock ?? Date.now, (sessionIds) => {
+    transaction: channelTransaction,
+    requests: channelRequests(requestPort(overrides.clock ?? Date.now, (sessionIds: readonly string[]) => {
       for (const sessionId of sessionIds) {
         for (const row of SessionHandleStore.inboxRows(sessionId)) {
-          if (commits.some((existing) => existing.id === row.id)) continue;
+          if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
           commits.push({ ...row, parentActionId: null });
           overrides.committed?.(row);
         }
       }
-    }),
-    sink: (event, data) => {
+    })),
+    sink: <T>(event: import("@openomni/protocol").BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
       }
       Bus.publish(event, data);
     },
     inbox: {
-      commit: (row) => {
-        SessionHandleStore.materialize({
+      commit: (row: Inbox.Commit) => Effect.gen(function* () {
+        yield* SessionHandleStore.materialize({
           id: row.sessionId,
           parentId: null,
           role: "resident",
@@ -177,14 +183,14 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           at: 0,
         });
         const existed = SessionHandleStore.inboxRows(row.sessionId).some(
-          (input) => input.id === row.id,
+          (input: Inbox.Row) => input.id === row.id,
         );
-        const received = SessionHandleStore.commitReceivedMessage(row);
+        const received = yield* SessionHandleStore.commitReceivedMessage(row);
         if (!existed) commits.push(row);
         return received.row;
-      },
+      }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
     },
-    prepare: (sender, send, target) => ({
+    prepare: (sender: Gateway.IngestSender, send: Gateway.SendMessage, target: string) => Effect.succeed({
       target,
       message:
         sender.kind === "external"
@@ -208,7 +214,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
               withinParentDeadline: true,
             },
     }),
-    run: async (sender, request, body) => {
+    run: (sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
       const decision = policy.evaluate({
         kind: "message",
         phase: "pre",
@@ -227,7 +233,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
       return {
         terminal: "executed",
         matchedRuleIds: decision.matchedRuleIds,
-        value: await body(
+        value: yield* body(
           messageExecutionReceipt(
             actionId,
             sender.kind === "session" ? sender.id : "ingress",
@@ -235,7 +241,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           ),
         ),
       };
-    },
+    }),
     ...overrides,
   });
   return router;

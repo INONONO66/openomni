@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message, ObservationSink } from "@openomni/protocol";
 import { Compaction } from "../src/compaction/compact.ts";
-import { addTurnBenchmarks } from "./turns.ts";
+import { addTurnBenchmarks, runBenchEffect } from "./turns.ts";
 
 /** The bench stands in for one run. It measures compaction, not reporting. */
 const BENCH_TRACE = { traceId: "trace-agent-bench", sessionId: "session-agent-bench" };
@@ -31,9 +31,9 @@ for (const size of [20, 100, 500]) {
   bench.add(
     `compaction/${size}-messages`,
     async () => {
-      await Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
+      await runBenchEffect(Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
         trigger: "threshold",
-      });
+      }));
     },
     { async: true },
   );

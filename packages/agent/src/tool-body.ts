@@ -1,101 +1,86 @@
 import {
-  PlainValueSchema,
   type PlainValue,
+  PlainValueSchema,
   type ToolDefinition,
   type ToolExecutionContext,
 } from "@openomni/protocol";
+import { Effect, Option } from "effect";
 import { z } from "zod";
-import { waveBodyScope } from "./core/execution/tool-wave";
-import { settled } from "./core/settled";
+import { ToolBodyFailed } from "./errors";
+import { RawToolSlots } from "./executor-raw";
+import { withExecutor } from "./executor-context";
+import type { Executor } from "./executor-contract";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
-  z
-    .object({
-      status: z.literal("error"),
-      message: z.string(),
-      errorKind: z.enum(["precondition_failed", "execution_failed", "invalid_output"]),
-    })
-    .strict(),
+  z.object({
+    status: z.literal("error"),
+    message: z.string(),
+    errorKind: z.enum(["precondition_failed", "execution_failed", "invalid_output"]),
+  }).strict(),
   z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
 ]);
 type ToolBodyOutcome = z.infer<typeof ToolBodyOutcome>;
 
-export async function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
+/** The only async-tool boundary. Register ownership and handlers before entering foreign code. */
+export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
   input: z.output<In>,
   context: ToolExecutionContext,
   timeoutMs: number | undefined,
-): Promise<ToolBodyOutcome> {
-  const outcome = await executeDefinition(definition, input, context, timeoutMs);
-  if (outcome.timedOut) return { status: "timed_out" };
-  if (outcome.error !== undefined) {
-    return {
-      status: "error",
-      message: outcome.error.message,
-      errorKind: isToolRefusal(outcome.error) ? "precondition_failed" : "execution_failed",
-    };
-  }
-  const parsedOutput = definition.output.safeParse(outcome.value);
-  const jsonOutput = parsedOutput.success
-    ? PlainValueSchema.safeParse(parsedOutput.data)
-    : parsedOutput;
-  if (!(parsedOutput.success && jsonOutput.success)) {
+  executor?: Executor,
+): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
+  return Effect.flatMap(RawToolSlots, (slots) => {
+    const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
+      const settle = slots.open();
+      const controller = new AbortController();
+      const scopedContext = {
+        ...context,
+        signal: AbortSignal.any([context.signal, controller.signal]),
+      };
+      const raw = Promise.resolve().then(() => executor === undefined
+        ? definition.execute(input, scopedContext)
+        : withExecutor(executor, () => definition.execute(input, scopedContext)));
+      raw.then(
+        (value) => {
+          settle();
+          resume(Effect.sync(() => decodeOutput(definition, value)));
+        },
+        (cause: CaughtValue) => {
+          settle();
+          // An explicit ToolRefused keeps its model-facing classification; every other
+          // foreign rejection is a typed body failure the executor records as evidence.
+          resume(isToolRefusal(cause)
+            ? Effect.succeed<ToolBodyOutcome>({ status: "error", message: cause.message, errorKind: "precondition_failed" })
+            : Effect.fail(new ToolBodyFailed({ tool: definition.name, cause: String(cause) })));
+        },
+      );
+      return Effect.sync(() => controller.abort());
+    });
+    if (timeoutMs === undefined) return execution;
+    return execution.pipe(Effect.timeoutOption(timeoutMs), Effect.map((outcome) =>
+      Option.getOrElse(outcome, (): ToolBodyOutcome => ({ status: "timed_out" }))));
+  });
+}
+
+function decodeOutput<In extends z.ZodType, Out extends z.ZodType>(
+  definition: ToolDefinition<In, Out>,
+  value: z.output<Out>,
+): ToolBodyOutcome {
+  const parsed = definition.output.safeParse(value);
+  const json = parsed.success ? PlainValueSchema.safeParse(parsed.data) : parsed;
+  if (!json.success) {
     return {
       status: "error",
       message: `${definition.name} produced invalid output`,
       errorKind: "invalid_output",
     };
   }
-  return { status: "success", output: jsonOutput.data };
-}
-
-async function executeDefinition<In extends z.ZodType, Out extends z.ZodType>(
-  definition: ToolDefinition<In, Out>,
-  input: z.output<In>,
-  context: ToolExecutionContext,
-  timeoutMs: number | undefined,
-): Promise<{
-  readonly timedOut: boolean;
-  readonly value?: z.output<Out>;
-  readonly error?: Error;
-}> {
-  if (timeoutMs === undefined) {
-    return settledExecution(Promise.resolve(definition.execute(input, context)));
-  }
-
-  const controller = new AbortController();
-  const forwardAbort = () => controller.abort(context.signal.reason);
-  context.signal.addEventListener("abort", forwardAbort, { once: true });
-  const scopedContext = { ...context, signal: controller.signal };
-  const rawExecution = Promise.resolve(definition.execute(input, scopedContext));
-  const execution = settledExecution(rawExecution);
-  // Ownership follows raw settlement, independent of fallible result conversion.
-  waveBodyScope.getStore()?.retain?.(settled(rawExecution));
-  const timeout = Promise.withResolvers<{ readonly timedOut: true }>();
-  const timer = setTimeout(() => {
-    controller.abort(new Error(`tool timed out after ${timeoutMs}ms`));
-    timeout.resolve({ timedOut: true });
-  }, timeoutMs);
-  return Promise.race([execution, timeout.promise]).finally(() => {
-    clearTimeout(timer);
-    context.signal.removeEventListener("abort", forwardAbort);
-  });
-}
-
-function settledExecution<T>(execution: Promise<T>) {
-  return execution.then(
-    (value) => ({ timedOut: false, value }) as const,
-    (error: CaughtValue) => ({ timedOut: false, error: toError(error) }) as const,
-  );
-}
-
-function isToolRefusal(error: Error): boolean {
-  return error.name === "ToolRefused";
+  return { status: "success", output: json.data };
 }
 
 type CaughtValue = PlainValue | Error | bigint | symbol | undefined | ((...args: never[]) => void);
 
-function toError(error: CaughtValue): Error {
-  return error instanceof Error ? error : new Error(String(error));
+function isToolRefusal(value: CaughtValue): value is Error {
+  return value instanceof Error && value.name === "ToolRefused";
 }

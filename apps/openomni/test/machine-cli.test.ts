@@ -1,3 +1,5 @@
+import { acquireEffect, runEffect } from "./helpers/effect";
+import { testCellPorts } from "./helpers/native-tool-ports";
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -7,7 +9,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createMachineHost } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
-import { composeCodemode } from "../src/composition/codemode";
+import { composeCodemode, type ComposedCodemode } from "../src/composition/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { socketPath } from "./helpers/socket-path";
 
@@ -19,8 +21,8 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   mkdirSync(rootB);
   const path = socketPath();
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
-  let cells: ReturnType<typeof composeCodemode>;
-  const host = await createMachineHost({
+  let cells: ComposedCodemode;
+  const host = await acquireEffect(createMachineHost({
     socketPath: path,
     enrollment: (id) => ({
       machineId: id,
@@ -37,8 +39,8 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
     },
     now: () => 2,
     callTool: (call) => cells.callTool(call),
-  });
-  cells = composeCodemode(host);
+  }));
+  cells = await acquireEffect(composeCodemode(host));
   const children: ReturnType<typeof spawn>[] = [];
   const exits: Promise<void>[] = [];
   async function attach(id: string, root: string) {
@@ -106,31 +108,31 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       "state = 41",
       "(ids, list(readback), written['bytesWritten'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
     ].join("\n");
-    const run = modelToolOutput("eval", { cells }, { role: "resident", sessionId: "qa-one" });
+    const run = modelToolOutput("eval", { cells: testCellPorts(cells) }, { role: "resident", sessionId: "qa-one" });
     const result = await run({ operation: { op: "run", code, timeout: 10 } });
     expect(result).toBe("(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')");
     expect(await run({ operation: { op: "run", code: "state + 1", timeout: 1 } })).toBe("42");
     const other = await modelToolOutput(
       "eval",
-      { cells },
+      { cells: testCellPorts(cells) },
       { role: "resident", sessionId: "qa-two" },
     )({ operation: { op: "run", code: "state", timeout: 15 } });
     expect(other).toContain("NameError");
-    const write = await host
+    const write = await runEffect(host
       .get("B")
-      .fs.write(join(rootB, "receipt"), Buffer.from([0, 255, 128, 65]));
-    const execution = await host.get("B").exec("printf out; printf err >&2; exit 7", rootB);
+      .fs.write(join(rootB, "receipt"), Buffer.from([0, 255, 128, 65])));
+    const execution = await runEffect(host.get("B").exec("printf out; printf err >&2; exit 7", rootB));
     if (execution.status !== "completed") throw new Error("QA exec did not complete");
-    const codeResult = await host
+    const codeResult = await runEffect(host
       .get("B")
-      .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 15_000 });
+      .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 15_000 }));
     expect(codeResult).toMatchObject({ status: "completed", value: "42" });
     console.log(
       "machines-codemode QA",
       JSON.stringify({
         list: host.list(),
         write,
-        readback: [...(await host.get("B").fs.read(join(rootB, "copy"))).data],
+        readback: [...(await runEffect(host.get("B").fs.read(join(rootB, "copy")))).data],
         exec: {
           stdout: [...execution.stdout],
           stderr: [...execution.stderr],
@@ -144,10 +146,10 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       }),
     );
   } finally {
-    await cells.close();
+    await runEffect(cells.close());
     for (const child of children) child.kill("SIGTERM");
     await Promise.all(exits);
-    host.close();
+    await runEffect(host.close());
     rmSync(base, { recursive: true, force: true });
     console.log(
       "machines-codemode cleanup",

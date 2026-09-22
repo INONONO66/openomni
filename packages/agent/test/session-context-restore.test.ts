@@ -1,55 +1,42 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { Cause, Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
 import { nth } from "./helpers/nth";
-import { answerThenCompact } from "./helpers/answer-then-compact";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import type { LedgerAction, PlainObject } from "@openomni/protocol";
+import { answerThenCompact } from "./helpers/effect-g2";
+import { isolated } from "./helpers/isolated";
+import { SessionHandleStore } from "@openomni/ledger";
+import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
 import {
   Bus,
-  closeSessions,
   createTurnDispatcher,
   type SessionRunner,
   type SessionRuntime,
 } from "../src/index";
 import { session } from "../src/session-handle";
+import type { SessionHandle, SessionRunnerInput } from "../src/session-contract";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 
 let nextId = 0;
-const runtime: SessionRuntime = {
-  observations: Bus,
-  clock: () => 1_000,
-  entropy: () => `restore-id-${++nextId}`,
-  processId: "restore-test",
-  scheduleHeartbeat: () => () => undefined,
-};
-
-beforeEach(() => {
-  Bus.reset();
-  Storage.reset();
-  nextId = 0;
-  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
-});
-
-afterEach(async () => {
-  await closeSessions(runtime);
-  Storage.reset();
-  Bus.reset();
-});
-
-/** A turn that answers, then compacts the prompt away behind its own answer, exactly as the real cut records it. */
-const compactingRunner: SessionRunner = async (input) => {
-  const { executor } = createTurnDispatcher([], input, runtime);
-  return answerThenCompact(executor, input);
-};
-
+function runtime(): SessionRuntime {
+  return {
+    observations: Bus,
+    clock: () => 1_000,
+    entropy: () => `restore-id-${++nextId}`,
+    processId: "restore-test",
+    scheduleHeartbeat: () => () => undefined,
+  };
+}
 function intentRecord(action: LedgerAction.Node): PlainObject {
   const value = action.intent.value;
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
 }
-
-function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.Node {
+function compactionIntent(
+  actions: readonly LedgerAction.Node[],
+): LedgerAction.Node {
   const found = actions.find(
-    (action) =>
+    (action: LedgerAction.Node) =>
       action.kind === "compaction" &&
       intentRecord(action).phase === "intent" &&
       intentRecord(action).op === "compact",
@@ -57,97 +44,158 @@ function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.N
   if (found === undefined) throw new Error("missing compaction intent");
   return found;
 }
+function program<E>(
+  body: (
+    handle: SessionHandle,
+    before: readonly LedgerAction.Node[],
+  ) => Effect.Effect<void, E>,
+  rows: NonNullable<Parameters<typeof seed>[0]> = [],
+) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      seed(rows);
 
-/** One prompted session whose first turn compacted; `before` is its action tree at rest. */
-async function compactedSession() {
-  const handle = session({ id: "ctx", role: "resident", runner: compactingRunner }, runtime);
-  await handle.prompt("hello");
-  return { handle, before: SessionHandleStore.tree("ctx") };
+      const current = runtime();
+      const compactingRunner: SessionRunner = (input: SessionRunnerInput) => {
+        const { executor } = createTurnDispatcher([], input, current);
+        return answerThenCompact(executor, input);
+      };
+      const handle = yield* session(
+        { id: "ctx", role: "resident", runner: compactingRunner },
+        current,
+      );
+      yield* handle.prompt("hello");
+      const before = SessionHandleStore.tree("ctx");
+      yield* body(handle, before);
+    }),
+  );
 }
 
 describe("restore_context_projection", () => {
-  test("appends the typed compensation, restores the prior projection and leaves the compaction intact", async () => {
-    seed();
-    const { handle, before } = await compactedSession();
-    const compaction = compactionIntent(before);
-    expect(foldSessionHistory("ctx", before).map((entry) => entry.info.role)).toEqual([
-      "assistant",
-    ]);
+  test("appends the typed compensation, restores the prior projection and leaves the compaction intact", () =>
+    isolated(
+      program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
+        Effect.gen(function* () {
+          const compaction = compactionIntent(before);
+          expect(
+            foldSessionHistory("ctx", before).map((entry: Message.WithParts) => entry.info.role),
+          ).toEqual(["assistant"]);
+          const outcome = yield* handle.restoreContext(compaction.id);
+          expect(outcome.terminal).toBe("executed");
+          const after = SessionHandleStore.tree("ctx");
+          expect(after.slice(0, before.length)).toEqual([...before]);
+          const appended = after.slice(before.length);
+          expect(
+            appended.map((action: LedgerAction.Node) => [
+              action.kind,
+              action.parentId,
+            ]),
+          ).toEqual([
+            ["policy.decision", compaction.id],
+            ["compaction", compaction.id],
+            ["policy.decision", compaction.id],
+            ["compaction", nth(appended, 1).id],
+          ]);
+          expect(nth(appended, 0).intent.value).toMatchObject({
+            hook: "turn.post",
+            op: "restore_context_projection",
+          });
+          expect(nth(appended, 1).intent.value).toMatchObject({
+            op: "restore_context_projection",
+            value: { compactionId: compaction.id },
+            recovery: "local_transactional",
+          });
+          expect(nth(appended, 3).effect.value).toMatchObject({
+            terminal: "executed",
+            result: {
+              restored: {
+                compactionId: compaction.id,
+                discarded: { count: 1 },
+              },
+            },
+          });
+          expect(
+            foldSessionHistory("ctx", after).map((entry: Message.WithParts) => entry.info.role),
+          ).toEqual(["user", "assistant"]);
+          expect(foldSessionHistory("ctx", after)).toEqual(
+            foldSessionHistory(
+              "ctx",
+              before.slice(0, before.indexOf(compaction)),
+            ),
+          );
+          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+          expect(handle.inspect().compactions).toEqual([
+            expect.objectContaining({
+              compactionId: compaction.id,
+              restoredBy: [nth(appended, 1).id],
+            }),
+          ]);
+        }),
+      ),
+    ));
 
-    const outcome = await handle.restoreContext(compaction.id);
+  test("a refused restoration records only the policy decision and changes nothing", () =>
+    isolated(
+      program(
+        (handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
+          Effect.gen(function* () {
+            const outcome = yield* handle.restoreContext(
+              compactionIntent(before).id,
+            );
+            expect(outcome).toEqual({
+              terminal: "blocked_pre",
+              reason: "pinned_projection",
+            });
+            const after = SessionHandleStore.tree("ctx");
+            expect(
+              after
+                .slice(before.length)
+                .map((action: LedgerAction.Node) => action.kind),
+            ).toEqual(["policy.decision"]);
+            expect(foldSessionHistory("ctx", after)).toEqual(
+              foldSessionHistory("ctx", before),
+            );
+          }),
+        [{
+          name: "no-restore", kind: "turn", phase: "post",
+          match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
+          priority: 500,
+        }],
+      ),
+    ));
 
-    expect(outcome.terminal).toBe("executed");
-    const after = SessionHandleStore.tree("ctx");
-    expect(after.slice(0, before.length)).toEqual(before);
-    const appended = after.slice(before.length);
-    expect(appended.map((action) => [action.kind, action.parentId])).toEqual([
-      ["policy.decision", compaction.id],
-      ["compaction", compaction.id],
-      ["policy.decision", compaction.id],
-      ["compaction", nth(appended, 1).id],
-    ]);
-    expect(nth(appended, 0).intent.value).toMatchObject({
-      hook: "turn.post",
-      op: "restore_context_projection",
-    });
-    expect(nth(appended, 1).intent.value).toMatchObject({
-      op: "restore_context_projection",
-      value: { compactionId: compaction.id },
-      recovery: "local_transactional",
-    });
-    expect(nth(appended, 3).effect.value).toMatchObject({
-      terminal: "executed",
-      result: { restored: { compactionId: compaction.id, discarded: { count: 1 } } },
-    });
-    const restored = foldSessionHistory("ctx", after);
-    expect(restored.map((entry) => entry.info.role)).toEqual(["user", "assistant"]);
-    expect(restored).toEqual(
-      foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))),
-    );
-    expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
-    expect(handle.inspect().compactions).toEqual([
-      expect.objectContaining({ compactionId: compaction.id, restoredBy: [nth(appended, 1).id] }),
-    ]);
-  });
-
-  test("a refused restoration records only the policy decision and changes nothing", async () => {
-    seed([
-      {
-        name: "no-restore",
-        kind: "turn",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
-        verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
-        priority: 500,
-      },
-    ]);
-    const { handle, before } = await compactedSession();
-
-    const outcome = await handle.restoreContext(compactionIntent(before).id);
-
-    expect(outcome).toEqual({ terminal: "blocked_pre", reason: "pinned_projection" });
-    const after = SessionHandleStore.tree("ctx");
-    expect(after.slice(before.length).map((action) => action.kind)).toEqual(["policy.decision"]);
-    expect(foldSessionHistory("ctx", after)).toEqual(foldSessionHistory("ctx", before));
-  });
-
-  test("an unknown or unexecuted compaction is refused before anything is recorded", async () => {
-    seed();
-    const { handle, before } = await compactedSession();
-    const compaction = compactionIntent(before);
-
-    await expect(handle.restoreContext("nope")).rejects.toMatchObject({
-      name: "ContextRestoreError",
-      code: "context_restore_refused",
-      reason: "unknown_compaction",
-    });
-    const result = before.find(
-      (action) => action.kind === "compaction" && action.parentId === compaction.id,
-    );
-    await expect(handle.restoreContext(result?.id ?? "")).rejects.toMatchObject({
-      reason: "not_executed",
-    });
-    expect(SessionHandleStore.tree("ctx")).toEqual(before);
-    expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
-  });
+  test("an unknown or unexecuted compaction is refused before anything is recorded", () =>
+    isolated(
+      program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
+        Effect.gen(function* () {
+          const compaction = compactionIntent(before);
+          const missing = yield* Effect.exit(handle.restoreContext("nope"));
+          expect(missing._tag).toBe("Failure");
+          if (missing._tag === "Failure") {
+            expect(Cause.squash(missing.cause)).toMatchObject({
+              name: "ContextRestoreError",
+              code: "context_restore_refused",
+              reason: "unknown_compaction",
+            });
+          }
+          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+          const result = before.find(
+            (action: LedgerAction.Node) =>
+              action.kind === "compaction" && action.parentId === compaction.id,
+          );
+          const unexecuted = yield* Effect.exit(
+            handle.restoreContext(result?.id ?? ""),
+          );
+          expect(unexecuted._tag).toBe("Failure");
+          if (unexecuted._tag === "Failure") {
+            expect(Cause.squash(unexecuted.cause)).toMatchObject({
+              name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
+            });
+          }
+          expect(SessionHandleStore.tree("ctx")).toEqual([...before]);
+          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+        }),
+      ),
+    ));
 });

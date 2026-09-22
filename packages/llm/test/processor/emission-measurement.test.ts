@@ -5,7 +5,7 @@ import {
 } from "../helpers/fixtures";
 import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
-import { Processor } from "../../src/processor";
+import { Processor } from "../helpers/native";
 import { Bus } from "../helpers/observation";
 import type { StreamEvent } from "../../src/processor/stream-events";
 

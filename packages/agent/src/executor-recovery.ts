@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import type { CommitFailed } from "./errors";
 import {
   canonicalDigest,
   type LedgerAction,
@@ -5,11 +7,9 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import type {
-  ExecutionBatchResult,
   ExecutionRequest,
   ExecutorOptions,
   RecoveryClassification,
-  RecoverySite,
 } from "./executor-contract";
 import type { createExecutionRecord } from "./executor-record";
 
@@ -17,7 +17,7 @@ type RecordPort = Pick<ReturnType<typeof createExecutionRecord>, "appendResult">
 type Proof = "absent" | "applied" | "indeterminate";
 
 interface RecoveryVerdict {
-  readonly terminal: "failed" | "outcome_unknown";
+  readonly terminal: "interrupted" | "outcome_unknown";
   readonly classification: RecoveryClassification;
   readonly proof: Proof;
   readonly proofReceipt: { readonly id: string; readonly digest: string } | null;
@@ -52,7 +52,7 @@ function recordedClassification(value: PlainValue | undefined): RecoveryClassifi
 /** The ledger itself is the read-back for a kernel-local transaction: no terminal means nothing happened. */
 function localAbsent(receipt: LedgerAction.Node): RecoveryVerdict {
   return {
-    terminal: "failed",
+    terminal: "interrupted",
     classification: "local_transactional",
     proof: "absent",
     proofReceipt: { id: receipt.id, digest: canonicalDigest(receipt.effect.value) },
@@ -88,60 +88,14 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     );
   }
 
-  function projected(result: LedgerAction.Node, value: PlainValue): ExecutionBatchResult {
-    const effect = object(result.effect.value);
-    if (effect.terminal === "executed")
-      return { terminal: "executed", value: effect.result ?? value };
-    if (effect.terminal === "blocked_post")
-      return {
-        terminal: "blocked_post",
-        disposition: effect.disposition === "reverted" ? "reverted" : "irreversible",
-        reason: String(effect.reason),
-      };
-    return { terminal: "failed", error: new Error(String(effect.terminal)) };
-  }
-
-  /** The body settled in-process; only its completion failed. Known evidence is a failed completion, never a replay. */
-  async function recoverCompletion(
-    intentId: string,
-    request: ExecutionRequest,
-    site: RecoverySite,
-    error: Error,
-    value: PlainValue,
-  ): Promise<ExecutionBatchResult> {
-    const existing = terminal(intentId);
-    if (existing !== undefined) return projected(existing, value);
-    await record.appendResult(
-      { kind: request.kind as LedgerAction.Kind, op: request.op },
-      intentId,
-      {
-        phase: "result",
-        terminal: "failed",
-        disposition: "irreversible",
-        effect: request.effect,
-        resultHash: canonicalDigest(value),
-        error: { name: error.name },
-        ...(request.toolObservation ? { callId: request.toolObservation.callId } : {}),
-        recovery: {
-          site,
-          classification: recoveryClassification(request),
-          proof: "applied",
-          proofReceipt: { id: intentId, digest: canonicalDigest(value) },
-          revertReceipt: null,
-          rawSettled: true,
-        },
-      },
-    );
-    return { terminal: "failed", error };
-  }
-
-  async function settleCrash(action: LedgerAction.Node, verdict: RecoveryVerdict): Promise<void> {
+  function settleCrash(action: LedgerAction.Node, verdict: RecoveryVerdict): Effect.Effect<void, CommitFailed> {
     const intent = object(action.intent.value);
     const callId = typeof intent.callId === "string" ? intent.callId : undefined;
-    await record.appendResult({ kind: action.kind, op: String(intent.op) }, action.id, {
+    return record.appendResult({ kind: action.kind, op: String(intent.op) }, action.id, {
       phase: "result",
       terminal: verdict.terminal,
       effect: intent.effect ?? {},
+      evidence: { failures: [{ tag: "OutcomeUnknown", reason: "process_lost" }], defects: [], interrupted: false },
       error: { name: "ProcessLost" },
       ...(callId === undefined ? {} : { callId }),
       ...(action.kind === "tool" && callId !== undefined
@@ -179,14 +133,14 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
   }
 
   /** Settle the open intent as executed from its durable boundary, never re-running the body. */
-  async function settleFromBoundary(
+  function settleFromBoundary(
     action: LedgerAction.Node,
     boundary: LedgerAction.Node,
-  ): Promise<void> {
+  ): Effect.Effect<void, CommitFailed> {
     const intent = object(action.intent.value);
     const result = object(boundary.effect.value).result ?? null;
     const revert = object(result).revert;
-    await record.appendResult(
+    return record.appendResult(
       { kind: action.kind, op: String(intent.op) },
       action.id,
       {
@@ -232,7 +186,8 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
 
   /** Provider attempts carry the external effect; an open one makes the
    * logical llm ambiguous, while settled attempts leave only the local commit. */
-  async function settleLlm(action: LedgerAction.Node, all: readonly LedgerAction.Node[]) {
+  function settleLlm(action: LedgerAction.Node, all: readonly LedgerAction.Node[]) {
+    return Effect.gen(function* () {
     let ambiguous = false;
     let lastSettled: LedgerAction.Node = action;
     for (const attempt of all) {
@@ -244,24 +199,27 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
         continue;
       }
       ambiguous = true;
-      await settleCrash(attempt, crashVerdict(attempt));
+      yield* settleCrash(attempt, crashVerdict(attempt));
     }
-    await settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
+    yield* settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
+    });
   }
 
   /** Crash-open settlement for this turn: persisted evidence only, no body, guarded waves stay with their captured dispatcher. */
-  async function recover(): Promise<void> {
-    const all = actions();
-    for (const action of openIntents(all)) {
-      if (action.kind !== "llm") {
-        const boundary = boundaryEvidence(all, action.id);
-        if (boundary === undefined) await settleCrash(action, crashVerdict(action));
-        else await settleFromBoundary(action, boundary);
-        continue;
+  function recover(): Effect.Effect<void, CommitFailed> {
+    return Effect.gen(function* () {
+      const all = actions();
+      for (const action of openIntents(all)) {
+        if (action.kind !== "llm") {
+          const boundary = boundaryEvidence(all, action.id);
+          if (boundary === undefined) yield* settleCrash(action, crashVerdict(action));
+          else yield* settleFromBoundary(action, boundary);
+          continue;
+        }
+        yield* settleLlm(action, all);
       }
-      await settleLlm(action, all);
-    }
+    });
   }
 
-  return { recover, recoverCompletion };
+  return { recover };
 }

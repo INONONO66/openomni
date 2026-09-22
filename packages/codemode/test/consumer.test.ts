@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
-import { CodemodeError, createCodemode } from "../src/index";
+import { attachMachineDaemon, createMachineHost } from "../../machines/test/helpers/native";
+import { CodemodeError, createCodemode } from "./helpers/native";
 
 const silent = {
   publish() {
@@ -104,7 +104,7 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
   await pair(async ({ mode, a, b }) => {
     expect(mode.listMachines().map((entry) => entry.machineId)).toEqual(["A", "B"]);
     expect(mode.findMachine({ tag: "A" })).toBe(mode.getMachine("A"));
-    expect((await codemodeFailure(() => mode.findMachine({ tag: "missing" }))).data.reason).toBe(
+    expect((await codemodeFailure(() => mode.findMachine({ tag: "missing" }))).reason).toBe(
       "machine_not_found",
     );
     const bytes = Buffer.from([0, 255, 128, 65]);
@@ -201,7 +201,7 @@ test("host disconnect closes the injected runner and awaits its processes", asyn
     );
     await entered.promise;
     host.close();
-    expect(await outcome).toMatchObject({ name: "IpcConnectionError" });
+    expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.call" });
     await da.closed;
     release.resolve();
   }, gate.tools);
@@ -238,12 +238,12 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
       },
     },
   });
-  expect((await codemodeFailure(() => mode.findMachine({ tag: "same" }))).data.reason).toBe(
+  expect((await codemodeFailure(() => mode.findMachine({ tag: "same" }))).reason).toBe(
     "ambiguous_machine",
   );
   await mode.close();
   const runner = createCodemode();
-  expect((await codemodeFailure(() => runner.listMachines())).data.reason).toBe(
+  expect((await codemodeFailure(() => runner.listMachines())).reason).toBe(
     "machines_not_bound",
   );
   await expect(
@@ -316,7 +316,7 @@ test("run leaves a held cell in the background: peek shows its output so far, st
     // Another tenant cannot see, let alone stop, this cell.
     for (const op of [mode.cell.peek, mode.cell.stop]) {
       const refusal = await codemodeFailure(() => op(started.cellId, "intruder"));
-      expect(refusal.data.reason).toBe("unknown_cell_id");
+      expect(refusal.reason).toBe("unknown_cell_id");
     }
     expect(await mode.cell.stop(started.cellId, "background")).toEqual({
       status: "cancelled",
@@ -325,7 +325,7 @@ test("run leaves a held cell in the background: peek shows its output so far, st
     });
     // Settled state is handed over once; the code never runs again.
     await expect(mode.cell.peek(started.cellId, "background")).rejects.toMatchObject({
-      data: { reason: "unknown_cell_id" },
+      reason: "unknown_cell_id",
     });
     release.resolve();
     expect(await mode.cell.run("6 * 7", "background")).toMatchObject({
@@ -350,7 +350,7 @@ test("a peek and a stop racing on one cell hand its settled state to exactly one
     ]);
     expect(outcomes.map((outcome) => outcome.status)).toEqual(["rejected", "fulfilled"]);
     expect(outcomes[0]).toMatchObject({
-      reason: { name: "CodemodeError", data: { reason: "unknown_cell_id" } },
+      reason: { _tag: "CodemodeError", reason: "unknown_cell_id" },
     });
     expect(outcomes[1]).toMatchObject({
       value: { status: "cancelled", cellId: started.cellId },
@@ -384,7 +384,7 @@ test("unread settled cells are retained up to the bound; the oldest is evicted a
     // have all settled at the facade.
     expect(await mode.cell.run("'barrier'", "bound")).toMatchObject({ status: "completed" });
     await expect(mode.cell.peek(cellId(0), "bound")).rejects.toMatchObject({
-      data: { reason: "unknown_cell_id" },
+      reason: "unknown_cell_id",
     });
     expect(await mode.cell.peek(cellId(1), "bound")).toMatchObject({
       status: "completed",
@@ -410,7 +410,7 @@ test("a run that settles within its wait answers the result and leaves nothing b
     });
     if (settled.status !== "completed") throw new Error("unreachable");
     await expect(mode.cell.peek(settled.cellId, "prompt")).rejects.toMatchObject({
-      data: { reason: "unknown_cell_id" },
+      reason: "unknown_cell_id",
     });
   });
 });

@@ -1,3 +1,6 @@
+import { channelRequests } from "../../helpers/channel-requests";
+import { channelTransaction } from "../../helpers/channel-transaction";
+import { runEffect } from "../../helpers/effect";
 import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
@@ -31,7 +34,7 @@ function inspectDebitState(senderId: string, targetActorId: string): Gateway.Egr
       at: messagingNow,
     },
     0,
-    (state) => {
+    (state: Gateway.EgressDebitState) => {
       observed = state;
       return "inspect" as const;
     },
@@ -178,8 +181,9 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
-      requests: seededRequests(),
-      deliver: (message) => {
+      requests: channelRequests(seededRequests()),
+      transaction: channelTransaction,
+      deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };
       },
@@ -199,11 +203,11 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   });
 
   test("backward-compat: with NO budget source injected, a cold proactive send is unaffected", async () => {
-    expectWithoutDebit(await messaging(false).send(buildSendInput()));
+    expectWithoutDebit(await runEffect(messaging(false).send(buildSendInput())));
   });
 
   test("fail-safe default: gate wired but no budget entry → cold proactive denied budget_exhausted", async () => {
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
     expectDenied(receipt, "budget_exhausted");
     expect(deliveries).toHaveLength(0);
     expect(inspectDebitState("actor:sender", "actor:target").countInWindow).toBe(0);
@@ -211,7 +215,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   test("an admitted send records a debit (record-before-act)", async () => {
     budgets = [budget()];
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
     expect(receipt.kind).toBe("sent");
     expect(deliveries).toEqual(["message:test"]);
     const state = inspectDebitState("actor:sender", "actor:target");
@@ -222,8 +226,8 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   test("split-evasion: the cap survives across separate send calls (debit is durable)", async () => {
     budgets = [budget({ maxPerWindow: 1 })];
-    const first = await messaging().send(buildSendInput({ messageId: "message:1" }));
-    const second = await messaging().send(buildSendInput({ messageId: "message:2" }));
+    const first = await runEffect(messaging().send(buildSendInput({ messageId: "message:1" })));
+    const second = await runEffect(messaging().send(buildSendInput({ messageId: "message:2" })));
     expect(first.kind).toBe("sent");
     expectDenied(second, "budget_exhausted");
     expect(deliveries).toEqual(["message:1"]);
@@ -231,25 +235,25 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   test("cooldown-block: a second send within cooldownMs is cooldown_suppressed", async () => {
     budgets = [budget({ maxPerWindow: 10, cooldownMs: 30_000 })];
-    const first = await messaging().send(
+    const first = await runEffect(messaging().send(
       buildSendInput({ messageId: "message:1", at: messagingNow }),
-    );
-    const second = await messaging().send(
+    ));
+    const second = await runEffect(messaging().send(
       buildSendInput({ messageId: "message:2", at: messagingNow + 5_000 }),
-    );
+    ));
     expect(first.kind).toBe("sent");
     expectDenied(second, "cooldown_suppressed");
     // A send past the cooldown is admitted again.
-    const third = await messaging().send(
+    const third = await runEffect(messaging().send(
       buildSendInput({ messageId: "message:3", at: messagingNow + 40_000 }),
-    );
+    ));
     expect(third.kind).toBe("sent");
     expect(deliveries).toEqual(["message:1", "message:3"]);
   });
 
   test("DNC-deny: a do-not-contact target is denied dnc_denied with nothing delivered", async () => {
     budgets = [budget({ doNotContact: true })];
-    const receipt = await messaging().send(buildSendInput());
+    const receipt = await runEffect(messaging().send(buildSendInput()));
     expectDenied(receipt, "dnc_denied");
     expect(deliveries).toHaveLength(0);
   });
@@ -270,6 +274,6 @@ describe("send kernel active-egress gate (#219 seam)", () => {
       },
     ];
     budgets = [budget({ doNotContact: true })];
-    expectWithoutDebit(await messaging().send(buildSendInput()));
+    expectWithoutDebit(await runEffect(messaging().send(buildSendInput())));
   });
 });

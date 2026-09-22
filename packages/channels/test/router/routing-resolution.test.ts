@@ -1,6 +1,8 @@
 import { beforeEach, expect, test } from "bun:test";
-import { z } from "zod";
-import { rejected } from "../helpers/rejection";
+import { runEffect } from "../helpers/effect";
+import { Effect } from "effect";
+import { effectFailure } from "../helpers/effect-failure";
+import type { GatewayRouterPorts } from "../../src/router";
 import { replaceDecisionFacts } from "../helpers/ledger";
 import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
 import { Channel, Ingress, type Gateway, type Inbox, type DecisionFact } from "@openomni/protocol";
@@ -34,19 +36,19 @@ test("records the channel-scoped decision before inbox commit", async () => {
   const observed: Array<DecisionFact.Recorded | undefined> = [];
   const router = makeRouter({
     inbox: {
-      commit: (row) => {
+      commit: (row: Inbox.Commit) => Effect.sync(() => {
         observed.push(Storage.get().decisionFacts?.head(streamId()));
-        return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
-      },
+        return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
+      }),
     },
   });
-  await router.ingest(ownerSender, ownerFacts);
+  await runEffect(router.ingest(ownerSender, ownerFacts));
   expect(observed).toHaveLength(1);
   expect(observed[0]).toMatchObject({ key: streamId(), type: "route.decided" });
 });
 
 test("blocked decisions are durable before returning the receipt", async () => {
-  expect(await makeRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+  expect(await runEffect(makeRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });
   expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({
@@ -60,10 +62,10 @@ test("equivalent redelivery uses one route fact and the same inbox id", async ()
   registerOwnerDm();
   const mapped = createMappedOwnerSession();
   const router = makeRouter();
-  await router.ingest(ownerSender, ownerFacts);
+  await runEffect(router.ingest(ownerSender, ownerFacts));
   const before = SessionHandleStore.tree(mapped.id);
   const recorded = Storage.get().decisionFacts?.head(streamId());
-  await router.ingest(ownerSender, ownerFacts);
+  await runEffect(router.ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
   expect(SessionHandleStore.tree(mapped.id)).toEqual(before);
   expect(SessionHandleStore.inboxRows(mapped.id)).toHaveLength(1);
@@ -73,7 +75,7 @@ test("equivalent redelivery uses one route fact and the same inbox id", async ()
 test("historical route facts upcast on redelivery without reconstructing another route", async () => {
   registerOwnerDm();
   const mapped = createMappedOwnerSession();
-  await makeRouter().ingest(ownerSender, ownerFacts);
+  await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   const modern = Ingress.Events.RoutingDecision.schema.parse(
     Storage.get().decisionFacts?.head(streamId())?.data,
   );
@@ -95,19 +97,19 @@ test("historical route facts upcast on redelivery without reconstructing another
     timeCreated: 1,
   });
   expect(recorded?.kind).toBe("recorded");
-  await makeRouter().ingest(ownerSender, ownerFacts);
+  await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
   expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded?.fact);
 });
 
 test("a changed decision refuses redelivery before committing or observing", async () => {
   const router = makeRouter();
-  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({ status: "blocked_pre" });
   registerOwnerDm();
   createMappedOwnerSession();
   const count = routingDecisions().length;
   const recorded = Storage.get().decisionFacts?.head(streamId());
-  await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+  expect(await effectFailure(router.ingest(ownerSender, ownerFacts))).toMatchObject({
     code: "route_replay_divergent",
   });
   expect(commits).toEqual([]);
@@ -119,11 +121,11 @@ test.each([
   "actorId",
   "trustTier",
   "inboundTreatment",
-] as const)("mutated %s authority refuses redelivery without leaking the authority", async (field) => {
+] as const)("mutated %s authority refuses redelivery without leaking the authority", async (field: "actorId" | "trustTier" | "inboundTreatment") => {
   registerOwnerDm();
   createMappedOwnerSession();
   const router = makeRouter();
-  await router.ingest(ownerSender, ownerFacts);
+  await runEffect(router.ingest(ownerSender, ownerFacts));
   const count = routingDecisions().length;
   if (field === "actorId") {
     ActorRegistry.registerIdentity({ id: "replacement", kind: "human", trustTier: "owner" });
@@ -147,10 +149,10 @@ test.each([
       createdBy: "owner",
     });
   }
-  const caught = await rejected(router.ingest(ownerSender, ownerFacts), z.instanceof(Error));
-  expect(caught).toMatchObject({ code: "route_replay_divergent" });
+  const caught = await effectFailure(router.ingest(ownerSender, ownerFacts));
+  expect(caught).toMatchObject({ _tag: "IngressRoutingError", code: "route_replay_divergent" });
   for (const value of ["actor-owner", "replacement", "manager", "evidence_only"])
-    expect(caught.message).not.toContain(value);
+    expect(String(caught)).not.toContain(value);
   expect(commits).toHaveLength(1);
   expect(routingDecisions()).toHaveLength(count);
 });
@@ -162,8 +164,8 @@ test("a post-commit reply-grant failure retains commit progress for the executor
   const observed: Gateway.MessageObservation[] = [];
   const notified: Inbox.Row[] = [];
   const router = makeRouter({
-    observe: (_sender, observation) => observed.push(observation),
-    committed: (row) => notified.push(row),
+    observe: (_sender: { kind: "external"; surface: string; externalId: string; } | { kind: "session"; id: string; }, observation: { messageId: string; kind: "message.sent"; sender: { kind: "external"; surface: string; externalId: string; } | { kind: "session"; id: string; }; targetKind: "session" | "actor" | "new_session"; type: "message" | "interrupt" | "resume"; bytes: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; matchedRuleIds: string[]; ingestMs: number; kind: "message.admitted"; verdict: "allow"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; matchedRuleIds: string[]; ingestMs: number; kind: "message.rejected"; verdict: "deny"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.committed"; commitMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.drained"; queueMs: number; boundary: "before_llm" | "after_llm" | "after_tools"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.replied"; replyTo: string; roundTripMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; childTurnMs?: number | undefined; tokens?: number | undefined; } | { messageId: string; kind: "message.timed_out"; waitedMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; }) => observed.push(observation),
+    committed: (row: import("@openomni/protocol").Inbox.Row) => notified.push(row),
     messaging: {
       grants: () => [],
       deliveryRoutes: new Map(),
@@ -171,20 +173,19 @@ test("a post-commit reply-grant failure retains commit progress for the executor
         throw failure;
       },
     },
-    run: async (_sender, request, body) => {
-      await expect(body(messageExecutionReceipt("source", "ingress", request.intent))).rejects.toBe(
-        failure,
-      );
-      return { terminal: "blocked_post", reason: "grant_projection_failed", matchedRuleIds: [] };
-    },
+    run: (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      const exit = yield* Effect.exit(body(messageExecutionReceipt("source", "ingress", request.intent)));
+      expect(exit).toMatchObject({ _tag: "Failure", cause: { _tag: "Die", defect: failure } });
+      return { terminal: "blocked_post" as const, reason: "grant_projection_failed", matchedRuleIds: [] };
+    }),
   });
-  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({
+  expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_post",
     reasonCode: "grant_projection_failed",
   });
   expect(commits).toHaveLength(1);
   expect(notified).toHaveLength(1);
-  expect(observed.filter((observation) => observation.kind === "message.committed")).toHaveLength(
+  expect(observed.filter((observation: { messageId: string; kind: "message.sent"; sender: { kind: "external"; surface: string; externalId: string; } | { kind: "session"; id: string; }; targetKind: "session" | "actor" | "new_session"; type: "message" | "interrupt" | "resume"; bytes: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; matchedRuleIds: string[]; ingestMs: number; kind: "message.admitted"; verdict: "allow"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; matchedRuleIds: string[]; ingestMs: number; kind: "message.rejected"; verdict: "deny"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.committed"; commitMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.drained"; queueMs: number; boundary: "before_llm" | "after_llm" | "after_tools"; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; } | { messageId: string; kind: "message.replied"; replyTo: string; roundTripMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; childTurnMs?: number | undefined; tokens?: number | undefined; } | { messageId: string; kind: "message.timed_out"; waitedMs: number; eventId?: string | undefined; traceId?: string | undefined; spanId?: string | undefined; parentSpanId?: string | undefined; sessionId?: string | undefined; runId?: string | undefined; turnId?: string | undefined; callId?: string | undefined; role?: "resident" | "worker" | undefined; actorId?: string | undefined; agentName?: string | undefined; componentId?: string | undefined; componentGeneration?: number | undefined; pluginName?: string | undefined; pluginVersion?: string | undefined; configRevision?: number | undefined; time?: number | undefined; }) => observation.kind === "message.committed")).toHaveLength(
     1,
   );
 });
@@ -193,7 +194,7 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
   registerOwnerDm();
   createMappedOwnerSession();
   const router = makeRouter();
-  await router.ingest(ownerSender, ownerFacts);
+  await runEffect(router.ingest(ownerSender, ownerFacts));
   const fact = Storage.get().decisionFacts?.head(streamId());
   if (fact === undefined) throw new Error("route fact missing");
   const original = Ingress.Events.RoutingDecision.schema.parse(fact.data);
@@ -204,19 +205,19 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
   const changed = {
     ...original,
     factsUsed: [
-      ...original.factsUsed.filter((value) => !priorEndpoint.includes(value)),
+      ...original.factsUsed.filter((value: string) => !priorEndpoint.includes(value)),
       ...replyGrantEndpointFacts({ channel: ownerSender.surface, externalId: "another-endpoint" }),
     ],
   };
   expect(Ingress.routeDecisionsEquivalent(original, changed)).toBe(true);
-  replaceDecisionFacts((facts) => ({
+  replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
     ...facts,
-    record: (input) =>
+    record: (input: { key: string; type: string; data: import("@openomni/protocol").PlainObject; timeCreated: number; }) =>
       input.key === streamId()
         ? { kind: "exists", fact: { ...fact, data: changed } }
         : facts.record(input),
   }));
-  await expect(router.ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+  expect(await effectFailure(router.ingest(ownerSender, ownerFacts))).toMatchObject({
     code: "route_replay_divergent",
   });
   expect(commits).toHaveLength(1);
@@ -225,9 +226,9 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
 
 test("equivalent blocked redelivery returns a refusal without another route fact", async () => {
   const router = makeRouter();
-  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({ status: "blocked_pre" });
   const recorded = Storage.get().decisionFacts?.head(streamId());
-  expect(await router.ingest(ownerSender, ownerFacts)).toMatchObject({ status: "blocked_pre" });
+  expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({ status: "blocked_pre" });
   expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
@@ -236,10 +237,10 @@ test.each([
   "absent",
   "wrong_type",
   "corrupt_fact",
-] as const)("decision facts %s refuses before inbox commit or projection", async (fault) => {
+] as const)("decision facts %s refuses before inbox commit or projection", async (fault: "record_failure" | "absent" | "wrong_type" | "corrupt_fact") => {
   registerOwnerDm();
   createMappedOwnerSession();
-  replaceDecisionFacts((facts) =>
+  replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) =>
     fault === "absent"
       ? undefined
       : {
@@ -259,7 +260,7 @@ test.each([
           },
         },
   );
-  await expect(makeRouter().ingest(ownerSender, ownerFacts)).rejects.toMatchObject({
+  expect(await effectFailure(makeRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     code: "route_record_failed",
   });
   expect(commits).toEqual([]);
@@ -268,10 +269,10 @@ test.each([
 
 test("unconfigured actor delivery refuses without inbox commit", async () => {
   expect(
-    await makeRouter().ingest(
+    await runEffect(makeRouter().ingest(
       { kind: "session", id: "sender" },
       { to: { kind: "actor", actorId: "target" }, type: "message", content: "hello" },
-    ),
+    )),
   ).toMatchObject({ status: "blocked_pre", reasonCode: "message.resident.actor_grant" });
   expect(commits).toEqual([]);
 });
@@ -292,7 +293,7 @@ test("forged observations cannot choose a session", async () => {
     factsUsed: [],
     target: "resident",
   });
-  await makeRouter().ingest(ownerSender, ownerFacts);
+  await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
   expect(commits[0]?.sessionId).toBe(mapped.id);
   expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({

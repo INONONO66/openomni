@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { decodeLlmFailure } from "../error";
+import type { LlmError } from "../errors";
 import type { Message, Transcript } from "@openomni/protocol";
 import { OutputPayload, ProviderEvent } from "./event-schema";
 import { stringifyToolOutput } from "../message";
@@ -149,31 +152,24 @@ function normalizeOutputPayload(event: ProviderEvent): { output: string; isError
  */
 const ABORT_SETTLE_GRACE_MS = 250;
 
-export async function drainToolSettlements(
+export function drainToolSettlements(
   iterator: AsyncIterator<StreamEvent>,
   firstEvent: StreamEvent,
   state: StreamEventState,
   context: StreamEventContext,
-): Promise<void> {
-  const deadline = Date.now() + ABORT_SETTLE_GRACE_MS;
-  let event: StreamEvent = firstEvent;
-  while (state.pendingTools.size > 0) {
-    if (event.type === "tool-result" || event.type === "tool-error") {
-      handleToolResult(ProviderEvent.parse(event), state, context);
-      if (state.pendingTools.size === 0) return;
+): Effect.Effect<void, LlmError> {
+  return Effect.gen(function* () {
+    let event = firstEvent;
+    while (state.pendingTools.size > 0) {
+      if (event.type === "tool-result" || event.type === "tool-error") {
+        yield* Effect.try({ try: () => handleToolResult(ProviderEvent.parse(event), state, context), catch: decodeLlmFailure("stream.settlement") });
+        if (state.pendingTools.size === 0) return;
+      }
+      const next = yield* Effect.tryPromise({ try: () => iterator.next(), catch: decodeLlmFailure("stream.settlement.next") });
+      if (next.done) return;
+      event = next.value;
     }
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return;
-    const next = await Promise.race([
-      iterator.next().then(
-        (result) => (result.done ? undefined : result.value),
-        () => undefined,
-      ),
-      new Promise<undefined>((resolve) => {
-        setTimeout(() => resolve(undefined), remaining);
-      }),
-    ]);
-    if (next === undefined) return;
-    event = next;
-  }
+  }).pipe(Effect.timeoutOption(ABORT_SETTLE_GRACE_MS), Effect.catchAll((error) => Effect.sync(() => {
+    context.note("stream.settlement.failed", { error: error.cause ?? String(error) });
+  })), Effect.asVoid);
 }

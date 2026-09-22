@@ -5,9 +5,9 @@ import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
 import { requireHandler } from "../../support/handler-frame";
 import { sendText } from "../../support/send-text";
-import { RetryExhaustedError } from "../../support/fetch-retry";
+import { RateLimited, TelegramApiError } from "../../errors";
 import { TELEGRAM_RENDER } from "./format";
-import { TelegramApiError, TelegramClient } from "./client";
+import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
@@ -101,7 +101,7 @@ export class TelegramAdapter implements Channel.Surface {
         ),
       (error) =>
         (error instanceof TelegramApiError && error.rejected) ||
-        (error instanceof RetryExhaustedError && error.status === 429),
+        (error instanceof RateLimited && error.status === 429),
       this.publish,
     );
   }

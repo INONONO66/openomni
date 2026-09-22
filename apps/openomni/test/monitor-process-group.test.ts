@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -7,6 +8,7 @@ import { Storage } from "@openomni/ledger";
 import type { PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { alarmFixture } from "./helpers/alarm";
+import { runEffect } from "./helpers/effect";
 
 const parseJson: (text: string) => PlainValue = JSON.parse;
 const identity = z
@@ -70,7 +72,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           },
           1,
         );
-        fixture.worker.start();
+        await runEffect(fixture.worker.start());
         await Promise.all([ready, bound(connected.promise)]);
         const group = peers[0]?.process.group;
         if (group === undefined) throw new Error("missing process group");
@@ -83,8 +85,13 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         const gone = bound(Promise.all(original.map((peer) => peer.closed)).then(() => undefined));
         if (mode === "rearm") {
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
-          fixture.storage.alarms.rearm("group", "monitor-session", 1000);
-          fixture.worker.tick();
+          Either.getOrThrowWith(
+            fixture.run(
+              Effect.either(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
+            ),
+            (error) => error,
+          );
+          await runEffect(fixture.worker.tick());
           await Promise.all([gone, readyAgain]);
           expect(fixture.storage.alarms.get("group")).toMatchObject({ status: "armed", epoch: 2 });
         } else if (mode === "exit" || mode === "budget") {
@@ -99,10 +106,16 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           await Promise.all([gone, terminal]);
           expect(await writer.exited).toBe(0);
         } else {
-          if (mode === "cancel") fixture.storage.alarms.cancel("group", "monitor-session", 1000);
+          if (mode === "cancel")
+            Either.getOrThrowWith(
+              fixture.run(
+                Effect.either(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
+              ),
+              (error) => error,
+            );
           if (mode === "timeout") fixture.advance(1050);
-          if (mode !== "shutdown") fixture.worker.tick();
-          await Promise.all([gone, fixture.worker.close()]);
+          if (mode !== "shutdown") await runEffect(fixture.worker.tick());
+          await Promise.all([gone, runEffect(fixture.worker.close())]);
         }
         for (const peer of original) {
           const state = Bun.spawnSync(["ps", "-p", String(peer.process.pid), "-o", "stat="]);

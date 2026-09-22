@@ -1,5 +1,7 @@
+import { effectFailure } from "../helpers/effect-failure";
+import { runEffect } from "../helpers/effect";
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { Ingress } from "@openomni/protocol";
+import { Ingress, type BusEvent } from "@openomni/protocol";
 import { BlacklistStore, ChannelGrantStore } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
@@ -20,7 +22,7 @@ describe("GatewayRouter kernel routing", () => {
   test("mapped Owner DM commits once and returns a session receipt", async () => {
     registerOwnerDm();
     const mapped = createMappedOwnerSession();
-    const result = await kernelRouter().ingest(ownerSender, ownerFacts);
+    const result = await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
     expect(result).toEqual({
       status: "executed",
       handle: { messageId: ownerEvent.id, target: mapped.id },
@@ -36,7 +38,7 @@ describe("GatewayRouter kernel routing", () => {
   test("publishes one canonical route decision", async () => {
     registerOwnerDm();
     const mapped = createMappedOwnerSession();
-    await kernelRouter().ingest(ownerSender, ownerFacts);
+    await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
     expect(routingDecisions()).toHaveLength(1);
     expect(routingDecisions()[0]).toMatchObject({
       inboundId: ownerEvent.id,
@@ -52,14 +54,13 @@ describe("GatewayRouter kernel routing", () => {
     registerOwnerDm();
     createMappedOwnerSession();
     const publish = Bus.publish;
-    const spy = spyOn(Bus, "publish").mockImplementation((event, data) => {
-      if (event === Ingress.Events.RoutingDecision) throw new Error("routing publish failed");
+    const publicationFault = new Error("routing publish failed");
+    const spy = spyOn(Bus, "publish").mockImplementation(<T>(event: BusEvent.Descriptor<T>, data: T) => {
+      if (event === Ingress.Events.RoutingDecision) throw publicationFault;
       publish(event, data);
     });
     try {
-      await expect(kernelRouter().ingest(ownerSender, ownerFacts)).rejects.toThrow(
-        "routing publish failed",
-      );
+      expect(await effectFailure(kernelRouter().ingest(ownerSender, ownerFacts))).toBe(publicationFault);
       expect(commits).toHaveLength(0);
     } finally {
       spy.mockRestore();
@@ -71,7 +72,7 @@ describe("GatewayRouter kernel routing", () => {
     const blacklist = spyOn(BlacklistStore, "list");
     const channels = spyOn(ChannelGrantStore, "list");
     try {
-      await kernelRouter().ingest(ownerSender, ownerFacts);
+      await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
       expect(blacklist).toHaveBeenCalledTimes(1);
       expect(channels).toHaveBeenCalledTimes(1);
     } finally {

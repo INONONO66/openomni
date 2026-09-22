@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+import type { ExecutionError } from "../errors";
 import type {
   Actor,
   BusEvent,
@@ -23,7 +25,7 @@ interface AgentExecutionLifecycle {
   runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
     attempts: import("../executor-contract").LlmAttempts<T>,
-  ): Promise<T>;
+  ): Effect.Effect<T, ExecutionError>;
 }
 
 type AgentToolSpec = Tool.Spec & {
@@ -37,15 +39,15 @@ export interface ChatAgentConfig {
    * fail-closed ledger append from the lossy bus without touching the loop.
    */
   events: BusEvent.Sink;
-  stopEvidence?: () => Promise<{
+  stopEvidence?: () => Effect.Effect<{
     readonly progress: boolean;
     readonly blocked: boolean;
     readonly openIntent: readonly string[];
     readonly alarmIds: readonly string[];
-  }>;
+  }, ExecutionError>;
   /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
   boundary?: import("../session-handle").SessionRunnerInput["boundary"];
-  toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Promise<readonly Tool.Result[]>;
+  toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Effect.Effect<readonly Tool.Result[], ExecutionError>;
   /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
   executor?: Executor;
   systemPrompt?: string;
@@ -76,8 +78,8 @@ export interface ChatAgentConfig {
    */
   pinnedModel?: Model.Ref;
   budget?: AgentBudget;
-  onStepFinish?: (step: AgentStep) => void | Promise<void>;
-  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
+  onStepFinish?: (step: AgentStep) => Effect.Effect<void, ExecutionError>;
+  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.Effect<Tool.Result, ExecutionError>;
   signal?: AbortSignal;
   /**
    * Provider-SDK options, forwarded verbatim to the llm call. JSON-shaped
@@ -108,8 +110,8 @@ export interface ChatAgentConfig {
    */
   steeringPending?: () => boolean;
   llm?: {
-    run?: (input: RunInput, sink: Sink) => Promise<import("@openomni/llm").Run.Outcome>;
-    resolveModel?: (model: Model.Ref) => Promise<Provider.Model>;
+    run?: (input: RunInput, sink: Sink) => Effect.Effect<import("@openomni/llm").Run.Outcome, import("@openomni/llm").LlmError>;
+    resolveModel?: (model: Model.Ref) => Effect.Effect<Provider.Model, import("@openomni/llm").LlmError>;
   };
 }
 

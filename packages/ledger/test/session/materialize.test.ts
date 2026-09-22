@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -18,16 +19,23 @@ describe("L0 session materialization", () => {
   test("repeat declaration preserves the existing row and generation", () => {
     const first = materializeSession("gateway-minted");
     const tree = SessionHandleStore.tree(first.id);
-    const repeat = SessionHandleStore.materialize({
-      id: first.id,
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "different", blocks: [] },
-      policyGeneration: 9,
-      actionId: "must-not-append",
-      at: 100,
-    });
+    const repeat = Either.getOrThrowWith(
+      Effect.runSync(
+        Effect.either(
+          SessionHandleStore.materialize({
+            id: first.id,
+            parentId: null,
+            role: "resident",
+            tools: [],
+            system: { preset: "different", blocks: [] },
+            policyGeneration: 9,
+            actionId: "must-not-append",
+            at: 100,
+          }),
+        ),
+      ),
+      (error) => error,
+    );
     expect(repeat).toEqual({ created: false, row: first });
     expect(SessionHandleStore.tree(first.id)).toEqual(tree);
   });
@@ -80,7 +88,9 @@ describe("L0 session materialization", () => {
       raw.exec(
         "CREATE TRIGGER refuse_configure BEFORE INSERT ON action BEGIN SELECT RAISE(ABORT, 'refuse configure'); END",
       );
-      expect(() => materializeSession("legacy")).toThrow("refuse configure");
+      expect(() => materializeSession("legacy")).toThrow(
+        expect.objectContaining({ _tag: "ForeignFailure" }),
+      );
       expect(raw.query("SELECT * FROM session").all()).toEqual(before);
       expect(SessionHandleStore.tree("legacy")).toEqual([]);
     } finally {

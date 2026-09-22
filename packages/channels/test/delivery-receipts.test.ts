@@ -67,7 +67,7 @@ test("invalid Slack destination throws before any HTTP request or external recei
   try {
     const adapter = new SlackAdapter({ botToken: "token", appToken: "app" }, {}, () => undefined);
     await expect(adapter.deliver("USER", "message", "invalid")).rejects.toMatchObject({
-      name: "SlackEndpointKeyError",
+      _tag: "SlackEndpointKeyError",
     });
     expect(requests).toBe(0);
   } finally {

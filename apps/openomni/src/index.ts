@@ -1,3 +1,15 @@
+import { Cause, Effect, Scope } from "effect";
+import { bootResource } from "./composition/boot";
+import { foreignFailure } from "./composition/failure";
+import { shutdownSessions } from "./shutdown";
+import {
+  AppClock,
+  AppScope,
+  AppEntropy,
+  AppObservations,
+  type AppRuntime,
+  lifecycleFailure,
+} from "./runtime";
 import { AsyncResource } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
 import { createAlarmWorker } from "./composition/alarm-worker";
@@ -5,10 +17,10 @@ import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
   type ChatAgentConfig,
-  closeSessions,
   createSessionRequests,
   type SessionRuntime,
   getSessionHandle,
+  ForeignFailure as AgentFailure,
   ExecutionApprovalError,
   sweepSessions,
   wakeSession,
@@ -16,20 +28,25 @@ import {
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
+  decodeChannelFailure,
+  ForeignFailure as ChannelFailure,
   WebSocketHandler,
 } from "@openomni/channels";
 import { homedir } from "node:os";
 import {
   ActorRegistry,
   ChannelInstanceStore,
-  initialize,
+  LedgerWrites,
   PersonStore,
   SecretStore,
   SessionHandleStore,
-  Storage,
 } from "@openomni/ledger";
 
-import { createMachineHost, type MachineHost } from "@openomni/machines";
+import {
+  createMachineHost,
+  ForeignFailure as MachineFailure,
+  type MachineHost,
+} from "@openomni/machines";
 import type { Channel } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
@@ -43,21 +60,38 @@ import {
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
-import { createCompletionPort } from "./tools/completion";
+import { createCompletionPort } from "./composition/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
-import { createMountedChannelGrantRegistrar, createResidentGateway } from "./gateway";
-import { createComposer, rollbackToCause } from "./composition/composer";
+import {
+  acquireAppResource,
+  channelRequests,
+  createMonitorPorts,
+  createMountedChannelGrantRegistrar,
+  createResidentGateway,
+  gatewayRuntime,
+  runAppBoot,
+  runAppEffect,
+  toolPorts,
+  webSocketCallbacks,
+} from "./gateway";
 import { createResident } from "./resident";
-import { composeCodemode } from "./composition/codemode";
+import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
 import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 interface StartOptions {
+  readonly runtime?: AppRuntime;
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    "clock" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
+    | "clock"
+    | "entropy"
+    | "closeGraceMs"
+    | "approvalTimeoutMs"
+    | "retryAlarm"
+    | "openIntent"
+    | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly llm?: ChatAgentConfig["llm"];
@@ -67,7 +101,7 @@ interface StartOptions {
 /**
  * Owner-admitted delegation targets, recorded as durable identity facts.
  * Registration is an upsert, so a restart re-asserting the same actors is a
- * no-op — which is also why this is not a composer effect: durable facts are
+ * no-op — which is also why this is not a scoped resource: durable facts are
  * history, not runtime handles.
  */
 function registerActors(actors: readonly RegisteredActor[]): void {
@@ -142,32 +176,55 @@ export async function startOpenOmni(options: StartOptions = {}) {
       presented.length !== expected.length ||
       !timingSafeEqual(presented, expected)
     ) {
-      throw new ExecutionApprovalError("unauthenticated");
+      throw new ExecutionApprovalError({ code: "unauthenticated" });
     }
     return { kind: "owner" as const, principalId: "owner", evidenceId: `ws-owner:${requestId}` };
   };
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
-  // Every stage whose teardown matters is mounted on the composer: boot
-  // rollback and shutdown are the same reverse-order release, owned by the
-  // stage that acquired the thing rather than restated by hand in two places.
-  const composer = createComposer();
-  const doorbell = new AsyncResource("session-inbox");
-  try {
-    await composer.mount("journal", (ctx) => {
-      initialize({ dbPath: config.dbPath, observationSink: Bus });
-      seedKernelPolicyRows();
-      ctx.effect(() => Storage.reset());
+  const runtime =
+    options.runtime ??
+    gatewayRuntime({
+      dbPath: config.dbPath,
+      clock: options.sessionRuntime?.clock,
+      entropy: options.sessionRuntime?.entropy,
     });
+  try {
+    const services = await runAppBoot(
+      runtime,
+      Effect.gen(function* () {
+        return {
+          ledger: yield* LedgerWrites,
+          scope: yield* AppScope,
+          clock: yield* AppClock,
+          entropy: yield* AppEntropy,
+          observations: yield* AppObservations,
+        };
+      }),
+    );
+    const acquire = <A, E, E2>(
+      resource: Effect.Effect<A, E>,
+      release: (value: A) => Effect.Effect<void, E2>,
+    ) => runAppBoot(runtime, bootResource(resource, release));
+    const doorbell = await acquire(
+      Effect.sync(() => new AsyncResource("session-inbox")),
+      (resource) =>
+        Effect.sync(() => {
+          resource.emitDestroy();
+        }),
+    );
+    seedKernelPolicyRows();
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      clock: services.clock.now,
+      entropy: services.entropy.next,
       dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
-        options.sessionRuntime?.clock ?? Date.now,
+        services.clock.now,
       ),
-      observations: Bus,
+      observations: services.observations,
       requestDomainRevisions,
       onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
       onInboxCommitted: (ids) => {
@@ -176,22 +233,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
             void wake(id);
           });
       },
-      authorizeApproval: async (credential, request) => authenticateOwner(credential, request.id),
+      authorizeApproval: (credential, request) =>
+        Effect.try({
+          try: () => authenticateOwner(credential, request.id),
+          catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
+        }),
+      generation: (snapshot) => resident.generation(snapshot),
     };
     const requests = createSessionRequests(sessionRuntime);
     let recovery: Promise<void> = Promise.resolve();
-    await composer.mount("session.handles", (ctx) => {
-      ctx.effect(async () => {
-        const outcomes = await Promise.allSettled([closeSessions(sessionRuntime), recovery]);
-        const failures = outcomes.flatMap((outcome) =>
-          outcome.status === "rejected"
-            ? [outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason))]
-            : [],
-        );
-        if (failures.length > 0)
-          throw new AggregateError(failures, "session shutdown and recovery failed");
-      });
-    });
+    await acquire(Effect.void, () => shutdownSessions(sessionRuntime, recovery));
     const actors: readonly RegisteredActor[] = config.actors ?? [];
     registerActors(actors);
     // Declared Person manifests materialize alongside env actors — both are
@@ -230,25 +281,32 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
-    let cells: ReturnType<typeof composeCodemode> | undefined;
+    let cells: ComposedCodemode | undefined;
     const machines = config.machines;
     const host: MachineHost | undefined =
       machines === undefined
         ? undefined
-        : await createMachineHost({
-            socketPath: machines.socketPath,
-            enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-            events: Bus,
-            now: () => Date.now(),
-            callTool: (call) =>
-              cells === undefined
-                ? Promise.resolve({ status: "failed", error: "codemode is not composed" })
-                : cells.callTool(call),
-          });
-    if (host !== undefined) {
-      const attachedHost = host;
-      await composer.mount("machines", (ctx) => ctx.effect(() => attachedHost.close()));
-    }
+        : await acquireAppResource(
+            runtime,
+            createMachineHost({
+              socketPath: machines.socketPath,
+              enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
+              events: Bus,
+              now: () => Date.now(),
+              callTool: (call) =>
+                cells === undefined
+                  ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
+                  : cells.callTool(call).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new MachineFailure({
+                            operation: "codemode.callTool",
+                            cause: String(error),
+                          }),
+                      ),
+                    ),
+            }),
+          );
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
@@ -256,9 +314,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       options.llm ?? {},
     );
     if (host !== undefined) {
-      cells = composeCodemode(host);
-      const composed = cells;
-      await composer.mount("codemode", (ctx) => ctx.effect(() => composed.close()));
+      cells = await acquireAppResource(runtime, composeCodemode(host));
     }
 
     const resident = createResident({
@@ -266,10 +322,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, options.llm ?? {}),
       tools: {
-        messages,
-        machines: host,
-        ...(cells === undefined ? {} : { cells }),
-        llm: llmPort,
+        alarms: await createMonitorPorts(runtime),
+        ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         provisioning: provisioningPort,
       },
       sessionRuntime,
@@ -277,7 +331,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
 
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
-      const admission = await messages.ingest(sender, facts);
+      const admission = await runAppEffect(runtime, messages.ingest(sender, facts));
       if (admission.status === "blocked_pre") {
         throw new Error(`message admission refused: ${admission.reasonCode}`);
       }
@@ -308,7 +362,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
       answer: (answer) =>
-        requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+        runAppEffect(
+          runtime,
+          requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+        ),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         dbPath: config.dbPath,
@@ -323,109 +380,167 @@ export async function startOpenOmni(options: StartOptions = {}) {
           });
       },
     });
-    await composer.mount("session.processes", (ctx) => ctx.effect(() => processSessions.close()));
-    const wake = (id: string) => {
-      const row = SessionHandleStore.row(id);
-      const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
-        (block) => block.id === "runner" && block.source === "app:runner",
-      )?.content;
-      return runner === "process"
-        ? processSessions.wake(id)
-        : wakeSession(id, resident.runnerFor(row), sessionRuntime);
-    };
-    gateway = createResidentGateway(
-      {
-        inbox: { commit: commitMessageInbox },
-        prepare: prepareMessage(resident.materialize),
-        requests,
-        authenticateAnswer: async (_sender, credential, requestId) =>
-          authenticateOwner(credential, requestId),
-        committed: (row) => {
-          doorbell.runInAsyncScope(() => {
-            void wake(row.sessionId);
+    await acquire(Effect.succeed(processSessions), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.close(),
+        catch: lifecycleFailure("processes.close"),
+      }),
+    );
+    const wakeEffect = (id: string) =>
+      Effect.gen(function* () {
+        const row = SessionHandleStore.row(id);
+        const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
+          (block) => block.id === "runner" && block.source === "app:runner",
+        )?.content;
+        if (runner === "process") {
+          yield* Effect.tryPromise({
+            try: () => processSessions.wake(id),
+            catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
           });
+        } else {
+          const scope = yield* AppScope;
+          yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
+        }
+      });
+    const wake = (id: string) =>
+      runAppEffect(
+        runtime,
+        Effect.gen(function* () {
+          const scope = yield* AppScope;
+          yield* Effect.forkIn(
+            wakeEffect(id).pipe(
+              Effect.catchAllCause((cause) =>
+                Cause.isInterruptedOnly(cause)
+                  ? Effect.void
+                  : Effect.sync(() => {
+                      console.error("session wake failed", Cause.pretty(cause));
+                    }),
+              ),
+            ),
+            scope,
+          );
+        }),
+      );
+    gateway = await runAppBoot(
+      runtime,
+      createResidentGateway(
+        {
+          inbox: {
+            commit: (input) =>
+              commitMessageInbox(input).pipe(
+                Effect.mapError(decodeChannelFailure("message.commit")),
+              ),
+          },
+          prepare: prepareMessage(resident.materialize),
+          requests: channelRequests(requests),
+          authenticateAnswer: (_sender, credential, requestId) =>
+            Effect.try({
+              try: () => authenticateOwner(credential, requestId),
+              catch: decodeChannelFailure("answer.authenticate"),
+            }),
+          committed: (row) => {
+            doorbell.runInAsyncScope(() => {
+              void wake(row.sessionId);
+            });
+          },
+          clock: sessionRuntime.clock,
         },
+        {
+          deliveryRoutes,
+          grants: () =>
+            SessionHandleStore.listRows()
+              .filter((row) => row.role === "resident")
+              .flatMap((row) =>
+                actors.map((actor) => ({
+                  id: `${row.id}->${actor.actorId}`,
+                  senderId: row.id,
+                  targetActorId: actor.actorId,
+                  operations: ["awaited" as const, "fire_and_forget" as const],
+                })),
+              ),
+          budgets: () => config.socialBudgets ?? [],
+          replyGrantRules: () =>
+            SessionHandleStore.listRows()
+              .filter((row) => row.role === "resident")
+              .flatMap((row) =>
+                [...deliveryRoutes.keys()].map((surface) => ({
+                  id: `reply:${row.id}:${surface}`,
+                  senderId: row.id,
+                  surface,
+                  operations: ["fire_and_forget" as const, "awaited" as const],
+                  instanceTtlMs: 86_400_000,
+                  maxLiveInstances: 64,
+                  createdBy: "resident",
+                })),
+              ),
+        },
+      ),
+    );
+    const alarms = await acquireAppResource(
+      runtime,
+      createAlarmWorker({
+        alarms: services.ledger.alarms,
+        requestTimeout: requests.timeout,
+        observations: Bus,
         clock: sessionRuntime.clock,
-      },
+        wake: (id) =>
+          Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(
+            Effect.provideService(AppScope, services.scope),
+          ),
+        failure: (error) => console.error("alarm worker failure", error),
+      }),
+    );
+    await runAppBoot(runtime, alarms.start());
+
+    await acquire(Effect.succeed(supervisor), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.stopAll(),
+        catch: lifecycleFailure("channels.close"),
+      }),
+    );
+    await supervisor.reconcile();
+
+    wsHandler = new WebSocketHandler(
+      ({ sender, facts }) =>
+        messages.ingest(sender, facts).pipe(
+          Effect.flatMap((admission) =>
+            admission.status === "blocked_pre"
+              ? Effect.fail(
+                  new ChannelFailure({
+                    operation: "message.admission",
+                    cause: admission.reasonCode,
+                  }),
+                )
+              : Effect.void,
+          ),
+        ),
+      Bus.publish,
       {
-        deliveryRoutes,
-        grants: () =>
-          SessionHandleStore.listRows()
-            .filter((row) => row.role === "resident")
-            .flatMap((row) =>
-              actors.map((actor) => ({
-                id: `${row.id}->${actor.actorId}`,
-                senderId: row.id,
-                targetActorId: actor.actorId,
-                operations: ["awaited" as const, "fire_and_forget" as const],
-              })),
-            ),
-        budgets: () => config.socialBudgets ?? [],
-        replyGrantRules: () =>
-          SessionHandleStore.listRows()
-            .filter((row) => row.role === "resident")
-            .flatMap((row) =>
-              [...deliveryRoutes.keys()].map((surface) => ({
-                id: `reply:${row.id}:${surface}`,
-                senderId: row.id,
-                surface,
-                operations: ["fire_and_forget" as const, "awaited" as const],
-                instanceTtlMs: 86_400_000,
-                maxLiveInstances: 64,
-                createdBy: "resident",
-              })),
-            ),
+        ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
+        onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
       },
     );
-    const alarmStore = Storage.get().alarms;
-    if (alarmStore === undefined) throw new Error("alarm storage unavailable at boot");
-    const alarms = createAlarmWorker({
-      alarms: alarmStore,
-      requestTimeout: requests.timeout,
-      observations: Bus,
-      clock: sessionRuntime.clock,
-      wake: async (id) => {
-        await wake(id);
-      },
-      failure: (error) => console.error("alarm worker failure", error),
-    });
-    await composer.mount("alarms", (ctx) => {
-      ctx.effect(() => alarms.close());
-      alarms.start();
-    });
-
-    await composer.mount("channels", async (ctx) => {
-      ctx.effect(() => supervisor.stopAll());
-      await supervisor.reconcile();
-    });
-
-    wsHandler = new WebSocketHandler(routingHandler, Bus.publish, {
-      ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
-      onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
-    });
 
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,
-      websocket: wsHandler.ws,
+      websocket: webSocketCallbacks(runtime, wsHandler),
       fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
     if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
     const boundServer = server;
     const boundPort: number = server.port;
-    await composer.mount("ws.server", (ctx) => {
-      // Initiate the graceful stop without awaiting it: Bun resolves this
-      // promise only after every open client connection closes, and shutdown
-      // must not wait on clients (the pre-composer stop never did).
-      ctx.effect(() => {
-        void boundServer.stop();
-      });
-    });
+    await acquire(Effect.succeed(boundServer), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.stop(true),
+        catch: lifecycleFailure("websocket.close"),
+      }),
+    );
     const awaitingOwner = requests
       .list()
       .some((request) => request.mode === "approval" && request.state === "open");
-    recovery = sweepSessions(resident.runnerFor, sessionRuntime);
+    recovery = acquireAppResource(runtime, sweepSessions(resident.runnerFor, sessionRuntime));
     if (awaitingOwner) {
       void recovery.catch((error: Error) => console.error("session recovery failed", error));
     } else await recovery;
@@ -436,15 +551,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
-      // Shutdown is the same reverse-order release boot rollback uses: the
-      // composer owns the sequence, so a new stage cannot leak by forgetting
-      // a line here.
-      stop: () => composer.dispose(),
+      runtime,
+      stop: runtime.dispose,
     };
   } catch (error) {
-    // Fail-closed boot rollback leaves no armed kernel timer or configured
-    // storage behind, so a later boot starts clean.
-    return rollbackToCause(composer, error instanceof Error ? error : new Error(String(error)));
+    await runtime.dispose().catch((disposal: Error) => {
+      throw new AggregateError([error, disposal], "app boot and disposal failed");
+    });
+    throw error;
   }
 }
 
@@ -457,10 +571,16 @@ export function installShutdownHandlers(deps: {
   readonly exit: (code: number) => void;
   readonly on: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
 }): void {
+  let stopping = false;
   const handler = () => {
+    if (stopping) return;
+    stopping = true;
     void deps.stop().then(
       () => deps.exit(0),
-      () => deps.exit(1),
+      (error: Error) => {
+        console.error("app shutdown incident", error);
+        deps.exit(1);
+      },
     );
   };
   deps.on("SIGINT", handler);

@@ -1,8 +1,10 @@
+import { bounded } from "../../helpers/bounded";
+import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { runTestAgent } from "../../helpers/test-agent";
+import { runTestAgent } from "../../helpers/effect-g1";
 import { Bus } from "../../../src/index";
 import { mockLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
@@ -29,7 +31,7 @@ describe("canonical lifecycle audit facts", () => {
     });
     let calls = 0;
     try {
-      await runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
+      await isolated(runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
         events: Bus,
         model: { provider: "test", id: "model" },
         llm: mockLlm(async (_input, sink) => {
@@ -37,8 +39,8 @@ describe("canonical lifecycle audit facts", () => {
           sink.onMessage(measuredMessage(calls === 1 ? 3 : 4));
           return calls === 1 ? { type: "continue" } : { type: "stop" };
         }),
-      });
-      await done.promise;
+      }));
+      await bounded(done.promise);
       expect(responseTokens).toEqual([3, 4]);
     } finally {
       unsubscribe();

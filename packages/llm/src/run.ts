@@ -1,6 +1,7 @@
 import type { BusEvent, Message, PlainObject, Tool } from "@openomni/protocol";
 import { LlmCall, type Transcript } from "@openomni/protocol";
-import { z } from "zod";
+import { Effect } from "effect";
+import { LlmRunFailure, InvalidProviderData, type LlmError } from "./errors";
 import type { Sink } from "./sink";
 import { Processor } from "./processor";
 import { toModelMessages } from "./message";
@@ -8,7 +9,7 @@ import type { Provider } from "./provider";
 import { ProviderTransform } from "./provider/transform";
 import { getLanguage, type Transport } from "./provider/sdk";
 import { Auth } from "./auth/storage";
-import { coerceApiError, errorFacts, NamedError } from "./error";
+import { coerceApiError, decodeLlmFailure, errorFacts } from "./error";
 import { adaptStream, streamArguments } from "./provider/stream";
 import { Retry } from "./retry";
 
@@ -84,36 +85,11 @@ interface RunDependencies {
  * namespace are distinct identifiers).
  */
 export namespace Run {
-  const FailureUsage = z.object({
-    inputTokens: z.number(),
-    outputTokens: z.number(),
-    reasoningTokens: z.number(),
-    cacheReadTokens: z.number(),
-    cacheWriteTokens: z.number(),
-  });
-
-  /**
-   * The typed failure crossing from the provider-owning package to Agent.
-   * `cause` remains Error's native cause chain; machine-consumed facts live
-   * in data so consumers never have to recover them from prose.
-   */
-  export const FailureError = NamedError.create(
-    "LlmRunFailure",
-    z.object({
-      message: z.string(),
-      providerErrorName: z.string().optional(),
-      retryAfterMs: z.number().nonnegative().optional(),
-      usage: FailureUsage,
-      aborted: z.boolean(),
-      contextOverflow: z.boolean(),
-      visibleOutput: z.boolean().default(false),
-    }),
-  );
-  export type Failure = InstanceType<typeof FailureError>;
+  export type Failure = LlmRunFailure;
 
   /** Billed usage, the visible-output boundary and the credential handle of one provider attempt. */
   export interface AttemptEvidence {
-    readonly usage: z.infer<typeof FailureUsage>;
+    readonly usage: LlmRunFailure["usage"];
     readonly visibleOutput: boolean;
     readonly finishReason: string;
     readonly credential: ReturnType<typeof Auth.reference> | null;
@@ -188,22 +164,24 @@ function attemptUsage(totals: Transcript.Usage): Run.AttemptEvidence["usage"] {
   };
 }
 
-export async function run(
+export function run(
   input: RunInput,
   sink: Sink,
   dependencies: RunDependencies = {},
-): Promise<Run.Outcome> {
+): Effect.Effect<Run.Outcome, LlmError> {
+  return Effect.suspend((): Effect.Effect<Run.Outcome, LlmError> => {
   const { messages, system = "", signal, model } = input;
 
-  const abortSignal = signal ?? new AbortController().signal;
+  const controller = new AbortController();
+  const abortSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   if (abortSignal.aborted) {
-    return { type: "aborted" };
+    return Effect.succeed({ type: "aborted" } as const);
   }
 
   const { traceId, runId } = input.trace;
   const sessionID = input.trace.sessionId;
   if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
-    throw new Error("llm run requires a non-empty traceId, sessionId, and runId");
+    return new InvalidProviderData({ operation: "run.trace", cause: "empty trace identity", message: "llm run requires a non-empty traceId, sessionId, and runId" });
   }
   const messageID = `msg-${crypto.randomUUID()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
@@ -231,9 +209,9 @@ export async function run(
   };
 
   let credential: ReturnType<typeof Auth.reference> | undefined;
-  const createStream: Processor.ProcessorOptions["createStream"] = async (streamInput) => {
-    const ai = await import("ai");
-    const auth = await Auth.resolve(
+  const createStream: Processor.ProcessorOptions["createStream"] = (streamInput) => Effect.gen(function* () {
+    const ai = yield* Effect.tryPromise({ try: () => import("ai"), catch: decodeLlmFailure("provider.import") });
+    const auth = yield* Auth.resolve(
       model.providerID,
       input.auth,
       input.authProvider,
@@ -241,13 +219,12 @@ export async function run(
     );
     credential = Auth.reference(auth);
 
-    const languageModel = getLanguage(model, auth, input.transport);
-
-    const streamResult = ai.streamText(
-      streamArguments(input, streamInput.system, abortSignal, wireNames, languageModel),
-    );
+    const streamResult = yield* Effect.try({
+      try: () => ai.streamText(streamArguments(input, streamInput.system, abortSignal, wireNames, getLanguage(model, auth, input.transport))),
+      catch: decodeLlmFailure("provider.stream"),
+    });
     return { fullStream: adaptStream(streamResult.fullStream) };
-  };
+  });
   const provider = model.providerID;
   const modelId = model.id;
 
@@ -284,9 +261,8 @@ export async function run(
 
   const startMs = Date.now();
 
-  try {
-    await processor.process({ system, promptText: serializePrompt(system, input, model) });
-
+  return processor.process({ system, promptText: serializePrompt(system, input, model) }).pipe(Effect.match({
+    onSuccess: (): Run.Outcome => {
     const durationMs = Date.now() - startMs;
     // Usage belongs to this single provider attempt.
     const finalTokens = processor.usageTotals;
@@ -317,25 +293,27 @@ export async function run(
         credential: credential ?? null,
       },
     };
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+  }, onFailure: (err): Run.Outcome => {
     const apiError = coerceApiError(err);
     const source = apiError ?? err;
     const sourceFacts = errorFacts(source);
     const aborted = abortSignal.aborted || sourceFacts.aborted === true;
     const retryAfterMs = Retry.retryAfterMs(source);
-    const failure = new Run.FailureError(
-      {
-        message: err.message,
-        providerErrorName: err.name,
-        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    const failure = new LlmRunFailure({
+        message: err.message || String(err),
+        providerErrorName: "providerErrorName" in err ? err.providerErrorName ?? err.name : err.name,
+        provider, model: modelId,
+        retryAfterMs,
+        statusCode: apiError?.statusCode,
+        isRetryable: apiError?.isRetryable,
+        responseHeaders: apiError?.responseHeaders,
+        responseBody: apiError?.responseBody,
         usage: attemptUsage(processor.usageTotals),
         aborted,
         contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
         visibleOutput: processor.visibleOutput,
-      },
-      { cause: source },
-    );
+        cause: source.cause ?? String(source),
+    });
     if (err.stack !== undefined) failure.stack = err.stack;
 
     input.events.publish(LlmCall.Events.Failed, {
@@ -355,5 +333,6 @@ export async function run(
     }
 
     return { type: "error", error: failure };
-  }
+  }}), Effect.onInterrupt(() => Effect.sync(() => controller.abort())));
+  });
 }

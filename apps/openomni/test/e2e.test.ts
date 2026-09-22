@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import { AssertionError } from "node:assert/strict";
@@ -63,10 +64,10 @@ async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }>
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink: Sink) => {
+      run: (input, sink: Sink) => Effect.sync(() => {
         sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
         return { type: "stop" };
-      },
+      }),
     },
   });
   return { port: app.port };
@@ -141,11 +142,11 @@ describe("OpenOmni Resident WebSocket", () => {
       config,
       llm: {
         resolveModel: fakeProviderModel,
-        run: async (input, sink: Sink) => {
+        run: (input, sink: Sink) => Effect.sync(() => {
           providerCalls += 1;
           sink.onMessage(assistantMessage(input, { text: REPLY }));
           return { type: "stop" };
-        },
+        }),
       },
     });
     const db = new Database(config.dbPath, { readonly: true });

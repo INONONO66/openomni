@@ -1,4 +1,5 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import { Effect } from "effect";
+import { CommitRefused, SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   canonicalDigest,
@@ -10,14 +11,10 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
-import {
-  recordedCompaction,
-  restoreContextRequest,
-  restoredContextProjection,
-} from "./compaction/restore";
+import { recordedCompaction, restoreContextRequest, restoredContextProjection } from "./compaction/restore";
+import { ForeignFailure, CommitFailed, type ExecutionError, type SessionError } from "./errors";
 import {
   SessionPolicyRefusal,
-  SessionCommitError,
   type SessionRuntime,
   type SessionRunnerResult,
   type SessionActionCommitPort,
@@ -35,6 +32,8 @@ import type { SessionControllerState } from "./session-controller-state";
 import { observeDrained } from "./session-message-observation";
 import { decideRequestTransition, type RequestDecision } from "./session-request";
 
+type AdmissionError = SessionError;
+
 export function createSessionAdmission(
   sessionId: string,
   runtime: SessionRuntime,
@@ -44,8 +43,8 @@ export function createSessionAdmission(
   entropy: () => string,
   pinPolicy: (generation: number) => CompiledPolicySnapshot,
   ports: {
-    readonly awaitRetainedRunner: () => Promise<void>;
-    readonly acquire: (expectedFence: number) => number;
+    readonly awaitRetainedRunner: () => Effect.Effect<void, AdmissionError>;
+    readonly acquire: (expectedFence: number) => Effect.Effect<number, AdmissionError>;
     readonly runTurn: (input: {
       readonly turnId: string;
       readonly resultId: string;
@@ -54,150 +53,16 @@ export function createSessionAdmission(
       readonly resumeCount: number;
       readonly generation: SessionGeneration.Snapshot;
       readonly resume: boolean;
-    }) => Promise<SessionRunnerResult>;
+    }) => Effect.Effect<SessionRunnerResult, AdmissionError>;
     readonly seal: (
       open: SessionHandleStore.OpenTurn,
       result: SessionRunnerResult,
       releaseLease: boolean,
-    ) => Promise<void>;
-    readonly releaseHeldLease: () => void;
+    ) => Effect.Effect<void, AdmissionError>;
+    readonly releaseHeldLease: () => Effect.Effect<void, ExecutionError>;
   },
 ) {
   const { awaitRetainedRunner, acquire, runTurn, seal, releaseHeldLease } = ports;
-  async function startTurn(): Promise<SessionRunnerResult | undefined> {
-    await awaitRetainedRunner();
-    const current = SessionHandleStore.row(sessionId);
-    state.fence = acquire(current.leaseFence);
-    const actions = SessionHandleStore.tree(sessionId);
-    const generation = SessionHandleStore.latestGeneration(actions);
-    const pending = SessionHandleStore.pendingInbox(sessionId);
-    const promptRefusal = await evaluatePromptPolicies(
-      pending,
-      pinPolicy(generation.policyGeneration),
-    );
-    if (promptRefusal !== undefined) {
-      await consumePolicyBlockedInbox(pending, true);
-      return policyRefusalResult(promptRefusal.reason);
-    }
-    const resultId = entropy();
-    const turnId = entropy();
-    const currentActions = SessionHandleStore.tree(sessionId);
-    const parentActionId = currentActions.at(-1)?.id ?? null;
-    const deliveries = deliveryActions(pending, turnId, "before_llm", parentActionId);
-    const envelope = turnIntentAction({
-      id: turnId,
-      parentId: deliveries.at(-1)?.id ?? parentActionId,
-      sessionId,
-      resultId,
-      inboxIds: pending.map((item) => item.id),
-      generation,
-      resumeCount: 0,
-      boundaryActionId: parentActionId,
-      at: clock(),
-    });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: SessionHandleStore.row(sessionId).revision,
-      actions: [...deliveries, envelope],
-      consumeInboxIds: pending.map((item) => item.id),
-      state: "running",
-      releaseLease: false,
-    });
-    requireCommit(committed);
-    observeDrained(pending, turnId, "before_llm", clock(), runtime.observations);
-    if (pending.some((item) => item.kind === "interrupt")) {
-      const action = SessionHandleStore.tree(sessionId).find((item) => item.id === turnId);
-      if (action === undefined) throw new Error(`committed turn is missing: ${turnId}`);
-      const interrupted = { kind: "interrupted" as const };
-      await seal(
-        {
-          turnId,
-          resultId,
-          resumeCount: 0,
-          boundaryActionId: parentActionId,
-          toolsGeneration: generation.generation,
-          toolsHash: generation.toolsHash,
-          systemHash: generation.systemHash,
-          policyGeneration: generation.policyGeneration,
-          action,
-        },
-        interrupted,
-        true,
-      );
-      return interrupted;
-    }
-    return runTurn({
-      turnId,
-      resultId,
-      parentActionId: envelope.id,
-      boundaryActionId: parentActionId,
-      resumeCount: 0,
-      generation,
-      resume: false,
-    });
-  }
-
-  async function evaluatePromptPolicies(
-    items: readonly Inbox.Row[],
-    policy: CompiledPolicySnapshot,
-  ): Promise<SessionPolicyRefusal | undefined> {
-    const ledger = createExecutionLedger();
-    let refusal: SessionPolicyRefusal | undefined;
-    for (const item of items) {
-      if (item.kind !== "prompt") continue;
-      const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
-      const outcome = await createExecutor({
-        policy,
-        ledger,
-        observations: runtime.observations,
-        identity: {
-          sessionId,
-          role: SessionHandleStore.row(sessionId).role,
-          parentActionId: item.id,
-        },
-        clock,
-        entropy,
-      }).runExisting(
-        {
-          kind: "prompt",
-          op: "inbox",
-          intent: {
-            inboxId: item.id,
-            content: item.content,
-            origin: item.origin.value,
-            createdAt: item.createdAt,
-            ordinal: item.ordinal,
-          },
-          effect: { status: "recorded" },
-        },
-        async () => recorded,
-      );
-      if (refusal !== undefined) continue;
-      if (outcome.terminal !== "executed") {
-        refusal = new SessionPolicyRefusal(outcome.reason);
-      } else if (canonicalDigest(outcome.value) !== canonicalDigest(recorded)) {
-        refusal = new SessionPolicyRefusal("invalid_output");
-      }
-    }
-    return refusal;
-  }
-
-  async function consumePolicyBlockedInbox(
-    items: readonly Inbox.Row[],
-    releaseLease: boolean,
-  ): Promise<void> {
-    const current = SessionHandleStore.row(sessionId);
-    commitSession({
-      expectedRevision: current.revision,
-      actions: [],
-      consumeInboxIds: items.map((item) => item.id),
-      state: current.state,
-      releaseLease,
-    });
-  }
 
   function commitSession(input: {
     readonly expectedRevision: number;
@@ -206,8 +71,8 @@ export function createSessionAdmission(
     readonly state: LedgerSession.State;
     readonly releaseLease: boolean;
     readonly generation?: LedgerSession.GenerationPointers;
-  }): Extract<LedgerSession.CommitResult, { readonly ok: true }> {
-    const committed = SessionHandleStore.commit({
+  }): Effect.Effect<Extract<LedgerSession.CommitResult, { readonly ok: true }>, LedgerError> {
+    return SessionHandleStore.commit({
       sessionId,
       owner,
       fence: state.fence,
@@ -218,9 +83,116 @@ export function createSessionAdmission(
       state: input.state,
       ...(input.generation === undefined ? {} : { generation: input.generation }),
       releaseLease: input.releaseLease,
+    }).pipe(Effect.map((result) => {
+      requireCommit(result);
+      return result;
+    }));
+  }
+
+  function startTurn(): Effect.Effect<SessionRunnerResult | undefined, AdmissionError> {
+    return Effect.gen(function* () {
+      yield* awaitRetainedRunner();
+      const current = SessionHandleStore.row(sessionId);
+      state.fence = yield* acquire(current.leaseFence);
+      const actions = SessionHandleStore.tree(sessionId);
+      const generation = SessionHandleStore.latestGeneration(actions);
+      const pending = SessionHandleStore.pendingInbox(sessionId);
+      const promptRefusal = yield* evaluatePromptPolicies(pending, pinPolicy(generation.policyGeneration));
+      if (promptRefusal !== undefined) {
+        yield* consumePolicyBlockedInbox(pending, true);
+        return policyRefusalResult(promptRefusal.reason);
+      }
+      const resultId = entropy();
+      const turnId = entropy();
+      const parentActionId = SessionHandleStore.tree(sessionId).at(-1)?.id ?? null;
+      const deliveries = deliveryActions(pending, turnId, "before_llm", parentActionId);
+      const envelope = turnIntentAction({
+        id: turnId,
+        parentId: deliveries.at(-1)?.id ?? parentActionId,
+        sessionId,
+        resultId,
+        inboxIds: pending.map((item) => item.id),
+        generation,
+        resumeCount: 0,
+        boundaryActionId: parentActionId,
+        at: clock(),
+      });
+      yield* commitSession({
+        expectedRevision: SessionHandleStore.row(sessionId).revision,
+        actions: [...deliveries, envelope],
+        consumeInboxIds: pending.map((item) => item.id),
+        state: "running",
+        releaseLease: false,
+      });
+      observeDrained(pending, turnId, "before_llm", clock(), runtime.observations);
+      if (pending.some((item) => item.kind === "interrupt")) {
+        const action = SessionHandleStore.tree(sessionId).find((item) => item.id === turnId);
+        if (action === undefined) return yield* new ForeignFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
+        yield* seal({
+          turnId,
+          resultId,
+          resumeCount: 0,
+          boundaryActionId: parentActionId,
+          toolsGeneration: generation.generation,
+          toolsHash: generation.toolsHash,
+          systemHash: generation.systemHash,
+          policyGeneration: generation.policyGeneration,
+          action,
+        }, { kind: "interrupted" }, true);
+        return { kind: "interrupted" as const };
+      }
+      return yield* runTurn({
+        turnId,
+        resultId,
+        parentActionId: envelope.id,
+        boundaryActionId: parentActionId,
+        resumeCount: 0,
+        generation,
+        resume: false,
+      });
     });
-    if (!committed.ok) throw new SessionCommitError(committed);
-    return committed;
+  }
+
+  function evaluatePromptPolicies(
+    items: readonly Inbox.Row[],
+    policy: CompiledPolicySnapshot,
+  ): Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError> {
+    return Effect.gen(function* () {
+      const ledger = createExecutionLedger();
+      let refusal: SessionPolicyRefusal | undefined;
+      for (const item of items) {
+        if (item.kind !== "prompt") continue;
+        const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
+        const outcome = yield* createExecutor({
+          policy,
+          ledger,
+          observations: runtime.observations,
+          identity: { sessionId, role: SessionHandleStore.row(sessionId).role, parentActionId: item.id },
+          clock,
+          entropy,
+        }).runExisting({
+          kind: "prompt",
+          op: "inbox",
+          intent: { inboxId: item.id, content: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
+          effect: { status: "recorded" },
+        }, () => Effect.succeed(recorded));
+        if (refusal !== undefined) continue;
+        if (outcome.terminal !== "executed") refusal = new SessionPolicyRefusal(outcome.reason);
+        else if (canonicalDigest(outcome.value) !== canonicalDigest(recorded)) refusal = new SessionPolicyRefusal("invalid_output");
+      }
+      return refusal;
+    });
+  }
+
+  function consumePolicyBlockedInbox(items: readonly Inbox.Row[], releaseLease: boolean): Effect.Effect<void, ExecutionError> {
+    const current = SessionHandleStore.row(sessionId);
+    return commitSession({
+      expectedRevision: current.revision,
+      actions: [],
+      consumeInboxIds: items.map((item) => item.id),
+      state: current.state,
+      releaseLease,
+    }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
   }
 
   function createExecutionLedger(turnId?: string): SessionActionCommitPort {
@@ -229,228 +201,121 @@ export function createSessionAdmission(
       actions: () => SessionHandleStore.tree(sessionId),
       validateRequest(request) {
         const row = SessionHandleStore.row(sessionId);
-        return (
-          row.leaseOwner === owner &&
-          row.leaseFence === executionFence &&
-          row.leaseExpiresAt !== null &&
-          clock() < row.leaseExpiresAt &&
-          row.toolsGeneration === request.toolsGeneration &&
-          row.systemHash === request.systemHash &&
-          row.policyGeneration === request.generation &&
-          (runtime.requestDomainRevisions === undefined ||
-            canonicalDigest({ ...runtime.requestDomainRevisions(request) }) ===
-              canonicalDigest(request.domainRevisions))
-        );
+        return row.leaseOwner === owner && row.leaseFence === executionFence && row.leaseExpiresAt !== null &&
+          clock() < row.leaseExpiresAt && row.toolsGeneration === request.toolsGeneration &&
+          row.systemHash === request.systemHash && row.policyGeneration === request.generation &&
+          (runtime.requestDomainRevisions === undefined || canonicalDigest({ ...runtime.requestDomainRevisions(request) }) === canonicalDigest(request.domainRevisions));
       },
-      async transition(payload, inputId, at) {
-        const current = SessionHandleStore.row(sessionId);
-        if (
-          current.leaseFence !== executionFence ||
-          (turnId !== undefined &&
-            SessionHandleStore.tree(sessionId).some(
-              (node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId,
-            ))
-        ) {
-          throw new SessionCommitError({
-            ok: false,
-            reason: "stale",
-            currentFence: current.leaseFence,
-            currentRevision: current.revision,
-          });
-        }
-        return commitSessionRequest(
-          sessionId,
-          { owner, fence: executionFence },
-          payload,
-          inputId,
-          at,
-          runtime,
-        );
+      transition(payload, inputId, at) {
+        return Effect.gen(function* () {
+          const current = SessionHandleStore.row(sessionId);
+          if (current.leaseFence !== executionFence || (turnId !== undefined && SessionHandleStore.tree(sessionId).some((node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId)))
+            return yield* new ForeignFailure({ operation: "session.request.transition", cause: "stale" });
+          return yield* commitSessionRequest(sessionId, { owner, fence: executionFence }, payload, inputId, at, runtime);
+        });
       },
-      async commit(action) {
-        const current = SessionHandleStore.row(sessionId);
-        const sealed =
-          turnId !== undefined &&
-          SessionHandleStore.tree(sessionId).some(
-            (node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId,
-          );
-        if (current.leaseFence !== executionFence || sealed) {
-          throw new SessionCommitError({
-            ok: false,
-            reason: "stale",
-            currentFence: current.leaseFence,
-            currentRevision: current.revision,
+      commit(action) {
+        return Effect.gen(function* () {
+          const current = SessionHandleStore.row(sessionId);
+          const sealed = turnId !== undefined && SessionHandleStore.tree(sessionId).some((node) => SessionHandleStore.turnTerminal(node)?.turnId === turnId);
+          if (current.leaseFence !== executionFence || sealed || state.terminalFrozen) return yield* new CommitRefused({
+            sessionId, reason: "fence", expectedRevision: current.revision,
+            currentRevision: current.revision, fence: executionFence, currentFence: current.leaseFence,
           });
-        }
-        const receipt = commitSession({
-          expectedRevision: current.revision,
-          actions: [action],
-          consumeInboxIds: [],
-          state: current.state,
-          releaseLease: false,
-        }).receipts[0];
-        if (receipt === undefined) throw new Error("single-action commit returned no receipt");
-        return receipt;
+          const committed = yield* commitSession({ expectedRevision: current.revision, actions: [action], consumeInboxIds: [], state: current.state, releaseLease: false });
+          const receipt = committed.receipts[0];
+          if (receipt === undefined) return yield* new ForeignFailure({ operation: "session.commit", cause: "missing_receipt" });
+          return receipt;
+        });
       },
     };
   }
 
-  /**
-   * Append `restore_context_projection`: the recorded, policy-evaluated
-   * compensation of one compaction, rebuilt from that compaction's own recipe.
-   * The original compaction and every earlier projection stay in history.
-   */
-  async function restoreContextProjection(compactionId: string): Promise<ExecutionResult> {
-    await awaitRetainedRunner();
-    const current = SessionHandleStore.row(sessionId);
-    state.fence = acquire(current.leaseFence);
-    try {
-      const actions = SessionHandleStore.tree(sessionId);
-      const record = recordedCompaction(actions, compactionId);
-      const executor = createExecutor({
-        policy: pinPolicy(SessionHandleStore.latestGeneration(actions).policyGeneration),
-        ledger: createExecutionLedger(),
-        observations: runtime.observations,
-        clock,
-        entropy,
-        identity: { sessionId, role: current.role, parentActionId: compactionId },
-      });
-      return await executor.run(restoreContextRequest(compactionId), async () =>
-        restoredContextProjection(sessionId, actions, compactionId, record),
-      );
-    } finally {
-      releaseHeldLease();
-    }
-  }
-
-  async function resumeTurn(open: SessionHandleStore.OpenTurn): Promise<SessionRunnerResult> {
-    await awaitRetainedRunner();
-    state.fence = acquire(SessionHandleStore.row(sessionId).leaseFence);
-    if (SessionHandleStore.pendingInbox(sessionId).some((item) => item.kind === "interrupt")) {
-      const interrupted = { kind: "interrupted" as const };
-      await seal(open, interrupted, true);
-      return interrupted;
-    }
-    if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
-      const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
-      await seal(open, exhausted, true);
-      return exhausted;
-    }
-    const generation = generationForOpen(open);
-    const resumeCount = open.resumeCount + 1;
-    const resumeId = entropy();
-    const resultId = open.resultId;
-    const resume = turnResumeAction({
-      id: resumeId,
-      parentId: open.boundaryActionId ?? open.action.id,
-      sessionId,
-      turnId: open.turnId,
-      resultId,
-      generation,
-      resumeCount,
-      boundaryActionId: open.boundaryActionId,
-      at: clock(),
-    });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: SessionHandleStore.row(sessionId).revision,
-      actions: [resume],
-      consumeInboxIds: [],
-      state: "running",
-      releaseLease: false,
-    });
-    requireCommit(committed);
-    return runTurn({
-      turnId: open.turnId,
-      resultId,
-      parentActionId: resumeId,
-      boundaryActionId: open.boundaryActionId,
-      resumeCount,
-      generation,
-      resume: true,
+  function restoreContextProjection(compactionId: string): Effect.Effect<ExecutionResult, AdmissionError> {
+    return Effect.gen(function* () {
+      yield* awaitRetainedRunner();
+      const current = SessionHandleStore.row(sessionId);
+      state.fence = yield* acquire(current.leaseFence);
+      return yield* Effect.gen(function* () {
+        const actions = SessionHandleStore.tree(sessionId);
+        const record = recordedCompaction(actions, compactionId);
+        const executor = createExecutor({
+          policy: pinPolicy(SessionHandleStore.latestGeneration(actions).policyGeneration),
+          ledger: createExecutionLedger(),
+          observations: runtime.observations,
+          clock,
+          entropy,
+          identity: { sessionId, role: current.role, parentActionId: compactionId },
+        });
+        return yield* executor.run(restoreContextRequest(compactionId), () => Effect.succeed(restoredContextProjection(sessionId, actions, compactionId, record)));
+      }).pipe(Effect.onExit(() => releaseHeldLease().pipe(Effect.orDie)));
     });
   }
 
-  async function resumeInterrupted(item: Inbox.Row): Promise<SessionRunnerResult | undefined> {
-    await awaitRetainedRunner();
-    const terminal = latestTerminal(SessionHandleStore.tree(sessionId));
-    if (terminal === undefined) {
-      await consumeNoopInbox([item]);
-      return undefined;
-    }
-    const current = SessionHandleStore.row(sessionId);
-    state.fence = acquire(current.leaseFence);
-    const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
-    const resultId = entropy();
-    const turnId = entropy();
-    const resumeCount = terminal.effect.resumeCount + 1;
-    const delivery = deliveryActions([item], turnId, "before_llm", terminal.action.id);
-    const resume = turnIntentAction({
-      id: turnId,
-      parentId: delivery.at(-1)?.id ?? terminal.action.id,
-      sessionId,
-      resultId,
-      inboxIds: [item.id],
-      generation,
-      resumeCount,
-      boundaryActionId: terminal.effect.boundaryActionId,
-      at: clock(),
-    });
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: [...delivery, resume],
-      consumeInboxIds: [item.id],
-      state: "running",
-      releaseLease: false,
-    });
-    requireCommit(committed);
-    return runTurn({
-      turnId,
-      resultId,
-      parentActionId: resume.id,
-      boundaryActionId: terminal.effect.boundaryActionId,
-      resumeCount,
-      generation,
-      resume: true,
+  function resumeTurn(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionRunnerResult, AdmissionError> {
+    return Effect.gen(function* () {
+      yield* awaitRetainedRunner();
+      state.fence = yield* acquire(SessionHandleStore.row(sessionId).leaseFence);
+      if (SessionHandleStore.pendingInbox(sessionId).some((item) => item.kind === "interrupt")) {
+        const interrupted = { kind: "interrupted" as const };
+        yield* seal(open, interrupted, true);
+        return interrupted;
+      }
+      if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
+        const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
+        yield* seal(open, exhausted, true);
+        return exhausted;
+      }
+      const generation = yield* generationForOpen(open);
+      const resumeCount = open.resumeCount + 1;
+      const resumeId = entropy();
+      const resultId = open.resultId;
+      const resume = turnResumeAction({ id: resumeId, parentId: open.boundaryActionId ?? open.action.id, sessionId, turnId: open.turnId, resultId, generation, resumeCount, boundaryActionId: open.boundaryActionId, at: clock() });
+      yield* commitSession({ expectedRevision: SessionHandleStore.row(sessionId).revision, actions: [resume], consumeInboxIds: [], state: "running", releaseLease: false });
+      return yield* runTurn({ turnId: open.turnId, resultId, parentActionId: resumeId, boundaryActionId: open.boundaryActionId, resumeCount, generation, resume: true });
     });
   }
 
-  async function consumeNoopInbox(items: readonly Inbox.Row[]): Promise<void> {
-    const current = SessionHandleStore.row(sessionId);
-    state.fence = acquire(current.leaseFence);
-    const actions = SessionHandleStore.tree(sessionId);
-    const noops = deliveryActions(items, "noop", "before_llm", actions.at(-1)?.id ?? null);
-    const committed = SessionHandleStore.commit({
-      sessionId,
-      owner,
-      fence: state.fence,
-      now: clock(),
-      expectedRevision: current.revision,
-      actions: noops,
-      consumeInboxIds: items.map((item) => item.id),
-      state: current.state,
-      releaseLease: true,
+  function resumeInterrupted(item: Inbox.Row): Effect.Effect<SessionRunnerResult | undefined, AdmissionError> {
+    return Effect.gen(function* () {
+      yield* awaitRetainedRunner();
+      const terminal = latestTerminal(SessionHandleStore.tree(sessionId));
+      if (terminal === undefined) {
+        yield* consumeNoopInbox([item]);
+        return undefined;
+      }
+      const current = SessionHandleStore.row(sessionId);
+      state.fence = yield* acquire(current.leaseFence);
+      const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+      const resultId = entropy();
+      const turnId = entropy();
+      const resumeCount = terminal.effect.resumeCount + 1;
+      const delivery = deliveryActions([item], turnId, "before_llm", terminal.action.id);
+      const resume = turnIntentAction({ id: turnId, parentId: delivery.at(-1)?.id ?? terminal.action.id, sessionId, resultId, inboxIds: [item.id], generation, resumeCount, boundaryActionId: terminal.effect.boundaryActionId, at: clock() });
+      yield* commitSession({ expectedRevision: current.revision, actions: [...delivery, resume], consumeInboxIds: [item.id], state: "running", releaseLease: false });
+      return yield* runTurn({ turnId, resultId, parentActionId: resume.id, boundaryActionId: terminal.effect.boundaryActionId, resumeCount, generation, resume: true });
     });
-    requireCommit(committed);
   }
-  return {
-    startTurn,
-    evaluatePromptPolicies,
-    consumePolicyBlockedInbox,
-    commitSession,
-    createExecutionLedger,
-    resumeTurn,
-    resumeInterrupted,
-    consumeNoopInbox,
-    restoreContextProjection,
-  };
+
+  function consumeNoopInbox(items: readonly Inbox.Row[]): Effect.Effect<void, AdmissionError> {
+    return Effect.gen(function* () {
+      const current = SessionHandleStore.row(sessionId);
+      state.fence = yield* acquire(current.leaseFence);
+      const noops = deliveryActions(items, "noop", "before_llm", SessionHandleStore.tree(sessionId).at(-1)?.id ?? null);
+      yield* commitSession({ expectedRevision: current.revision, actions: noops, consumeInboxIds: items.map((item) => item.id), state: current.state, releaseLease: true });
+    });
+  }
+
+  return { startTurn, evaluatePromptPolicies, consumePolicyBlockedInbox, commitSession, createExecutionLedger, resumeTurn, resumeInterrupted, consumeNoopInbox, restoreContextProjection };
+}
+
+function requestIdentity(payload: SessionTransition.Payload): string {
+  switch (payload.kind) {
+    case "request.open": return payload.request.requestId;
+    case "request.answer": return payload.answer.requestId;
+    case "request.delivery": return payload.receipt.requestId;
+    default: return payload.requestId;
+  }
 }
 
 export function commitSessionRequest(
@@ -461,39 +326,20 @@ export function commitSessionRequest(
   at: number,
   runtime: SessionRuntime,
   admission?: Inbox.Commit,
-): RequestDecision {
-  const row = SessionHandleStore.row(sessionId);
-  const requestId =
-    payload.kind === "request.open"
-      ? payload.request.requestId
-      : payload.kind === "request.answer"
-        ? payload.answer.requestId
-        : payload.kind === "request.delivery"
-          ? payload.receipt.requestId
-          : payload.requestId;
-  const request = SessionHandleStore.requestById(requestId);
-  const decision = decideRequestTransition(
-    {
-      version: 1,
-      sessionId,
-      inputId,
-      at,
-      expectedRevision: row.revision,
-      authority,
-      payload,
-    },
-    {
+): Effect.Effect<RequestDecision, ExecutionError> {
+  return Effect.gen(function* () {
+    const row = SessionHandleStore.row(sessionId);
+    const requestId = requestIdentity(payload);
+    const request = SessionHandleStore.requestById(requestId);
+    const decision = decideRequestTransition({ version: 1, sessionId, inputId, at, expectedRevision: row.revision, authority, payload }, {
       row,
       actions: SessionHandleStore.tree(sessionId),
       request,
       requests: SessionHandleStore.requestRows(),
-      domainRevisions:
-        request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
-    },
-  );
-  if (decision.actions.length > 0) {
-    requireCommit(
-      SessionHandleStore.commitRequestTransition({
+      domainRevisions: request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
+    });
+    if (decision.actions.length > 0) {
+      yield* SessionHandleStore.commitRequestTransition({
         sessionId,
         ...authority,
         now: at,
@@ -505,8 +351,8 @@ export function commitSessionRequest(
         ...(decision.receive === undefined ? {} : { receive: decision.receive }),
         ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
         ...(admission === undefined ? {} : { admit: admission }),
-      }),
-    );
-  }
-  return decision;
+      }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.map(requireCommit));
+    }
+    return decision;
+  });
 }

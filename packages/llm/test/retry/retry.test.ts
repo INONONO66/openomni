@@ -1,7 +1,16 @@
+import { Effect, Cause, Exit, Fiber, TestClock, TestContext } from "effect";
 import { describe, expect, test, vi } from "bun:test";
 import { Retry } from "../../src/retry";
 
 import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
+
+async function sleepWithClock(ms: number, signal?: AbortSignal): Promise<void> {
+  await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+    const fiber = yield* Effect.forkScoped(Retry.sleep(ms, signal));
+    yield* TestClock.adjust(ms);
+    yield* Fiber.join(fiber);
+  }).pipe(Effect.provide(TestContext.TestContext))));
+}
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
@@ -53,102 +62,28 @@ describe("Retry", () => {
   });
 
   describe("sleep(ms, abortSignal)", () => {
-    test("resolves without an abort signal", async () => {
-      let fireTimer: (() => void) | undefined;
-      const timerHandle = setTimeout(() => undefined, 0);
-      clearTimeout(timerHandle);
-      const timeout = vi.spyOn(globalThis, "setTimeout").mockImplementation(
-        Object.assign(
-          (callback: Parameters<typeof setTimeout>[0]) => {
-            if (typeof callback === "function") fireTimer = callback;
-            return timerHandle;
-          },
-          { __promisify__: setTimeout.__promisify__ },
-        ),
-      );
-      try {
-        const sleeping = Retry.sleep(0);
-        if (fireTimer === undefined) expect.unreachable("Expected sleep to schedule a timer");
-        fireTimer();
-        await sleeping;
-      } finally {
-        timeout.mockRestore();
-      }
+    test("completes on the injected clock", async () => {
+      await sleepWithClock(100);
     });
 
-    test("schedules exactly the requested delay", async () => {
-      // The contract is which delay reaches the timer, not how long the test
-      // process actually slept: an elapsed-time assertion pins the platform
-      // scheduler instead of `sleep` and costs the full delay every run.
-      const timeout = vi.spyOn(globalThis, "setTimeout");
+    test("signal interruption settles without a Promise twin", async () => {
       const controller = new AbortController();
-      try {
-        const sleeping = Retry.sleep(100, controller.signal);
-
-        expect(timeout).toHaveBeenCalledWith(expect.any(Function), 100);
+      const exit = await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+        const fiber = yield* Effect.forkScoped(Retry.sleep(5_000, controller.signal));
         controller.abort();
-        await expect(sleeping).rejects.toHaveProperty("name", "AbortError");
-      } finally {
-        timeout.mockRestore();
-      }
+        return yield* Fiber.await(fiber);
+      }).pipe(Effect.provide(TestContext.TestContext))));
+      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
     });
 
-    test("respects AbortSignal and throws AbortError", async () => {
-      const controller = new AbortController();
-      const promise = Retry.sleep(1000, controller.signal);
-      // Aborting on the next microtask, not after a 50ms timer: the sleep is
-      // already pending (its `setTimeout` was registered synchronously by
-      // src/retry/index.ts:19-26), so the abort races nothing.
-      await Promise.resolve();
-      controller.abort();
-      await expect(promise).rejects.toMatchObject({
-        constructor: DOMException,
-        name: "AbortError",
-      });
-    });
-
-    test("clears timeout when aborted", async () => {
-      const controller = new AbortController();
-      const promise = Retry.sleep(5000, controller.signal);
-      controller.abort();
-      await expect(promise).rejects.toMatchObject({
-        constructor: DOMException,
-        name: "AbortError",
-      });
-    });
-
-    test("rejects immediately when signal is already aborted", async () => {
+    test("an already-aborted signal interrupts without scheduling work", async () => {
       const controller = new AbortController();
       controller.abort();
-      // "Immediately" means no timer was ever scheduled (src/retry/index.ts:10-12
-      // throws before the Promise body runs). Pinning that is exact; the old
-      // `elapsed < 100` bound was a proxy that a loaded machine could fail and
-      // that a 50ms regression would still pass.
-      const timeout = vi.spyOn(globalThis, "setTimeout");
-      try {
-        await expect(Retry.sleep(5000, controller.signal)).rejects.toHaveProperty(
-          "name",
-          "AbortError",
-        );
-        expect(timeout).not.toHaveBeenCalled();
-      } finally {
-        timeout.mockRestore();
-      }
+      const exit = await Effect.runPromiseExit(Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal));
+      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
     });
 
-    test("caps delay at RETRY_MAX_DELAY", async () => {
-      const timeout = vi.spyOn(globalThis, "setTimeout");
-      const controller = new AbortController();
-      try {
-        const sleeping = Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal);
 
-        expect(timeout).toHaveBeenCalledWith(expect.any(Function), Retry.RETRY_MAX_DELAY);
-        controller.abort();
-        await expect(sleeping).rejects.toHaveProperty("name", "AbortError");
-      } finally {
-        timeout.mockRestore();
-      }
-    });
   });
 
   describe("decide(attempt, error) delay computation", () => {

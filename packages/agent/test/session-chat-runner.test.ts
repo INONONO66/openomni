@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { isolated } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
 import { describe, expect, it, spyOn } from "bun:test";
@@ -14,7 +16,7 @@ import {
   type SessionRuntime,
 } from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
-import { turnExecutor } from "./helpers/compiled-policy";
+import { turnExecutor, nullRetryAlarm, failure, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
 import {
   completeModel,
@@ -27,7 +29,12 @@ import {
 
 const policy = compilePolicySnapshot({
   generation: 0,
-  rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 0 })),
+  rows: SEEDED_POLICY_ROWS.map(
+    (row: Omit<import("@openomni/protocol").PolicyRow.Row, "generation">) => ({
+      ...row,
+      generation: 0,
+    }),
+  ),
 });
 
 function input(
@@ -40,9 +47,10 @@ function input(
     turnId: "turn-1",
     actionId: "action-1",
     ledger: {
-      commit: async () => {
-        throw new Error("session runner fixture does not commit ledger actions");
-      },
+      commit: () =>
+        Effect.sync(() => {
+          throw new Error("session runner fixture does not commit ledger actions");
+        }),
     },
     policy,
     resultId: "result-1",
@@ -83,18 +91,14 @@ function config(run: MockLlmFn, executor: Executor = testExecutor(), fallbacks?:
   };
 }
 
-const echoModel = async (model: Model.Ref) => ({
-  id: model.id,
-  name: model.id,
-  providerID: model.provider,
-});
+const echoModel = (model: Model.Ref) =>
+  Effect.succeed({
+    id: model.id,
+    name: model.id,
+    providerID: model.provider,
+  });
 
 const traceContext = { traceId: "trace-1", sessionId: "session-1", runId: "run-1" };
-
-interface DurableRun {
-  readonly actions: readonly LedgerAction.Node[];
-  readonly inboxIds: readonly string[];
-}
 
 function actionPhase(action: LedgerAction.Node): string | undefined {
   const value = action.intent.value;
@@ -102,18 +106,20 @@ function actionPhase(action: LedgerAction.Node): string | undefined {
   return typeof value.phase === "string" ? value.phase : undefined;
 }
 
-async function promptTurns(handle: SessionHandle, turns: number): Promise<void> {
-  for (let prompt = 0; prompt < turns; prompt += 1) {
-    const result = await handle.prompt(`run durable turn ${prompt + 1}`);
-    if (result?.kind !== "result") throw new Error("durable chat did not return a result");
-  }
+function promptTurns(handle: SessionHandle, turns: number) {
+  return Effect.gen(function* () {
+    for (let prompt = 0; prompt < turns; prompt += 1) {
+      const result = yield* handle.prompt(`run durable turn ${prompt + 1}`);
+      if (result?.kind !== "result") throw new Error("durable chat did not return a result");
+    }
+  });
 }
 
-async function runDurably(
+function runDurably(
   run: MockLlmFn,
   { prompts = 1, fallbacks }: { readonly prompts?: number; readonly fallbacks?: Model.Ref[] } = {},
-): Promise<DurableRun> {
-  return Storage.withIsolation(async () => {
+) {
+  return Effect.gen(function* () {
     Bus.reset();
     let nextId = 0;
     const runtime: SessionRuntime = {
@@ -122,259 +128,360 @@ async function runDurably(
       entropy: () => `boundary-id-${++nextId}`,
       processId: "boundary-test",
       scheduleHeartbeat: () => () => undefined,
+      retryAlarm: nullRetryAlarm,
     };
     Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input) => {
+      prepare: (input: import("../src/session-handle").SessionRunnerInput) => {
         return {
           config: config(run, createTurnDispatcher([], input, runtime).executor, fallbacks),
           traceContext,
         };
       },
     });
-    const handle = session(
+    const handle = yield* session(
       { id: "boundary-session", role: "resident", runner: chatRunner },
       runtime,
     );
 
     try {
-      await promptTurns(handle, prompts);
+      yield* promptTurns(handle, prompts);
       return {
         actions: SessionHandleStore.tree(handle.id),
-        inboxIds: SessionHandleStore.inboxRows(handle.id).map((row) => row.id),
+        inboxIds: SessionHandleStore.inboxRows(handle.id).map(
+          (row: import("@openomni/protocol").Inbox.Row) => row.id,
+        ),
       };
     } finally {
-      await closeSessions(runtime);
-      Storage.reset();
+      yield* closeSessions(runtime);
       Bus.reset();
     }
   });
 }
 
 describe("session chat runner", () => {
-  it("returns interrupted before invoking the model", async () => {
-    let calls = 0;
-    const runner = createSessionChatRunner({
-      prepare: () => ({
-        config: config(async () => {
-          calls += 1;
-          return createStopOutcome();
+  it("returns interrupted before invoking the model", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let calls = 0;
+          const runner = createSessionChatRunner({
+            prepare: () => ({
+              config: config(async () => {
+                calls += 1;
+                return createStopOutcome();
+              }),
+              traceContext,
+            }),
+          });
+
+          const result = yield* runner(
+            input(() => Effect.succeed({ messages: [], interrupted: true })),
+          );
+
+          expect(result).toEqual({ kind: "interrupted" });
+          expect(calls).toBe(0);
         }),
-        traceContext,
-      }),
-    });
+      ),
+    ));
 
-    const result = await runner(input(async () => ({ messages: [], interrupted: true })));
+  it("passes boundary messages into the model and returns its terminal result", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const boundaries: string[] = [];
+          const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
-    expect(result).toEqual({ kind: "interrupted" });
-    expect(calls).toBe(0);
-  });
+          const result = yield* runner(
+            input((boundary: import("@openomni/protocol").SessionTurn.Boundary) =>
+              Effect.succeed(
+                (() => {
+                  boundaries.push(boundary);
+                  return boundary === "before_llm"
+                    ? { messages: [{ role: "user", text: "steered" }], interrupted: false }
+                    : { messages: [], interrupted: false };
+                })(),
+              ),
+            ),
+          );
 
-  it("passes boundary messages into the model and returns its terminal result", async () => {
-    const boundaries: string[] = [];
-    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
+          expect(boundaries).toEqual(["before_llm", "after_llm", "after_tools"]);
+          expect(modelInputs[0]).toContain('"role":"user"');
+          expect(modelInputs[0]).toContain('"text":"initial"');
+          expect(modelInputs[0]).toContain('"text":"steered"');
+          expect(modelInputs[0]?.indexOf('"text":"initial"')).toBeLessThan(
+            modelInputs[0]?.indexOf('"text":"steered"') ?? -1,
+          );
+          expect(result).toMatchObject({ kind: "result", finishReason: "stop" });
+        }),
+      ),
+    ));
 
-    const result = await runner(
-      input(async (boundary) => {
-        boundaries.push(boundary);
-        return boundary === "before_llm"
-          ? { messages: [{ role: "user", text: "steered" }], interrupted: false }
-          : { messages: [], interrupted: false };
-      }),
-    );
+  it("starts another model turn when a post-model boundary supplies continuation", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let afterLlm = 0;
+          const { runner, modelInputs } = recordingChatRunner(config, traceContext);
 
-    expect(boundaries).toEqual(["before_llm", "after_llm", "after_tools"]);
-    expect(modelInputs[0]).toContain('"role":"user"');
-    expect(modelInputs[0]).toContain('"text":"initial"');
-    expect(modelInputs[0]).toContain('"text":"steered"');
-    expect(modelInputs[0]?.indexOf('"text":"initial"')).toBeLessThan(
-      modelInputs[0]?.indexOf('"text":"steered"') ?? -1,
-    );
-    expect(result).toMatchObject({ kind: "result", finishReason: "stop" });
-  });
+          const result = yield* runner(
+            input((boundary: import("@openomni/protocol").SessionTurn.Boundary) =>
+              Effect.succeed(
+                (() => {
+                  if (boundary === "after_llm" && afterLlm++ === 0) {
+                    return { messages: [{ role: "user", text: "continue" }], interrupted: false };
+                  }
+                  return { messages: [], interrupted: false };
+                })(),
+              ),
+            ),
+          );
 
-  it("starts another model turn when a post-model boundary supplies continuation", async () => {
-    let afterLlm = 0;
-    const { runner, modelInputs } = recordingChatRunner(config, traceContext);
+          expect(modelInputs).toHaveLength(2);
+          expect(modelInputs[1]).toContain('"role":"assistant"');
+          expect(modelInputs[1]).toContain('"text":"continue"');
+          expect(modelInputs[1]?.indexOf('"role":"assistant"')).toBeLessThan(
+            modelInputs[1]?.indexOf('"text":"continue"') ?? -1,
+          );
+          expect(result.kind).toBe("result");
+        }),
+      ),
+    ));
 
-    const result = await runner(
-      input(async (boundary) => {
-        if (boundary === "after_llm" && afterLlm++ === 0) {
-          return { messages: [{ role: "user", text: "continue" }], interrupted: false };
-        }
-        return { messages: [], interrupted: false };
-      }),
-    );
+  it("returns interrupted at either post-model boundary", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          for (const interruptedAt of ["after_llm", "after_tools"] as const) {
+            const runner = createSessionChatRunner({
+              prepare: () => ({ config: config(completeModel), traceContext }),
+            });
+            const result = yield* runner(
+              input((boundary: import("@openomni/protocol").SessionTurn.Boundary) =>
+                Effect.succeed({
+                  messages: [],
+                  interrupted: boundary === interruptedAt,
+                }),
+              ),
+            );
+            expect(result.kind).toBe("interrupted");
+          }
+        }),
+      ),
+    ));
 
-    expect(modelInputs).toHaveLength(2);
-    expect(modelInputs[1]).toContain('"role":"assistant"');
-    expect(modelInputs[1]).toContain('"text":"continue"');
-    expect(modelInputs[1]?.indexOf('"role":"assistant"')).toBeLessThan(
-      modelInputs[1]?.indexOf('"text":"continue"') ?? -1,
-    );
-    expect(result.kind).toBe("result");
-  });
+  it("records real prompt and turn ownership with sibling llm pairs for normal calls", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let calls = 0;
 
-  it("returns interrupted at either post-model boundary", async () => {
-    for (const interruptedAt of ["after_llm", "after_tools"] as const) {
-      const runner = createSessionChatRunner({
-        prepare: () => ({ config: config(completeModel), traceContext }),
-      });
-      const result = await runner(
-        input(async (boundary) => ({
-          messages: [],
-          interrupted: boundary === interruptedAt,
-        })),
-      );
-      expect(result.kind).toBe("interrupted");
-    }
-  });
+          const { actions, inboxIds } = yield* runDurably(
+            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
+              calls += 1;
+              return calls === 1 ? { type: "continue" } : completeModel(input, sink);
+            },
+          );
 
-  it("records real prompt and turn ownership with sibling llm pairs for normal calls", async () => {
-    let calls = 0;
+          const llmIntents = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "llm" && actionPhase(action) === "intent",
+          );
+          const llmResults = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "llm" && actionPhase(action) === "result",
+          );
+          expect(calls).toBe(2);
+          expect(llmIntents).toHaveLength(2);
+          expect(llmResults).toHaveLength(2);
 
-    const { actions, inboxIds } = await runDurably(async (input, sink) => {
-      calls += 1;
-      return calls === 1 ? { type: "continue" } : completeModel(input, sink);
-    });
+          const turnIntents = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "turn" && actionPhase(action) === "intent",
+          );
+          const turnTerminals = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "turn" && actionPhase(action) === "terminal",
+          );
+          expect(turnIntents).toHaveLength(1);
+          expect(turnTerminals).toHaveLength(1);
+          const turnIntent = turnIntents[0];
+          if (turnIntent === undefined) throw new Error("missing durable turn intent");
+          expect(
+            llmIntents.map(
+              (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+            ),
+          ).toEqual([turnIntent.id, turnIntent.id]);
+          expect(
+            llmResults.map(
+              (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+            ),
+          ).toEqual(
+            llmIntents.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
+          );
 
-    const llmIntents = actions.filter(
-      (action) => action.kind === "llm" && actionPhase(action) === "intent",
-    );
-    const llmResults = actions.filter(
-      (action) => action.kind === "llm" && actionPhase(action) === "result",
-    );
-    expect(calls).toBe(2);
-    expect(llmIntents).toHaveLength(2);
-    expect(llmResults).toHaveLength(2);
+          const prompts = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "prompt",
+          );
+          expect(prompts).toHaveLength(1);
+          expect(prompts[0]?.id).toBe(inboxIds[0]);
+        }),
+      ),
+    ));
 
-    const turnIntents = actions.filter(
-      (action) => action.kind === "turn" && actionPhase(action) === "intent",
-    );
-    const turnTerminals = actions.filter(
-      (action) => action.kind === "turn" && actionPhase(action) === "terminal",
-    );
-    expect(turnIntents).toHaveLength(1);
-    expect(turnTerminals).toHaveLength(1);
-    const turnIntent = turnIntents[0];
-    if (turnIntent === undefined) throw new Error("missing durable turn intent");
-    expect(llmIntents.map((action) => action.parentId)).toEqual([turnIntent.id, turnIntent.id]);
-    expect(llmResults.map((action) => action.parentId)).toEqual(
-      llmIntents.map((action) => action.id),
-    );
+  it("records retry attempts beneath one logical llm action", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const sleep = spyOn(LlmRetry, "sleep").mockReturnValue(Effect.void);
+          let calls = 0;
 
-    const prompts = actions.filter((action) => action.kind === "prompt");
-    expect(prompts).toHaveLength(1);
-    expect(prompts[0]?.id).toBe(inboxIds[0]);
-  });
+          try {
+            const { actions } = yield* runDurably(
+              async (
+                input: import("@openomni/llm").RunInput,
+                sink: import("@openomni/llm").Sink,
+              ) => {
+                calls += 1;
+                return calls === 1
+                  ? { type: "error", error: providerFailure("transient provider outage") }
+                  : completeModel(input, sink);
+              },
+            );
 
-  it("records retry attempts beneath one logical llm action", async () => {
-    const sleep = spyOn(LlmRetry, "sleep").mockResolvedValue(undefined);
-    let calls = 0;
+            const llmIntents = actions.filter(
+              (action: import("@openomni/protocol").LedgerAction.Node) =>
+                action.kind === "llm" && actionPhase(action) === "intent",
+            );
+            const attempts = actions.filter(
+              (action: import("@openomni/protocol").LedgerAction.Node) =>
+                action.kind === "attempt" && actionPhase(action) === "intent",
+            );
+            const attemptResults = actions.filter(
+              (action: import("@openomni/protocol").LedgerAction.Node) =>
+                action.kind === "attempt" && actionPhase(action) === "result",
+            );
+            expect(calls).toBe(2);
+            expect(llmIntents).toHaveLength(1);
+            expect(attempts).toHaveLength(2);
+            expect(
+              attemptResults.map(
+                (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+              ),
+            ).toEqual(
+              attempts.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
+            );
+            const llmIntent = llmIntents[0];
+            if (llmIntent === undefined) throw new Error("missing logical llm intent");
+            expect(
+              attempts.map(
+                (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+              ),
+            ).toEqual([llmIntent.id, llmIntent.id]);
+          } finally {
+            sleep.mockRestore();
+          }
+        }),
+      ),
+    ));
 
-    try {
-      const { actions } = await runDurably(async (input, sink) => {
-        calls += 1;
-        return calls === 1
-          ? { type: "error", error: providerFailure("transient provider outage") }
-          : completeModel(input, sink);
-      });
+  it("restores the primary model at the next turn boundary as a recorded llm action", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const sleep = spyOn(LlmRetry, "sleep").mockReturnValue(Effect.void);
+          const fallback = { provider: "openai", id: "gpt-4o" };
+          const answered: string[] = [];
 
-      const llmIntents = actions.filter(
-        (action) => action.kind === "llm" && actionPhase(action) === "intent",
-      );
-      const attempts = actions.filter(
-        (action) => action.kind === "attempt" && actionPhase(action) === "intent",
-      );
-      const attemptResults = actions.filter(
-        (action) => action.kind === "attempt" && actionPhase(action) === "result",
-      );
-      expect(calls).toBe(2);
-      expect(llmIntents).toHaveLength(1);
-      expect(attempts).toHaveLength(2);
-      expect(attemptResults.map((action) => action.parentId)).toEqual(
-        attempts.map((action) => action.id),
-      );
-      const llmIntent = llmIntents[0];
-      if (llmIntent === undefined) throw new Error("missing logical llm intent");
-      expect(attempts.map((action) => action.parentId)).toEqual([llmIntent.id, llmIntent.id]);
-    } finally {
-      sleep.mockRestore();
-    }
-  });
+          try {
+            const { actions } = yield* runDurably(
+              async (
+                input: import("@openomni/llm").RunInput,
+                sink: import("@openomni/llm").Sink,
+              ) => {
+                answered.push(input.model.id);
+                return answered.length === 1
+                  ? { type: "error", error: providerFailure("transient provider outage") }
+                  : completeModel(input, sink);
+              },
+              { prompts: 2, fallbacks: [fallback] },
+            );
 
-  it("restores the primary model at the next turn boundary as a recorded llm action", async () => {
-    const sleep = spyOn(LlmRetry, "sleep").mockResolvedValue(undefined);
-    const fallback = { provider: "openai", id: "gpt-4o" };
-    const answered: string[] = [];
+            const llmIntents = actions
+              .filter(
+                (action: import("@openomni/protocol").LedgerAction.Node) =>
+                  action.kind === "llm" && actionPhase(action) === "intent",
+              )
+              .map((action: import("@openomni/protocol").LedgerAction.Node) => action.intent.value);
+            expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);
+            expect(llmIntents).toMatchObject([
+              { op: "chat", value: { model: mockProviderModel.id } },
+              {
+                op: "restore_model_selection",
+                value: { from: fallback, to: { provider: "anthropic", id: mockProviderModel.id } },
+              },
+              { op: "chat", value: { model: mockProviderModel.id } },
+            ]);
+          } finally {
+            sleep.mockRestore();
+          }
+        }),
+      ),
+    ));
 
-    try {
-      const { actions } = await runDurably(
-        async (input, sink) => {
-          answered.push(input.model.id);
-          return answered.length === 1
-            ? { type: "error", error: providerFailure("transient provider outage") }
-            : completeModel(input, sink);
-        },
-        { prompts: 2, fallbacks: [fallback] },
-      );
+  it("does not invoke the model when a durable chat composition loses its executor", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let calls = 0;
+          const preparedConfig = config(async () => {
+            calls += 1;
+            return createStopOutcome();
+          });
+          Reflect.deleteProperty(preparedConfig, "executor");
+          const runner = createSessionChatRunner({
+            prepare: () => ({ config: preparedConfig, traceContext }),
+          });
 
-      const llmIntents = actions
-        .filter((action) => action.kind === "llm" && actionPhase(action) === "intent")
-        .map((action) => action.intent.value);
-      expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);
-      expect(llmIntents).toMatchObject([
-        { op: "chat", value: { model: mockProviderModel.id } },
-        {
-          op: "restore_model_selection",
-          value: { from: fallback, to: { provider: "anthropic", id: mockProviderModel.id } },
-        },
-        { op: "chat", value: { model: mockProviderModel.id } },
-      ]);
-    } finally {
-      sleep.mockRestore();
-    }
-  });
+          expect(
+            yield* failure(
+              runner(input(() => Effect.succeed({ messages: [], interrupted: false }))),
+            ),
+          ).toBeInstanceOf(TypeError);
+          expect(calls).toBe(0);
+        }),
+      ),
+    ));
 
-  it("does not invoke the model when a durable chat composition loses its executor", async () => {
-    let calls = 0;
-    const preparedConfig = config(async () => {
-      calls += 1;
-      return createStopOutcome();
-    });
-    Reflect.deleteProperty(preparedConfig, "executor");
-    const runner = createSessionChatRunner({
-      prepare: () => ({ config: preparedConfig, traceContext }),
-    });
+  it("turns reported failures into error results and rethrows unreported failures", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const cause = foreign("chat", "failed");
+          const prepared = { config: config(completeModel), traceContext };
+          const reported = createSessionChatRunner({
+            prepare: () => prepared,
+            reportError: (error: Error) => (error === cause ? "reported" : undefined),
+          });
+          const unreported = createSessionChatRunner({ prepare: () => prepared });
+          const ready = input(() => Effect.fail(cause));
 
-    await expect(runner(input(async () => ({ messages: [], interrupted: false })))).rejects.toThrow(
-      "executor",
-    );
-    expect(calls).toBe(0);
-  });
-
-  it("turns reported failures into error results and rethrows unreported failures", async () => {
-    const cause = new Error("prepare failed");
-    const reported = createSessionChatRunner({
-      prepare: () => {
-        throw cause;
-      },
-      reportError: (error) => (error === cause ? "reported" : undefined),
-    });
-    const unreported = createSessionChatRunner({
-      prepare: () => {
-        throw cause;
-      },
-    });
-    const ready = input(async () => ({ messages: [], interrupted: false }));
-
-    expect(await reported(ready)).toEqual({
-      kind: "error",
-      text: "reported",
-      cause,
-      reported: true,
-    });
-    expect(unreported(ready)).rejects.toBe(cause);
-  });
+          expect(yield* reported(ready)).toEqual({
+            kind: "error",
+            text: "reported",
+            cause,
+            reported: true,
+          });
+          expect(yield* failure(unreported(ready))).toBe(cause);
+          const defect = new Error("prepare failed");
+          const defective = createSessionChatRunner({
+            prepare: () => {
+              throw defect;
+            },
+          });
+          expect(yield* failure(defective(ready))).toBe(defect);
+        }),
+      ),
+    ));
 });

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -64,12 +65,12 @@ test("a resident tool call is executed and observed through the durable executor
       })(),
     },
     llm: {
-      resolveModel: async (model) => ({
+      resolveModel: (model) => Effect.succeed({
         id: model.id,
         name: model.id,
         providerID: model.provider,
       }),
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         const result = requestToolStep(input, sink, {
           id: "call-1",
           tool: "eval",
@@ -77,8 +78,8 @@ test("a resident tool call is executed and observed through the durable executor
         });
         if (result === undefined) return { type: "stop" };
         sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
-        return { type: "stop" };
-      },
+        return { type: "stop" as const };
+      }),
     },
   });
 

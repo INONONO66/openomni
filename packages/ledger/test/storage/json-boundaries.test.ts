@@ -1,3 +1,4 @@
+import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
 import { createSqliteActorRegistryAdapter } from "../../src/storage/sqlite-actor-registry-adapter";
@@ -55,17 +56,24 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
   const store = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
     publish: () => undefined,
   });
-  store.sessions.create(
-    LedgerSession.Row.parse({
-      id: "s",
-      parentId: null,
-      role: "resident",
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-      revision: 0,
-      state: "idle",
-    }),
+  Either.getOrThrowWith(
+    Effect.runSync(
+      Effect.either(
+        store.sessions.create(
+          LedgerSession.Row.parse({
+            id: "s",
+            parentId: null,
+            role: "resident",
+            leaseOwner: null,
+            leaseFence: 0,
+            leaseExpiresAt: null,
+            revision: 0,
+            state: "idle",
+          }),
+        ),
+      ),
+    ),
+    (error) => error,
   );
   store.actions.append(
     {

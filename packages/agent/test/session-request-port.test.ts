@@ -1,20 +1,21 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { isolated } from "./helpers/isolated";
+import { Effect, Exit } from "effect";
+import { expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
 import { createSessionRequests } from "../src/session-requests";
 
-beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
-  SessionHandleStore.materialize({
-    id: "source",
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: "configure",
-    at: 1,
-  });
+const setup = Effect.gen(function* () {
+  (yield* SessionHandleStore.materialize({
+          id: "source",
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: "configure",
+          at: 1,
+        }));
   const actions = Storage.get().actions;
   if (actions === undefined) throw new Error("missing action adapter");
   for (const id of ["first", "second"]) {
@@ -36,7 +37,7 @@ beforeEach(() => {
     );
   }
 });
-afterEach(() => Storage.reset());
+
 
 const opening = (requestId: string) => ({
   requestId,
@@ -50,7 +51,8 @@ const opening = (requestId: string) => ({
   at: 100,
 });
 
-test("gateway request port commits physical bindings and receiving intake under a released owner lease", async () => {
+test("gateway request port commits physical bindings and receiving intake under a released owner lease", () => isolated(Effect.gen(function* () {
+  yield* setup;
   const received: string[] = [];
   const port = createSessionRequests({
     clock: () => 100,
@@ -60,8 +62,8 @@ test("gateway request port commits physical bindings and receiving intake under 
       received.push(...ids);
     },
   });
-  const opened = await port.open(opening("first"));
-  const request = await port.receipt({
+  const opened = yield* port.open(opening("first"));
+  const request = yield* port.receipt({
     inputId: "physical",
     requestId: opened.requestId,
     sessionId: "source",
@@ -88,34 +90,36 @@ test("gateway request port commits physical bindings and receiving intake under 
     allowedAction: "report_result" as const,
     content: "answer",
   };
-  expect(await port.answer(input)).toBe("resolved");
+  expect(yield* port.answer(input)).toBe("resolved");
   const before = SessionHandleStore.tree("source");
-  expect(await port.answer({ ...input, receivedAt: 150 })).toBe("resolved");
+  expect(yield* port.answer({ ...input, receivedAt: 150 })).toBe("resolved");
   expect(SessionHandleStore.tree("source")).toEqual(before);
   expect(received).toEqual(["source"]);
   expect(SessionHandleStore.inboxRows("source")).toHaveLength(1);
   expect(port.list()[0]?.state).toBe("resolved");
-});
+})));
 
-test("gateway timeout resolves the original action without creating conversational input", async () => {
+test("gateway timeout resolves the original action without creating conversational input", () => isolated(Effect.gen(function* () {
+  yield* setup;
   let now = 100;
   const port = createSessionRequests({
     clock: () => now,
     observations: { publish: () => undefined },
   });
-  await port.open(opening("first"));
-  port.timeout("first", 199);
+  yield* port.open(opening("first"));
+  yield* port.timeout("first", 199);
   expect(port.list()[0]?.state).toBe("open");
   now = 200;
-  port.timeout("first", now);
+  yield* port.timeout("first", now);
   expect(port.list()[0]?.state).toBe("expired");
   expect(SessionHandleStore.inboxRows("source")).toEqual([]);
   const before = SessionHandleStore.tree("source");
-  port.timeout("first", now);
+  yield* port.timeout("first", now);
   expect(SessionHandleStore.tree("source")).toEqual(before);
-});
+})));
 
-test("request opening uses its original turn generation, never a later catalog", async () => {
+test("request opening uses its original turn generation, never a later catalog", () => isolated(Effect.gen(function* () {
+  yield* setup;
   const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree("source"));
   const append = (action: LedgerAction.Append) => {
     if (
@@ -170,71 +174,69 @@ test("request opening uses its original turn generation, never a later catalog",
     clock: () => 100,
     observations: { publish: () => undefined },
   });
-  expect(await port.open(opening("pinned"))).toMatchObject({
+  expect(yield* port.open(opening("pinned"))).toMatchObject({
     turnId: "turn",
     callId: "call",
     toolsGeneration: 1,
   });
-  expect(() => port.open(opening("missing-turn"))).toThrow(
-    "original request generation is unavailable",
-  );
+  expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing-turn"))))).toBe(true);
   const row = SessionHandleStore.row("source");
-  const lease = SessionHandleStore.acquireLease({
-    sessionId: "source",
-    owner: "configure",
-    expectedFence: row.leaseFence,
-    now: 100,
-    expiresAt: 200,
-  });
+  const lease = (yield* SessionHandleStore.acquireLease({
+          sessionId: "source",
+          owner: "configure",
+          expectedFence: row.leaseFence,
+          now: 100,
+          expiresAt: 200,
+        }));
   if (!lease.ok) throw new Error("configuration lease refused");
   const next = { ...generation, generation: 2, revertTo: 1 };
   expect(
-    SessionHandleStore.commit({
-      sessionId: "source",
-      owner: "configure",
-      fence: lease.fence,
-      now: 100,
-      expectedRevision: row.revision,
-      actions: [
-        SessionHandleStore.configureAction({
-          id: "next",
-          sessionId: "source",
-          parentId: "configure",
-          operation: "tools.add",
-          snapshot: next,
-          at: 100,
-        }),
-      ],
-      consumeInboxIds: [],
-      state: "idle",
-      releaseLease: true,
-      generation: {
-        toolsGeneration: 2,
-        systemHash: next.systemHash,
-        policyGeneration: next.policyGeneration,
-      },
-    }).ok,
+    (yield* SessionHandleStore.commit({
+            sessionId: "source",
+            owner: "configure",
+            fence: lease.fence,
+            now: 100,
+            expectedRevision: row.revision,
+            actions: [
+              SessionHandleStore.configureAction({
+                id: "next",
+                sessionId: "source",
+                parentId: "configure",
+                operation: "tools.add",
+                snapshot: next,
+                at: 100,
+              }),
+            ],
+            consumeInboxIds: [],
+            state: "idle",
+            releaseLease: true,
+            generation: {
+              toolsGeneration: 2,
+              systemHash: next.systemHash,
+              policyGeneration: next.policyGeneration,
+            },
+          })).ok,
   ).toBe(true);
-  expect(() => port.open(opening("stale"))).toThrow("request open refused");
-});
+  expect(Exit.isFailure(yield* Effect.exit(port.open(opening("stale"))))).toBe(true);
+})));
 
-test("gateway port refuses missing original actions and mismatched physical receipts", async () => {
+test("gateway port refuses missing original actions and mismatched physical receipts", () => isolated(Effect.gen(function* () {
+  yield* setup;
   const port = createSessionRequests({
     clock: () => 100,
     observations: { publish: () => undefined },
   });
-  expect(() => port.open(opening("missing"))).toThrow("original invocation missing");
-  await port.open(opening("first"));
+  expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing"))))).toBe(true);
+  yield* port.open(opening("first"));
   const before = SessionHandleStore.tree("source");
-  await expect(
-    port.receipt({
+  const refused = yield* Effect.exit(port.receipt({
       inputId: "bad",
       requestId: "first",
       sessionId: "source",
       sourceActionId: "second",
       value: "accepted",
       at: 100,
-    }),
-  ).rejects.toThrow("request receipt refused");
+    }));
+  expect(Exit.isFailure(refused)).toBe(true);
   expect(SessionHandleStore.tree("source")).toEqual(before);
-});
+})));

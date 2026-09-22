@@ -1,3 +1,4 @@
+import { Layer, ManagedRuntime, } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -5,6 +6,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { gatewayRuntime } from "../gateway";
 import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { type CliDeps, runCli } from "./commands";
@@ -90,7 +92,8 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     applyEnvFile(envPath, process.env);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
-    const app = await startOpenOmni({ config });
+    const runtime = gatewayRuntime({ dbPath: config.dbPath });
+    const app = await startOpenOmni({ config, runtime });
     installShutdownHandlers({
       stop: app.stop,
       exit: (code) => process.exit(code),
@@ -164,19 +167,23 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     envPath,
     startApp,
     async attachMachine(configPath) {
-      const daemon = await attachConfiguredMachine(configPath);
+      const runtime = ManagedRuntime.make(Layer.scope);
+      try {
+      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
       console.log(JSON.stringify(daemon.attachment));
       if (daemon.attachment.status === "refused") {
-        await daemon.close();
         return 1;
       }
       installShutdownHandlers({
-        stop: () => daemon.close(),
+        stop: runtime.dispose,
         exit: (code) => process.exit(code),
         on: (signal, handler) => process.once(signal, handler),
       });
-      await daemon.closed;
+      await runtime.runPromise(daemon.closed);
       return 0;
+      } finally {
+        await runtime.dispose();
+      }
     },
     ask,
     writeEnv: (entries) => writeEnvFile(envPath, entries),

@@ -1,11 +1,12 @@
+import { Effect, Exit, Cause } from "effect";
 import { describe, expect, test } from "bun:test";
 import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IpcRemoteError, connectIpcClient, createIpcServer } from "@openomni/ipc";
+import { IpcRemoteError, connectIpcClient, createIpcServer } from "../../ipc/test/helpers/native";
 import { type BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon, type CodeRunner } from "../src/daemon";
-import { type MachineHost, createMachineHost } from "../src/host";
+import { attachMachineDaemon, type CodeRunner } from "./helpers/native";
+import { type MachineHost, createMachineHost } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
 import { MachineCellError } from "../src/errors";
 import { kernelEnrollment } from "./helpers";
@@ -159,18 +160,14 @@ describe("machine attach handshake", () => {
           const running = handle.runCode(cell);
           await entered.promise;
           const duplicate = await handle.runCode(cell).catch((error: unknown) => error);
-          expect(MachineCellError.isInstance(duplicate)).toBe(true);
+          expect(duplicate).toBeInstanceOf(MachineCellError);
           expect(duplicate).toMatchObject({
-            name: "MachineCellError",
-            data: { code: "duplicate_cell_id", cellId: cell.cellId },
+            _tag: "MachineCellError", code: "duplicate_cell_id", cellId: cell.cellId,
           });
           finish.resolve();
           expect((await running).status).toBe("cancelled");
-          expect(await handle.runCode(cell, AbortSignal.abort())).toEqual({
-            status: "cancelled",
-            cellId: cell.cellId,
-            output: { stdout: "", stderr: "" },
-          });
+          const preAborted = await Effect.runPromiseExit(handle.native.runCode(cell, AbortSignal.abort()));
+          expect(Exit.isFailure(preAborted) && Cause.isInterrupted(preAborted.cause)).toBe(true);
         } finally {
           finish.resolve();
           await daemon.close();
@@ -211,8 +208,8 @@ describe("machine attach handshake", () => {
           await client.call("machine.attach", offer({ exports: [{ name: "docs", path: "/" }] }));
           const handle = host.get("mac-studio");
           await expect(handle.fs.stat("/file")).rejects.toMatchObject({
-            name: "MachineRefusalError",
-            data: { reason: "invalid_response" },
+            _tag: "MachineRefusalError",
+            reason: "invalid_response",
           });
           const controller = new AbortController();
           const running = handle.runCode(
@@ -222,7 +219,7 @@ describe("machine attach handshake", () => {
           const outcome = running.catch((error: unknown) => error);
           await started.promise;
           controller.abort();
-          expect(await outcome).toBeInstanceOf(IpcRemoteError);
+          expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.cancel" });
         } finally {
           client.close();
         }
@@ -560,7 +557,7 @@ describe("machine attach handshake", () => {
     });
     try {
       await expect(attachMachineDaemon({ socketPath: path, offer: offer() })).rejects.toMatchObject(
-        { name: "ZodError" },
+        { _tag: "ForeignFailure", operation: "daemon.attach.response", cause: expect.stringContaining("invalid") },
       );
     } finally {
       rogue.close();

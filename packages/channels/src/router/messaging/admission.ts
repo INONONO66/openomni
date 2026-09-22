@@ -1,3 +1,4 @@
+import { SendAdmissionConflict } from "../../errors";
 import { Gateway, type DecisionFact } from "@openomni/protocol";
 import { EgressBudgetStore, DecisionFacts } from "@openomni/ledger";
 import { z } from "zod";
@@ -11,7 +12,6 @@ const SendAdmission = z.object({
   sendClass: Gateway.MessageClass,
 });
 type SendAdmission = z.infer<typeof SendAdmission>;
-class SendAdmissionConflict extends Error {}
 
 interface AuthorizedSend {
   readonly input: Gateway.SendInput;
@@ -66,9 +66,9 @@ function recordedAdmission(
   if (!parsed.success) throw new Error(`corrupt send admission fact on ${streamId}`);
   const admission = parsed.data;
   if (admission.signature !== sendSignature(input, target)) {
-    return new SendAdmissionConflict(
-      `message id ${input.messageId} was already admitted with different content`,
-    );
+    return new SendAdmissionConflict({
+      message: `message id ${input.messageId} was already admitted with different content`,
+    });
   }
   return admission;
 }

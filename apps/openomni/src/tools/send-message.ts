@@ -1,10 +1,11 @@
 import { defineTool, ToolRefused } from "@openomni/agent";
-import type { GatewayRouter } from "@openomni/channels";
 import { Gateway } from "@openomni/protocol";
 import { z } from "zod";
 
 /** The tool needs exactly the router's ingest door; composition supplies the router itself. */
-type MessagePort = Pick<GatewayRouter, "ingest">;
+export interface MessagePort {
+  ingest(sender: Gateway.IngestSender, message: Gateway.SendMessage | Gateway.IngressFacts | Gateway.RequestAnswer): Promise<Gateway.IngestResult>;
+}
 
 const Id = z.string().min(1);
 

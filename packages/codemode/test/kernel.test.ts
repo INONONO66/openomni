@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { type BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "@openomni/machines";
-import { type MachineHost, createMachineHost } from "@openomni/machines";
-import { PythonKernel } from "../src/kernel";
-import { createCodemode } from "../src/index";
+import { attachMachineDaemon } from "../../machines/test/helpers/native";
+import { type MachineHost, createMachineHost } from "../../machines/test/helpers/native";
+import { PythonKernel } from "./helpers/native";
+import { createCodemode } from "./helpers/native";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 const socketPath = () => join(tmpdir(), `oc-${crypto.randomUUID()}.sock`);
@@ -364,8 +364,8 @@ describe("code-mode kernel substrate", () => {
     });
     try {
       await expect(host.get("mac-mini").runCode(cell("1"))).rejects.toMatchObject({
-        name: "MachineRefusalError",
-        data: { reason: "machine_not_attached" },
+        _tag: "MachineRefusalError",
+        reason: "machine_not_attached",
       });
     } finally {
       host.close();

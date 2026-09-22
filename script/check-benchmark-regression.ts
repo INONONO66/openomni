@@ -107,7 +107,18 @@ function acceptedReference(history: Json) {
   return latest;
 }
 
+const BaselineAcceptance = z.literal("true");
+
+function acceptsBaseline(value: string | undefined): boolean {
+  return BaselineAcceptance.safeParse(value).success;
+}
+
+function rowVerdict(exceeds: boolean, accept: boolean): "ACCEPTED" | "FAIL" {
+  return exceeds && accept ? "ACCEPTED" : "FAIL";
+}
+
 export async function main(args = Bun.argv.slice(2)): Promise<number> {
+  const acceptBaseline = acceptsBaseline(process.env.BENCHMARK_ACCEPT_BASELINE);
   const threshold = regressionThreshold(process.env.BENCHMARK_REGRESSION_PERCENT);
   if (args[0] === "--validate-input") return 0;
   if (args[0] === "--accepted-commit") {
@@ -126,16 +137,16 @@ export async function main(args = Bun.argv.slice(2)): Promise<number> {
     statisticsSha256: sha256(statisticsSource), historySha256: sha256(historySource),
   };
   const summary = [
-    "## Benchmark regression gate", "",
+    acceptBaseline ? "## Baseline reset accepted by Owner (BENCHMARK_ACCEPT_BASELINE=true)" : "## Benchmark regression gate", "",
     `Accepted main reference: ${result.referenceCommit}. Fail above both ${threshold}% and two sample standard deviations of the latest 20 accepted medians (zero band with fewer than two samples).`, "",
     "| Benchmark | Head p50 ns/op | Reference ns/op | Limit ns/op | Result |",
     "| --- | ---: | ---: | ---: | --- |",
-    ...result.comparisons.map((metric) => `| ${metric.name} | ${metric.median} | ${metric.reference ?? "-"} | ${metric.limit ?? "-"} | ${metric.status} |`), "",
+    ...result.comparisons.map((metric) => `| ${metric.name} | ${metric.median} | ${metric.reference ?? "-"} | ${metric.limit ?? "-"} | ${metric.regressed ? rowVerdict(metric.regressed, acceptBaseline) : metric.status} |`), "",
   ].join("\n");
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   await Bun.write("bench-results/regression.json", `${JSON.stringify(result, null, 2)}\n`);
-  return result.failed ? 1 : 0;
+  return result.failed && !acceptBaseline ? 1 : 0;
 }
 
 if (import.meta.main) process.exitCode = await main();

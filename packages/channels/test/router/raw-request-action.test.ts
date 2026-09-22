@@ -1,9 +1,14 @@
+import { Effect } from "effect";
+import { channelRequests } from "../helpers/channel-requests";
+import { channelTransaction } from "../helpers/channel-transaction";
+import { effectFailure } from "../helpers/effect-failure";
+import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort } from "../helpers/requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { ActorRegistry, Storage, SessionHandleStore } from "@openomni/ledger";
-import { type Gateway, type Inbox, Ingress } from "@openomni/protocol";
-import { createGatewayRouter } from "../../src/router";
-import { IngressRoutingError } from "../../src/router/routing-error";
+import { type Gateway, type Inbox, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
+import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
+import { IngressRoutingError } from "../../src/errors";
 
 beforeEach(() => {
   Storage.reset();
@@ -29,29 +34,30 @@ test.each([
   [null, "invalid"],
   [0, "invalid"],
   [{ unexpected: true }, "invalid"],
-] as const)("raw request reply projects %j as %s", async (action, expectedAction) => {
+] as const)("raw request reply projects %j as %s", async (action: PlainValue, expectedAction: string) => {
   // Given a durable request accepting only report_result.
-  await openRequest("request-raw-action", {
+  await runEffect(await openRequest("request-raw-action", {
     sessionId: "request-owner",
     correlation: { channelId: "dm", tokenHash: "token" },
     expectedResponders: ["responder"],
-  });
+  }));
   const commits: Inbox.Commit[] = [];
   const decisions: Ingress.RoutingDecisionPayload[] = [];
   const router = createGatewayRouter({
-    requests: requestPort(),
-    sink: (event, data) => {
+    requests: channelRequests(requestPort()),
+    transaction: channelTransaction,
+    sink: <T>(event: BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
       }
     },
     inbox: {
-      commit: (row) => {
+      commit: (row: Inbox.Commit) => Effect.sync(() => {
         commits.push(row);
-        return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
-      },
+        return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
+      }),
     },
-    prepare: (_sender, _message, target) => ({
+    prepare: (_sender: Gateway.IngestSender, _message: Gateway.SendMessage, target: string) => Effect.succeed({
       target,
       message: {
         sender: "external",
@@ -63,10 +69,11 @@ test.each([
         replyCorrelation: true,
       },
     }),
-    run: async (_sender, request, body) => ({
+    run: (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      return {
       terminal: "executed",
       matchedRuleIds: [],
-      value: await body({
+      value: yield* body({
         action: {
           id: "source",
           sessionId: "request-owner",
@@ -82,6 +89,7 @@ test.each([
         },
         revision: 1,
       }),
+      };
     }),
   });
   const facts: Gateway.IngressFacts = {
@@ -103,7 +111,7 @@ test.each([
 
   // Then only the allowed action can resolve the request and commit a prompt.
   if (action === "report_result") {
-    expect(await outcome).toMatchObject({
+    expect(await runEffect(outcome)).toMatchObject({
       status: "executed",
       handle: { target: "request-owner" },
     });
@@ -111,8 +119,9 @@ test.each([
     expect(SessionHandleStore.inboxRows("request-owner")).toMatchObject([{ content: "answer" }]);
     expect(SessionHandleStore.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
-    await expect(outcome).rejects.toBeInstanceOf(IngressRoutingError);
-    await expect(outcome).rejects.toMatchObject({ data: { code: "route_blocked" } });
+    const failure = await effectFailure(outcome);
+    expect(failure).toBeInstanceOf(IngressRoutingError);
+    expect(failure).toMatchObject({ _tag: "IngressRoutingError", code: "route_blocked" });
     expect(decisions[0]).toMatchObject({
       stage: "request_correlation",
       outcome: "block",

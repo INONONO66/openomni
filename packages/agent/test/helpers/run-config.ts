@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { ChatAgentConfig } from "../../src/core/types";
 import { collector } from "./observation-collector";
 
@@ -17,7 +18,7 @@ export function overflowCompactionConfig(): Pick<ChatAgentConfig, "events" | "mo
       contextWindowTokens: 10_000,
       protectRecentMessages: 2,
       speculate: false,
-      onSummarize: async () => "overflow checkpoint",
+      onSummarize: () => Effect.succeed("overflow checkpoint"),
     },
   };
 }

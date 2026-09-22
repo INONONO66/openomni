@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { ForeignFailure } from "../../src/errors";
+import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { collector } from "../helpers/observation-collector";
@@ -70,14 +73,16 @@ describe("Compaction.compact with elision configured", () => {
   async function compactElided(output: string, measuredTokens?: number) {
     const sink = collector();
     const messages = [userMessage("u0"), toolMessage(output), userMessage("u1"), userMessage("u2")];
-    const result = await Compaction.compact(
-      messages,
-      { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
-      trace,
-      sink,
-      measuredTokens === undefined
-        ? { trigger: "threshold" }
-        : { trigger: "threshold", measuredTokens },
+    const result = await isolated(
+      Compaction.compact(
+        messages,
+        { contextWindowTokens: 100, protectRecentMessages: 2, elideToolOutputs: options },
+        trace,
+        sink,
+        measuredTokens === undefined
+          ? { trigger: "threshold" }
+          : { trigger: "threshold", measuredTokens },
+      ),
     );
     return { sink, messages, result };
   }
@@ -88,7 +93,7 @@ describe("Compaction.compact with elision configured", () => {
     expect(result.compacted).toBe(true);
     expect(result.removedCount).toBe(0);
     expect(result.messages).toHaveLength(4);
-    expect(sink.events.map((event) => event.name)).toEqual([
+    expect(sink.events.map((event: (typeof sink.events)[number]) => event.name)).toEqual([
       RunEvents.CompactionStarted.name,
       RunEvents.CompactionCompleted.name,
     ]);
@@ -158,19 +163,20 @@ describe("Compaction.compact with elision configured", () => {
       toolMessage("tail-2"),
     ];
 
-    const result = await Compaction.compact(
-      messages,
-      {
-        contextWindowTokens: 100,
-        protectRecentMessages: 2,
-        elideToolOutputs: options,
-        onSummarize: async () => {
-          throw new Error("summary unavailable");
+    const result = await isolated(
+      Compaction.compact(
+        messages,
+        {
+          contextWindowTokens: 100,
+          protectRecentMessages: 2,
+          elideToolOutputs: options,
+          onSummarize: () =>
+            Effect.fail(new ForeignFailure({ operation: "test", cause: "summary unavailable" })),
         },
-      },
-      trace,
-      sink,
-      { trigger: "threshold", measuredTokens: 10_000 },
+        trace,
+        sink,
+        { trigger: "threshold", measuredTokens: 10_000 },
+      ),
     );
 
     expect(result.compacted).toBe(true);

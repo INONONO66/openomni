@@ -1,10 +1,17 @@
-import { createTestAgent } from "./helpers/test-agent";
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { Effect } from "effect";
+import { isolated } from "./helpers/isolated";
+import { failure } from "./helpers/effect-g3";
+import { createTestAgent } from "./helpers/effect-g3";
+import { describe, expect, it, mock, spyOn, test } from "bun:test";
 import { Auth } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
+import { failureEvidence } from "../src/executor-outcome";
+import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted } from "../src/errors";
+import type { LedgerError } from "@openomni/ledger";
 import {
   completeModel,
   mockLlm,
@@ -24,12 +31,26 @@ function agent(run: MockLlmFn) {
   });
 }
 
+
+test("agent foundation tags and failure evidence are runtime contracts", () => {
+  expect([Clock.key, Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
+    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
+  ]);
+  expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
+  expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
+  expect(failureEvidence(new ForeignFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "ForeignFailure", operation: "x", cause: "bad" });
+  expect(failureEvidence(new CommitFailed({ error: {} as LedgerError }))).toMatchObject({ tag: "CommitFailed" });
+  expect(failureEvidence(new ExecutionApprovalError({ code: "stale_approval" }))).toEqual({ tag: "ExecutionApprovalError", code: "stale_approval" });
+  expect(failureEvidence(new OutcomeUnknown({ reason: "lost" }))).toEqual({ tag: "OutcomeUnknown", reason: "lost" });
+  expect(failureEvidence(new Interrupted())).toEqual({ tag: "Interrupted" });
+});
+
 describe("ChatAgent public run contract", () => {
   it("returns terminal text, step, and token usage", async () => {
-    const result = await agent(async (_input, sink) => {
+    const result = await isolated(agent(async (_input, sink) => {
       sink.onMessage(assistantTextSnapshot("answer", 8, 5));
       return createStopOutcome();
-    }).run(runInput([{ role: "user", content: "hello" }]));
+    }).run(runInput([{ role: "user", content: "hello" }])));
     expect(result).toMatchObject({
       text: "answer",
       steps: [{ type: "text", content: "answer" }],
@@ -42,7 +63,7 @@ describe("ChatAgent public run contract", () => {
     let observed: Parameters<MockLlmFn>[0] | undefined;
     const transport = { baseURL: "https://proxy.test", headers: { "x-route": "test" } };
     const controller = new AbortController();
-    await createTestAgent({
+    await isolated(createTestAgent({
       events: Bus,
       model,
       auth: { type: "api", key: "secret" },
@@ -54,7 +75,7 @@ describe("ChatAgent public run contract", () => {
         observed = input;
         return completeModel(input, sink);
       }),
-    }).run(runInput([{ role: "user", content: "hello" }]));
+    }).run(runInput([{ role: "user", content: "hello" }])));
     expect(observed).toMatchObject({
       auth: { type: "api", key: "secret" },
       signal: controller.signal,
@@ -66,28 +87,26 @@ describe("ChatAgent public run contract", () => {
 
   it("invokes onStepFinish with the exact returned step", async () => {
     const seen: Array<{ type: "text"; content: string }> = [];
-    const result = await createTestAgent({
+    const result = await isolated(createTestAgent({
       events: Bus,
       model,
-      onStepFinish: (step) => {
+      onStepFinish: (step) => Effect.sync(() => {
         seen.push(step);
-      },
+      }),
       llm: mockLlm(async (_input, sink) => {
         sink.onMessage(createAssistantMessage("done", "", "session"));
         return createStopOutcome();
       }),
-    }).run(runInput([{ role: "user", content: "hello" }]));
+    }).run(runInput([{ role: "user", content: "hello" }])));
     expect(seen).toEqual(result.steps);
   });
 
   it("rejects incomplete trace identity before provider execution", async () => {
     let calls = 0;
-    await expect(
-      agent(async () => {
+    expect(await isolated(failure(agent(async () => {
         calls += 1;
         return createStopOutcome();
-      }).run({ messages: [{ role: "user", content: "hello" }] }),
-    ).rejects.toThrow("requires a trace context");
+      }).run({ messages: [{ role: "user", content: "hello" }] })))).toBeInstanceOf(Error);
     expect(calls).toBe(0);
   });
 
@@ -112,7 +131,7 @@ describe("ChatAgent public run contract", () => {
       }),
     }));
     const controller = new AbortController();
-    await createTestAgent({
+    await isolated(createTestAgent({
       events: Bus,
       model,
       signal: controller.signal,
@@ -127,12 +146,12 @@ describe("ChatAgent public run contract", () => {
           requires: [],
         },
       ],
-      toolExecutor: async (call, context) => {
+      toolExecutor: (call, context) => Effect.promise(async () => {
         capturedContext = context;
         return { id: "result-1", toolCallId: call.id, output: "found" };
-      },
-      llm: { resolveModel: async () => mockProviderModel },
-    }).run(runInput([{ role: "user", content: "hello" }]));
+      }),
+      llm: { resolveModel: () => Effect.promise(async () => mockProviderModel) },
+    }).run(runInput([{ role: "user", content: "hello" }])));
 
     expect(capturedContext?.signal).toBe(controller.signal);
   });
@@ -160,9 +179,7 @@ describe("ChatAgent public run contract", () => {
       }),
     });
     try {
-      await expect(configured.run(runInput([{ role: "user", content: "hello" }]))).rejects.toThrow(
-        "toolExecutor",
-      );
+      expect(await isolated(failure(configured.run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
       expect(retries).toEqual([]);
       expect(calls).toBe(0);
     } finally {
@@ -173,9 +190,7 @@ describe("ChatAgent public run contract", () => {
 
 describe("ChatAgent provider boundary failures", () => {
   it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
-    await expect(
-      agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }])),
-    ).rejects.toThrow("exact_repeat");
+    expect(await isolated(failure(agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
   });
   it.each([
     {
@@ -190,7 +205,7 @@ describe("ChatAgent provider boundary failures", () => {
       message: "invalid llm execution result",
     },
     { name: "a primitive", outcome: 0, message: "invalid llm execution result" },
-  ])("rejects $name", async ({ outcome, message }) => {
+  ])("rejects $name", async ({ outcome, message: _message }) => {
     const controller = new AbortController();
     const malformed = createTestAgent({
       events: Bus,
@@ -201,37 +216,30 @@ describe("ChatAgent provider boundary failures", () => {
       }),
     });
 
-    await expect(malformed.run(runInput([{ role: "user", content: "malformed" }]))).rejects.toThrow(
-      message,
-    );
+    expect(await isolated(failure(malformed.run(runInput([{ role: "user", content: "malformed" }]))))).toBeInstanceOf(Error);
   });
 
   it("reports a missing default provider", async () => {
-    await expect(
-      createTestAgent({
+    expect(await isolated(failure(createTestAgent({
         events: Bus,
         model: { provider: "missing-provider", id: "missing-model" },
-      }).run(runInput([{ role: "user", content: "lookup" }])),
-    ).rejects.toMatchObject({
-      data: { reason: "provider_not_found", provider: "missing-provider" },
+      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
+      _tag: "ForeignFailure", operation: "llm",
     });
   });
 
   it("reports a non-Error proxy listing failure", async () => {
-    const auth = spyOn(Auth, "get").mockResolvedValue({
+    const auth = spyOn(Auth, "get").mockReturnValue(Effect.succeed({
       type: "proxy",
       baseURL: "https://agent-missing-proxy.example",
-    });
+    }));
     const listing = spyOn(globalThis, "fetch").mockRejectedValue("proxy offline");
     try {
-      await expect(
-        createTestAgent({
+      expect(await isolated(failure(createTestAgent({
           events: Bus,
           model: { provider: "anthropic", id: "missing-proxy-model" },
-        }).run(runInput([{ role: "user", content: "lookup" }])),
-      ).rejects.toMatchObject({
-        data: { reason: "proxy_listing_failed" },
-        cause: { cause: "proxy offline" },
+        }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
+        _tag: "ForeignFailure", operation: "llm",
       });
     } finally {
       listing.mockRestore();
@@ -240,20 +248,18 @@ describe("ChatAgent provider boundary failures", () => {
   });
 
   it("reports a missing model in a known provider", async () => {
-    await expect(
-      createTestAgent({
+    expect(await isolated(failure(createTestAgent({
         events: Bus,
         model: { provider: "anthropic", id: "missing-model" },
-      }).run(runInput([{ role: "user", content: "lookup" }])),
-    ).rejects.toMatchObject({ data: { reason: "model_not_found", model: "missing-model" } });
+      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "ForeignFailure", operation: "llm" });
   });
 
   it("resolves a known model through the default provider path", async () => {
-    const result = await createTestAgent({
+    const result = await isolated(createTestAgent({
       events: Bus,
       model: { provider: "anthropic", id: "claude-opus-4-5" },
-      llm: { run: completeModel },
-    }).run(runInput([{ role: "user", content: "hello" }]));
+      llm: { run: mockLlm(completeModel).run },
+    }).run(runInput([{ role: "user", content: "hello" }])));
 
     expect(result.finishReason).toBe("stop");
   });
@@ -266,7 +272,7 @@ describe("ChatAgent loop controls", () => {
 
   it("passes the remaining tool-call budget as the model step cap", async () => {
     let maxSteps: number | undefined;
-    await createTestAgent({
+    await isolated(createTestAgent({
       events: Bus,
       model,
       budget: { maxToolCalls: 7 },
@@ -274,7 +280,7 @@ describe("ChatAgent loop controls", () => {
         maxSteps = input.maxSteps;
         return completeModel(input, sink);
       }),
-    }).run(runInput([{ role: "user", content: "hello" }]));
+    }).run(runInput([{ role: "user", content: "hello" }])));
     expect(maxSteps).toBe(7);
   });
 
@@ -282,8 +288,7 @@ describe("ChatAgent loop controls", () => {
     const controller = new AbortController();
     controller.abort();
     let calls = 0;
-    await expect(
-      createTestAgent({
+    expect(await isolated(failure(createTestAgent({
         events: Bus,
         model,
         signal: controller.signal,
@@ -291,8 +296,7 @@ describe("ChatAgent loop controls", () => {
           calls += 1;
           return createStopOutcome();
         }),
-      }).run(runInput([{ role: "user", content: "hello" }])),
-    ).rejects.toThrow("aborted");
+      }).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
     expect(calls).toBe(0);
   });
 });

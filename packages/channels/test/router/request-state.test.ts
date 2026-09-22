@@ -1,3 +1,4 @@
+import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { SessionTransition } from "@openomni/protocol";
@@ -11,11 +12,11 @@ test.each([
   "first",
   "quorum",
   "all",
-] as const)("%s resolves only at its distinct-responder threshold", async (resolution) => {
+] as const)("%s resolves only at its distinct-responder threshold", async (resolution: "first" | "quorum" | "all") => {
   const threshold = resolution === "first" ? 1 : resolution === "quorum" ? 2 : 3;
-  await openRequest("original", { expectedResponders: ["a", "b", "c"], resolution, threshold });
+  await runEffect(await openRequest("original", { expectedResponders: ["a", "b", "c"], resolution, threshold }));
   for (const [index, responder] of ["a", "b", "c"].slice(0, threshold).entries()) {
-    expect(await answer("original", responder, `reply-${index}`, 2 + index)).toBe(
+    expect(await runEffect(answer("original", responder, `reply-${index}`, 2 + index))).toBe(
       index + 1 === threshold ? "resolved" : "attached",
     );
   }
@@ -24,44 +25,44 @@ test.each([
   expect(stored?.sessionId).toBe("request-owner");
   expect(
     SessionHandleStore.tree("request-owner").filter(
-      (action) => action.id === "original:resolution",
+      (action: ReturnType<typeof SessionHandleStore.tree>[number]) => action.id === "original:resolution",
     ),
   ).toHaveLength(1);
 });
 
 test("same reply and same responder never advance the request twice", async () => {
-  await openRequest("original", {
+  await runEffect(await openRequest("original", {
     expectedResponders: ["a", "b"],
     resolution: "all",
     threshold: 2,
-  });
-  expect(await answer("original", "a", "reply-a", 2)).toBe("attached");
+  }));
+  expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
   const before = SessionHandleStore.tree("request-owner");
-  expect(await answer("original", "a", "reply-a", 2)).toBe("attached");
+  expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
-  expect(await answer("original", "a", "reply-a-new", 3)).toBe("duplicate");
+  expect(await runEffect(answer("original", "a", "reply-a-new", 3))).toBe("duplicate");
   expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(1);
 });
 
 test("unknown responder is rejected without attaching", async () => {
-  await openRequest("original");
-  expect(await answer("original", "stranger", "reply", 2)).toBe("rejected");
+  await runEffect(await openRequest("original"));
+  expect(await runEffect(answer("original", "stranger", "reply", 2))).toBe("rejected");
   expect(SessionHandleStore.requestById("original")?.replies).toEqual([]);
 });
 
-test.each([0, 1])("timeout keeps %s partial replies in original action history", async (count) => {
-  await openRequest("original", {
+test.each([0, 1])("timeout keeps %s partial replies in original action history", async (count: number) => {
+  await runEffect(await openRequest("original", {
     expectedResponders: ["a", "b"],
     resolution: "all",
     threshold: 2,
     deadline: 10,
-  });
-  if (count) await answer("original", "a", "early", 2);
+  }));
+  if (count) await runEffect(answer("original", "a", "early", 2));
   expect(
-    command("original", { kind: "request.timeout", requestId: "original" }, 9).resolution,
+    (await command("original", { kind: "request.timeout", requestId: "original" }, 9)).resolution,
   ).toBe("rejected");
   expect(
-    command("original", { kind: "request.timeout", requestId: "original" }, 10).resolution,
+    (await command("original", { kind: "request.timeout", requestId: "original" }, 10)).resolution,
   ).toBe("expired");
   expect(SessionHandleStore.requestById("original")).toMatchObject({
     state: "expired",
@@ -71,14 +72,14 @@ test.each([0, 1])("timeout keeps %s partial replies in original action history",
 });
 
 test("cancellation preserves partial replies and cannot be reversed by late input", async () => {
-  await openRequest("original", {
+  await runEffect(await openRequest("original", {
     expectedResponders: ["a", "b"],
     resolution: "all",
     threshold: 2,
-  });
-  await answer("original", "a", "early", 2);
+  }));
+  await runEffect(answer("original", "a", "early", 2));
   expect(
-    command(
+    (await command(
       "original",
       {
         kind: "request.cancel",
@@ -86,10 +87,10 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
         principal: { kind: "actor", principalId: "a", evidenceId: "external" },
       },
       3,
-    ).resolution,
+    )).resolution,
   ).toBe("rejected");
   expect(
-    command(
+    (await command(
       "original",
       {
         kind: "request.cancel",
@@ -97,26 +98,26 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
         principal: { kind: "session", principalId: "request-owner", evidenceId: "session" },
       },
       4,
-    ).resolution,
+    )).resolution,
   ).toBe("cancelled");
-  expect(await answer("original", "b", "late", 5)).toBe("duplicate");
+  expect(await runEffect(answer("original", "b", "late", 5))).toBe("duplicate");
   expect(SessionHandleStore.requestById("original")).toMatchObject({
     state: "cancelled",
     replies: [{ replyId: "early" }],
   });
 });
 
-test.each([10, 11])("answer at %s cannot cross the deadline", async (at) => {
-  await openRequest("original", { deadline: 10 });
-  expect(await answer("original", "actor-external-worker", "late", at)).toBe("late_unknown");
+test.each([10, 11])("answer at %s cannot cross the deadline", async (at: number) => {
+  await runEffect(await openRequest("original", { deadline: 10 }));
+  expect(await runEffect(answer("original", "actor-external-worker", "late", at))).toBe("late_unknown");
   expect(SessionHandleStore.requestById("original")?.replies).toEqual([]);
   expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
 });
 
 test("resolved request cannot reopen for supplementary replies", async () => {
-  await openRequest("original");
-  expect(await answer("original", "actor-external-worker", "first", 2)).toBe("resolved");
-  expect(await answer("original", "actor-external-worker", "second", 3)).toBe("duplicate");
+  await runEffect(await openRequest("original"));
+  expect(await runEffect(answer("original", "actor-external-worker", "first", 2))).toBe("resolved");
+  expect(await runEffect(answer("original", "actor-external-worker", "second", 3))).toBe("duplicate");
   expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(1);
 });
 
@@ -124,8 +125,8 @@ test.each([
   "accepted",
   "rejected",
   "unknown",
-] as const)("physical %s receipt preserves its value in request action history", async (value) => {
-  await openRequest("original");
+] as const)("physical %s receipt preserves its value in request action history", async (value: "accepted" | "rejected" | "unknown") => {
+  await runEffect(await openRequest("original"));
   const port = requestPort();
   const receipt = {
     inputId: "receipt",
@@ -136,12 +137,12 @@ test.each([
     value,
     at: 2,
   };
-  await port.receipt(receipt);
+  await runEffect(port.receipt(receipt));
   const before = SessionHandleStore.tree("request-owner");
-  await port.receipt(receipt);
+  await runEffect(port.receipt(receipt));
   expect(SessionHandleStore.tree("request-owner")).toEqual(before);
   expect(
-    before.find((action) => action.id === "original:input:receipt")?.effect.value,
+    before.find((action: ReturnType<typeof SessionHandleStore.tree>[number]) => action.id === "original:input:receipt")?.effect.value,
   ).toMatchObject({ receipt });
   expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe("platform");
   expect(SessionHandleStore.requestById("original")?.state).toBe("open");
@@ -153,7 +154,7 @@ test.each([
   { resolution: "all", expectedResponders: ["a", "b"], threshold: 1 },
   { resolution: "first", threshold: 2 },
   { state: "resolved", outcome: null },
-] as const)("request schema rejects incoherent bounds or terminal state %#", (overrides) => {
+] as const)("request schema rejects incoherent bounds or terminal state %#", (overrides: Record<string, unknown>) => {
   expect(SessionTransition.Request.safeParse({ ...requestFixture(), ...overrides }).success).toBe(
     false,
   );

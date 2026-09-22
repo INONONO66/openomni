@@ -12,6 +12,10 @@ import {
   type ObservationSink,
 } from "@openomni/protocol";
 import { Storage } from "../storage/storage.js";
+import { Effect } from "effect";
+import { StorageUnavailable, type LedgerError } from "../errors";
+import type { CommitReceipt, LeaseReceipt } from "../services";
+import { writeEffect } from "../storage/write-effect";
 
 export const LEASE_TTL_MS = 30_000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -38,70 +42,76 @@ export type ConfigureAuthority = (input: {
   readonly generation: number;
 }) => boolean | Promise<boolean>;
 
-export function materialize(input: MaterializeInput): LedgerSession.MaterializeResult {
-  const snapshot = generationSnapshot({
-    generation: 1,
-    revertTo: 0,
-    tools: input.tools,
-    system: input.system,
-    policyGeneration: input.policyGeneration,
-  });
-  const result = requiredSessions().materialize({
-    row: {
-      id: input.id,
-      parentId: input.parentId,
-      role: input.role,
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-      revision: 0,
-      state: "idle",
-      toolsGeneration: snapshot.generation,
-      systemHash: snapshot.systemHash,
-      policyGeneration: snapshot.policyGeneration,
-    },
-    initialAction: configureAction({
-      id: input.actionId,
-      sessionId: input.id,
-      parentId: null,
-      operation: "create",
-      snapshot,
-      at: input.at,
+export function materialize(
+  input: MaterializeInput,
+): Effect.Effect<LedgerSession.MaterializeResult, LedgerError> {
+  return writeEffect("session.generation", () =>
+    generationSnapshot({
+      generation: 1,
+      revertTo: 0,
+      tools: input.tools,
+      system: input.system,
+      policyGeneration: input.policyGeneration,
     }),
-  });
-  if (result === undefined) throw new Error(`session materialization refused: ${input.id}`);
-  return result;
+  ).pipe(
+    Effect.flatMap((snapshot) =>
+      sessionWrites().pipe(
+        Effect.flatMap((sessions) =>
+          sessions.materialize({
+            row: {
+              id: input.id,
+              parentId: input.parentId,
+              role: input.role,
+              leaseOwner: null,
+              leaseFence: 0,
+              leaseExpiresAt: null,
+              revision: 0,
+              state: "idle",
+              toolsGeneration: snapshot.generation,
+              systemHash: snapshot.systemHash,
+              policyGeneration: snapshot.policyGeneration,
+            },
+            initialAction: configureAction({
+              id: input.actionId,
+              sessionId: input.id,
+              parentId: null,
+              operation: "create",
+              snapshot,
+              at: input.at,
+            }),
+          }),
+        ),
+      ),
+    ),
+  );
 }
 
-export function acquireLease(input: LedgerSession.AcquireLease): LedgerSession.LeaseResult {
-  const result = requiredSessions().acquireLease(input);
-  if (result === undefined) throw new Error(`session not found: ${input.sessionId}`);
-  return result;
+export function acquireLease(
+  input: LedgerSession.AcquireLease,
+): Effect.Effect<LeaseReceipt, LedgerError> {
+  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.acquireLease(input)));
 }
 
-export function renewLease(input: LedgerSession.RenewLease): boolean {
-  return requiredSessions().renewLease(input);
+export function renewLease(input: LedgerSession.RenewLease): Effect.Effect<true, LedgerError> {
+  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.renewLease(input)));
 }
 
-export function commit(input: LedgerSession.Commit): LedgerSession.CommitResult {
-  const result = requiredSessions().commit(input);
-  if (result === undefined) throw new Error(`session not found: ${input.sessionId}`);
-  return result;
+export function commit(input: LedgerSession.Commit): Effect.Effect<CommitReceipt, LedgerError> {
+  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.commit(input)));
 }
 
-export function commitInbox(input: Inbox.Commit): Inbox.Row {
-  const committed = requiredInbox().commit(input);
-  if (committed === undefined) throw new Error(`inbox commit refused: ${input.id}`);
-  return committed;
+export function commitInbox(input: Inbox.Commit): Effect.Effect<Inbox.Row, LedgerError> {
+  return inboxWrites().pipe(Effect.flatMap((inbox) => inbox.commit(input)));
 }
 
-export function commitReceivedMessage(input: Inbox.Commit): {
-  row: Inbox.Row;
-  receipt: LedgerAction.Receipt;
-} {
-  const received = requiredInbox().receive(input);
-  if (received === undefined) throw new Error(`inbox receive refused: ${input.id}`);
-  return received;
+export function commitReceivedMessage(input: Inbox.Commit): Effect.Effect<
+  {
+    row: Inbox.Row;
+    receipt: LedgerAction.Receipt;
+  },
+  LedgerError
+> {
+  return inboxWrites().pipe(Effect.flatMap((inbox) => inbox.receive(input)));
 }
 
 export function pendingInbox(sessionId: string): Inbox.Row[] {
@@ -204,7 +214,9 @@ export function requestById(requestId: string): SessionTransition.Request | unde
   return requestRows().find((request) => request.requestId === requestId);
 }
 
-export function commitRequestTransition(input: LedgerSession.Commit): LedgerSession.CommitResult {
+export function commitRequestTransition(
+  input: LedgerSession.Commit,
+): Effect.Effect<CommitReceipt, LedgerError> {
   return commit(input);
 }
 
@@ -297,18 +309,18 @@ export function configureAction(input: {
     kind: "session.configure",
     intent: {
       encodingVersion: 1,
-      value: SessionGeneration.ConfigureIntent.parse({ operation: input.operation }),
+      value: { operation: input.operation },
     },
     effect: {
       encodingVersion: 1,
-      value: SessionGeneration.ConfigureEffect.parse({
+      value: {
         phase: "configured",
         snapshot: input.snapshot,
-      }),
+      },
     },
     revert: {
       encodingVersion: 1,
-      value: SessionGeneration.ConfigureRevert.parse({ generation: input.snapshot.revertTo }),
+      value: { generation: input.snapshot.revertTo },
     },
     ts: input.at,
   };
@@ -565,6 +577,26 @@ function assertUniqueBlocks(blocks: readonly SessionGeneration.SystemBlock[]): v
     }
     seen.add(block.id);
   }
+}
+
+function sessionWrites() {
+  return writeEffect("storage.sessions", (refuse) => {
+    if (Storage.getInitializedDbPath() === null)
+      return refuse(new StorageUnavailable({ capability: "storage" }));
+    const sessions = Storage.get().sessions;
+    if (sessions === undefined) return refuse(new StorageUnavailable({ capability: "sessions" }));
+    return sessions;
+  });
+}
+
+function inboxWrites() {
+  return writeEffect("storage.inbox", (refuse) => {
+    if (Storage.getInitializedDbPath() === null)
+      return refuse(new StorageUnavailable({ capability: "storage" }));
+    const inbox = Storage.get().inbox;
+    if (inbox === undefined) return refuse(new StorageUnavailable({ capability: "inbox" }));
+    return inbox;
+  });
 }
 
 function requiredSessions() {

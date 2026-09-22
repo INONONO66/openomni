@@ -175,6 +175,7 @@ jobs:
       - run: bun run ci restore
       - run: bun run script/check-topology.ts
       - run: bun run script/check-deps.ts
+      - run: bun run script/check-effect-boundaries.ts
       - run: bun run lint:guards
       - run: bun run lint:side-effects
       - run: bun run lint:tools
@@ -189,6 +190,8 @@ jobs:
     if: needs.plan.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ startsWith(matrix.key, 'scripts-tooling-') && 15 || 30 }}
+    env:
+      OPENOMNI_CHILD_COVERAGE_DIR: ${{ github.workspace }}/apps/openomni/coverage/children
     strategy:
       fail-fast: false
       # ci-plan derives scripts-tooling-1 and scripts-tooling-2 from scriptPartitions.

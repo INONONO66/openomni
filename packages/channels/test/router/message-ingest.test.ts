@@ -1,3 +1,8 @@
+import { Effect } from "effect";
+import { channelRequests } from "../helpers/channel-requests";
+import { channelTransaction } from "../helpers/channel-transaction";
+import { effectFailure } from "../helpers/effect-failure";
+import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { Gateway, type Inbox } from "@openomni/protocol";
@@ -13,15 +18,16 @@ afterEach(() => Storage.reset());
 function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
-    requests: requestPort(),
+    requests: channelRequests(requestPort()),
+    transaction: channelTransaction,
     sink: () => undefined,
     inbox: {
-      commit: (row) => {
+      commit: (row: Inbox.Commit) => Effect.sync(() => {
         commits.push(row);
-        return { ...row, status: "pending", consumedBy: null, consumedAt: null, ordinal: 1 };
-      },
+        return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
+      }),
     },
-    prepare: () => ({
+    prepare: () => Effect.succeed({
       target: "child",
       ...(sender === undefined ? {} : { sender }),
       message: {
@@ -54,14 +60,16 @@ function sendToChild(router: ReturnType<typeof createGatewayRouter>, content: st
 
 test("session ingest commits once through the injected inbox without a channel driver", async () => {
   const { router, commits } = recordingRouter(
-    async (_sender, request, body) => ({
-      terminal: "executed",
-      matchedRuleIds: [],
-      value: await body(messageExecutionReceipt("source", "parent", request.intent)),
+    (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      return {
+        terminal: "executed" as const,
+        matchedRuleIds: [],
+        value: yield* body(messageExecutionReceipt("source", "parent", request.intent)),
+      };
     }),
     { sessionId: "parent", owner: "process", fence: 1 },
   );
-  const result: Gateway.IngestResult = await sendToChild(router, "work");
+  const result: Gateway.IngestResult = await runEffect(sendToChild(router, "work"));
   expect(result).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(commits).toHaveLength(1);
   expect(commits[0]).toMatchObject({
@@ -76,8 +84,8 @@ test("session ingest commits once through the injected inbox without a channel d
 test.each([
   "content",
   "target",
-] as const)("pre transform of %s is applied or refused before inbox commit", async (field) => {
-  const { router, commits } = recordingRouter(async (_sender, request, body) => {
+] as const)("pre transform of %s is applied or refused before inbox commit", async (field: "content" | "target") => {
+  const { router, commits } = recordingRouter((_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
     const value = Gateway.SendMessage.extend({
       messageId: z.string(),
       sender: Gateway.IngestSender,
@@ -89,25 +97,36 @@ test.each([
     return {
       terminal: "executed",
       matchedRuleIds: [],
-      value: await body(messageExecutionReceipt("source", "parent", transformed)),
+      value: yield* body(messageExecutionReceipt("source", "parent", transformed)),
     };
-  });
+  }));
   const result = sendToChild(router, "secret");
   if (field === "target") {
-    await expect(result).rejects.toThrow("message routing transform requires readmission");
+    expect(await effectFailure(result)).toMatchObject({ message: "message routing transform requires readmission" });
     expect(commits).toHaveLength(0);
   } else {
-    await result;
+    await runEffect(result);
     expect(commits[0]?.content).toBe("redacted");
   }
 });
 
-test("post-execution denial retains the delivery handle and committed effect", async () => {
-  const { router, commits } = recordingRouter(async (_sender, request, body) => {
-    await body(messageExecutionReceipt("source", "parent", request.intent));
-    return { terminal: "blocked_post", matchedRuleIds: ["post-rule"], reason: "post-denial" };
+test.each(["interrupted", "outcome_unknown"] as const)("%s preserves the handle without committing an inbox", async (terminal: "interrupted" | "outcome_unknown") => {
+  const { router, commits } = recordingRouter(() => Effect.succeed({
+    terminal, reason: "execution_stopped", matchedRuleIds: [],
+  }));
+  const result = await runEffect(sendToChild(router, "work"));
+  expect(result).toMatchObject({
+    status: "blocked_post", reasonCode: "execution_stopped", handle: { target: "child" },
   });
-  const result = await sendToChild(router, "work");
+  expect(commits).toEqual([]);
+});
+
+test("post-execution denial retains the delivery handle and committed effect", async () => {
+  const { router, commits } = recordingRouter((_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+    yield* body(messageExecutionReceipt("source", "parent", request.intent));
+    return { terminal: "blocked_post" as const, matchedRuleIds: ["post-rule"], reason: "post-denial" };
+  }));
+  const result = await runEffect(sendToChild(router, "work"));
   expect(result).toMatchObject({
     status: "blocked_post",
     reasonCode: "post-denial",

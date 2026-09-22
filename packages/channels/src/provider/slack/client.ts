@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
 import type { ChannelClient, PublishPort } from "../../types";
-import { SlackApiError } from "./error";
+import { SlackApiError } from "../../errors";
 
 const BASE_URL = "https://slack.com/api";
 

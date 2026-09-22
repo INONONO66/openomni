@@ -1,3 +1,5 @@
+import { runEffect } from "./helpers/effect";
+import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { Bus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
@@ -17,11 +19,11 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
     sessionRuntime: { clock: () => now },
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input: RunInput, sink: Sink) => {
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         calls += 1;
         sink.onMessage(assistantMessage(input, { text: "ALARM_SENTINEL" }));
         return { type: "stop" as const };
-      },
+      }),
     },
   };
   const app = await suite.boot(options);
@@ -35,7 +37,7 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
   });
   let id: string;
   try {
-    const receipt = await app.gateway.ingest(
+    const receipt = await runEffect(app.gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
       {
         eventId: "seed",
@@ -46,7 +48,7 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
         payload: "seed",
         render: "seed",
       },
-    );
+    ));
     if (receipt.status !== "executed") throw new Error("seed refused");
     id = receipt.handle.target;
     await terminal.promise;
@@ -79,7 +81,7 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
       row.revision,
     ),
   ).toBeDefined();
-  await createSessionRequests({ observations: Bus, clock: () => now }).open({
+  await runEffect(createSessionRequests({ observations: Bus, clock: () => now }).open({
     requestId: "alarm-source",
     sessionId: id,
     deadline: 100,
@@ -89,7 +91,7 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
     allowedActions: ["report_result"],
     resolution: "first",
     threshold: 1,
-  });
+  }));
   Storage.reset();
   calls = 0;
   now = 99;

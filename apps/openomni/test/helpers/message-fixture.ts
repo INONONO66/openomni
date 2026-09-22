@@ -12,7 +12,8 @@ import {
 } from "@openomni/agent";
 import { initialize } from "@openomni/ledger";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
-import { createResidentGateway, type OutboundMessaging } from "../../src/gateway";
+import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
+import { decodeChannelFailure } from "@openomni/channels";
 import {
   commitMessageInbox,
   messageMaterialization,
@@ -22,6 +23,8 @@ import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 import type { z } from "zod";
+import { Effect } from "effect";
+import { acquireSyncEffect, runEffect, runSyncEffect } from "./effect";
 
 /** The model-facing vocabulary is read off the sealed tool, not re-exported for tests. */
 type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input"]>;
@@ -45,31 +48,26 @@ export function messageFixture(
     ),
   };
   const requests = createSessionRequests(runtime);
-  const gateway = createResidentGateway(
-    {
-      clock: runtime.clock,
-      requests,
-      inbox: { commit: commitMessageInbox },
-      prepare: prepareMessage((id, parentId, childRole, runner) =>
-        messageMaterialization({
-          id,
-          parentId,
-          role: childRole,
-          runner,
-          tools,
-          preset: "",
-          at: 100,
-        }),
-      ),
-    },
-    messaging,
-  );
+  const gateway = runSyncEffect(createResidentGateway({
+    clock: runtime.clock,
+    requests: channelRequests(requests),
+    inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+    prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({
+      id,
+      parentId,
+      role: childRole,
+      runner,
+      tools,
+      preset: "",
+      at: 100,
+    })),
+  }, messaging));
   let result: Tool.Result | undefined;
-  const handle = session(
+  const handle = acquireSyncEffect(session(
     {
       id: sessionId,
       role,
-      runner: async (input) => {
+      runner: (input) => Effect.gen(function* () {
         const payload = toolInput(
           Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
         );
@@ -89,18 +87,18 @@ export function messageFixture(
           entropy: () => crypto.randomUUID(),
         });
         const dispatcher = createDispatcher(
-          [eraseTool(createSendMessageTool(gateway, runtime.clock))],
+          [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args)) }, runtime.clock))],
           { executor },
         );
-        result = await dispatcher.execute(
+        result = yield* dispatcher.execute(
           { id: crypto.randomUUID(), tool: "send_message", input: payload },
           { sessionId, turnId: input.turnId },
         );
-        return { kind: "result", text: result.output ?? "" };
-      },
+        return { kind: "result" as const, text: result.output ?? "" };
+      }),
     },
     runtime,
-  );
+  ));
   return {
     directory,
     dbPath,
@@ -109,7 +107,7 @@ export function messageFixture(
     requests,
     async send(input: Gateway.SendMessage): Promise<Tool.Result> {
       result = undefined;
-      await handle.prompt(JSON.stringify(input));
+      await runEffect(handle.prompt(JSON.stringify(input)));
       if (result === undefined) throw new Error("fixture tool did not execute");
       return result;
     },

@@ -8,8 +8,9 @@ import {
   type PlainObject,
 } from "@openomni/protocol";
 import type { ExecutionRequest, ExecutorOptions } from "./executor";
-import { waveBodyScope } from "./core/execution/tool-wave";
-import { Run } from "@openomni/llm";
+import { Effect } from "effect";
+import { CommitFailed, type ExecutionError } from "./errors";
+import { failureEvidence } from "./executor-outcome";
 
 export type ToolObservationStatus = "success" | "error" | "timed_out";
 type ToolObservationIdentity = NonNullable<ExecutionRequest["toolObservation"]>;
@@ -22,33 +23,34 @@ interface ActionSubject {
 export function createExecutionRecord(
   options: Pick<ExecutorOptions, "ledger" | "observations" | "identity" | "clock" | "entropy">,
 ) {
-  async function commit(action: LedgerAction.Append): Promise<LedgerAction.Receipt> {
-    waveBodyScope.getStore()?.signal.throwIfAborted();
-    const receipt = await options.ledger.commit(action);
-    options.observations.publish(L0Observation.ActionCommittedEvent, {
-      id: receipt.action.id,
-      sessionId: receipt.action.sessionId,
-      revision: receipt.revision,
-      kind: receipt.action.kind,
-    });
-    return receipt;
+  function commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
+    return options.ledger.commit(action).pipe(
+      Effect.mapError((error) => new CommitFailed({ error })),
+      Effect.map((receipt) => {
+        options.observations.publish(L0Observation.ActionCommittedEvent, {
+          id: receipt.action.id,
+          sessionId: receipt.action.sessionId,
+          revision: receipt.revision,
+          kind: receipt.action.kind,
+        });
+        return receipt;
+      }),
+    );
   }
 
-  async function appendFailure<Caught>(
+  function appendFailure(
     subject: ActionSubject,
     parentId: string,
     effect: PlainValue,
-    caught: Caught,
+    error: ExecutionError,
     callId?: string,
     toolResult?: Tool.Result,
-  ): Promise<void> {
-    const error = caught instanceof Error ? caught : new Error(String(caught));
-    await appendResult(subject, parentId, {
+  ): Effect.Effect<void, CommitFailed> {
+    return appendResult(subject, parentId, {
       phase: "result",
-      terminal: "failed",
+      terminal: "executed",
       effect,
-      error: { name: error.name },
-      ...(caught instanceof Run.FailureError ? { failure: caught.data } : {}),
+      evidence: { failures: [failureEvidence(error)], defects: [], interrupted: false },
       ...(callId === undefined ? {} : { callId }),
       ...(toolResult === undefined ? {} : { toolResult }),
     });
@@ -111,13 +113,13 @@ export function createExecutionRecord(
     });
   }
 
-  async function appendIntent(input: {
+  function appendIntent(input: {
     readonly kind: LedgerAction.Kind;
     readonly op: string;
     readonly parentId: string | null;
     readonly value: PlainValue;
     readonly invocation?: PlainObject;
-  }): Promise<LedgerAction.Receipt> {
+  }): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
     return commit(
       actionAppend(
         input,
@@ -135,21 +137,20 @@ export function createExecutionRecord(
     );
   }
 
-  async function appendResult(
+  function appendResult(
     subject: ActionSubject,
     parentId: string,
     value: PlainValue,
     revert?: PlainValue,
-  ): Promise<void> {
-    const action = actionAppend(
-      { ...subject, parentId },
-      { encodingVersion: 1, value: { phase: "result", op: subject.op } },
-      { encodingVersion: 1, value },
-    );
-    if (revert === undefined) {
-      await commit(action);
-    } else {
-      await commit({
+  ): Effect.Effect<void, CommitFailed> {
+    return Effect.suspend(() => {
+      const action = actionAppend(
+        { ...subject, parentId },
+        { encodingVersion: 1, value: { phase: "result", op: subject.op } },
+        { encodingVersion: 1, value },
+      );
+      if (revert === undefined) return Effect.asVoid(commit(action));
+      return Effect.asVoid(commit({
         id: action.id,
         parentId: action.parentId,
         sessionId: action.sessionId,
@@ -158,8 +159,8 @@ export function createExecutionRecord(
         effect: action.effect,
         ts: action.ts,
         revert: { encodingVersion: 1, value: revert },
-      });
-    }
+      }));
+    });
   }
 
   function actionAppend(

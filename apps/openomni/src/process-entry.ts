@@ -1,16 +1,21 @@
+import type { Readable } from "node:stream";
 import {
   Bus,
   closeSessions,
   createSessionRequests,
   currentExecutor,
+  ForeignFailure,
   wakeSession,
   type SessionRuntime,
 } from "@openomni/agent";
-import { createGatewayRouter } from "@openomni/channels";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
+import { SessionHandleStore } from "@openomni/ledger";
+import { Effect, FiberRef } from "effect";
+import { acquireAppResource, channelRequests, channelTransaction, gatewayRuntime, toolPorts } from "./gateway";
+import type { AppRuntime } from "./runtime";
 import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { createCompletionPort, type LlmPort } from "./tools/completion";
+import { createCompletionPort } from "./composition/completion";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -36,15 +41,17 @@ export const ProcessSessionRequest = z
 export type ProcessSessionRequest = z.infer<typeof ProcessSessionRequest>;
 export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
 
-export async function serveProcessSession(
+export function serveProcessSession(
   request: ProcessSessionRequest,
   committed: (ids: readonly string[]) => void,
-  answer?: (input: SessionTransition.Answer) => Promise<SessionTransition.Resolution>,
-): Promise<void> {
-  initialize({ dbPath: request.dbPath, observationSink: Bus });
+  answer: ((input: SessionTransition.Answer) => Promise<SessionTransition.Resolution>) | undefined,
+  appRuntime: AppRuntime,
+) {
+  return Effect.gen(function* () {
   seedKernelPolicyRows();
   const runtime: SessionRuntime = {
     observations: Bus,
+    generation: (snapshot) => resident.generation(snapshot),
     onInboxCommitted: committed,
     dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), Date.now),
   };
@@ -53,7 +60,7 @@ export async function serveProcessSession(
       gateway.ingest(...args),
   };
   // The process's one sub-model seam: the configured model's credential and transport, real I/O.
-  const llm: LlmPort = createCompletionPort(
+  const llm = createCompletionPort(
     {
       ...request.model,
       apiKey: request.apiKey,
@@ -66,46 +73,60 @@ export async function serveProcessSession(
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     sessionRuntime: runtime,
-    tools: { messages, llm },
+    tools: toolPorts(appRuntime, { messages, completion: llm }),
   });
   const gateway = createGatewayRouter({
     sink: Bus.publish,
-    inbox: { commit: commitMessageInbox },
+    transaction: channelTransaction,
+    inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
     prepare: prepareMessage(resident.materialize),
-    run: async (sender, execution, body) => {
-      const result = await (outboundMessage.getStore()?.executor ?? currentExecutor()).run(
+    run: (sender, execution, body) => Effect.gen(function* () {
+      const outbound = yield* FiberRef.get(outboundMessage);
+      const result = yield* (outbound?.executor ?? currentExecutor()).run(
         execution,
-        body,
+        (intent) => body(intent).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "message.body", cause: String(error) }))),
       );
       if (sender.kind !== "session") throw new Error("process gateway requires a session sender");
       return { ...result, matchedRuleIds: messageDecisionRules(sender.id, execution) };
-    },
-    requests: { ...createSessionRequests(runtime), ...(answer === undefined ? {} : { answer }) },
+    }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
+    requests: { ...channelRequests(createSessionRequests(runtime)), ...(answer === undefined ? {} : { answer: (input: SessionTransition.Answer) => Effect.tryPromise({ try: () => answer(input), catch: decodeChannelFailure("process.answer") }) }) },
     committed: (row) => committed([row.sessionId]),
   });
+  yield* wakeSession(
+    request.sessionId,
+    resident.runnerFor(SessionHandleStore.row(request.sessionId)),
+    runtime,
+  ).pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
+  });
+}
+
+export async function runProcessEntry(io: {
+  stdin: Readable;
+  log: (line: string) => void;
+  exit: (code: number) => never;
+  gatewayRuntime?: typeof gatewayRuntime;
+}): Promise<void> {
+  const replies = createProcessReplyChannel(io.stdin, io.log);
   try {
-    await wakeSession(
-      request.sessionId,
-      resident.runnerFor(SessionHandleStore.row(request.sessionId)),
-      runtime,
-    );
+    const line = await replies.first;
+    if (line === undefined) io.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
+    const request = ProcessSessionRequest.parse(JSON.parse(line));
+    const runtime = (io.gatewayRuntime ?? gatewayRuntime)({ dbPath: request.dbPath });
+    try {
+      await acquireAppResource(runtime, serveProcessSession(
+        request,
+        (sessionIds) => io.log(JSON.stringify({ sessionIds })),
+        replies.answer,
+        runtime,
+      ));
+    } finally {
+      await runtime.dispose();
+    }
   } finally {
-    await closeSessions(runtime);
-    Storage.reset();
+    replies.close();
   }
 }
 
 if (import.meta.main) {
-  const replies = createProcessReplyChannel(process.stdin, (line) => console.log(line));
-  try {
-    const line = await replies.first;
-    if (line === undefined) process.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
-    await serveProcessSession(
-      ProcessSessionRequest.parse(JSON.parse(line)),
-      (sessionIds) => console.log(JSON.stringify({ sessionIds })),
-      replies.answer,
-    );
-  } finally {
-    replies.close();
-  }
+  await runProcessEntry({ stdin: process.stdin, log: console.log, exit: process.exit });
 }

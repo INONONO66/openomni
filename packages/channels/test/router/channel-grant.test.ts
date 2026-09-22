@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
+import { runEffect } from "../helpers/effect";
 import { ChannelGrantStore } from "@openomni/ledger";
 import { registerChannelGrant } from "../helpers/channel-grant";
 import {
@@ -18,7 +19,7 @@ beforeEach(() => {
 
 test("registered Owner still needs a channel grant", async () => {
   ChannelGrantStore.remove("grant-owner-dm");
-  expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+  expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });
   expect(commits).toEqual([]);
@@ -31,7 +32,7 @@ test("blocked channel overrides registered Owner authority", async () => {
     channel: "owner-dm",
     kind: "blocked_channel",
   });
-  expect(await kernelRouter().ingest(ownerSender, ownerFacts)).toMatchObject({
+  expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });
   expect(routingDecisions()[0]).toMatchObject({ outcome: "block", inboundTreatment: "drop" });
@@ -45,7 +46,7 @@ test("broadcast channel floors the Owner to evidence-only content", async () => 
     channel: "owner-dm",
     kind: "broadcast_channel",
   });
-  expect((await kernelRouter().ingest(ownerSender, ownerFacts)).status).toBe("executed");
+  expect((await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).status).toBe("executed");
   expect(routingDecisions()[0]).toMatchObject({
     outcome: "route",
     inboundTreatment: "evidence_only",

@@ -28,6 +28,10 @@ on:
         description: Number of repeated benchmark runs to summarize
         required: false
         default: "5"
+      accept_baseline:
+        description: "Owner-approved baseline reset: accept regressions above the limit and publish the new reference"
+        required: false
+        default: "false"
 
 concurrency:
   group: bench-${{ github.ref }}
@@ -43,6 +47,8 @@ jobs:
     timeout-minutes: 15
     env:
       BENCHMARK_REGRESSION_PERCENT: "20"
+      # The label/input is the Owner sign-off record; it never skips validation.
+      BENCHMARK_ACCEPT_BASELINE: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'benchmark:accept-baseline')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.accept_baseline == 'true') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

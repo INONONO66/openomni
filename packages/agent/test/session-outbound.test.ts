@@ -1,6 +1,8 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Cause, Chunk, Effect, Exit, Scope } from "effect";
+import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
-import { receiveOutbound } from "./helpers/receive-outbound";
+import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
+import { isolated } from "./helpers/isolated";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   session,
@@ -8,12 +10,14 @@ import {
   sweepSessions,
   wakeSession,
   type SessionRuntime,
+  type SessionRunner,
 } from "../src/session-handle";
+import type { LedgerSession } from "@openomni/protocol";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-/** The parent's pending "commission" message action that a child's outbound reply answers. */
+/** The parent's pending commission answered by the child's outbound reply. */
 function appendCommission(): void {
   const actions = Storage.get().actions;
   if (actions === undefined) throw new Error("missing action adapter");
@@ -34,211 +38,219 @@ function appendCommission(): void {
     SessionHandleStore.row("parent").revision,
   );
 }
-
-const runtimes: SessionRuntime[] = [];
-const directories: string[] = [];
-beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
-  seedPolicy();
-});
-afterEach(async () => {
-  await Promise.all(runtimes.splice(0).map((runtime) => closeSessions(runtime)));
-  Storage.reset();
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
-
-test("a dropped receiving consumer leaves a sealed source obligation without mutating its parent", async () => {
-  const runtime: SessionRuntime = {
-    observations: { publish: () => undefined },
-    clock: () => 100,
-    async dispatchOutbound() {
-      throw new Error("receiver unavailable");
-    },
-  };
-  runtimes.push(runtime);
-  session(
-    { id: "parent", role: "resident", runner: async () => ({ kind: "result", text: "parent" }) },
-    runtime,
-  );
-  const child = session(
-    {
-      id: "child",
-      parentId: "parent",
-      role: "worker",
-      runner: async () => ({ kind: "result", text: "child answer" }),
-    },
-    runtime,
-  );
-  const before = SessionHandleStore.tree("parent");
-  await expect(
-    child.prompt("work", {
-      encodingVersion: 1,
-      value: {
-        kind: "message",
-        messageId: "commission",
-        senderSessionId: "parent",
-        sourceActionId: "commission-action",
-      },
-    }),
-  ).rejects.toThrow("receiver unavailable");
-  expect(SessionHandleStore.tree("parent")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
-  const source = SessionHandleStore.tree("child");
-  expect(
-    source.filter((action) => SessionHandleStore.turnTerminal(action) !== undefined),
-  ).toHaveLength(1);
-  const obligations = SessionHandleStore.outboundRows("child");
-  expect(obligations).toHaveLength(1);
-  expect(obligations[0]?.state).toBe("pending");
-  expect(obligations[0]?.message.content).toBe("child answer");
-});
-
-test("restart after receiving commit retries exact bytes without another inbox or receiver execution", async () => {
-  Storage.reset();
-  const directory = mkdtempSync(join(tmpdir(), "source-obligation-"));
-  directories.push(directory);
-  const dbPath = join(directory, "ledger.sqlite");
-  Storage.initialize({ dbPath });
-  seedPolicy();
-  let consumed = 0;
-  const parentRunner = async () => {
-    consumed += 1;
-    return { kind: "result" as const, text: "received" };
-  };
-  const sent: string[] = [];
-  function runtime(at: number, loseAck: boolean): SessionRuntime {
-    const value: SessionRuntime = {
-      observations: { publish: () => undefined },
-      clock: () => at,
-      async dispatchOutbound({ message }) {
-        sent.push(JSON.stringify(message));
-        const received = receiveOutbound(message, at);
-        await wakeSession(message.destinationSessionId, parentRunner, value);
-        if (loseAck) throw new Error("source ack lost");
-        return received.receipt;
-      },
-    };
-    runtimes.push(value);
-    return value;
-  }
-  const first = runtime(100, true);
-  session({ id: "parent", role: "resident", runner: parentRunner }, first);
-  appendCommission();
-  const child = session(
-    {
-      id: "child",
-      parentId: "parent",
-      role: "worker",
-      runner: async () => ({ kind: "result", text: "exact answer" }),
-    },
-    first,
-  );
-  await expect(
-    child.prompt("work", {
-      encodingVersion: 1,
-      value: {
-        kind: "message",
-        messageId: "commission",
-        senderSessionId: "parent",
-        sourceActionId: "commission-action",
-      },
-    }),
-  ).rejects.toThrow("source ack lost");
-  expect(consumed).toBe(1);
-  const parentBefore = SessionHandleStore.tree("parent");
-  expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("pending");
-  await closeSessions(first);
-  Storage.reset();
-  Storage.initialize({ dbPath });
-  const reopened = runtime(200, false);
-  await sweepSessions(
-    (row) =>
-      row.id === "parent"
-        ? parentRunner
-        : async () => {
-            throw new Error("sealed child replayed");
-          },
-    reopened,
-  );
-  expect(sent).toHaveLength(2);
-  expect(sent[1]).toBe(sent[0]);
-  expect(consumed).toBe(1);
-  expect(SessionHandleStore.tree("parent")).toEqual(parentBefore);
-  expect(SessionHandleStore.inboxRows("parent")).toHaveLength(1);
-  expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("delivered");
-});
-
+const origin = {
+  encodingVersion: 1 as const,
+  value: {
+    kind: "message",
+    messageId: "commission",
+    senderSessionId: "parent",
+    sourceActionId: "commission-action",
+  },
+};
+const parentRunner: SessionRunner = () => Effect.succeed({ kind: "result", text: "parent" });
+const childRunner: SessionRunner = () => Effect.succeed({ kind: "result", text: "child answer" });
 function commissionedChild(runtime: SessionRuntime) {
-  runtimes.push(runtime);
-  session(
-    { id: "parent", role: "resident", runner: async () => ({ kind: "result", text: "parent" }) },
-    runtime,
-  );
-  appendCommission();
-  const child = session(
-    {
-      id: "child",
-      parentId: "parent",
-      role: "worker",
-      runner: async () => ({ kind: "result", text: "child answer" }),
-    },
-    runtime,
-  );
-  return child.prompt("work", {
-    encodingVersion: 1,
-    value: {
-      kind: "message",
-      messageId: "commission",
-      senderSessionId: "parent",
-      sourceActionId: "commission-action",
-    },
+  return Effect.gen(function* () {
+    seedPolicy();
+    yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
+    yield* session({ id: "parent", role: "resident", runner: parentRunner }, runtime);
+    appendCommission();
+    const child = yield* session(
+      { id: "child", parentId: "parent", role: "worker", runner: childRunner },
+      runtime,
+    );
+    return yield* child.prompt("work", origin);
   });
 }
 
-test("a destination receipt for different bytes is refused and the obligation stays pending", async () => {
-  const prompted = commissionedChild({
-    observations: { publish: () => undefined },
-    clock: () => 100,
-    dispatchOutbound: async ({ message }) =>
-      receiveOutbound({ ...message, content: "tampered answer" }, 100).receipt,
-  });
-  await expect(prompted).rejects.toThrow(
-    "outbound destination receipt does not match its recorded payload",
-  );
-  expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
-  expect(SessionHandleStore.inboxRows("parent").map((row) => row.content)).toEqual([
-    "tampered answer",
-  ]);
-});
+test("a dropped receiving consumer leaves a sealed source obligation without mutating its parent", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const runtime: SessionRuntime = {
+          observations: { publish: () => undefined },
+          clock: () => 100,
+          dispatchOutbound: () => Effect.fail(foreign("receiver", "unavailable")),
+        };
+        seedPolicy();
+        yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
+        yield* session({ id: "parent", role: "resident", runner: parentRunner }, runtime);
+        const child = yield* session(
+          { id: "child", parentId: "parent", role: "worker", runner: childRunner },
+          runtime,
+        );
+        const before = SessionHandleStore.tree("parent");
+        expect(yield* failure(child.prompt("work", origin))).toMatchObject({
+          _tag: "ForeignFailure",
+          operation: "receiver",
+          cause: "unavailable",
+        });
+        expect(SessionHandleStore.tree("parent")).toEqual(before);
+        expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
+        const source = SessionHandleStore.tree("child");
+        expect(
+          source.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              SessionHandleStore.turnTerminal(action) !== undefined,
+          ),
+        ).toHaveLength(1);
+        const obligations = SessionHandleStore.outboundRows("child");
+        expect(obligations).toHaveLength(1);
+        expect(obligations[0]?.state).toBe("pending");
+        expect(obligations[0]?.message.content).toBe("child answer");
+      }),
+    ),
+  ));
 
-test("a lease stolen during dispatch fails both the ack and the release as one aggregate", async () => {
-  const prompted = commissionedChild({
-    observations: { publish: () => undefined },
-    clock: () => 100,
-    dispatchOutbound: async ({ message }) => {
-      const stolen = SessionHandleStore.acquireLease({
-        sessionId: message.sourceSessionId,
-        owner: "other-runtime",
-        expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
-        now: 100 + SessionHandleStore.LEASE_TTL_MS,
-        expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
-      });
-      if (!stolen.ok) throw new Error("test takeover refused");
-      return receiveOutbound(message, 100).receipt;
-    },
-  });
-  const failure = await prompted.then(
-    () => undefined,
-    (error: unknown) => error,
-  );
-  expect(failure).toBeInstanceOf(AggregateError);
-  if (!(failure instanceof AggregateError)) throw new Error("unreachable");
-  expect(failure.message).toBe("outbound dispatch and source lease release failed");
-  expect(failure.errors.map((error) => String(error))).toEqual([
-    "SessionCommitError: session commit stale",
-    "SessionCommitError: session commit stale",
-  ]);
-  expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
-  expect(SessionHandleStore.row("child").leaseOwner).toBe("other-runtime");
-});
+test("restart after receiving commit retries exact bytes without another inbox or receiver execution", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        Storage.reset();
+        const directory = mkdtempSync(join(tmpdir(), "source-obligation-"));
+        const dbPath = join(directory, "ledger.sqlite");
+        Storage.initialize({ dbPath });
+        seedPolicy();
+        const scope = yield* Effect.scope;
+        let consumed = 0;
+        const receive: SessionRunner = () =>
+          Effect.sync(() => {
+            consumed += 1;
+            return { kind: "result" as const, text: "received" };
+          });
+        const sent: string[] = [];
+        function runtime(at: number, loseAck: boolean): SessionRuntime {
+          const value: SessionRuntime = {
+            observations: { publish: () => undefined },
+            clock: () => at,
+            dispatchOutbound: ({
+              message,
+            }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+              Effect.gen(function* () {
+                sent.push(JSON.stringify(message));
+                const received = yield* receiveOutbound(message, at);
+                yield* wakeSession(message.destinationSessionId, receive, value).pipe(
+                  Effect.provideService(Scope.Scope, scope),
+                  Effect.orDie,
+                );
+                if (loseAck) return yield* foreign("source.ack", "lost");
+                return received.receipt;
+              }),
+          };
+          return value;
+        }
+        let current = runtime(100, true);
+        try {
+          yield* session({ id: "parent", role: "resident", runner: receive }, current);
+          appendCommission();
+          const child = yield* session(
+            {
+              id: "child",
+              parentId: "parent",
+              role: "worker",
+              runner: () => Effect.succeed({ kind: "result", text: "exact answer" }),
+            },
+            current,
+          );
+          expect(yield* failure(child.prompt("work", origin))).toMatchObject({
+            _tag: "ForeignFailure",
+            operation: "source.ack",
+            cause: "lost",
+          });
+          expect(consumed).toBe(1);
+          const parentBefore = SessionHandleStore.tree("parent");
+          expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("pending");
+          yield* closeSessions(current);
+          Storage.reset();
+          Storage.initialize({ dbPath });
+          current = runtime(200, false);
+          yield* sweepSessions(
+            (row: LedgerSession.Row) =>
+              row.id === "parent" ? receive : () => Effect.die(new Error("sealed child replayed")),
+            current,
+          );
+          expect(sent).toHaveLength(2);
+          expect(sent[1]).toBe(sent[0]);
+          expect(consumed).toBe(1);
+          expect(SessionHandleStore.tree("parent")).toEqual(parentBefore);
+          expect(SessionHandleStore.inboxRows("parent")).toHaveLength(1);
+          expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("delivered");
+        } finally {
+          yield* closeSessions(current);
+          Storage.reset();
+          rmSync(directory, { recursive: true, force: true });
+        }
+      }),
+    ),
+  ));
+
+test("a destination receipt for different bytes is refused and the obligation stays pending", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const prompted = commissionedChild({
+          observations: { publish: () => undefined },
+          clock: () => 100,
+          dispatchOutbound: ({
+            message,
+          }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+            receiveOutbound({ ...message, content: "tampered answer" }, 100).pipe(
+              Effect.map(
+                (received: Effect.Effect.Success<ReturnType<typeof receiveOutbound>>) =>
+                  received.receipt,
+              ),
+            ),
+        });
+        expect(yield* failure(prompted)).toBeInstanceOf(Error);
+        expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+        expect(
+          SessionHandleStore.inboxRows("parent").map(
+            (row: import("@openomni/protocol").Inbox.Row) => row.content,
+          ),
+        ).toEqual(["tampered answer"]);
+      }),
+    ),
+  ));
+
+test("a lease stolen during dispatch preserves both the ack failure and the release defect", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const prompted = commissionedChild({
+          observations: { publish: () => undefined },
+          clock: () => 100,
+          dispatchOutbound: ({
+            message,
+          }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+            Effect.gen(function* () {
+              yield* SessionHandleStore.acquireLease({
+                sessionId: message.sourceSessionId,
+                owner: "other-runtime",
+                expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
+                now: 100 + SessionHandleStore.LEASE_TTL_MS,
+                expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
+              }).pipe(Effect.orDie);
+              return (yield* receiveOutbound(message, 100)).receipt;
+            }),
+        });
+        const exit = yield* Effect.exit(prompted);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) throw new Error("expected lost-fence failures");
+        expect([
+          ...Chunk.toReadonlyArray(Cause.failures(exit.cause)),
+          ...Chunk.toReadonlyArray(Cause.defects(exit.cause)),
+        ]).toMatchObject([
+          {
+            _tag: "CommitFailed",
+            error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
+          },
+          {
+            _tag: "CommitFailed",
+            error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
+          },
+        ]);
+        expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+        expect(SessionHandleStore.row("child").leaseOwner).toBe("other-runtime");
+      }),
+    ),
+  ));

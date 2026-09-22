@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,16 +24,16 @@ describe("Resident compaction", () => {
       apiKey: "test-key",
       tools: {},
       llm: {
-        resolveModel: async (model) => ({
+        resolveModel: (model) => Effect.succeed(({
           id: model.id,
           name: model.id,
           providerID: model.provider,
           limit: { context: 100_000 },
-        }),
-        run: async (input, sink: Sink) => {
+        })),
+        run: (input, sink: Sink) => Effect.sync(() => {
           sink.onMessage(assistantMessage(input, { text: `seed answer ${"filler ".repeat(30)}` }));
           return { type: "stop" };
-        },
+        }),
       },
     });
     for (let index = 0; index < 6; index += 1) {
@@ -50,13 +51,13 @@ describe("Resident compaction", () => {
       },
       tools: {},
       llm: {
-        resolveModel: async (model) => ({
+        resolveModel: (model) => Effect.succeed(({
           id: model.id,
           name: model.id,
           providerID: model.provider,
           limit: { context: 700 },
-        }),
-        run: async (input, sink: Sink) => {
+        })),
+        run: (input, sink: Sink) => Effect.sync(() => {
           calls += 1;
           messageCounts.push(input.messages?.length ?? 0);
           sink.onMessage(
@@ -67,7 +68,7 @@ describe("Resident compaction", () => {
             }),
           );
           return { type: "stop" };
-        },
+        }),
       },
     });
 

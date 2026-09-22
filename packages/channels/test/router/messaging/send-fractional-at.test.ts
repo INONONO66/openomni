@@ -1,3 +1,6 @@
+import { channelRequests } from "../../helpers/channel-requests";
+import { channelTransaction } from "../../helpers/channel-transaction";
+import { runEffect } from "../../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
 import { ActorRegistry, Storage } from "@openomni/ledger";
@@ -50,7 +53,8 @@ for (const at of [1, 1.5]) {
     });
     let deliveries = 0;
     const messaging = createExistingAgentMessaging({
-      requests: seededRequests(),
+      requests: channelRequests(seededRequests()),
+      transaction: channelTransaction,
       grants: () => [grant],
       deliver: () => {
         deliveries += 1;
@@ -59,7 +63,7 @@ for (const at of [1, 1.5]) {
       publish: () => undefined,
     });
     expect(messaging.preflight(input)).toBeUndefined();
-    expect((await messaging.send(input)).kind).toBe("sent");
+    expect((await runEffect(messaging.send(input))).kind).toBe("sent");
     expect(deliveries).toBe(1);
   });
 }

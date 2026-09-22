@@ -1,3 +1,4 @@
+import { runEffect } from "../helpers/native";
 import { describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,8 +27,8 @@ describe("Auth Storage", () => {
     { name: "should work with API key auth type", provider: "openai", key: "sk-xxx" },
   ])("$name", async ({ provider, key }) => {
     await withTestAuthFile(async () => {
-      await Auth.set(provider, { type: "api", key });
-      const stored = await Auth.get(provider);
+      await runEffect(Auth.set(provider, { type: "api", key }));
+      const stored = await runEffect(Auth.get(provider));
       expect(stored).toBeDefined();
       expect(stored?.type).toBe("api");
       if (stored?.type !== "api") throw new Error("expected API auth");
@@ -37,12 +38,12 @@ describe("Auth Storage", () => {
 
   it("should return stored value with correct Zod type", async () => {
     await withTestAuthFile(async () => {
-      await Auth.set("anthropic", {
+      await runEffect(Auth.set("anthropic", {
         type: "proxy",
         baseURL: "http://localhost:8317/v1",
         apiKey: "proxy-key",
-      });
-      const stored = await Auth.get("anthropic");
+      }));
+      const stored = await runEffect(Auth.get("anthropic"));
       expect(stored).toBeDefined();
       expect(stored?.type).toBe("proxy");
       if (stored?.type !== "proxy") throw new Error("expected proxy auth");
@@ -53,18 +54,18 @@ describe("Auth Storage", () => {
 
   it("should return undefined for nonexistent key", async () => {
     await withTestAuthFile(async () => {
-      expect(await Auth.get("nonexistent")).toBeUndefined();
+      expect(await runEffect(Auth.get("nonexistent"))).toBeUndefined();
     });
   });
 
   it("preserves both credentials when set calls overlap", async () => {
     await withTestAuthFile(async () => {
       await Promise.all([
-        Auth.set("anthropic", { type: "api", key: "sk-ant" }),
-        Auth.set("openai", { type: "api", key: "sk-openai" }),
+        runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" })),
+        runEffect(Auth.set("openai", { type: "api", key: "sk-openai" })),
       ]);
 
-      expect(await Auth.all()).toEqual({
+      expect(await runEffect(Auth.all())).toEqual({
         anthropic: { type: "api", key: "sk-ant" },
         openai: { type: "api", key: "sk-openai" },
       });
@@ -73,9 +74,9 @@ describe("Auth Storage", () => {
 
   it("should return all entries", async () => {
     await withTestAuthFile(async () => {
-      await Auth.set("anthropic", { type: "proxy", baseURL: "http://localhost:8317/v1" });
-      await Auth.set("openai", { type: "api", key: "sk-xxx" });
-      const all = await Auth.all();
+      await runEffect(Auth.set("anthropic", { type: "proxy", baseURL: "http://localhost:8317/v1" }));
+      await runEffect(Auth.set("openai", { type: "api", key: "sk-xxx" }));
+      const all = await runEffect(Auth.all());
       expect(Object.keys(all).length).toBe(2);
       expect(all.anthropic).toBeDefined();
       expect(all.openai).toBeDefined();
@@ -93,7 +94,7 @@ describe("Auth Storage", () => {
           invalid: { type: "unknown", data: "bad" },
         }),
       );
-      const all = await Auth.all();
+      const all = await runEffect(Auth.all());
       expect(Object.keys(all).length).toBe(1);
       expect(all.valid).toBeDefined();
       expect(all.invalid).toBeUndefined();
@@ -103,9 +104,9 @@ describe("Auth Storage", () => {
   it("fails loudly on a malformed auth file instead of reading it as empty", async () => {
     await withTestAuthFile(async (filepath) => {
       await Bun.write(filepath, "{ this is not json");
-      await expect(Auth.all()).rejects.toThrow("auth file is not valid JSON");
-      await expect(Auth.get("anthropic")).rejects.toThrow("auth file is not valid JSON");
-      await expect(Auth.set("anthropic", { type: "api", key: "sk-new" })).rejects.toThrow(
+      await expect(runEffect(Auth.all())).rejects.toThrow("auth file is not valid JSON");
+      await expect(runEffect(Auth.get("anthropic"))).rejects.toThrow("auth file is not valid JSON");
+      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-new" }))).rejects.toThrow(
         "auth file is not valid JSON",
       );
       expect(await Bun.file(filepath).text()).toBe("{ this is not json");
@@ -115,7 +116,7 @@ describe("Auth Storage", () => {
   it("fails loudly when the auth file is valid JSON but not an object", async () => {
     await withTestAuthFile(async (filepath) => {
       await Bun.write(filepath, "null");
-      await expect(Auth.all()).rejects.toThrow("auth file is not a JSON object");
+      await expect(runEffect(Auth.all())).rejects.toThrow("auth file is not a JSON object");
     });
   });
 
@@ -127,7 +128,7 @@ describe("Auth Storage", () => {
           legacy: { type: "oauth", refresh: "r", access: "a", expires: 999 },
         }),
       );
-      const all = await Auth.all();
+      const all = await runEffect(Auth.all());
       expect(all.legacy).toBeUndefined();
     });
   });
@@ -137,7 +138,7 @@ describe("Auth Storage", () => {
       const nested = join(dir, "nested", "auth.json");
       process.env.OPENOMNI_AUTH_FILE = nested;
 
-      await Auth.set("anthropic", { type: "api", key: "sk-ant" });
+      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }));
 
       expect(await Bun.file(nested).json()).toEqual({
         anthropic: { type: "api", key: "sk-ant" },
@@ -152,7 +153,7 @@ describe("Auth Storage", () => {
       mkdirSync(filepath);
       await Bun.write(join(filepath, "sentinel"), "keep");
 
-      await expect(Auth.set("anthropic", { type: "api", key: "sk-ant" })).rejects.toThrow();
+      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }))).rejects.toThrow();
 
       expect(readdirSync(dir).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
       expect(await Bun.file(join(filepath, "sentinel")).text()).toBe("keep");
@@ -161,7 +162,7 @@ describe("Auth Storage", () => {
 
   it("should set auth.json file with 0o600 permissions", async () => {
     await withTestAuthFile(async (filepath) => {
-      await Auth.set("anthropic", { type: "api", key: "sk-ant" });
+      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }));
       const mode = (await Bun.file(filepath).stat())?.mode ?? 0;
       expect(mode & 0o777).toBe(0o600);
     });

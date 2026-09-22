@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Bus } from "@openomni/agent";
@@ -15,14 +16,14 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   let calls = 0;
   const waiting = Promise.withResolvers<void>();
   const app = await suite.boot({
-    sessionRuntime: { onHibernate: () => waiting.resolve() },
+    sessionRuntime: { onHibernate: () => Effect.sync(() => waiting.resolve()) },
     config: suite.config("monitor-app-db-", {
       wsToken: "monitor-test",
       compactionSummarizer: false,
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: async (input, sink) => {
+      run: (input, sink) => Effect.sync(() => {
         calls += 1;
         if (calls === 1)
           requestToolStep(input, sink, {
@@ -42,8 +43,8 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
             },
           });
         else sink.onMessage(assistantMessage(input, { text: "observed" }));
-        return { type: "stop" };
-      },
+        return { type: "stop" as const };
+      }),
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);

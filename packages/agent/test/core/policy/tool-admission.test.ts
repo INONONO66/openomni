@@ -1,8 +1,11 @@
-import { createTestAgent } from "../../helpers/test-agent";
+import { Effect } from "effect";
+import { isolated } from "../../helpers/isolated";
+import { createTestAgent } from "../../helpers/effect-g1";
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
 import { Bus, createDispatcher, defineTool } from "../../../src/index";
-import { compiledPolicy, recordingExecutor } from "../../helpers/compiled-policy";
+import { recordingExecutor } from "../../helpers/effect-g1";
+import { compiledPolicy } from "../../helpers/compiled-policy";
 import { z } from "zod";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import type { ChatAgentConfig } from "../../../src/core/types";
@@ -68,8 +71,8 @@ describe("tool calls reach the executor without target gating", () => {
           ? { toolWave: (calls: readonly Tool.Call[]) => dispatcher.executeWave(calls, context) }
           : {}),
         llm: {
-          resolveModel: async () => ({ id: "model", name: "model", providerID: "test" }),
-          run: async (input, sink) => {
+          resolveModel: () => Effect.succeed({ id: "model", name: "model", providerID: "test" }),
+          run: (input, sink) => Effect.sync(() => {
             catalogs.push(input.tools.map((tool) => tool.name));
             const message = createAssistantMessage("completed", "", "session-tools");
             if (!requested) {
@@ -85,11 +88,11 @@ describe("tool calls reach the executor without target gating", () => {
               });
             }
             sink.onMessage(message);
-            return { type: "stop" };
-          },
+            return { type: "stop" as const };
+          }),
         },
       };
-      await createTestAgent(config).run(
+      await isolated(createTestAgent(config).run(
         {
           messages: [{ role: "user", content: "inspect" }],
           traceContext: { traceId: "trace-tools", sessionId: "session-tools", runId: "run-tools" },
@@ -99,7 +102,7 @@ describe("tool calls reach the executor without target gating", () => {
           onToolCall: () => undefined,
           onToolResult: (result) => results.push(result),
         },
-      );
+      ));
       expect(catalogs.length).toBeGreaterThan(0);
       expect(
         catalogs.every((catalog) => catalog.join(",") === "screen.capture,network.fetch"),
