@@ -63,5 +63,5 @@ export function AppLive(options: AppRuntimeOptions) {
 }
 
 export type AppServices = AppClock | AppEntropy | AppObservations | LedgerWrites | AppScope;
-export type AppRuntimeError = AppLifecycleFailure | LedgerError;
+type AppRuntimeError = AppLifecycleFailure | LedgerError;
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, AppRuntimeError>;

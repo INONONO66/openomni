@@ -2,7 +2,6 @@ import type { LedgerError } from "@openomni/ledger";
 import type { Effect, Scope } from "effect";
 import type { RawToolSlots } from "./executor-raw";
 import type { ExecutionError } from "./errors";
-export { ExecutionApprovalError } from "./errors";
 import type {
   BusEvent,
   LedgerAction,

@@ -4,7 +4,7 @@ import { GenerationUnavailable, type SessionError } from "./errors";
 import { createRawSlots } from "./executor-raw";
 import type { SessionLayer, ToolCatalog } from "./services";
 
-export type GenerationServices = SessionLayer | ToolCatalog;
+type GenerationServices = SessionLayer | ToolCatalog;
 export interface GenerationBundle {
   readonly snapshot: SessionGeneration.Snapshot;
   readonly layer: Layer.Layer<GenerationServices, SessionError>;

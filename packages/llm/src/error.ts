@@ -29,9 +29,6 @@ const ProviderFailure = ErrorFacts.extend({
   responseBody: z.string().optional().catch(undefined),
 }).transform(({ name, providerErrorName, ...facts }) => ({ ...facts, providerErrorName: providerErrorName ?? name }));
 export type ApiFailure = APIError;
-export function apiFailure<E>(error: E): ApiFailure | undefined {
-  return error instanceof APIError ? error : undefined;
-}
 /** Preserve provider retry metadata as values, never as a native Error cause chain. */
 export function coerceApiError<E>(error: E): ApiFailure | undefined {
   if (error instanceof APIError) return error;

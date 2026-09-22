@@ -7,7 +7,7 @@ import type { Machine } from "@openomni/protocol";
 import { parseLocus, type Locus } from "../locus";
 
 type FsValue<Op extends Machine.FsValue["op"]> = Extract<Machine.FsValue, { op: Op }>;
-export interface ToolMachine {
+interface ToolMachine {
   readonly fs: {
     read(path: string, window?: { offset?: number; limit?: number }): Promise<Omit<FsValue<"read">, "data"> & { readonly data: Uint8Array }>;
     write(path: string, data: Uint8Array): Promise<FsValue<"write">>;

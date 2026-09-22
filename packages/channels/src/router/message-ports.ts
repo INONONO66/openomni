@@ -32,7 +32,7 @@ type MessageExecutionResult = { readonly matchedRuleIds: readonly string[] } & (
   | { readonly terminal: "blocked_post"; readonly reason: string }
 );
 
-export interface PreparedMessage {
+interface PreparedMessage {
   readonly target: string;
   readonly messageId?: string;
   readonly limits?: { readonly fanout: number; readonly depth: number };

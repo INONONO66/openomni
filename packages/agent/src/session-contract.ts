@@ -199,7 +199,7 @@ export interface SessionHandle {
   close(): Effect.Effect<void, SessionError>;
 }
 
-export class SessionLeaseError extends Error {
+class SessionLeaseError extends Error {
   constructor(readonly result: Exclude<LedgerSession.LeaseResult, { readonly ok: true }>) {
     super(`session lease ${result.reason}`);
     this.name = "SessionLeaseError";

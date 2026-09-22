@@ -7,7 +7,6 @@ import { ForeignFailure, type SessionError } from "./errors";
 import { entropyOf } from "./core/entropy";
 import { toolSnapshot } from "./session-record";
 import { createController } from "./session-controller";
-export { SessionCommitError } from "./session-contract";
 export type { SessionCreateOptions, SessionRunnerInput, SessionRunnerResult, SessionRunner, SessionRuntime, SessionHandle } from "./session-contract";
 
 const registries = new WeakMap<SessionRuntime, SessionRegistry>();
