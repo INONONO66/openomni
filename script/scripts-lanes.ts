@@ -25,6 +25,7 @@ export const scriptsLanes = {
     "verify-tsconfig-inheritance.test.ts",
     "check-effect-boundaries.test.ts",
     "effect-error-contract.test.ts",
+    "effect-service-contract.test.ts",
   ],
   "scripts-tooling": [
     "check-quality-python.test.ts",
