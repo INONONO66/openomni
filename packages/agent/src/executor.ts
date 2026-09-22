@@ -9,7 +9,7 @@ import { createExecutionApprovals } from "./executor-approval";
 import { createExecutionRecovery, recoveryClassification } from "./executor-recovery";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
-import { type CommitFailed, ExecutionApprovalError, ForeignFailure, OutcomeUnknown, type ExecutionError } from "./errors";
+import { type CommitFailed, ExecutionApprovalError, ForeignFailure, Interrupted, OutcomeUnknown, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { createRawSlots, RawToolSlots } from "./executor-raw";
 import { GenerationRawSlots } from "./session-generations";
@@ -207,6 +207,12 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
+        let completed: BodyExit | undefined;
+        const settle = (body: BodyExit) => {
+          if (completed !== undefined) return;
+          completed = body;
+          settled(body);
+        };
         return Effect.exit(Effect.interruptible(owned)).pipe(
           Effect.flatMap((exit) => {
             signal.removeEventListener("abort", abort);
@@ -217,7 +223,11 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
             return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
           }),
           Effect.flatMap((exit) => Effect.sync(() => {
-            settled({ exit, startedAt, rawPending: slots.pending() > 0 });
+            settle({ exit, startedAt, rawPending: slots.pending() > 0 });
+          })),
+          Effect.ensuring(Effect.sync(() => {
+            if (completed === undefined)
+              settle({ exit: Exit.fail(new Interrupted()), startedAt, rawPending: slots.pending() > 0 });
           })),
         );
       }),
