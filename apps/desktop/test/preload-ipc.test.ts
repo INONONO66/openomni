@@ -1,5 +1,10 @@
 import { afterAll, beforeEach, expect, mock, test } from "bun:test";
-import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "../src/preload/api";
+import {
+  CLOSE_WINDOW_CHANNEL,
+  GATEWAY_CHANNEL,
+  SHELL_COMMAND_CHANNEL,
+  type DesktopApi,
+} from "../src/preload/api";
 import type { ShellCommand } from "../src/preload/api";
 
 type Wrapper = (event: { readonly senderId: number }, command: unknown) => void;
@@ -7,6 +12,7 @@ const listeners = new Set<Wrapper>();
 const registered: { channel: string; wrapper: Wrapper }[] = [];
 const removed: { channel: string; wrapper: Wrapper }[] = [];
 const invoked: string[] = [];
+const sentChannels: string[] = [];
 const exposed = new Map<string, DesktopApi>();
 let gatewayResult: object | undefined = { url: "ws://localhost:3000/ws" };
 
@@ -27,6 +33,9 @@ mock.module("electron", () => ({
       invoked.push(channel);
       return Promise.resolve(gatewayResult);
     },
+    send: (channel: string) => {
+      sentChannels.push(channel);
+    },
   },
 }));
 
@@ -43,6 +52,13 @@ beforeEach(() => {
   registered.length = 0;
   removed.length = 0;
   invoked.length = 0;
+  sentChannels.length = 0;
+});
+
+test("closeWindow sends the close-window channel and nothing else", () => {
+  api().closeWindow();
+  expect(sentChannels).toEqual([CLOSE_WINDOW_CHANNEL]);
+  expect(invoked).toEqual([]);
 });
 
 test("gateway validates IPC replies and preserves absence", async () => {
@@ -74,8 +90,8 @@ test("malformed commands are ignored without blocking valid delivery", () => {
   expect(received).toEqual(["new-tab"]);
 });
 
-test("bridge exposes only versions, gateway, and value-only command subscription", async () => {
-  expect(Object.keys(api()).sort()).toEqual(["gateway", "onShellCommand", "versions"]);
+test("bridge exposes only versions, gateway, closeWindow, and value-only command subscription", async () => {
+  expect(Object.keys(api()).sort()).toEqual(["closeWindow", "gateway", "onShellCommand", "versions"]);
   expect(await api().gateway()).toEqual({ url: "ws://localhost:3000/ws" });
   expect(invoked).toEqual([GATEWAY_CHANNEL]);
   const received: ShellCommand[][] = [];

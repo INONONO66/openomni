@@ -35,6 +35,7 @@ let host: HTMLElement;
 let root: Root;
 let client: QueryClient;
 let subscriptions: number;
+let closedWindows: number;
 const listeners = new Set<(command: ShellCommand) => void>();
 const descriptors = new Map<string, PropertyDescriptor | undefined>();
 const cleanups: (() => void)[] = [];
@@ -60,10 +61,17 @@ beforeEach(() => {
     Object.defineProperty(globalThis, key, { value, configurable: true });
   }
   subscriptions = 0;
+  closedWindows = 0;
   Object.defineProperty(browser, "desktop", {
-    value: commandBridge(listeners, () => {
-      subscriptions += 1;
-    }),
+    value: commandBridge(
+      listeners,
+      () => {
+        subscriptions += 1;
+      },
+      () => {
+        closedWindows += 1;
+      },
+    ),
   });
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
   client = new QueryClient({ defaultOptions: { queries: { gcTime: Number.POSITIVE_INFINITY } } });
@@ -232,8 +240,11 @@ test("close commands recover focus from panels and tabs without stealing focus o
   expect(document.activeElement === node('[data-ui="TabStrip.Create"]')).toBe(true);
   expect(host.querySelector('[role="tabpanel"], textarea')).toBeNull();
   const before = consoleStore.state;
+  expect(closedWindows).toBe(0);
   await command("close-tab");
   expect(consoleStore.state).toBe(before);
+  // Cmd+W with nothing left to close hands the keystroke back to the window.
+  expect(closedWindows).toBe(1);
 });
 
 test("search keeps its invoking tab and reveal while explicit result activation changes the active tab", async () => {

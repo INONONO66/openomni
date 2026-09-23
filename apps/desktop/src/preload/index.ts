@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type DesktopApi } from "./api";
+import {
+  CLOSE_WINDOW_CHANNEL,
+  GATEWAY_CHANNEL,
+  SHELL_COMMAND_CHANNEL,
+  type DesktopApi,
+} from "./api";
 import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
@@ -12,6 +17,9 @@ const api: DesktopApi = {
     return () => {
       ipcRenderer.removeListener(SHELL_COMMAND_CHANNEL, wrapper);
     };
+  },
+  closeWindow: () => {
+    ipcRenderer.send(CLOSE_WINDOW_CHANNEL);
   },
   versions: {
     electron: process.versions.electron ?? "",

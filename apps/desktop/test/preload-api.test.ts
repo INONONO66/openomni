@@ -7,6 +7,7 @@ describe("DesktopApi contract", () => {
       versions: { electron: "1", chrome: "2", node: "3" },
       gateway: () => Promise.resolve(undefined),
       onShellCommand: () => () => undefined,
+      closeWindow: () => undefined,
     };
     expect(Object.keys(api.versions).sort()).toEqual(["chrome", "electron", "node"]);
   });
@@ -18,6 +19,7 @@ describe("DesktopApi contract", () => {
       versions: { electron: "1", chrome: "2", node: "3" },
       gateway: () => Promise.resolve<GatewayEndpoint>({ url: "ws://127.0.0.1:3000/ws" }),
       onShellCommand: () => () => undefined,
+      closeWindow: () => undefined,
     };
     expect(await configured.gateway()).toEqual({ url: "ws://127.0.0.1:3000/ws" });
   });

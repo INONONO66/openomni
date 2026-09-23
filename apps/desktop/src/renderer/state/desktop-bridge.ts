@@ -3,6 +3,7 @@ import { gatewayEndpointSchema, shellCommandSchema } from "../../preload/validat
 
 const bridgeSchema = z.object({
   gateway: z.function({ input: [], output: z.promise(gatewayEndpointSchema) }),
+  closeWindow: z.function({ input: [], output: z.void().catch(undefined) }),
   onShellCommand: z.function({
     input: [z.function({ input: [shellCommandSchema], output: z.void().catch(undefined) })],
     output: z.function({ input: [], output: z.void().catch(undefined) }),
