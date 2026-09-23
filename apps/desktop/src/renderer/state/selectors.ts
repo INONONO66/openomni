@@ -19,6 +19,11 @@ export function sessionIndex(sessions: readonly Session[]): ReadonlyMap<SessionI
   return index;
 }
 
+/** Sidebar/Sessions list membership: a session is listed once its first prompt earned a title. */
+export function listedSessions(sessions: readonly Session[]): readonly Session[] {
+  return sessions.filter((session) => session.titleSource === "prompt");
+}
+
 export function historyMenuEntries(
   state: ClientState = consoleStore.state,
 ): readonly { readonly id: string; readonly title: string }[] {

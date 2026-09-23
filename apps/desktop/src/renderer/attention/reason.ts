@@ -5,10 +5,6 @@ export function formatRelative(now: number, at: number): string {
   return relativeTime(at, now);
 }
 
-export function rowDensity(session: Pick<Session, "titleSource" | "phase">): "single" | "double" {
-  return session.titleSource === "placeholder" && session.phase === "idle" ? "single" : "double";
-}
-
 /**
  * Whether the row's second line names the session's state or its last
  * activity. A phase the Owner can act on or watch is state; a session at rest,
