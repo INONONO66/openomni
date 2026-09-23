@@ -1,6 +1,5 @@
 import { StatusGlyph, TreeRow } from "@openomni/ui";
 import type { ComponentProps } from "react";
-import { rowDensity } from "../attention/reason";
 import type { Session } from "../state/store";
 import { sessionGlyphProps } from "./session-glyph";
 import { SessionSecondary } from "./session-secondary";
@@ -19,13 +18,11 @@ export function SessionRow({
     <TreeRow
       {...props}
       secondary={
-        rowDensity(session) === "double" ? (
-          <SessionSecondary
-            session={session}
-            now={now}
-            {...(project === undefined ? {} : { project })}
-          />
-        ) : undefined
+        <SessionSecondary
+          session={session}
+          now={now}
+          {...(project === undefined ? {} : { project })}
+        />
       }
       trailing={<StatusGlyph {...sessionGlyphProps(session.phase)} />}
     />

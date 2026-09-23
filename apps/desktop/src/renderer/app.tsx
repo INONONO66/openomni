@@ -22,7 +22,7 @@ import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { desktopBridge } from "./state/desktop-bridge";
 import { useGatewayEndpoint } from "./state/queries";
-import { historyMenuEntries, sessionIndex, placeTitle } from "./state/selectors";
+import { historyMenuEntries, listedSessions, placeTitle, sessionIndex } from "./state/selectors";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
   activateTab,
@@ -52,11 +52,12 @@ export function App({ platform, storage }: AppEnvironment) {
   const tab = activeTab(state);
   const place = tab?.place ?? null;
   const byId = sessionIndex(sessions);
+  const listed = useMemo(() => listedSessions(sessions), [sessions]);
   const { transport, notice } = useChatEndpoint();
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
-    shown: orderByAttention(sessions, now),
+    shown: orderByAttention(listed, now),
     pendingChanges: 0,
   }));
 
@@ -68,12 +69,21 @@ export function App({ platform, storage }: AppEnvironment) {
     setHeld((previous) =>
       applyAtBoundary(
         previous,
-        orderByAttention(consoleStore.state.sessions, Date.now()),
+        orderByAttention(listedSessions(consoleStore.state.sessions), Date.now()),
         searching ? null : boundary,
       ),
     );
     if (!searching) setSidebarFloating(false);
   }, []);
+
+  // A session's first prompt earns its title and its place in the list: that
+  // appearance is a boundary, not a reorder held for the next navigation.
+  const listedCount = useRef(listed.length);
+  useEffect(() => {
+    if (listedCount.current === listed.length) return;
+    listedCount.current = listed.length;
+    arrive();
+  }, [arrive, listed]);
 
   const captureCloseFocus = useCallback((id: string) => {
     const focused = document.activeElement;
@@ -198,7 +208,7 @@ export function App({ platform, storage }: AppEnvironment) {
       pendingChanges={held.pendingChanges}
       route={place?.kind === "route" ? place.route : null}
       selectedId={place?.kind === "session" ? place.sessionId : null}
-      sessions={sessions}
+      sessions={listed}
       now={now}
     />
   );
@@ -214,7 +224,7 @@ export function App({ platform, storage }: AppEnvironment) {
         key={tab?.id ?? "empty"}
       >
         {place?.kind === "route" && place.route === "sessions" ? (
-          <SessionList now={now} onSelect={select} ordered={held.shown} sessions={sessions} />
+          <SessionList now={now} onSelect={select} ordered={held.shown} sessions={listed} />
         ) : undefined}
       </ConsoleContent>
     ) : (

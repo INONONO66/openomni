@@ -4,9 +4,9 @@ import { beforeEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { attentionKind, attentionScore, orderByAttention } from "../src/renderer/attention/order";
-import { rowDensity } from "../src/renderer/attention/reason";
 import { SessionList } from "../src/renderer/shell/session-list";
 import { sessionGlyphProps } from "../src/renderer/shell/session-glyph";
+import { listedSessions } from "../src/renderer/state/selectors";
 import { consoleStore, INITIAL_CLIENT_STATE, openTab } from "../src/renderer/state/store";
 import type { SessionPhase } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
@@ -62,33 +62,32 @@ for (const [phase, kind, tone, shape] of cases) {
   });
 }
 
-test("row density follows content on both surfaces", () => {
-  for (const [titleSource, phase, density] of [
-    ["placeholder", "idle", "single"],
-    ["prompt", "idle", "double"],
-    ["placeholder", "running", "double"],
-    ["placeholder", "waiting_input", "double"],
-    ["placeholder", "completed", "double"],
-    ["prompt", "failed", "double"],
-  ] as const) {
-    const session = makeSession({ titleSource, phase, title: "New Session" });
-    expect(rowDensity(session)).toBe(density);
-    consoleStore.setState((state) => ({ ...state, sessions: [session] }));
-    const document = new Window().document;
-    document.body.innerHTML =
-      renderShell() +
-      renderToStaticMarkup(
-        <SessionList sessions={[session]} now={now} onSelect={() => undefined} />,
-      );
-    const glyphs = document.querySelectorAll('[data-ui="TreeRow"] [data-ui="StatusGlyph"]');
-    expect(glyphs).toHaveLength(2);
-    for (const glyph of glyphs) {
-      const row = glyph.closest('[data-ui="TreeRow"]');
-      expect(row?.getAttribute("data-density")).toBe(density);
-      expect(row?.querySelectorAll("[data-secondary]")).toHaveLength(density === "single" ? 0 : 1);
-      expect(glyph.getAttribute("data-size")).toBe("regular");
-    }
+test("a session is listed on both surfaces once its first prompt earned a title", () => {
+  const unprompted = makeSession({ id: "fresh", titleSource: "placeholder", title: "New Session" });
+  const prompted = makeSession({ id: "asked", titleSource: "prompt", title: "fix the build" });
+  expect(listedSessions([unprompted, prompted]).map((session) => session.id)).toEqual(["asked"]);
+
+  consoleStore.setState((state) => ({ ...state, sessions: [unprompted, prompted] }));
+  openTab({ kind: "session", sessionId: "fresh" });
+  const document = new Window().document;
+  document.body.innerHTML =
+    renderShell() +
+    renderToStaticMarkup(
+      <SessionList sessions={listedSessions([unprompted, prompted])} now={now} onSelect={() => undefined} />,
+    );
+  const glyphs = document.querySelectorAll('[data-ui="TreeRow"] [data-ui="StatusGlyph"]');
+  expect(glyphs).toHaveLength(2);
+  for (const glyph of glyphs) {
+    const row = glyph.closest('[data-ui="TreeRow"]');
+    expect(row?.textContent).toContain("fix the build");
+    expect(row?.textContent).not.toContain("New Session");
+    // Every listed session has a second line: its state or its last activity.
+    expect(row?.getAttribute("data-density")).toBe("double");
+    expect(row?.querySelectorAll("[data-secondary]")).toHaveLength(1);
+    expect(glyph.getAttribute("data-size")).toBe("regular");
   }
+  // The open, unprompted session still resolves for the header while absent from the list.
+  expect(document.body.innerHTML).toContain("New Session");
 });
 
 test("unread terminals report; snooze overrides demand; pin overrides snooze", () => {

@@ -127,14 +127,14 @@ Measurements: `.omo/reports/sidebar-toggle-ref-20260907.md`. Linear's renderer i
 - History is strictly tab-local: Back, Forward and menu jumps change only the active tab's cursor/place, even when another tab already shows the destination session. Duplicate current views are allowed; history never activates another tab or dedupes. Explicit navigation truncates forward entries only for a different place. The maximum-20 menu is newest-first with original cursor ids; if current is older, it includes current plus newest 19. Ages are omitted rather than inferred from session creation. App rejects callbacks captured from a different tab/history.
 - Sidebar top nav order: Sessions, Inbox, Automations, Memory. Inbox/Automations/Memory render honest empty states — the wire has no data for them yet.
 - Section label is "Sessions" (reference: "Threads"); its search is a toggle beside the label that swaps the header into the field (`SectionHeader.Toggle`).
-- Session rows live in a project → session tree (`role="tree"`, project rows `treeitem` + `aria-expanded`, children in a `group`). A placeholder-titled idle session is one line (title plus phase glyph); every other session is double density and adds phase/reason and relative activity time (`rowDensity` in `attention/reason.ts`, rendered by `shell/session-row.tsx`).
+- Session rows live in a project → session tree (`role="tree"`, project rows `treeitem` + `aria-expanded`, children in a `group`). Only sessions whose first prompt earned a title are listed (`listedSessions` in `state/selectors.ts`, applied to the tree, the Sessions list, search and attention ordering); a freshly created session exists only as its tab and header until then, and its appearance is itself an attention boundary. Every listed row is double density: title plus phase glyph, then state/reason or relative activity time and the origin mark (`shell/session-row.tsx`).
 
 ## Tabs, sessions and lifetime
 
 - Plus and native New Tab create a session record and open a fresh tab. New titles start as `New Session`. Chosen title default: the first accepted nonempty prompt earns `Array.from(text.trim()).slice(0,40).join("")`, without ellipsis; an earned literal `New Session` is not renamed. Empty, disabled and already-sending submissions do not earn titles. Failed sends retain the earned title and show the error. Titles resolve live in tabs, sidebar, list and history.
 - Explicit session opens (sidebar, search and list rows) prefer the target tab if it already shows that session, otherwise the first matching current view in strip order. Matching activation never overwrites history. A plain click moves the current tab; Cmd/Ctrl-click uses `openTab(place)`, which reuses an equal current route.
 - Search captures the invoking tab once per open, not per result activation. Selecting an existing session in B leaves invocation A's history unchanged; a later unopened result still navigates A. If A closes, selection uses the then-active tab, or opens a tab when empty. Search preserves the null attention boundary and floating reveal until exit.
-- Sessions is a place tab with an app-owned flat semantic list: every store session once, grouped by held attention kind (`orderByAttention`), independent of sidebar collapse/filtering, with title and phase glyph and, for double-density rows, `projectId ?? "no project"`, reason and relative activity time from supplied `now`. No new clock, fabricated projects or composer. Selecting an unmatched row navigates the list tab; a matching view is activated instead. Other routes remain honest empty columns.
+- Sessions is a place tab with an app-owned flat semantic list: every listed store session once, grouped by held attention kind (`orderByAttention`), independent of sidebar collapse/filtering, with title and phase glyph and `projectId ?? "no project"`, reason and relative activity time from supplied `now`. No new clock, fabricated projects or composer. Selecting an unmatched row navigates the list tab; a matching view is activated instead. Other routes remain honest empty columns.
 - Closing removes only a view, never a session, draft, Chat or stream. App keeps one Chat per session and a current-transport forwarding reference; switching, closing and reopening reuse messages and in-flight work, including duplicate history-created views. Window/App teardown ends this cache.
 - Inactive close preserves the active tab and editor focus. Active close chooses old right neighbor, then left, then none. Focus from the removed panel recovers to the successor editor if available, otherwise successor tab; focus from its tab control recovers to successor tab. Empty recovery targets plus. The active panel is `tab-panel-${id}`, labelled by `tab-${id}`; inactive tabs do not point at absent panels.
 - Closed snapshots retain original id/index/history, capped at newest 20. Reopen restores at the clamped position. A session collision activates the matching view but retains the snapshot for retry; after that view navigates away, reopen restores the original back and forward entries. Route snapshots restore even on collision.
@@ -161,3 +161,17 @@ producer yet: every session starts `idle`, and the exported `setSessionPhase` /
 `setSessionAttention` store commands are called only by tests. No development
 global exposes them. The cleanup preserves those mappings, flags, density rules
 and held-order boundaries; it adds no kernel integration or phase lifecycle.
+
+## Session row second line
+
+`shell/session-secondary.tsx` renders one second line under the title on the
+sidebar tree and the Sessions list: the project name, then the attention reason
+(`attention/reason.ts` `sessionReason`) while `hasActiveState` holds (any phase
+other than `idle`/`archived`, or an unread `completed`/`failed`), otherwise the
+relative last-activity time. When `Session.surfaceKey` is set (the
+`Channel.SurfaceKey` string `<surface>:<path>` minted by the channels gateway
+for the conversation the session belongs to) and its surface prefix is one of
+slack/discord/telegram/github, a `·` and the brand `OriginMark` from
+`packages/ui` follow. Local sessions carry no key and draw no mark. No producer
+sets `surfaceKey` yet; the field waits on the same gateway session read model as
+phases.

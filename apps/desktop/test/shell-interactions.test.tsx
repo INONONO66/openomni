@@ -9,6 +9,7 @@ import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
 import { activeTab, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { installGlobals } from "./helpers";
@@ -94,6 +95,10 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     expect(host.querySelector("textarea")?.disabled).toBe(true);
     await click('button[aria-label="New session"]');
     expect(consoleStore.state.sessions).toHaveLength(2);
+    // Neither session has been prompted: the tree lists nothing until one earns a title.
+    expect(host.querySelector(`#session-row-${selected}`)).toBeNull();
+    await act(() => setSessionTitleIfPlaceholder(selected, "fix the build"));
+    expect(host.querySelectorAll('[id^="session-row-"]')).toHaveLength(1);
     await click(`#session-row-${selected}`);
     expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
       kind: "session",

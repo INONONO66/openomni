@@ -21,6 +21,8 @@ function git(cwd: string, ...args: string[]): string {
 
 test("gatedPath admits product src and tooling, refuses tests and docs", () => {
   expect(gatedPath("packages/agent/src/executor.ts")).toBe(true);
+  expect(gatedPath("packages/ui/src/tree-row.tsx")).toBe(true);
+  expect(gatedPath("packages/ui/src/styles.css")).toBe(false);
   expect(gatedPath("apps/openomni/src/cli/daemon.ts")).toBe(true);
   expect(gatedPath("script/check-deps.ts")).toBe(true);
   expect(gatedPath("script/check-deps.test.ts")).toBe(false);

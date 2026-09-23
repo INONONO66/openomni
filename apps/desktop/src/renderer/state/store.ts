@@ -27,6 +27,13 @@ export interface Session {
   readonly id: SessionId;
   readonly title: string;
   readonly titleSource: "placeholder" | "prompt";
+  /**
+   * The channel surface key (`Channel.SurfaceKey` format, e.g. `slack:T1:dm:U1`)
+   * the session is bound to; absent for a session started in this app.
+   * Sessions are client-local today, so the read model that will supply it
+   * has not landed; the field is the row's contract for it.
+   */
+  readonly surfaceKey?: string;
   readonly projectId: ProjectId | null;
   readonly phase: SessionPhase;
   readonly createdAt: number;

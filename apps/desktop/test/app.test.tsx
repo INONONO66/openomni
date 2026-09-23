@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab, openTab } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 
@@ -46,11 +47,22 @@ describe("empty routes", () => {
 });
 
 describe("one session", () => {
-  test("Given a created session, When the app renders, Then it is the header and the current row", () => {
+  test("Given a created session, When the app renders, Then it is the header but not yet a row", () => {
     newSessionTab();
     const html = shell(null);
 
-    expect(html).toContain(`aria-label="${consoleStore.state.sessions[0]?.title}"`);
+    // A session earns its row with its first prompt; until then only the tab and header name it.
+    expect(html).toContain("No turns in this session yet.");
+    expect(html).toContain("No sessions yet");
+    expect(html).not.toContain('role="treeitem"');
+  });
+
+  test("Given a prompted session, When the app renders, Then it is the header and the current row", () => {
+    newSessionTab();
+    setSessionTitleIfPlaceholder(consoleStore.state.sessions[0]?.id ?? "", "fix the build");
+    const html = shell(null);
+
+    expect(html).toContain('aria-label="fix the build"');
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).toContain("No turns in this session yet.");
     expect(html).not.toContain("No sessions yet");

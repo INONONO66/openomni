@@ -174,7 +174,7 @@ test("Sessions list ignores collapsed/filter state, keeps attention order and ex
     setter?.call(input, "no-match");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  expect(host.querySelectorAll('[role="tree"] [data-level="1"]')).toHaveLength(0);
+  expect(host.querySelectorAll('[role="tree"] [role="treeitem"]:not([aria-expanded])')).toHaveLength(0);
   const list = node(host, '[role="tabpanel"] ul');
   const rows = [...list.querySelectorAll("button")];
   expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["gamma", "beta", "alpha"]);
