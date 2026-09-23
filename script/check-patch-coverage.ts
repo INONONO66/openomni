@@ -2,8 +2,8 @@
  * Patch coverage gate (#1116): every changed executable line must be covered.
  *
  * Inputs are one or more lcov files (glob) plus a base ref. Changed and added
- * lines in packages/-/src and apps/-/src TS/JS modules and top-level script
- * *.ts files (non-test) come from `git diff --unified=0 <base>...HEAD`. A changed line is
+ * lines in packages/-/src and apps/-/src TS/JS modules and top-level
+ * script *.ts files (non-test) come from `git diff --unified=0 <base>...HEAD`. A changed line is
  * uncovered when every lcov reporting the file records it with zero hits.
  * An independent TypeScript AST filter removes syntactically non-executable
  * lines, even when Bun records zero hits for them in every lane. Lines absent
