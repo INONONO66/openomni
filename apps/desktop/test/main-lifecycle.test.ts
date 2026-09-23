@@ -6,7 +6,12 @@ import { join } from "node:path";
 import type { MenuItemConstructorOptions } from "electron";
 import { BOUNDS_WRITE_DELAY_MS, parseWindowBounds } from "../src/main/window-bounds";
 import type { GatewayEndpoint } from "../src/preload/api";
-import { GATEWAY_CHANNEL, SHELL_COMMAND_CHANNEL, type ShellCommand } from "../src/preload/api";
+import {
+  CLOSE_WINDOW_CHANNEL,
+  GATEWAY_CHANNEL,
+  SHELL_COMMAND_CHANNEL,
+  type ShellCommand,
+} from "../src/preload/api";
 
 import { flatten } from "./helpers/menu";
 
@@ -19,6 +24,7 @@ test.each([
   const ready = Promise.withResolvers<void>();
   const events = new EventEmitter();
   const handlers = new Map<string, () => GatewayEndpoint>();
+  const listeners = new Map<string, (event: { sender: object }) => void>();
   const windows: WindowDouble[] = [];
   const switches: string[][] = [];
   const loaded: string[] = [];
@@ -83,8 +89,16 @@ test.each([
       ready.resolve();
       return Promise.resolve();
     };
+    close = () => {
+      this.emit("close");
+      this.destroyed = true;
+      this.emit("closed");
+    };
     static getFocusedWindow() {
       return focused;
+    }
+    static fromWebContents(contents: object) {
+      return windows.find((window) => window.webContents === contents) ?? null;
     }
   }
   mock.module("electron", () => ({
@@ -100,6 +114,8 @@ test.each([
     },
     ipcMain: {
       handle: (channel: string, handler: () => GatewayEndpoint) => handlers.set(channel, handler),
+      on: (channel: string, listener: (event: { sender: object }) => void) =>
+        listeners.set(channel, listener),
     },
     nativeTheme: { shouldUseDarkColors: !development },
     Menu: {
@@ -205,7 +221,20 @@ test.each([
     expect(sent).toHaveLength(3);
     events.emit("activate");
     expect(windows).toHaveLength(2);
-    expect(windows[1]?.options).toMatchObject(first.bounds);
+    const second = windows[1];
+    if (!second) throw new Error("Missing second window");
+    expect(second.options).toMatchObject(first.bounds);
+    // Renderer-requested close resolves the window from the sender; unknown and
+    // destroyed senders are ignored rather than closing some other window.
+    const closeWindow = listeners.get(CLOSE_WINDOW_CHANNEL);
+    if (!closeWindow) throw new Error("Missing close-window listener");
+    closeWindow({ sender: first.webContents });
+    closeWindow({ sender: {} });
+    expect(second.destroyed).toBe(false);
+    closeWindow({ sender: second.webContents });
+    expect(second.destroyed).toBe(true);
+    dispatch();
+    expect(sent).toHaveLength(3);
     events.emit("window-all-closed");
     expect(quits).toBe(development ? 1 : 0);
   } finally {

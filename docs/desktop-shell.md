@@ -146,7 +146,9 @@ Menu owns CommandOrControl+T/W/Shift+T, CommandOrControl+1..9 (9 selects last),
 Control+Tab/Shift+Tab, CommandOrControl+Shift+]/[ cycle aliases, and
 CommandOrControl+[/] history. Cycling is positional, not MRU. Hidden cycle aliases
 remain accelerator-enabled. Explicit File/View menus preserve native editing,
-quit, minimize, zoom and fullscreen without a window-close Cmd+W binding.
+quit, minimize, zoom and fullscreen without a window-close Cmd+W binding;
+`close-tab` on a window with no tab left asks main to close that window over
+`shell:close-window` (sender-resolved), so Cmd+W still closes an empty window.
 Development-only reload/forceReload/devtools use the same
 `Boolean(process.env.ELECTRON_RENDERER_URL)` predicate as startup. Production
 excludes them. Pure menu tests do not prove native accelerator delivery or role

@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, ipcMain, nativeTheme } from "electron";
-import { GATEWAY_CHANNEL } from "../preload/api";
+import { CLOSE_WINDOW_CHANNEL, GATEWAY_CHANNEL } from "../preload/api";
 import { resolveGatewayEndpoint } from "./gateway-endpoint";
 import { buildMenuTemplate, createShellCommandSender } from "./menu";
 import {
@@ -138,6 +138,11 @@ app.whenReady().then(() => {
   // endpoint on its first paint, and a handler installed inside `createWindow`
   // would be a race with it on the second window.
   ipcMain.handle(GATEWAY_CHANNEL, () => gateway);
+  // The sender decides which window closes: a menu-focused window and the
+  // focused window can differ, and only the renderer knows it has no tab left.
+  ipcMain.on(CLOSE_WINDOW_CHANNEL, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
   const send = createShellCommandSender({
     getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
     getApplicationWindows: () => [...applicationWindows.values()],

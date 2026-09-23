@@ -18,9 +18,12 @@ test("browser preview has no desktop bridge", () => {
 });
 
 test("malformed bridge methods fail at lookup", () => {
-  expose({ gateway: "not callable", onShellCommand: () => () => undefined });
+  const closeWindow = () => undefined;
+  expose({ gateway: "not callable", onShellCommand: () => () => undefined, closeWindow });
   expect(desktopBridge).toThrow();
-  expose({ gateway: () => Promise.resolve(undefined) });
+  expose({ gateway: () => Promise.resolve(undefined), closeWindow });
+  expect(desktopBridge).toThrow();
+  expose({ gateway: () => Promise.resolve(undefined), onShellCommand: () => () => undefined });
   expect(desktopBridge).toThrow();
 });
 
@@ -33,9 +36,15 @@ test("bridge validates gateway and preserves command delivery and disposal", asy
       delivered = "disposed";
     };
   };
-  expose({ gateway, onShellCommand });
+  let closed = 0;
+  const closeWindow = () => {
+    closed += 1;
+  };
+  expose({ gateway, onShellCommand, closeWindow });
   const bridge = desktopBridge();
   if (!bridge) throw new Error("Missing bridge");
+  bridge.closeWindow();
+  expect(closed).toBe(1);
   expect(await bridge.gateway()).toEqual({ url: "ws://localhost" });
   const dispose = bridge.onShellCommand((command) => {
     delivered = command;

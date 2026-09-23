@@ -118,6 +118,7 @@ test("desktop entries register IPC before window creation and render without awa
       handle: (channel: string, callback: () => GatewayEndpoint) => {
         handlers.set(channel, callback);
       },
+      on: () => undefined,
     },
     nativeTheme: { shouldUseDarkColors: true },
     Menu: {

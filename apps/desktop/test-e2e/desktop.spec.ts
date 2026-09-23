@@ -46,7 +46,7 @@ test("production desktop shell boots with its bridge and CSP", async () => {
       versions: window.desktop.versions,
       gateway: typeof window.desktop.gateway,
     }));
-    expect(bridge.keys).toEqual(["gateway", "onShellCommand", "versions"]);
+    expect(bridge.keys).toEqual(["closeWindow", "gateway", "onShellCommand", "versions"]);
     expect(bridge.gateway).toBe("function");
     expect(bridge.versions.electron).toBeTruthy();
     expect(requireType).toBe("undefined");

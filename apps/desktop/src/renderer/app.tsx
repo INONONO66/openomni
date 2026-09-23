@@ -118,8 +118,14 @@ export function App({ platform, storage }: AppEnvironment) {
   const onShellCommand = useCallback(
     (command: ShellCommand) => {
       const before = consoleStore.state;
-      if (command === "close-tab" && before.activeTabId !== null)
+      if (command === "close-tab") {
+        // Cmd+W on an empty window closes the window, as it would natively.
+        if (before.activeTabId === null) {
+          desktopBridge()?.closeWindow();
+          return;
+        }
         captureCloseFocus(before.activeTabId);
+      }
       dispatchShellCommand(command);
       if (consoleStore.state !== before) arrive();
     },

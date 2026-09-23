@@ -26,11 +26,22 @@ export interface GatewayEndpoint {
  */
 export const GATEWAY_CHANNEL = "openomni:gateway";
 export const SHELL_COMMAND_CHANNEL = "shell:command";
+/**
+ * Renderer -> main: close the window that sent it.
+ *
+ * Cmd+W is a menu accelerator that reaches the renderer as `close-tab`, so the
+ * native window-close never fires on its own. When no tab is left, the renderer
+ * hands the keystroke back here and main closes the sender's window — the
+ * behaviour a user expects from Cmd+W on an empty window.
+ */
+export const CLOSE_WINDOW_CHANNEL = "shell:close-window";
 
 export type ShellCommand = z.infer<typeof shellCommandSchema>;
 
 export interface DesktopApi {
   readonly onShellCommand: (listener: (command: ShellCommand) => void) => () => void;
+  /** Close this window; used when `close-tab` arrives with no tab to close. */
+  readonly closeWindow: () => void;
   readonly versions: { readonly electron: string; readonly chrome: string; readonly node: string };
   /**
    * Where the gateway is, or `undefined` when this build has none.
