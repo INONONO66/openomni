@@ -1,11 +1,9 @@
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
-import { executorLayer } from "./helpers/service-layers";
+import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../src/executor";
 import { CommitFailed, PolicyDenied } from "../src/errors";
 import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
@@ -70,9 +68,9 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   const generations = yield* makeSessionGenerations(a);
   const executeCaptured = Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options, identity: {
+    const executor = testExecutor({ ...options, identity: {
       ...options.identity, toolsGeneration: captured.snapshot.generation, systemHash: captured.snapshot.systemHash,
-    } }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    } });
     return yield* captured.provide(executor.run({
       kind: "tool", op: captured.snapshot.systemValue, intent: {}, effect: {},
     }, () => capturedBody));
@@ -129,7 +127,7 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   }, async () => { Deferred.unsafeDone(entered, Exit.void); return release.promise; }));
   const running = yield* Effect.fork(Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
-    return yield* captured.provide(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options, closeGraceMs: 0 }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })).run({
+    return yield* captured.provide(testExecutor({ ...options, closeGraceMs: 0 }).run({
       kind: "tool", op: "A", intent: {}, effect: {},
     }, () => capturedBody));
   })));

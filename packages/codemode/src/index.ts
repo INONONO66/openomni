@@ -6,7 +6,6 @@ import { PythonKernel } from "./kernel";
 import { CodemodeError, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
 export * from "./errors";
-export { Codemode } from "./services";
 
 type Failure = CodeError | MachineError;
 type Caller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, Failure>;

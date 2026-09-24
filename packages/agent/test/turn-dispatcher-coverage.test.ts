@@ -1,3 +1,4 @@
+import { runAgentSync } from "./helpers/executor";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, it } from "bun:test";
 import { Effect, Fiber } from "effect";
@@ -66,7 +67,7 @@ describe("createTurnDispatcher", () => {
 describe("wave tracking", () => {
   it("hands every model wave to trackWave as a settlement promise", async () => {
     const tracked: Promise<void>[] = [];
-    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough, trackWave: (wave) => tracked.push(wave) }).pipe(Effect.provide(catalogLayer([tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))]))));
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough, trackWave: (wave) => tracked.push(wave) }).pipe(Effect.provide(catalogLayer([tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))]))));
 
     const results = await isolated(dispatcher.executeWave([call("ok"), call("boom")], context));
     await isolated(dispatcher.execute(call("ok"), context));
@@ -84,7 +85,7 @@ describe("currentExecutor", () => {
 
   it("returns the executor running the tool body", async () => {
     let seen: Executor | undefined;
-    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
         tool("probe", async () => {
           seen = currentExecutor();
           return "probed";
@@ -99,7 +100,7 @@ describe("currentExecutor", () => {
 
 describe("tool body outcomes", () => {
   it("settles a never-resolving body as timed_out", async () => {
-    const dispatcher = Effect.runSync(createDispatcher({
+    const dispatcher = runAgentSync(createDispatcher({
         executor: passThrough,
         timeoutMs: 5,
       }).pipe(Effect.provide(catalogLayer([tool("stall", () => new Promise<string>(() => undefined))]))));
@@ -113,7 +114,7 @@ describe("tool body outcomes", () => {
     const caller = new AbortController();
     const bodyEntered = Promise.withResolvers<void>();
     let seenReason: Error | undefined;
-    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(Effect.provide(catalogLayer([
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(Effect.provide(catalogLayer([
         tool("abortable", (_input, { signal }) => {
           bodyEntered.resolve();
           return new Promise<string>((_resolve, reject) => {
@@ -141,7 +142,7 @@ describe("tool body outcomes", () => {
   });
 
   it("clears the timer when the body finishes inside the timeout", async () => {
-    const dispatcher = Effect.runSync(createDispatcher({
+    const dispatcher = runAgentSync(createDispatcher({
       executor: passThrough,
       timeoutMs: 1000,
     }).pipe(Effect.provide(catalogLayer([tool("fast", async () => "done")]))));
@@ -153,7 +154,7 @@ describe("tool body outcomes", () => {
   });
 
   it("fails closed when the body violates the output schema", async () => {
-    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
         tool(
           "bad-output",
           async () => "anything",
@@ -176,7 +177,7 @@ describe("tool body outcomes", () => {
         return Effect.fail(failure);
       },
     };
-    const dispatcher = Effect.runSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
+    const dispatcher = runAgentSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
     const result = await isolated(Effect.either(dispatcher.execute(call("echo"), context)));
     expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "test" } });

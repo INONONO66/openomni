@@ -1,3 +1,4 @@
+import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
@@ -5,7 +6,6 @@ import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
 import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { createTurnDispatcher } from "../src/index";
-import { createExecutor, } from "../src/executor";
 import type { DurableExecutor, ExecutionBatchItem } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
 import { CommitRefused, ForeignFailure as LedgerFailure } from "@openomni/ledger";
@@ -138,7 +138,7 @@ describe("completion recovery", () => {
         if (site === "after_persist") yield* commit(action);
         return yield* storageLost;
       });
-      const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+      const executor = testExecutor({
         ...options,
         ledger: {
           ...options.ledger,
@@ -149,7 +149,7 @@ describe("completion recovery", () => {
               ? lose(action)
               : commit(action),
         },
-      }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+      });
       let bodies = 0;
       const error = await isolated(failure(executor.runBatch(
         [{ request: toolRequest, body: () => Effect.sync(() => {
@@ -189,7 +189,7 @@ describe("completion recovery", () => {
 
   test("a throwing model-facing projection preserves the executed body's evidence", async () => {
     const { actions, options } = harness();
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    const executor = testExecutor(options);
     const results = await runBatch(executor,
       [
         {
@@ -217,7 +217,7 @@ describe("completion recovery", () => {
   test("a refused post decision propagates without a fabricated verdict and recovers without replay", async () => {
     const { actions, options } = harness();
     const commit = options.ledger.commit;
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...options,
       ledger: {
         ...options.ledger,
@@ -226,7 +226,7 @@ describe("completion recovery", () => {
             ? Effect.fail(new LedgerFailure({ operation: "commit", cause: "decision_lost" }))
             : commit(action),
       },
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     let bodies = 0;
     const error = await isolated(failure(executor.runBatch(
       [{ request: toolRequest, body: () => Effect.sync(() => { bodies += 1; return { status: "success" }; }) }],
@@ -249,7 +249,7 @@ describe("completion recovery", () => {
     const { actions, options } = harness();
     const commit = options.ledger.commit;
     let injected = false;
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...options,
       policy: compiledPolicy(denyWritePost),
       ledger: {
@@ -263,7 +263,7 @@ describe("completion recovery", () => {
           return receipt;
         }),
       },
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     let reverted = 0;
     const error = await isolated(failure(executor.runBatch(
       [{
@@ -289,7 +289,7 @@ describe("completion recovery", () => {
 
   test("a throwing reverter is never proof of rollback", async () => {
     const { actions, options } = harness();
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options, policy: compiledPolicy(denyWritePost) }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    const executor = testExecutor({ ...options, policy: compiledPolicy(denyWritePost) });
     const results = await runBatch(executor,
       [
         {
@@ -316,13 +316,13 @@ describe("completion recovery", () => {
     const commit = options.ledger.commit;
     const stale = new CommitRefused({ sessionId: "session", reason: "fence", expectedRevision: 1, currentRevision: 1, fence: 1, currentFence: 2 });
     let bodyDone = false;
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...options,
       ledger: {
         ...options.ledger,
         commit: (action) => bodyDone ? Effect.fail(stale) : commit(action),
       },
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     const run = executor.runBatch(
       [
         {
@@ -347,7 +347,7 @@ describe("completion recovery", () => {
 describe("crash-open recovery", () => {
   test("classification is pinned on the intent and defaults by kind", async () => {
     const { actions, options } = harness();
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    const executor = testExecutor(options);
     await runBatch(executor,
       [
         { request: toolRequest, body: () => Effect.succeed({ status: "success" }) },
@@ -382,7 +382,7 @@ describe("crash-open recovery", () => {
         effect: { category: "execution" },
       }),
     ));
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    const executor = testExecutor(options);
     await recover(executor);
     expect(actions).toHaveLength(2);
     expect(effect(nth(actions, 1))).toMatchObject({
@@ -426,7 +426,7 @@ describe("crash-open recovery", () => {
         effect: {},
       }),
     ));
-    await recover(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(2);
   });
 
@@ -443,7 +443,7 @@ describe("crash-open recovery", () => {
     ));
     await isolated(options.ledger.commit(openIntent("done", "llm", "turn", { op: "chat", value: {} })));
     await isolated(options.ledger.commit(settledResult("done", "llm", { terminal: "executed", effect: {} })));
-    await recover(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(3);
   });
 
@@ -453,7 +453,7 @@ describe("crash-open recovery", () => {
     await isolated(options.ledger.commit(
       openIntent("attempt-1", "attempt", "lost-llm", { op: "chat", value: { attempt: 1 } }),
     ));
-    await recover(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })));
+    await recover(testExecutor(options));
     expect(
       actions.map((action) => [action.kind, action.parentId, effect(action).terminal]),
     ).toEqual([
@@ -490,7 +490,7 @@ describe("crash-open recovery", () => {
         evidence: { failures: [{ tag: "ForeignFailure", operation: "chat", cause: "APIError" }], defects: [], interrupted: false },
       }),
     ));
-    await recover(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(5);
     expect(actions[4]).toMatchObject({ kind: "llm", parentId: "llm-2" });
     expect(effect(nth(actions, 4))).toMatchObject({
@@ -516,7 +516,7 @@ describe("crash-open recovery", () => {
         recovery: "local_transactional",
       }),
     ));
-    await recover(Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })));
+    await recover(testExecutor(options));
     expect(resultsOf(actions, "message").map((action) => effect(action).terminal)).toEqual([
       "interrupted",
     ]);

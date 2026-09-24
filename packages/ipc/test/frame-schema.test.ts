@@ -1,16 +1,9 @@
 import { expect, test } from "bun:test";
 import { FrameSchema } from "../src/frame-schema";
-import { Ipc } from "../src/services";
 import { IpcProtocolError } from "../src/errors";
-import { Context } from "effect";
-
 import { LineDecoder } from "../src/framing";
 
-
-test("IPC service and protocol error are runtime contracts", () => {
-  const service = { connect: (): never => { throw new Error("fixture"); }, listen: (): never => { throw new Error("fixture"); } };
-  expect(Ipc.key).toBe("@openomni/ipc/Ipc");
-  expect(Context.get(Context.make(Ipc, service), Ipc)).toBe(service);
+test("IPC protocol error is a runtime contract", () => {
   expect(new IpcProtocolError({ message: "bad frame" })._tag).toBe("IpcProtocolError");
 });
 

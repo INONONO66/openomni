@@ -247,10 +247,10 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
           Effect.flatMap((exit) => {
             signal.removeEventListener("abort", abort);
             if (slots.pending() === 0) return Effect.succeed(exit);
-            const grace = Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
+            const grace = Effect.forkScoped(Effect.interruptible(slots.awaitSettled).pipe(
               Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
             ));
-            return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
+            return Effect.scoped(grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit)));
           }),
         );
         if (options.retainEffect === undefined)
@@ -361,7 +361,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       if (single.pre.verdict === "deny" || decision !== "approve")
         return finishStage(single, decision, undefined).pipe(Effect.map((result) => [result]));
       let body: BodyExit | undefined;
-      return Effect.fork(executeBody(single, signal, false, (result) => { body = result; })).pipe(
+      return Effect.forkScoped(executeBody(single, signal, false, (result: BodyExit) => { body = result; })).pipe(
         Effect.flatMap((fiber) => Effect.exit(restore(Fiber.await(fiber))).pipe(
           Effect.flatMap((awaited) => Exit.isFailure(awaited)
             ? Effect.sync(() => controller.abort()).pipe(Effect.flatMap(() => Fiber.await(fiber)))
@@ -391,7 +391,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         if (!shouldExecute(stage, index)) continue;
         if (stage.item.sequential) { yield* join; group.length = 0; }
         const work = executeBody(stage, signal, guarded, (result) => { exits.set(index, result); });
-        const fiber = yield* Effect.fork(work);
+        const fiber = yield* Effect.forkScoped(work);
         group.push(fiber);
         if (stage.item.sequential) { yield* join; group.length = 0; }
       }
@@ -404,13 +404,13 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     return Effect.uninterruptibleMask((restore) => {
       const controller = new AbortController();
       const signal = combinedSignal(controller.signal, control.signal, options.signal);
-      return stageAll(items).pipe(Effect.flatMap((stages) => {
+      return Effect.scoped(stageAll(items).pipe(Effect.flatMap((stages: Stage<R>[]) => {
         const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
         const single = stages.length === 1 ? stages[0] : undefined;
         return single !== undefined && !guarded
           ? runSingle(single, signal, controller, restore)
           : runStages(stages, signal, controller, guarded, restore);
-      }));
+      })));
     });
   }
 

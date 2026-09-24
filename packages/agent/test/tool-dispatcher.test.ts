@@ -1,3 +1,4 @@
+import { runAgentSync } from "./helpers/executor";
 import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
@@ -16,7 +17,7 @@ import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
 
 function dispatcher(definitions: readonly import("@openomni/protocol").AnyToolDefinition[]) {
-  return Effect.runSync(createDispatcher({ executor: recordingExecutor().executor }).pipe(Effect.provide(catalogLayer(definitions))));
+  return runAgentSync(createDispatcher({ executor: recordingExecutor().executor }).pipe(Effect.provide(catalogLayer(definitions))));
 }
 
 function definition(options: {
@@ -51,7 +52,7 @@ describe("tool dispatcher public contract", () => {
               await released.promise;
             },
           });
-          const dispatch = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+          const dispatch = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
               definition({
                 execute: async () => {
                   bodies += 1;
@@ -145,7 +146,7 @@ describe("tool dispatcher public contract", () => {
           ]);
           const failure = new Error("TOOL_FAILURE_SENTINEL");
           const recording = recordingExecutor();
-          const failed = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+          const failed = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
             definition({ execute: () => Promise.reject(failure) }),
           ]))));
 

@@ -1,10 +1,8 @@
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "./service-layers";
+import { testExecutor } from "./executor";
 import type { LedgerError } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import { createExecutor } from "../../src/executor";
 import { compiledPolicy, fixtureHashes } from "./compiled-policy";
 
 /** Commit gates and refusals happen before persistence, as in the real ledger. */
@@ -14,7 +12,7 @@ export function recoveryRecording(options: {
 } = {}) {
   const committed: LedgerAction.Node[] = [];
   let sequence = 0;
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+  const executor = testExecutor({
     policy: options.policy ?? compiledPolicy(),
     ledger: {
       actions: () => committed,
@@ -30,6 +28,6 @@ export function recoveryRecording(options: {
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: () => 1,
     entropy: () => `action-${++sequence}`,
-  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  });
   return { executor, committed };
 }

@@ -1,7 +1,7 @@
+import { testExecutor } from "./executor";
 import { turnTestLayer, catalogLayer } from "./service-layers";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "./service-layers";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage, type LedgerError } from "@openomni/ledger";
@@ -13,7 +13,7 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { createExecutor, type ExecutionLedger } from "../../src/executor";
+import type { ExecutionLedger } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
 import { executeCompaction } from "../../src/compaction/execute-cut";
 import { session, wakeSession } from "../../src/session-handle";
@@ -176,7 +176,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
     )
       return stop(point, bodies);
     const ledger = intercept(recording.ledger, point, bodies);
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...recording,
       ledger,
       policy: compiledPolicy(),
@@ -186,7 +186,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
         ...createRetryAlarmPort(sessionId, recording.clock),
         wait: () => stop(point, bodies),
       },
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     if (point === "tool_wave_between_result_commits") {
       const tools = ["first", "second"].map((name: string) =>
         stringQueryTool(name, name, async () => {

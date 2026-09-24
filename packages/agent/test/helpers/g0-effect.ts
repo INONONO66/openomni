@@ -1,12 +1,10 @@
+import { testExecutor } from "./executor";
 import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices } from "./chat-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "./service-layers";
 import { Effect } from "effect";
 import { LedgerAction } from "@openomni/protocol";
 import type { Sink } from "@openomni/llm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
-import { createExecutor } from "../../src/executor";
 import type { ExecutionLedger } from "../../src/executor-contract";
 import type { ChatAgentInput } from "../../src/core/types";
 import { runAgent } from "../../src/core/execution/run";
@@ -39,7 +37,7 @@ export function recordingExecutor() {
   const record = recordingLedger();
   return {
     ...record,
-    executor: Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    executor: testExecutor({
       policy: compiledPolicy(),
       ledger: record.ledger,
       retryAlarm: immediateRetryAlarm,
@@ -47,7 +45,7 @@ export function recordingExecutor() {
       identity: { sessionId: "session-1", role: "resident", parentActionId: null },
       clock: () => 1,
       entropy: record.entropy,
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })),
+    }),
   };
 }
 
@@ -55,7 +53,7 @@ export function createTestAgent(config: ChatAgentConfig) {
   return {
     run(input: ChatAgentInput, sink?: Sink) {
       const record = recordingLedger();
-      const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+      const executor = testExecutor({
         policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
           generation: 1,
           rows: SEEDED_POLICY_ROWS.map((row: (typeof SEEDED_POLICY_ROWS)[number]) => ({
@@ -74,7 +72,7 @@ export function createTestAgent(config: ChatAgentConfig) {
           role: "resident",
           parentActionId: null,
         },
-      }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+      });
       return Effect.gen(function* () { const fixture: ChatFixture = { executor, execution: executor, ...config }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
     },
   };

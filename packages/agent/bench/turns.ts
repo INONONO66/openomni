@@ -1,4 +1,5 @@
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { runAgentSync } from "../test/helpers/executor";
 import { turnTestLayer } from "../test/helpers/service-layers";
 import { prepareChatFixture } from "../test/helpers/chat-services";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
@@ -43,7 +44,7 @@ export async function firstDelta(now: () => number) {
 
 export function toolDispatch() {
   const recording = recordingExecutor();
-  const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([valueTool({ name: "echo", execute: async (value) => value })]))));
+  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([valueTool({ name: "echo", execute: async (value) => value })]))));
   return {
     committed: recording.committed,
     run: () => runBenchEffect(dispatcher.execute(

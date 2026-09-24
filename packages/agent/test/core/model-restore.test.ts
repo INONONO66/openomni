@@ -1,6 +1,5 @@
+import { testExecutor } from "../helpers/executor";
 import { type ChatFixture, chatServices } from "../helpers/chat-services";
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "../helpers/service-layers";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { recordingLedger } from "../helpers/effect-g2";
@@ -9,7 +8,6 @@ import type { Sink } from "@openomni/llm";
 import type { LedgerAction, Model, PlainObject, PolicyRow } from "@openomni/protocol";
 import { runAgent } from "../../src/core/execution/run";
 import { createAssistantMessage } from "../../src/core/message-factory";
-import { createExecutor } from "../../src/executor";
 import { compiledPolicy, opPhaseOf } from "../helpers/compiled-policy";
 import { createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
@@ -43,7 +41,7 @@ async function turn(options: {
 }) {
   const recording = recordingLedger();
   const resolved: Model.Ref[] = [];
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+  const executor = testExecutor({
     policy: compiledPolicy(options.rows),
     ledger: recording.ledger,
     observations: { publish: () => undefined },
@@ -55,7 +53,7 @@ async function turn(options: {
       parentActionId: "turn-2",
       turnId: "turn-2",
     },
-  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  });
   const result = await isolated(
     Effect.gen(function* () { const fixture: ChatFixture = {
       executor,

@@ -1,6 +1,5 @@
+import { testExecutor } from "./helpers/executor";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
-import { executorLayer } from "./helpers/service-layers";
 import { isolated } from "./helpers/isolated";
 import type { ExecutionError } from "../src/errors";
 import { Effect, Either } from "effect";
@@ -12,7 +11,6 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
-import { createExecutor } from "../src/executor";
 import { closeSessions, wakeSession } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { bounded } from "./helpers/bounded";
@@ -95,7 +93,7 @@ function recoverExecutor(witness: Witness) {
   const before = actions();
   const history = foldSessionHistory(sessionId, before);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...recording, observations, policy: compiledPolicy() }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
   yield* executor.recover();
   expect(actions().slice(0, before.length)).toEqual(before);
   const recovered = actions();
@@ -254,7 +252,7 @@ function recoverCommittedCompaction(witness: Witness) {
     expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
   } else expect(inbox).toEqual([]);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...recording, observations, policy: compiledPolicy() }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
   yield* executor.recover();
   expect(actions()).toEqual(before);
   const recovered = foldSessionHistory(sessionId, actions());

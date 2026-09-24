@@ -1,10 +1,9 @@
+import { testExecutor } from "./executor";
 import type { SessionFixture as SessionRuntime } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "./service-layers";
 import { Cause, Effect, Exit } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import { createExecutor } from "../../src/executor";
 import type { ExecutorOptions, ExecutionLedger } from "../../src/executor-contract";
 import type {} from "../../src/session-contract";
 import { commitSessionRequest } from "../../src/session-admission";
@@ -16,7 +15,7 @@ export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = { arm:
 export function recordingExecutor(options: { policy?: CompiledPolicySnapshot; onCommit?: (action: LedgerAction.Append) => void | Promise<void>; onObservation?: (name: string) => void; clock?: () => number } = {}) {
   const committed: LedgerAction.Append[] = [];
   let ordinal = 0;
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+  const executor = testExecutor({
     policy: options.policy ?? allowAllPolicy,
     retryAlarm: nullRetryAlarm,
     ledger: { commit: (action: LedgerAction.Append) => Effect.gen(function* () {
@@ -28,12 +27,12 @@ export function recordingExecutor(options: { policy?: CompiledPolicySnapshot; on
     observations: { publish: (event) => options.onObservation?.(event.name) },
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: options.clock ?? (() => 1), entropy: () => `action-${committed.length + 1}`,
-  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  });
   return { executor, committed };
 }
 export function turnExecutor(policy: CompiledPolicySnapshot, committed: LedgerAction.Append[] = [], overrides: Partial<ResolvedExecutorOptions> = {}) {
   let ordinal = 0;
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+  const executor = testExecutor({
     policy, retryAlarm: nullRetryAlarm,
     ledger: { commit: (action: LedgerAction.Append) => Effect.sync(() => {
       committed.push(action); ordinal += 1;
@@ -41,7 +40,7 @@ export function turnExecutor(policy: CompiledPolicySnapshot, committed: LedgerAc
     }) },
     observations: { publish: () => undefined }, identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
     clock: () => 1, entropy: () => `action-${committed.length + 1}`, ...overrides,
-  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  });
   return { executor, committed };
 }
 export function failure<A, E, R>(program: Effect.Effect<A, E, R>) {

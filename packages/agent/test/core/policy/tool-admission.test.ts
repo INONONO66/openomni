@@ -1,3 +1,4 @@
+import { runAgentSync } from "../../helpers/executor";
 import type { ChatFixture as ChatAgentConfig } from "../../helpers/chat-services";
 import { catalogLayer } from "../../helpers/service-layers";
 import { Effect } from "effect";
@@ -44,7 +45,7 @@ describe("tool calls reach the executor without target gating", () => {
           },
         ]),
       });
-      const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+      const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
           defineTool({
             name: "screen.capture",
             description: "Capture screen",

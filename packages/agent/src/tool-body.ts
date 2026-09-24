@@ -31,7 +31,8 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   executor?: Executor,
   invocation?: InvocationFrame,
 ): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
-  return Effect.flatMap(RawToolSlots, (slots) => {
+  return Effect.gen(function* () {
+    const slots = yield* RawToolSlots;
     const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
       const settle = slots.open();
       const controller = new AbortController();
@@ -58,8 +59,8 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
       );
       return Effect.sync(() => controller.abort());
     });
-    if (timeoutMs === undefined) return execution;
-    return execution.pipe(Effect.timeoutOption(timeoutMs), Effect.map((outcome) =>
+    if (timeoutMs === undefined) return yield* execution;
+    return yield* execution.pipe(Effect.timeoutOption(timeoutMs), Effect.map((outcome: Option.Option<ToolBodyOutcome>) =>
       Option.getOrElse(outcome, (): ToolBodyOutcome => ({ status: "timed_out" }))));
   });
 }

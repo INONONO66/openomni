@@ -1,10 +1,8 @@
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { executorLayer } from "./service-layers";
+import { testExecutor } from "./executor";
 import { writeSync } from "node:fs";
 import { Storage } from "@openomni/ledger";
 import { Effect } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
 import { compiledPolicy } from "./compiled-policy";
 import { requestLedger, runChatAttempts } from "./effect-g1";
@@ -20,7 +18,7 @@ if (import.meta.main) {
   seedPolicy();
   await Effect.runPromise(Effect.gen(function* () {
     const recording = yield* requestLedger({ id: rearmSessionId });
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...recording,
       policy: compiledPolicy(),
       observations: { publish: () => undefined },
@@ -30,7 +28,7 @@ if (import.meta.main) {
           Effect.zipRight(Effect.never),
         ),
       },
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     yield* runChatAttempts(executor, () => Effect.fail(providerFailure("overloaded")));
   }));
 }

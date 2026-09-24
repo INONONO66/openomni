@@ -1,3 +1,5 @@
+import { isolated } from "./helpers/isolated";
+import { runAgentSync } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "@openomni/policy";
@@ -22,7 +24,7 @@ function generation(number: number, close: () => void) {
   };
 }
 
-test("root scope does not finalize a generation before physical raw settlement", () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+test("root scope does not finalize a generation before physical raw settlement", () => isolated(Effect.scoped(Effect.gen(function* () {
   const root = yield* Scope.make();
   let rawSettled = false;
   const closed: boolean[] = [];
@@ -43,7 +45,7 @@ test("root scope does not finalize a generation before physical raw settlement",
   expect(closed).toEqual([true]);
 })).pipe(Effect.timeout("5 seconds"))));
 
-test("a retired generation cannot reacquire ownership after its last release notification", () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+test("a retired generation cannot reacquire ownership after its last release notification", () => isolated(Effect.scoped(Effect.gen(function* () {
   const first = generation(1, () => undefined);
   const owner = yield* makeSessionGenerations(first);
   const scope = yield* Scope.make();
@@ -55,7 +57,7 @@ test("a retired generation cannot reacquire ownership after its last release not
   yield* owner.configure(generation(2, () => undefined), Effect.void);
   const attempted = yield* Effect.sync(() => {
     release();
-    return Effect.runSync(Effect.either(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
+    return runAgentSync(Effect.either(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
   });
   expect(attempted).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
 })).pipe(Effect.timeout("5 seconds"))));

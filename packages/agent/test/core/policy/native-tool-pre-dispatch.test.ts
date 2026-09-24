@@ -1,4 +1,4 @@
-import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { testExecutor, runAgentSync } from "../../helpers/executor";
 import { executorLayer, catalogLayer } from "../../helpers/service-layers";
 import { expect, test } from "bun:test";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "@openomni/policy";
@@ -80,7 +80,7 @@ for (const door of ["model", "cell", "wave"] as const) {
         execute: async ({ text }) => { executed.push(text); return text; },
         render: ({ text }, output) => { rendered.push(text); return output; },
       });
-      const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+      const executor = testExecutor({
         identity: { sessionId: id, role: "resident", parentActionId: `${id}:configure` },
         clock: () => 100, entropy: () => `${id}:${++sequence}`, observations: { publish: () => undefined },
         policy: compilePolicySnapshot({
@@ -102,8 +102,8 @@ for (const door of ["model", "cell", "wave"] as const) {
             return receipt;
           })),
         },
-      }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
-      const dispatcher = Effect.runSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))));
+      });
+      const dispatcher = runAgentSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))));
       const call = { id: "call", tool: "echo", input: { text: "original" } };
       const context = { sessionId: id, turnId: "turn" };
       const result = yield* (door === "wave" ? dispatcher.executeWave([call], context).pipe(Effect.map((results) => results[0]))

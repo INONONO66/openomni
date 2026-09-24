@@ -155,7 +155,16 @@ class Provenance {
     if (node.expression.kind === ts.SyntaxKind.ImportKeyword || required) return this.fromSpecifier(node.arguments[0], source);
     const callee = this.expression(node.expression, seen);
     if (effectApi(callee, "Context", ["Tag", "GenericTag"])) return { module: source.fileName, members: [], tag: node };
-    return callee?.tag ? callee : undefined;
+    if (callee?.tag) return callee;
+    if (ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)
+      && node.expression.expression.text === "Object" && node.expression.name.text === "assign"
+      && !this.checker.getSymbolAtLocation(node.expression.expression)?.valueDeclaration) {
+      const target = node.arguments[0];
+      return target ? this.expression(target, seen) : undefined;
+    }
+    if (!callee?.node || !callable(callee.node) || seen.has(callee.node)) return undefined;
+    const returned = returnedExpressions(callee.node);
+    return returned.length === 1 && returned[0] ? this.expression(returned[0], new Set(seen).add(callee.node)) : undefined;
   }
   private bindingElement(node: ts.BindingElement, seen: Set<ts.Node | string>): Origin | undefined {
     const declaration = node.parent.parent;
@@ -300,14 +309,30 @@ function promiseTwins(file: string, functions: readonly DeclaredFunction[], prov
 function productionSource(file: string): boolean {
   return /^(packages\/[^/]+|apps\/openomni)\/src\//.test(file) && !/\.(test|spec)\.[cm]?tsx?$/.test(file) && !/(^|\/)(__tests__|test|tests)\//.test(file);
 }
-function tagKey(tag: ts.CallExpression): string {
-  const key = tag.arguments[0];
-  return key && ts.isStringLiteralLike(key) ? key.text : "<computed>";
+function tagKey(tag: ts.CallExpression, provenance?: Provenance): string {
+  const argument = tag.arguments[0];
+  const key = argument && (provenance?.expression(argument)?.node ?? argument);
+  if (key && ts.isStringLiteralLike(key)) return key.text;
+  if (key && ts.isTemplateExpression(key) && key.head.text === "@openomni/bundle/"
+    && key.templateSpans.length === 1 && /^\/[A-Za-z][A-Za-z0-9-]*$/.test(key.templateSpans[0]?.literal.text ?? "")) {
+    const span = key.templateSpans[0];
+    if (span) return `${key.head.text}${ts.isStringLiteralLike(span.expression) ? span.expression.text : "<template>"}${span.literal.text}`;
+  }
+  return "<computed>";
 }
 function validTagKey(key: string, file: string): boolean {
   const bundle = /^apps\/openomni\/src\/bundles\/([a-z][a-z0-9-]*)\//.exec(file);
+  if (/^@openomni\/bundle\/([a-z][a-z0-9-]*|<template>)\/[A-Za-z][A-Za-z0-9-]*$/.test(key))
+    return !bundle || key.startsWith(`@openomni/bundle/${bundle[1]}/`);
   const owner = bundle ? `bundle/${bundle[1]}` : file.split("/")[1];
   return key.startsWith(`@openomni/${owner}/`) && /^[A-Za-z][\w/-]*$/.test(key.slice(`@openomni/${owner}/`.length));
+}
+/** A never-valued presence probe does not declare a new service identity. */
+function tagPresenceProbe(node: ts.CallExpression, provenance: Provenance): boolean {
+  const parent = node.parent;
+  return node.typeArguments?.length === 2 && node.typeArguments.every((type: ts.TypeNode) => type.kind === ts.SyntaxKind.NeverKeyword)
+    && ts.isCallExpression(parent) && parent.arguments[parent.arguments.length - 1] === node
+    && effectApi(provenance.expression(parent.expression), "Context", ["getOption"]);
 }
 function enclosingName(node: ts.Node): string {
   const names: string[] = [];
@@ -352,18 +377,22 @@ function genFinalizers(node: ts.Node, provenance: Provenance): ts.TryStatement[]
 }
 function callBoundaryRules(node: ts.CallExpression, file: string, provenance: Provenance, sites: BoundarySites): void {
   const origin = provenance.expression(node.expression);
-  if (effectApi(origin, "Context", ["Tag", "GenericTag"]) && !validTagKey(tagKey(node), file)) sites.add("R4_TAG_PREFIX", file, node);
+  if (effectApi(origin, "Context", ["Tag", "GenericTag"])) {
+    const key = tagKey(node, provenance);
+    if (!validTagKey(key, file) && !(key === "<computed>" && tagPresenceProbe(node, provenance))) sites.add("R4_TAG_PREFIX", file, node);
+  }
   if (effectApi(origin, "Effect", ["gen"])) {
     for (const argument of node.arguments) for (const block of genFinalizers(argument, provenance)) sites.add("R6_GEN_FINALLY", file, block);
   }
-  if (effectApi(origin, "Layer", ["succeed"])) {
-    const tag = node.arguments[0] && provenance.expression(node.arguments[0])?.tag;
-    // Generation-local subscriptions own their bridge. Clock, Entropy, immutable
-    // snapshots/catalogs and the borrowed process observation port are pure values.
-    const application = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : node;
-    const value = application === node ? node.arguments[1] : application.arguments[0];
-    if (tag && value && (generationResource(tag, node, file) || provenance.ownsResource(value))) sites.add("R10_RESOURCE_SUCCEED", file, application);
-  }
+  if (effectApi(origin, "Layer", ["succeed"])) succeedRule(node, file, provenance, sites);
+}
+// Generation-local subscriptions own their bridge. Clock, Entropy, immutable
+// snapshots/catalogs and the borrowed process observation port are pure values.
+function succeedRule(node: ts.CallExpression, file: string, provenance: Provenance, sites: BoundarySites): void {
+  const tag = node.arguments[0] && provenance.expression(node.arguments[0])?.tag;
+  const application = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : node;
+  const value = application === node ? node.arguments[1] : application.arguments[0];
+  if (tag && value && (generationResource(tag, node, file) || provenance.ownsResource(value))) sites.add("R10_RESOURCE_SUCCEED", file, application);
 }
 function generationResource(tag: ts.CallExpression, provider: ts.Node, file: string): boolean {
   return tagKey(tag) === "@openomni/agent/ObservationSink"

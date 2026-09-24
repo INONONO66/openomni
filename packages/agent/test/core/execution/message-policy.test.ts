@@ -1,14 +1,12 @@
+import { testExecutor } from "../../helpers/executor";
 import { type ChatFixture, chatServices } from "../../helpers/chat-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
-import { executorLayer } from "../../helpers/service-layers";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { LedgerAction } from "@openomni/protocol";
-import { createExecutor } from "../../../src/executor";
 import { runAgent } from "../../../src/core/execution/run";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { recordingLedger } from "../../helpers/g0-effect";
@@ -16,7 +14,7 @@ import { runInput } from "../../helpers/run-input";
 
 test("the final result consumes the executor-transformed canonical assistant rather than raw provider text", async () => {
   const recording = recordingLedger();
-  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+  const executor = testExecutor({
     policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       kinds: LedgerAction.Kind.options,
@@ -57,7 +55,7 @@ test("the final result consumes the executor-transformed canonical assistant rat
     clock: () => 1,
     entropy: recording.entropy,
     identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
-  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+  });
   const result = await isolated(
     Effect.gen(function* () { const fixture: ChatFixture = {
       events: { publish: () => undefined },

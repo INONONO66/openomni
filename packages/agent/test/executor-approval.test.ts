@@ -1,3 +1,4 @@
+import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { executorLayer } from "./helpers/service-layers";
 import { expect, it } from "bun:test";
@@ -30,13 +31,13 @@ function fixture(overrides: Partial<ResolvedExecutorOptions> = {}) {
         if (request.state === "open") opened.resolve(request);
       },
     });
-    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    const executor = testExecutor({
       ...recording,
       policy,
       authorizeApproval: () => Effect.succeed(evidence),
       observations: { publish: () => undefined },
       ...overrides,
-    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
+    });
     const approvals = executor.approvals;
     if (approvals === undefined) throw new Error("missing approvals");
     const executorIdentity = overrides.identity ?? recording.identity;
@@ -228,12 +229,13 @@ it("rejects invalid deadlines before admitting execution", () => isolated(Effect
   const recording = yield* requestLedger();
   for (const approvalTimeoutMs of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
     expect(yield* Effect.flip(
-      Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
-        ...recording,
-        policy,
-        observations: { publish: () => undefined },
-        approvalTimeoutMs,
-      }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }),
+      createExecutor({ ...recording, approvalTimeoutMs }).pipe(
+        Effect.provide(executorLayer({
+          ...recording,
+          policy,
+          observations: { publish: () => undefined },
+        })),
+      ),
     )).toMatchObject({ _tag: "ForeignFailure", operation: "executor.acquire", cause: "invalid_approval_timeout" });
   }
 })));

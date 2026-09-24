@@ -1,3 +1,4 @@
+import { runAgentSync } from "../../helpers/executor";
 import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
 import { Effect, TestClock, TestContext } from "effect";
@@ -46,7 +47,7 @@ it("publishes no lifecycle event when pre policy blocks before tool intent", asy
     clock: () => 10,
   });
   let bodyCalls = 0;
-  const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
       echoTool(async (text) => {
         bodyCalls += 1;
         return text;
@@ -81,7 +82,7 @@ it("publishes Started after intent commit and Completed after result commit", as
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = Effect.runSync(createDispatcher({
+  const dispatcher = runAgentSync(createDispatcher({
     executor: recording.executor,
   }).pipe(Effect.provide(catalogLayer([echoTool(async (text) => text)]))));
 
@@ -109,7 +110,7 @@ it("publishes one error completion after a failed tool result commits", async ()
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = Effect.runSync(createDispatcher({
+  const dispatcher = runAgentSync(createDispatcher({
     executor: recording.executor,
   }).pipe(Effect.provide(catalogLayer([echoTool(() => Promise.reject(new TypeError("failed")))]))));
 
@@ -129,7 +130,7 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
       onObservation: observations.observe,
       clock: () => 10,
     });
-    const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor, timeoutMs: 50 }).pipe(Effect.provide(catalogLayer([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
+    const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor, timeoutMs: 50 }).pipe(Effect.provide(catalogLayer([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
       bodyEntered.resolve();
     }))]))));

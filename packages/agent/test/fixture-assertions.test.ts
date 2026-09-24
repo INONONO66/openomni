@@ -1,3 +1,4 @@
+import { runAgentSync } from "./helpers/executor";
 import { catalogLayer } from "./helpers/service-layers";
 import { Effect } from "effect";
 import { expect, it } from "bun:test";
@@ -16,7 +17,7 @@ it("shared budget assertions reject wrong reasons and unexpected provider calls"
 
 it("shared tool assertions remain sensitive to result and durable commit mutations", () => isolated(Effect.gen(function* () {
   const recording = recordingExecutor();
-  const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([timedQueryTool("reject before timeout", async () => { throw new Error("failed"); })]))));
+  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([timedQueryTool("reject before timeout", async () => { throw new Error("failed"); })]))));
   const result = yield* dispatcher.execute({ id: "check", tool: "timed", input: {} }, { sessionId: "session-1", turnId: "turn-1" });
   expectFailedToolCommit(result, recording.committed);
   expect(() => expectFailedToolCommit({ ...result, isError: false }, recording.committed)).toThrow();

@@ -505,6 +505,46 @@ test("bundle namespaces are aligned to their source band", (): void => {
   expect(findings(root)).toEqual([expect.objectContaining({ code: "R4_TAG_PREFIX", line: 3 })]);
 });
 
+test("bundle policy factories preserve namespaced keys and genuine Context reads", (): void => {
+  const root = fixture([{ path: "packages/agent/src/bundle.ts", source: [
+    'import { Context } from "effect";',
+    'export function bundlePolicyTag(name: string) {',
+    `  const key = \`@openomni/bundle/\${name}/Policy\`;`,
+    '  return Object.assign(Context.GenericTag<number>(key), { key });',
+    '}',
+    'const policy = bundlePolicyTag("audit"); Context.get(context, policy);',
+    'const literal = Context.GenericTag<number>("@openomni/bundle/audit/Store"); Context.getOption(context, literal);',
+    'function contains(key: string) { return Context.getOption(context, Context.GenericTag<never, never>(key)); }',
+  ].join("\n") }]);
+  expect(findings(root)).toEqual([]);
+  expect(effectServiceInventory(root).filter((service: { readonly reads: number }) => service.reads === 0)).toEqual([]);
+});
+
+test.each([
+  '"@openomni/bundle/Bad Ns/X"',
+  '"@openomni/other/X"',
+  `\`@openomni/other/\${name}/Policy\``,
+  `\`@openomni/bundle/\${name}/bad/path\``,
+  `\`@openomni/bundle/\${"Bad Ns"}/Policy\``,
+  'name',
+])("bundle keys reject malformed or arbitrary identities: %s", (key: string): void => {
+  const root = fixture([{ path: "packages/agent/src/bundle.ts", source: [
+    'import { Context } from "effect";',
+    `const tag = Context.GenericTag<number>(${key}); Context.getOption(context, tag);`,
+  ].join("\n") }]);
+  expect(codes(root)).toEqual(["R4_TAG_PREFIX"]);
+});
+
+test("unused policy factories and service-valued computed probes still fail", (): void => {
+  const root = fixture([{ path: "packages/agent/src/bundle.ts", source: [
+    'import { Context } from "effect";',
+    `export function bundlePolicyTag(name: string) { return Context.GenericTag<number>(\`@openomni/bundle/\${name}/Policy\`); }`,
+    'Context.getOption(context, Context.GenericTag<number>(key));',
+    'Context.getOption(context, Context.GenericTag<never, never>("@openomni/other/X"));',
+  ].join("\n") }]);
+  expect(codes(root)).toEqual(["R9_UNUSED_TAG", "R4_TAG_PREFIX", "R4_TAG_PREFIX"]);
+});
+
 test("aliases through require and re-export chains retain boundary provenance", (): void => {
   const root = fixture([
     { path: "packages/agent/src/api.ts", source: 'export { raceAll as race } from "effect/Effect";' },
