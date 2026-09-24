@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -151,14 +152,14 @@ test("an alarm prompt refusal remains typed at the worker and never wakes the se
         },
         1,
       );
-      const before = fixture.storage.actions.tree("monitor-session");
+      const before = sessionTree("monitor-session", fixture.storage.actions);
       expect(await runEffect(Effect.flip(fixture.worker.tick()))).toMatchObject({
         _tag: "AlarmRefused",
         operation: "fire",
         reason: "prompt",
         alarmId: "refused",
       });
-      expect(fixture.storage.actions.tree("monitor-session")).toEqual(before);
+      expect(sessionTree("monitor-session", fixture.storage.actions)).toEqual(before);
       expect(fixture.storage.alarms.get("refused")?.status).toBe("armed");
       expect(fixture.rows()).toEqual([]);
       expect(fixture.wakes).toEqual([]);

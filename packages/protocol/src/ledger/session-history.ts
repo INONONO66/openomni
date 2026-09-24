@@ -50,7 +50,7 @@ export namespace SessionHistory {
   export const PageRequest = z
     .object({
       afterRevision: Revision.default(0),
-      limit: z.number().int().positive().max(1_000).default(100),
+      limit: z.number().int().positive().max(256).default(100),
     })
     .strict();
   export type PageRequest = z.input<typeof PageRequest>;

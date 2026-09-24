@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -117,7 +118,7 @@ test("three committed actions bind every stored field and expose their hashes", 
     length: 3,
     head: computeActionHash(head),
   });
-  expect(adapter.actions.tree("chain")[2]).toMatchObject({
+  expect(sessionTree("chain", adapter.actions)[2]).toMatchObject({
     prevHash: head.prev_hash,
     actionHash: head.action_hash,
   });
@@ -177,7 +178,7 @@ for (const ts of [10.5, 9007199254740992]) {
     const adapter = fresh();
     const receipt = adapter.actions.append({ ...append("t"), ts }, 3);
     expect(receipt?.action.ts).toBe(ts);
-    expect(adapter.actions.tree("chain").at(-1)?.ts).toBe(ts);
+    expect(sessionTree("chain", adapter.actions).at(-1)?.ts).toBe(ts);
     expect(SessionHandleStore.verifyChain("chain")).toEqual({
       kind: "intact",
       length: 4,
@@ -192,7 +193,7 @@ test("0039 backfills a historical row with a fractional epoch instant", () => {
   db.run("UPDATE action SET ts = 10.5 WHERE id = 'one:1'");
   Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
   const actions = createActions(db, (operation) => operation(), { publish: () => undefined });
-  expect(actions.tree("one")[0]?.ts).toBe(10.5);
+  expect(sessionTree("one", actions)[0]?.ts).toBe(10.5);
   expect(actions.verifyChain("one")).toEqual({
     kind: "intact",
     length: 1,

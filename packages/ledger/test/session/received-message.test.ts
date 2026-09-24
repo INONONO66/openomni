@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { Inbox } from "@openomni/protocol";
@@ -57,7 +58,7 @@ test("divergent received message refuses without changing canonical history", ()
     Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(message))),
     (error) => error,
   );
-  const before = SessionHandleStore.tree("receiver");
+  const before = sessionTree("receiver");
   expect(() =>
     Either.getOrThrowWith(
       Effect.runSync(
@@ -66,6 +67,6 @@ test("divergent received message refuses without changing canonical history", ()
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
-  expect(SessionHandleStore.tree("receiver")).toEqual(before);
+  expect(sessionTree("receiver")).toEqual(before);
   expect(SessionHandleStore.inboxRows("receiver")[0]?.content).toBe("answer");
 });

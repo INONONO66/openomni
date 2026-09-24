@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { Effect, Layer } from "effect";
 import { Clock, Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
 import { runEffect } from "./effect";
@@ -37,7 +38,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
     actionId: `${sessionId}:configure`,
     at: 0,
   }));
-  const existing = SessionHandleStore.tree(sessionId).find((action) => action.id === requestId);
+  const existing = sessionTree(sessionId).find((action) => action.id === requestId);
   if (existing) return;
   const row = SessionHandleStore.row(sessionId);
   const lease = Effect.runSync(SessionHandleStore.acquireLease({
@@ -134,7 +135,7 @@ export async function command(
       expectedRevision: current.revision,
       payload,
     },
-    { row: current, actions: SessionHandleStore.tree(sessionId), request },
+    { row: current, inputRecord: SessionHandleStore.requestInputById(sessionId, inputId), invocation: SessionHandleStore.actionById(requestId), request },
   );
   const committed = await Effect.runPromise(SessionHandleStore.commitRequestTransition({
     sessionId,

@@ -89,7 +89,7 @@ class SessionRegistry {
       self.swept = true;
       const recoveries: Effect.Effect<SessionRunnerResult | undefined, SessionError>[] = [];
       for (const row of SessionHandleStore.listRows()) {
-        const hasOpenTurn = SessionHandleStore.openTurns(SessionHandleStore.tree(row.id)).length > 0;
+        const hasOpenTurn = SessionHandleStore.latestOpenTurn(row.id) !== undefined;
         const hasInbox = SessionHandleStore.pendingInbox(row.id).length > 0;
         const hasOutbound = SessionHandleStore.outboundRows(row.id).some((item) => item.state === "pending");
         if (!hasOpenTurn && !hasInbox && !hasOutbound) continue;
@@ -141,7 +141,7 @@ class SessionRegistry {
 
 function assertDeclaration(row: LedgerSession.Row, options: SessionCreateOptions, tools: readonly SessionGeneration.Tool[], system: Partial<SessionSystem> | undefined): void {
   if (row.role !== options.role || row.parentId !== (options.parentId ?? null)) throw new Error(`session declaration conflicts with durable identity: ${row.id}`);
-  const snapshot = SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id));
+  const snapshot = SessionHandleStore.latestGenerationFor(row.id);
   const expected = SessionHandleStore.generationSnapshot({
     generation: snapshot.generation, revertTo: snapshot.revertTo, tools,
     system: { preset: system?.preset ?? "", blocks: system?.blocks ?? [] },

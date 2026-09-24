@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -80,7 +81,7 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
     Effect.mapError((error) => new CommitFailed({ error })),
   ));
-  expect(SessionHandleStore.latestGeneration(SessionHandleStore.tree(fiberSessionId)).generation).toBe(2);
+  expect(SessionHandleStore.latestGeneration(sessionTree(fiberSessionId)).generation).toBe(2);
   expect(finalizersA).toBe(0);
   release.resolve("A-result");
   expect(yield* Fiber.join(running)).toEqual({ terminal: "executed", value: {
@@ -91,7 +92,7 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   expect(yield* executeCaptured).toEqual({ terminal: "executed", value: {
     generation: 2, system: "B", output: { status: "success", output: "B" },
   } });
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) =>
+  expect(sessionTree(fiberSessionId).filter((action) =>
     action.kind === "tool" && effectValue(action).phase === "result").map(effectValue))
     .toMatchObject([{ terminal: "executed", result: { generation: 1, system: "A" } },
       { terminal: "executed", result: { generation: 2, system: "B" } }]);
@@ -113,7 +114,7 @@ test("failed configure leaves selection unchanged; unavailable generations fail 
   }
   const reverted = yield* generations.capture();
   expect(reverted.snapshot).toMatchObject({ generation: 3, revertTo: 2, systemValue: "A" });
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) => action.kind === "session.configure")).toHaveLength(3);
+  expect(sessionTree(fiberSessionId).filter((action) => action.kind === "session.configure")).toHaveLength(3);
 }))));
 
 test("retired generation stays acquired after interrupted fiber until its raw slot actually settles", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -138,7 +139,7 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   ));
   yield* Fiber.interrupt(running);
   expect(finalized).toBe(0);
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) =>
+  expect(sessionTree(fiberSessionId).filter((action) =>
     action.kind === "tool" && effectValue(action).phase === "result").map(effectValue))
     .toMatchObject([{ terminal: "outcome_unknown" }]);
   release.resolve("late");

@@ -1,10 +1,11 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, CommitRefused } from "@openomni/ledger";
+import { CommitRefused } from "@openomni/ledger";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
@@ -19,7 +20,7 @@ const request = {
   toolObservation: { turnId: `${fiberSessionId}:turn`, callId: "write-once" },
 };
 function results() {
-  return SessionHandleStore.tree(fiberSessionId).filter((action) =>
+  return sessionTree(fiberSessionId).filter((action) =>
     action.kind === "tool" && effectValue(action).phase === "result").map(effectValue);
 }
 
@@ -60,8 +61,8 @@ test("pre denied commits its policy node and enters zero bodies", () => isolated
   expect(yield* executor.run(request, () => Effect.sync(() => { bodies += 1; return "no"; })))
     .toEqual({ terminal: "blocked_pre", reason: "policy" });
   expect(bodies).toBe(0);
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) => action.kind === "tool")).toEqual([]);
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) => action.kind === "policy.decision").map(effectValue))
+  expect(sessionTree(fiberSessionId).filter((action) => action.kind === "tool")).toEqual([]);
+  expect(sessionTree(fiberSessionId).filter((action) => action.kind === "policy.decision").map(effectValue))
     .toMatchObject([{ terminal: "blocked_pre", evidence: { failures: [{ tag: "PolicyDenied", phase: "pre" }] } }]);
 })));
 
@@ -103,7 +104,7 @@ test("terminal commit refusal publishes no success and leaves the intent open", 
   expect(exit).toMatchObject({ _tag: "Left", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
   expect(results()).toEqual([]);
   expect(published).not.toContain("tool.execution.completed");
-  expect(SessionHandleStore.tree(fiberSessionId).filter((action) => action.kind === "tool")).toHaveLength(1);
+  expect(sessionTree(fiberSessionId).filter((action) => action.kind === "tool")).toHaveLength(1);
 })));
 
 test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or releasing escrow", () => isolated(Effect.gen(function* () {

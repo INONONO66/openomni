@@ -1,3 +1,4 @@
+import { memoryExecutionReads } from "./helpers/execution-reads";
 import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
@@ -30,7 +31,7 @@ function harness() {
     entropy: () => `action:${++sequence}`,
     observations: { publish: () => undefined },
     ledger: {
-      actions: () => actions,
+      ...memoryExecutionReads(() => actions),
       commit: (action) => Effect.sync(() => {
         const node = LedgerAction.Node.parse({
           ...action,

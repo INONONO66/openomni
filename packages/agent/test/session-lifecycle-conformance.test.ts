@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
@@ -91,7 +92,7 @@ function snapshotOf(sessionId: string): SessionSnapshot | undefined {
         return undefined;
     return {
         row: SessionHandleStore.row(sessionId),
-        actions: SessionHandleStore.tree(sessionId),
+        actions: sessionTree(sessionId),
         inbox: SessionHandleStore.inboxRows(sessionId),
         requests: SessionHandleStore.requestRows(sessionId),
         outbound: SessionHandleStore.outboundRows(sessionId),
@@ -284,7 +285,7 @@ function resolutions(snapshot: SessionSnapshot | undefined): [
         .map((action: LedgerAction.Node) => [action.kind, objectValue(action.effect.value)?.resolution]);
 }
 function hookOf(sessionId: string, actionId: string): string | undefined {
-    const action = SessionHandleStore.tree(sessionId).find((node: LedgerAction.Node) => node.id === actionId);
+    const action = sessionTree(sessionId).find((node: LedgerAction.Node) => node.id === actionId);
     const hook = action === undefined ? undefined : objectValue(action.intent.value)?.hook;
     return typeof hook === "string" ? hook : undefined;
 }
@@ -414,7 +415,7 @@ function releaseBodies(fixture: WaveFixture, order: readonly WaveCall[]) {
             fixture.gates[call].resolve();
         (yield* waitFor(fixture.entered.D.promise, "sequential body entry after the parallel barrier"));
         expect(fixture.tape).toEqual([...parallel]);
-        expect(SessionHandleStore.tree(fixture.handle.id).some((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
+        expect(sessionTree(fixture.handle.id).some((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
         fixture.gates.D.resolve();
     });
 }
@@ -475,7 +476,7 @@ describe("session lifecycle conformance", () => {
                     name: "DONE",
                     run: () => Effect.gen(function* () {
                         const sealed = sink.committed((committed: L0Observation.ActionCommitted) => committed.sessionId === "S" &&
-                            SessionHandleStore.turnTerminal(SessionHandleStore.tree("S").find((action: LedgerAction.Node) => action.id === committed.id)) !== undefined);
+                            SessionHandleStore.turnTerminal(sessionTree("S").find((action: LedgerAction.Node) => action.id === committed.id)) !== undefined);
                         gate.resolve();
                         (yield* waitFor(sealed, "terminal result"));
                         expect((yield* waitFor(plainRunning ?? Promise.reject(new Error("no run")), "result"))).toEqual({
@@ -1139,14 +1140,14 @@ describe("session lifecycle conformance", () => {
                             const q = requestOf(opened, `${first}-${second}`);
                             (yield* toEffect(contenders[first](q)));
                             const winner = SessionHandleStore.requestById(q.requestId);
-                            const before = SessionHandleStore.tree(q.sessionId).length;
+                            const before = sessionTree(q.sessionId).length;
                             const loser = (yield* toEffect(contenders[second](q)));
                             expect(SessionHandleStore.requestById(q.requestId)).toMatchObject({
                                 state: winner?.state,
                                 outcome: winner?.outcome,
                                 replies: winner?.replies,
                             });
-                            expect(SessionHandleStore.tree(q.sessionId).length).toBeLessThanOrEqual(before + 1);
+                            expect(sessionTree(q.sessionId).length).toBeLessThanOrEqual(before + 1);
                             expect(["duplicate", "late_unknown", winner?.state]).toContain(loser);
                         }
                     }),
@@ -1177,13 +1178,13 @@ describe("session lifecycle conformance", () => {
                         // Misrouted to a real session: refused there before any record, and
                         // never applied here. The destination row does not move at all.
                         const destination = SessionHandleStore.row("answer-refuse");
-                        const destinationTree = SessionHandleStore.tree("answer-refuse").length;
+                        const destinationTree = sessionTree("answer-refuse").length;
                         expect((yield* toEffect(port.answer({
                             ...reply(q, "corrupt-session", 1099),
                             sessionId: "answer-refuse",
                         })))).toBe("rejected");
                         expect(SessionHandleStore.row("answer-refuse").revision).toBe(destination.revision);
-                        expect(SessionHandleStore.tree("answer-refuse")).toHaveLength(destinationTree);
+                        expect(sessionTree("answer-refuse")).toHaveLength(destinationTree);
                         expect(SessionHandleStore.requestById("answer-refuse:q")?.seenReplyIds).toEqual([
                             "answer-refuse:reply-1",
                             "answer-refuse:refuse-1",
@@ -1193,12 +1194,12 @@ describe("session lifecycle conformance", () => {
                         expect((yield* toEffect(port.answer(reply(q, "STALE:reply-1", 1099))))).toBe("resolved");
                         // The winning input id replayed by a different principal is a
                         // conflicting replay: refused without a record, the winner untouched.
-                        const settled = SessionHandleStore.tree(q.sessionId).length;
+                        const settled = sessionTree(q.sessionId).length;
                         expect((yield* toEffect(port.answer({
                             ...reply(q, "STALE:reply-1", 1099),
                             principal: { kind: "session", principalId: "impostor", evidenceId: "other" },
                         })))).toBe("rejected");
-                        expect(SessionHandleStore.tree(q.sessionId)).toHaveLength(settled);
+                        expect(sessionTree(q.sessionId)).toHaveLength(settled);
                         expect(SessionHandleStore.requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["worker"]);
                     }),
                 },
@@ -1425,7 +1426,7 @@ function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs
             actionId,
             at: now,
         }));
-        const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
+        const generation = SessionHandleStore.latestGeneration(sessionTree(id));
         const lease = (yield* SessionHandleStore.acquireLease({
             sessionId: id,
             owner,
@@ -1597,7 +1598,7 @@ function childParentFixture() {
                     runner: () => Effect.succeed({ kind: "result" as const, text: "done" }),
                 }, fixture), fixture); }));
                 // The parent's real source action: the reply observation resolves it.
-                const source = SessionHandleStore.tree("PARENT")[0]?.id;
+                const source = sessionTree("PARENT")[0]?.id;
                 if (source === undefined)
                     throw new Error("parent has no source action");
                 expect((yield* failure(child.prompt("hello", {

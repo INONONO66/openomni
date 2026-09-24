@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
@@ -120,7 +121,7 @@ it("configuration drift refuses consent while interruption cancels the whole sus
         yield* Fiber.join(running);
         expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("cancelled");
         expect(
-          SessionHandleStore.tree(f.handle.id).some(
+          sessionTree(f.handle.id).some(
             (action: import("@openomni/protocol").LedgerAction.Node) => {
               const effect = action.effect.value;
               return (

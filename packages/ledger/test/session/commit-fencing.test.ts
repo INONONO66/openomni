@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
@@ -122,7 +123,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
       currentRevision: 0,
     }),
   );
-  expect(actions.tree(sessionId)).toEqual([]);
+  expect(sessionTree(sessionId, actions)).toEqual([]);
   expect(sessions.get(sessionId)).toEqual(before);
 
   // The successor's fence commits the identical work exactly once.
@@ -133,5 +134,5 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(committed?.ok).toBe(true);
   if (committed?.ok !== true) throw new Error("successor commit was refused");
   expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2 });
-  expect(actions.tree(sessionId).map((action) => action.id)).toEqual(["successor-result"]);
+  expect(sessionTree(sessionId, actions).map((action) => action.id)).toEqual(["successor-result"]);
 });

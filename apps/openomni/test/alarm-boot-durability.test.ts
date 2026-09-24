@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
@@ -41,7 +42,7 @@ test("alarm restart: SQLite reopen fires at the exact boundary with atomic promp
         content: "deadline",
         createdAt: 2000,
       });
-      const tree = fixture.storage.actions.tree("monitor-session");
+      const tree = sessionTree("monitor-session", fixture.storage.actions);
       expect(tree.map((action) => action.kind)).toEqual(["alarm.arm", "alarm.fired", "prompt"]);
       expect(tree.at(-1)?.ordinal).toBe(fixture.storage.sessions.get("monitor-session")?.revision);
       expect(tree.at(-1)?.id).toBe(prompt.id);

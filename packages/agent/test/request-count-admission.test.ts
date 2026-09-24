@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, spyOn, test } from "bun:test";
 import { isolated } from "./helpers/isolated";
@@ -73,13 +74,13 @@ test("admission carries its observed count into the real SQLite transaction", ()
       );
       try {
         const before = SessionHandleStore.row(first.sessionId);
-        const actions = SessionHandleStore.tree(first.sessionId);
+        const actions = sessionTree(first.sessionId);
         expect(yield* Effect.flip(open(first))).toMatchObject({
           _tag: "CommitFailed",
           error: { _tag: "CommitRefused" },
         });
         expect(SessionHandleStore.row(first.sessionId)).toEqual(before);
-        expect(SessionHandleStore.tree(first.sessionId)).toEqual(actions);
+        expect(sessionTree(first.sessionId)).toEqual(actions);
         expect(
           SessionHandleStore.requestRows().map(
             (request: SessionTransition.Request) => request.requestId,

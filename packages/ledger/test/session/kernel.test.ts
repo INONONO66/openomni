@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -126,7 +127,7 @@ function turnIntent(input: {
     kind: "turn",
     intent: {
       encodingVersion: 1,
-      value: SessionTurn.Intent.parse({
+      value: SessionTurn.HistoricalIntent.parse({
         phase: "intent",
         resultId: input.resultId,
         inboxIds: [],
@@ -156,7 +157,7 @@ function turnResume(input: {
     kind: "turn",
     intent: {
       encodingVersion: 1,
-      value: SessionTurn.Resume.parse({
+      value: SessionTurn.HistoricalResume.parse({
         phase: "resume",
         turnId: input.turnId,
         resultId: input.resultId,
@@ -413,7 +414,7 @@ describe("session kernel folds", () => {
   test("reads authoritative open and terminal tails from committed session actions", () => {
     const sessionId = "snapshot-session";
     const created = materialize(sessionId);
-    const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+    const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
     const first = Either.getOrThrowWith(
       Effect.runSync(
         Effect.either(
@@ -725,7 +726,7 @@ describe("session kernel folds", () => {
       ["resync-3", 4],
       ["resync-4", 5],
     ]);
-    expect(seen).toEqual(SessionHandleStore.tree("resync").slice(2));
+    expect(seen).toEqual(sessionTree("resync").slice(2));
     expect(SessionHandleStore.historyPage("resync", { afterRevision: 5 })).toEqual({
       sessionId: "resync",
       afterRevision: 5,
@@ -825,7 +826,7 @@ describe("session kernel folds", () => {
 
     Storage.configure(bareStorageAdapter());
     expect(() => SessionHandleStore.row("missing")).toThrow("capability is unavailable: sessions");
-    expect(() => SessionHandleStore.tree("missing")).toThrow("capability is unavailable: actions");
+    expect(() => sessionTree("missing")).toThrow("capability is unavailable: actions");
     expect(() => SessionHandleStore.pendingInbox("missing")).toThrow(
       "capability is unavailable: inbox",
     );

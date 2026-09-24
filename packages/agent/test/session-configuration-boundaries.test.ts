@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
@@ -40,13 +41,13 @@ it("does not record a denied configuration", () =>
         () => Effect.succeed(false),
         (handle: SessionHandle) =>
           Effect.gen(function* () {
-            const before = SessionHandleStore.tree(handle.id);
+            const before = sessionTree(handle.id);
             expect(yield* failure(handle.system.blocks.set([]))).toMatchObject({
               _tag: "ForeignFailure",
               operation: "session.configure",
               cause: "denied",
             });
-            expect(SessionHandleStore.tree(handle.id)).toEqual(before);
+            expect(sessionTree(handle.id)).toEqual(before);
           }),
       ),
     ),
@@ -88,7 +89,7 @@ it("rejects configuration whose authorization outlives its captured generation",
                   cause: "stale",
                 });
                 expect(
-                  SessionHandleStore.latestGeneration(SessionHandleStore.tree(handle.id))
+                  SessionHandleStore.latestGeneration(sessionTree(handle.id))
                     .generation,
                 ).toBe(receipt.generation);
               } finally {

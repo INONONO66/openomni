@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Gateway, LedgerSession, PlainValueSchema } from "@openomni/protocol";
@@ -107,7 +108,7 @@ test("materialization refuses a mismatched initial action before creating any ro
     parentId: null,
     operation: "create",
     at: 1,
-    snapshot: SessionHandleStore.latestGeneration(SessionHandleStore.tree("source")),
+    snapshot: SessionHandleStore.latestGeneration(sessionTree("source")),
   });
   expect(() =>
     Either.getOrThrowWith(
@@ -256,7 +257,7 @@ test("session commit savepoints roll back every refused write unit", () => {
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "inbox" }));
-  const snapshot = SessionHandleStore.latestGeneration(SessionHandleStore.tree(session.id));
+  const snapshot = SessionHandleStore.latestGeneration(sessionTree(session.id));
   const admission = {
     ...duplicate,
     sessionId: "admitted-child",

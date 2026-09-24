@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Scope, Exit, Either } from "effect";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
@@ -78,7 +79,7 @@ for (const status of ["armed", "fired"] as const) {
           }
           const before = alarmStore().get(alarm.id);
           expect(before?.status).toBe(status);
-          const tree = SessionHandleStore.tree("sender");
+          const tree = sessionTree("sender");
           const inbox = SessionHandleStore.inboxRows("sender");
           await expect(
             monitorTool.execute(
@@ -92,7 +93,7 @@ for (const status of ["armed", "fired"] as const) {
             ),
           ).rejects.toThrow(ToolRefused);
           expect(alarmStore().get(alarm.id)).toEqual(before);
-          expect(SessionHandleStore.tree("sender")).toEqual(tree);
+          expect(sessionTree("sender")).toEqual(tree);
           expect(SessionHandleStore.inboxRows("sender")).toEqual(inbox);
 
           // A refused control must preserve both the pending timeout and shared scan.

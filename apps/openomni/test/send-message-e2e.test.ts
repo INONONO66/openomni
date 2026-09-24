@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
@@ -51,7 +52,7 @@ test.each([
   ws.send(JSON.stringify({ text: "start" }));
   expect(await receipt).toMatchObject({ type: "receipt", status: "accepted" });
   expect(await final).toMatchObject({ type: "message", text: "FINAL_SENTINEL" });
-  const actions = SessionHandleStore.listRows().flatMap((row) => SessionHandleStore.tree(row.id));
+  const actions = SessionHandleStore.listRows().flatMap((row) => sessionTree(row.id));
   expect(actions.some((action) => action.kind === "message")).toBe(true);
 });
 
@@ -69,7 +70,7 @@ test("a child session terminal commits exactly one parent reply with the origina
     (error: Error) => ({ ok: false, error }),
   );
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    const action = SessionHandleStore.tree(event.sessionId).find(
+    const action = sessionTree(event.sessionId).find(
       (candidate) => candidate.id === event.id,
     );
     if (action === undefined) return;
@@ -140,7 +141,7 @@ test("a child session terminal commits exactly one parent reply with the origina
   });
   expect(rows[0]?.content).toContain("CHILD_SENTINEL");
   const outbound = SessionHandleStore.outboundRows(child.id)[0];
-  const receipt = SessionHandleStore.tree(child.parentId).find(
+  const receipt = sessionTree(child.parentId).find(
     (action) => action.id === outbound?.destinationReceipt?.id,
   );
   expect(receipt).toMatchObject({

@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Inbox, type LedgerSession } from "@openomni/protocol";
@@ -35,7 +36,7 @@ test("LedgerWrites resolves native storage and reports a missing alarm without m
       _tag: "AlarmRefused", alarmId: "missing", operation: "acquire", reason: "missing",
     });
     expect(writes.alarms.due(Number.MAX_SAFE_INTEGER)).toEqual([]);
-    expect(SessionHandleStore.tree("fixture")).toHaveLength(1);
+    expect(sessionTree("fixture")).toHaveLength(1);
   }));
 });
 
@@ -49,7 +50,7 @@ test("receiving into an absent session refuses admission without recording a rec
       _tag: "InboxCommitRefused", sessionId: "missing", inboxId: "missing-letter", reason: "admission",
     });
     expect(writes.inbox.list("missing")).toEqual([]);
-    expect(SessionHandleStore.tree("missing")).toEqual([]);
+    expect(sessionTree("missing")).toEqual([]);
   }));
 });
 
@@ -67,7 +68,7 @@ test.each([
       _tag: "InboxCommitRefused", sessionId: "child", inboxId: "letter", reason,
     });
     expect(storage.sessions.list()).toEqual(before);
-    expect(storage.actions.tree("child")).toEqual([]);
+    expect(sessionTree("child", storage.actions)).toEqual([]);
     expect(storage.inbox.list("child")).toEqual([]);
   }));
 });

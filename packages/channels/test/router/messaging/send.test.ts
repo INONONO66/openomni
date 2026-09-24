@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { effectFailure } from "../../helpers/effect-failure";
 import { channelRequests } from "../../helpers/channel-requests";
 import { channelTransaction } from "../../helpers/channel-transaction";
@@ -321,7 +322,7 @@ describe("delivery receipt", () => {
     // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.request.correlation.replyToMessageId).toBe("platform:msg-77");
     expect(
-      SessionHandleStore.tree(receipt.request.sessionId).filter(
+      sessionTree(receipt.request.sessionId).filter(
         (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request",
       ),
     ).toHaveLength(2);

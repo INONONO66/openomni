@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -78,7 +79,7 @@ test("real app SSE compaction commits reversible evidence through the session ex
   expect(rows).toHaveLength(1);
   const row = rows[0];
   if (row === undefined) throw new Error("missing session");
-  const actions = SessionHandleStore.tree(row.id);
+  const actions = sessionTree(row.id);
   const compacted = actions.filter((action) => action.kind === "compaction" && "revert" in action);
   expect(compacted.length).toBeGreaterThan(0);
   for (const action of compacted) {

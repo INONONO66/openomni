@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
@@ -126,7 +127,7 @@ describe("ledger-first observations", () => {
       { id: "alarm-observed", sessionId: "session-surfaces", revision: 2, kind: "alarm.arm" },
     ]);
     expect(adapter.sessions.get("session-surfaces")?.revision).toBe(2);
-    expect(adapter.actions.tree("session-surfaces").map((node) => node.id)).toEqual([
+    expect(sessionTree("session-surfaces", adapter.actions).map((node) => node.id)).toEqual([
       "inbox-observed",
       "alarm-observed",
     ]);
@@ -150,7 +151,7 @@ describe("ledger-first observations", () => {
 
     expect(adapter.actions.append(action("action-refused", "session-refused"), 1)).toBeUndefined();
     expect(adapter.sessions.get("session-refused")?.revision).toBe(0);
-    expect(adapter.actions.tree("session-refused")).toEqual([]);
+    expect(sessionTree("session-refused", adapter.actions)).toEqual([]);
     expect(observations).toEqual([]);
   });
 
@@ -176,8 +177,8 @@ describe("ledger-first observations", () => {
     const withNoop = noopAdapter.actions.append(action("action-parity", "session-parity"), 0);
 
     expect(withThrow).toEqual(withNoop);
-    expect(throwingAdapter.actions.tree("session-parity")).toEqual(
-      noopAdapter.actions.tree("session-parity"),
+    expect(sessionTree("session-parity", throwingAdapter.actions)).toEqual(
+      sessionTree("session-parity", noopAdapter.actions),
     );
   });
 });

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./executor";
 import { turnTestLayer, catalogLayer } from "./service-layers";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
@@ -34,7 +35,7 @@ function stop(point: CrashPoint, bodies: string[], pending?: LedgerAction.Append
     crashPoint: point,
     bodies,
     lease: { owner: row.leaseOwner, fence: row.leaseFence, expiresAt: row.leaseExpiresAt },
-    openTurns: SessionHandleStore.openTurns(SessionHandleStore.tree(sessionId)),
+    openTurns: SessionHandleStore.openTurns(sessionTree(sessionId)),
     ...(pending === undefined
       ? {}
       : { pending: { kind: pending.kind, effect: pending.effect.value } }),

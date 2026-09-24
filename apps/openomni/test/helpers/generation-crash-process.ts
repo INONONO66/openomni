@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { BundlesLive, GenerationLayers, session } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Deferred, Effect } from "effect";
@@ -28,5 +29,5 @@ await acquireAppResource(runtime, Effect.gen(function* () {
 }));
 await runAppEffect(runtime, Effect.sync(() => {
   process.send?.({ type: "configured", generation: SessionHandleStore.latestGenerationFor("crash-session").generation,
-    openTurns: SessionHandleStore.openTurns(SessionHandleStore.tree("crash-session")).length, acquisitions: audit.acquired.length });
+    openTurns: SessionHandleStore.openTurns(sessionTree("crash-session")).length, acquisitions: audit.acquired.length });
 }));

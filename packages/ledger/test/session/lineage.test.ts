@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "../../src/index";
 import { materializeSession } from "../helpers/session";
@@ -31,6 +32,6 @@ describe("canonical session lineage", () => {
     materializeSession("child", "external-parent");
     expect(SessionHandleStore.row("child").parentId).toBe("external-parent");
     expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["child"]);
-    expect(SessionHandleStore.tree("external-parent")).toEqual([]);
+    expect(sessionTree("external-parent")).toEqual([]);
   });
 });

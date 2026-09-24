@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { Migration } from "./migration-runner";
 import { ACTION_HASH_MIGRATION } from "./l0-hash";
 import { DECISION_FACT_MIGRATION } from "./decision-fact-migration";
-import { preflight967, U967Error, U967_MIGRATION, REPLY_GRANT_MIGRATION } from "./u967-preflight";
+import {
+  FOLD_CHECKPOINT_MIGRATION,
+  preflight967,
+  U967Error,
+  U967_MIGRATION,
+  REPLY_GRANT_MIGRATION,
+} from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
 
@@ -52,6 +58,7 @@ export const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: REQUEST_MIGRATION },
   { name: ACTION_HASH_MIGRATION },
   { name: DECISION_FACT_MIGRATION },
+  { name: FOLD_CHECKPOINT_MIGRATION },
 ];
 
 export function preflightSqliteDatabase(db: Database) {
@@ -60,7 +67,9 @@ export function preflightSqliteDatabase(db: Database) {
   const latest = db
     .query<{ name: string }, []>("SELECT name FROM _migrations ORDER BY rowid DESC LIMIT 1")
     .get();
-  return latest?.name === REQUEST_MIGRATION || latest?.name === ACTION_HASH_MIGRATION
+  return latest?.name === REQUEST_MIGRATION ||
+    latest?.name === ACTION_HASH_MIGRATION ||
+    latest?.name === DECISION_FACT_MIGRATION
     ? "pending"
     : state;
 }

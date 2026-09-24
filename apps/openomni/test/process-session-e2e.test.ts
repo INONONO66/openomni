@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, mock, spyOn, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
 import { acquireAppResource, gatewayRuntime } from "../src/gateway";
@@ -206,7 +207,7 @@ test.each([
       origin: { value: { replyTo: "process-original", terminal: "completed" } },
     });
     expect(
-      SessionHandleStore.tree(child.id).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id).filter((action) => action.kind === "alarm.arm"),
     ).toEqual([]);
     expect(SessionHandleStore.requestRows("sender")[0]?.state).toBe("resolved");
     expect(Storage.get().alarms?.due(deadline)).toEqual([]);

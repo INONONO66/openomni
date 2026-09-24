@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
@@ -23,7 +24,7 @@ test("a completed turn's captured ledger rejects late writes without appending",
   }, fixture), fixture); });
   yield* handle.prompt("start");
   const input = yield* Deferred.await(entered);
-  const before = SessionHandleStore.tree(handle.id);
+  const before = sessionTree(handle.id);
   const action: LedgerAction.Append = {
     id: "late", sessionId: handle.id, parentId: input.turnId, kind: "tool",
     intent: { encodingVersion: 1, value: {} }, effect: { encodingVersion: 1, value: {} }, ts: 100, irreversible: true,
@@ -31,7 +32,7 @@ test("a completed turn's captured ledger rejects late writes without appending",
   expect(yield* Effect.flip(input.ledger.commit(action))).toMatchObject({
     _tag: "CommitRefused", sessionId: handle.id, reason: "fence",
   });
-  expect(SessionHandleStore.tree(handle.id)).toEqual(before);
+  expect(sessionTree(handle.id)).toEqual(before);
 }))));
 
 test("request transitions cannot renew an expired lease beneath a live runner", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -98,7 +99,7 @@ test("zero-grace shutdown seals pending tool evidence before releasing the turn 
   yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
   yield* handle.close();
   yield* Fiber.join(running);
-  const results = SessionHandleStore.tree(handle.id).filter((action: LedgerAction.Node) => action.parentId === "pending-tool");
+  const results = sessionTree(handle.id).filter((action: LedgerAction.Node) => action.parentId === "pending-tool");
   expect(results).toContainEqual(expect.objectContaining({
     kind: "tool", effect: { encodingVersion: 1, value: { phase: "result", terminal: "outcome_unknown", reason: "shutdown_grace_exhausted" } },
   }));

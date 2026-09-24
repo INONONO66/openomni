@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
@@ -31,7 +32,7 @@ describe("canonical SQLite reads fail closed", () => {
     "",
   ])("corrupt action payload %s rejects tree and snapshot reads", (payload) => {
     raw.query("UPDATE action SET effect = ? WHERE id = ?").run(payload, "corrupt:configure");
-    expect(() => SessionHandleStore.tree("corrupt")).toThrow();
+    expect(() => sessionTree("corrupt")).toThrow();
     expect(() => SessionHandleStore.getSnapshot("corrupt")).toThrow();
   });
 

@@ -11,7 +11,7 @@ import type {
   ResolvedExecutorOptions,
 } from "./executor-contract";
 import { ExecutionApprovalError, type ExecutionError } from "./errors";
-import { createApprovalRequest, findSessionRequest } from "./session-request";
+import { createApprovalRequest } from "./session-request";
 
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
@@ -28,7 +28,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
       : options.ledger.transition(payload, inputId, options.clock());
   }
   function notify(request: SessionTransition.Request) {
-    const persisted = findSessionRequest(options.ledger.actions?.() ?? [], request.requestId);
+    const persisted = options.ledger.requestById?.(request.requestId);
     const suspended = pending.get(request.requestId);
     if (suspended === undefined || persisted === undefined || persisted.state === "open") return;
     const value = persisted.state === "resolved" ? "approve"

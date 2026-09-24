@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { channelRequests } from "../helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
@@ -72,9 +73,9 @@ test("native reply reaches the canonical receiving inbox once and retains its or
     });
   expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
   expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
   expect(received).toEqual(["request-owner"]);
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
   expect(SessionHandleStore.inboxRows("request-owner")[0]?.origin.value).toEqual(message);
@@ -83,13 +84,13 @@ test("native reply reaches the canonical receiving inbox once and retains its or
 test("native reply rejects an altered authenticated sender, content, or destination binding", async () => {
   await runEffect(await openRequest("original", { expectedResponders: [sender.id], correlation: {} }));
   const port = channelRequests(requestPort());
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   expect(await effectFailure(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound(), "altered", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2))).toBeInstanceOf(Error);
   expect(await runEffect(answerNativeRequest(port, sender, undefined, "ordinary", 2))).toBe(false);
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
 });
 
 test("a late native answer records the timeout winner without manufacturing new conversational input", async () => {

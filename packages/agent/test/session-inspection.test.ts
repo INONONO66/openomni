@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
@@ -213,7 +214,7 @@ function lifecycle() {
             return { kind: "result", text: "child answer" };
           }),
       }, fixture), fixture); });
-    const commission = SessionHandleStore.tree("parent").find(
+    const commission = sessionTree("parent").find(
       (action: import("@openomni/protocol").LedgerAction.Node) =>
         SessionHandleStore.turnTerminal(action) !== undefined,
     );
@@ -255,7 +256,7 @@ describe("action-based history and diagnostic projections", () => {
         Effect.gen(function* () {
           const parent = yield* lifecycle();
           const inspection = parent.inspect({ depth: 1 });
-          const tree = SessionHandleStore.tree("parent");
+          const tree = sessionTree("parent");
           expect(
             inspection.transitions.map(
               (
@@ -460,7 +461,7 @@ describe("action-based history and diagnostic projections", () => {
             ).toBe(true);
           }
           const rendered = JSON.stringify(inspection);
-          expect(JSON.stringify(SessionHandleStore.tree("parent"))).toContain(SECRET);
+          expect(JSON.stringify(sessionTree("parent"))).toContain(SECRET);
           expect(rendered).not.toContain(SECRET);
           expect(rendered).not.toContain("/etc/shadow");
         }),
@@ -472,13 +473,13 @@ describe("action-based history and diagnostic projections", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const parent = yield* lifecycle();
-          const before = SessionHandleStore.tree("parent");
+          const before = sessionTree("parent");
           const ran = bodies;
           parent.inspect({ depth: 2 });
           parent.history({ limit: 5 });
           expect(bodies).toBe(ran);
-          expect(SessionHandleStore.tree("parent")).toEqual(before);
-          expect(SessionHandleStore.tree("child")).toEqual(SessionHandleStore.tree("child"));
+          expect(sessionTree("parent")).toEqual(before);
+          expect(sessionTree("child")).toEqual(sessionTree("child"));
         }),
       ),
     ));
@@ -488,7 +489,7 @@ describe("action-based history and diagnostic projections", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const parent = yield* lifecycle();
-          const before = SessionHandleStore.tree("parent");
+          const before = sessionTree("parent");
           const rebuilt: typeof before = [];
           let page = parent.history({ afterRevision: 0, limit: 4 });
           for (;;) {

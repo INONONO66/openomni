@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -106,7 +107,7 @@ describe("SQLite canonical request deadline", () => {
   test("timeout winner refuses a late answer and its receiving inbox", () => {
     const { transition } = openRequest();
     expectCommitted(transition("expired"));
-    const before = SessionHandleStore.tree("request-session");
+    const before = sessionTree("request-session");
     expect(() => transition("resolved", { receive: reply() })).toThrow(
       expect.objectContaining({
         _tag: "CommitRefused",
@@ -114,7 +115,7 @@ describe("SQLite canonical request deadline", () => {
         reason: "revision",
       }),
     );
-    expect(SessionHandleStore.tree("request-session")).toEqual(before);
+    expect(sessionTree("request-session")).toEqual(before);
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
   });
 
@@ -128,13 +129,13 @@ describe("SQLite canonical request deadline", () => {
     const { transition } = openRequest();
     materializeSession("other");
     const before = SessionHandleStore.row("request-session");
-    const tree = SessionHandleStore.tree("request-session");
+    const tree = sessionTree("request-session");
     const alarms = Storage.get().alarms?.due(100);
     expect(() => transition("resolved", overrides)).toThrow(
       expect.objectContaining({ _tag: "CommitRefused", reason }),
     );
     expect(SessionHandleStore.row("request-session")).toEqual(before);
-    expect(SessionHandleStore.tree("request-session")).toEqual(tree);
+    expect(sessionTree("request-session")).toEqual(tree);
     expect(Storage.get().alarms?.due(100)).toEqual(alarms);
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
     expect(SessionHandleStore.inboxRows("other")).toEqual([]);
@@ -202,7 +203,7 @@ describe("SQLite canonical request deadline", () => {
       Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
-    const before = SessionHandleStore.tree("request-session");
+    const before = sessionTree("request-session");
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
@@ -211,7 +212,7 @@ describe("SQLite canonical request deadline", () => {
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
-    expect(SessionHandleStore.tree("request-session")).toEqual(before);
+    expect(sessionTree("request-session")).toEqual(before);
     expect(SessionHandleStore.inboxRows("request-session")).toHaveLength(1);
   });
 });
@@ -263,12 +264,12 @@ describe("durable request projection", () => {
     raw.run(`CREATE TRIGGER refuse_projection BEFORE INSERT ON ${table}
       BEGIN SELECT RAISE(ABORT, 'projection fault'); END`);
     const before = SessionHandleStore.row("request-session");
-    const tree = SessionHandleStore.tree("request-session");
+    const tree = sessionTree("request-session");
     expect(() => transition("resolved", { receive: reply() })).toThrow(
       expect.objectContaining({ _tag: "ForeignFailure" }),
     );
     expect(SessionHandleStore.row("request-session")).toEqual(before);
-    expect(SessionHandleStore.tree("request-session")).toEqual(tree);
+    expect(sessionTree("request-session")).toEqual(tree);
     expect(SessionHandleStore.inboxRows("request-session")).toEqual([]);
     expect(Storage.get().alarms?.due(100)).toHaveLength(1);
     raw.run("DROP TRIGGER refuse_projection");

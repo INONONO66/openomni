@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
@@ -105,9 +106,9 @@ test("first quorum reply commits input but leaves the request open", async () =>
 });
 
 async function expectStableReplyReplay(): Promise<void> {
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
 }
 
@@ -208,10 +209,10 @@ test.each([
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(site === "before" ? 0 : 1);
   now = 20;
   await runEffect(router.ingest(sender, facts("handoff-reply")));
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   now = 30;
   await runEffect(router.ingest(sender, facts("handoff-reply")));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
   expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
   expect(SessionHandleStore.requestById("handoff")?.replies).toHaveLength(1);
 });

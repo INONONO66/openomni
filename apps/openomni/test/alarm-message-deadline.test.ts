@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, test } from "bun:test";
 import { createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -107,8 +108,7 @@ for (const replyFirst of [false, true]) {
           replyFirst ? "resolved" : "expired",
         );
         expect(
-          fixture.storage.actions
-            .tree("request-session")
+          sessionTree("request-session", fixture.storage.actions)
             .filter((action) => action.id === "request-action:resolution"),
         ).toHaveLength(1);
         expect(SessionHandleStore.inboxRows("request-session")).toHaveLength(replyFirst ? 1 : 0);

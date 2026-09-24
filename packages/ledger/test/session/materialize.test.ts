@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -18,7 +19,7 @@ afterEach(() => {
 describe("L0 session materialization", () => {
   test("repeat declaration preserves the existing row and generation", () => {
     const first = materializeSession("gateway-minted");
-    const tree = SessionHandleStore.tree(first.id);
+    const tree = sessionTree(first.id);
     const repeat = Either.getOrThrowWith(
       Effect.runSync(
         Effect.either(
@@ -37,7 +38,7 @@ describe("L0 session materialization", () => {
       (error) => error,
     );
     expect(repeat).toEqual({ created: false, row: first });
-    expect(SessionHandleStore.tree(first.id)).toEqual(tree);
+    expect(sessionTree(first.id)).toEqual(tree);
   });
 
   test("promotes a historical nullable-role row without replacing its JSON", () => {
@@ -49,7 +50,7 @@ describe("L0 session materialization", () => {
         .run("legacy", legacy);
       expect(SessionHandleStore.listRows()).toEqual([]);
       expect(materializeSession("legacy")).toMatchObject({ role: "resident", revision: 1 });
-      expect(SessionHandleStore.tree("legacy").map((action) => action.kind)).toEqual([
+      expect(sessionTree("legacy").map((action) => action.kind)).toEqual([
         "session.configure",
       ]);
       expect(raw.query("SELECT data FROM session WHERE id = ?").get("legacy")).toEqual({
@@ -63,11 +64,11 @@ describe("L0 session materialization", () => {
   test("reopens a parent-linked worker with identical generations, revision and tree", () => {
     materializeSession("resident-parent");
     const row = materializeSession("worker-child", "resident-parent");
-    const tree = SessionHandleStore.tree(row.id);
+    const tree = sessionTree(row.id);
     Storage.reset();
     Storage.initialize({ dbPath });
     expect(SessionHandleStore.row(row.id)).toEqual(row);
-    expect(SessionHandleStore.tree(row.id)).toEqual(tree);
+    expect(sessionTree(row.id)).toEqual(tree);
     expect(SessionHandleStore.getSnapshot(row.id)).toMatchObject({
       parentId: "resident-parent",
       role: "worker",
@@ -92,7 +93,7 @@ describe("L0 session materialization", () => {
         expect.objectContaining({ _tag: "ForeignFailure" }),
       );
       expect(raw.query("SELECT * FROM session").all()).toEqual(before);
-      expect(SessionHandleStore.tree("legacy")).toEqual([]);
+      expect(sessionTree("legacy")).toEqual([]);
     } finally {
       raw.close();
     }

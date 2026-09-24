@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";
@@ -63,11 +64,11 @@ test("equivalent redelivery uses one route fact and the same inbox id", async ()
   const mapped = createMappedOwnerSession();
   const router = makeRouter();
   await runEffect(router.ingest(ownerSender, ownerFacts));
-  const before = SessionHandleStore.tree(mapped.id);
+  const before = sessionTree(mapped.id);
   const recorded = Storage.get().decisionFacts?.head(streamId());
   await runEffect(router.ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
-  expect(SessionHandleStore.tree(mapped.id)).toEqual(before);
+  expect(sessionTree(mapped.id)).toEqual(before);
   expect(SessionHandleStore.inboxRows(mapped.id)).toHaveLength(1);
   expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
 });

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
 import {
@@ -15,7 +16,7 @@ import {
   wakeSession,
   type SessionRuntime,
 } from "@openomni/agent";
-import { LedgerWrites, SessionHandleStore, Storage } from "@openomni/ledger";
+import { LedgerWrites, Storage } from "@openomni/ledger";
 import { Effect, Scope, Exit, Cause } from "effect";
 import { Llm, type RunInput, type Sink } from "@openomni/llm";
 import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
@@ -284,7 +285,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
       guard.removeEventListener("abort", abort);
       expect(calls).toBe(2);
       expect(
-        SessionHandleStore.tree(handle.id).filter((action) => action.kind === "alarm.fired"),
+        sessionTree(handle.id).filter((action) => action.kind === "alarm.fired"),
       ).toHaveLength(1);
       expect(errors).toEqual([]);
     } finally {

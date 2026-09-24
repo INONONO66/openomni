@@ -3,6 +3,7 @@ import { BusEvent } from "../bus/index.js";
 import { NamedError } from "../error/index.js";
 import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
+import { Message as ModelMessage } from "../message/index.js";
 
 export { SessionTransition } from "./session-transition.js";
 
@@ -41,6 +42,7 @@ export namespace LedgerAction {
     "outbound",
     "inbox.deliver",
     "compaction",
+    "fold.checkpoint",
     "alarm.arm",
     "alarm.fired",
     "alarm.paused",
@@ -99,6 +101,43 @@ export namespace LedgerAction {
     })
     .strict();
   export type Receipt = z.infer<typeof Receipt>;
+}
+
+export namespace FoldCheckpoint {
+  export const State = z
+    .object({
+      messages: z.array(ModelMessage.WithParts),
+      canonicalTurn: z.boolean(),
+      messageTurns: z.array(z.tuple([Identifier, NullableIdentifier])),
+      parents: z.array(z.tuple([Identifier, NullableIdentifier])),
+      compatibility: z.array(
+        z
+          .object({ id: Identifier, role: z.enum(["user", "assistant"]), text: z.string() })
+          .strict(),
+      ),
+      successorActionId: NullableIdentifier,
+    })
+    .strict();
+  export type State = z.infer<typeof State>;
+  export const Intent = z
+    .object({
+      phase: z.literal("checkpoint"),
+      revision: z.number().int().nonnegative(),
+      foldVersion: z.literal(1),
+      reason: z.enum(["interval", "compaction"]),
+    })
+    .strict();
+  export const Result = z
+    .object({
+      revision: z.number().int().nonnegative(),
+      foldVersion: z.literal(1),
+      stateHash: z.string().min(1),
+      state: State,
+    })
+    .strict();
+  export const Effect = z
+    .object({ phase: z.literal("result"), terminal: z.literal("executed"), result: Result })
+    .strict();
 }
 
 const InboxAdmission = z
@@ -363,23 +402,42 @@ export namespace SessionTurn {
     })
     .strict();
 
-  export const Intent = PinnedGeneration.extend({
+  export const Context = z
+    .object({
+      snapshotActionId: Identifier,
+      sourceRevision: z.number().int().nonnegative(),
+      foldVersion: z.literal(1),
+      projectionHash: z.string().min(1),
+      messageIds: z.array(Identifier),
+      successorActionId: NullableIdentifier,
+      projection: z.array(ModelMessage.WithParts),
+    })
+    .strict();
+  export type Context = z.infer<typeof Context>;
+
+  export const HistoricalIntent = PinnedGeneration.extend({
     phase: z.literal("intent"),
     resultId: Identifier,
     inboxIds: z.array(Identifier),
     resumeCount: z.number().int().nonnegative(),
     boundaryActionId: NullableIdentifier,
   }).strict();
+  export const Intent = HistoricalIntent.extend({ context: Context }).strict();
   export type Intent = z.infer<typeof Intent>;
+  export const DecodeIntent = z.union([Intent, HistoricalIntent]);
+  export type DecodeIntent = z.infer<typeof DecodeIntent>;
 
-  export const Resume = PinnedGeneration.extend({
+  export const HistoricalResume = PinnedGeneration.extend({
     phase: z.literal("resume"),
     turnId: Identifier,
     resultId: Identifier,
     resumeCount: z.number().int().positive(),
     boundaryActionId: NullableIdentifier,
   }).strict();
+  export const Resume = HistoricalResume.extend({ context: Context }).strict();
   export type Resume = z.infer<typeof Resume>;
+  export const DecodeResume = z.union([Resume, HistoricalResume]);
+  export type DecodeResume = z.infer<typeof DecodeResume>;
 
   export const Checkpoint = z
     .object({

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { Inbox, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -277,7 +278,7 @@ function commitOpenTurn(input: {
       at: now,
     });
     const generation = SessionHandleStore.latestGeneration(
-      SessionHandleStore.tree(input.sessionId),
+      sessionTree(input.sessionId),
     );
     const acquired = yield* SessionHandleStore.acquireLease({
       sessionId: input.sessionId,
@@ -296,7 +297,7 @@ function commitOpenTurn(input: {
       actions: [
         {
           id: `${input.sessionId}:turn`,
-          parentId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+          parentId: sessionTree(input.sessionId).at(-1)?.id ?? null,
           sessionId: input.sessionId,
           kind: "turn",
           intent: {
@@ -328,7 +329,7 @@ function commitOpenTurn(input: {
 }
 
 function durableRequest(sessionId: string, turnId: string): SessionTransition.Request {
-  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+  const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
   return openRequest({
     requestId: `${sessionId}:request`,
     sessionId,
@@ -378,6 +379,7 @@ describe("durable session handle", () => {
             | "request"
             | "turn"
             | "llm"
+            | "fold.checkpoint"
             | "inbox.deliver"
             | "compaction"
             | "alarm.arm"
@@ -389,7 +391,7 @@ describe("durable session handle", () => {
           if (committed.kind !== "policy.decision") return;
           observedDecisionIds.add(committed.id);
           if (
-            !SessionHandleStore.tree("policy-topology").some(
+            !sessionTree("policy-topology").some(
               (action: LedgerAction.Node) => action.id === committed.id,
             )
           ) {
@@ -416,7 +418,7 @@ describe("durable session handle", () => {
 
         const result = yield* awaitSignal(handle.prompt("run once"));
 
-        const tree = SessionHandleStore.tree(handle.id);
+        const tree = sessionTree(handle.id);
         const prompt = tree.find((action: LedgerAction.Node) => action.kind === "prompt");
         const turn = tree.find(
           (action: LedgerAction.Node) => SessionHandleStore.turnIntent(action) !== undefined,
@@ -479,7 +481,7 @@ describe("durable session handle", () => {
               }),
             ), fixture), fixture); });
           const result = yield* awaitSignal(handle.prompt("blocked prompt"));
-          const tree = SessionHandleStore.tree(handle.id);
+          const tree = sessionTree(handle.id);
           expect(result).toMatchObject({
             kind: "error",
             cause: { name: "SessionPolicyRefusal", reason },
@@ -552,7 +554,7 @@ describe("durable session handle", () => {
             });
             expect(calls).toBe(0);
             expect(
-              SessionHandleStore.tree(handle.id).filter(
+              sessionTree(handle.id).filter(
                 (action: LedgerAction.Node) => action.kind === "turn",
               ),
             ).toEqual([]);
@@ -710,7 +712,7 @@ describe("durable session handle", () => {
                   });
                 }
                 expect(
-                  SessionHandleStore.tree(handle.id)
+                  sessionTree(handle.id)
                     .map(SessionHandleStore.turnTerminal)
                     .filter(
                       (
@@ -771,7 +773,7 @@ describe("durable session handle", () => {
 
               const result = yield* awaitSignal(handle.prompt("start the turn"));
 
-              const tree = SessionHandleStore.tree(handle.id);
+              const tree = sessionTree(handle.id);
               const hooks = tree
                 .filter((action: LedgerAction.Node) => action.kind === "policy.decision")
                 .map(policyHook);
@@ -854,7 +856,7 @@ describe("durable session handle", () => {
         const drained: SessionRunnerInput["messages"][] = [];
         const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
-            const treeAtEntry = SessionHandleStore.tree(input.sessionId);
+            const treeAtEntry = sessionTree(input.sessionId);
             const intent = treeAtEntry.find(
               (action: LedgerAction.Node) => action.id === input.turnId,
             );
@@ -932,7 +934,7 @@ describe("durable session handle", () => {
           ["third prompt", "consumed"],
         ]);
         expect(
-          SessionHandleStore.tree(handle.id)
+          sessionTree(handle.id)
             .map(SessionHandleStore.delivery)
             .filter(
               (
@@ -977,7 +979,7 @@ describe("durable session handle", () => {
         yield* awaitSignal(bounded(handle.prompt("first prompt"), "prompt completion"));
         const input = yield* awaitSignal(bounded(entered.promise, "runner entry"));
         const request = durableRequest(handle.id, input.turnId);
-        const tree = SessionHandleStore.tree(handle.id);
+        const tree = sessionTree(handle.id);
         if (input.ledger.transition === undefined) throw new Error("missing transition port");
         const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
         const refused = yield* failure(late);
@@ -986,7 +988,7 @@ describe("durable session handle", () => {
           operation: "session.request.transition",
           cause: "stale",
         });
-        expect(SessionHandleStore.tree(handle.id)).toEqual(tree);
+        expect(sessionTree(handle.id)).toEqual(tree);
         expect(SessionHandleStore.requestRows()).toEqual([]);
       }),
     ));
@@ -1035,7 +1037,7 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "interrupted", text: "" });
         expect(runs).toBe(0);
         expect(handle.get().state).toBe("interrupted");
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
       }),
     ));
 
@@ -1080,7 +1082,7 @@ describe("durable session handle", () => {
         });
         expect(runs).toBe(0);
         expect(handle.get().state).toBe("idle");
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
       }),
     ));
 
@@ -1096,7 +1098,7 @@ describe("durable session handle", () => {
           content: "",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now,
-          parentActionId: SessionHandleStore.tree(handle.id).at(-1)?.id ?? null,
+          parentActionId: sessionTree(handle.id).at(-1)?.id ?? null,
         });
 
         const result = yield* awaitSignal(handle.prompt("run after the no-op"));
@@ -1104,9 +1106,9 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "result", text: "ran once" });
         expect(inputs).toHaveLength(1);
         expect(inputs[0]?.resumeCount).toBe(0);
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
         expect(
-          SessionHandleStore.tree(handle.id).filter(
+          sessionTree(handle.id).filter(
             (action: LedgerAction.Node) => SessionHandleStore.turnResume(action) !== undefined,
           ),
         ).toEqual([]);
@@ -1123,7 +1125,7 @@ describe("durable session handle", () => {
             return { kind: "result", text: "must not run" };
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("queued-interrupt", runner), fixture), fixture); });
-        const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
+        const parentActionId = sessionTree(handle.id).at(-1)?.id ?? null;
         yield* SessionHandleStore.commitInbox({
           id: "queued-interrupt:prompt",
           sessionId: handle.id,
@@ -1146,7 +1148,7 @@ describe("durable session handle", () => {
         yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
 
         expect(entries).toBe(0);
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
         expect(handle.get()).toMatchObject({
           state: "interrupted",
           turns: [{ terminal: { kind: "interrupted" } }],
@@ -1159,7 +1161,7 @@ describe("durable session handle", () => {
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("leading-idle-interrupt", runner), fixture), fixture); });
-        const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
+        const parentActionId = sessionTree(handle.id).at(-1)?.id ?? null;
         yield* SessionHandleStore.commitInbox({
           id: "leading-idle-interrupt:interrupt",
           sessionId: handle.id,
@@ -1234,7 +1236,7 @@ describe("durable session handle", () => {
         expect(SessionHandleStore.inboxRows(handle.id).map((row: Inbox.Row) => row.status)).toEqual(
           ["consumed", "consumed"],
         );
-        const terminals = SessionHandleStore.tree(handle.id)
+        const terminals = sessionTree(handle.id)
           .map(SessionHandleStore.turnTerminal)
           .filter(
             (
@@ -1510,6 +1512,7 @@ describe("durable session handle", () => {
             | "request"
             | "turn"
             | "llm"
+            | "fold.checkpoint"
             | "inbox.deliver"
             | "compaction"
             | "alarm.arm"
@@ -1663,9 +1666,9 @@ describe("durable session handle", () => {
           _tag: "CommitFailed",
           error: { _tag: "CommitRefused" },
         });
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toHaveLength(1);
+        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toHaveLength(1);
         expect(
-          SessionHandleStore.tree(handle.id).some((action: LedgerAction.Node) =>
+          sessionTree(handle.id).some((action: LedgerAction.Node) =>
             SessionHandleStore.turnTerminal(action),
           ),
         ).toBe(false);
@@ -1730,7 +1733,7 @@ describe("durable session handle", () => {
 
         expect(handle.get()).toEqual(before);
         expect(
-          SessionHandleStore.tree(handle.id).filter(
+          sessionTree(handle.id).filter(
             (action: LedgerAction.Node) => action.kind === "session.configure",
           ),
         ).toHaveLength(1);
@@ -1775,7 +1778,7 @@ describe("durable session handle", () => {
           "read",
         ]);
         expect(
-          SessionHandleStore.latestGeneration(SessionHandleStore.tree(handle.id)).systemBlocks,
+          SessionHandleStore.latestGeneration(sessionTree(handle.id)).systemBlocks,
         ).toEqual(nextBlocks);
       }),
     ));
@@ -2007,7 +2010,7 @@ describe("durable session handle", () => {
         expect(resumedInput.messages).toEqual(firstInput.messages);
         expect(resumedInput.resumeCount).toBe(1);
         expect(
-          SessionHandleStore.tree(handle.id)
+          sessionTree(handle.id)
             .map(SessionHandleStore.delivery)
             .filter(
               (
@@ -2089,7 +2092,7 @@ describe("durable session handle", () => {
             Effect.gen(function* () {
               commits += 1;
               expect(
-                SessionHandleStore.tree(message.sourceSessionId).some(
+                sessionTree(message.sourceSessionId).some(
                   (action: LedgerAction.Node) =>
                     SessionHandleStore.turnTerminal(action) !== undefined,
                 ),
@@ -2148,7 +2151,7 @@ describe("durable session handle", () => {
           SessionHandleStore.inboxRows(parent.id).map((row: Inbox.Row) => row.content),
         ).toEqual(["terminal-text"]);
         expect(
-          SessionHandleStore.tree(worker.id).flatMap((action: LedgerAction.Node) => {
+          sessionTree(worker.id).flatMap((action: LedgerAction.Node) => {
             const terminal = SessionHandleStore.turnTerminal(action);
             return terminal === undefined ? [] : [terminal.kind];
           }),
@@ -2205,11 +2208,11 @@ describe("session crash recovery and observation", () => {
 
         expect(input.resultId).toBe("preminted-result");
         expect(input.resumeCount).toBe(1);
-        const terminal = SessionHandleStore.tree("crashed-turn").find(
+        const terminal = sessionTree("crashed-turn").find(
           (action: LedgerAction.Node) => SessionHandleStore.turnTerminal(action) !== undefined,
         );
         expect(terminal?.id).toBe("preminted-result");
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree("crashed-turn"))).toEqual([]);
+        expect(SessionHandleStore.openTurns(sessionTree("crashed-turn"))).toEqual([]);
       }),
     ));
 
@@ -2235,7 +2238,7 @@ describe("session crash recovery and observation", () => {
           generation: 1,
         });
         expect(runs).toBe(0);
-        expect(SessionHandleStore.openTurns(SessionHandleStore.tree("drifted-turn"))).toHaveLength(
+        expect(SessionHandleStore.openTurns(sessionTree("drifted-turn"))).toHaveLength(
           1,
         );
       }),
@@ -2277,7 +2280,7 @@ describe("session crash recovery and observation", () => {
                   content: "late prompt",
                   origin: { encodingVersion: 1, value: { source: "test" } },
                   createdAt: now,
-                  parentActionId: SessionHandleStore.tree(input.sessionId).at(-1)?.id ?? null,
+                  parentActionId: sessionTree(input.sessionId).at(-1)?.id ?? null,
                 }).pipe(
                   Effect.mapError(
                     (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
@@ -2301,7 +2304,7 @@ describe("session crash recovery and observation", () => {
               operation: "session.prompt",
               cause: "late prompt refused",
             });
-            const tree = SessionHandleStore.tree("boundary-deny");
+            const tree = sessionTree("boundary-deny");
             expect(
               SessionHandleStore.turnTerminal(
                 tree.find((action: LedgerAction.Node) => action.id === "boundary-result"),
@@ -2358,7 +2361,7 @@ describe("session crash recovery and observation", () => {
           origin: { encodingVersion: 1, value: { kind: "sdk" } },
           parentActionId: "cancelled-turn:turn",
         });
-        const prefix = SessionHandleStore.tree("cancelled-turn");
+        const prefix = sessionTree("cancelled-turn");
         let runnerEntries = 0;
         yield* awaitSignal(
           bounded(
@@ -2371,7 +2374,7 @@ describe("session crash recovery and observation", () => {
           ),
         );
         expect(runnerEntries).toBe(0);
-        const actions = SessionHandleStore.tree("cancelled-turn");
+        const actions = sessionTree("cancelled-turn");
         expect(actions.slice(0, prefix.length)).toEqual(prefix);
         expect(
           SessionHandleStore.turnTerminal(
@@ -2406,7 +2409,7 @@ describe("session crash recovery and observation", () => {
         );
 
         expect(runnerEntries).toBe(0);
-        const terminalAction = SessionHandleStore.tree("poison-turn").find(
+        const terminalAction = sessionTree("poison-turn").find(
           (action: LedgerAction.Node) => action.id === "poison-result",
         );
         expect(SessionHandleStore.turnTerminal(terminalAction)).toMatchObject({
@@ -2455,7 +2458,7 @@ describe("session crash recovery and observation", () => {
         expect(handle.get().state).toBe("interrupted");
         expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
         expect(
-          SessionHandleStore.tree(handle.id)
+          sessionTree(handle.id)
             .map(SessionHandleStore.delivery)
             .filter(
               (
@@ -2536,7 +2539,7 @@ describe("session crash recovery and observation", () => {
               return { kind: "result", text: "unused" };
             }),
           ), fixture), fixture); });
-        const configureId = SessionHandleStore.tree(handle.id)[0]?.id;
+        const configureId = sessionTree(handle.id)[0]?.id;
         if (configureId === undefined) throw new Error("missing configure action");
         const watch = handle.watch();
         const observed = signal<SessionTurn.Observation>();

@@ -62,11 +62,11 @@ describe("SessionHistory.Page", () => {
 describe("SessionHistory requests", () => {
   test("page requests default to the first hundred actions and cap the limit", () => {
     expect(SessionHistory.PageRequest.parse({})).toEqual({ afterRevision: 0, limit: 100 });
-    expect(SessionHistory.PageRequest.parse({ afterRevision: 7, limit: 1_000 })).toEqual({
+    expect(SessionHistory.PageRequest.parse({ afterRevision: 7, limit: 256 })).toEqual({
       afterRevision: 7,
-      limit: 1_000,
+      limit: 256,
     });
-    for (const fields of [{ limit: 0 }, { limit: 1_001 }, { afterRevision: -1 }, { extra: 1 }])
+    for (const fields of [{ limit: 0 }, { limit: 257 }, { afterRevision: -1 }, { extra: 1 }])
       expect(SessionHistory.PageRequest.safeParse(fields).success).toBe(false);
   });
 

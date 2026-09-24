@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -42,7 +43,7 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   await reply;
   const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing resident");
-  const hooks = SessionHandleStore.tree(row.id).filter((action) => action.kind === "policy.decision").map((action) => action.intent.value);
+  const hooks = sessionTree(row.id).filter((action) => action.kind === "policy.decision").map((action) => action.intent.value);
   expect(hooks).toEqual(expect.arrayContaining([expect.objectContaining({ hook: "tool.pre", op: "echo" }), expect.objectContaining({ hook: "tool.post", op: "echo" })]));
   const db = new Database(config.dbPath, { readonly: true });
   try { expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM action WHERE kind = 'policy.decision'").get()?.count).toBeGreaterThan(0); }
@@ -112,7 +113,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     const observed = readFileSync(path, "utf8").trim().split("\n").map((line) => z.object({ acquisition: z.number(), data: z.object({ toolName: z.string() }) }).parse(JSON.parse(line)));
     expect(observed.filter((entry) => entry.data.toolName === "echo").map((entry) => entry.acquisition)).toEqual([2, 2]);
     expect(observed.filter((entry) => entry.data.toolName === "demo__echo").map((entry) => entry.acquisition)).toEqual([3, 3]);
-    const actions = SessionHandleStore.tree(row.id);
+    const actions = sessionTree(row.id);
     expect(actions.map((action) => action.intent.value)).toEqual(expect.arrayContaining([
       expect.objectContaining({ op: "echo", originalArgs: { text: "/home/private" }, value: { text: "redacted" } }),
       expect.objectContaining({ hook: "tool.pre", ref: "demo/redact-home", transforms: [{ ruleId: "demo/redact", ref: "demo/redact-home" }] }),

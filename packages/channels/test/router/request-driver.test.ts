@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
 import { channelTransaction } from "../helpers/channel-transaction";
 import { channelRequests } from "../helpers/channel-requests";
@@ -65,7 +66,7 @@ test("router opens the immutable original message action before real Telegram de
   expect(observedRequestId).toBeDefined();
   expect(observedRequestId).not.toBe(result.handle.messageId);
   expect(
-    SessionHandleStore.tree("source").find((action: import("@openomni/protocol").LedgerAction.Node) => action.id === observedRequestId)?.intent
+    sessionTree("source").find((action: import("@openomni/protocol").LedgerAction.Node) => action.id === observedRequestId)?.intent
       .value,
   ).toMatchObject({ phase: "intent", value: { content: "original question" } });
 });
@@ -134,7 +135,7 @@ test.each([
   expect(await runEffect(messaging.send({ ...input, at: 11 }))).toEqual({ ...receipt, at: 11 });
   expect(posted).toBe(1);
   expect(
-    SessionHandleStore.tree("source-session")
+    sessionTree("source-session")
       .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request")
       .map((action: import("@openomni/protocol").LedgerAction.Node) => action.effect.value),
   ).toMatchObject([

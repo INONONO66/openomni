@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -24,8 +25,8 @@ test.each([
   expect(stored?.replies).toHaveLength(threshold);
   expect(stored?.sessionId).toBe("request-owner");
   expect(
-    SessionHandleStore.tree("request-owner").filter(
-      (action: ReturnType<typeof SessionHandleStore.tree>[number]) => action.id === "original:resolution",
+    sessionTree("request-owner").filter(
+      (action) => action.id === "original:resolution",
     ),
   ).toHaveLength(1);
 });
@@ -37,9 +38,9 @@ test("same reply and same responder never advance the request twice", async () =
     threshold: 2,
   }));
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
   expect(await runEffect(answer("original", "a", "reply-a-new", 3))).toBe("duplicate");
   expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(1);
 });
@@ -138,11 +139,11 @@ test.each([
     at: 2,
   };
   await runEffect(port.receipt(receipt));
-  const before = SessionHandleStore.tree("request-owner");
+  const before = sessionTree("request-owner");
   await runEffect(port.receipt(receipt));
-  expect(SessionHandleStore.tree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner")).toEqual(before);
   expect(
-    before.find((action: ReturnType<typeof SessionHandleStore.tree>[number]) => action.id === "original:input:receipt")?.effect.value,
+    before.find((action) => action.id === "original:input:receipt")?.effect.value,
   ).toMatchObject({ receipt });
   expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe("platform");
   expect(SessionHandleStore.requestById("original")?.state).toBe("open");

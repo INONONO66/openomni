@@ -1,12 +1,16 @@
+import { z } from "zod";
 import { SessionHandleStore } from "@openomni/ledger";
 import {
+  canonicalDigest,
+  FoldCheckpoint,
+  NamedError,
   Message,
+  PlainValueSchema,
   Tool,
   type LedgerAction,
   type PlainObject,
   type PlainValue,
 } from "@openomni/protocol";
-import { createAssistantMessage, createUserMessage, withMessageId } from "../core/message-factory";
 
 /**
  * Canonical model-context fold over committed actions: delivered prompts,
@@ -17,47 +21,223 @@ import { createAssistantMessage, createUserMessage, withMessageId } from "../cor
 export function foldSessionHistory(
   sessionId: string,
   actions: readonly LedgerAction.Node[],
+  seed?: FoldCheckpoint.State,
 ): Message.WithParts[] {
-  let messages: Message.WithParts[] = [];
-  let canonicalTurn = false;
-  const byId = new Map(actions.map((action) => [action.id, action]));
-  const messageTurns = new Map<string, string | null>();
-  const turnOf = (action: LedgerAction.Node) => byId.get(action.parentId ?? "")?.parentId;
+  return deriveHistory(foldHistoryState(sessionId, actions, seed));
+}
+
+/** The continuation is captured before view-only cancellation of unsettled tools. */
+export function foldHistoryState(
+  sessionId: string,
+  actions: readonly LedgerAction.Node[],
+  seed?: FoldCheckpoint.State,
+): FoldCheckpoint.State {
+  const state: FoldCheckpoint.State =
+    seed === undefined
+      ? {
+          messages: [],
+          canonicalTurn: false,
+          messageTurns: [],
+          parents: [],
+          compatibility: [],
+          successorActionId: null,
+        }
+      : structuredClone(seed);
+  const parents = new Map<string, string | null>(state.parents);
+  const messageTurns = new Map<string, string | null>(state.messageTurns);
   for (const action of actions) {
-    if (opensTurn(action)) canonicalTurn = false;
-    const prompt = deliveredPrompt(action, sessionId);
-    if (prompt !== undefined) messages.push(prompt);
-    const snapshot = assistantSnapshot(action);
-    if (snapshot !== undefined) {
-      messageTurns.set(snapshot.info.id, turnOf(action) ?? null);
-      messages = upsertMessage(messages, snapshot);
-      canonicalTurn = true;
+    applyHistoryAction(sessionId, state, parents, messageTurns, action);
+    const live = new Set(state.messages.map((message) => message.info.id));
+    for (const [id, turnId] of messageTurns) {
+      if (!live.has(id) && (turnId === null || !parents.has(turnId))) messageTurns.delete(id);
     }
-    const projection = compactionProjection(action);
-    if (projection !== undefined) messages = projection;
-    const result = toolSettlement(action);
-    if (result !== undefined) {
-      const turnId = turnOf(action);
-      messages = messages.map((message) =>
-        messageTurns.get(message.info.id) !== turnId
-          ? message
-          : settleToolParts(message, result, action.ts),
-      );
-    }
-    const terminal = SessionHandleStore.turnTerminal(action);
-    if (terminal === undefined) continue;
-    if (!canonicalTurn && terminal.text.length > 0)
-      messages.push(
-        terminalAssistant(terminal.text, messages.at(-1)?.info.id ?? "", sessionId, action),
-      );
-    if (terminal.kind === "interrupted" || terminal.kind === "error")
-      messages = messages.map((message) => cancelOpenToolParts(message, terminal.kind, action.ts));
   }
-  // An open turn can outlive its process between positional result commits.
-  // Hydration never re-executes those calls; only slots without a settlement cancel.
-  return messages.map((message) =>
+  state.messageTurns = [...messageTurns].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  state.parents = [...parents].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return state;
+}
+
+function applyHistoryAction(
+  sessionId: string,
+  state: FoldCheckpoint.State,
+  parents: Map<string, string | null>,
+  messageTurns: Map<string, string | null>,
+  action: LedgerAction.Node,
+) {
+  if (action.kind === "fold.checkpoint") return;
+  const turnId = parents.get(action.parentId ?? "");
+  if (object(action.intent.value).phase === "intent") parents.set(action.id, action.parentId);
+  if (opensTurn(action)) state.canonicalTurn = false;
+  const prompt = deliveredPrompt(action, sessionId);
+  if (prompt !== undefined) {
+    state.messages.push(prompt);
+    const delivery = SessionHandleStore.delivery(action);
+    if (delivery !== undefined)
+      state.compatibility.push({ id: delivery.inboxId, role: "user", text: delivery.content });
+  }
+  const snapshot = assistantSnapshot(action);
+  if (snapshot !== undefined) {
+    messageTurns.set(snapshot.info.id, turnId ?? null);
+    state.messages = upsertMessage(state.messages, snapshot);
+    state.canonicalTurn = true;
+  }
+  const projection = compactionProjection(action);
+  if (projection !== undefined) {
+    state.messages = projection;
+    state.successorActionId = action.id;
+  }
+  const result = toolSettlement(action);
+  if (result !== undefined)
+    state.messages = state.messages.map((message) =>
+      messageTurns.get(message.info.id) !== turnId
+        ? message
+        : settleToolParts(message, result, action.ts),
+    );
+  const terminalTurn = applyTerminal(state, action);
+  if (terminalTurn !== undefined) parents.delete(terminalTurn);
+  if (object(action.effect.value).phase === "result" && action.parentId !== null)
+    parents.delete(action.parentId);
+}
+
+function applyTerminal(state: FoldCheckpoint.State, action: LedgerAction.Node) {
+  const terminal = SessionHandleStore.turnTerminal(action);
+  if (terminal === undefined) return;
+  if (terminal.text.length > 0) {
+    state.compatibility.push({ id: action.id, role: "assistant", text: terminal.text });
+    if (!state.canonicalTurn)
+      state.messages.push(
+        terminalAssistant(
+          terminal.text,
+          state.messages.at(-1)?.info.id ?? "",
+          action.sessionId,
+          action,
+        ),
+      );
+  }
+  if (terminal.kind === "interrupted" || terminal.kind === "error")
+    state.messages = state.messages.map((message) =>
+      cancelOpenToolParts(message, terminal.kind, action.ts),
+    );
+  return terminal.turnId;
+}
+
+function deriveHistory(state: FoldCheckpoint.State): Message.WithParts[] {
+  return state.messages.map((message) =>
     cancelOpenToolParts(message, "tool execution cancelled", message.info.time.created),
   );
+}
+
+export const FoldCheckpointIntegrityError = NamedError.create(
+  "FoldCheckpointIntegrityError",
+  z
+    .object({
+      code: z.literal("fold_checkpoint_integrity"),
+      sessionId: z.string(),
+      checkpointId: z.string(),
+      reason: z.enum(["version", "revision", "seed", "stateHash"]),
+      revision: z.number().int().nonnegative(),
+      expected: z.string().nullable(),
+      actual: z.string().nullable(),
+    })
+    .strict(),
+);
+
+function checkpointSeed(sessionId: string, checkpoint: LedgerAction.Node) {
+  const intent = object(checkpoint.intent.value);
+  const result = object(object(checkpoint.effect.value).result);
+  const fail = (
+    reason: InstanceType<typeof FoldCheckpointIntegrityError>["data"]["reason"],
+    actual: string | null = null,
+  ): never => {
+    throw new FoldCheckpointIntegrityError({
+      code: "fold_checkpoint_integrity",
+      sessionId,
+      checkpointId: checkpoint.id,
+      revision: checkpoint.ordinal - 1,
+      reason,
+      expected: typeof result.stateHash === "string" ? result.stateHash : null,
+      actual,
+    });
+  };
+  if (intent.foldVersion !== 1 || result.foldVersion !== 1) fail("version");
+  if (
+    intent.revision !== checkpoint.ordinal - 1 ||
+    result.revision !== intent.revision ||
+    checkpoint.sessionId !== sessionId
+  )
+    fail("revision");
+  const parsed = FoldCheckpoint.Effect.safeParse(checkpoint.effect.value);
+  if (!parsed.success || !FoldCheckpoint.Intent.safeParse(intent).success) return fail("seed");
+  const state = PlainValueSchema.parse(parsed.data.result.state);
+  const actual = canonicalDigest({ foldVersion: 1, state });
+  if (actual !== parsed.data.result.stateHash) fail("stateHash", actual);
+  return parsed.data.result;
+}
+
+/** Validate the durable seed even when a commit does not need to materialize its suffix. */
+export function readHistoryCheckpoint(sessionId: string, throughRevision?: number) {
+  const { revision, checkpoint } = SessionHandleStore.latestFoldCheckpoint(
+    sessionId,
+    throughRevision,
+  );
+  const seed = checkpoint === undefined ? undefined : checkpointSeed(sessionId, checkpoint);
+  return {
+    nonCheckpointActions: revision - (checkpoint?.ordinal ?? 0),
+    hydrate: () =>
+      readHistorySuffix(
+        sessionId,
+        revision,
+        foldHistoryState(sessionId, [], seed?.state),
+        seed?.revision ?? 0,
+        0,
+      ),
+  };
+}
+
+/** Read one fixed committed prefix; a missing checkpoint alone permits genesis replay. */
+export function hydrateSessionHistory(sessionId: string, throughRevision?: number) {
+  return readHistoryCheckpoint(sessionId, throughRevision).hydrate();
+}
+
+/** Recovery refresh consumes only commits newer than the runner's captured prefix. */
+export function refreshSessionHistory(
+  sessionId: string,
+  previous: ReturnType<typeof hydrateSessionHistory>,
+) {
+  return readHistorySuffix(
+    sessionId,
+    SessionHandleStore.row(sessionId).revision,
+    previous.state,
+    previous.revision,
+    previous.nonCheckpointActions,
+  );
+}
+
+function readHistorySuffix(
+  sessionId: string,
+  revision: number,
+  initial: FoldCheckpoint.State,
+  afterRevision: number,
+  count: number,
+) {
+  let state = initial;
+  let cursor = afterRevision;
+  let nonCheckpointActions = count;
+  while (cursor < revision) {
+    const page = SessionHandleStore.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
+    const suffix = page.actions.filter((action) => action.ordinal <= revision);
+    if (suffix.length === 0) throw new Error("history prefix has a revision gap");
+    state = foldHistoryState(sessionId, suffix, state);
+    nonCheckpointActions += suffix.filter((action) => action.kind !== "fold.checkpoint").length;
+    cursor = suffix.at(-1)?.ordinal ?? cursor;
+  }
+  return {
+    revision,
+    state,
+    history: deriveHistory(state),
+    messages: state.compatibility,
+    nonCheckpointActions,
+  };
 }
 
 /** A turn intent or resume starts a fresh turn: its assistant text is not yet canonical. */
@@ -73,9 +253,16 @@ function deliveredPrompt(
 ): Message.WithParts | undefined {
   const delivery = SessionHandleStore.delivery(action);
   if (delivery?.kind !== "prompt") return undefined;
-  return withMessageId(
-    createUserMessage(delivery.content, sessionId, undefined, action.ts),
-    delivery.inboxId,
+  return durableText(
+    {
+      id: delivery.inboxId,
+      sessionID: sessionId,
+      role: "user",
+      time: { created: action.ts },
+      agent: sessionId,
+      model: { providerID: "", modelID: "" },
+    },
+    delivery.content,
   );
 }
 
@@ -188,10 +375,37 @@ function terminalAssistant(
   sessionId: string,
   action: LedgerAction.Node,
 ): Message.WithParts {
-  return withMessageId(
-    createAssistantMessage(text, parentId, sessionId, undefined, action.ts),
-    action.id,
+  return durableText(
+    {
+      id: action.id,
+      sessionID: sessionId,
+      role: "assistant",
+      time: { created: action.ts },
+      agent: sessionId,
+      parentID: parentId,
+      modelID: "",
+      providerID: "",
+      path: { cwd: "", root: "" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    },
+    text,
   );
+}
+
+function durableText(info: Message.Info, text: string): Message.WithParts {
+  return {
+    info,
+    parts: [
+      {
+        id: `${info.id}:part:0`,
+        sessionID: info.sessionID,
+        messageID: info.id,
+        type: "text",
+        text,
+      },
+    ],
+  };
 }
 
 /** The value as a record, or an empty one: absent facts read as absent fields. */

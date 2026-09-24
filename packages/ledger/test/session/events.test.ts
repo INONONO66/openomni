@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { L0Observation } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -27,7 +28,7 @@ test("canonical commit observation sees the already durable row and action", asy
       revision: 1,
     });
     expect(SessionHandleStore.row(event.sessionId).revision).toBe(event.revision);
-    expect(SessionHandleStore.tree(event.sessionId).map((action) => action.id)).toEqual([event.id]);
+    expect(sessionTree(event.sessionId).map((action) => action.id)).toEqual([event.id]);
   } finally {
     clearTimeout(timeout);
     stop();

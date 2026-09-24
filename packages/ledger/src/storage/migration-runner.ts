@@ -3,7 +3,7 @@ import { Alarm } from "@openomni/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { U967Error, U967_MIGRATION } from "./u967-preflight";
+import { FOLD_CHECKPOINT_MIGRATION, U967Error, U967_MIGRATION } from "./u967-preflight";
 import { inspect967Projections } from "./u967-projection";
 import { preflight969, REQUEST_MIGRATION } from "./u969-preflight";
 import { DECISION_FACT_MIGRATION, migrateDecisionFacts } from "./decision-fact-migration";
@@ -62,7 +62,8 @@ function applyMigration(
   migration: Migration.Definition,
   prepare967?: Migration.Preparation967,
 ): void {
-  const rebuild = migration.name === REQUEST_MIGRATION;
+  const rebuild =
+    migration.name === REQUEST_MIGRATION || migration.name === FOLD_CHECKPOINT_MIGRATION;
   const foreignKeys = db
     .query<{ foreign_keys: number | bigint }, []>("PRAGMA foreign_keys")
     .all()[0]?.foreign_keys;
@@ -88,7 +89,7 @@ function applyMigration(
       .query<{ "1": number | bigint }, [string]>("SELECT 1 FROM _migrations WHERE name = ?")
       .get(migration.name);
     if (!applied) {
-      if (rebuild) preflight969(db, Date.now());
+      if (migration.name === REQUEST_MIGRATION) preflight969(db, Date.now());
       if (migration.name === U967_MIGRATION) prepareArchiveDisposition(db, prepare967);
       if (migration.name === "0037_watch_alarms/migration.sql") validateWatchAlarms(db);
       const sql = readFileSync(join(migrationDir, migration.name), "utf-8");

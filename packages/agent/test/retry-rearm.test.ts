@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
@@ -32,7 +33,7 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
     }
     yield* Effect.sync(() => { Storage.reset(); Storage.initialize({ dbPath }); });
     try {
-      const tree = SessionHandleStore.tree(rearmSessionId);
+      const tree = sessionTree(rearmSessionId);
       const attemptIntent = tree.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "attempt" && typeof action.intent.value === "object" && action.intent.value !== null && !Array.isArray(action.intent.value) && action.intent.value.phase === "intent");
       if (attemptIntent === undefined) throw new Error("missing durable attempt intent");
       const alarmId = `${attemptIntent.id}:retry:1`;
@@ -49,10 +50,10 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
       const runner = countingRunner(runtime, calls);
       yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(rearmSessionId, runner, fixture), fixture); });
       expect(calls.model).toBe(1);
-      expect(SessionHandleStore.openTurns(SessionHandleStore.tree(rearmSessionId))).toEqual([]);
-      const settled = SessionHandleStore.tree(rearmSessionId);
+      expect(SessionHandleStore.openTurns(sessionTree(rearmSessionId))).toEqual([]);
+      const settled = sessionTree(rearmSessionId);
       yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(rearmSessionId, runner, fixture), fixture); });
-      expect(SessionHandleStore.tree(rearmSessionId)).toEqual(settled);
+      expect(sessionTree(rearmSessionId)).toEqual(settled);
       expect(calls.model).toBe(1);
       yield* closeSessions(runtime);
     } finally { yield* Effect.sync(() => Storage.reset()); }

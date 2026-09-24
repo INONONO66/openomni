@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";
@@ -71,7 +72,7 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(SessionHandleStore.tree("sender").filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
+  expect(sessionTree("sender").filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
     [],
   );
   expect(SessionHandleStore.requestRows("sender")).toMatchObject([

@@ -36,14 +36,13 @@ export function outboundOpen(
 }
 
 function toolsGeneration(message: SessionTransition.OutboundMessage): number {
-  const actions = SessionHandleStore.tree(message.sourceSessionId);
   const terminal = SessionHandleStore.turnTerminal(
-    actions.find((action) => action.id === message.sourceActionId),
+    SessionHandleStore.actionById(message.sourceActionId),
   );
   const intent =
     terminal === undefined
       ? undefined
-      : SessionHandleStore.turnIntent(actions.find((action) => action.id === terminal.turnId));
+      : SessionHandleStore.turnIntent(SessionHandleStore.actionById(terminal.turnId));
   if (intent === undefined) throw new Error("outbound original turn is missing");
   return intent.toolsGeneration;
 }

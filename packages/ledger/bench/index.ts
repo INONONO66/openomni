@@ -149,7 +149,7 @@ async function runSessionTree(): Promise<void> {
       const id = `tree-${count}`;
       seedTurnHistory(id, count / 2);
       bench.add(`${count / 1_000}k-actions`, () => {
-        SessionHandleStore.tree(id);
+        SessionHandleStore.getSnapshot(id, 10);
       });
     }
     await bench.run();
@@ -170,9 +170,8 @@ async function runSessionCommit(): Promise<void> {
   try {
     const id = "commit-session";
     seedTurnHistory(id);
-    const tree = SessionHandleStore.tree(id);
-    const generation = SessionHandleStore.latestGeneration(tree);
-    let parentId = tree.at(-1)?.id ?? null;
+    const generation = SessionHandleStore.latestGenerationFor(id);
+    let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
     let index = 10;
     let request: LedgerSession.Commit;
     let result: Effect.Effect.Success<ReturnType<typeof SessionHandleStore.commit>>;

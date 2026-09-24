@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
@@ -70,9 +71,9 @@ function dispatcher(
       ...recording.identity,
       ledger: {
         ...recording.ledger,
-        actions: () => {
+        requestById: (id) => {
           if ((result.executor.approvals?.pending().length ?? 0) > 0) ready?.();
-          return recording.ledger.actions?.() ?? [];
+          return recording.ledger.requestById?.(id);
         },
       },
       actionId: recording.identity.parentActionId,
@@ -144,7 +145,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   expect(
-    SessionHandleStore.tree(initial.identity.sessionId).filter(
+    sessionTree(initial.identity.sessionId).filter(
       (action: LedgerAction.Node) => action.id === `${originalId}:application`,
     ),
   ).toHaveLength(1);
@@ -197,7 +198,7 @@ it("a committed application claim prevents replay after result persistence fails
   const recovered = yield* dispatcher(yield* requestLedger(), bodies);
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
-  const effects = SessionHandleStore.tree(initial.identity.sessionId).map(
+  const effects = sessionTree(initial.identity.sessionId).map(
     (action: LedgerAction.Node) => action.effect.value,
   );
   expect(

@@ -3,10 +3,11 @@ import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
-import { foldSessionHistory } from "./session-lifecycle/history";
+import { hydrateSessionHistory } from "./session-lifecycle/history";
+import { commitFoldBatch } from "./session-fold-commit";
 import { sessionStopEvidence } from "./session-stop-evidence";
 import type { SessionPolicyRefusal, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionActionCommitPort, SessionBoundaryResult } from "./session-contract";
-import { sessionMessages, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue } from "./session-record";
+import { turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { GenerationOwnership, ObservationSink, type RunnerServices } from "./services";
 import { parentReply } from "./session-parent-reply";
@@ -100,13 +101,14 @@ export function createSessionTurn(
       let runnerResult: SessionRunnerResult = policyRefusalResult("invalid_output");
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
+        const hydrated = hydrateSessionHistory(sessionId);
         runnerResult = yield* runner({
           sessionId, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
           stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
           resultId: input.resultId, parentActionId, boundaryActionId,
-          messages: sessionMessages(SessionHandleStore.tree(sessionId)),
-          history: foldSessionHistory(sessionId, SessionHandleStore.tree(sessionId)),
+          messages: hydrated.messages,
+          history: hydrated.history,
           tools: input.generation.tools, toolsGeneration: input.generation.generation, toolsHash: input.generation.toolsHash,
           system: input.generation.systemValue, systemHash: input.generation.systemHash, policyGeneration: input.generation.policyGeneration,
           resumeCount: input.resumeCount, signal: controller.signal, boundary,
@@ -129,7 +131,7 @@ export function createSessionTurn(
       const retained = state.rawSlots.pending() > 0;
       if (!retained) yield* stopHeartbeat();
       if (!state.terminalFrozen) {
-        const latestAction = SessionHandleStore.tree(sessionId).at(-1);
+        const latestAction = SessionHandleStore.latestAction(sessionId);
         if (latestAction === undefined) return yield* Effect.die(new Error(`session tree is empty: ${sessionId}`));
         yield* seal({
           turnId: input.turnId, resultId: input.resultId, resumeCount: input.resumeCount, boundaryActionId,
@@ -172,7 +174,7 @@ export function createSessionTurn(
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary, at: clock(),
       });
       const current = SessionHandleStore.row(sessionId);
-      yield* SessionHandleStore.commit({
+      yield* commitFoldBatch({
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [checkpoint, ...deliveries], consumeInboxIds: pending.map((item) => item.id),
         state: current.state === "interrupted" ? "interrupted" : "running", releaseLease: false,
@@ -189,15 +191,15 @@ export function createSessionTurn(
   function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult, releaseLease: boolean): Effect.Effect<void, SessionError> {
     return Effect.gen(function* () {
       const current = SessionHandleStore.row(sessionId);
-      const actions = SessionHandleStore.tree(sessionId);
+      const latest = SessionHandleStore.latestAction(sessionId);
       const interrupts = result.kind === "interrupted" ? SessionHandleStore.pendingInbox(sessionId).filter((item) => item.kind === "interrupt") : [];
-      const deliveries = deliveryActions(interrupts, open.turnId, "before_llm", actions.at(-1)?.id ?? open.action.id);
+      const deliveries = deliveryActions(interrupts, open.turnId, "before_llm", latest?.id ?? open.action.id);
       const terminal = turnTerminalAction({
-        id: open.resultId, parentId: deliveries.at(-1)?.id ?? actions.at(-1)?.id ?? open.action.id,
+        id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
         sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),
       });
       const reply = parentReply(current, terminal, result);
-      yield* SessionHandleStore.commit({
+      yield* commitFoldBatch({
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
         consumeInboxIds: interrupts.map((item) => item.id), state: result.kind === "interrupted" ? "interrupted" : "idle",

@@ -1,3 +1,5 @@
+import { executionReads } from "../../helpers/execution-reads";
+import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { testExecutor, runAgentSync } from "../../helpers/executor";
 import { executorLayer, catalogLayer } from "../../helpers/service-layers";
 import { expect, test } from "bun:test";
@@ -38,13 +40,13 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   expect(executed).toEqual([]);
   expect(transformations).toBe(1);
   const ready = Promise.withResolvers<void>();
-  const recovered = yield* createExecutor({ ...recorded, ledger: { ...recorded.ledger, actions: () => {
+  const recovered = yield* createExecutor({ ...recorded, ledger: { ...recorded.ledger, requestById: (id) => {
     if ((recovered.approvals?.pending().length ?? 0) > 0) ready.resolve();
-    return recorded.ledger.actions?.() ?? [];
+    return recorded.ledger.requestById?.(id);
   } }, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "proof" }) }).pipe(Effect.provide(providers));
   const dispatcher = yield* createDispatcher({ executor: recovered }).pipe(Effect.provide(catalogLayer([definition])));
   const recovering = yield* Effect.forkScoped(recovered.recover().pipe(
-    Effect.andThen(() => dispatcher.recover(recorded.ledger.actions?.() ?? [], context)),
+    Effect.andThen(() => dispatcher.recover(sessionTree(recorded.identity.sessionId), context)),
     Effect.tapErrorCause((cause) => Effect.sync(() => ready.reject(Cause.squash(cause)))),
   ));
   yield* Effect.promise(() => ready.promise).pipe(Effect.timeout("5 seconds"));
@@ -91,7 +93,7 @@ for (const door of ["model", "cell", "wave"] as const) {
           }],
         }),
         ledger: {
-          actions: () => SessionHandleStore.tree(id),
+          ...executionReads(id),
           commit: (action) => SessionHandleStore.commit({
             sessionId: id, owner: id, fence: lease.fence, now: 100,
             expectedRevision: SessionHandleStore.row(id).revision,
@@ -111,7 +113,7 @@ for (const door of ["model", "cell", "wave"] as const) {
       expect(executed).toEqual(replacement === null ? [] : [replacement]);
       expect(rendered).toEqual(replacement === null || door === "cell" ? [] : [replacement]);
       expect(result).toMatchObject(replacement === null ? { isError: true, errorKind: "invalid_input" } : { output: replacement });
-      const actions = SessionHandleStore.tree(id);
+      const actions = sessionTree(id);
       const intent = actions.find((action) => action.kind === "tool" && PlainObjectSchema.parse(action.intent.value).phase === "intent");
       expect(intent?.intent.value).toMatchObject({ value: { text: replacement }, originalArgs: { text: "original" } });
       const decision = actions.find((action) => action.kind === "policy.decision");

@@ -1,3 +1,4 @@
+import { memoryExecutionReads } from "./execution-reads";
 import { testExecutor } from "./executor";
 import type { LedgerError } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
@@ -15,7 +16,7 @@ export function recoveryRecording(options: {
   const executor = testExecutor({
     policy: options.policy ?? compiledPolicy(),
     ledger: {
-      actions: () => committed,
+      ...memoryExecutionReads(() => committed),
       commit: (action) => Effect.gen(function* () {
         yield* options.beforeCommit?.(action) ?? Effect.void;
         const ordinal = committed.length + 1;

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { generationServices } from "./helpers/generation-services";
 import { acquireSyncEffect, runSyncEffect } from "./helpers/effect";
@@ -33,7 +34,7 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
   const timer = setTimeout(() => terminal.reject(new Error("initial terminal missing")), 5000);
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.kind !== "turn") return;
-    const action = SessionHandleStore.tree(event.sessionId).find((row) => row.id === event.id);
+    const action = sessionTree(event.sessionId).find((row) => row.id === event.id);
     if (action !== undefined && SessionHandleStore.turnTerminal(action) !== undefined)
       terminal.resolve();
   });

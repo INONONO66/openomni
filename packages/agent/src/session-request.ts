@@ -18,7 +18,8 @@ export interface RequestDecision {
 
 interface RequestSnapshot {
   readonly row: LedgerSession.Row;
-  readonly actions: readonly LedgerAction.Node[];
+  readonly inputRecord?: LedgerAction.Node;
+  readonly invocation?: LedgerAction.Node;
   readonly request?: SessionTransition.Request;
   readonly domainRevisions?: Readonly<Record<string, number>>;
   readonly requests?: readonly SessionTransition.Request[];
@@ -28,24 +29,6 @@ const rejected: RequestDecision = { resolution: "rejected", actions: [] };
 
 function all(...checks: readonly boolean[]): boolean {
   return checks.every((check) => check);
-}
-
-function requestEffect(
-  action: LedgerAction.Node | undefined,
-): SessionTransition.Request | undefined {
-  const parsed = SessionTransition.Request.safeParse(objectValue(action?.effect.value)?.request);
-  return parsed.success ? parsed.data : undefined;
-}
-
-export function findSessionRequest(
-  actions: readonly LedgerAction.Node[],
-  requestId: string,
-): SessionTransition.Request | undefined {
-  for (let index = actions.length - 1; index >= 0; index -= 1) {
-    const request = requestEffect(actions[index]);
-    if (request?.requestId === requestId) return request;
-  }
-  return undefined;
 }
 
 type CapturedApproval = Omit<import("./executor-contract").ExecutionApprovalRequest, "durable">;
@@ -129,9 +112,7 @@ export function decideRequestTransition(
   )
     return rejected;
   const inputDigest = requestInputDigest(command.payload);
-  return (
-    repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest)
-  );
+  return repeatedInput(snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
 }
 
 type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;
@@ -207,13 +188,10 @@ function replayedInput(
 }
 
 function repeatedInput(
-  command: SessionTransition.Command,
   snapshot: RequestSnapshot,
   inputDigest: string,
 ): RequestDecision | undefined {
-  const previous = snapshot.actions.find(
-    (action) => objectValue(action.intent.value)?.inputId === command.inputId,
-  );
+  const previous = snapshot.inputRecord;
   if (previous === undefined) return undefined;
   return replayedInput(previous, snapshot.request, inputDigest);
 }
@@ -406,10 +384,7 @@ function originalInvocationMatches(
   next: SessionTransition.Request,
   snapshot: RequestSnapshot,
 ): boolean {
-  const invocation = recordedInvocation(
-    snapshot.actions.find((action) => action.id === next.requestId),
-    snapshot.row.id,
-  );
+  const invocation = recordedInvocation(snapshot.invocation, snapshot.row.id);
   if (invocation === undefined || invocation.value === undefined) return false;
   return all(
     canonicalDigest(invocation.originalArgs ?? invocation.value) === next.inputHash,

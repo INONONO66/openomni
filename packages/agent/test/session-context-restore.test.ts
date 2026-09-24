@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { describe, expect, test } from "bun:test";
 import { Cause, Effect } from "effect";
@@ -58,7 +59,7 @@ function program<E>(
       });
       const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture), fixture); });
       yield* handle.prompt("hello");
-      const before = SessionHandleStore.tree("ctx");
+      const before = sessionTree("ctx");
       yield* body(handle, before);
     }),
   );
@@ -75,7 +76,7 @@ describe("restore_context_projection", () => {
           ).toEqual(["assistant"]);
           const outcome = yield* handle.restoreContext(compaction.id);
           expect(outcome.terminal).toBe("executed");
-          const after = SessionHandleStore.tree("ctx");
+          const after = sessionTree("ctx");
           expect(after.slice(0, before.length)).toEqual([...before]);
           const appended = after.slice(before.length);
           expect(
@@ -88,6 +89,7 @@ describe("restore_context_projection", () => {
             ["compaction", compaction.id],
             ["policy.decision", compaction.id],
             ["compaction", nth(appended, 1).id],
+            ["fold.checkpoint", nth(appended, 3).id],
           ]);
           expect(nth(appended, 0).intent.value).toMatchObject({
             hook: "turn.post",
@@ -139,7 +141,7 @@ describe("restore_context_projection", () => {
               terminal: "blocked_pre",
               reason: "pinned_projection",
             });
-            const after = SessionHandleStore.tree("ctx");
+            const after = sessionTree("ctx");
             expect(
               after
                 .slice(before.length)
@@ -186,7 +188,7 @@ describe("restore_context_projection", () => {
               name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
             });
           }
-          expect(SessionHandleStore.tree("ctx")).toEqual([...before]);
+          expect(sessionTree("ctx")).toEqual([...before]);
           expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
         }),
       ),

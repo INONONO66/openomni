@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -229,14 +230,14 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(storage.policies.append(policy)).toBe(false);
   expect(storage.policies.rows()).toEqual([policy]);
   expect(storage.sessions.get(session.id)?.revision).toBe(7);
-  const whole = storage.actions.tree(session.id);
+  const whole = sessionTree(session.id, storage.actions);
   expect(storage.actions.range(session.id, 0, 3)).toEqual(whole.slice(0, 3));
   expect(storage.actions.range(session.id, 3, 100)).toEqual(whole.slice(3));
   expect(storage.actions.range(session.id, whole.length, 1)).toEqual([]);
 
   return {
     session: storage.sessions.get(session.id),
-    tree: storage.actions.tree(session.id),
+    tree: sessionTree(session.id, storage.actions),
     inbox: storage.inbox.list(session.id),
     alarms: storage.alarms.due(1000),
     policies: storage.policies.rows(),
@@ -338,7 +339,7 @@ describe("L0 adapter contracts", () => {
       ),
     ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
     expect(storage.sessions.get(row.id)?.revision).toBe(1);
-    expect(storage.actions.tree(row.id).map((action) => action.kind)).toEqual(["turn"]);
+    expect(sessionTree(row.id, storage.actions).map((action) => action.kind)).toEqual(["turn"]);
     expect(storage.inbox.list(row.id)).toEqual([]);
   });
 });
@@ -383,7 +384,7 @@ describe("SQLite adapter contract guards", () => {
       ),
     ).toThrow("refuse action");
     expect(adapter.sessions.get(row.id)?.revision).toBe(0);
-    expect(adapter.actions.tree(row.id)).toEqual([]);
+    expect(sessionTree(row.id, adapter.actions)).toEqual([]);
   });
 
   test("inbox action and row roll back together when the row insert fails", () => {
@@ -419,7 +420,7 @@ describe("SQLite adapter contract guards", () => {
       ),
     ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
     expect(adapter.sessions.get(row.id)?.revision).toBe(0);
-    expect(adapter.actions.tree(row.id)).toEqual([]);
+    expect(sessionTree(row.id, adapter.actions)).toEqual([]);
   });
 
   test("request action compare-and-set rejects foreign parent and stale revision", () => {
@@ -440,7 +441,7 @@ describe("SQLite adapter contract guards", () => {
     expect(adapter.actions.append(action, 0)).toBeUndefined();
     expect(adapter.actions.append({ ...action, parentId: null }, 1)).toBeUndefined();
     expect(adapter.sessions.get("request-owner")?.revision).toBe(0);
-    expect(adapter.actions.tree("request-owner")).toEqual([]);
+    expect(sessionTree("request-owner", adapter.actions)).toEqual([]);
   });
 
   test("canonical session reads cannot mutate a later snapshot", () => {

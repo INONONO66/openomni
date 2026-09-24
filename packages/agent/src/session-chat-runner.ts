@@ -4,7 +4,7 @@ import { runAgent } from "./core/execution/run";
 import type { AgentResult, ChatAgentConfig } from "./core/types";
 import type { Executor } from "./executor";
 import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./session-handle";
-import { foldSessionHistory } from "./session-lifecycle/history";
+import { hydrateSessionHistory, refreshSessionHistory } from "./session-lifecycle/history";
 import { pinnedModelSelection } from "./model-selection";
 import type { ExecutionError } from "./errors";
 import type { RunnerServices } from "./services";
@@ -27,15 +27,16 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
     const executor = prepared.config.executor;
     if (executor.recover === undefined || executor.runAttempts === undefined || executor.judgeStop === undefined)
       return yield* Effect.die(new Error("durable chat runner requires session authority"));
+    const captured = hydrateSessionHistory(input.sessionId);
     yield* executor.recover();
-    const actions = input.ledger.actions?.();
+    const refreshed = refreshSessionHistory(input.sessionId, captured);
     const operation = runAgent({
       messages,
-      history: actions === undefined ? input.history : foldSessionHistory(input.sessionId, actions),
+      history: refreshed.history,
       traceContext: prepared.traceContext,
     }, {
       ...prepared.config,
-      ...(actions === undefined ? {} : { pinnedModel: pinnedModelSelection(actions, input.turnId) }),
+      pinnedModel: pinnedModelSelection(input.sessionId, input.turnId),
       execution: { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop },
       signal: input.signal,
       boundary: input.boundary,

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { BundlesLive, GenerationLayers, SessionLayer } from "@openomni/agent";
@@ -39,7 +40,7 @@ test("G1 prerequisite: SIGKILL at committed configure rearms current and recorde
       const generations = yield* GenerationLayers;
       yield* generations.initialize({ resident: [], worker: [] });
       const current = SessionHandleStore.latestGenerationFor("crash-session");
-      const open = SessionHandleStore.openTurns(SessionHandleStore.tree("crash-session"));
+      const open = SessionHandleStore.openTurns(sessionTree("crash-session"));
       expect(open).toHaveLength(1);
       const recorded = open[0];
       if (recorded === undefined) throw new Error("missing recorded open turn");

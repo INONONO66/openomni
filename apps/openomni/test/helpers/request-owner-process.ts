@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
@@ -36,8 +37,8 @@ function snapshot(dbPath: string, modelCalls: number) {
       requests: SessionHandleStore.requestRows(),
       sessions: SessionHandleStore.listRows().map((row) => ({
         row,
-        actions: SessionHandleStore.tree(row.id),
-        generation: SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id)),
+        actions: sessionTree(row.id),
+        generation: SessionHandleStore.latestGeneration(sessionTree(row.id)),
         inbox: SessionHandleStore.inboxRows(row.id),
       })),
       tables: z
@@ -82,7 +83,7 @@ async function serve() {
     });
   let opened = false;
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    const action = SessionHandleStore.tree(event.sessionId).find((item) => item.id === event.id);
+    const action = sessionTree(event.sessionId).find((item) => item.id === event.id);
     const request = SessionHandleStore.requestRows(event.sessionId).find(
       (item) => item.callId === ORIGINAL_CALL.id && item.state === "open",
     );

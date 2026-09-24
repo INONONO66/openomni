@@ -24,7 +24,12 @@ interface ExecutionKindRegistration {
 
 export interface ExecutionLedger {
   commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, LedgerError>;
-  actions?(): readonly LedgerAction.Node[];
+  actionById?(id: string): LedgerAction.Node | undefined;
+  requestById?(id: string): SessionTransition.Request | undefined;
+  resultFor?(id: string): LedgerAction.Node | undefined;
+  openOperationsPage?(turnId: string, cursor: number): readonly LedgerAction.Node[];
+  operationChildrenPage?(parentId: string, cursor: number): readonly LedgerAction.Node[];
+  guardedOperationsPage?(turnId: string, cursor: number): readonly LedgerAction.Node[];
   validateRequest?(request: SessionTransition.Request): boolean;
   transition?(
     payload: SessionTransition.Payload,

@@ -8,6 +8,7 @@ import {
 } from "@openomni/protocol";
 import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
 import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./sqlite-l0-rows.js";
+import { createActionReads } from "./sqlite-action-reads";
 import { appendAction } from "./sqlite-l0-write.js";
 import { publishCommitted } from "./sqlite-l0-observation.js";
 
@@ -17,6 +18,7 @@ export function createActions(
   observationSink: ObservationSink,
 ): ProtocolStorage.ActionSubAdapter {
   return {
+    ...createActionReads(db),
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
@@ -29,13 +31,33 @@ export function createActions(
       );
       return row === null ? undefined : decodeAction(row);
     },
-    configurationActions(sessionId) {
+    latestAction(sessionId, throughRevision) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND ordinal <= ? ORDER BY ordinal DESC LIMIT 1",
+          )
+          .get(sessionId, throughRevision),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    latestFoldCheckpoint(sessionId, throughRevision) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND kind = 'fold.checkpoint' AND ordinal <= ? ORDER BY ordinal DESC LIMIT 1",
+          )
+          .get(sessionId, throughRevision),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    configurationActions(sessionId, beforeRevision) {
       const rows = ActionSqlRow.array().parse(
         db
           .query(
-            "SELECT * FROM action WHERE session_id = ? AND kind IN ('session.configure') ORDER BY ordinal",
+            "SELECT * FROM action WHERE session_id = ? AND kind = 'session.configure' AND ordinal < ? ORDER BY ordinal DESC LIMIT 1",
           )
-          .all(sessionId),
+          .all(sessionId, beforeRevision),
       );
       return rows.map(decodeAction);
     },
@@ -96,19 +118,8 @@ export function createActions(
     verifyChain(sessionId) {
       return verifyChain(db, sessionId);
     },
-    tree(sessionId) {
-      const rows = ActionSqlRow.array().parse(
-        db
-          .query(
-            `SELECT id, parent_id, session_id, kind, intent, effect, revert,
-                  irreversible, encoding_version, ts, ordinal, prev_hash, action_hash
-           FROM action WHERE session_id = ? ORDER BY ordinal`,
-          )
-          .all(sessionId),
-      );
-      return rows.map(decodeAction);
-    },
     range(sessionId, afterRevision, limit) {
+      const pageLimit = z.number().int().positive().max(256).parse(limit);
       const rows = ActionSqlRow.array().parse(
         db
           .query(
@@ -116,7 +127,7 @@ export function createActions(
                   irreversible, encoding_version, ts, ordinal, prev_hash, action_hash
            FROM action WHERE session_id = ? AND ordinal > ? ORDER BY ordinal LIMIT ?`,
           )
-          .all(sessionId, afterRevision, limit),
+          .all(sessionId, afterRevision, pageLimit),
       );
       return rows.map(decodeAction);
     },

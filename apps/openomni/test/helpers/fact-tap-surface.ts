@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import assert from "node:assert/strict";
 import { Database } from "bun:sqlite";
@@ -180,7 +181,7 @@ try {
   assert.equal(rows.length, 1);
   const row = rows[0];
   assert.ok(row);
-  const toolResults = SessionHandleStore.tree(row.id)
+  const toolResults = sessionTree(row.id)
     .filter((action) => action.kind === "tool")
     .flatMap((action) => {
       const parsed = z

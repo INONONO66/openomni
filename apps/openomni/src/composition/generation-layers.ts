@@ -80,7 +80,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
       const owner = yield* manager(id.sessionId);
-      const snapshot = SessionHandleStore.generationByNumber(SessionHandleStore.tree(id.sessionId), id.generation);
+      const snapshot = SessionHandleStore.generationFor(id.sessionId, id.generation);
       if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
       return yield* owner.capture(yield* bundle(id.sessionId, snapshot));
     }),

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
@@ -42,7 +43,7 @@ const worker = new URL("./helpers/crash-matrix-g1.ts", import.meta.url).pathname
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
-  return SessionHandleStore.tree(sessionId);
+  return sessionTree(sessionId);
 }
 function results(kind: LedgerAction.Kind) {
   return actions().filter((action) => action.kind === kind && effectOf(action).phase === "result");
@@ -552,10 +553,11 @@ function recoverOutbound(witness: Witness, dbPath: string) {
 
 function recoverCell(witness: Witness, dbPath: string) {
   return Effect.gen(function* () {
-  if (committedCompactionPoints.has(witness.crashPoint)) return yield* recoverCommittedCompaction(witness);
+  const point = crashPoint.parse(witness.crashPoint);
+  if (committedCompactionPoints.has(point)) return yield* recoverCommittedCompaction(witness);
   if (witness.crashPoint === "outbound_reply_before_delivery_settle")
     return yield* recoverAdmission(witness);
-  if (outboundPoints.has(witness.crashPoint)) return yield* recoverOutbound(witness, dbPath);
+  if (outboundPoints.has(point)) return yield* recoverOutbound(witness, dbPath);
   switch (witness.crashPoint) {
     case "recovery_dispatch_identity_committed_before_rpc":
       return yield* recoverContinuation(witness);

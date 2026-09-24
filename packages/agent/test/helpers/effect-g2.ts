@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./executor";
 import { catalogLayer } from "./service-layers";
 import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, prepareChatFixture } from "./chat-services";
@@ -193,7 +194,7 @@ export function answerThenCompact(executor: DurableExecutor, input: SessionRunne
       { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
       () => Effect.sync(() => PlainValueSchema.parse(answer)),
     );
-    const prior = foldSessionHistory(input.sessionId, input.ledger.actions?.() ?? []);
+    const prior = foldSessionHistory(input.sessionId, sessionTree(input.sessionId));
     const plan = createCompactionPlan(prior, [answer], 100);
     yield* executor.run(
       {

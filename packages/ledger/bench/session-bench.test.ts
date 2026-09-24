@@ -1,3 +1,4 @@
+import { sessionTree } from "../test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { z } from "zod";
@@ -18,14 +19,14 @@ describe("session benchmark fixtures", () => {
     seedTurnHistory("default");
     const snapshot = SessionHandleStore.getSnapshot("default", 10);
     expect(snapshot.turns).toHaveLength(10);
-    expect(SessionHandleStore.tree("default")).toHaveLength(21);
+    expect(sessionTree("default")).toHaveLength(21);
   });
 
   test.each([500, 5_000])("%i turns seed exactly twice as many committed turn actions", (count) => {
     Storage.initialize({ dbPath: ":memory:" });
     const id = `seed-${count}`;
     seedTurnHistory(id, count);
-    const tree = SessionHandleStore.tree(id);
+    const tree = sessionTree(id);
     expect(tree).toHaveLength(count * 2 + 1);
     expect(tree.filter((action) => action.kind === "turn")).toHaveLength(count * 2);
     expect(SessionHandleStore.row(id).revision).toBe(tree.length);
@@ -41,7 +42,7 @@ describe("session benchmark fixtures", () => {
   test("preparing a warm-session commit leaves history unchanged until one action is committed", () => {
     Storage.initialize({ dbPath: ":memory:" });
     seedTurnHistory("warm");
-    const tree = SessionHandleStore.tree("warm");
+    const tree = sessionTree("warm");
     const request = prepareTurnCommit(
       "warm",
       10,
@@ -49,15 +50,15 @@ describe("session benchmark fixtures", () => {
       SessionHandleStore.latestGeneration(tree),
     );
     request.actions = request.actions.slice(0, 1);
-    expect(SessionHandleStore.tree("warm")).toEqual(tree);
+    expect(sessionTree("warm")).toEqual(tree);
     const result = Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
     expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: null } });
-    expect(SessionHandleStore.tree("warm").at(-1)).toMatchObject({
+    expect(sessionTree("warm").at(-1)).toMatchObject({
       id: "warm:turn:10",
       kind: "turn",
       parentId: tree.at(-1)?.id,
     });
-    expect(SessionHandleStore.tree("warm")).toHaveLength(22);
+    expect(sessionTree("warm")).toHaveLength(22);
   });
 });
 
