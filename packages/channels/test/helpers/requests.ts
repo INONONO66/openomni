@@ -10,14 +10,17 @@ import {
   type SessionTransition,
 } from "@openomni/protocol";
 
+/** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */
+const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
+
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
   clock: () => number = () => 1,
   onInboxCommitted?: (sessionIds: readonly string[]) => void,
-  runtime: Omit<SessionRuntime, "processId" | "onInboxCommitted"> = {},
+  runtime: Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure"> = {},
 ) {
   return runEffect(
-    createSessionRequests({ ...runtime, processId: "channels-test", onInboxCommitted }).pipe(
+    createSessionRequests({ ...runtime, authorizeConfigure: allowConfigure, processId: "channels-test", onInboxCommitted }).pipe(
       Effect.provide(Layer.mergeAll(
         Layer.succeed(Clock, { now: clock }),
         Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
