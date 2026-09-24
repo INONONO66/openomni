@@ -18,6 +18,8 @@ export namespace Storage {
     latestTurnTerminal(sessionId: string): LedgerAction.Node | undefined;
     latestTurnUpdate(sessionId: string, turnId: string): LedgerAction.Node | undefined;
     turnIntentsPage(sessionId: string, beforeRevision: number, limit: number): LedgerAction.Node[];
+    /** Ordinal of the turn intent preceding the newest `count` intents before `beforeRevision`, else 0. */
+    turnWindowStart(sessionId: string, beforeRevision: number, count: number): number;
     /** `turn` and `inbox.deliver` actions after `cursor`, ascending: one window feeds every tail. */
     turnTailPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
     openTurnsPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];

@@ -181,6 +181,22 @@ test("snapshot pages retain all deliveries for the selected turn without loading
   expect(kernel.getSnapshot("bounded", 0).turns).toEqual([]);
 });
 
+test("turnWindowStart opens after the intent preceding the newest count turns, else at zero", () => {
+  const actions = Storage.get().actions;
+  if (actions === undefined) throw new Error("actions adapter missing");
+  const first = turn("first");
+  terminal("first");
+  const second = turn("second");
+  const third = turn("third");
+  const revision = kernel.row("bounded").revision;
+  expect(actions.turnWindowStart("bounded", revision + 1, 1)).toBe(second.ordinal);
+  expect(actions.turnWindowStart("bounded", revision + 1, 2)).toBe(first.ordinal);
+  expect(actions.turnWindowStart("bounded", revision + 1, 3)).toBe(0);
+  expect(actions.turnWindowStart("bounded", revision + 1, 99)).toBe(0);
+  expect(actions.turnWindowStart("bounded", third.ordinal, 1)).toBe(first.ordinal);
+  expect(actions.turnWindowStart("missing", revision + 1, 1)).toBe(0);
+});
+
 test("snapshot tails fold deliveries committed before their turn intent and stay per turn", () => {
   const deliver = (id: string, turnId: string, content: string, parentId: string) =>
     append(
