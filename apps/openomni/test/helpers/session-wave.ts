@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect } from "bun:test";
 import { Bus, defineTool, eraseTool, type SessionHandle } from "@openomni/agent";
@@ -128,7 +129,7 @@ export function commitInterrupt(sessionId: string, id: string) {
           content: "",
           createdAt: Date.now(),
           origin: { encodingVersion: 1, value: { kind: "sdk" } },
-          parentActionId: SessionHandleStore.tree(sessionId).at(-1)?.id ?? null,
+          parentActionId: sessionTree(sessionId).at(-1)?.id ?? null,
         }),
       ),
     ),
@@ -137,7 +138,7 @@ export function commitInterrupt(sessionId: string, id: string) {
 }
 
 export function interruptDeliveries(sessionId: string) {
-  return SessionHandleStore.tree(sessionId).flatMap((action) => {
+  return sessionTree(sessionId).flatMap((action) => {
     const delivery = SessionHandleStore.delivery(action);
     return delivery?.kind === "interrupt" ? [delivery] : [];
   });

@@ -1,5 +1,6 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { isolated } from "./helpers/isolated";
@@ -20,6 +21,7 @@ function setup() {
     const suspended = Promise.withResolvers<void>();
     const effects: string[] = [];
     runtime = {
+      authorizeConfigure: allowConfigure,
       clock: () => now,
       entropy: () => crypto.randomUUID(),
       observations: {
@@ -120,7 +122,7 @@ it("configuration drift refuses consent while interruption cancels the whole sus
         yield* Fiber.join(running);
         expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("cancelled");
         expect(
-          SessionHandleStore.tree(f.handle.id).some(
+          sessionTree(f.handle.id).some(
             (action: import("@openomni/protocol").LedgerAction.Node) => {
               const effect = action.effect.value;
               return (

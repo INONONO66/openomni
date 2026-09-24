@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { channelRequests } from "./helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runEffect } from "./helpers/effect";
@@ -50,7 +51,7 @@ afterEach(async () => {
 async function approval() {
   originalAction("protected-call", "owner-session", { person: "alice", trustTier: "trusted" });
   const row = SessionHandleStore.row("owner-session");
-  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(row.id));
+  const generation = SessionHandleStore.latestGeneration(sessionTree(row.id));
   const request = requestFixture({
     requestId: "protected-call",
     sessionId: row.id,
@@ -86,7 +87,7 @@ async function approval() {
       authority: { owner: "fixture", fence: lease.fence },
       payload: { kind: "request.open", request },
     },
-    { row: SessionHandleStore.row(row.id), actions: SessionHandleStore.tree(row.id) },
+    { row: SessionHandleStore.row(row.id), invocation: SessionHandleStore.actionById(request.requestId), inputRecord: SessionHandleStore.requestInputById(row.id, "open") },
   );
   expect(decision.resolution).toBe("opened");
   const result = await runEffect(SessionHandleStore.commitRequestTransition({
@@ -229,7 +230,7 @@ test.each([
   expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(
     decision === "approve" ? "resolved" : "refused",
   );
-  const actions = SessionHandleStore.tree(request.sessionId);
+  const actions = sessionTree(request.sessionId);
   expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply")?.effect.value).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
@@ -246,16 +247,16 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   const answer = wireAnswer(request);
   const wire = { type: "request_answer", ...answer };
   expect(await frame(first.socket, wire)).toMatchObject({ result: { status: "executed" } });
-  const before = SessionHandleStore.tree(request.sessionId);
+  const before = sessionTree(request.sessionId);
   await first.server.stop(true);
   Storage.reset();
   Storage.initialize({ dbPath });
   at = 20;
   const second = await connect(router());
   expect(await frame(second.socket, wire)).toMatchObject({ result: { status: "executed" } });
-  expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId)).toEqual(before);
   expect(
-    SessionHandleStore.tree(request.sessionId).filter(
+    sessionTree(request.sessionId).filter(
       (action: import("@openomni/protocol").LedgerAction.Node) => action.id === `${request.requestId}:resolution`,
     ),
   ).toHaveLength(1);
@@ -263,7 +264,7 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
 
 test("wrong frame credential is refused without recording or leaking it", async () => {
   const request = await approval();
-  const before = SessionHandleStore.tree(request.sessionId);
+  const before = sessionTree(request.sessionId);
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
   const result = await frame(socket, {
@@ -275,7 +276,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
     result: { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" },
   });
   expect(JSON.stringify(result)).not.toContain("wrong-secret");
-  expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId)).toEqual(before);
 });
 
 test("session sender, malformed input, missing authenticator, and non-Owner evidence fail closed", async () => {
@@ -363,12 +364,12 @@ test("Owner authentication finishing at the deadline cannot approve into the pas
 test("an authenticated Owner answer cannot bypass the absolute blacklist", async () => {
   const request = await approval();
   BlacklistStore.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
-  const before = SessionHandleStore.tree(request.sessionId);
+  const before = sessionTree(request.sessionId);
   expect(await runEffect(router().ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.blacklisted",
   });
-  expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId)).toEqual(before);
 });
 
 test("plain text preserves stable driver event ID and cannot enter Owner authentication", async () => {

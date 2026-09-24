@@ -1,6 +1,9 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { Effect } from "effect";
 import {
+  canonicalDigest,
+  FoldCheckpoint,
+  PlainValueSchema,
   SessionGeneration,
   SessionTurn,
   type Inbox,
@@ -18,32 +21,49 @@ import {
   type SessionTool,
 } from "./session-contract";
 
-export function latestTerminal(
-  actions: readonly LedgerAction.Node[],
-): { readonly action: LedgerAction.Node; readonly effect: SessionTurn.Terminal } | undefined {
-  for (let index = actions.length - 1; index >= 0; index -= 1) {
-    const action = actions[index];
-    const effect = SessionHandleStore.turnTerminal(action);
-    if (action !== undefined && effect !== undefined) return { action, effect };
-  }
-  return undefined;
-}
-
-export function sessionMessages(
-  actions: readonly LedgerAction.Node[],
-): (SessionTurn.Message & { readonly id: string })[] {
-  const messages: (SessionTurn.Message & { readonly id: string })[] = [];
-  for (const action of actions) {
-    const delivered = SessionHandleStore.delivery(action);
-    if (delivered?.kind === "prompt") {
-      messages.push({ id: delivered.inboxId, role: "user", text: delivered.content });
-    }
-    const terminal = SessionHandleStore.turnTerminal(action);
-    if (terminal !== undefined && terminal.text.length > 0) {
-      messages.push({ id: action.id, role: "assistant", text: terminal.text });
-    }
-  }
-  return messages;
+export function foldCheckpointAction(input: {
+  readonly sessionId: string;
+  readonly parentId: string | null;
+  readonly revision: number;
+  readonly at: number;
+  readonly reason: "interval" | "compaction";
+  readonly state: FoldCheckpoint.State;
+}): LedgerAction.Append {
+  const state = PlainValueSchema.parse(input.state);
+  return {
+    id: `${input.sessionId}:fold:${input.revision}`,
+    sessionId: input.sessionId,
+    parentId: input.parentId,
+    kind: "fold.checkpoint",
+    intent: {
+      encodingVersion: 1,
+      value: PlainValueSchema.parse(
+        FoldCheckpoint.Intent.parse({
+          phase: "checkpoint",
+          foldVersion: 1,
+          revision: input.revision,
+          reason: input.reason,
+        }),
+      ),
+    },
+    effect: {
+      encodingVersion: 1,
+      value: PlainValueSchema.parse(
+        FoldCheckpoint.Effect.parse({
+          phase: "result",
+          terminal: "executed",
+          result: {
+            foldVersion: 1,
+            revision: input.revision,
+            state,
+            stateHash: canonicalDigest({ foldVersion: 1, state }),
+          },
+        }),
+      ),
+    },
+    irreversible: true,
+    ts: input.at,
+  };
 }
 
 export function toolSnapshot(tool: SessionTool): SessionGeneration.Tool {
@@ -74,7 +94,9 @@ interface TurnPinnedInput {
   readonly boundaryActionId: string | null;
 }
 
-function pinnedTurn(input: TurnPinnedInput): Omit<SessionTurn.Intent, "phase" | "inboxIds"> {
+function pinnedTurn(
+  input: TurnPinnedInput,
+): Omit<SessionTurn.Intent, "phase" | "inboxIds" | "context"> {
   return {
     resultId: input.resultId,
     toolsGeneration: input.generation.generation,
@@ -88,14 +110,14 @@ function pinnedTurn(input: TurnPinnedInput): Omit<SessionTurn.Intent, "phase" | 
 
 function turnEnvelopeAction(
   input: TurnEnvelopeActionInput,
-  intent: SessionTurn.Intent | SessionTurn.Resume,
+  intent: SessionTurn.DecodeIntent | SessionTurn.DecodeResume,
 ): LedgerAction.Append {
   return {
     id: input.id,
     parentId: input.parentId,
     sessionId: input.sessionId,
     kind: "turn",
-    intent: { encodingVersion: 1, value: intent },
+    intent: { encodingVersion: 1, value: PlainValueSchema.parse(intent) },
     effect: { encodingVersion: 1, value: SessionTurn.Pending.parse({ phase: "pending" }) },
     irreversible: true,
     ts: input.at,
@@ -115,7 +137,7 @@ export function turnIntentAction(input: {
 }): LedgerAction.Append {
   return turnEnvelopeAction(
     input,
-    SessionTurn.Intent.parse({
+    SessionTurn.DecodeIntent.parse({
       phase: "intent",
       inboxIds: [...input.inboxIds],
       ...pinnedTurn(input),
@@ -136,7 +158,7 @@ export function turnResumeAction(input: {
 }): LedgerAction.Append {
   return turnEnvelopeAction(
     input,
-    SessionTurn.Resume.parse({
+    SessionTurn.DecodeResume.parse({
       phase: "resume",
       turnId: input.turnId,
       ...pinnedTurn(input),
@@ -323,11 +345,10 @@ export function sessionRunnerResultFromValue(value: PlainValue): SessionRunnerRe
   return result.success ? result.data : undefined;
 }
 
-export function generationForOpen(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionGeneration.Snapshot, GenerationUnavailable> {
-  const snapshot = SessionHandleStore.generationByNumber(
-    SessionHandleStore.tree(open.action.sessionId),
-    open.toolsGeneration,
-  );
+export function generationForOpen(
+  open: SessionHandleStore.OpenTurn,
+): Effect.Effect<SessionGeneration.Snapshot, GenerationUnavailable> {
+  const snapshot = SessionHandleStore.generationFor(open.action.sessionId, open.toolsGeneration);
   if (
     snapshot === undefined ||
     snapshot.toolsHash !== open.toolsHash ||

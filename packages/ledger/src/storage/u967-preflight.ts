@@ -4,6 +4,7 @@ import { REQUEST_MIGRATION } from "./u969-preflight";
 import { ACTION_HASH_MIGRATION } from "./l0-hash";
 import { DECISION_FACT_MIGRATION } from "./decision-fact-migration";
 
+export const FOLD_CHECKPOINT_MIGRATION = "0041_fold_checkpoints/migration.sql";
 export const U967_MIGRATION = "0034_u967_archive_disposition/migration.sql";
 export const RETIRED_TABLE_MIGRATION = "0035_drop_retired_delegation_tables/migration.sql";
 export const REPLY_GRANT_MIGRATION = "0036_reply_grant_projection/migration.sql";
@@ -49,7 +50,8 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
     latest === "0037_watch_alarms/migration.sql" ||
     latest === REQUEST_MIGRATION ||
     latest === ACTION_HASH_MIGRATION ||
-    latest === DECISION_FACT_MIGRATION;
+    latest === DECISION_FACT_MIGRATION ||
+    latest === FOLD_CHECKPOINT_MIGRATION;
   const latestIndex =
     latest === undefined ? -1 : migrations.findIndex((migration) => migration.name === latest);
   const expected = latestIndex < 0 ? migrations.slice(0, -1) : migrations.slice(0, latestIndex + 1);
@@ -61,6 +63,8 @@ export function preflight967(db: Database, migrations: readonly { readonly name:
     [REQUEST_MIGRATION]: SCHEMA_0038,
     [ACTION_HASH_MIGRATION]: SCHEMA_0039,
     [DECISION_FACT_MIGRATION]: SCHEMA_0040,
+    [FOLD_CHECKPOINT_MIGRATION]:
+      "sha256:47ee28548d787cb5c01c469440a4cc5714979649c2025ee97f92b383ed4613a8",
   };
   const schemaDigest = fingerprints[latest ?? ""] ?? SCHEMA_0033;
   if (

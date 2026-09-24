@@ -1,16 +1,22 @@
-import type { SessionFixture as SessionRuntime } from "./session-services";
+import { runAgentSync } from "./executor";
+import { executionReads } from "./execution-reads";
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
 import { Effect, Either } from "effect";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
-import type {} from "../../src/session-contract";
-import type { LedgerAction, SessionTransition } from "@openomni/protocol";
+import { commitFoldBatch } from "../../src/session-fold-commit";
+import type { LedgerAction, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";
 export { bounded } from "./bounded";
 
 export function requestLedger(
   input: {
     id?: string;
+    turnId?: string;
+    resultId?: string;
+    legacy?: boolean;
     clock?: () => number;
     onRequest?: (request: SessionTransition.Request) => void;
     domainRevisions?: SessionRuntime["requestDomainRevisions"];
@@ -51,14 +57,15 @@ export function requestLedger(
     (error: LedgerError) => error,
   );
   if (!lease.ok) throw new Error("test lease refused");
-  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
-  const turnId = `${id}:turn`;
-  if (!SessionHandleStore.tree(id).some((action: LedgerAction.Node) => action.id === turnId)) {
+  const generation = SessionHandleStore.latestGeneration(sessionTree(id));
+  const turnId = input.turnId ?? `${id}:turn`;
+  const commit = input.legacy === true ? SessionHandleStore.commit : commitFoldBatch;
+  if (!sessionTree(id).some((action: LedgerAction.Node) => action.id === turnId)) {
     const row = SessionHandleStore.row(id);
     const opened = Either.getOrThrowWith(
       Effect.runSync(
         Effect.either(
-          SessionHandleStore.commit({
+          commit({
             sessionId: id,
             owner,
             fence: lease.fence,
@@ -77,7 +84,7 @@ export function requestLedger(
                   encodingVersion: 1,
                   value: {
                     phase: "intent",
-                    resultId: `${id}:result`,
+                    resultId: input.resultId ?? `${id}:result`,
                     inboxIds: [],
                     resumeCount: 0,
                     boundaryActionId: null,
@@ -100,16 +107,17 @@ export function requestLedger(
     if (!opened.ok) throw new Error("test turn refused");
   }
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     clock,
     observations: collector(),
     requestDomainRevisions: input.domainRevisions,
   };
   const ledger: ExecutionLedger = {
-    actions: () => SessionHandleStore.tree(id),
+    ...executionReads(id),
     commit(action: LedgerAction.Append) {
       return Effect.gen(function* () {
         const row = SessionHandleStore.row(id);
-        const committed = yield* SessionHandleStore.commit({
+        const committed = yield* commitFoldBatch({
           sessionId: id,
           owner,
           fence: lease.fence,
@@ -141,6 +149,14 @@ export function requestLedger(
     },
   };
   return {
+    commitBatch(actions: readonly LedgerAction.Append[], overrides: Partial<LedgerSession.Commit> = {}) {
+      const row = SessionHandleStore.row(id);
+      return runAgentSync(commitFoldBatch({
+        sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: row.revision,
+        actions: [...actions], consumeInboxIds: [], state: row.state, releaseLease: false,
+        ...overrides,
+      }));
+    },
     ledger,
     identity: {
       sessionId: id,

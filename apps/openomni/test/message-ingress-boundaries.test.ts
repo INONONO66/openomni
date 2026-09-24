@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -207,7 +208,7 @@ test("alarm insertion failure rolls back the child, configuration, inbox and ala
   expect(db.query("SELECT id FROM alarm").all()).toEqual([]);
   expect(db.query("SELECT id FROM inbox WHERE session_id != 'sender'").all()).toEqual([]);
   expect(SessionHandleStore.requestRows("sender")).toEqual([]);
-  expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
+  expect(sessionTree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
     [],
   );
 });
@@ -233,7 +234,7 @@ test("process loss between request and child inbox insertion exposes neither aft
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["gateway-ingress", "sender"]);
   expect(SessionHandleStore.inboxRows("sender")).toHaveLength(1);
   expect(SessionHandleStore.requestRows("sender")).toEqual([]);
-  expect(SessionHandleStore.tree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
+  expect(sessionTree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
     [],
   );
   using db = new Database(fixture.dbPath);

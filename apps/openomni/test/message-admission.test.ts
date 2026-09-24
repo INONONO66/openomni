@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
@@ -48,7 +49,7 @@ test.each([
   expect(result.isError).not.toBe(true);
   const handle = Gateway.SendMessageHandle.parse(JSON.parse(result.output));
   expect(keys).toEqual([handle.messageId]);
-  const receipts = SessionHandleStore.tree(fixture.sessionId).flatMap((action) => {
+  const receipts = sessionTree(fixture.sessionId).flatMap((action) => {
     const effect = action.effect.value;
     if (
       action.kind !== "message" ||
@@ -72,10 +73,10 @@ test("ungranted app actor send is a compiled pre-denial, never an executed deliv
   expect(result.output).toContain("message.resident.actor_grant");
   expect(calls()).toBe(0);
   expect(
-    SessionHandleStore.tree(fixture.sessionId).filter((action) => action.kind === "message"),
+    sessionTree(fixture.sessionId).filter((action) => action.kind === "message"),
   ).toEqual([]);
   expect(
-    SessionHandleStore.tree(fixture.sessionId).some((action) => action.kind === "policy.decision"),
+    sessionTree(fixture.sessionId).some((action) => action.kind === "policy.decision"),
   ).toBe(true);
 });
 

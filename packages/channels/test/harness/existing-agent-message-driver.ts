@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
@@ -92,7 +93,7 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
   const reopened = SessionHandleStore.requestById("request:qa:briefing");
   const second = await runEffect(answer("request:qa:briefing", "b", "reply-b", 30));
   const final = SessionHandleStore.requestById("request:qa:briefing");
-  const terminals = SessionHandleStore.tree("session:qa-owner").filter(
+  const terminals = sessionTree("session:qa-owner").filter(
     (action: LedgerAction.Node) => action.id === "request:qa:briefing:resolution",
   );
   const allocationDelta = SessionHandleStore.listRows().length - baseline;

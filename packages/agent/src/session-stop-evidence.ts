@@ -11,28 +11,41 @@ export function sessionStopEvidence(
   approvals: () => ExecutionApprovals | undefined,
   openIntent?: SessionRuntime["openIntent"],
 ): NonNullable<ChatAgentConfig["stopEvidence"]> {
-  let ordinal = SessionHandleStore.tree(sessionId).at(-1)?.ordinal ?? 0;
+  let ordinal = SessionHandleStore.row(sessionId).revision;
+  const start = SessionHandleStore.actionById(turnId)?.ordinal ?? ordinal;
   return () => Effect.gen(function* () {
-    const actions = SessionHandleStore.tree(sessionId);
-    const start = actions.find((action) => action.id === turnId)?.ordinal ?? ordinal;
-    const recent = actions.filter((action) => action.ordinal > ordinal);
-    ordinal = actions.at(-1)?.ordinal ?? ordinal;
-    const obligations = yield* (openIntent?.({ sessionId, turnId, revision: SessionHandleStore.row(sessionId).revision }) ?? Effect.succeed([]));
+    const revision = SessionHandleStore.row(sessionId).revision;
+    let progress = false;
+    let blocked = false;
+    while (ordinal < revision) {
+      const page = SessionHandleStore.historyPage(sessionId, { afterRevision: ordinal, limit: 256 });
+      for (const action of page.actions) {
+        if (action.ordinal > revision) break;
+        progress ||= effectChanged(action);
+        blocked ||= effectBlocked(action);
+        ordinal = action.ordinal;
+      }
+    }
+    const obligations = yield* (openIntent?.({ sessionId, turnId, revision }) ?? Effect.succeed([]));
     const pending = approvals()?.pending() ?? [];
-    const armed = new Set(Storage.get().alarms?.due(Number.MAX_SAFE_INTEGER).map((alarm) => alarm.id) ?? []);
-    const alarmIds = actions.filter((action) => action.ordinal > start && action.kind === "alarm.arm" && armed.has(action.id)).map((action) => action.id);
+    const alarms = Storage.get().alarms?.due(Number.MAX_SAFE_INTEGER) ?? [];
+    const alarmIds = alarms.flatMap((alarm) => {
+      const action = SessionHandleStore.actionById(alarm.id);
+      return action?.sessionId === sessionId && action.ordinal > start ? [alarm.id] : [];
+    });
     return {
-      progress: recent.some(effectChanged),
-      blocked: recent.some((action) => {
-        const effect = action.effect.value;
-        const intent = action.intent.value;
-        if (action.kind === "policy.decision" && intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent.verdict === "deny" && (intent.hook === "tool.pre" || intent.hook === "tool.post")) return true;
-        return action.kind === "tool" && effect !== null && typeof effect === "object" && !Array.isArray(effect) && (effect.terminal === "blocked_pre" || effect.terminal === "blocked_post" || effect.terminal === "failed");
-      }),
+      progress, blocked,
       openIntent: [...obligations.map((intent) => intent.actionId), ...pending.map((approval) => approval.id)],
       alarmIds,
     };
   });
+}
+
+function effectBlocked(action: LedgerAction.Node): boolean {
+  const effect = action.effect.value;
+  const intent = action.intent.value;
+  if (action.kind === "policy.decision" && intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent.verdict === "deny" && (intent.hook === "tool.pre" || intent.hook === "tool.post")) return true;
+  return action.kind === "tool" && effect !== null && typeof effect === "object" && !Array.isArray(effect) && (effect.terminal === "blocked_pre" || effect.terminal === "blocked_post" || effect.terminal === "failed");
 }
 
 function effectChanged(action: LedgerAction.Node): boolean {

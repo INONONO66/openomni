@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
@@ -92,6 +93,6 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   expect(inbox).toHaveLength(1);
   expect(inbox[0]).toMatchObject({ content: "WAKE", status: "consumed" });
   expect(
-    SessionHandleStore.tree(alarm.sessionId).filter((action) => action.kind === "alarm.fired"),
+    sessionTree(alarm.sessionId).filter((action) => action.kind === "alarm.fired"),
   ).toHaveLength(1);
 });

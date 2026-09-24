@@ -78,24 +78,25 @@ function crashVerdict(action: LedgerAction.Node): RecoveryVerdict {
  * A refused recovery commit propagates: the durable intent stays recovery-pending.
  */
 export function createExecutionRecovery(options: ExecutorOptions, record: RecordPort) {
-  function actions(): readonly LedgerAction.Node[] {
-    return options.ledger.actions?.() ?? [];
-  }
-
   function terminal(intentId: string): LedgerAction.Node | undefined {
-    return actions().find(
-      (action) => action.parentId === intentId && object(action.effect.value).phase === "result",
-    );
+    return options.ledger.resultFor?.(intentId);
   }
 
-  function settleCrash(action: LedgerAction.Node, verdict: RecoveryVerdict): Effect.Effect<void, CommitFailed> {
+  function settleCrash(
+    action: LedgerAction.Node,
+    verdict: RecoveryVerdict,
+  ): Effect.Effect<void, CommitFailed> {
     const intent = object(action.intent.value);
     const callId = typeof intent.callId === "string" ? intent.callId : undefined;
     return record.appendResult({ kind: action.kind, op: String(intent.op) }, action.id, {
       phase: "result",
       terminal: verdict.terminal,
       effect: intent.effect ?? {},
-      evidence: { failures: [{ tag: "OutcomeUnknown", reason: "process_lost" }], defects: [], interrupted: false },
+      evidence: {
+        failures: [{ tag: "OutcomeUnknown", reason: "process_lost" }],
+        defects: [],
+        interrupted: false,
+      },
       error: { name: "ProcessLost" },
       ...(callId === undefined ? {} : { callId }),
       ...(action.kind === "tool" && callId !== undefined
@@ -122,14 +123,11 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
   }
 
   /** The committed boundary child, when the body's transaction landed before the crash. */
-  function boundaryEvidence(
-    all: readonly LedgerAction.Node[],
-    intentId: string,
-  ): LedgerAction.Node | undefined {
-    return all.find(
-      (action) =>
-        action.id === `${intentId}:boundary` && object(action.effect.value).phase === "boundary",
-    );
+  function boundaryEvidence(intentId: string): LedgerAction.Node | undefined {
+    const action = options.ledger.actionById?.(`${intentId}:boundary`);
+    return action !== undefined && object(action.effect.value).phase === "boundary"
+      ? action
+      : undefined;
   }
 
   /** Settle the open intent as executed from its durable boundary, never re-running the body. */
@@ -162,64 +160,64 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     );
   }
 
-  function openIntents(all: readonly LedgerAction.Node[]): LedgerAction.Node[] {
-    const turnId = options.identity.turnId ?? options.identity.parentActionId;
-    const parents = new Set<string | null>([turnId]);
-    const guardedWaves = new Set<PlainValue | undefined>();
-    for (const action of all) {
-      const intent = object(action.intent.value);
-      if (action.kind === "turn" && intent.phase === "resume" && intent.turnId === turnId)
-        parents.add(action.id);
-      if (intent.approvalRequired === true) guardedWaves.add(intent.waveId);
-    }
-    return all.filter((action) => {
-      const intent = object(action.intent.value);
-      if (intent.phase !== "intent" || terminal(action.id) !== undefined) return false;
-      if (action.kind === "tool")
-        return intent.turnId === turnId && !guardedWaves.has(intent.waveId);
-      return (
-        (action.kind === "llm" || action.kind === "message" || action.kind === "compaction") &&
-        parents.has(action.parentId)
-      );
-    });
-  }
-
-  /** Provider attempts carry the external effect; an open one makes the
-   * logical llm ambiguous, while settled attempts leave only the local commit. */
-  function settleLlm(action: LedgerAction.Node, all: readonly LedgerAction.Node[]) {
+  /** An open attempt or an already visible prefix cannot be proven absent.
+   * Only non-visible settled attempts leave a purely local commit to recover. */
+  function settleLlm(action: LedgerAction.Node) {
     return Effect.gen(function* () {
-    let ambiguous = false;
-    let lastSettled: LedgerAction.Node = action;
-    for (const attempt of all) {
-      if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
-      if (object(attempt.intent.value).phase !== "intent") continue;
-      const settled = terminal(attempt.id);
-      if (settled !== undefined) {
-        lastSettled = settled;
-        continue;
+      let ambiguous = false;
+      let lastSettled: LedgerAction.Node = action;
+      for (const attempt of operationRecords(options.ledger.operationChildrenPage, action.id)) {
+        if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
+        if (object(attempt.intent.value).phase !== "intent") continue;
+        const settled = terminal(attempt.id);
+        if (settled !== undefined) {
+          lastSettled = settled;
+          ambiguous ||= hasVisiblePrefix(settled);
+          continue;
+        }
+        ambiguous = true;
+        yield* settleCrash(attempt, crashVerdict(attempt));
       }
-      ambiguous = true;
-      yield* settleCrash(attempt, crashVerdict(attempt));
-    }
-    yield* settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
+      yield* settleCrash(action, ambiguous ? crashVerdict(action) : localAbsent(lastSettled));
     });
   }
 
   /** Crash-open settlement for this turn: persisted evidence only, no body, guarded waves stay with their captured dispatcher. */
   function recover(): Effect.Effect<void, CommitFailed> {
     return Effect.gen(function* () {
-      const all = actions();
-      for (const action of openIntents(all)) {
+      const turnId = options.identity.turnId ?? options.identity.parentActionId;
+      if (turnId === null) return;
+      for (const action of operationRecords(options.ledger.openOperationsPage, turnId)) {
         if (action.kind !== "llm") {
-          const boundary = boundaryEvidence(all, action.id);
+          const boundary = boundaryEvidence(action.id);
           if (boundary === undefined) yield* settleCrash(action, crashVerdict(action));
           else yield* settleFromBoundary(action, boundary);
           continue;
         }
-        yield* settleLlm(action, all);
+        yield* settleLlm(action);
       }
     });
   }
 
   return { recover };
+}
+
+function hasVisiblePrefix(action: LedgerAction.Node): boolean {
+  const evidence = object(object(action.effect.value).evidence);
+  if (evidence.visibleOutput === true) return true;
+  return Array.isArray(evidence.failures) &&
+    evidence.failures.some((failure) => object(failure).visibleOutput === true);
+}
+
+function* operationRecords(
+  read: ExecutorOptions["ledger"]["openOperationsPage"],
+  id: string,
+): Generator<LedgerAction.Node> {
+  let cursor = 0;
+  for (;;) {
+    const page = read?.(id, cursor) ?? [];
+    yield* page;
+    if (page.length < 256) return;
+    cursor = page.at(-1)?.ordinal ?? cursor;
+  }
 }

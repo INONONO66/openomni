@@ -443,6 +443,17 @@ interface TurnDispatchInput {
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
 }
 
+function guardedOperations(ledger: ExecutionLedger, turnId: string): LedgerAction.Node[] {
+  const actions: LedgerAction.Node[] = [];
+  let cursor = 0;
+  for (;;) {
+    const page = ledger.guardedOperationsPage?.(turnId, cursor) ?? [];
+    actions.push(...page);
+    if (page.length < 256) return actions;
+    cursor = page.at(-1)?.ordinal ?? cursor;
+  }
+}
+
 function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string | undefined) {
   const groups = new Map<string, { action: LedgerAction.Node; call: Tool.Call }[]>();
   const settledIntents = new Set(
@@ -553,7 +564,7 @@ export function createTurnDispatcher(
         // Persisted evidence settles ordinary crash-open intents first; only
         // request-bearing waves then re-admit their captured invocations.
         return executor.recover().pipe(Effect.andThen(() =>
-          dispatcher.recover(input.ledger.actions?.() ?? [], {
+          dispatcher.recover(guardedOperations(input.ledger, input.turnId ?? input.actionId), {
             sessionId: input.sessionId,
             turnId: input.turnId ?? input.actionId,
             signal: input.signal,

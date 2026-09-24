@@ -1,3 +1,5 @@
+import { executionReads } from "./execution-reads";
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
@@ -25,10 +27,10 @@ export function requestLedger(input: { readonly id: string; readonly clock?: () 
       now: clock(),
       expiresAt: clock() + 30_000,
     });
-    const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
+    const generation = SessionHandleStore.latestGeneration(sessionTree(id));
     const turnId = `${id}:turn`;
     const ledger: ExecutionLedger = {
-      actions: () => SessionHandleStore.tree(id),
+      ...executionReads(id),
       commit: (action: LedgerAction.Append) =>
         Effect.gen(function* () {
           const row = SessionHandleStore.row(id);

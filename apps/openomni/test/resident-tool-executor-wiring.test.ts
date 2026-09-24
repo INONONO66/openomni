@@ -1,14 +1,16 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { initialize, Storage } from "@openomni/ledger";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
+import { allowConfigure } from "./helpers/generation-services";
 
 const directory = mkdtempSync(join(tmpdir(), "openomni-resident-tool-wiring-"));
 
@@ -56,6 +58,7 @@ test("a resident tool call is executed and observed through the durable executor
       },
     },
     sessionRuntime: {
+      authorizeConfigure: allowConfigure,
       observations,
       clock: () => 10,
       entropy: (() => {
@@ -84,7 +87,7 @@ test("a resident tool call is executed and observed through the durable executor
 
   await resident.prompt(sessionId, "please answer");
 
-  const tree = SessionHandleStore.tree(sessionId);
+  const tree = sessionTree(sessionId);
   const prompt = tree.find((action) => action.kind === "prompt");
   const turn = tree.find((action) => action.kind === "turn" && action.id !== tree.at(-1)?.id);
   const toolIntent = tree.find(

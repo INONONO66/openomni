@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, it } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -32,6 +33,6 @@ it("ignores alarms that are no longer armed and reports nothing when no obligati
   yield* alarms.arm({ id: "alarm-1", sessionId: "evidence", kind: "at", fireAt: 5_000 });
   const owned = yield* alarms.acquire("alarm-1", 0);
   yield* alarms.fire({ id: "alarm-1", epoch: owned.epoch, fence: owned.fence, sourceKey: `timer:${owned.fireAt}`, at: 5_000, content: "woke", terminal: true });
-  expect(SessionHandleStore.tree("evidence").some((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toBe(true);
+  expect(sessionTree("evidence").some((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toBe(true);
   expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: [], alarmIds: [] });
 })));

@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type SessionTransition } from "@openomni/protocol";
@@ -83,7 +84,7 @@ test("outbound projection folds a verified acknowledgement without erasing its p
   expect(SessionHandleStore.outboundRows("source")).toEqual([
     { message, state: "delivered", destinationReceipt: { id: "received", revision: 2 } },
   ]);
-  expect(SessionHandleStore.tree("source").map((action) => action.id)).toEqual([
+  expect(sessionTree("source").map((action) => action.id)).toEqual([
     "configure",
     "pending",
     "ack",

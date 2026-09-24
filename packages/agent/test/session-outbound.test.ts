@@ -1,4 +1,5 @@
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Cause, Chunk, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -60,6 +61,7 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
       Effect.gen(function* () {
         const runtime: SessionRuntime = {
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: () => Effect.fail(foreign("receiver", "unavailable")),
         };
@@ -67,15 +69,15 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
         yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
         yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
         const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "child", parentId: "parent", role: "worker", runner: childRunner }, fixture), fixture); });
-        const before = SessionHandleStore.tree("parent");
+        const before = sessionTree("parent");
         expect(yield* failure(child.prompt("work", origin))).toMatchObject({
           _tag: "ForeignFailure",
           operation: "receiver",
           cause: "unavailable",
         });
-        expect(SessionHandleStore.tree("parent")).toEqual(before);
+        expect(sessionTree("parent")).toEqual(before);
         expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
-        const source = SessionHandleStore.tree("child");
+        const source = sessionTree("child");
         expect(
           source.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
@@ -110,6 +112,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
         function runtime(at: number, loseAck: boolean): SessionRuntime {
           const value: SessionRuntime = {
             observations: { publish: () => undefined },
+            authorizeConfigure: allowConfigure,
             clock: () => at,
             dispatchOutbound: ({
               message,
@@ -143,7 +146,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
             cause: "lost",
           });
           expect(consumed).toBe(1);
-          const parentBefore = SessionHandleStore.tree("parent");
+          const parentBefore = sessionTree("parent");
           expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("pending");
           yield* closeSessions(current);
           Storage.reset();
@@ -154,7 +157,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
           expect(sent).toHaveLength(2);
           expect(sent[1]).toBe(sent[0]);
           expect(consumed).toBe(1);
-          expect(SessionHandleStore.tree("parent")).toEqual(parentBefore);
+          expect(sessionTree("parent")).toEqual(parentBefore);
           expect(SessionHandleStore.inboxRows("parent")).toHaveLength(1);
           expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("delivered");
         } finally {
@@ -172,6 +175,7 @@ test("a destination receipt for different bytes is refused and the obligation st
       Effect.gen(function* () {
         const prompted = commissionedChild({
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: ({
             message,
@@ -200,6 +204,7 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
       Effect.gen(function* () {
         const prompted = commissionedChild({
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: ({
             message,

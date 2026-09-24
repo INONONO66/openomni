@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -51,14 +52,14 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       await runEffect(fixture.worker.tick());
       // Assert durable truth before native callbacks or bus microtasks can run.
       expect(fixture.rows()).toHaveLength(1);
-      expect(fixture.storage.actions.tree("monitor-session").map((action) => action.kind)).toEqual([
+      expect(sessionTree("monitor-session", fixture.storage.actions).map((action) => action.kind)).toEqual([
         "alarm.arm",
         "alarm.fired",
         "prompt",
       ]);
       const createdRow = await created;
       expect(alarmPathEvent(createdRow.content)).toEqual({ path, event: "create" });
-      const createActions = fixture.storage.actions.tree("monitor-session");
+      const createActions = sessionTree("monitor-session", fixture.storage.actions);
       expect(createActions.map((action) => action.kind)).toEqual([
         "alarm.arm",
         "alarm.fired",
@@ -75,7 +76,7 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       await runEffect(fixture.worker.tick());
       expect(fixture.rows()).toHaveLength(2);
       expect(fixture.rows().at(-1)?.origin.value).toBe("modify");
-      expect(fixture.storage.actions.tree("monitor-session").at(-1)?.kind).toBe("prompt");
+      expect(sessionTree("monitor-session", fixture.storage.actions).at(-1)?.kind).toBe("prompt");
       expect(alarmPathEvent((await modified).content)).toEqual({ path, event: "modify" });
       const old = fixture.storage.alarms.get("modify");
       if (old === undefined) throw new Error("missing alarm");

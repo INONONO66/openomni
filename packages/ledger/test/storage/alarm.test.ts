@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Alarm, LedgerSession, type LedgerAction } from "@openomni/protocol";
@@ -109,7 +110,7 @@ function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
     ),
   ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
   return {
-    tree: adapter.actions.tree("alarm-session"),
+    tree: sessionTree("alarm-session", adapter.actions),
     inbox: adapter.inbox.list("alarm-session"),
     row: adapter.alarms.get("watch"),
   };
@@ -163,7 +164,7 @@ test("alarm rollback: fired action and inbox share one transaction, bus follows 
       ),
     ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
     expect(
-      fixture.adapter.actions.tree("alarm-session").map((action: LedgerAction.Node) => action.kind),
+      sessionTree("alarm-session", fixture.adapter.actions).map((action: LedgerAction.Node) => action.kind),
     ).toEqual(["alarm.arm"]);
     expect(fixture.adapter.sessions.get("alarm-session")?.revision).toBe(1);
     expect(fixture.adapter.inbox.list("alarm-session")).toEqual([]);

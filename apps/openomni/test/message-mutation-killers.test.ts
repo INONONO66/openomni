@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
@@ -165,7 +166,7 @@ test("message observations carry the committed compiled policy rule identity", a
       matchedRuleIds: ["message.worker.actor"],
     });
     expect(
-      SessionHandleStore.tree(fixture.sessionId).some(
+      sessionTree(fixture.sessionId).some(
         (action) => action.kind === "policy.decision",
       ),
     ).toBe(true);

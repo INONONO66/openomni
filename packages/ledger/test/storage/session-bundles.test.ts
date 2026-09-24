@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,14 +32,14 @@ test("new session creation persists canonical bundle selection across reopen", (
         "zeta",
       ]);
       expect(bundles).toEqual(["zeta", "audit-log"]);
-      const actions = SessionHandleStore.tree("selected");
+      const actions = sessionTree("selected");
       Storage.reset();
       initialize({ dbPath });
       expect(SessionHandleStore.latestGenerationFor("selected").bundles).toEqual([
         "audit-log",
         "zeta",
       ]);
-      expect(SessionHandleStore.tree("selected")).toEqual(actions);
+      expect(sessionTree("selected")).toEqual(actions);
       expect(SessionHandleStore.verifyChain("selected")).toMatchObject({
         kind: "intact",
         length: 1,
@@ -95,7 +96,7 @@ test("historic configure bytes and hashes survive default empty bundle decoding 
         }),
       );
       const before = storage.testDatabase().query("SELECT effect, action_hash FROM action").get();
-      const actions = storage.actions.tree("historic");
+      const actions = sessionTree("historic", storage.actions);
       expect(SessionHandleStore.latestGenerationFor("historic").bundles).toEqual([]);
       Storage.reset();
       const reopened = new SqliteStorageAdapter(dbPath);
@@ -104,7 +105,7 @@ test("historic configure bytes and hashes survive default empty bundle decoding 
       expect(reopened.testDatabase().query("SELECT effect, action_hash FROM action").get()).toEqual(
         before,
       );
-      expect(reopened.actions.tree("historic")).toEqual(actions);
+      expect(sessionTree("historic", reopened.actions)).toEqual(actions);
       expect(reopened.actions.verifyChain("historic")).toMatchObject({ kind: "intact", length: 1 });
       expect(SessionGeneration.Snapshot.parse(historic).bundles).toEqual([]);
     } finally {

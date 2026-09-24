@@ -1,3 +1,4 @@
+import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { ExecutionError } from "./errors";
@@ -7,6 +8,25 @@ function record(value: PlainValue | undefined): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+/** A route switch is evidence on the newly admitted attempt, not a rewritten selection. */
+export function attemptRouteChange(
+  previous: LedgerAction.Receipt | undefined,
+  next: PlainValue,
+): PlainValue {
+  if (previous === undefined) return null;
+  const from = record(record(previous.action.intent.value).value);
+  const to = record(next);
+  if (typeof from.provider !== "string" || typeof from.model !== "string" ||
+      typeof to.provider !== "string" || typeof to.model !== "string") return null;
+  if (from.provider === to.provider && from.model === to.model) return null;
+  return {
+    kind: "route.changed",
+    from: { provider: from.provider, model: from.model },
+    to: { provider: to.provider, model: to.model },
+    fromActionId: previous.action.id,
+  };
+}
+
 /**
  * The model an earlier turn's last provider attempt named, read back from
  * action history. Undefined when no earlier turn attempted a chat; the current
@@ -14,23 +34,12 @@ function record(value: PlainValue | undefined): PlainObject {
  * own selection.
  */
 export function pinnedModelSelection(
-  actions: readonly LedgerAction.Node[],
+  sessionId: string,
   turnId: string,
 ): Model.Ref | undefined {
-  const thisTurn = new Set<string | null>([turnId]);
-  const thisTurnLlm = new Set<string | null>();
-  let pinned: Model.Ref | undefined;
-  for (const action of actions) {
-    const intent = record(action.intent.value);
-    if (action.kind === "turn" && intent.phase === "resume" && intent.turnId === turnId)
-      thisTurn.add(action.id);
-    if (action.kind === "llm" && thisTurn.has(action.parentId)) thisTurnLlm.add(action.id);
-    if (action.kind !== "attempt" || intent.phase !== "intent" || intent.op !== "chat") continue;
-    if (thisTurnLlm.has(action.parentId)) continue;
-    const { provider, model } = record(intent.value);
-    if (typeof provider === "string" && typeof model === "string") pinned = { provider, id: model };
-  }
-  return pinned;
+  const action = SessionHandleStore.priorModelAttempt(sessionId, turnId);
+  const { provider, model } = record(record(action?.intent.value).value);
+  return typeof provider === "string" && typeof model === "string" ? { provider, id: model } : undefined;
 }
 
 /**

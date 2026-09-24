@@ -1,4 +1,5 @@
-import { type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { allowConfigure, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
@@ -58,6 +59,7 @@ test("gateway request port commits physical bindings and receiving intake under 
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
     onInboxCommitted: (ids) => {
       expect(SessionHandleStore.row("source").leaseOwner).toBeNull();
       received.push(...ids);
@@ -92,9 +94,9 @@ test("gateway request port commits physical bindings and receiving intake under 
     content: "answer",
   };
   expect(yield* port.answer(input)).toBe("resolved");
-  const before = SessionHandleStore.tree("source");
+  const before = sessionTree("source");
   expect(yield* port.answer({ ...input, receivedAt: 150 })).toBe("resolved");
-  expect(SessionHandleStore.tree("source")).toEqual(before);
+  expect(sessionTree("source")).toEqual(before);
   expect(received).toEqual(["source"]);
   expect(SessionHandleStore.inboxRows("source")).toHaveLength(1);
   expect(port.list()[0]?.state).toBe("resolved");
@@ -106,6 +108,7 @@ test("gateway timeout resolves the original action without creating conversation
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => now,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   yield* port.open(opening("first"));
   yield* port.timeout("first", 199);
@@ -114,14 +117,14 @@ test("gateway timeout resolves the original action without creating conversation
   yield* port.timeout("first", now);
   expect(port.list()[0]?.state).toBe("expired");
   expect(SessionHandleStore.inboxRows("source")).toEqual([]);
-  const before = SessionHandleStore.tree("source");
+  const before = sessionTree("source");
   yield* port.timeout("first", now);
-  expect(SessionHandleStore.tree("source")).toEqual(before);
+  expect(sessionTree("source")).toEqual(before);
 })));
 
 test("request opening uses its original turn generation, never a later catalog", () => isolated(Effect.gen(function* () {
   yield* setup;
-  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree("source"));
+  const generation = SessionHandleStore.latestGeneration(sessionTree("source"));
   const append = (action: LedgerAction.Append) => {
     if (
       Storage.get().actions?.append(action, SessionHandleStore.row("source").revision) === undefined
@@ -174,6 +177,7 @@ test("request opening uses its original turn generation, never a later catalog",
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* port.open(opening("pinned"))).toMatchObject({
     turnId: "turn",
@@ -226,10 +230,11 @@ test("gateway port refuses missing original actions and mismatched physical rece
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing"))))).toBe(true);
   yield* port.open(opening("first"));
-  const before = SessionHandleStore.tree("source");
+  const before = sessionTree("source");
   const refused = yield* Effect.exit(port.receipt({
       inputId: "bad",
       requestId: "first",
@@ -239,5 +244,5 @@ test("gateway port refuses missing original actions and mismatched physical rece
       at: 100,
     }));
   expect(Exit.isFailure(refused)).toBe(true);
-  expect(SessionHandleStore.tree("source")).toEqual(before);
+  expect(sessionTree("source")).toEqual(before);
 })));

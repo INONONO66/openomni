@@ -1,3 +1,4 @@
+import { memoryExecutionReads } from "./helpers/execution-reads";
 import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
@@ -8,10 +9,11 @@ import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue } from
 import { createTurnDispatcher } from "../src/index";
 import type { DurableExecutor, ExecutionBatchItem } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
-import { CommitRefused, ForeignFailure as LedgerFailure } from "@openomni/ledger";
+import { CommitRefused, ForeignFailure as LedgerFailure, SessionHandleStore } from "@openomni/ledger";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
+import { requestLedger } from "./helpers/request-ledger";
 
 import { compiledPolicy } from "./helpers/compiled-policy";
 
@@ -30,7 +32,7 @@ function harness() {
     entropy: () => `action:${++sequence}`,
     observations: { publish: () => undefined },
     ledger: {
-      actions: () => actions,
+      ...memoryExecutionReads(() => actions),
       commit: (action) => Effect.sync(() => {
         const node = LedgerAction.Node.parse({
           ...action,
@@ -391,6 +393,31 @@ describe("completion recovery", () => {
   });
 });
 
+test("SQLite recovery settles all 257 open operations across the page boundary exactly once", () => isolated(Effect.gen(function* () {
+  const recording = requestLedger({ id: "session", turnId: "turn" });
+  const intents = Array.from({ length: 257 }, (_value: undefined, index: number) =>
+    openIntent(`pending:${index}`, "tool", "turn", { op: "write", turnId: "turn" }),
+  );
+  expect(recording.commitBatch(intents).ok).toBe(true);
+  const executor = testExecutor({
+    ...recording, policy: compiledPolicy(), observations: { publish: (): void => undefined },
+  });
+  yield* executor.recover();
+  for (const intent of intents) {
+    const result = SessionHandleStore.resultFor("session", intent.id);
+    if (result === undefined) throw new Error(`missing result for ${intent.id}`);
+    expect(effect(result).terminal).toBe("outcome_unknown");
+    expect(effect(result).recovery).toEqual({
+      site: "crash", classification: "ambiguous_no_replay", proof: "indeterminate",
+      proofReceipt: null, revertReceipt: null, rawSettled: false,
+    });
+  }
+  expect(SessionHandleStore.openOperationsPage("session", "turn")).toEqual([]);
+  const revision = SessionHandleStore.row("session").revision;
+  yield* executor.recover();
+  expect(SessionHandleStore.row("session").revision).toBe(revision);
+})));
+
 describe("crash-open recovery", () => {
   test("classification is pinned on the intent and defaults by kind", async () => {
     const { actions, options } = harness();
@@ -512,6 +539,33 @@ describe("crash-open recovery", () => {
     expect(effect(nth(actions, 3))).toMatchObject({
       recovery: { classification: "ambiguous_no_replay", proof: "indeterminate" },
     });
+  });
+
+  test.each(["success", "failure", "reasoning"] as const)("recovery keeps billed %s evidence and never proves a visible prefix absent", async (outcome: "success" | "failure" | "reasoning") => {
+    const { actions, options } = harness();
+    const usage = { inputTokens: 19, outputTokens: 7, reasoningTokens: 3 };
+    const visibleOutput = outcome !== "reasoning";
+    const evidence: PlainObject = outcome === "success" ? { usage, visibleOutput } : {
+      failures: [{ tag: "LlmRunFailure", usage, visibleOutput, provider: "failed-route" }],
+      defects: [], interrupted: false,
+    };
+    await isolated(Effect.gen(function* () {
+      yield* options.ledger.commit(openIntent("prefix-llm", "llm", "turn", { op: "chat", value: {} }));
+      yield* options.ledger.commit(openIntent("prefix-attempt", "attempt", "prefix-llm", { op: "chat", value: {} }));
+      yield* options.ledger.commit(settledResult("prefix-attempt", "attempt", { terminal: "executed", evidence }));
+    }));
+    const before = structuredClone(actions);
+    const executor = testExecutor(options);
+    await recover(executor);
+    expect(actions.slice(0, before.length)).toEqual(before);
+    expect(actions).toHaveLength(before.length + 1);
+    expect(actions.at(-1)?.effect.value).toMatchObject({
+      terminal: visibleOutput ? "outcome_unknown" : "interrupted",
+      recovery: { proof: visibleOutput ? "indeterminate" : "absent" },
+    });
+    const settled = structuredClone(actions);
+    await recover(executor);
+    expect(actions).toEqual(settled);
   });
 
   test("an llm whose attempts all settled is interrupted from that evidence under a resume parent", async () => {

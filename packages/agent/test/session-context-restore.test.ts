@@ -1,11 +1,12 @@
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { describe, expect, test } from "bun:test";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { describe, expect, spyOn, test } from "bun:test";
 import { Cause, Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
 import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated } from "./helpers/isolated";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
 import { Bus, createTurnDispatcher, type SessionRunner } from "../src/index";
 import { session } from "../src/session-handle";
@@ -15,6 +16,7 @@ import { foldSessionHistory } from "../src/session-lifecycle/history";
 let nextId = 0;
 function runtime(): SessionRuntime {
   return {
+    authorizeConfigure: allowConfigure,
     observations: Bus,
     clock: () => 1_000,
     entropy: () => `restore-id-${++nextId}`,
@@ -58,13 +60,38 @@ function program<E>(
       });
       const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture), fixture); });
       yield* handle.prompt("hello");
-      const before = SessionHandleStore.tree("ctx");
+      const before = sessionTree("ctx");
       yield* body(handle, before);
     }),
   );
 }
 
 describe("restore_context_projection", () => {
+  test("folding minus a selected subtree is a no-I/O what-if, not a live restoration", () => isolated(
+    program((_handle, before) => Effect.sync(() => {
+      const selected = compactionIntent(before);
+      const excluded = new Set([selected.id]);
+      const retained = before.filter((action) => {
+        if (action.parentId !== null && excluded.has(action.parentId)) excluded.add(action.id);
+        return !excluded.has(action.id);
+      });
+      const original = structuredClone([...before]);
+      const expected = foldSessionHistory("ctx", before.slice(0, before.indexOf(selected)));
+      const storage = spyOn(Storage, "get").mockImplementation(() => { throw new Error("what-if storage access"); });
+      const publication = spyOn(Bus, "publish").mockImplementation(() => { throw new Error("what-if publication"); });
+      try {
+        expect(foldSessionHistory("ctx", retained)).toEqual(expected);
+        expect(storage).not.toHaveBeenCalled();
+        expect(publication).not.toHaveBeenCalled();
+        expect(before).toEqual(original);
+      } finally {
+        storage.mockRestore();
+        publication.mockRestore();
+      }
+      expect(sessionTree("ctx")).toEqual(original);
+    })),
+  ));
+
   test("appends the typed compensation, restores the prior projection and leaves the compaction intact", () =>
     isolated(
       program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
@@ -75,7 +102,7 @@ describe("restore_context_projection", () => {
           ).toEqual(["assistant"]);
           const outcome = yield* handle.restoreContext(compaction.id);
           expect(outcome.terminal).toBe("executed");
-          const after = SessionHandleStore.tree("ctx");
+          const after = sessionTree("ctx");
           expect(after.slice(0, before.length)).toEqual([...before]);
           const appended = after.slice(before.length);
           expect(
@@ -88,6 +115,7 @@ describe("restore_context_projection", () => {
             ["compaction", compaction.id],
             ["policy.decision", compaction.id],
             ["compaction", nth(appended, 1).id],
+            ["fold.checkpoint", nth(appended, 3).id],
           ]);
           expect(nth(appended, 0).intent.value).toMatchObject({
             hook: "turn.post",
@@ -139,7 +167,7 @@ describe("restore_context_projection", () => {
               terminal: "blocked_pre",
               reason: "pinned_projection",
             });
-            const after = SessionHandleStore.tree("ctx");
+            const after = sessionTree("ctx");
             expect(
               after
                 .slice(before.length)
@@ -186,7 +214,7 @@ describe("restore_context_projection", () => {
               name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
             });
           }
-          expect(SessionHandleStore.tree("ctx")).toEqual([...before]);
+          expect(sessionTree("ctx")).toEqual([...before]);
           expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
         }),
       ),

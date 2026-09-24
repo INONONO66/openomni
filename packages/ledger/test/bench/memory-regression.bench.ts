@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { L0Observation } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -24,7 +25,7 @@ describe("session memory regression", () => {
       watch.unsubscribe();
       expect(Bus.listenerCount()).toBe(baseline);
     }
-    expect(SessionHandleStore.tree("watched")).toHaveLength(1);
+    expect(sessionTree("watched")).toHaveLength(1);
   }, 30_000);
 
   test("bus subscribe/publish/unsubscribe does not leak", async () => {
@@ -56,6 +57,6 @@ describe("session memory regression", () => {
     };
     for (let index = 0; index < 500; index += 1) hydrate();
     expect(SessionHandleStore.listRows()).toHaveLength(1);
-    expect(SessionHandleStore.tree("existing")).toHaveLength(1);
+    expect(sessionTree("existing")).toHaveLength(1);
   }, 30_000);
 });

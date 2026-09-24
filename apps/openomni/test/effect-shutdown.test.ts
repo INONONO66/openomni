@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { session, createTurnDispatcher, defineTool, eraseTool, sessionTool, type SessionRuntime } from "@openomni/agent";
@@ -12,6 +13,7 @@ import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "..
 import { installShutdownHandlers } from "../src/index";
 import { Clock, GenerationLayers } from "@openomni/agent";
 import { AppLifecycleFailure } from "../src/runtime";
+import { allowConfigure } from "./helpers/generation-services";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
@@ -116,6 +118,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     render: (_args, output) => output,
   }));
   const sessionRuntime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     closeGraceMs: 0,
     onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };
@@ -137,7 +140,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     order.push("close.returned");
     await interrupted.promise;
     expect(SessionHandleStore.row(handle.id)).toMatchObject({ leaseOwner: lease.leaseOwner, leaseFence: lease.leaseFence });
-    expect(SessionHandleStore.tree(handle.id).some((action) => {
+    expect(sessionTree(handle.id).some((action) => {
       const value = action.effect.value;
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
     })).toBe(true);

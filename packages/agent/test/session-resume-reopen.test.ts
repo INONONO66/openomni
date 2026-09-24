@@ -1,6 +1,8 @@
+import { PlainValueSchema } from "@openomni/protocol";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -26,6 +28,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
           const directory = mkdtempSync(join(tmpdir(), "937-resume-"));
           const dbPath = join(directory, "chat.sqlite");
           let runtime: SessionRuntime = {
+            authorizeConfigure: allowConfigure,
             observations: { publish: () => undefined },
             clock: () => 1000,
           };
@@ -106,7 +109,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                 at: 1,
               });
               const generation = SessionHandleStore.latestGeneration(
-                SessionHandleStore.tree("resume"),
+                sessionTree("resume"),
               );
               const lease = yield* SessionHandleStore.acquireLease({
                 sessionId: "resume",
@@ -148,7 +151,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                     kind: "turn",
                     intent: {
                       encodingVersion: 1,
-                      value: SessionTurn.Intent.parse({
+                      value: PlainValueSchema.parse(SessionTurn.DecodeIntent.parse({
                         phase: "intent",
                         resultId: originalResult,
                         inboxIds: [],
@@ -158,7 +161,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                         toolsHash: generation.toolsHash,
                         systemHash: generation.systemHash,
                         policyGeneration: 1,
-                      }),
+                      })),
                     },
                     effect: { encodingVersion: 1, value: { phase: "pending" } },
                     irreversible: true,
@@ -176,11 +179,11 @@ for (const mode of ["interrupted", "crash-open"] as const) {
               });
               expect(commit.ok).toBe(true);
             }
-            const immutable = SessionHandleStore.tree("resume");
+            const immutable = sessionTree("resume");
             yield* awaitSignal(closeSessions(runtime));
             Storage.reset();
             Storage.initialize({ dbPath });
-            runtime = { observations: { publish: () => undefined }, clock: () => 2000 };
+            runtime = { observations: { publish: () => undefined }, clock: () => 2000, authorizeConfigure: allowConfigure };
             yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
             const recovered = inputs.at(-1);
             if (recovered === undefined) throw new Error("missing recovered invocation");
@@ -192,7 +195,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
               expect(recovered.turnId).not.toBe(originalTurn);
               expect(recovered.resultId).not.toBe(originalResult);
             }
-            const tree = SessionHandleStore.tree("resume");
+            const tree = sessionTree("resume");
             expect(tree.slice(0, immutable.length)).toEqual(immutable);
             expect(
               tree.filter(
@@ -212,7 +215,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
               releaseLease: false,
             });
             expect(yield* failure(stale)).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
-            expect(SessionHandleStore.tree("resume")).toEqual(tree);
+            expect(sessionTree("resume")).toEqual(tree);
           } finally {
             yield* awaitSignal(closeSessions(runtime));
             Storage.reset();

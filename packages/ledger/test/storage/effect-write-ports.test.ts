@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import {
@@ -96,7 +97,7 @@ test("commit refusal is tagged with revision and fence and leaves no partial SQL
     currentFence: 1,
   });
   expect(f.storage.sessions.get("session")).toEqual(before);
-  expect(f.storage.actions.tree("session")).toEqual([]);
+  expect(sessionTree("session", f.storage.actions)).toEqual([]);
   expect(f.observations).toEqual([]);
 });
 
@@ -116,7 +117,7 @@ test("a late commit CAS refusal rolls back actions already appended in the same 
     currentRevision: 0,
   });
   expect(f.storage.sessions.get("session")).toEqual(before);
-  expect(f.storage.actions.tree("session")).toEqual([]);
+  expect(sessionTree("session", f.storage.actions)).toEqual([]);
   expect(f.observations).toEqual([]);
 });
 
@@ -202,7 +203,7 @@ test("expired renewal and stale commit fail in the typed channel", () => {
     fence: 1,
     currentFence: 2,
   });
-  expect(f.storage.actions.tree("session")).toEqual([]);
+  expect(sessionTree("session", f.storage.actions)).toEqual([]);
 });
 
 test("alarm fire on a missing row is a typed refusal", () => {
@@ -223,7 +224,7 @@ test("alarm prompt append refusal rolls back the fired action without publishing
   );
   const collision = canonicalDigest(["alarm.inbox", "alarm", 1, "timer"]);
   f.storage.actions.append({ ...LedgerAction.Append.parse(f.input.actions[0]), id: collision }, 1);
-  const before = f.storage.actions.tree("session");
+  const before = sessionTree("session", f.storage.actions);
   const observed = [...f.observations];
   expect(Effect.runSync(Effect.flip(f.storage.alarms.fire(fire)))).toMatchObject({
     _tag: "AlarmRefused",
@@ -231,7 +232,7 @@ test("alarm prompt append refusal rolls back the fired action without publishing
     operation: "fire",
     reason: "prompt",
   });
-  expect(f.storage.actions.tree("session")).toEqual(before);
+  expect(sessionTree("session", f.storage.actions)).toEqual(before);
   expect(f.storage.inbox.list("session")).toEqual([]);
   expect(f.storage.alarms.get("alarm")?.status).toBe("armed");
   expect(f.observations).toEqual(observed);
@@ -252,7 +253,7 @@ test("SQLite failure rolls back alarm action prompt and inbox and retains string
   if (failure._tag !== "ForeignFailure") throw failure;
   expect(typeof failure.cause).toBe("string");
   expect(failure.cause.length).toBeGreaterThan(0);
-  expect(f.storage.actions.tree("session").map((action) => action.kind)).toEqual(["alarm.arm"]);
+  expect(sessionTree("session", f.storage.actions).map((action) => action.kind)).toEqual(["alarm.arm"]);
   expect(f.storage.inbox.list("session")).toEqual([]);
   expect(f.storage.alarms.get("alarm")?.status).toBe("armed");
   expect(f.observations.map((event) => event.kind)).toEqual(["alarm.arm"]);
@@ -276,7 +277,7 @@ test("successful writes return the existing adapter receipt and row values", () 
   expect(result.ok).toBe(true);
   expect(f.storage.sessions.get("session")).toEqual(result.row);
   expect(result.receipts.map((receipt) => receipt.action)).toEqual(
-    f.storage.actions.tree("session"),
+    sessionTree("session", f.storage.actions),
   );
   expect(result.receipts.map((receipt) => receipt.revision)).toEqual([1]);
   expect(f.storage.actions.verifyChain("session")).toMatchObject({ kind: "intact" });
@@ -350,7 +351,7 @@ test("caller cancellation before SQLite commit cannot split alarm prompt and inb
   expect(observedAbort).toBe(true);
   if (Exit.isFailure(exit)) expect(Cause.isInterruptedOnly(exit.cause)).toBe(true);
   expect(controller.signal.aborted).toBe(true);
-  expect(f.storage.actions.tree("session").map((action) => action.kind)).toEqual([
+  expect(sessionTree("session", f.storage.actions).map((action) => action.kind)).toEqual([
     "alarm.arm",
     "alarm.fired",
     "prompt",

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { SessionHandleStore } from "@openomni/ledger";
 import { LlmLive } from "@openomni/llm";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "@openomni/policy";
@@ -10,6 +11,9 @@ import { makeSessionGenerations, type GenerationBundle } from "../../src/session
 import type { SessionRuntime } from "../../src/session-contract";
 import { Clock, Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";
 import { observationService } from "./service-layers";
+
+/** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
+export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
 
 export interface SessionFixture extends SessionRuntime {
   readonly clock?: () => number;
@@ -54,7 +58,7 @@ function sessionServices(fixture: SessionFixture) {
     const generations: Context.Tag.Service<typeof GenerationLayers> = {
       initialize: () => Effect.void,
       capture: (id) => Effect.gen(function* () {
-        const snapshot = SessionHandleStore.generationByNumber(SessionHandleStore.tree(id.sessionId), id.generation);
+        const snapshot = SessionHandleStore.generationByNumber(sessionTree(id.sessionId), id.generation);
         if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
         const owner = yield* manager(id.sessionId);
         return yield* owner.capture(bundle(id.sessionId, snapshot));

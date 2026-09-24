@@ -1,6 +1,7 @@
+import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
 import { prepareChatFixture } from "../../helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { dispatchingRunner } from "../../helpers/effect-g2";
@@ -49,7 +50,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
         ];
         let calls = 0;
         const inputs: Message.WithParts[][] = [];
-        let runtime: SessionRuntime = { observations: { publish: () => undefined } };
+        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
         const runner = dispatchingRunner(
           definitions,
           () => runtime,
@@ -100,7 +101,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           yield* closeSessions(runtime);
           Storage.reset();
           Storage.initialize({ dbPath });
-          runtime = { observations: { publish: () => undefined } };
+          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
           expect((yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("after reopen"))?.kind).toBe(
             "result",
           );
@@ -116,7 +117,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             ),
           ).toHaveLength(1);
           expect(
-            SessionHandleStore.tree("history").filter(
+            sessionTree("history").filter(
               (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "message",
             ),
           ).not.toHaveLength(0);
@@ -135,7 +136,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
       Effect.gen(function* () {
         const directory = mkdtempSync(join(tmpdir(), "937-compaction-reopen-"));
         const dbPath = join(directory, "chat.sqlite");
-        let runtime: SessionRuntime = { observations: { publish: () => undefined } };
+        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
         let calls = 0;
         let reopenedInput: Message.WithParts[] = [];
         let nextBoundary: Message.WithParts[] = [];
@@ -235,7 +236,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           ).toEqual(["during-1", "during-2"]);
           summary.resolve("checkpoint");
           yield* Effect.forEach([second, ...concurrent], Fiber.join);
-          const before = SessionHandleStore.tree("compact");
+          const before = sessionTree("compact");
           const node = [...before]
             .reverse()
             .find(
@@ -278,10 +279,10 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           yield* closeSessions(runtime);
           Storage.reset();
           Storage.initialize({ dbPath });
-          runtime = { observations: { publish: () => undefined } };
+          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
           yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("reopened");
           expect(reopenedInput.slice(0, -1)).toEqual(afterConcurrent);
-          expect(SessionHandleStore.tree("compact").slice(0, before.length)).toEqual(before);
+          expect(sessionTree("compact").slice(0, before.length)).toEqual(before);
         } finally {
           yield* closeSessions(runtime);
           Storage.reset();

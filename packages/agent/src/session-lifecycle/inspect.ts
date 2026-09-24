@@ -16,29 +16,45 @@ import {
 function inspectActions(
   sessionId: string,
   parentId: string | null,
-  actions: readonly LedgerAction.Node[],
+  headRevision: number,
 ): Omit<SessionHistory.Inspection, "children"> {
-  const byId = new Map(actions.map((action) => [action.id, action]));
   const turns = new Map<string, string | null>();
-  const parentOf = (action: LedgerAction.Node) =>
-    action.parentId === null ? undefined : byId.get(action.parentId);
-  const turnOf = (action: LedgerAction.Node | undefined): string | null => {
-    if (action === undefined) return null;
-    const known = turns.get(action.id);
-    if (known !== undefined) return known;
-    const turnId = ownTurnId(action) ?? turnOf(parentOf(action));
-    turns.set(action.id, turnId);
-    return turnId;
-  };
-  const transitions = actions.map((action) => transitionOf(action, turnOf(action)));
+  const turnOf: TurnOf = (action) => (action === undefined ? null : (turns.get(action.id) ?? null));
+  const transitions: SessionHistory.Transition[] = [];
+  const policy: SessionHistory.PolicyDecision[] = [];
+  const requests = new Map<string, SessionHistory.Request>();
+  const compactions: SessionHistory.Compaction[] = [];
+  const restorations = new Map<string, string[]>();
+  let cursor = 0;
+  while (cursor < headRevision) {
+    const page = SessionHandleStore.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
+    for (const action of page.actions) {
+      if (action.ordinal > headRevision) break;
+      const turnId = ownTurnId(action) ?? turns.get(action.parentId ?? "") ?? null;
+      turns.set(action.id, turnId);
+      transitions.push(transitionOf(action, turnId));
+      policy.push(...policyDecisionOf(action, turnId));
+      const request = requestRecord(action, turnOf);
+      if (request !== undefined) requests.set(request.requestId, request);
+      const compaction = compactionRecord(action, turnOf, restorations);
+      if (compaction !== undefined) compactions.push(compaction);
+      const target = restorationTarget(action);
+      if (target !== undefined)
+        restorations.set(target, [...(restorations.get(target) ?? []), action.id]);
+      cursor = action.ordinal;
+    }
+  }
   return {
     sessionId,
     parentId,
-    headRevision: actions.at(-1)?.ordinal ?? 0,
+    headRevision,
     transitions,
-    policy: actions.flatMap((action) => policyDecisionOf(action, turnOf(action))),
-    requests: requestsOf(actions, turnOf),
-    compactions: compactionsOf(actions, turnOf),
+    policy,
+    requests: [...requests.values()],
+    compactions: compactions.map((record) => ({
+      ...record,
+      restoredBy: restoredBy(restorations, record.compactionId),
+    })),
   };
 }
 
@@ -61,7 +77,7 @@ export function inspectSession(
         ? []
         : rows.filter((row) => row.parentId === id).map((row) => visit(row.id, remaining - 1));
     return {
-      ...inspectActions(id, current.parentId, SessionHandleStore.tree(id)),
+      ...inspectActions(id, current.parentId, current.revision),
       children,
     };
   };
@@ -303,18 +319,6 @@ function requestRecord(
   return parsed.success ? requestSummary(parsed.data, action, turnOf) : undefined;
 }
 
-function requestsOf(
-  actions: readonly LedgerAction.Node[],
-  turnOf: TurnOf,
-): SessionHistory.Request[] {
-  const latest = new Map<string, SessionHistory.Request>();
-  for (const action of actions) {
-    const record = requestRecord(action, turnOf);
-    if (record !== undefined) latest.set(record.requestId, record);
-  }
-  return [...latest.values()];
-}
-
 function isRestoreIntent(action: LedgerAction.Node, intent: PlainObject): boolean {
   return all(
     action.kind === "compaction",
@@ -328,18 +332,6 @@ function restorationTarget(action: LedgerAction.Node): string | undefined {
   if (!isRestoreIntent(action, intent)) return undefined;
   const compactionId = object(intent.value).compactionId;
   return typeof compactionId === "string" ? compactionId : undefined;
-}
-
-function restorationsOf(actions: readonly LedgerAction.Node[]): Map<string, string[]> {
-  const restorations = new Map<string, string[]>();
-  for (const action of actions) {
-    const target = restorationTarget(action);
-    if (target === undefined) continue;
-    const ids = restorations.get(target) ?? [];
-    ids.push(action.id);
-    restorations.set(target, ids);
-  }
-  return restorations;
 }
 
 function compactionResult(
@@ -383,17 +375,6 @@ function compactionRecord(
     discarded: discardedOf(object(executed.result.discarded)),
     restoredBy: restoredBy(restorations, action.parentId),
   };
-}
-
-function compactionsOf(
-  actions: readonly LedgerAction.Node[],
-  turnOf: TurnOf,
-): SessionHistory.Compaction[] {
-  const restorations = restorationsOf(actions);
-  return actions.flatMap((action) => {
-    const record = compactionRecord(action, turnOf, restorations);
-    return record === undefined ? [] : [record];
-  });
 }
 
 function object(value: PlainValue | undefined): PlainObject {

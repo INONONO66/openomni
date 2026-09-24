@@ -173,7 +173,10 @@ test.each([
   Migration.applyOrdered(
     db,
     migrationDir,
-    ORDERED_MIGRATIONS.filter((entry) => entry.name !== DECISION_FACT_MIGRATION),
+    ORDERED_MIGRATIONS.slice(
+      0,
+      ORDERED_MIGRATIONS.findIndex((entry) => entry.name === DECISION_FACT_MIGRATION),
+    ),
   );
   seed(db, "route:archive", 1);
   seed(db, "route:archive", 2);

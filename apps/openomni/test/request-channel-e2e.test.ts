@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
@@ -20,7 +21,7 @@ test("real external WebSocket reply wakes its original idle request owner withou
     Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.kind !== "turn") return;
       const terminal = SessionHandleStore.turnTerminal(
-        SessionHandleStore.tree(event.sessionId).find((action) => action.id === event.id),
+        sessionTree(event.sessionId).find((action) => action.id === event.id),
       );
       if (terminal?.text === "WAITING_EXTERNAL_SENTINEL") waiting.resolve(event.sessionId);
       if (terminal?.text === "DONE_EXTERNAL_SENTINEL") completed.resolve(event.sessionId);

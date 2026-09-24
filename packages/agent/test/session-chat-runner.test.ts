@@ -1,6 +1,8 @@
+import { runAgentSync } from "./helpers/executor";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
@@ -39,6 +41,20 @@ function input(
   boundary: SessionRunnerInput["boundary"],
   messages: SessionRunnerInput["messages"] = [{ role: "user", text: "initial" }],
 ): SessionRunnerInput {
+  const seeded = runAgentSync(SessionHandleStore.materialize({
+    id: "session-1", parentId: null, role: "resident", tools: [], system: { preset: "system", blocks: [] },
+    policyGeneration: 0, actionId: "fixture-configure", at: 1,
+  }));
+  if (seeded.created) {
+    const actions = Storage.get().actions;
+    if (actions === undefined) throw new Error("missing fixture actions");
+    for (const [index, message] of messages.entries()) actions.append({
+      id: `fixture-delivery-${index}`, sessionId: "session-1", parentId: null, kind: "inbox.deliver",
+      intent: { encodingVersion: 1, value: {} },
+      effect: { encodingVersion: 1, value: { phase: "delivery", turnId: "turn-1", inboxId: message.id ?? `fixture-message-${index}`, kind: "prompt", content: message.text, origin: { encodingVersion: 1, value: {} }, boundary: "before_llm" } },
+      ts: 1, irreversible: true,
+    }, SessionHandleStore.row("session-1").revision);
+  }
   return {
     sessionId: "session-1",
     role: "resident",
@@ -120,6 +136,7 @@ function runDurably(
     Bus.reset();
     let nextId = 0;
     const runtime: SessionRuntime = {
+      authorizeConfigure: allowConfigure,
       observations: Bus,
       clock: () => 1_000,
       entropy: () => `boundary-id-${++nextId}`,
@@ -142,7 +159,7 @@ function runDurably(
     try {
       yield* promptTurns(handle, prompts);
       return {
-        actions: SessionHandleStore.tree(handle.id),
+        actions: sessionTree(handle.id),
         inboxIds: SessionHandleStore.inboxRows(handle.id).map(
           (row: import("@openomni/protocol").Inbox.Row) => row.id,
         ),

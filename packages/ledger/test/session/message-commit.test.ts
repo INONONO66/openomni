@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -122,7 +123,7 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
   ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
   // Then no part of the child is visible.
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["parent"]);
-  expect(SessionHandleStore.tree("child")).toEqual([]);
+  expect(sessionTree("child")).toEqual([]);
   expect(SessionHandleStore.inboxRows("child")).toEqual([]);
 });
 
@@ -356,7 +357,7 @@ test("a source terminal and its outbound obligation roll back on the same fault"
     ),
   ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
   // Source history and consumption roll back; the parent was never part of this transaction.
-  expect(SessionHandleStore.tree("child").map((action) => action.id)).toEqual([
+  expect(sessionTree("child").map((action) => action.id)).toEqual([
     "child:configure",
     "letter",
   ]);

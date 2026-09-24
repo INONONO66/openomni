@@ -1,5 +1,6 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
-import { generationServices } from "./helpers/generation-services";
+import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { observationService } from "../../../packages/agent/test/helpers/service-layers";
 import { beforeEach, expect, test } from "bun:test";
 import { acquireEffect, runEffect } from "./helpers/effect";
@@ -74,13 +75,13 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     });
     let saved = false;
     const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
-    const runtime: SessionRuntime = {};
+    const runtime: SessionRuntime = { authorizeConfigure: allowConfigure };
     const observations = observationService({
         publish(event, payload) {
           Bus.publish(event, payload);
           if (mode === "crash-window" && event === L0Observation.ActionCommittedEvent && !saved) {
             const committed = L0Observation.ActionCommittedEvent.schema.parse(payload);
-            const action = SessionHandleStore.tree(sessionId).find(
+            const action = sessionTree(sessionId).find(
               (node) => node.id === committed.id,
             );
             if (
@@ -182,13 +183,13 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       expect((await bounded(first))?.kind).toBe(mode === "error-window" ? "result" : "interrupted");
       unsubscribe();
       expect(requests).toHaveLength(mode === "error-window" ? 2 : 1);
-      let prefix = SessionHandleStore.tree(sessionId);
+      let prefix = sessionTree(sessionId);
       if (mode === "crash-window") {
         expect(saved).toBe(true);
         await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
         Storage.reset();
         initialize({ dbPath: crashPath });
-        prefix = SessionHandleStore.tree(sessionId);
+        prefix = sessionTree(sessionId);
         expect(SessionHandleStore.openTurns(prefix)).toHaveLength(1);
         expect(
           prefix.filter(
@@ -204,7 +205,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       } else if (mode !== "error-window") {
         await bounded(runEffect(handle.resume()));
       }
-      expect(SessionHandleStore.tree(sessionId).slice(0, prefix.length)).toEqual(prefix);
+      expect(sessionTree(sessionId).slice(0, prefix.length)).toEqual(prefix);
       const results = requests[1]?.messages.flatMap((message) =>
         typeof message.content === "string"
           ? []

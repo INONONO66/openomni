@@ -2,7 +2,6 @@ import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
-import { findSessionRequest } from "./session-request";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 import { createExecutionApprovals } from "./executor-approval";
@@ -119,7 +118,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       const intent = object(original.intent.value);
       const inputHash = canonicalDigest({ ...policyPoint(request, "pre"), role: options.identity.role,
         sessionId: options.identity.sessionId, ...(request.message === undefined ? {} : { message: request.message }), value: request.intent });
-      const action = recordedDecision(options.ledger.actions?.() ?? [], original, intent.policyDecisionId, inputHash);
+      const action = recordedDecision(options.ledger, original, intent.policyDecisionId);
       if (action === undefined || intent.value === undefined) throw new ExecutionApprovalError({ code: "stale_approval" });
       const verdict = recordedVerdict(object(action.intent.value).verdict);
       const recorded = SessionHistory.PolicyDecision.parse({ ...object(action.intent.value),
@@ -182,7 +181,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
 
   function approval<R>(stage: Stage<R>, signal: AbortSignal) {
     const intent = stage.intent;
-    const original = intent === undefined ? undefined : findSessionRequest(options.ledger.actions?.() ?? [], intent.action.id);
+    const original = intent === undefined ? undefined : options.ledger.requestById?.(intent.action.id);
     if (intent === undefined || (!needsApproval(stage) && original === undefined))
       return Effect.succeed("approve" as const);
     return awaitApproval({
@@ -201,7 +200,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     return Effect.suspend<PlainValue, ExecutionError, R>(() => {
       const intent = stage.intent;
       if (intent === undefined) return Effect.die("missing admitted intent");
-      const captured = findSessionRequest(options.ledger.actions?.() ?? [], intent.action.id);
+      const captured = options.ledger.requestById?.(intent.action.id);
       assertFresh(stage.request, captured);
       const enter = (): Effect.Effect<PlainValue, ExecutionError, R> => {
         assertFresh(stage.request, captured);
@@ -214,7 +213,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       };
       if (!guarded) return enter();
       const id = `${intent.action.id}:application`;
-      if (options.ledger.actions?.().some((action) => action.id === id))
+      if (options.ledger.actionById?.(id) !== undefined)
         return Effect.fail(new OutcomeUnknown({ reason: "application_already_entered" }));
       return record.commit({
         id, parentId: intent.action.id, sessionId: options.identity.sessionId, kind: stage.kind,
@@ -319,8 +318,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   function completionFailure<R>(stage: Stage<R>, value: PlainValue, cause: Cause.Cause<ExecutionError>) {
     const failures = Chunk.toReadonlyArray(Cause.failures(cause));
     if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
-    const terminalExists = options.ledger.actions?.().some((action) =>
-      action.parentId === stage.intent?.action.id && object(action.effect.value).phase === "result");
+    const terminalExists = stage.intent !== undefined && options.ledger.resultFor?.(stage.intent.action.id) !== undefined;
     if (terminalExists) return Effect.failCause(cause);
     const failure = Option.getOrElse(Cause.failureOption(cause), () =>
       new ForeignFailure({ operation: `${stage.request.op}.completion`, cause: Cause.pretty(cause) }));
@@ -461,18 +459,17 @@ function policyPoint(request: ExecutionRequest, phase: "pre" | "post"): Pick<Pol
 function needsApproval(stage: { readonly pre: Pick<PolicyEvaluation, "verdict">; readonly request: ExecutionRequest }) {
   return stage.pre.verdict === "require_approval" || stage.request.approval?.required === true;
 }
-/** The single pre-decision an original intent was admitted under, by id when recorded, else by input hash. */
-function recordedDecision(actions: readonly LedgerAction.Node[], original: LedgerAction.Node, decisionId: PlainValue | undefined, inputHash: string) {
-  const candidates = actions.filter((action) => action.kind === "policy.decision" && action.ordinal < original.ordinal &&
-    (decisionId === undefined ? object(action.intent.value).inputHash === inputHash : action.id === decisionId));
-  return candidates.length === 1 ? candidates[0] : undefined;
+/** Re-admission is bound to the original persisted pre-decision identity. */
+function recordedDecision(ledger: ExecutorOptions["ledger"], original: LedgerAction.Node, decisionId: PlainValue | undefined) {
+  const action = typeof decisionId === "string" ? ledger.actionById?.(decisionId) : undefined;
+  return action?.sessionId === original.sessionId && action.kind === "policy.decision" && action.ordinal < original.ordinal ? action : undefined;
 }
 function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
   const parsed = RowVerdictType.safeParse(verdict);
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }
-function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof findSessionRequest>): void {
+function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof SessionHandleStore.requestById>): void {
   if (captured !== undefined && request.domainRevisions !== undefined &&
       canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions))
     throw new ExecutionApprovalError({ code: "stale_approval" });

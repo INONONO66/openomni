@@ -38,7 +38,7 @@ The four extension points and consumed-service contract are in
 
 | Row | Contract | Status and evidence |
 | --- | --- | --- |
-| B6 | No arbitrary code-callback registration; bundles only, through the four extension points. | **OPEN.** `packages/agent/src/bundle.ts` supplies validated Layer definitions, ordered composition and named policy services. `packages/agent/src/session-configuration.ts` still calls optional `authorizeConfigure` with an allow fallback (W1/H6), and `packages/agent/src/tool-dispatcher.ts` retains `approvalBindings` for original-invocation/domain-precondition binding. W0.5 does not delete those seams or claim a callback-zero census. Close only with actual deletion/census and PR evidence. |
+| B6 | No arbitrary code-callback registration; bundles only, through the four extension points. | **OPEN.** `packages/agent/src/bundle.ts` supplies validated Layer definitions, ordered composition and named policy services. on `kernel/1108-durable-reconstruction-20260924` the `authorizeConfigure` `?? Effect.succeed(true)` fail-open is deleted and the authority is required (`packages/agent/src/session-contract.ts:129`; W1/H6 ⏳ pending merge), and `packages/agent/src/tool-dispatcher.ts` retains `approvalBindings` for original-invocation/domain-precondition binding. W0.5 does not delete those seams or claim a callback-zero census. Close only with actual deletion/census and PR evidence. |
 
 Observation subscribers, tool bodies, named pure transformer implementations
 and ordinary Effect callbacks are allowed implementations, not an arbitrary
@@ -414,7 +414,7 @@ Read-only sweep of slop not already recorded above and not named by the W1–W5 
 | H3 (SD06) | `AGENTS.md` header | "retains the legacy catalog entries pending stage 2" after stage 2 landed | PR #1114 | ✅ `374de398` |
 | H4 (AU09) | `apps/openomni/src/tools/completion.ts` | Per-cell 32-call budget (#842) was one process-wide counter: `createTools` caches one catalog per `CatalogPorts`, so the closure counter was shared by every cell and session. Budget now keyed by `ctx.turnId` (= cell id at the cell door) | PR #1115 | ⏳ pending merge |
 | H5 | `packages/ipc/src/server.ts` vs `peer-request-table.ts` | Two wire-message classifiers (`decodeMessage` and `dispatch`) | PR #1115: `classifyIpcMessage` single owner | ⏳ pending merge |
-| H6 (S13) | `packages/agent/src/session-configuration.ts` | `authorizeConfigure` direct callback with `?? true` bypasses the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 (#1108, same files) | 🔁 deferred |
+| H6 (S13) | `packages/agent/src/session-configuration.ts` | `authorizeConfigure` optional callback with `?? Effect.succeed(true)` bypassed the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 #1108: fail-open deleted, authority required (`session-contract.ts:129`) | ⏳ pending merge |
 | H7 (AU07) | `apps/openomni/src/resident.ts:74-91` | Evidence-only authority is a string-prefix check on the prompt with a fabricated refusal text; must be a typed policy input at kernel admission | W3 #1111 | open |
 | H8 (S6) | `packages/policy/src/row-compiler.ts:580-654` vs ledger `policies.appendGeneration` | Two policy-generation writers; agent stubs `append: () => false` | W3 #1111 | open |
 | H9 | `packages/ledger/src/storage/sqlite-l0-write.ts:89-115` | Hand-written `alarm` INSERT bypassing `armAlarm` — second alarm writer | W2 #1110 | open |

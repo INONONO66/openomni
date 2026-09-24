@@ -19,7 +19,7 @@ import {
   messageMaterialization,
   prepareMessage,
 } from "../../src/composition/message-session";
-import { generationServices } from "./generation-services";
+import { allowConfigure, generationServices } from "./generation-services";
 import { ToolCatalog } from "@openomni/agent";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/send-message";
@@ -42,6 +42,7 @@ export function messageFixture(
   seedKernelPolicyRows();
   const sessionId = "sender";
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     dispatchOutbound: dispatchOutboundMessage(
       (...args) => gateway.ingest(...args),
       () => 100,

@@ -2,8 +2,17 @@ import { testExecutor, runAgentSync } from "../../helpers/executor";
 import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
 import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
-import type { LedgerAction, ToolExecutionContext } from "@openomni/protocol";
-import { Effect, Fiber } from "effect";
+import { PlainObjectSchema, type LedgerAction, type Message, type ToolExecutionContext } from "@openomni/protocol";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
+import { requestLedger } from "../../helpers/effect-g1";
+import { createTestAgent } from "../../helpers/effect-g2";
+import { runInput } from "../../helpers/run-input";
+import { createAssistantMessage } from "../../../src/core/message-factory";
+import { createRunState } from "../../../src/core/execution/state";
+import { buildTurn } from "../../../src/core/execution/turn";
+import { settleModelTools } from "../../../src/core/execution/tool-wave";
+import type { ObservedChatAgentConfig } from "../../../src/core/types";
 import { createRawSlots } from "../../../src/executor-raw";
 import { GenerationRawSlots } from "../../../src/session-generations";
 import { createDispatcher } from "../../../src/tool-dispatcher";
@@ -13,7 +22,7 @@ import { allowAllPolicy } from "../../helpers/compiled-policy";
 import { recordingLedger } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";
 import { isolated } from "../../helpers/isolated";
-import { timedQueryTool } from "../../helpers/query-tool";
+import { timedQueryTool, valueTool } from "../../helpers/query-tool";
 
 const request = { kind: "tool", op: "test", intent: {}, effect: {} };
 const call = { id: "timed-call", tool: "timed", input: {} };
@@ -244,6 +253,186 @@ for (const settlement of ["fulfillment", "rejection"] as const) {
     }
   }))));
 }
+
+it("preserves input-order results and ledger terminals after reverse body completion", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const record = recording();
+  const slots = yield* Effect.forEach(["A", "B", "C"], (id) => Effect.gen(function* () {
+    return { id, entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>(), settled: yield* Deferred.make<void>() };
+  }));
+  const completed: string[] = [];
+  const wave = yield* Effect.forkScoped(record.executor.runBatch(slots.map((slot) => ({
+    request: { ...request, op: slot.id, toolObservation: { turnId: context.turnId, callId: slot.id } },
+    body: () => Deferred.succeed(slot.entered, undefined).pipe(
+      Effect.zipRight(Deferred.await(slot.release)),
+      Effect.tap(() => Effect.sync(() => completed.push(slot.id))),
+      Effect.as(slot.id),
+      Effect.ensuring(Deferred.succeed(slot.settled, undefined)),
+    ),
+  })), { signal: new AbortController().signal }));
+  yield* Effect.forEach(slots, (slot) => Deferred.await(slot.entered)).pipe(Effect.timeout("5 seconds"));
+  for (const slot of [...slots].reverse()) {
+    yield* Deferred.succeed(slot.release, undefined);
+    yield* Deferred.await(slot.settled).pipe(Effect.timeout("5 seconds"));
+  }
+  expect(yield* Fiber.join(wave)).toEqual(slots.map((slot) => ({ terminal: "executed", value: slot.id })));
+  expect(completed).toEqual(["C", "B", "A"]);
+  expect(toolResults(record.committed).map((action) => PlainObjectSchema.parse(action.effect.value).callId)).toEqual(["A", "B", "C"]);
+}))));
+
+for (const failureKind of ["typed", "defect"] as const) {
+  it(`retains siblings' evidence after a ${failureKind} body failure`, () => isolated(Effect.scoped(Effect.gen(function* () {
+    const record = recording();
+    const siblingEntered = yield* Deferred.make<void>();
+    const failed = yield* Deferred.make<void>();
+    const failure = new ForeignFailure({ operation: "A", cause: "body_failed" });
+    const results = yield* record.executor.runBatch([
+      { request: { ...request, op: "A" }, body: () => Deferred.await(siblingEntered).pipe(
+        Effect.zipRight(failureKind === "typed" ? Effect.fail(failure) : Effect.die(new Error("body_defect"))),
+        Effect.ensuring(Deferred.succeed(failed, undefined)),
+      ) },
+      { request: { ...request, op: "B" }, body: () => Deferred.succeed(siblingEntered, undefined).pipe(
+        Effect.zipRight(Deferred.await(failed)), Effect.as({ sibling: "survived" }),
+      ) },
+    ], { signal: new AbortController().signal }).pipe(Effect.timeout("5 seconds"));
+    expect(results).toMatchObject([
+      { terminal: "executed", failure: { _tag: "ForeignFailure" } },
+      { terminal: "executed", value: { sibling: "survived" } },
+    ]);
+    const terminals = toolResults(record.committed).map((action) => PlainObjectSchema.parse(action.effect.value));
+    expect(terminals).toHaveLength(2);
+    expect(terminals[0]?.evidence).toMatchObject(failureKind === "typed"
+      ? { failures: [{ tag: "ForeignFailure" }], defects: [] }
+      : { failures: [], defects: [{ name: "Error" }] });
+    expect(terminals[1]?.result).toEqual({ sibling: "survived" });
+  }))));
+}
+
+it("refuses incomplete arguments without losing valid or invalid input positions", () => isolated(Effect.gen(function* () {
+  const bodies: string[] = [];
+  const record = recording();
+  const definition = valueTool({ name: "value", execute: async (value) => { bodies.push(value); return value; } });
+  const dispatcher = yield* createDispatcher({ executor: record.executor }).pipe(Effect.provide(catalogLayer([definition])));
+  const results = yield* dispatcher.executeWave([
+    { id: "incomplete", tool: "value", input: {} },
+    { id: "complete", tool: "value", input: { value: "complete" } },
+    { id: "unnamed", tool: "", input: {} },
+  ], context);
+  expect(results).toMatchObject([
+    { toolCallId: "incomplete", isError: true, errorKind: "invalid_input" },
+    { toolCallId: "complete", output: "complete" },
+    { toolCallId: "unnamed", isError: true, errorKind: "unregistered_tool" },
+  ]);
+  expect(bodies).toEqual(["complete"]);
+  expect(toolResults(record.committed).map((action) => PlainObjectSchema.parse(action.effect.value).callId)).toEqual(["complete"]);
+})));
+
+it("holds the entire wave until every captured approval has a durable answer", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const opened = yield* Deferred.make<void>();
+  let requests = 0;
+  const ledger = yield* requestLedger({ onRequest: (request) => {
+    if (request.state === "open" && ++requests === 2) Deferred.unsafeDone(opened, Effect.void);
+  } });
+  const record = recording({ ...ledger, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "auth" }) });
+  const bodies: string[] = [];
+  const calls = ["unguarded", "first", "second"];
+  const wave = yield* Effect.forkScoped(record.executor.runBatch(calls.map((id) => ({
+    request: { ...request, op: id, approval: { required: id !== "unguarded", domainRevisions: {} }, toolObservation: { turnId: ledger.identity.turnId, callId: id } },
+    body: () => Effect.sync(() => { bodies.push(id); return id; }),
+  })), { signal: new AbortController().signal }));
+  yield* Deferred.await(opened).pipe(Effect.timeout("5 seconds"));
+  const approvals = record.executor.approvals;
+  if (approvals === undefined) throw new Error("missing approval authority");
+  const [first, second] = approvals.pending();
+  if (first === undefined || second === undefined) throw new Error("missing wave approvals");
+  expect(bodies).toEqual([]);
+  yield* approvals.answer({ request: second, credential: "owner", decision: "approve" });
+  expect(bodies).toEqual([]);
+  yield* approvals.answer({ request: first, credential: "owner", decision: "approve" });
+  expect(yield* Fiber.join(wave)).toEqual(calls.map((value) => ({ terminal: "executed", value })));
+  expect(bodies).toEqual(calls);
+  expect(toolResults(sessionTree(ledger.identity.sessionId)).map((action) => PlainObjectSchema.parse(action.effect.value).callId)).toEqual(calls);
+}))));
+
+function pendingAssistant(ids: readonly string[]): Message.WithParts {
+  const message = createAssistantMessage("", "", context.sessionId);
+  return { ...message, parts: ids.map((id) => ({
+    id: `${id}:part`, sessionID: context.sessionId, messageID: message.info.id,
+    type: "tool", callID: id, tool: "timed", state: { status: "pending", input: {} },
+  })) };
+}
+
+it("dispatches zero tools when the canonical assistant call-block write fails", () => isolated(Effect.gen(function* () {
+  const ledger = recordingLedger();
+  let bodies = 0;
+  let failedWrites = 0;
+  const record = recording({ ledger: { commit: (action) => {
+    if (action.kind === "message" && PlainObjectSchema.parse(action.effect.value).phase === "result") {
+      failedWrites += 1;
+      return Effect.fail(new ForeignFailure({ operation: "canonical_assistant_write", cause: "injected_failure" }));
+    }
+    return ledger.ledger.commit(action);
+  } } });
+  const result = yield* Effect.either(createTestAgent({
+    events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    executor: record.executor, execution: record.executor,
+    toolWave: () => Effect.sync(() => { bodies += 1; return []; }),
+    llm: {
+      resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
+      run: (_input, sink) => Effect.sync(() => { sink.onMessage(pendingAssistant(["A"])); return { type: "stop" as const }; }),
+    },
+  }).run(runInput([{ role: "user", content: "call tools" }])));
+  expect(result).toMatchObject({ _tag: "Left" });
+  expect(failedWrites).toBe(1);
+  expect(bodies).toBe(0);
+  expect(toolResults(ledger.committed)).toEqual([]);
+})));
+
+it("settles a defective fallback slot without interrupting its sibling or losing model evidence", () => isolated(Effect.gen(function* () {
+  const siblingEntered = yield* Deferred.make<void>();
+  const failed = yield* Deferred.make<void>();
+  const published: string[] = [];
+  const input = runInput([]);
+  const state = createRunState(input);
+  const config: ObservedChatAgentConfig = {
+    events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    toolExecutor: (call) => call.id === "A"
+      ? Deferred.await(siblingEntered).pipe(Effect.zipRight(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
+      : Deferred.succeed(siblingEntered, undefined).pipe(Effect.zipRight(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
+  };
+  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
+    onMessage: () => undefined, onToolCall: () => undefined, onToolResult: (result) => { published.push(result.toolCallId); },
+  });
+  if (built.type !== "ready") throw new Error("turn unavailable");
+  built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
+  expect(yield* settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds"))).toBe(2);
+  expect(published).toEqual(["A", "B"]);
+  expect(built.turn.turnAssistant.message.parts).toMatchObject([
+    { callID: "A", state: { status: "error" } },
+    { callID: "B", state: { status: "completed", output: "survived" } },
+  ]);
+})));
+
+it("propagates a fallback body's interruption instead of settling the slot as an error", () => isolated(Effect.gen(function* () {
+  const input = runInput([]);
+  const state = createRunState(input);
+  const config: ObservedChatAgentConfig = {
+    events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    toolExecutor: (call) => call.id === "A"
+      ? Effect.interrupt
+      : Effect.succeed({ id: call.id, toolCallId: call.id, output: "settled" }),
+  };
+  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
+    onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined,
+  });
+  if (built.type !== "ready") throw new Error("turn unavailable");
+  built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
+  const exit = yield* Effect.exit(settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds")));
+  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(built.turn.turnAssistant.message.parts).toMatchObject([
+    { callID: "A", state: { status: "pending" } },
+    { callID: "B", state: { status: "pending" } },
+  ]);
+})));
 
 it("does not enter a body when cancellation predates the wave", () => isolated(Effect.gen(function* () {
   const controller = new AbortController();

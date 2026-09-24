@@ -1,3 +1,4 @@
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { executorLayer } from "./helpers/service-layers";
@@ -92,7 +93,7 @@ for (const decision of ["approve", "refuse"] as const) {
     expect(durable.inputHash).toBe(canonicalDigest(request.intent));
     expect(durable.parsedInput).toEqual(request.intent);
     expect(
-      SessionHandleStore.tree(f.identity.sessionId).find(
+      sessionTree(f.identity.sessionId).find(
         (action) => action.id === durable.requestId,
       )?.kind,
     ).toBe("tool");
@@ -108,7 +109,7 @@ for (const decision of ["approve", "refuse"] as const) {
       decision === "approve" ? ["read", "write", "last"] : ["read", "last"],
     );
     expect(
-      SessionHandleStore.tree(f.identity.sessionId).filter(
+      sessionTree(f.identity.sessionId).filter(
         (action) => action.id === `${pending.id}:resolution`,
       ),
     ).toHaveLength(1);
@@ -197,7 +198,7 @@ it("expires exactly once at the deadline, even with a delayed alarm", () => isol
   yield* expireApproval(f, request.requestId, now);
   expect(SessionHandleStore.requestById(pending.id)?.state).toBe("expired");
   expect(
-    SessionHandleStore.tree(f.identity.sessionId).filter(
+    sessionTree(f.identity.sessionId).filter(
       (action) => action.id === `${pending.id}:resolution`,
     ),
   ).toHaveLength(1);

@@ -54,7 +54,10 @@ export function executeCompaction(input: CompactionExecution): Effect.Effect<Com
       {
         kind: "compaction",
         op: "compact",
-        intent: { trigger: input.dispatch.trigger },
+        intent: {
+          trigger: input.dispatch.trigger,
+          predecessorProjectionHash: canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(snapshot) }),
+        },
         effect: {},
         boundary: true,
         revertData: () =>

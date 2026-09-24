@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { commitFoldBatch } from "./session-fold-commit";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Deadline, type SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ForeignFailure, type SessionError } from "./errors";
@@ -22,15 +23,14 @@ export function createSessionConfiguration(
     nextSystem: SessionSystem,
   ): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError> {
     return Effect.gen(function* () {
-      const before = SessionHandleStore.latestGeneration(SessionHandleStore.tree(sessionId));
+      const before = SessionHandleStore.latestGenerationFor(sessionId);
       const generation = before.generation + 1;
-      const accepted = yield* (runtime.authorizeConfigure?.({
+      const accepted = yield* runtime.authorizeConfigure({
         sessionId, role: SessionHandleStore.row(sessionId).role, operation, generation,
-      }) ?? Effect.succeed(true));
+      });
       if (!accepted) return yield* new ForeignFailure({ operation: "session.configure", cause: "denied" });
       const current = SessionHandleStore.row(sessionId);
-      const actions = SessionHandleStore.tree(sessionId);
-      const previous = SessionHandleStore.latestGeneration(actions);
+      const previous = SessionHandleStore.latestGenerationFor(sessionId);
       if (previous.generation !== before.generation)
         return yield* new ForeignFailure({ operation: "session.configure", cause: "stale" });
       const snapshot = SessionHandleStore.generationSnapshot({
@@ -42,10 +42,10 @@ export function createSessionConfiguration(
         (state.active !== undefined || current.state === "running" || state.rawSlots.pending() > 0);
       state.fence = ownsRunningLease ? current.leaseFence : yield* acquire(current.leaseFence);
       const configured = SessionHandleStore.configureAction({
-        id: entropy(), sessionId, parentId: actions.at(-1)?.id ?? null,
+        id: entropy(), sessionId, parentId: SessionHandleStore.latestAction(sessionId)?.id ?? null,
         operation, snapshot, at: clock(),
       });
-      const commit = SessionHandleStore.commit({
+      const commit = commitFoldBatch({
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [configured], consumeInboxIds: [], state: current.state,
         generation: { toolsGeneration: snapshot.generation, systemHash: snapshot.systemHash, policyGeneration: snapshot.policyGeneration },

@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LedgerSession, SessionTransition } from "@openomni/protocol";
@@ -75,7 +76,7 @@ describe("SQLite global request count CAS", () => {
     const pending = proposal(request, 0);
     const before = {
       row: SessionHandleStore.row(request.sessionId),
-      actions: SessionHandleStore.tree(request.sessionId),
+      actions: sessionTree(request.sessionId),
       inbox: SessionHandleStore.inboxRows(request.sessionId),
       alarms: Storage.get().alarms?.due(100),
     };
@@ -102,7 +103,7 @@ describe("SQLite global request count CAS", () => {
       }),
     );
     expect(SessionHandleStore.row(request.sessionId)).toEqual(before.row);
-    expect(SessionHandleStore.tree(request.sessionId)).toEqual(before.actions);
+    expect(sessionTree(request.sessionId)).toEqual(before.actions);
     expect(SessionHandleStore.inboxRows(request.sessionId)).toEqual(before.inbox);
     expect(Storage.get().alarms?.due(100)).toEqual(alarms);
     expect(SessionHandleStore.requestById(request.requestId)).toBeUndefined();

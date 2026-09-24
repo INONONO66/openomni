@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -129,7 +130,7 @@ test("owning storage publishes committed observations and rolls back a late CAS 
           ),
         ).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
         expect(storage.sessions.get("owned")).toEqual(before);
-        expect(storage.actions.tree("owned").map((action) => action.id)).toEqual(["create"]);
+        expect(sessionTree("owned", storage.actions).map((action) => action.id)).toEqual(["create"]);
         expect(observed.map((event) => event.id)).toEqual(["create"]);
       }).pipe(
         Effect.provide(

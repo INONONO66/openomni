@@ -30,7 +30,7 @@ export function createRetryAlarmPort(sessionId: string, clock: () => number): Re
       })),
       Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid,
     ),
-    wait: (fireAt, signal) => {
+    wait: (fireAt, signal) => Effect.suspend(() => {
       const sleep = Effect.sleep(Math.max(0, fireAt - clock()));
       if (signal === undefined) return sleep;
       const aborted = Effect.async<never>((resume) => {
@@ -40,7 +40,7 @@ export function createRetryAlarmPort(sessionId: string, clock: () => number): Re
         return Effect.sync(() => signal.removeEventListener("abort", abort));
       });
       return sleep.pipe(Effect.raceFirst(aborted));
-    },
+    }),
     settle: (id) => alarms.pipe(
       Effect.flatMap((adapter) => adapter.cancel(id, sessionId, clock())),
       Effect.catchTag("AlarmRefused", (error) =>

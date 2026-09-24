@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
@@ -167,7 +168,7 @@ test("N+1 contenders under one fence commit N notifications plus one pause; late
       expect(rows.map((row) => row.content).slice(0, 2)).toEqual(["one", "two"]);
       expect(rows).toHaveLength(3);
       expect(JSON.parse(rows[2]?.content ?? "{}")).toMatchObject({ reason: "wake_budget" });
-      expect(fixture.storage.actions.tree("monitor-session").map((action) => action.kind)).toEqual([
+      expect(sessionTree("monitor-session", fixture.storage.actions).map((action) => action.kind)).toEqual([
         "alarm.arm",
         "alarm.fired",
         "prompt",
@@ -260,8 +261,7 @@ test("a real PTY line's occurrence key is committed once; its redelivery adds no
       const prompt = await ready;
       const row = fixture.storage.alarms.get("pty");
       if (row === undefined) throw new Error("missing alarm");
-      const occurrence = fixture.storage.actions
-        .tree("monitor-session")
+      const occurrence = sessionTree("monitor-session", fixture.storage.actions)
         .find((action) => action.kind === "alarm.fired");
       expect(occurrence?.id).toBe(Alarm.occurrenceId("pty", row.epoch, `line:${row.fence}:1`));
       expect(occurrence?.intent.value).toMatchObject({ sourceKey: `line:${row.fence}:1` });

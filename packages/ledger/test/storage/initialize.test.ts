@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -58,7 +59,7 @@ describe("Storage.initialize", () => {
     const verifyAdapter = new SqliteStorageAdapter(dbPath);
     try {
       expect(verifyAdapter.sessions.get("s1")).toEqual(session);
-      expect(verifyAdapter.actions.tree("s1")).toHaveLength(1);
+      expect(sessionTree("s1", verifyAdapter.actions)).toHaveLength(1);
     } finally {
       verifyAdapter.close();
     }

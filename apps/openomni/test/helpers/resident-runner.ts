@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { Provider, run } from "@openomni/llm";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
-import { generationServices } from "./generation-services";
+import { allowConfigure, generationServices } from "./generation-services";
 import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
 import { Bus, closeSessions, wakeSession, type SessionRuntime } from "@openomni/agent";
@@ -26,6 +26,7 @@ export function residentRunner(
   const runtime = options.sessionRuntime ?? {
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
+    authorizeConfigure: allowConfigure,
   };
   const scope = effectScope();
   seedKernelPolicyRows();

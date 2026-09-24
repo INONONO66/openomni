@@ -80,9 +80,7 @@ it("executes exactly the original promotion after authenticated consent", async 
     expect(registered.output).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
     expect(malloryStanding()).toBe("registered");
     expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
-    expect(
-      f.ledger.actions?.().filter((action) => action.id === `${request.requestId}:application`),
-    ).toHaveLength(1);
+    expect(f.ledger.actionById?.(`${request.requestId}:application`)).toBeDefined();
   } finally {
     await f.close();
   }

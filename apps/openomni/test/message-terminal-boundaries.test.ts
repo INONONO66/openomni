@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
@@ -100,7 +101,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(await delivery).toEqual({ ok: true });
     const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
     if (child === undefined || child.parentId === null) throw new Error("missing child");
-    const terminals = SessionHandleStore.tree(child.id).flatMap((action) => {
+    const terminals = sessionTree(child.id).flatMap((action) => {
       const terminal = SessionHandleStore.turnTerminal(action);
       return terminal === undefined ? [] : [terminal];
     });
@@ -117,7 +118,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(letters[0]?.content).toBe(terminals[0]?.text);
     // No child-owned request/alarm is opened by the terminal reply.
     expect(
-      SessionHandleStore.tree(child.id).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id).filter((action) => action.kind === "alarm.arm"),
     ).toEqual([]);
     expect(SessionHandleStore.requestRows(child.parentId)).toHaveLength(1);
     expect(SessionHandleStore.requestRows(child.parentId)[0]?.state).toBe("resolved");

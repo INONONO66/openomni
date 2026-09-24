@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
@@ -99,7 +100,7 @@ test("967 boot preserves promoted expired session", async () => {
   await response;
   const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (template === undefined) throw new Error("missing app session");
-  const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(template.id));
+  const generation = SessionHandleStore.latestGeneration(sessionTree(template.id));
   await first.stop();
 
   const seedRuntime = gatewayRuntime({ dbPath: config.dbPath });

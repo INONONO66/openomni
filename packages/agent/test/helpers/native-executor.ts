@@ -1,3 +1,5 @@
+import { executionReads } from "./execution-reads";
+import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -26,7 +28,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId) {
     });
     const turnId = `${id}:turn`;
     const ledger: ExecutionLedger = {
-      actions: () => SessionHandleStore.tree(id),
+      ...executionReads(id),
       commit: (action) => Effect.suspend(() => SessionHandleStore.commit({
         sessionId: id, owner, fence: lease.fence, now,
         expectedRevision: SessionHandleStore.row(id).revision,
@@ -37,8 +39,8 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId) {
         return receipt;
       })),
     };
-    if (!SessionHandleStore.tree(id).some((action) => action.id === turnId)) {
-      const generation = SessionHandleStore.latestGeneration(SessionHandleStore.tree(id));
+    if (!sessionTree(id).some((action) => action.id === turnId)) {
+      const generation = SessionHandleStore.latestGeneration(sessionTree(id));
       yield* ledger.commit({
         id: turnId, parentId: `${id}:configure`, sessionId: id, kind: "turn",
         intent: { encodingVersion: 1, value: {

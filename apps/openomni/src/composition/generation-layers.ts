@@ -1,8 +1,8 @@
 import {
   AgentGenerationLive, BundleDefinitions, BundleError, type Clock, type Entropy, ForeignFailure,
-  GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink,
+  GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink, SessionLayer,
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
-  type GenerationBundle, type SessionError,
+  type GenerationBundle, type SessionError, type SessionRuntime,
 } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
@@ -80,7 +80,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
       const owner = yield* manager(id.sessionId);
-      const snapshot = SessionHandleStore.generationByNumber(SessionHandleStore.tree(id.sessionId), id.generation);
+      const snapshot = SessionHandleStore.generationFor(id.sessionId, id.generation);
       if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
       return yield* owner.capture(yield* bundle(id.sessionId, snapshot));
     }),
@@ -95,3 +95,25 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
     })),
   };
 }));
+
+/**
+ * The app's `session.configure` authority: evaluate the session's captured
+ * generation Layer's pinned pre-policy. Deny (or any non-allow verdict) fails
+ * closed; there is no callback fallback.
+ */
+export function configureAuthority(
+  generations: Context.Tag.Service<typeof GenerationLayers>,
+): SessionRuntime["authorizeConfigure"] {
+  return (input) => Effect.scoped(Effect.gen(function* () {
+    const captured = yield* generations.capture({
+      sessionId: input.sessionId,
+      generation: SessionHandleStore.latestGenerationFor(input.sessionId).generation,
+    });
+    const { policy } = yield* captured.provide(SessionLayer);
+    return policy.evaluate({
+      kind: "session.configure", phase: "pre", op: input.operation,
+      role: input.role, sessionId: input.sessionId,
+      value: { op: input.operation, generation: input.generation },
+    }).verdict === "allow";
+  }));
+}

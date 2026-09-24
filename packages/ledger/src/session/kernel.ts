@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  PlainObjectSchema,
   type Inbox,
   type LedgerAction,
   type LedgerSession,
@@ -124,8 +125,104 @@ export function inboxRows(sessionId: string): Inbox.Row[] {
   return requiredInbox().list(sessionId);
 }
 
-export function tree(sessionId: string): LedgerAction.Node[] {
-  return requiredActions().tree(sessionId);
+export function latestAction(
+  sessionId: string,
+  throughRevision = Number.MAX_SAFE_INTEGER,
+): LedgerAction.Node | undefined {
+  return requiredActions().latestAction(sessionId, throughRevision);
+}
+
+/** The seed and its high-water mark belong to the same SQLite read snapshot. */
+export function latestFoldCheckpoint(sessionId: string, throughRevision?: number) {
+  return Storage.get().transaction(() => {
+    const revision = Math.min(row(sessionId).revision, throughRevision ?? Number.MAX_SAFE_INTEGER);
+    return { revision, checkpoint: requiredActions().latestFoldCheckpoint(sessionId, revision) };
+  });
+}
+
+export function priorModelAttempt(sessionId: string, turnId: string) {
+  return requiredActions().priorModelAttempt(sessionId, turnId);
+}
+
+export function generationFor(
+  sessionId: string,
+  generation: number,
+): SessionGeneration.Snapshot | undefined {
+  return configurationSnapshot(requiredActions().generationFor(sessionId, generation));
+}
+
+export function turnTerminalFor(sessionId: string, turnId: string) {
+  return turnTerminal(requiredActions().turnTerminalFor(sessionId, turnId));
+}
+
+export function latestTurnTerminal(sessionId: string) {
+  const action = requiredActions().latestTurnTerminal(sessionId);
+  const effect = turnTerminal(action);
+  return action === undefined || effect === undefined ? undefined : { action, effect };
+}
+
+export function turnIntentsPage(sessionId: string, beforeRevision: number, limit = 256) {
+  return requiredActions().turnIntentsPage(sessionId, beforeRevision, limit);
+}
+
+export function openTurnsPage(sessionId: string, cursor = 0, limit = 256): OpenTurn[] {
+  const actions = requiredActions();
+  return actions.openTurnsPage(sessionId, cursor, limit).flatMap((intent) => {
+    const update = actions.latestTurnUpdate(sessionId, intent.id);
+    return openTurns(update === undefined ? [intent] : [intent, update]);
+  });
+}
+
+export function latestOpenTurn(sessionId: string): OpenTurn | undefined {
+  let cursor = 0;
+  let latest: OpenTurn | undefined;
+  for (;;) {
+    const page = openTurnsPage(sessionId, cursor);
+    latest = page.at(-1) ?? latest;
+    if (page.length < 256 || latest === undefined) return latest;
+    const intent = actionById(latest.turnId);
+    if (intent === undefined) throw new Error(`open turn intent missing: ${latest.turnId}`);
+    cursor = intent.ordinal;
+  }
+}
+
+export function resultFor(sessionId: string, parentId: string) {
+  const result = requiredActions().resultFor(sessionId, parentId);
+  if (result === undefined) return undefined;
+  const parent = actionById(parentId);
+  const outcome = SessionHistory.Outcome.safeParse(
+    PlainObjectSchema.parse(result.effect.value).terminal,
+  );
+  if (
+    parent?.sessionId !== sessionId ||
+    parent.kind !== result.kind ||
+    PlainObjectSchema.parse(result.intent.value).phase !== "result" ||
+    !outcome.success ||
+    outcome.data === "pending"
+  )
+    throw new Error(`invalid result identity: ${result.id}`);
+  return result;
+}
+
+export function requestInputById(sessionId: string, inputId: string) {
+  return requiredActions().requestInputById(sessionId, inputId);
+}
+
+export function guardedOperationsPage(sessionId: string, turnId: string, cursor = 0, limit = 256) {
+  return requiredActions().guardedOperationsPage(sessionId, turnId, cursor, limit);
+}
+
+export function openOperationsPage(sessionId: string, turnId: string, cursor = 0, limit = 256) {
+  return requiredActions().openOperationsPage(sessionId, turnId, cursor, limit);
+}
+
+export function operationChildrenPage(
+  sessionId: string,
+  parentId: string,
+  cursor = 0,
+  limit = 256,
+) {
+  return requiredActions().operationChildrenPage(sessionId, parentId, cursor, limit);
 }
 
 export function actionById(id: string): LedgerAction.Node | undefined {
@@ -133,7 +230,14 @@ export function actionById(id: string): LedgerAction.Node | undefined {
 }
 
 export function latestGenerationFor(sessionId: string): SessionGeneration.Snapshot {
-  return latestGeneration(requiredActions().configurationActions(sessionId));
+  let cursor = Number.MAX_SAFE_INTEGER;
+  for (;;) {
+    const action = requiredActions().configurationActions(sessionId, cursor)[0];
+    if (action === undefined) throw new Error("session has no configured generation");
+    const snapshot = configurationSnapshot(action);
+    if (snapshot !== undefined) return snapshot;
+    cursor = action.ordinal;
+  }
 }
 
 /** inputHash is an exact persisted key, not a policy evaluation or JSON-path query API. */
@@ -183,37 +287,52 @@ export function historyPage(
   });
 }
 
+function stateEffect(action: LedgerAction.Node) {
+  const effect = action.effect.value;
+  if (effect === null || typeof effect !== "object" || Array.isArray(effect))
+    throw new Error(`invalid ${action.kind === "outbound" ? "outbound" : "state"} action effect`);
+  return effect;
+}
+
+export function requestStatesPage(sessionId?: string, cursor = "", limit = 256) {
+  return requiredActions()
+    .requestStatesPage(sessionId, cursor, limit)
+    .map((action) => SessionTransition.Request.parse(stateEffect(action).request));
+}
+
 export function requestRows(sessionId?: string): SessionTransition.Request[] {
-  const requests = new Map<string, SessionTransition.Request>();
-  const ids = sessionId === undefined ? listRows().map((item) => item.id) : [sessionId];
-  for (const id of ids) {
-    for (const action of tree(id)) {
-      if (action.kind !== "request" && action.kind !== "reply") continue;
-      const effect = action.effect.value;
-      if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
-      if (effect.phase !== "state") continue;
-      const request = SessionTransition.Request.parse(effect.request);
-      requests.set(request.requestId, request);
-    }
+  const requests: SessionTransition.Request[] = [];
+  let cursor = "";
+  for (;;) {
+    const page = requestStatesPage(sessionId, cursor);
+    requests.push(...page);
+    if (page.length < 256) return requests;
+    cursor = page.at(-1)?.requestId ?? cursor;
   }
-  return [...requests.values()];
+}
+
+export function outboundStatesPage(sessionId: string, cursor = "", limit = 256) {
+  return requiredActions()
+    .outboundStatesPage(sessionId, cursor, limit)
+    .map((action) => SessionTransition.Outbound.parse(stateEffect(action).outbound));
 }
 
 export function outboundRows(sessionId: string): SessionTransition.Outbound[] {
-  const outbound = new Map<string, SessionTransition.Outbound>();
-  for (const action of tree(sessionId)) {
-    if (action.kind !== "outbound") continue;
-    const effect = action.effect.value;
-    if (effect === null || typeof effect !== "object" || Array.isArray(effect))
-      throw new Error("invalid outbound action effect");
-    const value = SessionTransition.Outbound.parse(effect.outbound);
-    outbound.set(value.message.messageId, value);
+  const outbound: SessionTransition.Outbound[] = [];
+  let cursor = "";
+  for (;;) {
+    const page = outboundStatesPage(sessionId, cursor);
+    outbound.push(...page);
+    if (page.length < 256) return outbound;
+    cursor = page.at(-1)?.message.messageId ?? cursor;
   }
-  return [...outbound.values()];
 }
 
 export function requestById(requestId: string): SessionTransition.Request | undefined {
-  return requestRows().find((request) => request.requestId === requestId);
+  const action = requiredActions().requestStateById(requestId);
+  return action === undefined
+    ? undefined
+    : SessionTransition.Request.parse(stateEffect(action).request);
 }
 
 export function commitRequestTransition(
@@ -330,15 +449,19 @@ export function configureAction(input: {
   };
 }
 
-export function turnIntent(action: LedgerAction.Node | undefined): SessionTurn.Intent | undefined {
+export function turnIntent(
+  action: LedgerAction.Node | undefined,
+): SessionTurn.DecodeIntent | undefined {
   if (action?.kind !== "turn") return undefined;
-  const parsed = SessionTurn.Intent.safeParse(action.intent.value);
+  const parsed = SessionTurn.DecodeIntent.safeParse(action.intent.value);
   return parsed.success ? parsed.data : undefined;
 }
 
-export function turnResume(action: LedgerAction.Node | undefined): SessionTurn.Resume | undefined {
+export function turnResume(
+  action: LedgerAction.Node | undefined,
+): SessionTurn.DecodeResume | undefined {
   if (action?.kind !== "turn") return undefined;
-  const parsed = SessionTurn.Resume.safeParse(action.intent.value);
+  const parsed = SessionTurn.DecodeResume.safeParse(action.intent.value);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -434,9 +557,13 @@ export function openTurns(actions: readonly LedgerAction.Node[]): OpenTurn[] {
 
 export function getSnapshot(sessionId: string, turns = 1): SessionTurn.Snapshot {
   if (!Number.isInteger(turns) || turns < 0) throw new Error("turn count must be non-negative");
-  const current = row(sessionId);
-  const actions = tree(sessionId);
-  const open = openTurns(actions).at(-1);
+  return Storage.get().transaction(() => snapshotFor(row(sessionId), turns));
+}
+
+function snapshotFor(current: LedgerSession.Row, turns: number): SessionTurn.Snapshot {
+  const sessionId = current.id;
+  void latestGenerationFor(sessionId);
+  const open = latestOpenTurn(sessionId);
   return SessionTurn.Snapshot.parse({
     id: current.id,
     parentId: current.parentId,
@@ -452,7 +579,7 @@ export function getSnapshot(sessionId: string, turns = 1): SessionTurn.Snapshot 
     systemHash: current.systemHash,
     policyGeneration: current.policyGeneration,
     ...(open === undefined ? {} : { openTurnId: open.turnId }),
-    turns: turns === 0 ? [] : foldTurnTails(actions).slice(-turns),
+    turns: turnTails(sessionId, current.revision, turns),
   });
 }
 
@@ -519,42 +646,76 @@ function configurationSnapshot(
   return effect.success ? effect.data.snapshot : undefined;
 }
 
-function foldTurnTails(actions: readonly LedgerAction.Node[]): SessionTurn.Tail[] {
-  const tails = new Map<string, SessionTurn.Tail>();
-  const pendingMessages: SessionTurn.Message[] = [];
-  for (const action of actions) {
-    const delivered = delivery(action);
-    if (delivered?.kind === "prompt") {
-      const tail = tails.get(delivered.turnId);
-      const message = SessionTurn.Message.parse({ role: "user", text: delivered.content });
-      if (tail === undefined) pendingMessages.push(message);
-      else tails.set(delivered.turnId, { ...tail, messages: [...tail.messages, message] });
-      continue;
-    }
-    const intent = turnIntent(action);
-    if (intent !== undefined) {
-      tails.set(action.id, {
-        turnId: action.id,
-        state: "running",
-        startedAt: action.ts,
-        messages: pendingMessages.splice(0),
-      });
-      continue;
-    }
-    const terminal = turnTerminal(action);
-    if (terminal === undefined) continue;
-    const tail = tails.get(terminal.turnId);
-    if (tail === undefined) continue;
-    tails.set(terminal.turnId, {
-      ...tail,
-      state: terminal.kind === "interrupted" ? "interrupted" : "idle",
-      terminal: { kind: terminal.kind, actionId: action.id, at: action.ts },
-      ...(terminal.text.length === 0
-        ? {}
-        : { messages: [...tail.messages, { role: "assistant", text: terminal.text }] }),
-    });
+/** The newest `count` turns: locate the oldest tail intent, then fold one ascending window. */
+function turnTails(sessionId: string, revision: number, count: number): SessionTurn.Tail[] {
+  const actions = requiredActions();
+  const intents: LedgerAction.Node[] = [];
+  let before = revision + 1;
+  while (intents.length < count) {
+    const page = actions.turnIntentsPage(sessionId, before, Math.min(256, count - intents.length));
+    intents.push(...page);
+    if (page.length === 0) break;
+    before = page.at(-1)?.ordinal ?? before;
   }
-  return [...tails.values()];
+  const oldest = intents.at(-1);
+  if (oldest === undefined) return [];
+  const tails = new Map<string, TailFold>();
+  for (const intent of intents.reverse()) {
+    tails.set(intent.id, { intent, messages: [] });
+  }
+  // Deliveries commit before their turn intent, so the window opens after the previous turn.
+  let cursor = actions.turnIntentsPage(sessionId, oldest.ordinal, 1).at(0)?.ordinal ?? 0;
+  for (;;) {
+    const page = actions.turnTailPage(sessionId, cursor, 256);
+    for (const action of page) foldTailAction(tails, action);
+    if (page.length < 256) break;
+    cursor = page.at(-1)?.ordinal ?? cursor;
+  }
+  return [...tails.values()].map(tail);
+}
+
+interface TailFold {
+  readonly intent: LedgerAction.Node;
+  readonly messages: SessionTurn.Message[];
+  terminal?: { readonly action: LedgerAction.Node; readonly effect: SessionTurn.Terminal };
+}
+
+function foldTailAction(tails: Map<string, TailFold>, action: LedgerAction.Node): void {
+  const delivered = delivery(action);
+  if (delivered !== undefined) {
+    if (delivered.kind === "prompt")
+      tails.get(delivered.turnId)?.messages.push({ role: "user", text: delivered.content });
+    return;
+  }
+  const effect = turnTerminal(action);
+  if (effect === undefined) return;
+  const fold = tails.get(effect.turnId);
+  if (fold !== undefined) fold.terminal = { action, effect };
+}
+
+function tail({ intent, messages, terminal }: TailFold): SessionTurn.Tail {
+  if (terminal !== undefined && terminal.effect.text.length > 0)
+    messages.push({ role: "assistant", text: terminal.effect.text });
+  return {
+    turnId: intent.id,
+    startedAt: intent.ts,
+    state:
+      terminal === undefined
+        ? "running"
+        : terminal.effect.kind === "interrupted"
+          ? "interrupted"
+          : "idle",
+    messages,
+    ...(terminal === undefined
+      ? {}
+      : {
+          terminal: {
+            kind: terminal.effect.kind,
+            actionId: terminal.action.id,
+            at: terminal.action.ts,
+          },
+        }),
+  };
 }
 
 function assertUniqueTools(tools: readonly SessionGeneration.Tool[]): void {

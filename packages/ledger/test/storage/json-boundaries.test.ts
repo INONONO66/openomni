@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { expect, test } from "bun:test";
@@ -91,10 +92,10 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
   );
   db.run("PRAGMA ignore_check_constraints = ON");
   db.run("UPDATE action SET irreversible = 2");
-  expect(() => store.actions.tree("s")).toThrow();
+  expect(() => sessionTree("s", store.actions)).toThrow();
   expect(() => store.actions.range("s", 0, 10)).toThrow();
   db.run("UPDATE action SET irreversible = 1, intent = '1e999'");
-  expect(() => store.actions.tree("s")).toThrow();
+  expect(() => sessionTree("s", store.actions)).toThrow();
   db.run("UPDATE action SET intent = '{}'");
-  expect(store.actions.tree("s")).toHaveLength(1);
+  expect(sessionTree("s", store.actions)).toHaveLength(1);
 });

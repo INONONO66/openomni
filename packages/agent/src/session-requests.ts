@@ -4,7 +4,6 @@ import { SessionHandleStore } from "@openomni/ledger";
 import {
   canonicalDigest,
   type Inbox,
-  type LedgerAction,
   type SessionGeneration,
   type SessionTransition,
   type PlainObject,
@@ -36,15 +35,15 @@ export interface SessionRequestPort {
 }
 
 function requestGeneration(
-  actions: readonly LedgerAction.Node[],
+  sessionId: string,
   turnId: string | null,
 ): SessionGeneration.Snapshot {
-  if (turnId === null) return SessionHandleStore.latestGeneration(actions);
-  const turn = SessionHandleStore.turnIntent(actions.find((action) => action.id === turnId));
+  if (turnId === null) return SessionHandleStore.latestGenerationFor(sessionId);
+  const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(turnId));
   const generation =
     turn === undefined
       ? undefined
-      : SessionHandleStore.generationByNumber(actions, turn.toolsGeneration);
+      : SessionHandleStore.generationFor(sessionId, turn.toolsGeneration);
   if (
     turn === undefined ||
     generation === undefined ||
@@ -59,8 +58,8 @@ function requestGeneration(
 
 /** The gateway gets this injected kernel port, never a lifecycle store. */
 /** The recorded invocation a request reopens; anything else is an invariant break, not a session failure. */
-function originalInvocation(actions: readonly LedgerAction.Node[], requestId: string): PlainObject & { readonly value: PlainValue } {
-  const intent = actions.find((action) => action.id === requestId)?.intent.value;
+function originalInvocation(requestId: string): PlainObject & { readonly value: PlainValue } {
+  const intent = SessionHandleStore.actionById(requestId)?.intent.value;
   if (intent === null || intent === undefined || typeof intent !== "object" || Array.isArray(intent) || intent.value === undefined)
     throw new Error(`original invocation missing: ${requestId}`);
   return { ...intent, value: intent.value };
@@ -120,10 +119,9 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
     timeout,
     open(input) {
       return Effect.gen(function* () {
-      const actions = SessionHandleStore.tree(input.sessionId);
-      const intent = originalInvocation(actions, input.requestId);
+      const intent = originalInvocation(input.requestId);
       const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
-      const generation = requestGeneration(actions, turnId);
+      const generation = requestGeneration(input.sessionId, turnId);
       const value: PlainValue = intent.originalArgs ?? intent.value;
       const request: SessionTransition.Request = {
         requestId: input.requestId,

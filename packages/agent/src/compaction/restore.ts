@@ -1,7 +1,6 @@
 import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionRequest } from "../executor-contract";
-import { foldSessionHistory } from "../session-lifecycle/history";
 import { type CompactionRecord, restoreCompactionProjection } from "./durable";
 
 const DiscardedRange = z
@@ -33,31 +32,39 @@ class ContextRestoreError extends Error {
 }
 
 /** The typed compensation of one compaction; a distinct recorded action, never a mutation of the original. */
-export function restoreContextRequest(compactionId: string): ExecutionRequest {
+export function restoreContextRequest(
+  compactionId: string,
+  predecessorProjectionHash: string,
+): ExecutionRequest {
   return {
     kind: "compaction",
     op: "restore_context_projection",
-    intent: { compactionId },
+    intent: { compactionId, predecessorProjectionHash },
     effect: {},
     recovery: "local_transactional",
   };
 }
 
-/** The executed record of `compactionId`; throws when it is unknown or never executed. */
-export function recordedCompaction(
-  actions: readonly LedgerAction.Node[],
-  compactionId: string,
-): CompactionRecord {
-  const intent = actions.find((action) => action.id === compactionId);
-  if (intent === undefined || intent.kind !== "compaction")
+/** Validate the caller's target before querying any result children or acquiring a lease. */
+export function requireCompactionIntent(action: LedgerAction.Node | undefined): LedgerAction.Node {
+  if (action === undefined || action.kind !== "compaction")
     throw new ContextRestoreError("unknown_compaction");
-  const result = actions.find(
-    (action) =>
-      action.kind === "compaction" &&
-      action.parentId === compactionId &&
-      field(action.effect.value, "terminal") === "executed",
-  );
-  if (result === undefined) throw new ContextRestoreError("not_executed");
+  if (field(action.intent.value, "phase") !== "intent")
+    throw new ContextRestoreError("not_executed");
+  return action;
+}
+
+/** The executed child of the already validated original compaction intent. */
+export function recordedCompaction(
+  compactionId: string,
+  result: LedgerAction.Node | undefined,
+): CompactionRecord {
+  if (
+    result?.kind !== "compaction" ||
+    result.parentId !== compactionId ||
+    field(result.effect.value, "terminal") !== "executed"
+  )
+    throw new ContextRestoreError("not_executed");
   return RecordedCompaction.parse(field(result.effect.value, "result"));
 }
 
@@ -67,19 +74,18 @@ export function recordedCompaction(
  * since gone or the recipe no longer matches its digest.
  */
 export function restoredContextProjection(
-  sessionId: string,
-  actions: readonly LedgerAction.Node[],
+  history: readonly Message.WithParts[],
   compactionId: string,
   record: CompactionRecord,
 ): PlainValue {
-  const projection = restoreCompactionProjection(foldSessionHistory(sessionId, actions), record);
+  const projection = restoreCompactionProjection(history, record);
   return PlainValueSchema.parse({
     projection,
     restored: { compactionId, discarded: record.discarded },
   });
 }
 
-function field(effect: PlainValue, key: "terminal" | "result"): PlainValue | undefined {
+function field(effect: PlainValue, key: "terminal" | "result" | "phase"): PlainValue | undefined {
   return effect !== null && typeof effect === "object" && !Array.isArray(effect)
     ? effect[key]
     : undefined;

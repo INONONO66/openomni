@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
 import { Cause, Effect, Either, Exit } from "effect";
@@ -191,7 +192,7 @@ async function waveApp(
 
 function toolResults(sessionId: string) {
   const result = z.object({ phase: z.literal("result"), terminal: z.string(), callId: z.string() });
-  return SessionHandleStore.tree(sessionId)
+  return sessionTree(sessionId)
     .filter(
       (action) =>
         action.kind === "tool" &&
@@ -211,7 +212,7 @@ function nextTerminal(): Promise<void> {
     }, 5000);
     const stop = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.sessionId === "gateway-ingress" || event.kind !== "turn") return;
-      const terminal = SessionHandleStore.tree(event.sessionId).find(
+      const terminal = sessionTree(event.sessionId).find(
         (action) => action.id === event.id,
       );
       if (terminal === undefined || SessionHandleStore.turnTerminal(terminal) === undefined) return;
@@ -289,7 +290,7 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
   // Then: exactly the original turn is interrupted without a body or second call.
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
-  const terminals = SessionHandleStore.tree(activeRow().id).flatMap((action) => {
+  const terminals = sessionTree(activeRow().id).flatMap((action) => {
     const terminal = SessionHandleStore.turnTerminal(action);
     return terminal ? [terminal] : [];
   });
@@ -311,7 +312,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
       async () => {
         started.push(name);
         preCounts.push(
-          SessionHandleStore.tree(activeRow().id).filter(
+          sessionTree(activeRow().id).filter(
             (action) =>
               action.kind === "policy.decision" &&
               z.object({ hook: z.literal("tool.pre") }).safeParse(action.intent.value).success,
@@ -513,7 +514,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     await bounded(runEffect(handle.close()));
     expect(SessionHandleStore.row(row.id).leaseOwner).toBeNull();
     expect(
-      SessionHandleStore.tree(row.id).some(
+      sessionTree(row.id).some(
         (action) =>
           z.object({ op: z.literal("late-callback") }).safeParse(action.intent.value).success,
       ),
@@ -630,7 +631,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         left: { _tag: "LeaseRefused", reason: "held" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
-      const beforeActions = SessionHandleStore.tree(row.id).length;
+      const beforeActions = sessionTree(row.id).length;
       let staleBodyStarts = 0;
       const stale = () =>
         executor.run(request, () =>
@@ -644,7 +645,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         error: { _tag: "CommitRefused", reason: "fence" },
       });
       expect(staleBodyStarts).toBe(0);
-      expect(SessionHandleStore.tree(row.id)).toHaveLength(beforeActions);
+      expect(sessionTree(row.id)).toHaveLength(beforeActions);
       gate.resolve();
       await bounded(completed.promise);
       // Close joins the raw effect after its exact completion signal.
@@ -663,7 +664,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       // Close records its interrupt and seals the captured intent whose late result
       // was refused by the already-sealed turn; raw completion itself commits nothing.
       expect(
-        SessionHandleStore.tree(row.id)
+        sessionTree(row.id)
           .slice(beforeActions)
           .map((action) => ({
             kind: action.kind,
@@ -781,7 +782,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           left: { _tag: "LeaseRefused", reason: "held" },
         });
         expect(held.leaseOwner).toBe(row.leaseOwner);
-        const beforeActions = SessionHandleStore.tree(sessionId).length;
+        const beforeActions = sessionTree(sessionId).length;
         const db = new Database(dbPath, { readonly: true });
         try {
           expect(
@@ -821,7 +822,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         });
         expect(staleStarts).toBe(0);
         expect(
-          SessionHandleStore.tree(sessionId)
+          sessionTree(sessionId)
             .slice(beforeActions)
             .map((action) => ({
               kind: action.kind,
@@ -866,7 +867,7 @@ test("approval-time prompts retain durable identities and enter the next model s
     op: z.literal("chat"),
     value: z.object({ messageIds: z.array(z.string()) }),
   });
-  const inputs = SessionHandleStore.tree(handle.id)
+  const inputs = sessionTree(handle.id)
     .filter((action) => action.kind === "llm")
     .flatMap((action) => {
       const parsed = modelIntent.safeParse(action.intent.value);
@@ -879,7 +880,7 @@ test("approval-time prompts retain durable identities and enter the next model s
     throw new Error("missing prompt IDs");
   expect(inputs[0]).toEqual([initialId]);
   expect(inputs[1]?.filter((id) => promptIds.includes(id))).toEqual(promptIds);
-  const delivered = SessionHandleStore.tree(handle.id).flatMap((action) => {
+  const delivered = sessionTree(handle.id).flatMap((action) => {
     const delivery = SessionHandleStore.delivery(action);
     return delivery?.kind === "prompt" ? [delivery] : [];
   });

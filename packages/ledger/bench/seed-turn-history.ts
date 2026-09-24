@@ -6,9 +6,8 @@ import { materializeSession } from "../test/helpers/session";
 /** Populate two committed turn actions per turn through the fenced L0 commit. */
 export function seedTurnHistory(id: string, count = 10): void {
   materializeSession(id);
-  const tree = SessionHandleStore.tree(id);
-  const generation = SessionHandleStore.latestGeneration(tree);
-  let parentId = tree.at(-1)?.id ?? null;
+  const generation = SessionHandleStore.latestGenerationFor(id);
+  let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
   for (let index = 0; index < count; index += 1) {
     const request = prepareTurnCommit(id, index, parentId, generation);
     Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
@@ -53,7 +52,7 @@ export function prepareTurnCommit(
         irreversible: true,
         intent: {
           encodingVersion: 1,
-          value: SessionTurn.Intent.parse({
+          value: SessionTurn.HistoricalIntent.parse({
             phase: "intent",
             resultId,
             inboxIds: [],

@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -141,7 +142,7 @@ function snapshot(
     alarm,
     fence: alarm?.fence ?? 0,
     session: adapter.sessions.get("owner"),
-    tree: adapter.actions.tree("owner"),
+    tree: sessionTree("owner", adapter.actions),
     inbox: adapter.inbox.list("owner"),
     published: observations.length,
   };

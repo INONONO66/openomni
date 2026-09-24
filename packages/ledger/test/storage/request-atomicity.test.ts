@@ -1,3 +1,4 @@
+import { sessionTree } from "../helpers/session-tree";
 import { Effect, Either } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -22,19 +23,19 @@ test("failed request insert rolls back original action, revision and observation
   raw.run(`CREATE TRIGGER refuse_request BEFORE INSERT ON action WHEN NEW.kind = 'request'
     BEGIN SELECT RAISE(ABORT, 'request write failed'); END`);
   const before = SessionHandleStore.row(request.sessionId);
-  const tree = SessionHandleStore.tree(request.sessionId);
+  const tree = sessionTree(request.sessionId);
   expect(() => commit([original, requestStateAction(request)])).toThrow(
     expect.objectContaining({ _tag: "ForeignFailure" }),
   );
   expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
-  expect(SessionHandleStore.tree(request.sessionId)).toEqual(tree);
+  expect(sessionTree(request.sessionId)).toEqual(tree);
   expect(SessionHandleStore.requestRows()).toEqual([]);
 });
 
 test("request commit requires the live lease rather than borrowing another owner's fence", () => {
   const { request, original, commit } = requestFixture();
   expectCommitted(commit([original, requestStateAction(request)]));
-  const before = SessionHandleStore.tree(request.sessionId);
+  const before = sessionTree(request.sessionId);
   const result = () =>
     Either.getOrThrowWith(
       Effect.runSync(
@@ -55,7 +56,7 @@ test("request commit requires the live lease rather than borrowing another owner
       (error) => error,
     );
   expect(result).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "fence" }));
-  expect(SessionHandleStore.tree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId)).toEqual(before);
 });
 
 test("commit observations see durable request state after the complete batch", () => {

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { canonicalDigest } from "../packages/protocol/src/index";
 import {
+  FOLD_CHECKPOINT_MIGRATION,
   sqliteSchema,
   U967Error,
   U967_MIGRATION,
@@ -93,6 +94,12 @@ export function assertArchiveEquality(
     rebuiltTables.add("alarm");
     migrationDelta.push("0037_watch_alarms/migration.sql");
   }
+  if (dispositionDelta && hasUpgrade(source, restored, FOLD_CHECKPOINT_MIGRATION)) {
+    preflightSqliteDatabase(source);
+    preflightSqliteDatabase(restored);
+    rebuiltTables.add("action");
+    rebuiltTables.add("policy");
+  }
   if (dispositionDelta && hasActionHashUpgrade(source, restored)) rebuiltTables.add("action");
   if (dispositionDelta && hasDecisionFactUpgrade(source, restored)) {
     removedTables.add(RETIRED_DECISION_TABLES.facts);
@@ -151,12 +158,15 @@ function hasWatchUpgrade(source: Database, restored: Database): boolean {
   return false;
 }
 
+function hasUpgrade(source: Database, restored: Database, migration: string): boolean {
+  return (
+    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration) !== null &&
+    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(migration) === null
+  );
+}
+
 function hasActionHashUpgrade(source: Database, restored: Database): boolean {
-  if (
-    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(ACTION_HASH_MIGRATION) === null ||
-    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(ACTION_HASH_MIGRATION) !== null
-  )
-    return false;
+  if (!hasUpgrade(source, restored, ACTION_HASH_MIGRATION)) return false;
   preflightSqliteDatabase(source);
   preflightSqliteDatabase(restored);
   const sessions = source
@@ -170,12 +180,7 @@ function hasActionHashUpgrade(source: Database, restored: Database): boolean {
 }
 
 function hasDecisionFactUpgrade(source: Database, restored: Database): boolean {
-  if (
-    source.query("SELECT 1 FROM _migrations WHERE name = ?").get(DECISION_FACT_MIGRATION) ===
-      null ||
-    restored.query("SELECT 1 FROM _migrations WHERE name = ?").get(DECISION_FACT_MIGRATION) !== null
-  )
-    return false;
+  if (!hasUpgrade(source, restored, DECISION_FACT_MIGRATION)) return false;
   preflightSqliteDatabase(source);
   preflightSqliteDatabase(restored);
   // Apply the shipped head-only conversion to a disposable native image. This
@@ -222,6 +227,7 @@ function addedMigrations(source: Database, restored: Database): string[] {
     REQUEST_MIGRATION,
     ACTION_HASH_MIGRATION,
     DECISION_FACT_MIGRATION,
+    FOLD_CHECKPOINT_MIGRATION,
   ]) {
     using marker = restored.prepare("SELECT 1 FROM _migrations WHERE name = ?");
     using current = source.prepare("SELECT 1 FROM _migrations WHERE name = ?");

@@ -2,6 +2,7 @@ import { expect, it } from "bun:test";
 import { openRequest } from "./helpers/open-request";
 import {
   canonicalDigest,
+  PlainObjectSchema,
   type LedgerAction,
   type LedgerSession,
   type SessionTransition,
@@ -86,7 +87,9 @@ function decide(
       expectedRevision: 1,
       payload,
     },
-    { row, actions, request: pending, domainRevisions: { person: 3 } },
+    { row, invocation: actions.find((action) => action.id === "invocation"),
+      inputRecord: actions.find((action) => PlainObjectSchema.parse(action.intent.value).inputId === (payload.kind === "request.answer" ? payload.answer.inputId : payload.kind)),
+      request: pending, domainRevisions: { person: 3 } },
   );
 }
 it("opens only the exact existing invocation and original effect", () => {
@@ -253,11 +256,11 @@ it("never borrows a foreign lease or accepts an obsolete revision", () => {
     authority: { owner: "foreign", fence: 1 },
     payload: { kind: "request.open", request: request() },
   };
-  expect(decideRequestTransition(command, { row, actions: [original] }).actions).toEqual([]);
+  expect(decideRequestTransition(command, { row, invocation: original }).actions).toEqual([]);
   expect(
     decideRequestTransition(
       { ...command, authority: { owner: "kernel", fence: 1 }, expectedRevision: 0 },
-      { row, actions: [original] },
+      { row, invocation: original },
     ).resolution,
   ).toBe("rejected");
 });
@@ -291,7 +294,7 @@ it("refuses approval when current domain revisions cannot be read", () => {
       authority: { owner: "kernel", fence: 1 },
       payload: { kind: "request.answer", answer: answer(pending) },
     },
-    { row, actions: [original], request: pending },
+    { row, invocation: original, request: pending },
   );
   expect(result.resolution).toBe("rejected");
   expect(result.request?.state).toBe("open");
@@ -319,7 +322,7 @@ it("proposes observed global approval count only for a new approval open", () =>
     { ...pending, requestId: "reply", mode: "reply" as const },
     { ...pending, requestId: "closed", state: "resolved" as const, outcome: "answered" as const },
   ];
-  const snapshot = { row, actions: [original], requests };
+  const snapshot = { row, invocation: original, requests };
   const opened = decideRequestTransition(command, snapshot);
   expect(opened.resolution).toBe("opened");
   expect(opened).toHaveProperty("requestCount", { since: 20 - 3_600_000, count: 7 });
@@ -339,7 +342,7 @@ it("proposes observed global approval count only for a new approval open", () =>
     decideRequestTransition(command, {
       ...snapshot,
       request: opened.request,
-      actions: [original, ...persisted],
+      inputRecord: persisted.find((action) => PlainObjectSchema.parse(action.intent.value).inputId === command.inputId),
     }),
   ).not.toHaveProperty("requestCount");
   const reply = { ...pending, mode: "reply" as const };

@@ -6,11 +6,12 @@ import type { SessionController, SessionControllerLifecycle, ResolvedSessionRunt
 import { toolSnapshot, internalOrigin, turnTerminalAction } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { createSessionTurn } from "./session-turn";
-import { createSessionAdmission, commitSessionRequest } from "./session-admission";
+import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session-admission";
 import { createSessionConfiguration } from "./session-configuration";
 import { dispatchSessionOutbound } from "./session-outbound";
 import { inspectSession } from "./session-lifecycle/inspect";
 import { createRawSlots } from "./executor-raw";
+import { commitFoldBatch } from "./session-fold-commit";
 
 export function createController(
   sessionId: string,
@@ -158,7 +159,7 @@ export function createController(
       return Effect.gen(function* () {
         yield* SessionHandleStore.commitInbox({
           id: entropy(), sessionId, kind, content, origin, createdAt: clock(),
-          parentActionId: SessionHandleStore.tree(sessionId).at(-1)?.id ?? null,
+          parentActionId: SessionHandleStore.latestAction(sessionId)?.id ?? null,
         });
         const current = SessionHandleStore.row(sessionId);
         // The durable interrupted mark needs this controller's live fence; under an
@@ -196,18 +197,24 @@ export function createController(
       });
     }
 
-    function driveInbox(pending: readonly Inbox.Row[]): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
+    function driveInbox(): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
       return Effect.gen(function* () {
-        if (pending.length === 0) return { stop: true };
-        if (SessionHandleStore.row(sessionId).state === "interrupted") {
-          const resume = pending.find((item) => item.kind === "resume");
-          if (resume === undefined) return { stop: true };
-          return { stop: false, result: yield* admission.resumeInterrupted(resume) };
+        const decision = decideSessionAdmission({
+          row: SessionHandleStore.row(sessionId),
+          pending: SessionHandleStore.pendingInbox(sessionId),
+          open: SessionHandleStore.latestOpenTurn(sessionId),
+          terminal: SessionHandleStore.latestTurnTerminal(sessionId),
+        });
+        switch (decision.kind) {
+          case "stop": return { stop: true };
+          case "refused": return yield* new ForeignFailure({ operation: "session.admission", cause: "invalid_state" });
+          case "start": return { stop: false, result: yield* admission.startTurn() };
+          case "recover": return { stop: false, result: yield* admission.resumeTurn(decision.open) };
+          case "resume": return { stop: false, result: yield* admission.resumeInterrupted(decision.item) };
+          case "consume":
+            yield* admission.consumeNoopInbox(decision.items);
+            return { stop: false };
         }
-        const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
-        if (firstPrompt === 0) return { stop: false, result: yield* admission.startTurn() };
-        yield* admission.consumeNoopInbox(firstPrompt > 0 ? pending.slice(0, firstPrompt) : pending);
-        return { stop: false };
       });
     }
 
@@ -219,9 +226,7 @@ export function createController(
             state.fence = yield* acquire(SessionHandleStore.row(sessionId).leaseFence);
           yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, true);
           }
-          const open = SessionHandleStore.openTurns(SessionHandleStore.tree(sessionId)).at(-1);
-          if (open !== undefined) { result = yield* admission.resumeTurn(open); continue; }
-          const next = yield* driveInbox(SessionHandleStore.pendingInbox(sessionId));
+          const next = yield* driveInbox();
           if (next.stop) break;
           result = next.result ?? result;
         }
@@ -252,23 +257,22 @@ export function createController(
 
     function sealUnknown() {
       return Effect.gen(function* () {
-        const actions = SessionHandleStore.tree(sessionId);
-        const terminals = new Set(actions.filter((action) => isResult(action)).map((action) => action.parentId));
-        const unresolved = actions.filter((action) => isPending(action) && !terminals.has(action.id));
+        const openTurns = [...openSessionTurns(sessionId)];
+        const unresolved = shutdownOperations(sessionId);
         const pending: LedgerAction.Append[] = unresolved.map((action) => ({
           id: entropy(), parentId: action.id, sessionId, kind: action.kind,
           intent: { encodingVersion: 1, value: { phase: "result", op: "shutdown" } },
           effect: { encodingVersion: 1, value: { phase: "result", terminal: "outcome_unknown", reason: "shutdown_grace_exhausted" } },
           ts: clock(), irreversible: true,
         }));
-        for (const open of SessionHandleStore.openTurns(actions)) pending.push(turnTerminalAction({
-          id: open.resultId, parentId: pending.at(-1)?.id ?? actions.at(-1)?.id ?? open.action.id,
+        for (const open of openTurns) pending.push(turnTerminalAction({
+          id: open.resultId, parentId: pending.at(-1)?.id ?? SessionHandleStore.latestAction(sessionId)?.id ?? open.action.id,
           sessionId, turnId: open.turnId, result: { kind: "interrupted" }, resumeCount: open.resumeCount,
           boundaryActionId: open.boundaryActionId, at: clock(),
         }));
         if (pending.length === 0) return;
         const current = SessionHandleStore.row(sessionId);
-        yield* SessionHandleStore.commit({
+        yield* commitFoldBatch({
           sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
           actions: pending, consumeInboxIds: [], state: "interrupted", releaseLease: false,
         });
@@ -279,13 +283,44 @@ export function createController(
   });
 }
 
-function isPending(action: LedgerAction.Node): boolean {
-  const value = action.effect.value;
-  return value !== null && typeof value === "object" && !Array.isArray(value) && value.phase === "pending";
+function* openSessionTurns(sessionId: string) {
+  let cursor = 0;
+  for (;;) {
+    const page = SessionHandleStore.openTurnsPage(sessionId, cursor);
+    yield* page;
+    if (page.length < 256) return;
+    const last = page.at(-1);
+    if (last !== undefined) cursor = SessionHandleStore.actionById(last.turnId)?.ordinal ?? cursor;
+  }
 }
-function isResult(action: LedgerAction.Node): boolean {
-  const value = action.effect.value;
-  return value !== null && typeof value === "object" && !Array.isArray(value) && value.phase === "result";
+
+function shutdownOperations(sessionId: string): LedgerAction.Node[] {
+  const pending: LedgerAction.Node[] = [];
+  let cursor = SessionHandleStore.row(sessionId).revision + 1;
+  for (;;) {
+    const page = SessionHandleStore.turnIntentsPage(sessionId, cursor);
+    for (const turn of page) pending.push(...unresolvedOperations(sessionId, turn.id));
+    if (page.length < 256) return pending;
+    cursor = page.at(-1)?.ordinal ?? cursor;
+  }
+}
+
+function unresolvedOperations(sessionId: string, turnId: string): LedgerAction.Node[] {
+  const operations = new Map<string, LedgerAction.Node>();
+  for (const read of [SessionHandleStore.openOperationsPage, SessionHandleStore.guardedOperationsPage]) {
+    let cursor = 0;
+    for (;;) {
+      const page = read(sessionId, turnId, cursor);
+      for (const action of page) {
+        const value = action.effect.value;
+        if (value !== null && typeof value === "object" && !Array.isArray(value) && value.phase === "pending" && SessionHandleStore.resultFor(sessionId, action.id) === undefined)
+          operations.set(action.id, action);
+      }
+      if (page.length < 256) break;
+      cursor = page.at(-1)?.ordinal ?? cursor;
+    }
+  }
+  return [...operations.values()];
 }
 function defaultHeartbeat(callback: () => void, intervalMs: number): () => void {
   const timer = setInterval(callback, intervalMs);

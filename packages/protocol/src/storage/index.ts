@@ -9,9 +9,46 @@ import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../le
 export namespace Storage {
   export interface ActionSubAdapter {
     append(input: LedgerAction.Append, expectedRevision: number): LedgerAction.Receipt | undefined;
-    tree(sessionId: string): LedgerAction.Node[];
     actionById(id: string): LedgerAction.Node | undefined;
-    configurationActions(sessionId: string): LedgerAction.Node[];
+    latestAction(sessionId: string, throughRevision: number): LedgerAction.Node | undefined;
+    latestFoldCheckpoint(sessionId: string, throughRevision: number): LedgerAction.Node | undefined;
+    priorModelAttempt(sessionId: string, turnId: string): LedgerAction.Node | undefined;
+    generationFor(sessionId: string, generation: number): LedgerAction.Node | undefined;
+    turnTerminalFor(sessionId: string, turnId: string): LedgerAction.Node | undefined;
+    latestTurnTerminal(sessionId: string): LedgerAction.Node | undefined;
+    latestTurnUpdate(sessionId: string, turnId: string): LedgerAction.Node | undefined;
+    turnIntentsPage(sessionId: string, beforeRevision: number, limit: number): LedgerAction.Node[];
+    /** `turn` and `inbox.deliver` actions after `cursor`, ascending: one window feeds every tail. */
+    turnTailPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
+    openTurnsPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
+    resultFor(sessionId: string, parentId: string): LedgerAction.Node | undefined;
+    requestInputById(sessionId: string, inputId: string): LedgerAction.Node | undefined;
+    requestStateById(requestId: string): LedgerAction.Node | undefined;
+    requestStatesPage(
+      sessionId: string | undefined,
+      cursor: string,
+      limit: number,
+    ): LedgerAction.Node[];
+    outboundStatesPage(sessionId: string, cursor: string, limit: number): LedgerAction.Node[];
+    guardedOperationsPage(
+      sessionId: string,
+      turnId: string,
+      cursor: number,
+      limit: number,
+    ): LedgerAction.Node[];
+    openOperationsPage(
+      sessionId: string,
+      turnId: string,
+      cursor: number,
+      limit: number,
+    ): LedgerAction.Node[];
+    operationChildrenPage(
+      sessionId: string,
+      parentId: string,
+      cursor: number,
+      limit: number,
+    ): LedgerAction.Node[];
+    configurationActions(sessionId: string, beforeRevision: number): LedgerAction.Node[];
     policyDecisionRuleIds(sessionId: string, inputHash: string): string[] | undefined;
     messageActionByPlatformId(sessionId: string, messageId: string): LedgerAction.Node | undefined;
     outboundReceipt(

@@ -1,3 +1,4 @@
+import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "../../helpers/executor";
 import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
@@ -297,7 +298,7 @@ test.each([
   const request = approvals?.pending()[0];
   if (approvals === undefined || request === undefined) throw new Error("missing retry approval");
   expect(
-    intents(recording.ledger.actions?.() ?? [], "attempt").map((action: LedgerAction.Append) => action.id),
+    intents(sessionTree(recording.identity.sessionId), "attempt").map((action: LedgerAction.Append) => action.id),
   ).toContain(request.id);
   yield* approvals.answer({ request, credential: "proof", decision });
   const result = yield* Fiber.join(terminal);
@@ -305,7 +306,7 @@ test.each([
   else {
     expect(result).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied" } });
     expect(
-      (recording.ledger.actions?.() ?? [])
+      (sessionTree(recording.identity.sessionId))
         .filter((action: LedgerAction.Node) => action.kind === "attempt")
         .map((action: LedgerAction.Node) => action.effect.value),
     ).toContainEqual(
@@ -317,7 +318,7 @@ test.each([
   }
   expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
-  expect(intents(recording.ledger.actions?.() ?? [], "llm")).toHaveLength(1);
+  expect(intents(sessionTree(recording.identity.sessionId), "llm")).toHaveLength(1);
 }))));
 
 test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -334,7 +335,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
       return { type: "stop" };
     }));
   expect(calls).toBe(2);
-  const actions = recording.ledger.actions?.() ?? [];
+  const actions = sessionTree(recording.identity.sessionId);
   const attemptIntents = intents(actions, "attempt");
   expect(attemptIntents).toHaveLength(2);
   const alarmId = `${attemptIntents[0]?.id}:retry:1`;
