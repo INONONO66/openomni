@@ -19,6 +19,8 @@ import {
   messageMaterialization,
   prepareMessage,
 } from "../../src/composition/message-session";
+import { generationServices } from "./generation-services";
+import { ToolCatalog } from "@openomni/agent";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
@@ -40,16 +42,15 @@ export function messageFixture(
   seedKernelPolicyRows();
   const sessionId = "sender";
   const runtime: SessionRuntime = {
-    observations: Bus,
-    clock: () => 100,
     dispatchOutbound: dispatchOutboundMessage(
       (...args) => gateway.ingest(...args),
       () => 100,
     ),
   };
-  const requests = createSessionRequests(runtime);
+  const context = acquireSyncEffect(generationServices({ clock: () => 100 }));
+  const requests = runSyncEffect(createSessionRequests(runtime).pipe(Effect.provide(context)));
   const gateway = runSyncEffect(createResidentGateway({
-    clock: runtime.clock,
+    clock: () => 100,
     requests: channelRequests(requests),
     inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({
@@ -61,7 +62,7 @@ export function messageFixture(
       preset: "",
       at: 100,
     })),
-  }, messaging));
+  }, messaging).pipe(Effect.provide(context)));
   let result: Tool.Result | undefined;
   const handle = acquireSyncEffect(session(
     {
@@ -71,7 +72,7 @@ export function messageFixture(
         const payload = toolInput(
           Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
         );
-        const executor = createExecutor({
+        const executor = yield* createExecutor({
           identity: {
             sessionId,
             role,
@@ -81,15 +82,8 @@ export function messageFixture(
             toolsGeneration: input.toolsGeneration,
           },
           ledger: input.ledger,
-          policy: input.policy,
-          observations: Bus,
-          clock: () => 100,
-          entropy: () => crypto.randomUUID(),
         });
-        const dispatcher = createDispatcher(
-          [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args)) }, runtime.clock))],
-          { executor },
-        );
+        const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provideService(ToolCatalog, { definitions: [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args)) }, () => 100))] }));
         result = yield* dispatcher.execute(
           { id: crypto.randomUUID(), tool: "send_message", input: payload },
           { sessionId, turnId: input.turnId },
@@ -98,7 +92,7 @@ export function messageFixture(
       }),
     },
     runtime,
-  ));
+  ).pipe(Effect.provide(context)));
   return {
     directory,
     dbPath,

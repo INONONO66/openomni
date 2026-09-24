@@ -3,7 +3,7 @@ import type { ExecutionError } from "../../errors";
 import { Compaction, type CompactionSession } from "../../compaction";
 import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
-import type { ChatAgentConfig } from "../types";
+import type { ObservedChatAgentConfig as ChatAgentConfig } from "../types";
 import { applyCompactionMessages, type AgentRunBase, type RunState } from "./state";
 
 type CompactionApplyResult = "compacted" | "deferred" | "none";

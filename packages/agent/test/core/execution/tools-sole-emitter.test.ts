@@ -1,3 +1,5 @@
+import { runAgentSync } from "../../helpers/executor";
+import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
 import { Effect, TestClock, TestContext } from "effect";
 import { isolated } from "../../helpers/isolated";
@@ -45,15 +47,12 @@ it("publishes no lifecycle event when pre policy blocks before tool intent", asy
     clock: () => 10,
   });
   let bodyCalls = 0;
-  const dispatcher = createDispatcher(
-    [
+  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
       echoTool(async (text) => {
         bodyCalls += 1;
         return text;
       }),
-    ],
-    { executor: recording.executor },
-  );
+    ]))));
 
   const result = await isolated(dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "blocked" } },
@@ -83,9 +82,9 @@ it("publishes Started after intent commit and Completed after result commit", as
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = createDispatcher([echoTool(async (text) => text)], {
+  const dispatcher = runAgentSync(createDispatcher({
     executor: recording.executor,
-  });
+  }).pipe(Effect.provide(catalogLayer([echoTool(async (text) => text)]))));
 
   const running = isolated(dispatcher.execute(
     { id: "call-1", tool: "echo", input: { text: "ok" } },
@@ -111,9 +110,9 @@ it("publishes one error completion after a failed tool result commits", async ()
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = createDispatcher([echoTool(() => Promise.reject(new TypeError("failed")))], {
+  const dispatcher = runAgentSync(createDispatcher({
     executor: recording.executor,
-  });
+  }).pipe(Effect.provide(catalogLayer([echoTool(() => Promise.reject(new TypeError("failed")))]))));
 
   const result = await isolated(dispatchEcho(dispatcher, "fail"));
 
@@ -131,10 +130,10 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
       onObservation: observations.observe,
       clock: () => 10,
     });
-    const dispatcher = createDispatcher([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
+    const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor, timeoutMs: 50 }).pipe(Effect.provide(catalogLayer([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
       signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
       bodyEntered.resolve();
-    }))], { executor: recording.executor, timeoutMs: 50 });
+    }))]))));
     const control = Effect.gen(function* () {
       yield* Effect.promise(() => bodyEntered.promise).pipe(Effect.timeout("5 seconds"));
       yield* TestClock.adjust(50);

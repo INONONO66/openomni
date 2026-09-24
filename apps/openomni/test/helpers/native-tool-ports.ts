@@ -25,7 +25,6 @@ export function testMachinePorts(host: MachineHost): NonNullable<CatalogPorts["m
 
 export function testCellPorts(cells: ComposedCodemode): NonNullable<CatalogPorts["cells"]> {
   return {
-    bindTools: cells.bindTools,
     cell: {
       run: (code, tenant, options) => runTyped(cells.cell.run(code, tenant, options)),
       peek: (id, tenant) => runTyped(cells.cell.peek(id, tenant)),

@@ -1,6 +1,7 @@
 import { Effect, Either } from "effect";
 import { SessionHandleStore, type LedgerError, type Storage } from "../../src/index";
 import type { LedgerSession } from "@openomni/protocol";
+import { runLedgerSync } from "./effect";
 
 export function bareStorageAdapter(): Storage.Adapter {
   return { transaction: <T>(operation: () => T): T => operation() };
@@ -13,7 +14,7 @@ export function materializeSession<E = never>(
   afterMaterialize?: (row: LedgerSession.Row) => Effect.Effect<void, E>,
 ) {
   return Either.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.either(
         SessionHandleStore.materialize({
           id,

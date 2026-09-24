@@ -48,7 +48,7 @@ function open(request: SessionTransition.Request) {
     { kind: "request.open", request },
     `${request.requestId}:open`,
     100,
-    { observations: { publish: () => undefined } },
+    {},
   );
 }
 

@@ -1,8 +1,13 @@
+import { testExecutor } from "./executor";
+import { catalogLayer } from "./service-layers";
+import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, prepareChatFixture } from "./chat-services";
+import type { SessionFixture as SessionRuntime } from "./session-services";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import type { Run, RunInput } from "@openomni/llm";
-import type { SessionRuntime } from "../../src/session-contract";
+import type {} from "../../src/session-contract";
 import { PlainValueSchema } from "@openomni/protocol";
 import { createCompactionPlan } from "../../src/compaction/durable";
 import { createAssistantMessage } from "../../src/core/message-factory";
@@ -12,9 +17,8 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, PlainObject, PlainValue, SessionTransition } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
-import type { ChatAgentConfig, ChatAgentInput } from "../../src/core/types";
+import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "@openomni/llm";
-import { createExecutor } from "../../src/executor";
 import type { ExecutorOptions, DurableExecutor, LlmAttempts } from "../../src/executor-contract";
 import type { SessionHandle } from "../../src/session-handle";
 import { runAgent } from "../../src/core/execution/run";
@@ -52,7 +56,7 @@ export function recordingExecutor(
   options: { readonly onCommit?: (action: LedgerAction.Append) => void | Promise<void> } = {},
 ) {
   const record = recordingLedger();
-  const executor = createExecutor({
+  const executor = testExecutor({
     policy: allowAllPolicy,
     retryAlarm: nullRetryAlarm,
     ledger: {
@@ -77,7 +81,7 @@ export function turnExecutor(policy: CompiledPolicySnapshot) {
   const record = recordingLedger();
   return {
     ...record,
-    executor: createExecutor({
+    executor: testExecutor({
       policy,
       ledger: record.ledger,
       observations: { publish: () => undefined },
@@ -93,8 +97,8 @@ export function createTestAgent(config: ChatAgentConfig) {
   return {
     run(input: ChatAgentInput, sink?: Sink) {
       const record = recordingLedger();
-      const executor = createExecutor({
-        policy: compilePolicySnapshot({
+      const executor = testExecutor({
+        policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
           generation: 1,
           rows: SEEDED_POLICY_ROWS.map(
             (row: Omit<import("@openomni/protocol").PolicyRow.Row, "generation">) => ({
@@ -115,7 +119,7 @@ export function createTestAgent(config: ChatAgentConfig) {
           parentActionId: null,
         },
       });
-      return runAgent(input, { executor, execution: executor, ...config }, sink);
+      return Effect.gen(function* () { const fixture: ChatFixture = { executor, execution: executor, ...config }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
     },
   };
 }
@@ -212,9 +216,9 @@ export function dispatchingRunner(
   model: (request: RunInput, sink: Sink, input: SessionRunnerInput) => Promise<Run.Outcome>,
 ) {
   return createSessionChatRunner({
-    prepare: (input: SessionRunnerInput) => {
-      const dispatcher = createTurnDispatcher(definitions, input, runtime());
-      return {
+    prepare: (input: SessionRunnerInput) => Effect.gen(function* () {
+      const dispatcher = (yield* createTurnDispatcher(input, runtime()).pipe(Effect.provide(catalogLayer(definitions))));
+      return prepareChatFixture({
         traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
         config: {
           events: { publish: () => undefined },
@@ -235,8 +239,8 @@ export function dispatchingRunner(
               Effect.promise(() => model(request, sink, input)),
           },
         },
-      };
-    },
+      });
+    }),
   });
 }
 

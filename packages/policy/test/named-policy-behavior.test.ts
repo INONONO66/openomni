@@ -1,0 +1,43 @@
+import { expect, test } from "bun:test";
+import type { PlainValue } from "@openomni/protocol";
+import { compilePolicySnapshot, PolicyCompileError } from "../src/index";
+import { atGeneration, compaction, draft } from "./row-fixtures";
+
+test("existing compiler executes the supplied captured named transform", () => {
+  const options = {
+    generation: 1,
+    registry: {
+      transformers: [
+        { name: "demo/replace", apply: (_args: PlainValue, config: PlainValue) => config },
+      ],
+      obligations: [],
+    },
+    rows: [
+      atGeneration(compaction, 1),
+      atGeneration(
+        draft("replace", "tool", "pre", {
+          type: "transform",
+          ref: "demo/replace",
+          config: { command: "admitted" },
+        }),
+        1,
+      ),
+    ],
+  };
+
+  const result = (() => {
+    try {
+      return compilePolicySnapshot(options).evaluate({
+        kind: "tool",
+        phase: "pre",
+        op: "bash",
+        value: { command: "original" },
+      }).value;
+    } catch (error) {
+      if (PolicyCompileError.isInstance(error)) return { compileError: error.code };
+      throw error;
+    }
+  })();
+
+  expect(result).toEqual({ command: "admitted" });
+});

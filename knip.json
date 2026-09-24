@@ -38,7 +38,12 @@
       "ignoreDependencies": ["tailwindcss"]
     },
     "apps/openomni": {
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/fixtures/*.ts"],
+      "entry": [
+        "src/index.ts",
+        "test/**/*.test.ts",
+        "test/fixtures/*.ts",
+        "test/helpers/generation-crash-process.ts"
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/agent": {

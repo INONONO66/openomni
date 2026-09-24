@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { generationServices } from "./helpers/generation-services";
+import { observationService } from "../../../packages/agent/test/helpers/service-layers";
 import { beforeEach, expect, test } from "bun:test";
 import { acquireEffect, runEffect } from "./helpers/effect";
 import { Database } from "bun:sqlite";
@@ -71,8 +74,8 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     });
     let saved = false;
     const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
-    let runtime: SessionRuntime = {
-      observations: {
+    const runtime: SessionRuntime = {};
+    const observations = observationService({
         publish(event, payload) {
           Bus.publish(event, payload);
           if (mode === "crash-window" && event === L0Observation.ActionCommittedEvent && !saved) {
@@ -101,8 +104,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
           if (mode === "error-window" && event === Tool.Events.Completed)
             throw new Error("crash after committed result");
         },
-      },
-    };
+    });
     const definitions = names.map((name) =>
       eraseTool(
         defineTool({
@@ -134,11 +136,11 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     );
     const runner = createSessionChatRunner({
       prepare(input) {
-        const dispatcher = createTurnDispatcher(definitions, input, runtime);
+        return Effect.gen(function* () {
+        const dispatcher = yield* createTurnDispatcher(input, runtime);
         return {
           traceContext: { traceId: "recovery", sessionId, runId: input.resultId },
           config: {
-            events: Bus,
             executor: dispatcher.executor,
             tools: [...dispatcher.specs],
             toolWave: (calls, signal) =>
@@ -148,17 +150,19 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
             transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
           },
         };
+        });
       },
     });
+    let services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, observations }));
     let unsubscribe: () => void = () => undefined;
     try {
-      initialize({ dbPath });
+      initialize({ dbPath, observationSink: observations });
       seedKernelPolicyRows();
       const handle = await acquireEffect(
         session(
           { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
           runtime,
-        ),
+        ).pipe(Effect.provide(services)),
       );
       unsubscribe = Bus.subscribe(Tool.Events.Completed, (event) => {
         if (
@@ -175,13 +179,13 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         await bounded(enteredB.promise);
         await bounded(runEffect(handle.interrupt()));
       }
-      expect((await bounded(first))?.kind).toBe(mode === "error-window" ? "error" : "interrupted");
+      expect((await bounded(first))?.kind).toBe(mode === "error-window" ? "result" : "interrupted");
       unsubscribe();
-      expect(requests).toHaveLength(1);
+      expect(requests).toHaveLength(mode === "error-window" ? 2 : 1);
       let prefix = SessionHandleStore.tree(sessionId);
       if (mode === "crash-window") {
         expect(saved).toBe(true);
-        await runEffect(closeSessions(runtime));
+        await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
         Storage.reset();
         initialize({ dbPath: crashPath });
         prefix = SessionHandleStore.tree(sessionId);
@@ -195,11 +199,9 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         ).toHaveLength(1);
         const expiresAt = SessionHandleStore.row(sessionId).leaseExpiresAt;
         if (expiresAt === null) throw new Error("missing crash lease");
-        runtime = { observations: Bus, clock: () => expiresAt + 1 };
-        await bounded(acquireEffect(sweepSessions(() => runner, runtime)));
-      } else if (mode === "error-window") {
-        await bounded(runEffect(handle.prompt("continue without replay")));
-      } else {
+        services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, clock: () => expiresAt + 1 }));
+        await bounded(acquireEffect(sweepSessions(() => runner, runtime).pipe(Effect.provide(services))));
+      } else if (mode !== "error-window") {
         await bounded(runEffect(handle.resume()));
       }
       expect(SessionHandleStore.tree(sessionId).slice(0, prefix.length)).toEqual(prefix);
@@ -219,7 +221,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       expect(bodies).toEqual(names);
     } finally {
       unsubscribe();
-      await runEffect(closeSessions(runtime));
+      await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
       await provider.stop(true);
       Storage.reset();
       rmSync(directory, { recursive: true, force: true });

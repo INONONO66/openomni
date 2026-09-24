@@ -1,7 +1,8 @@
+import { testExecutor } from "../../helpers/executor";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it, mock } from "bun:test";
-import { createExecutor } from "../../../src/index";
 import {
   recordingLedger,
   runTestOperation,
@@ -38,8 +39,8 @@ const mandatory: PolicyRow.Row = {
 
 function harness(rows: readonly PolicyRow.Row[]) {
   const { committed: actions, ledger } = recordingLedger();
-  const executor = createExecutor({
-    policy: compilePolicySnapshot({
+  const executor = testExecutor({
+    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows: [mandatory, ...rows],
       mandatory: ["compaction"],
@@ -118,8 +119,8 @@ describe("the single L2 executor's four-kind verdict model", () => {
         Effect.gen(function* () {
           const actions: LedgerAction.Append[] = [];
           let revision = 0;
-          const executor = createExecutor({
-            policy: compilePolicySnapshot({
+          const executor = testExecutor({
+            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
               generation: 1,
               rows: [mandatory],
               mandatory: ["compaction"],
@@ -184,8 +185,8 @@ describe("the single L2 executor's four-kind verdict model", () => {
               return { ok: true };
             }),
           );
-          const executor = createExecutor({
-            policy: compilePolicySnapshot({
+          const executor = testExecutor({
+            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
               generation: 1,
               rows: [mandatory],
               mandatory: ["compaction"],

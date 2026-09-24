@@ -1,3 +1,6 @@
+import { runAgentSync } from "../../helpers/executor";
+import type { ChatFixture as ChatAgentConfig } from "../../helpers/chat-services";
+import { catalogLayer } from "../../helpers/service-layers";
 import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { createTestAgent } from "../../helpers/effect-g1";
@@ -8,7 +11,7 @@ import { recordingExecutor } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { z } from "zod";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import type { ChatAgentConfig } from "../../../src/core/types";
+import type {} from "../../../src/core/types";
 
 // Catalog metadata does not bypass the executor's compiled policy.
 const tools: Tool.Spec[] = [
@@ -42,8 +45,7 @@ describe("tool calls reach the executor without target gating", () => {
           },
         ]),
       });
-      const dispatcher = createDispatcher(
-        [
+      const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
           defineTool({
             name: "screen.capture",
             description: "Capture screen",
@@ -57,9 +59,7 @@ describe("tool calls reach the executor without target gating", () => {
             },
             render: (_input, output) => output,
           }),
-        ],
-        { executor: recording.executor },
-      );
+        ]))));
       const context = { sessionId: "session-tools", turnId: "turn-tools" };
       const execute = (call: Tool.Call) => dispatcher.execute(call, context);
       const config: ChatAgentConfig = {

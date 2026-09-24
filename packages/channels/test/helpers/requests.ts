@@ -1,5 +1,6 @@
-import { Effect } from "effect";
-import { createSessionRequests, decideRequestTransition } from "@openomni/agent";
+import { Effect, Layer } from "effect";
+import { Clock, Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
+import { runEffect } from "./effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import {
   canonicalDigest,
@@ -7,19 +8,22 @@ import {
   type PlainValue,
   type SessionTransition,
 } from "@openomni/protocol";
-import { Bus } from "./observation";
 
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
   clock: () => number = () => 1,
   onInboxCommitted?: (sessionIds: readonly string[]) => void,
+  runtime: Omit<SessionRuntime, "processId" | "onInboxCommitted"> = {},
 ) {
-  return createSessionRequests({
-    observations: Bus,
-    clock,
-    processId: "channels-test",
-    onInboxCommitted,
-  });
+  return runEffect(
+    createSessionRequests({ ...runtime, processId: "channels-test", onInboxCommitted }).pipe(
+      Effect.provide(Layer.mergeAll(
+        Layer.succeed(Clock, { now: clock }),
+        Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
+      )),
+    ),
+    "sync",
+  );
 }
 
 export function originalAction(requestId: string, sessionId: string, value: PlainValue = {}) {

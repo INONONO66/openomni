@@ -1,9 +1,11 @@
+import { testExecutor } from "./helpers/executor";
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
-import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { createTurnDispatcher } from "../src/index";
-import { createExecutor, type ExecutorOptions } from "../src/executor";
 import type { DurableExecutor, ExecutionBatchItem } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
 import { CommitRefused, ForeignFailure as LedgerFailure } from "@openomni/ledger";
@@ -21,7 +23,7 @@ function recover(executor: DurableExecutor) { return isolated(executor.recover()
 function harness() {
   const actions: LedgerAction.Node[] = [];
   let sequence = 0;
-  const options: ExecutorOptions = {
+  const options: ResolvedExecutorOptions = {
     identity: { sessionId: "session", role: "resident", parentActionId: "turn", turnId: "turn" },
     policy: compiledPolicy(),
     clock: () => 100,
@@ -123,6 +125,53 @@ const denyWritePost: Parameters<typeof compiledPolicy>[0] = [
   },
 ];
 
+test("the body receives deeply frozen admitted input", async () => {
+  const { options } = harness();
+  const admittedInput = { nested: { items: [{ value: "admitted" }] } };
+  const result = await isolated(testExecutor(options).run(
+    { ...toolRequest, intent: admittedInput },
+    (_receipt: LedgerAction.Receipt, input: PlainValue) => Effect.sync(() => {
+      const nested = record(record(input).nested ?? null);
+      const items = nested.items;
+      expect(input).toEqual(admittedInput);
+      expect(Object.isFrozen(input)).toBe(true);
+      expect(Object.isFrozen(nested)).toBe(true);
+      expect(Array.isArray(items)).toBe(true);
+      expect(Object.isFrozen(items)).toBe(true);
+      expect(Object.isFrozen(Array.isArray(items) ? items[0] : null)).toBe(true);
+      return { status: "success" };
+    }),
+  ));
+  expect(result).toEqual({ terminal: "executed", value: { status: "success" } });
+  expect(Object.isFrozen(admittedInput)).toBe(false);
+});
+
+test.each(["corrupted", null, 42])("recovery rejects a corrupted recorded verdict (%j) before the body", async (verdict: PlainValue) => {
+  const { actions, options } = harness();
+  const decision = await isolated(options.ledger.commit({
+    ...openIntent("decision", "policy.decision", "turn", {}),
+    intent: { encodingVersion: 1, value: {
+      hook: "tool.pre", op: toolRequest.op, generation: options.policy.generation,
+      matchedRuleIds: [], verdict,
+      inputHash: canonicalDigest({ kind: "tool", phase: "pre", op: toolRequest.op,
+        role: "resident", sessionId: "session", value: toolRequest.intent }),
+    } },
+    effect: { encodingVersion: 1, value: { reason: null } },
+  }));
+  const original = await isolated(options.ledger.commit(openIntent("original", "tool", "turn", {
+    op: toolRequest.op, policyDecisionId: decision.action.id, value: toolRequest.intent,
+  })));
+  const before = structuredClone(actions);
+  let bodies = 0;
+  const error = await isolated(failure(testExecutor(options).run(
+    { ...toolRequest, originalAction: original.action },
+    () => Effect.sync(() => { bodies++; return {}; }),
+  )));
+  expect(error).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
+  expect(bodies).toBe(0);
+  expect(actions).toEqual(before);
+});
+
 describe("completion recovery", () => {
   for (const site of ["before_persist", "after_persist"] as const) {
     test(`a result commit throwing ${site} keeps one terminal and never replays the body`, async () => {
@@ -136,7 +185,7 @@ describe("completion recovery", () => {
         if (site === "after_persist") yield* commit(action);
         return yield* storageLost;
       });
-      const executor = createExecutor({
+      const executor = testExecutor({
         ...options,
         ledger: {
           ...options.ledger,
@@ -187,7 +236,7 @@ describe("completion recovery", () => {
 
   test("a throwing model-facing projection preserves the executed body's evidence", async () => {
     const { actions, options } = harness();
-    const executor = createExecutor(options);
+    const executor = testExecutor(options);
     const results = await runBatch(executor,
       [
         {
@@ -215,7 +264,7 @@ describe("completion recovery", () => {
   test("a refused post decision propagates without a fabricated verdict and recovers without replay", async () => {
     const { actions, options } = harness();
     const commit = options.ledger.commit;
-    const executor = createExecutor({
+    const executor = testExecutor({
       ...options,
       ledger: {
         ...options.ledger,
@@ -247,7 +296,7 @@ describe("completion recovery", () => {
     const { actions, options } = harness();
     const commit = options.ledger.commit;
     let injected = false;
-    const executor = createExecutor({
+    const executor = testExecutor({
       ...options,
       policy: compiledPolicy(denyWritePost),
       ledger: {
@@ -287,7 +336,7 @@ describe("completion recovery", () => {
 
   test("a throwing reverter is never proof of rollback", async () => {
     const { actions, options } = harness();
-    const executor = createExecutor({ ...options, policy: compiledPolicy(denyWritePost) });
+    const executor = testExecutor({ ...options, policy: compiledPolicy(denyWritePost) });
     const results = await runBatch(executor,
       [
         {
@@ -314,7 +363,7 @@ describe("completion recovery", () => {
     const commit = options.ledger.commit;
     const stale = new CommitRefused({ sessionId: "session", reason: "fence", expectedRevision: 1, currentRevision: 1, fence: 1, currentFence: 2 });
     let bodyDone = false;
-    const executor = createExecutor({
+    const executor = testExecutor({
       ...options,
       ledger: {
         ...options.ledger,
@@ -345,7 +394,7 @@ describe("completion recovery", () => {
 describe("crash-open recovery", () => {
   test("classification is pinned on the intent and defaults by kind", async () => {
     const { actions, options } = harness();
-    const executor = createExecutor(options);
+    const executor = testExecutor(options);
     await runBatch(executor,
       [
         { request: toolRequest, body: () => Effect.succeed({ status: "success" }) },
@@ -380,7 +429,7 @@ describe("crash-open recovery", () => {
         effect: { category: "execution" },
       }),
     ));
-    const executor = createExecutor(options);
+    const executor = testExecutor(options);
     await recover(executor);
     expect(actions).toHaveLength(2);
     expect(effect(nth(actions, 1))).toMatchObject({
@@ -424,7 +473,7 @@ describe("crash-open recovery", () => {
         effect: {},
       }),
     ));
-    await recover(createExecutor(options));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(2);
   });
 
@@ -441,7 +490,7 @@ describe("crash-open recovery", () => {
     ));
     await isolated(options.ledger.commit(openIntent("done", "llm", "turn", { op: "chat", value: {} })));
     await isolated(options.ledger.commit(settledResult("done", "llm", { terminal: "executed", effect: {} })));
-    await recover(createExecutor(options));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(3);
   });
 
@@ -451,7 +500,7 @@ describe("crash-open recovery", () => {
     await isolated(options.ledger.commit(
       openIntent("attempt-1", "attempt", "lost-llm", { op: "chat", value: { attempt: 1 } }),
     ));
-    await recover(createExecutor(options));
+    await recover(testExecutor(options));
     expect(
       actions.map((action) => [action.kind, action.parentId, effect(action).terminal]),
     ).toEqual([
@@ -488,7 +537,7 @@ describe("crash-open recovery", () => {
         evidence: { failures: [{ tag: "ForeignFailure", operation: "chat", cause: "APIError" }], defects: [], interrupted: false },
       }),
     ));
-    await recover(createExecutor(options));
+    await recover(testExecutor(options));
     expect(actions).toHaveLength(5);
     expect(actions[4]).toMatchObject({ kind: "llm", parentId: "llm-2" });
     expect(effect(nth(actions, 4))).toMatchObject({
@@ -514,7 +563,7 @@ describe("crash-open recovery", () => {
         recovery: "local_transactional",
       }),
     ));
-    await recover(createExecutor(options));
+    await recover(testExecutor(options));
     expect(resultsOf(actions, "message").map((action) => effect(action).terminal)).toEqual([
       "interrupted",
     ]);
@@ -544,23 +593,19 @@ describe("turn dispatcher recovery", () => {
     ));
     let executions = 0;
     const dispatcher = createTurnDispatcher(
-      [
-        stringQueryTool("echo", "echo", async () => {
-          executions += 1;
-          return "ok";
-        }),
-      ],
       {
         sessionId: "session",
         role: "resident",
         actionId: "turn",
         turnId: "turn",
-        policy: compiledPolicy(),
         ledger: options.ledger,
       },
-      { observations: { publish: () => undefined }, clock: () => 1, entropy: options.entropy },
-    );
-    await isolated(dispatcher.executor.recover());
+      {},
+    ).pipe(Effect.provide(catalogLayer([stringQueryTool("echo", "echo", async () => {
+      executions += 1;
+      return "ok";
+    })])), Effect.provide(executorLayer(options)));
+    await isolated(Effect.flatMap(dispatcher, (value) => value.executor.recover()));
     expect(executions).toBe(0);
     expect(effect(nth(actions, 1))).toMatchObject({
       terminal: "outcome_unknown",

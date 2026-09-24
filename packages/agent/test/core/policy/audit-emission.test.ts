@@ -1,6 +1,7 @@
+import { testExecutor } from "../../helpers/executor";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
-import { createExecutor } from "../../../src/index";
 import type { ExecutionLedger } from "../../../src/executor";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { L0Observation, type LedgerAction, type PolicyRow } from "@openomni/protocol";
@@ -29,8 +30,8 @@ it("awaits policy.decision commit before publishing its observation", async () =
       });
     },
   };
-  const executor = createExecutor({
-    policy: compilePolicySnapshot({ generation: 7, mandatory: ["compaction"], rows: [
+  const executor = testExecutor({
+    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 7, mandatory: ["compaction"], rows: [
       { ...policyRow("compaction", "turn", "post", { type: "allow" }), match: { encodingVersion: 1, value: {} } },
       policyRow("allow-read", "tool", "pre", { type: "allow" }),
     ] }),

@@ -11,6 +11,7 @@ import { bounded } from "../../../../packages/agent/test/helpers/request-ledger"
 import { requestLedger } from "../../../../packages/agent/test/helpers/effect-g1";
 import { requestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
+import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { runEffect, runSyncEffect } from "./effect";
 
 export { bounded };
@@ -30,17 +31,15 @@ export function protectedDispatch(
     },
   }));
   const controller = new AbortController();
-  const executor = createExecutor({
+  const executor = runSyncEffect(createExecutor({
     ...recording,
-    policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }))),
-    observations,
     authorizeApproval: () => Effect.succeed({
       kind: "owner" as const,
       principalId: "owner",
       evidenceId: "authenticated",
     }),
-  });
-  const dispatcher = createDispatcher([definition], { executor });
+  }).pipe(Effect.provide(executorLayer({ ...recording, observations, policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }))) }))));
+  const dispatcher = runSyncEffect(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))));
   const execution = dispatcher.execute(
     { id: "original-call", tool: definition.name, input },
     { sessionId: recording.identity.sessionId, turnId: "turn", signal: controller.signal },

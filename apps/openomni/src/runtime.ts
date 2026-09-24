@@ -1,6 +1,8 @@
-import { Bus } from "@openomni/agent";
-import { initialize, LedgerLive, type LedgerWrites, type LedgerError, Storage } from "@openomni/ledger";
+import { AgentProcessLive, Bus, type BundleDefinitions, BundlesLive, type Clock, type Entropy, type GenerationLayers, type ObservationSink, type SessionError } from "@openomni/agent";
+import { LedgerStorageLive, type LedgerWrites, type LedgerError } from "@openomni/ledger";
+import { LlmLive, type Llm } from "@openomni/llm";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
+import { GenerationLayersLive } from "./composition/generation-layers";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
@@ -10,58 +12,28 @@ export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")
 export const lifecycleFailure = (operation: string) =>
   flow(String, (cause) => new AppLifecycleFailure({ operation, cause }));
 
-export class AppClock extends Context.Tag("openomni/AppClock")<
-  AppClock,
-  { readonly now: () => number }
->() {}
-
-export class AppEntropy extends Context.Tag("openomni/AppEntropy")<
-  AppEntropy,
-  { readonly next: () => string }
->() {}
-
-export class AppObservations extends Context.Tag("openomni/AppObservations")<
-  AppObservations,
-  typeof Bus
->() {}
-
-export class AppScope extends Context.Tag("openomni/AppScope")<AppScope, Scope.Scope>() {}
+export class AppScope extends Context.Tag("@openomni/openomni/AppScope")<AppScope, Scope.Scope>() {}
 
 export interface AppRuntimeOptions {
   readonly dbPath: string;
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly observations?: typeof Bus;
+  readonly llm?: Layer.Layer<Llm>;
+  readonly bundles?: Layer.Layer<BundleDefinitions>;
 }
 
-export function AppLive(options: AppRuntimeOptions) {
+export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
   const observations = options.observations ?? Bus;
-  const ledger = Layer.unwrapScoped(
-    Effect.gen(function* () {
-      const storage = yield* Effect.acquireRelease(
-        Effect.try({
-          try: () => {
-            initialize({ dbPath: options.dbPath, observationSink: observations });
-            return Storage.get();
-          },
-          catch: lifecycleFailure("ledger.open"),
-        }),
-        () =>
-          Effect.try({ try: () => Storage.reset(), catch: lifecycleFailure("ledger.close") }).pipe(
-            Effect.orDie,
-          ),
-      );
-      return LedgerLive(storage);
-    }),
-  );
+  const ledger = LedgerStorageLive({ dbPath: options.dbPath, observationSink: observations });
+  const process = AgentProcessLive(observations, { clock: options.clock, entropy: options.entropy });
+  const generations = GenerationLayersLive.pipe(Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)));
   return Layer.mergeAll(
-    Layer.scoped(AppScope, Effect.scope).pipe(Layer.provideMerge(ledger)),
-    Layer.succeed(AppClock, { now: options.clock ?? Date.now }),
-    Layer.succeed(AppEntropy, { next: options.entropy ?? (() => crypto.randomUUID()) }),
-    Layer.succeed(AppObservations, observations),
+    Layer.scoped(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
+    options.llm ?? LlmLive,
   );
 }
 
-export type AppServices = AppClock | AppEntropy | AppObservations | LedgerWrites | AppScope;
-type AppRuntimeError = AppLifecycleFailure | LedgerError;
+export type AppServices = Clock | Entropy | ObservationSink | LedgerWrites | AppScope | Llm | BundleDefinitions | GenerationLayers;
+type AppRuntimeError = AppLifecycleFailure | LedgerError | SessionError;
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, AppRuntimeError>;

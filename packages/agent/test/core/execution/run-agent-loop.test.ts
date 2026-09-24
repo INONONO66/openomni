@@ -1,3 +1,6 @@
+import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
+import { prepareChatFixture } from "../../helpers/chat-services";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { dispatchingRunner } from "../../helpers/effect-g2";
@@ -9,7 +12,7 @@ import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Message, canonicalDigest, type PlainValue, type Inbox } from "@openomni/protocol";
 import { z } from "zod";
-import { session, closeSessions, type SessionRuntime } from "../../../src/session-handle";
+import { session, closeSessions } from "../../../src/session-handle";
 import { createSessionChatRunner } from "../../../src/session-chat-runner";
 import {
   createTurnDispatcher,
@@ -78,7 +81,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             runner,
             tools: definitions.map(sessionTool),
           };
-          const first = yield* session(options, runtime);
+          const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
           expect((yield* first.prompt("first"))?.kind).toBe("result");
           const preserved = inputs[1]?.find(
             (message: import("@openomni/protocol").Message.WithParts) =>
@@ -98,7 +101,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           Storage.reset();
           Storage.initialize({ dbPath });
           runtime = { observations: { publish: () => undefined } };
-          expect((yield* (yield* session(options, runtime)).prompt("after reopen"))?.kind).toBe(
+          expect((yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("after reopen"))?.kind).toBe(
             "result",
           );
           const restored = inputs[2]?.find(
@@ -140,9 +143,9 @@ test("compaction projection and lossless revert survive SQLite reopen without de
         const summarizing = Promise.withResolvers<void>();
         const summary = Promise.withResolvers<string>();
         const runner = createSessionChatRunner({
-          prepare(input: import("../../../src/session-handle").SessionRunnerInput) {
-            const dispatcher = createTurnDispatcher([], input, runtime);
-            return {
+          prepare: (input: import("../../../src/session-handle").SessionRunnerInput) => Effect.gen(function* () {
+            const dispatcher = (yield* Effect.gen(function* () { const turnInput = input; const turnRuntime = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+            return prepareChatFixture({
               traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
               config: {
                 events: { publish: () => undefined },
@@ -197,15 +200,14 @@ test("compaction projection and lossless revert survive SQLite reopen without de
                     }),
                 },
               },
-            };
-          },
+            }); }),
         });
         try {
           Storage.reset();
           Storage.initialize({ dbPath });
           seedPolicy();
           const options = { id: "compact", role: "resident" as const, runner };
-          const handle = yield* session(options, runtime);
+          const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
           yield* handle.prompt("first");
           const second = yield* Effect.forkScoped(handle.prompt("second"));
           yield* Effect.promise(() => summarizing.promise).pipe(Effect.timeout("5 seconds"));
@@ -277,7 +279,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           Storage.reset();
           Storage.initialize({ dbPath });
           runtime = { observations: { publish: () => undefined } };
-          yield* (yield* session(options, runtime)).prompt("reopened");
+          yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("reopened");
           expect(reopenedInput.slice(0, -1)).toEqual(afterConcurrent);
           expect(SessionHandleStore.tree("compact").slice(0, before.length)).toEqual(before);
         } finally {

@@ -28,6 +28,8 @@ export const scriptsLanes = {
     "effect-service-contract.test.ts",
   ],
   "scripts-tooling": [
+    "bundle-type-contract.test.ts",
+    "check-deps.test.ts",
     "check-quality-python.test.ts",
     "check-types-census.test.ts",
     "conformance/summarize-benchmark-runs.test.ts",
@@ -60,6 +62,7 @@ export const scriptPartitions = [
 // suites, check-types-census ~48s) so both shards stay far below the timeout.
 export const scriptToolingPartitions = {
   "scripts-tooling-1": [
+    "check-deps.test.ts",
     "run-quality-mutations.test.ts",
     "quality-mutation-workflow.test.ts",
     "quality-source.test.ts",
@@ -71,6 +74,7 @@ export const scriptToolingPartitions = {
     "quality-native-process.test.ts",
   ],
   "scripts-tooling-2": [
+    "bundle-type-contract.test.ts",
     "run-quality-mutations-compiler.test.ts",
     "quality-mutation-shard.test.ts",
     "check-types-census.test.ts",

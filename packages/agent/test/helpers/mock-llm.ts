@@ -1,6 +1,7 @@
+import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { LlmRunFailure, type Run, type RunInput, type Sink } from "@openomni/llm";
 import { Effect } from "effect";
-import type { ChatAgentConfig } from "../../src/core/types";
+import type {} from "../../src/core/types";
 import { createAssistantMessage } from "../../src/core/message-factory";
 
 export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;

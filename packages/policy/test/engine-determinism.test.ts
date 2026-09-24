@@ -1,3 +1,4 @@
+import { KERNEL_POLICY_REGISTRY } from "../src/named-registry";
 import { describe, expect, it } from "bun:test";
 import {
   compilePolicySnapshot,
@@ -21,8 +22,10 @@ function initialRows() {
     atGeneration(
       draft("redact-password", "tool", "post", {
         type: "transform",
-        name: "redact",
-        paths: ["password"],
+        ref: "kernel/redact",
+        config: {
+          paths: ["password"],
+        },
       }),
       1,
     ),
@@ -36,7 +39,11 @@ function initialRows() {
 describe("compiled policy snapshot determinism", () => {
   it("pins a turn to its generation while copy-on-write append advances new evaluators", async () => {
     const source = new MemoryPolicyRows(initialRows());
-    const compiler = createPolicyCompiler({ source, mandatory: ["compaction"] });
+    const compiler = createPolicyCompiler({
+      registry: KERNEL_POLICY_REGISTRY,
+      source,
+      mandatory: ["compaction"],
+    });
     const oldEvaluator = compiler.pin(1);
     const release = Promise.withResolvers<void>();
     const oldTurn = release.promise.then(() => oldEvaluator.evaluate(request));
@@ -67,11 +74,13 @@ describe("compiled policy snapshot determinism", () => {
   it("derives the same content hash and result regardless of insertion order", () => {
     const rows = initialRows();
     const forward = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows,
       mandatory: ["compaction"],
     });
     const reverse = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows: [...rows].reverse(),
       mandatory: ["compaction"],
@@ -84,6 +93,7 @@ describe("compiled policy snapshot determinism", () => {
   it("captures immutable row data without freezing caller-owned rows", () => {
     const rows = initialRows();
     const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows,
       mandatory: ["compaction"],
@@ -103,12 +113,15 @@ describe("compiled policy snapshot determinism", () => {
   it("captures verdict data without aliasing caller-owned nested values", () => {
     const verdict = {
       type: "transform",
-      name: "redact",
-      paths: ["credentials.password"],
-      replacement: "[redacted]",
+      ref: "kernel/redact",
+      config: {
+        paths: ["credentials.password"],
+        replacement: "[redacted]",
+      },
     };
     const row = draft("redact-credentials", "tool", "post", verdict);
     const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows: [atGeneration(compaction, 1), atGeneration(row, 1)],
       mandatory: ["compaction"],
@@ -121,7 +134,7 @@ describe("compiled policy snapshot determinism", () => {
     const before = snapshot.evaluate(requestWithCredentials);
 
     verdict.type = "deny";
-    verdict.paths[0] = "credentials.token";
+    verdict.config.paths[0] = "credentials.token";
 
     expect(snapshot.evaluate(requestWithCredentials)).toEqual(before);
     expect(snapshot.evaluate(requestWithCredentials)).toMatchObject({
@@ -133,7 +146,11 @@ describe("compiled policy snapshot determinism", () => {
   it("reads exactly one kind/phase/op bucket and never reads storage on the hot path", () => {
     const unrelated = unrelatedRows(220);
     const source = new MemoryPolicyRows([...initialRows(), ...unrelated]);
-    const compiler = createPolicyCompiler({ source, mandatory: ["compaction"] });
+    const compiler = createPolicyCompiler({
+      registry: KERNEL_POLICY_REGISTRY,
+      source,
+      mandatory: ["compaction"],
+    });
     const evaluator = compiler.pin(1);
     const readsBefore = source.reads;
 

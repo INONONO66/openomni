@@ -1,10 +1,12 @@
 import type { createSessionRequests } from "@openomni/agent";
 import { Effect } from "effect";
+
+type SessionRequests = Effect.Effect.Success<ReturnType<typeof createSessionRequests>>;
 import { decodeChannelFailure } from "../../src/errors";
 import type { GatewayRouterPorts } from "../../src/router";
 
 /** Keep real agent requests and translate only the channel boundary's error union. */
-export function channelRequests(requests: ReturnType<typeof createSessionRequests>): GatewayRouterPorts["requests"] {
+export function channelRequests(requests: SessionRequests): GatewayRouterPorts["requests"] {
   return {
     list: requests.list,
     open: (input: Parameters<GatewayRouterPorts["requests"]["open"]>[0]) =>

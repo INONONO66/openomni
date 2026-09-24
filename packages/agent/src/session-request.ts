@@ -412,7 +412,7 @@ function originalInvocationMatches(
   );
   if (invocation === undefined || invocation.value === undefined) return false;
   return all(
-    canonicalDigest(invocation.value) === next.inputHash,
+    canonicalDigest(invocation.originalArgs ?? invocation.value) === next.inputHash,
     canonicalDigest(next.parsedInput) === next.inputHash,
     invocation.effectHash === next.effectHash,
     domainRevisionsAgree(invocation.domainRevisions, next.domainRevisions),

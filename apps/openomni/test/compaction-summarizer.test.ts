@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import type { LlmIo } from "../src/composition/completion";
+import { Llm } from "@openomni/llm";
+import { Bus, ObservationSink } from "@openomni/agent";
+import type { FixtureLlm } from "./helpers/app-fixture";
 import { LlmRunFailure, type Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import {
@@ -9,10 +11,10 @@ import {
 } from "../src/compaction/summarizer";
 import { ExecutorContext } from "@openomni/agent";
 import { executor } from "./helpers/executor";
-import { runEffect } from "./helpers/effect";
+import { runEffect, runSyncEffect } from "./helpers/effect";
 
-function createCompactionSummarizer(config: Parameters<typeof summarizer>[0]) {
-  const run = summarizer(config);
+function createCompactionSummarizer(config: Parameters<typeof summarizer>[0] & { readonly io: FixtureLlm }) {
+  const run = runSyncEffect(summarizer(config).pipe(Effect.provideService(Llm, config.io), Effect.provideService(ObservationSink, Bus)));
   return (...args: Parameters<typeof run>) => Effect.provideService(run(...args), ExecutorContext, executor);
 }
 
@@ -43,7 +45,7 @@ function answer(text: string): Message.WithParts {
   return message("answer", text);
 }
 
-const resolveModel: NonNullable<LlmIo["resolveModel"]> = (model) => Effect.succeed({
+const resolveModel: NonNullable<FixtureLlm["resolveModel"]> = (model) => Effect.succeed({
   id: model.id,
   name: model.id,
   providerID: model.provider,
@@ -67,8 +69,8 @@ function runFailure(contextOverflow: boolean, message: string): Run.Failure {
 
 describe("production compaction summarizer", () => {
   it("merges the previous anchor without tools and bounds output tokens", async () => {
-    let captured: Parameters<NonNullable<LlmIo["run"]>>[0] | undefined;
-    const run: NonNullable<LlmIo["run"]> = (input, sink) => Effect.sync(() => {
+    let captured: Parameters<NonNullable<FixtureLlm["run"]>>[0] | undefined;
+    const run: NonNullable<FixtureLlm["run"]> = (input, sink) => Effect.sync(() => {
       captured = input;
       sink.onMessage(answer("dense merged summary"));
       return { type: "stop" };
@@ -87,7 +89,7 @@ describe("production compaction summarizer", () => {
   });
 
   it("throws a typed empty error for an empty model response", async () => {
-    const run: NonNullable<LlmIo["run"]> = (_input, sink) => Effect.sync(() => {
+    const run: NonNullable<FixtureLlm["run"]> = (_input, sink) => Effect.sync(() => {
       sink.onMessage(answer("   "));
       return { type: "stop" };
     });
@@ -101,7 +103,7 @@ describe("production compaction summarizer", () => {
   it("uses the typed overflow flag to shrink twice before a typed overflow error", async () => {
     const inputLengths: number[] = [];
     const failure = runFailure(true, "opaque upstream failure");
-    const run: NonNullable<LlmIo["run"]> = (input) => Effect.sync(() => {
+    const run: NonNullable<FixtureLlm["run"]> = (input) => Effect.sync(() => {
       inputLengths.push(input.messages.length);
       return { type: "error", error: failure };
     });
@@ -120,7 +122,7 @@ describe("production compaction summarizer", () => {
   it("does not retry overflow prose when the typed flag is false", async () => {
     let calls = 0;
     const failure = runFailure(false, "context window has been exceeded");
-    const run: NonNullable<LlmIo["run"]> = () => Effect.sync(() => {
+    const run: NonNullable<FixtureLlm["run"]> = () => Effect.sync(() => {
       calls += 1;
       return { type: "error", error: failure };
     });
@@ -135,7 +137,7 @@ describe("production compaction summarizer", () => {
     const controller = new AbortController();
     if (preAborted) controller.abort();
     let calls = 0;
-    const run: NonNullable<LlmIo["run"]> = (input) => Effect.sync(() => {
+    const run: NonNullable<FixtureLlm["run"]> = (input) => Effect.sync(() => {
       calls += 1;
       expect(input.signal).toBe(controller.signal);
       return { type: "aborted" };

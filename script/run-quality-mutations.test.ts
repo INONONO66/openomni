@@ -131,7 +131,11 @@ console.log("done");`;
 
 function strictProgram(directory: string, path: string): ts.Program {
 	const base = JSON.parse(readFileSync(resolve(import.meta.dir, "../tsconfig.base.json"), "utf8")) as { compilerOptions: Record<string, string | boolean | string[]> };
-	const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, noEmit: true }, files: [path] }, ts.sys, directory);
+	// ts.sys memoizes process.cwd() on first use, so a sibling test that chdirs
+	// into a fixture would otherwise pin type-root discovery there; anchor the
+	// repository's own @types explicitly.
+	const typeRoots = [resolve(import.meta.dir, "../node_modules/@types")];
+	const parsed = ts.parseJsonConfigFileContent({ compilerOptions: { ...base.compilerOptions, typeRoots, noEmit: true }, files: [path] }, ts.sys, directory);
 	return ts.createProgram(parsed.fileNames, parsed.options);
 }
 function strictDiagnostics(program: ts.Program): string[] {

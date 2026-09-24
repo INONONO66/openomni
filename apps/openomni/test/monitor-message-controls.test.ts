@@ -9,7 +9,8 @@ import { createMonitorTool } from "../src/tools/monitor";
 import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
 import { nativeMessageFixture } from "./helpers/native-message-fixture";
 import { actorPolicy } from "./helpers/message-scenarios";
-import { runEffect } from "./helpers/effect";
+import { generationServices } from "./helpers/generation-services";
+import { runEffect, acquireSyncEffect, runSyncEffect } from "./helpers/effect";
 
 function alarmStore() {
   const alarms = Storage.get().alarms;
@@ -46,10 +47,12 @@ for (const status of ["armed", "fired"] as const) {
           if (event.kind === "message.timed_out") timedOut.resolve();
         });
         const scope = await runEffect(Scope.make());
+        const services = acquireSyncEffect(generationServices({ clock: () => at }));
+        const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
         const makeWorker = () => runEffect(Scope.extend(
           createAlarmWorker({
             alarms: alarmStore(),
-            requestTimeout: createSessionRequests({ observations: Bus, clock: () => at }).timeout,
+            requestTimeout: requests.timeout,
             observations: Bus,
             clock: () => at,
             schedule: () => () => undefined,

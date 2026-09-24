@@ -1,8 +1,7 @@
 import { isAbsolute } from "node:path";
-import { defineTool, ToolRefused } from "@openomni/agent";
+import { currentInvocation, defineTool, ToolRefused } from "@openomni/agent";
 import { type LedgerError, SessionHandleStore } from "@openomni/ledger";
-import { compilePolicySnapshot } from "@openomni/policy";
-import { Alarm, LedgerAction } from "@openomni/protocol";
+import { Alarm } from "@openomni/protocol";
 import { z } from "zod";
 
 const lifetime = {
@@ -104,11 +103,7 @@ export function createMonitorTool(ports?: MonitorPorts) {
       const watch = Alarm.Watch.parse({ ...fields, description: args.description });
       const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(context.turnId));
       if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
-      const policy = compilePolicySnapshot({
-        generation: turn.policyGeneration,
-        rows: SessionHandleStore.policyRows(turn.policyGeneration),
-        kinds: LedgerAction.Kind.options,
-      });
+      const { policy } = currentInvocation();
       const evaluation = policy.evaluate({
         kind: "tool",
         phase: "pre",

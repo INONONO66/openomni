@@ -1,8 +1,8 @@
+import { testExecutor } from "./executor";
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Effect } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../../src/executor";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./native-executor";
 
 if (import.meta.main) {
@@ -12,7 +12,7 @@ if (import.meta.main) {
   Storage.initialize({ dbPath });
   await Effect.runPromise(Effect.gen(function* () {
     const options = yield* nativeExecutorOptions(mode === "execute" ? 100 : 100_000);
-    const executor = createExecutor({
+    const executor = testExecutor({
       ...options,
       ledger: { ...options.ledger, commit: (action) => {
         if (mode === "execute" && action.kind === "tool" && effectValue(action).phase === "result") {

@@ -1,4 +1,6 @@
 import { runEffect } from "./helpers/effect";
+import { generationServices } from "./helpers/generation-services";
+import { acquireSyncEffect, runSyncEffect } from "./helpers/effect";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { Bus, createSessionRequests } from "@openomni/agent";
@@ -81,7 +83,9 @@ test("the shipped startup alarm owner fires exactly at the deadline and never tw
       row.revision,
     ),
   ).toBeDefined();
-  await runEffect(createSessionRequests({ observations: Bus, clock: () => now }).open({
+  const services = acquireSyncEffect(generationServices({ clock: () => now }));
+  const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
+  await runEffect(requests.open({
     requestId: "alarm-source",
     sessionId: id,
     deadline: 100,

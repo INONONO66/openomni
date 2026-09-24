@@ -45,6 +45,20 @@ export class GenerationUnavailable extends Data.TaggedError("GenerationUnavailab
   readonly generation: number;
 }> {}
 
+export class GenerationUnsettled extends Data.TaggedError("GenerationUnsettled")<{
+  readonly sessionId: string;
+  readonly generation: number;
+  readonly owners: number;
+}> {}
+
+export class BundleError extends Data.TaggedError("BundleError")<{
+  readonly code: "namespace" | "duplicate" | "requirement" | "metadata" | "missing_output" | "acquisition" | "policy" | "selection";
+  readonly bundle: string;
+  readonly detail: string;
+}> {
+  override get message(): string { return `${this.code}: ${this.bundle}: ${this.detail}`; }
+}
+
 export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalError")<{
   readonly code: "stale_approval" | "approval_authority_unavailable" | "unauthenticated";
 }> {}
@@ -61,4 +75,4 @@ export type ExecutionError =
   | ExecutionApprovalError
   | AgentStopError;
 
-export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | LedgerError;
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError;

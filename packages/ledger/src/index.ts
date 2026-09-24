@@ -17,4 +17,4 @@ export {
   type CommitReceipt,
   type LeaseReceipt,
 } from "./services";
-export { LedgerLive } from "./layers";
+export { LedgerLive, LedgerStorageLive } from "./layers";

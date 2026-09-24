@@ -1,3 +1,7 @@
+import { testExecutor } from "./executor";
+import { turnTestLayer, catalogLayer } from "./service-layers";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage, type LedgerError } from "@openomni/ledger";
@@ -6,10 +10,10 @@ import {
   PlainValueSchema,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { createExecutor, type ExecutionLedger } from "../../src/executor";
+import type { ExecutionLedger } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
 import { executeCompaction } from "../../src/compaction/execute-cut";
-import { session, wakeSession, type SessionRuntime } from "../../src/session-handle";
+import { session, wakeSession } from "../../src/session-handle";
 import { receiveOutbound } from "./effect-g2";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import { requestLedger } from "./effect-g1";
@@ -84,7 +88,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
   )
     return stop(point, bodies);
   const ledger = intercept(recording.ledger, point, bodies);
-  const executor = createExecutor({
+  const executor = testExecutor({
     ...recording,
     ledger,
     policy: compiledPolicy(),
@@ -102,16 +106,12 @@ function executePoint(point: CrashPoint, bodies: string[]) {
         return name;
       }),
     );
-    const dispatcher = createTurnDispatcher(
-      tools,
-      {
+    const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = {
         ...recording.identity,
         actionId: recording.identity.turnId,
         ledger,
         policy: compiledPolicy(),
-      },
-      { observations, clock: recording.clock, entropy: recording.entropy },
-    );
+      }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { observations, clock: recording.clock, entropy: recording.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer(tools)), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
     return yield* dispatcher.executeWave(
       tools.map((tool: (typeof tools)[number]) => ({ id: tool.name, tool: tool.name, input: {} })),
       {
@@ -215,7 +215,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
     return { kind: "result" as const, text: "durable reply" };
   });
   if (point === "inbox_admitted_before_turn_open") {
-    yield* session({ id: sessionId, role: "resident", runner }, runtime);
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, role: "resident", runner }, fixture), fixture); });
     (yield* SessionHandleStore.commitReceivedMessage({
             id: "admitted",
             sessionId,
@@ -227,7 +227,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
           }));
     return stop(point, bodies);
   }
-  yield* session({ id: "parent", role: "resident", runner }, runtime);
+  yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner }, fixture), fixture); });
   const commission = (yield* SessionHandleStore.commitReceivedMessage({
           id: "commission",
           sessionId: "parent",
@@ -237,7 +237,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
           origin: { encodingVersion: 1, value: {} },
           parentActionId: null,
         }));
-  const child = yield* session({ id: sessionId, parentId: "parent", role: "worker", runner }, runtime);
+  const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, parentId: "parent", role: "worker", runner }, fixture), fixture); });
   return yield* child
     .prompt("work", {
       encodingVersion: 1,
@@ -266,9 +266,9 @@ if (import.meta.main) {
     seedPolicy();
     const bodies: string[] = [];
     if (stage === "resume") {
-      yield* wakeSession(sessionId, () => Effect.sync(() => stop(point, bodies)), {
+      yield* Effect.gen(function* () { const fixture: SessionFixture = {
         observations, clock: () => 100_000,
-      });
+      }; return yield* withSessionServices(wakeSession(sessionId, () => Effect.sync(() => stop(point, bodies)), fixture), fixture); });
     } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
       yield* admissionPoint(point, bodies, dbPath);
     } else yield* executePoint(point, bodies);

@@ -1,4 +1,5 @@
 import { Effect, Either } from "effect";
+import { runLedgerSync } from "../helpers/effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { LedgerSession } from "@openomni/protocol";
@@ -61,7 +62,7 @@ describe("canonical SQLite reads fail closed", () => {
 
   test("corrupt inbox origin rejects reads without consuming the row", () => {
     Either.getOrThrowWith(
-      Effect.runSync(
+      runLedgerSync(
         Effect.either(
           SessionHandleStore.commitInbox({
             id: "pending",

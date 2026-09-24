@@ -1,5 +1,6 @@
 export * from "./errors";
 export { Llm } from "./services";
+export { LlmLive } from "./layers";
 export { Auth } from "./auth";
 export { Provider, ModelsDev } from "./provider";
 export { Retry } from "./retry";

@@ -8,7 +8,7 @@ import type { RunInput } from "@openomni/llm";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { createCompletionPort } from "../src/composition/completion";
+import { completionFixture } from "./helpers/completion-fixture";
 import { assistantMessage } from "./helpers/assistant-message";
 import { admittedEffect } from "./helpers/admitted-effect";
 
@@ -87,7 +87,7 @@ describe("operator transport reaches every model caller", () => {
 
   it("the completion port forwards it to its one-shot sub-model call", async () => {
     let seen: RunInput | undefined;
-    const port = createCompletionPort(
+    const port = completionFixture(
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
         resolveModel,

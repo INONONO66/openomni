@@ -1,10 +1,11 @@
+import type { ChatFixture as ChatAgentConfig } from "../../helpers/chat-services";
 import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { describe, expect, it } from "bun:test";
 import { Bus } from "../../../src/index";
 import { runTestAgent } from "../../helpers/effect-g3";
-import type { ChatAgentConfig } from "../../../src/core/types";
+import type {} from "../../../src/core/types";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 

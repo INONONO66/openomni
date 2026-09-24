@@ -12,7 +12,7 @@ import type {
   Token,
   Tool,
 } from "@openomni/protocol";
-import type { Provider, RunInput, Sink } from "@openomni/llm";
+import type { RunInput } from "@openomni/llm";
 import type { CompactionOptions } from "../compaction";
 import type { Executor } from "../executor";
 
@@ -33,12 +33,6 @@ type AgentToolSpec = Tool.Spec & {
 };
 
 export interface ChatAgentConfig {
-  /**
-   * Where the run's records go. A port, not `Bus`: what sits behind it is the
-   * composition root's choice, tests bind a collector, and P2 can split a
-   * fail-closed ledger append from the lossy bus without touching the loop.
-   */
-  events: BusEvent.Sink;
   stopEvidence?: () => Effect.Effect<{
     readonly progress: boolean;
     readonly blocked: boolean;
@@ -109,10 +103,11 @@ export interface ChatAgentConfig {
    * step per turn until a budget bound ends the run — never an infinite loop.
    */
   steeringPending?: () => boolean;
-  llm?: {
-    run?: (input: RunInput, sink: Sink) => Effect.Effect<import("@openomni/llm").Run.Outcome, import("@openomni/llm").LlmError>;
-    resolveModel?: (model: Model.Ref) => Effect.Effect<Provider.Model, import("@openomni/llm").LlmError>;
-  };
+}
+
+/** Internal loop state captures observation delivery once at entry. */
+export interface ObservedChatAgentConfig extends ChatAgentConfig {
+  readonly events: BusEvent.Sink;
 }
 
 export interface ChatAgentInput {

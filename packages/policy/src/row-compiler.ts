@@ -2,22 +2,25 @@ import {
   canonicalDigest,
   Gateway,
   NamedError,
-  type PlainObject,
   type PlainValue,
-  PlainValueSchema,
-  Policy,
+  RowVerdictRead,
+  type RowVerdict,
+  type PolicyTransform,
+  type Policy,
   type PolicyRow,
   type Storage,
 } from "@openomni/protocol";
 import { z } from "zod";
 import { matchesMessage, type MessagePolicyContext } from "./message-match";
+import {
+  createNamedPolicyRegistry,
+  type NamedPolicyRegistry,
+  type NamedTransformer,
+} from "./named-registry";
+import { clonePlain, freezePlain } from "./plain";
 
 const MANDATORY_RULE_NAMES = ["compaction"] as const;
 type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
-
-const TRANSFORMER_NAMES = ["redact"] as const;
-const OBLIGATION_NAMES = ["budget_clamp"] as const;
-type ObligationName = (typeof OBLIGATION_NAMES)[number];
 
 const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool", "message"] as const;
 
@@ -42,7 +45,7 @@ const CompileErrorData = z
     ruleName: z.string().optional(),
     kind: z.string().optional(),
     phase: z.enum(["pre", "post"]).optional(),
-    name: z.string().optional(),
+    ref: z.string().optional(),
   })
   .strict();
 
@@ -90,9 +93,9 @@ function compileErrorMessage(options: CompileErrorOptions): string {
     case "invalid_verdict":
       return `policy rule ${options.ruleName ?? "<unnamed>"} has an invalid verdict`;
     case "unknown_transformer":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered transformer ${options.name ?? "<missing>"}`;
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered transformer ${options.ref ?? "<missing>"}`;
     case "unknown_obligation":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered obligation ${options.name ?? "<missing>"}`;
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered obligation ${options.ref ?? "<missing>"}`;
     case "snapshot_load_failed":
       return `policy generation ${options.generation} could not be loaded`;
     case "snapshot_append_failed":
@@ -112,61 +115,6 @@ const Match = z
   .strict();
 type Match = z.infer<typeof Match>;
 
-const AllowVerdict = z
-  .object({
-    type: z.literal("allow"),
-    reason: z.string().optional(),
-    reasonCodes: z.array(z.string()).optional(),
-    effects: z
-      .array(z.custom<Policy.PolicyEffect>((value) => Policy.PolicyEffect.safeParse(value).success))
-      .optional(),
-  })
-  .strict();
-const DenyVerdict = z
-  .object({
-    type: z.literal("deny"),
-    reason: z.string().optional(),
-  })
-  .strict();
-const ApprovalVerdict = z
-  .object({
-    type: z.literal("require_approval"),
-    reason: z.string().min(1),
-  })
-  .strict();
-const TransformVerdict = z
-  .object({
-    type: z.literal("transform"),
-    name: z.enum(TRANSFORMER_NAMES),
-    paths: z.array(z.string().min(1)).default([]),
-    replacement: PlainValueSchema.optional(),
-  })
-  .strict();
-const ObligationVerdict = z
-  .object({
-    type: z.literal("obligation"),
-    name: z.enum(OBLIGATION_NAMES),
-    metric: z.enum([
-      "continuation",
-      "fanout",
-      "exact_repeat",
-      "toolless_stall",
-      "blocked_recurrence",
-      "resume",
-      "notifications",
-    ]),
-    limit: z.number().int().positive(),
-  })
-  .strict();
-const RowVerdict = z.discriminatedUnion("type", [
-  AllowVerdict,
-  DenyVerdict,
-  ApprovalVerdict,
-  TransformVerdict,
-  ObligationVerdict,
-]);
-type RowVerdict = z.infer<typeof RowVerdict>;
-
 export interface PolicyEvaluationInput {
   readonly kind: string;
   readonly phase: PolicyRow.Phase;
@@ -178,8 +126,8 @@ export interface PolicyEvaluationInput {
 }
 
 interface CompiledObligation {
-  readonly name: ObligationName;
-  readonly metric: z.infer<typeof ObligationVerdict>["metric"];
+  readonly ref: string;
+  readonly metric: Extract<RowVerdict, { type: "obligation" }>["metric"];
   readonly limit: number;
 }
 
@@ -190,6 +138,8 @@ export interface PolicyEvaluation {
   readonly snapshotHash: string;
   readonly inputHash: string;
   readonly matchedRuleIds: readonly string[];
+  readonly transforms: readonly PolicyTransform[];
+  readonly ref?: string;
   readonly verdict: EffectiveRowVerdict;
   readonly reason?: string;
   readonly value: PlainValue;
@@ -206,13 +156,17 @@ export interface CompiledPolicySnapshot {
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
 }
 
+type CompiledVerdict =
+  | Exclude<RowVerdict, { type: "transform" }>
+  | (Extract<RowVerdict, { type: "transform" }> & { readonly apply: NamedTransformer["apply"] });
+
 interface CompiledRow {
   readonly name: string;
   readonly kind: string;
   readonly phase: PolicyRow.Phase;
   readonly priority: number;
   readonly match: Match;
-  readonly verdict: RowVerdict;
+  readonly verdict: CompiledVerdict;
 }
 
 interface BucketSet {
@@ -220,7 +174,8 @@ interface BucketSet {
   readonly operations: ReadonlyMap<string, readonly CompiledRow[]>;
 }
 
-interface CompilePolicySnapshotOptions {
+export interface CompilePolicySnapshotOptions {
+  readonly registry: NamedPolicyRegistry;
   readonly generation: number;
   readonly rows: readonly PolicyRow.Row[];
   readonly mandatory?: readonly RuleName[];
@@ -249,7 +204,12 @@ function ordered(rows: readonly CompiledRow[]): readonly CompiledRow[] {
   );
 }
 
-function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<string>): CompiledRow {
+function parseRow(
+  row: PolicyRow.Row,
+  generation: number,
+  kinds: ReadonlySet<string>,
+  registry: NamedPolicyRegistry,
+): CompiledRow {
   if (row.generation !== generation) {
     throw new PolicyCompileError({
       code: "generation_mismatch",
@@ -278,58 +238,13 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
       phase: row.phase,
     });
   }
-  const verdict = RowVerdict.safeParse(row.verdict.value);
-  if (!verdict.success) {
-    const rawVerdict =
-      row.verdict.value !== null &&
-      typeof row.verdict.value === "object" &&
-      !Array.isArray(row.verdict.value)
-        ? row.verdict.value
-        : undefined;
-    const rawType = rawVerdict?.type;
-    const rawName = rawVerdict?.name;
-    if (
-      rawType === "transform" &&
-      typeof rawName === "string" &&
-      !TRANSFORMER_NAMES.some((name) => name === rawName)
-    ) {
-      throw new PolicyCompileError({
-        code: "unknown_transformer",
-        generation,
-        ruleName: row.name,
-        kind: row.kind,
-        phase: row.phase,
-        name: rawName,
-      });
-    }
-    if (
-      rawType === "obligation" &&
-      typeof rawName === "string" &&
-      !OBLIGATION_NAMES.some((name) => name === rawName)
-    ) {
-      throw new PolicyCompileError({
-        code: "unknown_obligation",
-        generation,
-        ruleName: row.name,
-        kind: row.kind,
-        phase: row.phase,
-        name: rawName,
-      });
-    }
-    throw new PolicyCompileError({
-      code: "invalid_verdict",
-      generation,
-      ruleName: row.name,
-      kind: row.kind,
-      phase: row.phase,
-    });
-  }
+  const verdict = readVerdict(row);
   if (
     row.kind === "message" &&
     match.data.op !== "assistant" &&
     row.phase === "post" &&
-    verdict.data.type !== "allow" &&
-    verdict.data.type !== "obligation"
+    verdict.type !== "allow" &&
+    verdict.type !== "obligation"
   ) {
     throw new PolicyCompileError({
       code: "invalid_verdict",
@@ -345,8 +260,66 @@ function parseRow(row: PolicyRow.Row, generation: number, kinds: ReadonlySet<str
     phase: row.phase,
     priority: row.priority,
     match: Object.freeze(match.data),
-    verdict: Object.freeze(verdict.data),
+    verdict: resolveVerdict(immutableVerdict(verdict), row, generation, registry),
   });
+}
+
+function readVerdict(row: PolicyRow.Row): RowVerdict {
+  const verdict = RowVerdictRead.safeParse(row.verdict.value);
+  if (!verdict.success) {
+    throw new PolicyCompileError({
+      code: "invalid_verdict",
+      generation: row.generation,
+      ruleName: row.name,
+      kind: row.kind,
+      phase: row.phase,
+    });
+  }
+  return verdict.data;
+}
+
+function immutableVerdict(verdict: RowVerdict): RowVerdict {
+  const copy = structuredClone(verdict);
+  freezePlain(copy);
+  return copy;
+}
+
+function resolveVerdict(
+  verdict: RowVerdict,
+  row: PolicyRow.Row,
+  generation: number,
+  registry: NamedPolicyRegistry,
+): CompiledVerdict {
+  switch (verdict.type) {
+    case "transform": {
+      const transformer = registry.transformers.find(({ name }) => name === verdict.ref);
+      if (transformer === undefined)
+        throw new PolicyCompileError({
+          code: "unknown_transformer",
+          generation,
+          ruleName: row.name,
+          kind: row.kind,
+          phase: row.phase,
+          ref: verdict.ref,
+        });
+      return Object.freeze({ ...verdict, apply: transformer.apply });
+    }
+    case "obligation":
+      if (!registry.obligations.some(({ name }) => name === verdict.ref))
+        throw new PolicyCompileError({
+          code: "unknown_obligation",
+          generation,
+          ruleName: row.name,
+          kind: row.kind,
+          phase: row.phase,
+          ref: verdict.ref,
+        });
+      return Object.freeze(verdict);
+    case "allow":
+    case "deny":
+    case "require_approval":
+      return Object.freeze(verdict);
+  }
 }
 
 function contentIdentity(rows: readonly PolicyRow.Row[]): PlainValue {
@@ -408,44 +381,9 @@ function matches(row: CompiledRow, input: PolicyEvaluationInput): boolean {
   );
 }
 
-function clonePlain(value: PlainValue): PlainValue {
-  if (Array.isArray(value)) return value.map(clonePlain);
-  if (value === null || typeof value !== "object") return value;
-  const copy: PlainObject = {};
-  for (const [key, item] of Object.entries(value)) copy[key] = clonePlain(item);
-  return copy;
-}
-
-function redact(value: PlainValue, paths: readonly string[], replacement?: PlainValue): PlainValue {
-  const output = clonePlain(value);
-  for (const path of paths) {
-    const fields = path.split(".");
-    const leaf = fields.pop();
-    if (leaf === undefined || leaf.length === 0) continue;
-    let parent: PlainValue | undefined = output;
-    for (const field of fields) {
-      if (parent !== null && typeof parent === "object" && !Array.isArray(parent)) {
-        parent = parent[field];
-      } else {
-        parent = undefined;
-      }
-    }
-    if (
-      parent === undefined ||
-      parent === null ||
-      Array.isArray(parent) ||
-      typeof parent !== "object"
-    ) {
-      continue;
-    }
-    if (replacement === undefined) delete parent[leaf];
-    else parent[leaf] = clonePlain(replacement);
-  }
-  return output;
-}
-
 interface CandidateEvaluation {
   readonly matchedRuleIds: string[];
+  readonly transforms: PolicyTransform[];
   readonly effects: Policy.PolicyEffect[];
   readonly obligations: CompiledObligation[];
   readonly value: PlainValue;
@@ -455,6 +393,7 @@ interface CandidateEvaluation {
 
 interface CandidateState {
   matchedRuleIds: string[];
+  transforms: PolicyTransform[];
   effects: Policy.PolicyEffect[];
   obligations: CompiledObligation[];
   value: PlainValue;
@@ -462,7 +401,11 @@ interface CandidateState {
   reason?: string | undefined;
 }
 
-function applyCandidate(candidate: CompiledRow["verdict"], state: CandidateState): "stop" | "next" {
+function applyCandidate(
+  candidate: CompiledVerdict,
+  ruleId: string,
+  state: CandidateState,
+): "stop" | "next" {
   if (candidate.type === "deny") {
     state.verdict = "deny";
     state.reason = candidate.reason ?? "denied";
@@ -475,13 +418,14 @@ function applyCandidate(candidate: CompiledRow["verdict"], state: CandidateState
   }
   if (candidate.type === "transform") {
     state.verdict = "transform";
-    state.value = redact(state.value, candidate.paths, candidate.replacement);
+    state.value = candidate.apply(freezePlain(state.value), candidate.config ?? null);
+    state.transforms.push(Object.freeze({ ruleId, ref: candidate.ref }));
     return "next";
   }
   if (candidate.type === "obligation") {
     if (state.verdict === "allow") state.verdict = "obligation";
     state.obligations.push({
-      name: candidate.name,
+      ref: candidate.ref,
       metric: candidate.metric,
       limit: candidate.limit,
     });
@@ -501,6 +445,7 @@ function applyCandidates(
     input.kind === "message" && input.op === "send_message" && input.message === undefined;
   const state: CandidateState = {
     matchedRuleIds: [],
+    transforms: [],
     effects: [],
     obligations: [],
     value: initialValue,
@@ -512,7 +457,7 @@ function applyCandidates(
     if (missingMessageContext) break;
     if (!matches(compiled, input)) continue;
     state.matchedRuleIds.push(compiled.name);
-    if (applyCandidate(compiled.verdict, state) === "stop") break;
+    if (applyCandidate(compiled.verdict, compiled.name, state) === "stop") break;
   }
 
   return state;
@@ -535,6 +480,8 @@ function evaluateSnapshot(
     snapshotHash: contentHash,
     inputHash: canonicalDigest(input),
     matchedRuleIds: Object.freeze(evaluation.matchedRuleIds),
+    transforms: Object.freeze(evaluation.transforms),
+    ...(evaluation.transforms.length === 1 ? { ref: evaluation.transforms[0]?.ref } : {}),
     verdict: evaluation.verdict,
     ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }),
     value: evaluation.value,
@@ -559,7 +506,8 @@ export function compilePolicySnapshot(
     }
   }
   const kinds = new Set(options.kinds ?? DEFAULT_COMPILE_KINDS);
-  const rows = options.rows.map((row) => parseRow(row, options.generation, kinds));
+  const registry = createNamedPolicyRegistry(options.registry);
+  const rows = options.rows.map((row) => parseRow(row, options.generation, kinds, registry));
   const contentHash = canonicalDigest(contentIdentity(options.rows));
   const buckets = buildBuckets(rows);
   return Object.freeze({
@@ -581,6 +529,7 @@ function failedSnapshot(error: PolicyCompileError): CompiledPolicySnapshot {
         snapshotHash: contentHash,
         inputHash: canonicalDigest(input),
         matchedRuleIds: Object.freeze([]),
+        transforms: Object.freeze([]),
         verdict: "deny",
         reason: error.code,
         value: clonePlain(input.value),
@@ -602,10 +551,12 @@ interface PolicyCompiler {
 }
 
 export function createPolicyCompiler(options: {
+  readonly registry: NamedPolicyRegistry;
   readonly source: Pick<Storage.PolicyRowSubAdapter, "append" | "rows">;
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
 }): PolicyCompiler {
+  const registry = createNamedPolicyRegistry(options.registry);
   const cache = new Map<number, CompiledPolicySnapshot>();
   const mandatory = options.mandatory ?? MANDATORY_RULE_NAMES;
 
@@ -615,6 +566,7 @@ export function createPolicyCompiler(options: {
     let compiled: CompiledPolicySnapshot;
     try {
       compiled = compilePolicySnapshot({
+        registry,
         generation,
         rows: options.source.rows(generation),
         mandatory,
@@ -650,8 +602,13 @@ export function createPolicyCompiler(options: {
       next.set(rowKey(row), draft);
     }
     for (const draft of drafts) next.set(rowKey(draft), draft);
-    const rows = [...next.values()].map((draft) => ({ ...draft, generation }));
+    const rows = [...next.values()].map((draft) => ({
+      ...draft,
+      generation,
+      verdict: { ...draft.verdict, value: readVerdict({ ...draft, generation }) },
+    }));
     const compiled = compilePolicySnapshot({
+      registry,
       generation,
       rows,
       mandatory,
@@ -701,7 +658,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "turn",
     "post",
     { op: "continue" },
-    { type: "obligation", name: "budget_clamp", metric: "continuation", limit: 8 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "continuation", limit: 8 },
     900,
   ),
   seeded(
@@ -709,7 +666,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "tool",
     "pre",
     { op: "send_message" },
-    { type: "obligation", name: "budget_clamp", metric: "fanout", limit: 8 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "fanout", limit: 8 },
     900,
   ),
   seeded(
@@ -717,7 +674,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "turn",
     "post",
     { op: "exact_repeat" },
-    { type: "obligation", name: "budget_clamp", metric: "exact_repeat", limit: 3 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "exact_repeat", limit: 3 },
     900,
   ),
   seeded(
@@ -725,7 +682,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "turn",
     "post",
     { op: "toolless_stall" },
-    { type: "obligation", name: "budget_clamp", metric: "toolless_stall", limit: 3 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "toolless_stall", limit: 3 },
     900,
   ),
   seeded(
@@ -733,7 +690,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "turn",
     "post",
     { op: "blocked_recurrence" },
-    { type: "obligation", name: "budget_clamp", metric: "blocked_recurrence", limit: 3 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "blocked_recurrence", limit: 3 },
     900,
   ),
   seeded(
@@ -741,7 +698,7 @@ export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
     "turn",
     "pre",
     { op: "resume" },
-    { type: "obligation", name: "budget_clamp", metric: "resume", limit: 10 },
+    { type: "obligation", ref: "kernel/budget-clamp", metric: "resume", limit: 10 },
     900,
   ),
 ]);

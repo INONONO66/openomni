@@ -1,3 +1,5 @@
+import { testExecutor } from "./helpers/executor";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import type { ExecutionError } from "../src/errors";
 import { Effect, Either } from "effect";
@@ -9,8 +11,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
-import { createExecutor } from "../src/executor";
-import { closeSessions, wakeSession, type SessionRuntime } from "../src/session-handle";
+import { closeSessions, wakeSession } from "../src/session-handle";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { bounded } from "./helpers/bounded";
 import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
@@ -92,7 +93,7 @@ function recoverExecutor(witness: Witness) {
   const before = actions();
   const history = foldSessionHistory(sessionId, before);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
-  const executor = createExecutor({ ...recording, observations, policy: compiledPolicy() });
+  const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
   yield* executor.recover();
   expect(actions().slice(0, before.length)).toEqual(before);
   const recovered = actions();
@@ -168,7 +169,7 @@ function wakeAfterCrash(
   before: LedgerAction.Node[],
 ) {
   return Effect.gen(function* () {
-  yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
+  yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
   expect(actions().slice(0, before.length)).toEqual(before);
   return actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
   });
@@ -204,7 +205,7 @@ function recoverAdmission(witness: Witness) {
       expect(deliveries).toBe(1);
       expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([{ state: "delivered" }]);
       const revision = SessionHandleStore.row(sessionId).revision;
-      yield* wakeSession(sessionId, runner, runtime);
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); });
       expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
       expect(deliveries).toBe(1);
       return "rearmed";
@@ -251,7 +252,7 @@ function recoverCommittedCompaction(witness: Witness) {
     expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
   } else expect(inbox).toEqual([]);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
-  const executor = createExecutor({ ...recording, observations, policy: compiledPolicy() });
+  const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
   yield* executor.recover();
   expect(actions()).toEqual(before);
   const recovered = foldSessionHistory(sessionId, actions());
@@ -328,7 +329,7 @@ function recoverTurn(witness: Witness, resumeCount: number, onModel: () => Effec
     expect(calls.model).toBe(1);
     const recovered = actions();
     const revision = SessionHandleStore.row(sessionId).revision;
-    yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
     expect(actions()).toEqual(recovered);
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
     expect(calls.model).toBe(1);
@@ -532,7 +533,7 @@ function recoverOutbound(witness: Witness, dbPath: string) {
     expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
     const revision = SessionHandleStore.row(sessionId).revision;
     const recovered = actions();
-    yield* wakeSession(sessionId, runner, runtime).pipe(Effect.timeout("5 seconds"));
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
     expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
     expect(actions()).toEqual(recovered);
     expect(deliveries).toBe(acked ? 0 : 1);

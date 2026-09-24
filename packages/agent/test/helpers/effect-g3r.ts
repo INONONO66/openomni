@@ -1,8 +1,8 @@
+import { testExecutor } from "./executor";
 import type { LedgerError } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import { createExecutor } from "../../src/executor";
 import { compiledPolicy, fixtureHashes } from "./compiled-policy";
 
 /** Commit gates and refusals happen before persistence, as in the real ledger. */
@@ -12,7 +12,7 @@ export function recoveryRecording(options: {
 } = {}) {
   const committed: LedgerAction.Node[] = [];
   let sequence = 0;
-  const executor = createExecutor({
+  const executor = testExecutor({
     policy: options.policy ?? compiledPolicy(),
     ledger: {
       actions: () => committed,

@@ -12,7 +12,7 @@ import { createAssistantMessage, createUserMessage, withMessageId } from "../mes
 import { settleModelTools } from "./tool-wave";
 import { AgentStopError, type StopVerdict } from "./stop-chain";
 import * as Retry from "../retry";
-import type { AgentResult, ChatAgentConfig, TokenUsage } from "../types";
+import type { AgentResult, ObservedChatAgentConfig as ChatAgentConfig, TokenUsage } from "../types";
 import { emitTurnComplete, runResult } from "./run-events";
 import {
   advanceRunTurn,

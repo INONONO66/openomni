@@ -1,3 +1,9 @@
+import { Effect } from "effect";
+import { Provider, run } from "@openomni/llm";
+import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
+import type { ObservationSink } from "@openomni/protocol";
+import { generationServices } from "./generation-services";
+import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
 import { Bus, closeSessions, wakeSession, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -15,22 +21,27 @@ afterEach(async () => {
 });
 
 export function residentRunner(
-  options: Omit<ResidentOptions, "sessionRuntime"> & { sessionRuntime?: SessionRuntime },
+  options: Omit<ResidentOptions, "sessionRuntime"> & { llm?: Partial<FixtureLlm>; sessionRuntime?: SessionRuntime & { readonly clock?: () => number; readonly entropy?: () => string; readonly observations?: ObservationSink } },
 ) {
   const runtime = options.sessionRuntime ?? {
-    observations: Bus,
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
   };
   const scope = effectScope();
-  cleanups.push(async () => {
-    await runEffect(closeSessions(runtime));
-    await scope.close();
-  });
   seedKernelPolicyRows();
   const resident = createResident({ ...options, sessionRuntime: runtime });
+  const context = scope.runSync(generationServices({
+    clock: runtime.clock, entropy: runtime.entropy,
+    observations: runtime.observations === undefined ? Bus : observationService(runtime.observations),
+    definitions: resident.definitions, llm: { run, resolveModel: Provider.resolveModel, ...options.llm },
+  }));
+  cleanups.push(async () => {
+    await runEffect(closeSessions(runtime).pipe(Effect.provide(context)));
+    await scope.close();
+  });
   return {
     ...resident,
+    services: context,
     runtime,
     async prompt(sessionId: string, content: string) {
       const exists = SessionHandleStore.listRows().some((row) => row.id === sessionId);
@@ -40,7 +51,7 @@ export function residentRunner(
         kind: "prompt",
         content,
         origin: { encodingVersion: 1, value: { kind: "test" } },
-        createdAt: (runtime.clock ?? Date.now)(),
+        createdAt: Date.now(),
         parentActionId: null,
         ...(exists
           ? {}
@@ -50,7 +61,7 @@ export function residentRunner(
         sessionId,
         resident.runnerFor(SessionHandleStore.row(sessionId)),
         runtime,
-      ));
+      ).pipe(Effect.provide(context)));
       if (result === undefined) throw new Error("resident turn returned no result");
       return result;
     },

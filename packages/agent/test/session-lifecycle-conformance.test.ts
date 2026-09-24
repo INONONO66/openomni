@@ -1,3 +1,4 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
 import { ForeignFailure, type ExecutionError, type SessionError } from "../src/errors";
@@ -13,7 +14,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Alarm, type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { createExecutor } from "../src/index";
 import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/executor";
-import { closeSessions, session, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult, type SessionRuntime, sweepSessions, wakeSession, } from "../src/session-handle";
+import { closeSessions, session, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult, sweepSessions, wakeSession } from "../src/session-handle";
 import { createSessionRequests } from "../src/session-requests";
 import { commitSessionRequest } from "../src/session-admission";
 import { z } from "zod";
@@ -323,7 +324,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
         const approvals = signal<ExecutionApprovals>();
         const runtime = runtimeFor(overrides);
         const runner: SessionRunner = (input: SessionRunnerInput) => Effect.gen(function* () {
-            const executor = waveExecutor(input, runtime);
+            const executor = yield* waveExecutor(input, runtime);
             if (executor.approvals === undefined)
                 throw new Error("executor without approvals");
             input.bindApprovals?.(executor.approvals);
@@ -356,7 +357,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
                 return { kind: "interrupted" };
             return { kind: "result", text: outcome.map((slot: ExecutionBatchResult) => slot.terminal).join(",") };
         });
-        const handle = (yield* session({ id, role: "resident", runner }, runtime));
+        const handle = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id, role: "resident", runner }, fixture), fixture); }));
         return {
             handle,
             runtime,
@@ -373,11 +374,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
 function waveExecutor(input: SessionRunnerInput, runtime: SessionRuntime) {
     return createExecutor({
         signal: input.signal,
-        policy: input.policy,
         ledger: input.ledger,
-        observations: runtime.observations,
-        clock: runtime.clock ?? Date.now,
-        entropy: runtime.entropy ?? (() => crypto.randomUUID()),
         authorizeApproval: runtime.authorizeApproval,
         approvalTimeoutMs: runtime.approvalTimeoutMs,
         retainEffect: input.retainEffect,
@@ -446,14 +443,14 @@ describe("session lifecycle conformance", () => {
         seedPolicy([approvalRule]);
         const ordinary = runtimeFor();
         const gate = signal<void>();
-        const plain = (yield* session({
+        const plain = (yield* Effect.gen(function* () { const fixture: SessionFixture = ordinary; return yield* withSessionServices(session({
             id: "S",
             role: "resident",
             runner: () => Effect.gen(function* () {
                 (yield* toEffect(gate.promise));
                 return { kind: "result", text: "done" };
             }),
-        }, ordinary));
+        }, fixture), fixture); }));
         const wave = (yield* waveSession("W"));
         let plainRunning: Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError> | undefined;
         let wavePending: ExecutionApprovalRequest | undefined;
@@ -579,7 +576,7 @@ describe("session lifecycle conformance", () => {
         const refused = (yield* waveSession("REFUSED"));
         const timed = (yield* waveSession("TIMED", { approvalTimeoutMs: 100 }));
         const interrupted = (yield* waveSession("INTERRUPTED"));
-        const timedPort = createSessionRequests(timed.runtime);
+        const timedPort = (yield* Effect.gen(function* () { const fixture: SessionFixture = timed.runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
         const runs = new Map<string, Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError>>();
         const result = (yield* toEffect(runLifecycleTrace({
             sessions: ["REFUSED", "TIMED", "INTERRUPTED"],
@@ -743,7 +740,7 @@ describe("session lifecycle conformance", () => {
             resumedEntry.resolve(input);
             return { kind: "result", text: "resumed" };
         });
-        const handle = (yield* session({ id: "S", role: "resident", runner }, runtime));
+        const handle = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "S", role: "resident", runner }, fixture), fixture); }));
         let firstInput: SessionRunnerInput | undefined;
         let recovered: SessionRunnerInput | undefined;
         const result = (yield* toEffect(runLifecycleTrace({
@@ -780,10 +777,10 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         now = 2000;
                         const swept = signal<SessionRunnerInput>();
-                        (yield* waitFor(sweepSessions(() => (input: SessionRunnerInput) => Effect.sync(() => {
+                        (yield* waitFor(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => (input: SessionRunnerInput) => Effect.sync(() => {
                             swept.resolve(input);
                             return { kind: "result", text: "recovered" };
-                        }), runtime), "boot sweep"));
+                        }), fixture), fixture); }), "boot sweep"));
                         const input = (yield* waitFor(swept.promise, "sweep entry"));
                         expect(input).toMatchObject({ resultId: "R", resumeCount: 1, toolsGeneration: 1 });
                         expect(SessionHandleStore.row("C").toolsGeneration).toBe(2);
@@ -862,7 +859,7 @@ describe("session lifecycle conformance", () => {
     })));
     test("lifecycle v1 delayed timer cancel reply and duplicate input", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
-        const port = createSessionRequests(runtime);
+        const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
         const ids = ["QLATE", "QCANCEL", "QANSWER", "QREJECT"] as const;
         const opened = new Map<string, SessionTransition.Request>();
         const parentChild = childParentFixture();
@@ -1109,7 +1106,7 @@ describe("session lifecycle conformance", () => {
     })));
     test("lifecycle v1 product totality and effect-free prefix replay", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
-        const port = createSessionRequests(runtime);
+        const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
         // Inbox ids are store-wide: a delivered reply keeps its input id, so each
         // session's contenders carry session-scoped input ids.
         const contenders = {
@@ -1502,7 +1499,7 @@ function seedRequestSession(id: string) {
         }));
     });
 }
-function openRequest(port: ReturnType<typeof createSessionRequests>, id: string) {
+function openRequest(port: Effect.Effect.Success<ReturnType<typeof createSessionRequests>>, id: string) {
     return Effect.gen(function* () {
         const request = yield* port.open({
             requestId: `${id}:q`,
@@ -1574,7 +1571,7 @@ function childParentFixture() {
                         throw new Error("process died before wake");
                     sent.push(JSON.stringify(message));
                     const received = (yield* receiveOutbound(message, now));
-                    yield* wakeSession(message.destinationSessionId, parentRunner, value).pipe(
+                    yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(wakeSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
                         Effect.provideService(Scope.Scope, scope),
                         Effect.mapError((error: SessionError) => new ForeignFailure({ operation: "wakeSession", cause: error.message })),
                     );
@@ -1592,13 +1589,13 @@ function childParentFixture() {
         sealWithoutWake() {
             return Effect.scoped(Effect.gen(function* () {
                 const first = runtime(false, false, yield* Effect.scope);
-                (yield* session({ id: "PARENT", role: "resident", runner: parentRunner }, first));
-                const child = (yield* session({
+                (yield* Effect.gen(function* () { const fixture: SessionFixture = first; return yield* withSessionServices(session({ id: "PARENT", role: "resident", runner: parentRunner }, fixture), fixture); }));
+                const child = (yield* Effect.gen(function* () { const fixture: SessionFixture = first; return yield* withSessionServices(session({
                     id: "CHILD",
                     parentId: "PARENT",
                     role: "worker",
                     runner: () => Effect.succeed({ kind: "result" as const, text: "done" }),
-                }, first));
+                }, fixture), fixture); }));
                 // The parent's real source action: the reply observation resolves it.
                 const source = SessionHandleStore.tree("PARENT")[0]?.id;
                 if (source === undefined)
@@ -1621,7 +1618,7 @@ function childParentFixture() {
             return Effect.scoped(Effect.gen(function* () {
                 now = 2000;
                 const second = runtime(true, true, yield* Effect.scope);
-                expect((yield* failure(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), second)))).toBeInstanceOf(Error);
+                expect((yield* failure(Effect.gen(function* () { const fixture: SessionFixture = second; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture), fixture); })))).toBeInstanceOf(Error);
                 runtimes.splice(runtimes.indexOf(second), 1);
             }));
         },
@@ -1629,7 +1626,7 @@ function childParentFixture() {
             return Effect.gen(function* () {
                 now = 33000;
                 const third = runtime(false, true, yield* Effect.scope);
-                (yield* toEffect(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), third)));
+                (yield* toEffect(Effect.gen(function* () { const fixture: SessionFixture = third; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture), fixture); })));
                 (yield* toEffect(closeSessions(third)));
                 runtimes.splice(runtimes.indexOf(third), 1);
             });

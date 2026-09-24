@@ -1,8 +1,8 @@
+import { testExecutor } from "./executor";
 import { writeSync } from "node:fs";
 import { Storage } from "@openomni/ledger";
 import { Effect } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../../src/executor";
 import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
 import { compiledPolicy } from "./compiled-policy";
 import { requestLedger, runChatAttempts } from "./effect-g1";
@@ -18,7 +18,7 @@ if (import.meta.main) {
   seedPolicy();
   await Effect.runPromise(Effect.gen(function* () {
     const recording = yield* requestLedger({ id: rearmSessionId });
-    const executor = createExecutor({
+    const executor = testExecutor({
       ...recording,
       policy: compiledPolicy(),
       observations: { publish: () => undefined },

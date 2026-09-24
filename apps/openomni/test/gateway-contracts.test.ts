@@ -38,7 +38,7 @@ function testResident(run: ResidentRun) {
   const gateway = runSyncEffect(createResidentGateway({
     inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(resident.materialize),
-  }));
+  }).pipe(Effect.provide(resident.services)));
   SurfaceKey.claim("ws:ws:dm:evidence", "session:evidence");
   return {
     gateway,
@@ -67,7 +67,7 @@ function testResident(run: ResidentRun) {
         result.handle.target,
         resident.runnerFor(SessionHandleStore.row(result.handle.target)),
         resident.runtime,
-      ));
+      ).pipe(Effect.provide(resident.services)));
     },
   };
 }

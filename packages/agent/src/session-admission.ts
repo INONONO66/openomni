@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { CommitRefused, SessionHandleStore, type LedgerError } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import { ObservationSink, type RunnerServices } from "./services";
 import {
   canonicalDigest,
   type SessionGeneration,
@@ -16,6 +16,7 @@ import { ForeignFailure, CommitFailed, type ExecutionError, type SessionError } 
 import {
   SessionPolicyRefusal,
   type SessionRuntime,
+  type ResolvedSessionRuntime,
   type SessionRunnerResult,
   type SessionActionCommitPort,
 } from "./session-contract";
@@ -36,12 +37,11 @@ type AdmissionError = SessionError;
 
 export function createSessionAdmission(
   sessionId: string,
-  runtime: SessionRuntime,
+  runtime: ResolvedSessionRuntime,
   state: SessionControllerState,
   owner: string,
   clock: () => number,
   entropy: () => string,
-  pinPolicy: (generation: number) => CompiledPolicySnapshot,
   ports: {
     readonly awaitRetainedRunner: () => Effect.Effect<void, AdmissionError>;
     readonly acquire: (expectedFence: number) => Effect.Effect<number, AdmissionError>;
@@ -90,14 +90,16 @@ export function createSessionAdmission(
   }
 
   function startTurn(): Effect.Effect<SessionRunnerResult | undefined, AdmissionError> {
-    return Effect.gen(function* () {
+    return Effect.scoped(Effect.gen(function* () {
       yield* awaitRetainedRunner();
       const current = SessionHandleStore.row(sessionId);
       state.fence = yield* acquire(current.leaseFence);
       const actions = SessionHandleStore.tree(sessionId);
       const generation = SessionHandleStore.latestGeneration(actions);
+      const captured = yield* runtime.generations.capture({ sessionId, generation: generation.generation });
+      const observations = yield* captured.provide(ObservationSink);
       const pending = SessionHandleStore.pendingInbox(sessionId);
-      const promptRefusal = yield* evaluatePromptPolicies(pending, pinPolicy(generation.policyGeneration));
+      const promptRefusal = yield* captured.provide(evaluatePromptPolicies(pending)).pipe(Effect.provide(runtime.services));
       if (promptRefusal !== undefined) {
         yield* consumePolicyBlockedInbox(pending, true);
         return policyRefusalResult(promptRefusal.reason);
@@ -124,7 +126,7 @@ export function createSessionAdmission(
         state: "running",
         releaseLease: false,
       });
-      observeDrained(pending, turnId, "before_llm", clock(), runtime.observations);
+      observeDrained(pending, turnId, "before_llm", clock(), observations);
       if (pending.some((item) => item.kind === "interrupt")) {
         const action = SessionHandleStore.tree(sessionId).find((item) => item.id === turnId);
         if (action === undefined) return yield* new ForeignFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
@@ -150,27 +152,23 @@ export function createSessionAdmission(
         generation,
         resume: false,
       });
-    });
+    }));
   }
 
   function evaluatePromptPolicies(
     items: readonly Inbox.Row[],
-    policy: CompiledPolicySnapshot,
-  ): Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError> {
+  ): Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices> {
     return Effect.gen(function* () {
       const ledger = createExecutionLedger();
       let refusal: SessionPolicyRefusal | undefined;
       for (const item of items) {
         if (item.kind !== "prompt") continue;
         const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
-        const outcome = yield* createExecutor({
-          policy,
+        const executor = yield* createExecutor({
           ledger,
-          observations: runtime.observations,
           identity: { sessionId, role: SessionHandleStore.row(sessionId).role, parentActionId: item.id },
-          clock,
-          entropy,
-        }).runExisting({
+        });
+        const outcome = yield* executor.runExisting({
           kind: "prompt",
           op: "inbox",
           intent: { inboxId: item.id, content: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
@@ -236,19 +234,16 @@ export function createSessionAdmission(
       yield* awaitRetainedRunner();
       const current = SessionHandleStore.row(sessionId);
       state.fence = yield* acquire(current.leaseFence);
-      return yield* Effect.gen(function* () {
+      return yield* Effect.scoped(Effect.gen(function* () {
         const actions = SessionHandleStore.tree(sessionId);
         const record = recordedCompaction(actions, compactionId);
-        const executor = createExecutor({
-          policy: pinPolicy(SessionHandleStore.latestGeneration(actions).policyGeneration),
+        const captured = yield* runtime.generations.capture({ sessionId, generation: SessionHandleStore.latestGeneration(actions).generation });
+        const executor = yield* captured.provide(createExecutor({
           ledger: createExecutionLedger(),
-          observations: runtime.observations,
-          clock,
-          entropy,
           identity: { sessionId, role: current.role, parentActionId: compactionId },
-        });
-        return yield* executor.run(restoreContextRequest(compactionId), () => Effect.succeed(restoredContextProjection(sessionId, actions, compactionId, record)));
-      }).pipe(Effect.onExit(() => releaseHeldLease().pipe(Effect.orDie)));
+        })).pipe(Effect.provide(runtime.services));
+        return yield* captured.provide(executor.run(restoreContextRequest(compactionId), () => Effect.succeed(restoredContextProjection(sessionId, actions, compactionId, record))));
+      })).pipe(Effect.onExit(() => releaseHeldLease().pipe(Effect.orDie)));
     });
   }
 

@@ -1,13 +1,9 @@
-import { Bus, executorContext, ForeignFailure, Interrupted, newTraceId, type ExecutionError } from "@openomni/agent";
-import { Provider, run as llmRun, type RunInput, type Sink, type Run } from "@openomni/llm";
+import { ObservationSink, executorContext, ForeignFailure, Interrupted, newTraceId, type ExecutionError } from "@openomni/agent";
+import { Llm, type RunInput, type Sink, type Run } from "@openomni/llm";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { LlmCall } from "../tools/completion";
 
-export interface LlmIo {
-  readonly run?: typeof llmRun;
-  readonly resolveModel?: typeof Provider.resolveModel;
-}
 interface ResolvedModel {
   readonly provider: string;
   readonly id: string;
@@ -47,10 +43,12 @@ function textOutcome(outcome: Run.Outcome, text: string): Effect.Effect<{ readon
 }
 
 /** The app composes the native attempt; only the tool adapter at the gateway runs it. */
-export function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Effect.Effect<string, ExecutionError> {
+export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, ExecutionError, Llm | ObservationSink> {
   return Effect.gen(function* () {
     const capture = textCapture();
-    const resolved = yield* (io.resolveModel ?? Provider.resolveModel)({ provider: call.model.provider, id: call.model.id })
+    const llm = yield* Llm;
+    const events = yield* ObservationSink;
+    const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id })
       .pipe(Effect.mapError((error) => new ForeignFailure({ operation: "completion.resolve", cause: String(error) })));
     const input: RunInput = {
       messages: call.messages, tools: [], toolChoice: "none", maxSteps: 1, model: resolved,
@@ -60,7 +58,7 @@ export function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Effect.
       ...(call.signal === undefined ? {} : { signal: call.signal }),
       ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
       ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
-      trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() }, events: Bus,
+      trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() }, events,
     };
     const executor = yield* executorContext;
     const runAttempts = executor.runAttempts;
@@ -71,7 +69,7 @@ export function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Effect.
       prepare: (attempt) => Effect.succeed({
         request: { op: "text", intent: { attempt, ...intent }, effect: {} },
         admit: () => call.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.void,
-        body: () => (io.run ?? llmRun)(input, capture.sink).pipe(
+        body: () => llm.run(input, capture.sink).pipe(
           Effect.mapError((error): ExecutionError => error._tag === "LlmRunFailure" ? error : new ForeignFailure({ operation: "completion.run", cause: String(error) })),
           Effect.flatMap((outcome) => textOutcome(outcome, capture.text())),
         ),
@@ -87,8 +85,8 @@ export function runResolvedText(call: ResolvedTextCall, io: LlmIo = {}): Effect.
   });
 }
 
-export function createCompletionPort(model: ResolvedModel, io: LlmIo = {}) {
-  return (call: LlmCall): Effect.Effect<string, ExecutionError> => {
+export function createCompletionPort(model: ResolvedModel) {
+  return (call: LlmCall): Effect.Effect<string, ExecutionError, Llm | ObservationSink> => {
     const sessionId = "completion";
     const messageId = crypto.randomUUID();
     const target = call.model === undefined ? model : { ...model, id: call.model };
@@ -100,6 +98,6 @@ export function createCompletionPort(model: ResolvedModel, io: LlmIo = {}) {
       }],
       sessionId,
       ...(call.system === undefined ? {} : { system: call.system }),
-    }, io);
+    });
   };
 }

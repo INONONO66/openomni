@@ -1,3 +1,4 @@
+import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
 import { Cause, Effect, Either, Exit } from "effect";
 import { acquireAppResource } from "../src/gateway";
@@ -7,7 +8,6 @@ import { dirname, join } from "node:path";
 import {
   Bus,
   currentExecutor,
-  createDispatcher,
   type ExecutionApprovalRequest,
   type SessionHandle,
 } from "@openomni/agent";
@@ -552,7 +552,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         switch (door) {
           case "captured-cell":
           case "captured-wave": {
-            const dispatcher = createDispatcher([waveTool("inner", rawBody)], { executor });
+            const dispatcher = dispatcherFixture([waveTool("inner", rawBody)], { executor });
             const call = { id: "inner-call", tool: "inner", input: { slot: "inner" } };
             const context = { sessionId, turnId: "captured-turn", signal };
             if (door === "captured-cell") {
@@ -720,7 +720,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
       });
       const dispatch = (executor?: ReturnType<typeof currentExecutor>) => {
         // The current door resolves its executor from the enclosing tool scope.
-        const dispatcher = createDispatcher([inner], {
+        const dispatcher = dispatcherFixture([inner], {
           executor: executor ?? currentExecutor(),
           timeoutMs: 0,
         });

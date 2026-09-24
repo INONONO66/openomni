@@ -1,3 +1,6 @@
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, test } from "bun:test";
@@ -8,14 +11,7 @@ import { approveWriteRow } from "./helpers/compiled-policy";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { LlmRunFailure, type Run } from "@openomni/llm";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
-import {
-  Bus,
-  closeSessions,
-  createTurnDispatcher,
-  wakeSession,
-  type SessionRunner,
-  type SessionRuntime,
-} from "../src/index";
+import { Bus, closeSessions, createTurnDispatcher, wakeSession, type SessionRunner } from "../src/index";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { session } from "../src/session-handle";
 
@@ -49,7 +45,7 @@ const runtime: SessionRuntime = {
           (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
         ),
       );
-      yield* wakeSession(message.destinationSessionId, parentRunner, runtime).pipe(
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
         Effect.provideService(Scope.Scope, scope),
         Effect.orDie,
       );
@@ -112,7 +108,7 @@ const parentRunner: SessionRunner = (input: import("../src/session-handle").Sess
   Effect.scoped(
     Effect.gen(function* () {
       if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };
-      const { executor } = createTurnDispatcher([], input, runtime);
+      const { executor } = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
       let calls = 0;
       yield* runChatAttempts(executor, () =>
         Effect.gen(function* () {
@@ -206,13 +202,9 @@ function lifecycle() {
     yield* Effect.addFinalizer(() =>
       closeSessions(runtime).pipe(Effect.orDie, Effect.ensuring(Effect.sync(() => Bus.reset()))),
     );
-    const parent = yield* session(
-      { id: "parent", role: "resident", runner: parentRunner },
-      runtime,
-    );
+    const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
     yield* parent.prompt("hello");
-    const child = yield* session(
-      {
+    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
         id: "child",
         parentId: "parent",
         role: "worker",
@@ -220,9 +212,7 @@ function lifecycle() {
           Effect.sync(() => {
             return { kind: "result", text: "child answer" };
           }),
-      },
-      runtime,
-    );
+      }, fixture), fixture); });
     const commission = SessionHandleStore.tree("parent").find(
       (action: import("@openomni/protocol").LedgerAction.Node) =>
         SessionHandleStore.turnTerminal(action) !== undefined,
@@ -252,7 +242,7 @@ function lifecycle() {
       content: "monitor woke",
       terminal: true,
     });
-    yield* wakeSession("parent", parentRunner, runtime);
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession("parent", parentRunner, fixture), fixture); });
     yield* Effect.promise(() => woke).pipe(Effect.timeout("5 seconds"));
     return parent;
   });

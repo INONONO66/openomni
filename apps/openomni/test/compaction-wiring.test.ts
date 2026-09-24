@@ -1,4 +1,7 @@
 import { Effect } from "effect";
+import { LlmLive } from "@openomni/llm";
+import { Bus, ObservationSink } from "@openomni/agent";
+import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import { loadConfig } from "../src/config";
@@ -34,12 +37,12 @@ afterEach(() => {
 
 describe("compaction composition configuration", () => {
   it("wires a run-scoped summarizer by default", () => {
-    expect(configuredCompaction(loadConfig()).onSummarize).toBeFunction();
+    expect(runSyncEffect(configuredCompaction(loadConfig()).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus))).onSummarize).toBeFunction();
   });
 
   it("omits the summarizer when explicitly off while preserving deterministic reduction", () => {
     process.env.OPENOMNI_COMPACTION_SUMMARIZER = "off";
-    const compaction = configuredCompaction(loadConfig());
+    const compaction = runSyncEffect(configuredCompaction(loadConfig()).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus)));
     expect(compaction.onSummarize).toBeUndefined();
     expect(compaction.elideToolOutputs).toEqual({ minOutputChars: 4000, keepHeadChars: 500 });
   });

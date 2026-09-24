@@ -288,6 +288,7 @@ export class PythonKernel {
   private readonly lock = Effect.unsafeMakeSemaphore(1);
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
+  private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
 
   run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
     return Effect.suspend(() => {
@@ -380,6 +381,7 @@ export class PythonKernel {
       const exited = yield* Deferred.make<void>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
+      this.processExits.set(process, exited);
       process.once("close", () => { this.exits.delete(exited); Deferred.unsafeDone(exited, Exit.void); });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
@@ -398,9 +400,14 @@ export class PythonKernel {
   }
 
   private discard(process: ChildProcessWithoutNullStreams): Effect.Effect<void, CodeError> {
-    return Effect.try({ try: () => {
+    return Effect.gen(this, function* () {
+    const exited = this.processExits.get(process);
+    if (exited === undefined) return yield* Effect.die("missing process close witness");
+    yield* Effect.try({ try: () => {
       if (this.process === process) { this.process = undefined; this.lines?.close(); this.lines = undefined; }
       process.kill("SIGKILL");
     }, catch: decodeCodeFailure("driver.kill") });
+    yield* Deferred.await(exited);
+    });
   }
 }

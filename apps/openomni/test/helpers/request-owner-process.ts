@@ -4,7 +4,7 @@ import { Bus } from "@openomni/agent";
 import { PersonStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation, type PlainValue, type Tool } from "@openomni/protocol";
 import { z } from "zod";
-import { startOpenOmni } from "../../src/index";
+import { appFixture } from "./app-fixture";
 import { assistantMessage, requestToolStep } from "./assistant-message";
 
 export const OWNER_TOKEN = "request-owner-e2e-token";
@@ -72,7 +72,7 @@ async function serve() {
   const at = z.coerce.number().int().positive().parse(process.argv[3]);
   const recovering = process.argv[4] === "recover";
   let modelCalls = 0;
-  let app: Awaited<ReturnType<typeof startOpenOmni>> | undefined;
+  let app: Awaited<ReturnType<typeof appFixture>> | undefined;
   const emit = (event: OwnerProcessEvent) => process.send?.(event);
   const state = () => snapshot(dbPath, modelCalls);
   const failure = (error: Error | string) =>
@@ -133,7 +133,7 @@ async function serve() {
   });
   // No replacement definitions, mocked dispatcher, or regenerated captured generation:
   // every process builds the same real catalog through the production app root.
-  app = await startOpenOmni({
+  app = await appFixture({
     config: {
       dbPath,
       host: "127.0.0.1",

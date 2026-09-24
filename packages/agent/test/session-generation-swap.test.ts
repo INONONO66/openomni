@@ -1,12 +1,15 @@
+import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../src/executor";
 import { CommitFailed, PolicyDenied } from "../src/errors";
 import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
-import { SessionLayer, ToolCatalog } from "../src/services";
+import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { NamedPolicyRegistry } from "../src/bundle";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { createObservationBus } from "../src/observation/bus";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
 import { isolated } from "./helpers/isolated";
@@ -23,7 +26,9 @@ function bundle(generation: number, name: string, finalized: () => void,
     tools: [{ name, category: "query", inputSchema: { type: "object", properties: {} } }],
     system: { preset: name, blocks: [] }, policyGeneration: 1,
   });
-  return { snapshot, layer: Layer.mergeAll(
+  return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void, layer: Layer.mergeAll(
+    Layer.succeed(ObservationSink, createObservationBus()),
+    Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
     Layer.succeed(SessionLayer, { snapshot, policy: nativePolicy }),
     Layer.succeed(ToolCatalog, { definitions: [definition] }),
     Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
@@ -63,7 +68,7 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   const generations = yield* makeSessionGenerations(a);
   const executeCaptured = Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
-    const executor = createExecutor({ ...options, identity: {
+    const executor = testExecutor({ ...options, identity: {
       ...options.identity, toolsGeneration: captured.snapshot.generation, systemHash: captured.snapshot.systemHash,
     } });
     return yield* captured.provide(executor.run({
@@ -99,12 +104,12 @@ test("failed configure leaves selection unchanged; unavailable generations fail 
   const failed = yield* Effect.either(generations.configure(bundle(2, "B", () => undefined),
     Effect.fail(new PolicyDenied({ phase: "pre", ruleIds: ["configure-denied"] }))));
   expect(failed).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied", phase: "pre", ruleIds: ["configure-denied"] } });
-  expect((yield* generations.capture()).snapshot.systemValue).toBe("A");
-  expect(yield* Effect.either(generations.capture(99))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 99 } });
+  expect((yield* Effect.scoped(generations.capture())).snapshot.systemValue).toBe("A");
   for (const selected of [bundle(2, "B", () => undefined), bundle(3, "A", () => undefined)]) {
     yield* generations.configure(selected, options.ledger.commit(selectAction(selected.snapshot)).pipe(
       Effect.mapError((error) => new CommitFailed({ error })),
     ));
+    expect(yield* Effect.either(generations.capture(a))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
   }
   const reverted = yield* generations.capture();
   expect(reverted.snapshot).toMatchObject({ generation: 3, revertTo: 2, systemValue: "A" });
@@ -122,7 +127,7 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   }, async () => { Deferred.unsafeDone(entered, Exit.void); return release.promise; }));
   const running = yield* Effect.fork(Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
-    return yield* captured.provide(createExecutor({ ...options, closeGraceMs: 0 }).run({
+    return yield* captured.provide(testExecutor({ ...options, closeGraceMs: 0 }).run({
       kind: "tool", op: "A", intent: {}, effect: {},
     }, () => capturedBody));
   })));

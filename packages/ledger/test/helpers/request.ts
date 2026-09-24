@@ -2,11 +2,12 @@ import { Effect, Either } from "effect";
 import { type LedgerAction, type LedgerSession, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore } from "../../src/index";
 import { materializeSession } from "./session";
+import { runLedgerSync } from "./effect";
 
 export function requestFixture(mode: SessionTransition.Request["mode"] = "reply") {
   materializeSession("request-session");
   const lease = Either.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.either(
         SessionHandleStore.acquireLease({
           sessionId: "request-session",
@@ -62,7 +63,7 @@ export function requestFixture(mode: SessionTransition.Request["mode"] = "reply"
     revision = SessionHandleStore.row(request.sessionId).revision,
   ) =>
     Either.getOrThrowWith(
-      Effect.runSync(
+      runLedgerSync(
         Effect.either(
           SessionHandleStore.commitRequestTransition({
             sessionId: request.sessionId,

@@ -7,9 +7,11 @@ import {
   type LedgerAction,
   type SessionGeneration,
   type SessionTransition,
+  type PlainObject,
   type PlainValue,
 } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
+import { Clock, Entropy } from "./services";
 import { getSessionHandle } from "./session-handle";
 import { requestBindingDigest } from "./session-request";
 import { commitSessionRequest } from "./session-admission";
@@ -56,9 +58,18 @@ function requestGeneration(
 }
 
 /** The gateway gets this injected kernel port, never a lifecycle store. */
-export function createSessionRequests(runtime: SessionRuntime): SessionRequestPort {
-  const clock = runtime.clock ?? Date.now;
-  const entropy = runtime.entropy ?? (() => crypto.randomUUID());
+/** The recorded invocation a request reopens; anything else is an invariant break, not a session failure. */
+function originalInvocation(actions: readonly LedgerAction.Node[], requestId: string): PlainObject & { readonly value: PlainValue } {
+  const intent = actions.find((action) => action.id === requestId)?.intent.value;
+  if (intent === null || intent === undefined || typeof intent !== "object" || Array.isArray(intent) || intent.value === undefined)
+    throw new Error(`original invocation missing: ${requestId}`);
+  return { ...intent, value: intent.value };
+}
+
+export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<SessionRequestPort, never, Clock | Entropy> {
+  return Effect.gen(function* () {
+  const clock = (yield* Clock).now;
+  const entropy = (yield* Entropy).next;
   function transition(
     sessionId: string,
     payload: SessionTransition.Payload,
@@ -110,18 +121,10 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
     open(input) {
       return Effect.gen(function* () {
       const actions = SessionHandleStore.tree(input.sessionId);
-      const original = actions.find((action) => action.id === input.requestId);
-      const intent = original?.intent.value;
-      if (
-        intent === null ||
-        typeof intent !== "object" ||
-        Array.isArray(intent) ||
-        intent.value === undefined
-      )
-        throw new Error(`original invocation missing: ${input.requestId}`);
+      const intent = originalInvocation(actions, input.requestId);
       const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
       const generation = requestGeneration(actions, turnId);
-      const value: PlainValue = intent.value;
+      const value: PlainValue = intent.originalArgs ?? intent.value;
       const request: SessionTransition.Request = {
         requestId: input.requestId,
         sessionId: input.sessionId,
@@ -193,5 +196,6 @@ export function createSessionRequests(runtime: SessionRuntime): SessionRequestPo
       return result.request;
       });
     },
-  };
+  } satisfies SessionRequestPort;
+  });
 }

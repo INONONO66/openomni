@@ -2,22 +2,18 @@ import { Effect } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Deadline, type SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ForeignFailure, type SessionError } from "./errors";
-import type { SessionRuntime, SessionSystem } from "./session-contract";
+import type { ResolvedSessionRuntime, SessionSystem } from "./session-contract";
 import type { SessionControllerState } from "./session-controller-state";
-import type { makeSessionGenerations } from "./session-generations";
-
-type Generations = Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>;
 
 export function createSessionConfiguration(
   sessionId: string,
-  runtime: SessionRuntime,
+  runtime: ResolvedSessionRuntime,
   state: SessionControllerState,
   owner: string,
   clock: () => number,
   entropy: () => string,
   ports: {
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
-    readonly generations: Effect.Effect<Generations | undefined, SessionError>;
   },
 ) {
   function configure(
@@ -40,6 +36,7 @@ export function createSessionConfiguration(
       const snapshot = SessionHandleStore.generationSnapshot({
         generation, revertTo: previous.generation, tools: nextTools,
         system: nextSystem, policyGeneration: previous.policyGeneration,
+        bundles: previous.bundles,
       });
       const ownsRunningLease = current.leaseOwner === owner &&
         (state.active !== undefined || current.state === "running" || state.rawSlots.pending() > 0);
@@ -54,9 +51,7 @@ export function createSessionConfiguration(
         generation: { toolsGeneration: snapshot.generation, systemHash: snapshot.systemHash, policyGeneration: snapshot.policyGeneration },
         releaseLease: !ownsRunningLease,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      const generations = yield* ports.generations;
-      const committed = yield* (generations !== undefined && runtime.generation !== undefined
-        ? generations.configure(runtime.generation(snapshot), commit) : commit);
+      const committed = yield* runtime.generations.configure({ sessionId, generation }, snapshot, commit);
       yield* ports.hibernate(committed.row);
       return { generation: snapshot.generation, revertTo: snapshot.revertTo };
     });

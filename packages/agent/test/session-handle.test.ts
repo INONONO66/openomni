@@ -1,3 +1,4 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { Inbox, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
@@ -6,16 +7,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { openRequest } from "./helpers/open-request";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
-import {
-  closeSessions,
-  session,
-  type SessionCreateOptions,
-  type SessionHandle,
-  type SessionRunner,
-  type SessionRunnerInput,
-  type SessionRuntime,
-  sweepSessions,
-} from "../src/session-handle";
+import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput, sweepSessions } from "../src/session-handle";
 import { ForeignFailure, SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   type BusEvent,
@@ -28,6 +20,8 @@ import {
   type SessionTurn,
 } from "@openomni/protocol";
 import { CommitFailed } from "../src/errors";
+import { GenerationOwnership } from "../src/services";
+import { GenerationRawSlots } from "../src/session-generations";
 import { Bus } from "../src/index";
 
 interface Signal<T> {
@@ -153,11 +147,11 @@ function hibernatingSession(
 ) {
   return Effect.gen(function* () {
     const hibernated = signal<void>();
-    const handle = yield* session(residentOptions(id, runner), {
+    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = {
       ...runtime,
       ...extra,
       onHibernate: () => Effect.sync(() => hibernated.resolve()),
-    });
+    }; return yield* withSessionServices(session(residentOptions(id, runner), fixture), fixture); });
     return { handle, hibernated };
   });
 }
@@ -418,7 +412,7 @@ describe("durable session handle", () => {
             });
             return { kind: "result", text: "complete" };
           });
-        const handle = yield* session(residentOptions("policy-topology", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("policy-topology", runner), fixture), fixture); });
 
         const result = yield* awaitSignal(handle.prompt("run once"));
 
@@ -478,15 +472,12 @@ describe("durable session handle", () => {
           ]);
           const isolatedRuntime = { ...runtime };
           let calls = 0;
-          const handle = yield* session(
-            residentOptions(`prompt-${phase}-deny`, () =>
+          const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`prompt-${phase}-deny`, () =>
               Effect.sync(() => {
                 calls += 1;
                 return { kind: "result", text: "must not run" };
               }),
-            ),
-            isolatedRuntime,
-          );
+            ), fixture), fixture); });
           const result = yield* awaitSignal(handle.prompt("blocked prompt"));
           const tree = SessionHandleStore.tree(handle.id);
           expect(result).toMatchObject({
@@ -546,15 +537,12 @@ describe("durable session handle", () => {
             ]);
             const isolatedRuntime = { ...runtime };
             let calls = 0;
-            const handle = yield* session(
-              residentOptions("prompt-transform", () =>
+            const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("prompt-transform", () =>
                 Effect.sync(() => {
                   calls += 1;
                   return { kind: "result", text: "must not run" };
                 }),
-              ),
-              isolatedRuntime,
-            );
+              ), fixture), fixture); });
 
             const result = yield* awaitSignal(handle.prompt("immutable prompt"));
 
@@ -598,8 +586,7 @@ describe("durable session handle", () => {
               ]);
               const isolatedRuntime = { ...runtime };
               let calls = 0;
-              const handle = yield* session(
-                residentOptions(`turn-transform-${path}`, () =>
+              const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`turn-transform-${path}`, () =>
                   Effect.sync(() => {
                     calls += 1;
                     return {
@@ -608,9 +595,7 @@ describe("durable session handle", () => {
                       usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
                     };
                   }),
-                ),
-                isolatedRuntime,
-              );
+                ), fixture), fixture); });
 
               const result = yield* awaitSignal(handle.prompt("transform turn result"));
 
@@ -698,8 +683,7 @@ describe("durable session handle", () => {
               ]);
               const isolatedRuntime = { ...runtime };
               try {
-                const handle = yield* session(
-                  residentOptions("usage-transform", () =>
+                const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("usage-transform", () =>
                     Effect.sync(() => {
                       return {
                         kind: "result",
@@ -708,9 +692,7 @@ describe("durable session handle", () => {
                         usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
                       };
                     }),
-                  ),
-                  isolatedRuntime,
-                );
+                  ), fixture), fixture); });
                 const result = yield* awaitSignal(
                   bounded(handle.prompt("measure"), "transformed usage terminal"),
                 );
@@ -780,15 +762,12 @@ describe("durable session handle", () => {
               ]);
               const isolatedRuntime = { ...runtime };
               let calls = 0;
-              const handle = yield* session(
-                residentOptions(`turn-${phase}-deny`, () =>
+              const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`turn-${phase}-deny`, () =>
                   Effect.sync(() => {
                     calls += 1;
                     return { kind: "result", text: "body result" };
                   }),
-                ),
-                isolatedRuntime,
-              );
+                ), fixture), fixture); });
 
               const result = yield* awaitSignal(handle.prompt("start the turn"));
 
@@ -843,15 +822,12 @@ describe("durable session handle", () => {
             Storage.initialize({ dbPath: ":memory:", observationSink: sink });
             const isolatedRuntime = { ...runtime };
             let calls = 0;
-            const handle = yield* session(
-              residentOptions("missing-policy", () =>
+            const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("missing-policy", () =>
                 Effect.sync(() => {
                   calls += 1;
                   return { kind: "result", text: "ran" };
                 }),
-              ),
-              isolatedRuntime,
-            );
+              ), fixture), fixture); });
 
             const result = yield* awaitSignal(handle.prompt("must be refused"));
 
@@ -895,7 +871,7 @@ describe("durable session handle", () => {
             active -= 1;
             return { kind: "result", text: "done" };
           });
-        const handle = yield* session(residentOptions("single-flight", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("single-flight", runner), fixture), fixture); });
 
         const first = yield* Effect.fork(handle.prompt("first prompt"));
         const firstInput = yield* awaitSignal(bounded(entered.promise, "runner entry"));
@@ -997,7 +973,7 @@ describe("durable session handle", () => {
             entered.resolve(input);
             return { kind: "result", text: "done" };
           });
-        const handle = yield* session(residentOptions("late-transition", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("late-transition", runner), fixture), fixture); });
         yield* awaitSignal(bounded(handle.prompt("first prompt"), "prompt completion"));
         const input = yield* awaitSignal(bounded(entered.promise, "runner entry"));
         const request = durableRequest(handle.id, input.turnId);
@@ -1019,15 +995,12 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         let runs = 0;
-        const handle = yield* session(
-          residentOptions("interrupt-before-body", () =>
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupt-before-body", () =>
             Effect.sync(() => {
               runs += 1;
               return { kind: "result", text: "ran" };
             }),
-          ),
-          runtime,
-        );
+          ), fixture), fixture); });
         const admitted = signal<void>();
         const interrupted = signal<void>();
         const sessions = Storage.get().sessions;
@@ -1070,15 +1043,12 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         let runs = 0;
-        const handle = yield* session(
-          residentOptions("admission-storage-failure", () =>
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("admission-storage-failure", () =>
             Effect.sync(() => {
               runs += 1;
               return { kind: "result", text: "ran" };
             }),
-          ),
-          runtime,
-        );
+          ), fixture), fixture); });
         const sessions = Storage.get().sessions;
         if (sessions === undefined) throw new Error("missing session adapter");
         const commit = sessions.commit;
@@ -1118,7 +1088,7 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
-        const handle = yield* session(residentOptions("idle-interrupt", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("idle-interrupt", runner), fixture), fixture); });
         yield* SessionHandleStore.commitInbox({
           id: "idle-interrupt:interrupt",
           sessionId: handle.id,
@@ -1152,7 +1122,7 @@ describe("durable session handle", () => {
             entries += 1;
             return { kind: "result", text: "must not run" };
           });
-        const handle = yield* session(residentOptions("queued-interrupt", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("queued-interrupt", runner), fixture), fixture); });
         const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
         yield* SessionHandleStore.commitInbox({
           id: "queued-interrupt:prompt",
@@ -1173,7 +1143,7 @@ describe("durable session handle", () => {
           parentActionId,
         });
 
-        yield* awaitSignal(sweepSessions(() => runner, runtime));
+        yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
 
         expect(entries).toBe(0);
         expect(SessionHandleStore.openTurns(SessionHandleStore.tree(handle.id))).toEqual([]);
@@ -1188,7 +1158,7 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
-        const handle = yield* session(residentOptions("leading-idle-interrupt", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("leading-idle-interrupt", runner), fixture), fixture); });
         const parentActionId = SessionHandleStore.tree(handle.id).at(-1)?.id ?? null;
         yield* SessionHandleStore.commitInbox({
           id: "leading-idle-interrupt:interrupt",
@@ -1209,7 +1179,7 @@ describe("durable session handle", () => {
           parentActionId,
         });
 
-        yield* awaitSignal(sweepSessions(() => runner, runtime));
+        yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
 
         expect(inputs).toHaveLength(1);
         expect(inputs[0]?.resumeCount).toBe(0);
@@ -1243,7 +1213,7 @@ describe("durable session handle", () => {
             yield* awaitSignal(aborted.promise);
             return { kind: "result", text: "late result must not commit" };
           });
-        const handle = yield* session(residentOptions("interrupt", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupt", runner), fixture), fixture); });
 
         const running = yield* Effect.fork(handle.prompt("start"));
         const runnerSignal = yield* awaitSignal(
@@ -1315,10 +1285,7 @@ describe("durable session handle", () => {
             }
             return { kind: "result", text: `run ${entries}` };
           });
-        const handle = yield* session(
-          residentOptions("non-cooperative-interrupt", runner),
-          runtime,
-        );
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("non-cooperative-interrupt", runner), fixture), fixture); });
 
         const first = yield* Effect.fork(handle.prompt("start"));
         yield* awaitSignal(bounded(firstEntered.promise, "first runner entry"));
@@ -1351,6 +1318,37 @@ describe("durable session handle", () => {
         expect(maximumActive).toBe(1);
       }),
     ));
+
+  test("retained turn ownership holds the generation and lease until released", () =>
+    testProgram(Effect.gen(function* () {
+      const retained = signal<{ readonly release: () => void; readonly pending: () => number }>();
+      const runner: SessionRunner = () => Effect.gen(function* () {
+        const ownership = yield* GenerationOwnership;
+        const owners = yield* ownership.provide(GenerationRawSlots);
+        // Admission and the running turn each own a capture.
+        const before = owners.pending();
+        const release = ownership.retain();
+        retained.resolve({ release, pending: owners.pending });
+        expect(before).toBe(2);
+        expect(owners.pending()).toBe(before + 1);
+        return { kind: "result", text: "retained" };
+      });
+      const { handle, hibernated } = yield* hibernatingSession("retained-generation", runner);
+      const result = yield* bounded(handle.prompt("retain ownership"), "retained turn terminal");
+      const owner = yield* bounded(retained.promise, "generation retained");
+      try {
+        expect(result).toEqual({ kind: "result", text: "retained" });
+        expect(owner.pending()).toBe(1);
+        expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+        expect(yield* failure(contendLease(handle))).toMatchObject({ _tag: "LeaseRefused", reason: "held" });
+      } finally {
+        owner.release();
+      }
+      expect(owner.pending()).toBe(0);
+      yield* bounded(hibernated.promise, "retained ownership released");
+      expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    })),
+  );
 
   test("keeps the durable lease held through an ignored abort so no other runtime can resume", () =>
     testProgram(
@@ -1415,7 +1413,7 @@ describe("durable session handle", () => {
         const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
           resumeAfterFirst: true,
         });
-        const handle = yield* session(residentOptions("retained-release-refused", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("retained-release-refused", runner), fixture), fixture); });
         const running = yield* Effect.fork(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         yield* awaitSignal(bounded(handle.interrupt(), "interrupt receipt"));
@@ -1644,7 +1642,7 @@ describe("durable session handle", () => {
             yield* awaitSignal(aborted.promise);
             return { kind: "result", text: "stale completion" };
           });
-        const handle = yield* session(residentOptions("heartbeat-loss", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("heartbeat-loss", runner), fixture), fixture); });
 
         const running = yield* Effect.fork(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "heartbeat runner entry"));
@@ -1692,7 +1690,7 @@ describe("durable session handle", () => {
             }
             return { kind: "result", text: `generation ${input.toolsGeneration}` };
           });
-        const handle = yield* session(residentOptions("configure-pinning", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("configure-pinning", runner), fixture), fixture); });
 
         const firstTurn = yield* Effect.fork(handle.prompt("turn one"));
         const pinned = yield* awaitSignal(bounded(firstEntered.promise, "generation N runner"));
@@ -1722,7 +1720,7 @@ describe("durable session handle", () => {
           Effect.sync(() => {
             return { kind: "result", text: "unused" };
           });
-        const handle = yield* session(residentOptions("duplicate-tool", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("duplicate-tool", runner), fixture), fixture); });
         const before = handle.get();
 
         expect(yield* failure(awaitSignal(handle.tools.add([tool("read")])))).toMatchObject({
@@ -1743,13 +1741,10 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("complete");
-        const handle = yield* session(
-          {
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
             ...residentOptions("remove-after-reactivation", runner),
             tools: [tool("read"), tool("search")],
-          },
-          runtime,
-        );
+          }, fixture), fixture); });
 
         yield* awaitSignal(handle.prompt("hibernate the original controller"));
         const receipt = yield* awaitSignal(handle.tools.remove(["read"]));
@@ -1766,10 +1761,7 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("complete");
-        const handle = yield* session(
-          residentOptions("blocks-after-reactivation", runner),
-          runtime,
-        );
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("blocks-after-reactivation", runner), fixture), fixture); });
         const nextBlocks = [{ id: "safety", source: "operator", content: "Use the safe path." }];
 
         yield* awaitSignal(handle.prompt("hibernate the original controller"));
@@ -1795,7 +1787,7 @@ describe("durable session handle", () => {
           Effect.sync(() => {
             return { kind: "result", text: "must not run" };
           });
-        const handle = yield* session(residentOptions("lease-contention", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("lease-contention", runner), fixture), fixture); });
         const acquired = yield* SessionHandleStore.acquireLease({
           sessionId: handle.id,
           owner: "other-process",
@@ -1828,12 +1820,12 @@ describe("durable session handle", () => {
             yield* awaitSignal(release.promise);
             return { kind: "result", text: "complete" };
           });
-        const handle = yield* session(residentOptions("default-heartbeat", runner), {
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = {
           observations: sink,
           clock: runtime.clock,
           entropy: runtime.entropy,
           processId: runtime.processId,
-        });
+        }; return yield* withSessionServices(session(residentOptions("default-heartbeat", runner), fixture), fixture); });
 
         const running = yield* Effect.fork(handle.prompt("start"));
         try {
@@ -1879,13 +1871,13 @@ describe("durable session handle", () => {
             return { kind: "result", text: "complete" };
           });
         const options = residentOptions("hibernate", runner);
-        const first = yield* session(options, runtime);
+        const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
 
         yield* awaitSignal(first.prompt("sleep after this"));
         yield* awaitSignal(bounded(hibernated.promise, "runtime hibernation"));
         const snapshot = first.get();
         const fenceBeforeGet = snapshot.lease.fence;
-        const reopened = yield* session(options, runtime);
+        const reopened = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
 
         expect(snapshot.state).toBe("idle");
         expect(snapshot.turns.at(-1)?.messages).toEqual([
@@ -1911,10 +1903,10 @@ describe("durable session handle", () => {
             return { kind: "result", text: "complete" };
           });
         const options = residentOptions("hibernate-successor", runner);
-        const first = yield* session(options, runtime);
+        const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
         yield* awaitSignal(bounded(first.prompt("sleep after this"), "first prompt"));
         yield* awaitSignal(bounded(hibernated.promise, "runtime hibernation"));
-        const successor = yield* session(options, runtime);
+        const successor = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
         expect(successor).not.toBe(first);
 
         expect(
@@ -1959,7 +1951,7 @@ describe("durable session handle", () => {
             yield* awaitSignal(release.promise);
             return { kind: "result", text: "done" };
           });
-        const handle = yield* session(residentOptions("approval-routing", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("approval-routing", runner), fixture), fixture); });
         const request = approvalRequest(handle.id, "turn");
         livePending.push(request);
         const answer = {
@@ -2000,7 +1992,7 @@ describe("durable session handle", () => {
             resumed.resolve(input);
             return { kind: "result", text: "resumed" };
           });
-        const handle = yield* session(residentOptions("content-free-resume", runner), runtime);
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("content-free-resume", runner), fixture), fixture); });
 
         const first = yield* Effect.fork(handle.prompt("original prompt"));
         const firstInput = yield* awaitSignal(
@@ -2068,14 +2060,11 @@ describe("durable session handle", () => {
     | "result") =>
     testProgram(
       Effect.gen(function* () {
-        const parent = yield* session(
-          residentOptions("request-parent", () =>
+        const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("request-parent", () =>
             Effect.sync(() => {
               return { kind: "result", text: "parent" };
             }),
-          ),
-          runtime,
-        );
+          ), fixture), fixture); });
         expect(
           Storage.get().actions?.append(
             {
@@ -2130,8 +2119,7 @@ describe("durable session handle", () => {
               )).receipt;
             }),
         };
-        const worker = yield* session(
-          {
+        const worker = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
             id: "reply-child",
             parentId: parent.id,
             role: "worker",
@@ -2141,9 +2129,7 @@ describe("durable session handle", () => {
               Effect.sync(() => {
                 return { kind, text: "terminal-text" };
               }),
-          },
-          runtime,
-        );
+          }, fixture), fixture); });
         yield* awaitSignal(
           worker.prompt("work", {
             encodingVersion: 1,
@@ -2177,18 +2163,15 @@ describe("durable session handle", () => {
           Effect.sync(() => {
             return { kind: "result", text: "done" };
           });
-        const parent = yield* session(residentOptions("resident-parent", runner), runtime);
-        const worker = yield* session(
-          {
+        const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("resident-parent", runner), fixture), fixture); });
+        const worker = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
             id: "worker-child",
             parentId: parent.id,
             role: "worker",
             runner,
             tools: [tool("read")],
             system,
-          },
-          runtime,
-        );
+          }, fixture), fixture); });
 
         yield* awaitSignal(worker.prompt("do the work"));
 
@@ -2216,7 +2199,7 @@ describe("session crash recovery and observation", () => {
             return { kind: "result", text: "recovered" };
           });
 
-        const sweeping = yield* Effect.fork(sweepSessions(() => runner, runtime));
+        const sweeping = yield* Effect.fork(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
         const input = yield* awaitSignal(bounded(entered.promise, "recovered runner entry"));
         yield* awaitSignal(bounded(sweeping, "boot sweep terminal"));
 
@@ -2241,14 +2224,11 @@ describe("session crash recovery and observation", () => {
         });
         let runs = 0;
         const sweeping = yield* Effect.fork(
-          sweepSessions(
-            () => () =>
+          Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => () =>
               Effect.sync(() => {
                 runs += 1;
                 return { kind: "result", text: "must not run" };
-              }),
-            runtime,
-          ),
+              }), fixture), fixture); }),
         );
         expect(yield* failure(awaitSignal(sweeping))).toMatchObject({
           _tag: "GenerationUnavailable",
@@ -2312,7 +2292,7 @@ describe("session crash recovery and observation", () => {
               });
             yield* awaitSignal(
               bounded(
-                sweepSessions(() => runner, isolatedRuntime),
+                Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }),
                 "boot sweep terminal",
               ),
             );
@@ -2382,14 +2362,11 @@ describe("session crash recovery and observation", () => {
         let runnerEntries = 0;
         yield* awaitSignal(
           bounded(
-            sweepSessions(
-              () => () =>
+            Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => () =>
                 Effect.sync(() => {
                   runnerEntries += 1;
                   return { kind: "result", text: "must not run" };
-                }),
-              runtime,
-            ),
+                }), fixture), fixture); }),
             "cancelled open turn seal",
           ),
         );
@@ -2423,7 +2400,7 @@ describe("session crash recovery and observation", () => {
 
         yield* awaitSignal(
           bounded(
-            sweepSessions(() => runner, runtime),
+            Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }),
             "resume budget terminal",
           ),
         );
@@ -2443,15 +2420,12 @@ describe("session crash recovery and observation", () => {
     testProgram(
       Effect.gen(function* () {
         const runs: string[] = [];
-        const handle = yield* session(
-          residentOptions("interrupted-without-terminal", (input: SessionRunnerInput) =>
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupted-without-terminal", (input: SessionRunnerInput) =>
             Effect.sync(() => {
               runs.push(input.turnId);
               return { kind: "result", text: "never" };
             }),
-          ),
-          runtime,
-        );
+          ), fixture), fixture); });
         const row = SessionHandleStore.row(handle.id);
         const lease = yield* SessionHandleStore.acquireLease({
           sessionId: handle.id,
@@ -2557,14 +2531,11 @@ describe("session crash recovery and observation", () => {
   test("watch reports a revision gap and get replaces state after a dropped observation", () =>
     testProgram(
       Effect.gen(function* () {
-        const handle = yield* session(
-          residentOptions("watched-session", () =>
+        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("watched-session", () =>
             Effect.sync(() => {
               return { kind: "result", text: "unused" };
             }),
-          ),
-          runtime,
-        );
+          ), fixture), fixture); });
         const configureId = SessionHandleStore.tree(handle.id)[0]?.id;
         if (configureId === undefined) throw new Error("missing configure action");
         const watch = handle.watch();

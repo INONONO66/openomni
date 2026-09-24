@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { Auth } from "@openomni/llm";
-import type { ChatAgentConfig } from "@openomni/agent";
+import type { FixtureLlm } from "./app-fixture";
 import type { Model } from "@openomni/protocol";
 import { assistantMessage } from "./assistant-message";
 import { providerFailure } from "./provider-failure";
@@ -23,7 +23,7 @@ export function providerError(fields: {
 export function transientProvider(
   resolved: Model.Ref[],
   auths?: Auth.Info[],
-): ChatAgentConfig["llm"] {
+): FixtureLlm {
   let calls = 0;
   return {
     resolveModel: (model) => Effect.sync(() => {

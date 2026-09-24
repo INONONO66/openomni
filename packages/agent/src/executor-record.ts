@@ -7,7 +7,7 @@ import {
   type PlainValue,
   type PlainObject,
 } from "@openomni/protocol";
-import type { ExecutionRequest, ExecutorOptions } from "./executor";
+import type { ExecutionRequest, ResolvedExecutorOptions } from "./executor-contract";
 import { Effect } from "effect";
 import { CommitFailed, type ExecutionError } from "./errors";
 import { failureEvidence } from "./executor-outcome";
@@ -21,7 +21,7 @@ interface ActionSubject {
 
 /** One record-before-observe adapter over the session's existing fenced ledger port. */
 export function createExecutionRecord(
-  options: Pick<ExecutorOptions, "ledger" | "observations" | "identity" | "clock" | "entropy">,
+  options: Pick<ResolvedExecutorOptions, "ledger" | "observations" | "identity" | "clock" | "entropy">,
 ) {
   function commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
     return options.ledger.commit(action).pipe(
@@ -118,6 +118,7 @@ export function createExecutionRecord(
     readonly op: string;
     readonly parentId: string | null;
     readonly value: PlainValue;
+    readonly originalArgs?: PlainValue;
     readonly invocation?: PlainObject;
   }): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
     return commit(
@@ -129,6 +130,7 @@ export function createExecutionRecord(
             phase: "intent",
             op: input.op,
             value: input.value,
+            ...(input.originalArgs === undefined ? {} : { originalArgs: input.originalArgs }),
             ...input.invocation,
           },
         },

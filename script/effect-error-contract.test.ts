@@ -67,6 +67,8 @@ const agent = {
   SessionMissing: new Agent.SessionMissing({ sessionId: "session" }),
   LeaseLost: new Agent.LeaseLost({ sessionId: "session", fence: 1 }),
   GenerationUnavailable: new Agent.GenerationUnavailable({ generation: 1 }),
+  GenerationUnsettled: new Agent.GenerationUnsettled({ sessionId: "session", generation: 1, owners: 1 }),
+  BundleError: new Agent.BundleError({ code: "acquisition", bundle: "fixture", detail: "fixture" }),
   ExecutionApprovalError: new Agent.ExecutionApprovalError({ code: "stale_approval" }),
   AgentStopError: new Agent.AgentStopError({ reason: "budget" }),
 } satisfies { [K in Agent.SessionError["_tag"]]: Extract<Agent.SessionError, { _tag: K }> };

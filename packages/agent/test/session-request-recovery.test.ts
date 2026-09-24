@@ -1,3 +1,4 @@
+import { type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { ForeignFailure } from "../src/errors";
@@ -13,8 +14,10 @@ import { createSessionRequests } from "../src/session-requests";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger, crashAfterRequestOpen, failure, type RequestLedger } from "./helpers/effect-g1";
 import { bounded } from "./helpers/bounded";
+import { catalogLayer, executorLayer } from "./helpers/service-layers";
+import type { RunnerServices } from "../src/services";
 
-function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope>) {
+function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>) {
   return isolated(Effect.scoped(Effect.gen(function* () {
     const directory = mkdtempSync(join(tmpdir(), "request-recovery-"));
     const dbPath = join(directory, "ledger.sqlite");
@@ -61,8 +64,8 @@ function dispatcher(
   bodies: string[],
   ready?: () => void,
 ) {
-  const result = createTurnDispatcher(
-    definitions(bodies),
+  return Effect.gen(function* () {
+  const result: Effect.Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher(
     {
       ...recording.identity,
       ledger: {
@@ -73,16 +76,15 @@ function dispatcher(
         },
       },
       actionId: recording.identity.parentActionId,
-      policy: compiledPolicy(),
     },
     {
-      clock: recording.clock,
-      entropy: recording.entropy,
-      observations: { publish: () => undefined },
       authorizeApproval: () => Effect.succeed(proof),
     },
-  );
+  ).pipe(Effect.provide(catalogLayer(definitions(bodies))), Effect.provide(executorLayer({
+    clock: recording.clock, entropy: recording.entropy, observations: { publish: () => undefined }, policy: compiledPolicy(),
+  })));
   return result;
+  });
 }
 function currentRequest(): SessionTransition.Request {
   const request = SessionHandleStore.requestRows()[0];
@@ -110,7 +112,7 @@ function ownerAnswer(request: SessionTransition.Request): SessionTransition.Answ
 it("reopens SQLite and resumes the exact original wave without a model reconstruction", () => persisted((dbPath: string) => Effect.gen(function* () {
   const bodies: string[] = [];
   const initial = yield* requestLedger();
-  const crashed = dispatcher(
+  const crashed = yield* dispatcher(
     crashAfterRequestOpen(initial, "process lost after durable suspension"),
     bodies,
   );
@@ -122,7 +124,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   Storage.reset();
   Storage.initialize({ dbPath });
   const ready = Promise.withResolvers<void>();
-  const recovered = dispatcher(yield* requestLedger(), bodies, ready.resolve);
+  const recovered = yield* dispatcher(yield* requestLedger(), bodies, ready.resolve);
   const recovery = recovered.executor.recover?.();
   if (recovery === undefined) throw new Error("missing recovery");
   const recovering = yield* Effect.forkScoped(recovery);
@@ -152,7 +154,7 @@ it("a committed application claim prevents replay after result persistence fails
   const ready = Promise.withResolvers<void>();
   const initial = yield* requestLedger();
   const commit = initial.ledger.commit;
-  const crashed = dispatcher(
+  const crashed = yield* dispatcher(
     {
       ...initial,
       ledger: {
@@ -192,7 +194,7 @@ it("a committed application claim prevents replay after result persistence fails
   expect(bodies).toHaveLength(3);
   Storage.reset();
   Storage.initialize({ dbPath });
-  const recovered = dispatcher(yield* requestLedger(), bodies);
+  const recovered = yield* dispatcher(yield* requestLedger(), bodies);
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   const effects = SessionHandleStore.tree(initial.identity.sessionId).map(
@@ -210,16 +212,16 @@ it("a committed application claim prevents replay after result persistence fails
 })));
 it("a gateway answer cannot borrow another live owner's lease", () => persisted((_dbPath: string) => Effect.gen(function* () {
   const initial = yield* requestLedger();
-  const crashed = dispatcher(crashAfterRequestOpen(initial, "lost"), []);
+  const crashed = yield* dispatcher(crashAfterRequestOpen(initial, "lost"), []);
   expect(yield* failure(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
   )).toMatchObject({ _tag: "ForeignFailure", operation: "lost" });
   const request = currentRequest();
   const before = SessionHandleStore.row(request.sessionId);
-  const gateway = createSessionRequests({
+  const gateway = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 200,
     observations: { publish: () => undefined },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* failure(gateway.answer(ownerAnswer(request)))).toMatchObject({
     _tag: "CommitFailed", error: {
     _tag: "LeaseRefused",
@@ -229,10 +231,10 @@ it("a gateway answer cannot borrow another live owner's lease", () => persisted(
   } });
   expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
   expect(currentRequest().state).toBe("open");
-  const dormant = createSessionRequests({
+  const dormant = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 40_000,
     observations: { publish: () => undefined },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* dormant.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");
   expect(SessionHandleStore.row(request.sessionId).leaseOwner).toBeNull();

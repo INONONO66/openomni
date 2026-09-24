@@ -1,3 +1,5 @@
+import { testExecutor } from "./helpers/executor";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,7 +8,6 @@ import { SessionHandleStore, CommitRefused } from "@openomni/ledger";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
-import { createExecutor } from "../src/executor";
 import { ToolBodyFailed } from "../src/errors";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
@@ -36,7 +37,7 @@ for (const receipt of ["absent", "present"] as const) {
 test("interrupted fiber seals one interrupted action after its entry signal", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   const entered = yield* Deferred.make<void>();
-  const executor = createExecutor(options);
+  const executor = testExecutor(options);
   const fiber = yield* Effect.fork(executor.run(request, () =>
     Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never))));
   yield* Deferred.await(entered);
@@ -49,7 +50,7 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
 test("pre denied commits its policy node and enters zero bodies", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   let bodies = 0;
-  const executor = createExecutor({ ...options, policy: compilePolicySnapshot({
+  const executor = testExecutor({ ...options, policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1, rows: [...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })), {
       name: "no-write", kind: "tool", phase: "pre", generation: 1, priority: 1,
       match: { encodingVersion: 1, value: { op: "write" } },
@@ -65,7 +66,7 @@ test("pre denied commits its policy node and enters zero bodies", () => isolated
 })));
 
 test("expected failures, defects and child finalizer defects have distinct serializable evidence", () => isolated(Effect.gen(function* () {
-  const executor = createExecutor(yield* nativeExecutorOptions());
+  const executor = testExecutor(yield* nativeExecutorOptions());
   yield* Effect.exit(executor.run(request, () => Effect.fail(new ToolBodyFailed({ tool: "write", cause: "EIO" }))));
   yield* Effect.exit(executor.run(request, () => Effect.die(new Error("defect-code"))));
   yield* Effect.exit(executor.run(request, () => Effect.gen(function* () {
@@ -89,7 +90,7 @@ test("expected failures, defects and child finalizer defects have distinct seria
 test("terminal commit refusal publishes no success and leaves the intent open", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   const published: string[] = [];
-  const executor = createExecutor({ ...options,
+  const executor = testExecutor({ ...options,
     observations: { publish: (event) => { published.push(event.name); } },
     ledger: { ...options.ledger, commit: (action) =>
       action.kind === "tool" && effectValue(action).phase === "result"
@@ -110,7 +111,7 @@ test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or
   const entered = yield* Deferred.make<void>();
   const released = Promise.withResolvers<string>();
   const retained: Promise<void>[] = [];
-  const executor = createExecutor({ ...options, closeGraceMs: 0, retainEffect: (slot) => retained.push(slot) });
+  const executor = testExecutor({ ...options, closeGraceMs: 0, retainEffect: (slot) => retained.push(slot) });
   const definition = {
     name: "write", description: "write", category: "mutation" as const,
     input: z.object({}), output: z.string(), visibility: { model: [] as const, cell: [] as const },

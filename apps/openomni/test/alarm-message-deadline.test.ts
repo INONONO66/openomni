@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import { createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
-import { runEffect } from "./helpers/effect";
+import { Effect } from "effect";
+import { generationServices } from "./helpers/generation-services";
+import { runEffect, acquireSyncEffect, runSyncEffect } from "./helpers/effect";
 import { alarmFixture } from "./helpers/alarm";
 
 for (const replyFirst of [false, true]) {
@@ -19,7 +21,8 @@ for (const replyFirst of [false, true]) {
         if (event.kind === "message.timed_out") timedOut.resolve();
       });
       let at = 1000;
-      const requests = createSessionRequests({ observations: fixture.events, clock: () => at });
+      const services = acquireSyncEffect(generationServices({ clock: () => at, observations: fixture.events }));
+      const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
       try {
         await runEffect(
           SessionHandleStore.materialize({

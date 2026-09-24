@@ -1,3 +1,4 @@
+import { type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
@@ -54,14 +55,14 @@ const opening = (requestId: string) => ({
 test("gateway request port commits physical bindings and receiving intake under a released owner lease", () => isolated(Effect.gen(function* () {
   yield* setup;
   const received: string[] = [];
-  const port = createSessionRequests({
+  const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
     onInboxCommitted: (ids) => {
       expect(SessionHandleStore.row("source").leaseOwner).toBeNull();
       received.push(...ids);
     },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   const opened = yield* port.open(opening("first"));
   const request = yield* port.receipt({
     inputId: "physical",
@@ -102,10 +103,10 @@ test("gateway request port commits physical bindings and receiving intake under 
 test("gateway timeout resolves the original action without creating conversational input", () => isolated(Effect.gen(function* () {
   yield* setup;
   let now = 100;
-  const port = createSessionRequests({
+  const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => now,
     observations: { publish: () => undefined },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   yield* port.open(opening("first"));
   yield* port.timeout("first", 199);
   expect(port.list()[0]?.state).toBe("open");
@@ -170,10 +171,10 @@ test("request opening uses its original turn generation, never a later catalog",
       },
       effect: { encodingVersion: 1, value: { phase: "pending" } },
     });
-  const port = createSessionRequests({
+  const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* port.open(opening("pinned"))).toMatchObject({
     turnId: "turn",
     callId: "call",
@@ -222,10 +223,10 @@ test("request opening uses its original turn generation, never a later catalog",
 
 test("gateway port refuses missing original actions and mismatched physical receipts", () => isolated(Effect.gen(function* () {
   yield* setup;
-  const port = createSessionRequests({
+  const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
-  });
+  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing"))))).toBe(true);
   yield* port.open(opening("first"));
   const before = SessionHandleStore.tree("source");

@@ -1,10 +1,10 @@
 import { Effect, ExecutionStrategy, Scope } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
-import { createPolicyCompiler, type CompiledPolicySnapshot } from "@openomni/policy";
-import { LedgerAction, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
+import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, SessionRunnerResult, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";
 import { ForeignFailure, type SessionError } from "./errors";
-import { entropyOf } from "./core/entropy";
+import { resolveSessionRuntime, type ResolvedSessionRuntime } from "./session-contract";
+import type { SessionEntryServices } from "./services";
 import { toolSnapshot } from "./session-record";
 import { createController } from "./session-controller";
 export type { SessionCreateOptions, SessionRunnerInput, SessionRunnerResult, SessionRunner, SessionRuntime, SessionHandle } from "./session-contract";
@@ -15,14 +15,14 @@ function registryFor(runtime: SessionRuntime) {
   return Effect.gen(function* () {
     let registry = registries.get(runtime);
     if (registry === undefined) {
-      registry = new SessionRegistry(runtime, yield* Effect.scope);
+      registry = new SessionRegistry(yield* resolveSessionRuntime(runtime), yield* Effect.scope);
       registries.set(runtime, registry);
     }
     return registry;
   });
 }
 
-export function session(options: SessionCreateOptions, runtime: SessionRuntime): Effect.Effect<SessionHandle, SessionError, Scope.Scope> {
+export function session(options: SessionCreateOptions, runtime: SessionRuntime): Effect.Effect<SessionHandle, SessionError, Scope.Scope | SessionEntryServices> {
   return registryFor(runtime).pipe(Effect.flatMap((registry) => registry.declare(options)));
 }
 
@@ -49,15 +49,10 @@ export function closeSessions(runtime: SessionRuntime): Effect.Effect<void, Sess
 class SessionRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
   private readonly installing = new Map<string, Effect.Effect<RegistryEntry, SessionError>>();
-  private readonly policies = createPolicyCompiler({
-    kinds: LedgerAction.Kind.options,
-    source: { append: () => false, rows: (generation) => SessionHandleStore.policyRows(generation) },
-  });
   private swept = false;
   private closed = false;
 
-  constructor(private readonly runtime: SessionRuntime, private readonly scope: Scope.Scope) {}
-  pinPolicy(generation: number): CompiledPolicySnapshot { return this.policies.pin(generation); }
+  constructor(private readonly runtime: ResolvedSessionRuntime, private readonly scope: Scope.Scope) {}
   get(id: string): SessionHandle | undefined { return this.entries.get(id)?.controller.handle; }
   wake(id: string, runner: SessionRunner) {
     return this.install(id, runner).pipe(Effect.flatMap((entry) => entry.controller.reconcile()));
@@ -67,7 +62,7 @@ class SessionRegistry {
     const self = this;
     return Effect.gen(function* () {
       if (self.closed) return yield* new ForeignFailure({ operation: "session.declare", cause: "closed" });
-      const entropy = entropyOf(self.runtime);
+      const entropy = self.runtime.entropy;
       const id = options.id ?? entropy();
       const existing = self.entries.get(id);
       if (existing !== undefined) {
@@ -79,7 +74,8 @@ class SessionRegistry {
         id, parentId: options.parentId ?? null, role: options.role, tools,
         system: { preset: options.system?.preset ?? "", blocks: options.system?.blocks ?? [] },
         policyGeneration: options.policyGeneration ?? SessionHandleStore.currentPolicyGeneration(),
-        actionId: entropy(), at: (self.runtime.clock ?? Date.now)(),
+        bundles: options.bundles,
+        actionId: entropy(), at: self.runtime.clock(),
       });
       if (!materialized.created) assertDeclaration(materialized.row, options, tools, options.system);
       return (yield* self.install(id, options.runner)).controller.handle;
@@ -130,7 +126,7 @@ class SessionRegistry {
             },
           };
           const scope = yield* Scope.fork(self.scope, ExecutionStrategy.sequential);
-          controller = yield* createController(id, runner, self.runtime, lifecycle, (generation) => self.pinPolicy(generation), scope);
+          controller = yield* createController(id, runner, self.runtime, lifecycle, scope);
           const entry = { runner, controller };
           self.entries.set(id, entry);
           self.installing.delete(id);

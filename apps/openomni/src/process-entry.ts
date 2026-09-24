@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
 import {
-  Bus,
+  Bus, BundleDefinitions, GenerationLayers,
   closeSessions,
   createSessionRequests,
   currentExecutor,
@@ -48,10 +48,10 @@ export function serveProcessSession(
   appRuntime: AppRuntime,
 ) {
   return Effect.gen(function* () {
-  seedKernelPolicyRows();
+  const bundles = yield* BundleDefinitions;
+  const generations = yield* GenerationLayers;
+  seedKernelPolicyRows(bundles.select(bundles.names).rows);
   const runtime: SessionRuntime = {
-    observations: Bus,
-    generation: (snapshot) => resident.generation(snapshot),
     onInboxCommitted: committed,
     dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), Date.now),
   };
@@ -66,15 +66,17 @@ export function serveProcessSession(
       apiKey: request.apiKey,
       ...(request.transport === undefined ? {} : { transport: request.transport }),
     },
-    {},
   );
   const resident = createResident({
+    bundles: bundles.names,
     model: request.model,
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     sessionRuntime: runtime,
     tools: toolPorts(appRuntime, { messages, completion: llm }),
   });
+  yield* generations.initialize(resident.definitions);
+  const requests = yield* createSessionRequests(runtime);
   const gateway = createGatewayRouter({
     sink: Bus.publish,
     transaction: channelTransaction,
@@ -89,7 +91,7 @@ export function serveProcessSession(
       if (sender.kind !== "session") throw new Error("process gateway requires a session sender");
       return { ...result, matchedRuleIds: messageDecisionRules(sender.id, execution) };
     }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
-    requests: { ...channelRequests(createSessionRequests(runtime)), ...(answer === undefined ? {} : { answer: (input: SessionTransition.Answer) => Effect.tryPromise({ try: () => answer(input), catch: decodeChannelFailure("process.answer") }) }) },
+    requests: { ...channelRequests(requests), ...(answer === undefined ? {} : { answer: (input: SessionTransition.Answer) => Effect.tryPromise({ try: () => answer(input), catch: decodeChannelFailure("process.answer") }) }) },
     committed: (row) => committed([row.sessionId]),
   });
   yield* wakeSession(

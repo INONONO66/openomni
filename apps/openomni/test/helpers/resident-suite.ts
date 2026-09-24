@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
 import type { OpenOmniConfig } from "../../src/config";
-import { startOpenOmni } from "../../src/index";
+import { appFixture } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
 
 /** The provider-model resolution every fake-llm boot uses. */
@@ -21,7 +21,7 @@ export interface ResidentSuite {
   /** A minimal fake-model config whose durable state lives in a tracked temp dir. */
   config(prefix: string, overrides?: Partial<OpenOmniConfig>): OpenOmniConfig;
   /** Boots the app and owns stopping it after the test. */
-  boot(options: Parameters<typeof startOpenOmni>[0]): ReturnType<typeof startOpenOmni>;
+  boot(options: Parameters<typeof appFixture>[0]): ReturnType<typeof appFixture>;
   /** Owns every connected socket until cleanup, including assertion failures. */
   openSocket(url: string, protocols: string[], timeoutMs?: number): Promise<WebSocket>;
   /** Registers an owned resource immediately, before the next fallible operation. */
@@ -96,7 +96,7 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
       };
     },
     async boot(options) {
-      const app = await startOpenOmni(options);
+      const app = await appFixture(options);
       stop = app.stop;
       return app;
     },

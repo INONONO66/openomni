@@ -1,6 +1,6 @@
 import { Effect, Cause } from "effect";
 import { Bus } from "@openomni/agent";
-import { type BusEvent, Component, type TraceContext } from "@openomni/protocol";
+import { type BusEvent, Component, type ObservationSink, type TraceContext } from "@openomni/protocol";
 
 export interface ObservedComponent {
   readonly events: BusEvent.Sink;
@@ -19,9 +19,9 @@ interface ComponentIdentity extends TraceContext.Type {
 }
 
 /** App-owned component observation sink behind the protocol port. */
-export function observeComponent(trace: ComponentIdentity): ObservedComponent {
+export function observeComponent(trace: ComponentIdentity, sink: ObservationSink = Bus): ObservedComponent {
   const events =
-    Bus.scope?.({
+    sink.scope?.({
       traceId: trace.traceId,
       sessionId: trace.sessionId,
       runId: trace.runId,
@@ -32,7 +32,7 @@ export function observeComponent(trace: ComponentIdentity): ObservedComponent {
       pluginName: trace.pluginName,
       pluginVersion: trace.pluginVersion,
       configRevision: trace.configRevision,
-    }) ?? Bus;
+    }) ?? sink;
 
   return {
     events,

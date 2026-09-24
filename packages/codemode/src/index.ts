@@ -6,7 +6,6 @@ import { PythonKernel } from "./kernel";
 import { CodemodeError, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
 export * from "./errors";
-export { Codemode } from "./services";
 
 type Failure = CodeError | MachineError;
 type Caller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, Failure>;
@@ -14,6 +13,7 @@ export interface RunOptions {
   readonly timeoutMs?: number;
   readonly waitMs?: number;
   readonly signal?: AbortSignal;
+  readonly ownership?: { retain(): () => void };
 }
 interface BackgroundCell {
   readonly tenant: string;
@@ -21,6 +21,7 @@ interface BackgroundCell {
   readonly controller: AbortController;
   readonly execution: Fiber.RuntimeFiber<Machine.CellResult, Failure>;
   readonly done: boolean;
+  readonly quarantined: boolean;
 }
 const RETAINED_SETTLED_CELLS = 64;
 interface Options {
@@ -41,7 +42,7 @@ export function createCodemode(options: Options = {}) {
     const scope = yield* Scope.Scope;
     const kernels = new Map<string, PythonKernel>();
     const handles = new Map<string, ReturnType<typeof makeHandle>>();
-    const live = new Map<string, { caller: Caller; tenant: string; timeoutMs: number; signal?: AbortSignal; boundary?: ReturnType<NonNullable<Options["boundary"]>> }>();
+    const live = new Map<string, { caller: Caller; tenant: string; timeoutMs: number; signal?: AbortSignal; ownership?: RunOptions["ownership"]; boundary?: ReturnType<NonNullable<Options["boundary"]>> }>();
     const lifetime = new AbortController();
     const running = new Set<Deferred.Deferred<void>>();
     const background = new Map<string, BackgroundCell>();
@@ -124,7 +125,7 @@ export function createCodemode(options: Options = {}) {
         if (machineOp !== undefined) return machineOp;
         if (call.name === "codemode.eval") {
           const input = yield* Effect.try({ try: () => RunInput.parse(call.arguments), catch: decodeCodeFailure("eval.arguments") });
-          const started = yield* launch(input.machineId, input.code, `${binding.tenant}/nested`, binding.caller, { timeoutMs: binding.timeoutMs, signal: binding.signal }, binding.boundary);
+          const started = yield* launch(input.machineId, input.code, `${binding.tenant}/nested`, binding.caller, { timeoutMs: binding.timeoutMs, signal: binding.signal, ownership: binding.ownership }, binding.boundary);
           return { status: "completed", value: yield* Fiber.join(started.entry.execution) };
         }
         if (call.name === "completion" && options.completion) {
@@ -140,11 +141,11 @@ export function createCodemode(options: Options = {}) {
       return entry;
     }
     function settle(cellId: string, entry: BackgroundCell) {
-      background.delete(cellId);
+      if (!entry.quarantined) background.delete(cellId);
       return Fiber.join(entry.execution);
     }
     function retainSettled(): void {
-      const settled = [...background].filter(([, entry]) => entry.done);
+      const settled = [...background].filter(([, entry]) => entry.done && !entry.quarantined);
       for (const [cellId] of settled.slice(0, Math.max(0, settled.length - RETAINED_SETTLED_CELLS))) background.delete(cellId);
     }
     function peek(cellId: string, tenant: string): Effect.Effect<Machine.CellState, Failure> {
@@ -164,22 +165,36 @@ export function createCodemode(options: Options = {}) {
       });
     }
     function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = options.boundary?.(tenant)) {
-      return Effect.gen(function* () {
+      return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
         const timeoutMs = runOptions.timeoutMs ?? 15_000;
         const cellId = crypto.randomUUID();
         const controller = new AbortController();
         const signal = AbortSignal.any([lifetime.signal, controller.signal, ...(runOptions.signal ? [runOptions.signal] : [])]);
         const handle = yield* Effect.try({ try: () => machines().get(id), catch: decodeCodeFailure("cell.launch") });
-        live.set(cellId, { caller, tenant, timeoutMs, signal, boundary });
+        const release = runOptions.ownership?.retain();
+        live.set(cellId, { caller, tenant, timeoutMs, signal, boundary, ownership: runOptions.ownership });
         const settled = yield* Deferred.make<void>();
         running.add(settled);
         let done = false;
-        const execution = yield* Effect.forkIn(handle.runCode({ cellId, code, tenant, timeoutMs }, signal).pipe(Effect.ensuring(Effect.sync(() => {
-          done = true; live.delete(cellId); running.delete(settled); Deferred.unsafeDone(settled, Exit.void); retainSettled();
-        }))), scope);
-        const entry: BackgroundCell = { tenant, machineId: id, controller, execution, get done() { return done; } };
+        let entered = false;
+        let quarantined = false;
+        const execution = yield* Effect.forkIn(restore(Effect.suspend(() => {
+          entered = true;
+          return handle.runCode({ cellId, code, tenant, timeoutMs }, signal);
+        })), scope);
+        const entry: BackgroundCell = { tenant, machineId: id, controller, execution,
+          get done() { return done; }, get quarantined() { return quarantined; } };
+        execution.addObserver((exit) => {
+          done = true;
+          quarantined = entered && Exit.isFailure(exit) && release !== undefined;
+          if (!quarantined) { release?.(); live.delete(cellId); }
+          else background.set(cellId, entry);
+          running.delete(settled);
+          Deferred.unsafeDone(settled, Exit.void);
+          retainSettled();
+        });
         return { cellId, entry };
-      });
+      }));
     }
     const runner: CodeRunner = {
       runCode: (request, call, signal) => Effect.gen(function* () {
@@ -197,6 +212,8 @@ export function createCodemode(options: Options = {}) {
         closed = true; lifetime.abort();
         yield* Effect.forEach([...kernels.values()], (kernel) => kernel.close(), { discard: true, concurrency: "unbounded" });
         yield* Effect.forEach([...running], Deferred.await, { discard: true });
+        if ([...background.values()].some((entry) => entry.quarantined))
+          return yield* new MachineForeignFailure({ operation: "shutdown.cell_unsettled", cause: "physical termination was not witnessed" });
         live.clear(); kernels.clear();
       }).pipe(Effect.mapError((error) => new MachineForeignFailure({ operation: "code.close", cause: String(error) }))),
     };
@@ -214,7 +231,7 @@ export function createCodemode(options: Options = {}) {
           const started = yield* launch(target.machineId, code, tenant, caller, runOptions);
           if (runOptions.waitMs === undefined) return yield* Fiber.join(started.entry.execution);
           background.set(started.cellId, started.entry);
-          const result = yield* Fiber.join(started.entry.execution).pipe(Effect.timeoutOption(runOptions.waitMs), Effect.onError(() => Effect.sync(() => { background.delete(started.cellId); })));
+          const result = yield* Fiber.join(started.entry.execution).pipe(Effect.timeoutOption(runOptions.waitMs), Effect.onError(() => Effect.sync(() => { if (!started.entry.quarantined) background.delete(started.cellId); })));
           if (result._tag === "Some") { background.delete(started.cellId); return result.value; }
           return yield* peek(started.cellId, tenant);
         }), peek, stop,

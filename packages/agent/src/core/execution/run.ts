@@ -2,11 +2,10 @@ import { Cause, Context, Effect, Scope } from "effect";
 import { ForeignFailure, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
 import type { LlmError } from "@openomni/llm";
 import {
-  Provider,
+  Llm,
   Retry as LlmRetry,
   LlmRunFailure,
   observeRetry,
-  run as llmRun,
   type Sink,
 } from "@openomni/llm";
 import { selectModel } from "@openomni/llm";
@@ -16,7 +15,8 @@ import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";
 import { estimateMessagesTokens } from "../../compaction/estimate";
 import { ExecutorContext } from "../../executor-context";
 import type { Executor } from "../../executor";
-import type { AgentResult, ChatAgentConfig, ChatAgentInput } from "../types";
+import type { AgentResult, ChatAgentConfig, ObservedChatAgentConfig, ChatAgentInput } from "../types";
+import { ObservationSink } from "../../services";
 import { evaluateBudget, publishBudgetTelemetry } from "../budget";
 import { restoreModelSelection } from "../../model-selection";
 import { failureFacts } from "../retry";
@@ -47,10 +47,14 @@ import {
 /** Stateless L3 orchestration; the session supplies the only execution authority. */
 export function runAgent(
   input: ChatAgentInput,
-  config: ChatAgentConfig,
+  options: ChatAgentConfig,
   sink?: Sink,
-): Effect.Effect<AgentResult, ExecutionError> {
-  return Effect.scopedWith((scope) => Effect.suspend(() => {
+): Effect.Effect<AgentResult, ExecutionError, Llm | ObservationSink> {
+  return Effect.gen(function* () {
+  const llm = yield* Llm;
+  const events = yield* ObservationSink;
+  const config = { ...options, events };
+  return yield* Effect.scopedWith((scope) => Effect.suspend(() => {
   const trace = requireTrace("agent run", input.traceContext);
   assertToolExecutor(config);
   assertUnambiguousToolMetadata(config);
@@ -83,7 +87,7 @@ export function runAgent(
       ) {
         return yield* new AgentStopError({ reason: "budget" });
       }
-      const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor);
+      const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor, llm);
       if (result !== undefined) return finish(result);
     }
   }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
@@ -103,16 +107,18 @@ export function runAgent(
     return result;
   }
   }));
+  });
 }
 
 function runModelStep(
   state: RunState,
-  config: ChatAgentConfig,
+  config: ObservedChatAgentConfig,
   sink: Sink | undefined,
   trace: RunTrace,
   base: AgentRunBase,
   compaction: CompactionSession | undefined,
   durableExecutor: Executor,
+  llm: Context.Tag.Service<typeof Llm>,
 ): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope> {
   return Effect.gen(function* () {
   const executor = durableExecutor;
@@ -125,7 +131,7 @@ function runModelStep(
     recordRunAttempt(state, attempt);
     const chain = [config.model, ...(config.modelFallbacks ?? [])].slice(state.modelChainStart);
     const selected = selectModel(chain, [...priorFailures, ...failures]);
-    const model = yield* (config.llm?.resolveModel ?? Provider.resolveModel)(selected.model).pipe(Effect.mapError(modelFailure));
+    const model = yield* llm.resolveModel(selected.model).pipe(Effect.mapError(modelFailure));
     const modelKey = `${model.providerID}/${model.id}`;
     if (state.modelKey !== undefined && state.modelKey !== modelKey) resetModelWindowGuards(state);
     state.modelKey = modelKey;
@@ -171,7 +177,7 @@ function runModelStep(
         }
         return Effect.void;
       }),
-      body: () => Effect.suspend(() => (config.llm?.run ?? llmRun)(prepared.runInput, prepared.trackingSink)).pipe(
+      body: () => Effect.suspend(() => llm.run(prepared.runInput, prepared.trackingSink)).pipe(
         Effect.mapError(modelFailure),
         Effect.flatMap((result) => {
           if (result.type === "aborted") return Effect.fail(result.error ?? new Interrupted());

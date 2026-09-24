@@ -1,9 +1,11 @@
+import { testExecutor } from "./executor";
+import type { SessionFixture as SessionRuntime } from "./session-services";
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Cause, Effect, Exit } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import { createExecutor } from "../../src/executor";
 import type { ExecutorOptions, ExecutionLedger } from "../../src/executor-contract";
-import type { SessionRuntime } from "../../src/session-contract";
+import type {} from "../../src/session-contract";
 import { commitSessionRequest } from "../../src/session-admission";
 import { ForeignFailure } from "../../src/errors";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
@@ -13,7 +15,7 @@ export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = { arm:
 export function recordingExecutor(options: { policy?: CompiledPolicySnapshot; onCommit?: (action: LedgerAction.Append) => void | Promise<void>; onObservation?: (name: string) => void; clock?: () => number } = {}) {
   const committed: LedgerAction.Append[] = [];
   let ordinal = 0;
-  const executor = createExecutor({
+  const executor = testExecutor({
     policy: options.policy ?? allowAllPolicy,
     retryAlarm: nullRetryAlarm,
     ledger: { commit: (action: LedgerAction.Append) => Effect.gen(function* () {
@@ -28,9 +30,9 @@ export function recordingExecutor(options: { policy?: CompiledPolicySnapshot; on
   });
   return { executor, committed };
 }
-export function turnExecutor(policy: CompiledPolicySnapshot, committed: LedgerAction.Append[] = [], overrides: Partial<ExecutorOptions> = {}) {
+export function turnExecutor(policy: CompiledPolicySnapshot, committed: LedgerAction.Append[] = [], overrides: Partial<ResolvedExecutorOptions> = {}) {
   let ordinal = 0;
-  const executor = createExecutor({
+  const executor = testExecutor({
     policy, retryAlarm: nullRetryAlarm,
     ledger: { commit: (action: LedgerAction.Append) => Effect.sync(() => {
       committed.push(action); ordinal += 1;

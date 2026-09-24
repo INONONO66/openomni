@@ -1,3 +1,4 @@
+import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { runEffect } from "./helpers/effect";
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile, readFile, realpath } from "node:fs/promises";
@@ -5,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { acquireEffect } from "./helpers/effect";
-import { createDispatcher, ToolRefused } from "@openomni/agent";
+import { ToolRefused } from "@openomni/agent";
 import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@openomni/machines";
 import { Machine, type PlainValue } from "@openomni/protocol";
 import { createTools } from "../src/tools/core/catalog";
@@ -57,11 +58,11 @@ async function fixture(
     cell: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof createDispatcher>["executeCell"]>>>;
+    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["executeCell"]>>>;
     model: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof createDispatcher>["execute"]>>>;
+    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["execute"]>>>;
   }) => Promise<void>,
   capabilities = ["fs.read", "fs.write", "shell.exec"],
 ) {
@@ -133,7 +134,7 @@ async function fixture(
     return result;
   }
   try {
-    const dispatcher = createDispatcher(createTools({ machines: testMachinePorts(host) }, origin), { executor });
+    const dispatcher = dispatcherFixture(createTools({ machines: testMachinePorts(host) }, origin), { executor });
     let call = 0;
     await run({
       root,
@@ -438,7 +439,7 @@ test("daemon authority refuses writes and exec independently of the catalog", as
 });
 
 test("missing machine host and malformed machine ids yield typed refusals", async () => {
-  const dispatcher = createDispatcher(createTools({}, origin), { executor });
+  const dispatcher = dispatcherFixture(createTools({}, origin), { executor });
   for (const [tool, input] of [
     ["read", { path: "c:/file" }],
     ["bash", { machine: "c", command: "true" }],

@@ -1,8 +1,9 @@
+import type { SessionFixture as SessionRuntime } from "./session-services";
 import { Effect, Either } from "effect";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
-import type { SessionRuntime } from "../../src/session-contract";
+import type {} from "../../src/session-contract";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";
 export { bounded } from "./bounded";

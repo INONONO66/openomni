@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { Effect, type Context } from "effect";
-import type { WebSocketFrames } from "./services";
+import { Effect } from "effect";
 import { decodeChannelFailure, InvalidInbound, type ChannelError } from "./errors";
 import { newTraceId } from "./support/trace";
 import { Channel, Gateway, Operational } from "@openomni/protocol";
@@ -72,7 +71,7 @@ const TextFrame = z
   }));
 const WebSocketFrame = z.union([RequestAnswerFrame, TextFrame]);
 
-export class WebSocketHandler implements Context.Tag.Service<typeof WebSocketFrames> {
+export class WebSocketHandler {
   /**
    * Live connections by declared externalId, last-wins: a reconnect replaces
    * the previous socket as the delivery target. Everyone on this socket is

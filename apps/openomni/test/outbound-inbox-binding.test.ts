@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
-import { compiledPolicy } from "../../../packages/agent/test/helpers/compiled-policy";
+import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { commitMessageInbox } from "../src/composition/message-session";
 import { dispatchOutboundMessage } from "../src/composition/terminal-message";
 import { seedKernelPolicyRows } from "../src/policy-seed";
@@ -77,9 +77,9 @@ test("the receiving consumer may only commit the exact outbound letter", async (
     () => 100,
   );
   const failure = await runEffect(
-    Effect.flip(
-      dispatch({ message, authority: { owner: "runner", fence: 1 }, policy: compiledPolicy() }),
-    ),
+    Effect.scoped(Effect.flip(
+      dispatch({ message, authority: { owner: "runner", fence: 1 } }),
+    ).pipe(Effect.provide(runnerTestLayer))),
   );
   expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.outbound" });
   expect(SessionHandleStore.inboxRows("parent")).toEqual([]);

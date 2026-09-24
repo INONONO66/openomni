@@ -1,8 +1,10 @@
+
+import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { createRunState, recordCallContext, type RunState } from "../../src/core/execution/state";
 import { resolveCompactionGeometry } from "../../src/compaction/geometry";
 import { applyCompaction } from "../../src/core/execution/turn-compaction";
 import type { CompactionSession } from "../../src/compaction/speculate";
-import type { ChatAgentConfig } from "../../src/core/types";
+import type {} from "../../src/core/types";
 import { runInput } from "./run-input";
 
 export function stateAtGrace(window: number, offset: number) {

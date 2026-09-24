@@ -3,11 +3,8 @@ import { bootResource } from "./composition/boot";
 import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
 import {
-  AppClock,
   AppScope,
-  AppEntropy,
-  AppObservations,
-  type AppRuntime,
+  type AppRuntime, type AppServices,
   lifecycleFailure,
 } from "./runtime";
 import { AsyncResource } from "node:async_hooks";
@@ -16,7 +13,7 @@ import { createAlarmWorker } from "./composition/alarm-worker";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
-  type ChatAgentConfig,
+  BundleDefinitions, Clock, Entropy, GenerationLayers, ObservationSink,
   createSessionRequests,
   type SessionRuntime,
   getSessionHandle,
@@ -85,8 +82,6 @@ interface StartOptions {
   readonly runtime?: AppRuntime;
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    | "clock"
-    | "entropy"
     | "closeGraceMs"
     | "approvalTimeoutMs"
     | "retryAlarm"
@@ -94,7 +89,6 @@ interface StartOptions {
     | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
-  readonly llm?: ChatAgentConfig["llm"];
   readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
 }
 
@@ -187,19 +181,20 @@ export async function startOpenOmni(options: StartOptions = {}) {
     options.runtime ??
     gatewayRuntime({
       dbPath: config.dbPath,
-      clock: options.sessionRuntime?.clock,
-      entropy: options.sessionRuntime?.entropy,
     });
   try {
     const services = await runAppBoot(
       runtime,
       Effect.gen(function* () {
         return {
+          context: yield* Effect.context<AppServices>(),
           ledger: yield* LedgerWrites,
           scope: yield* AppScope,
-          clock: yield* AppClock,
-          entropy: yield* AppEntropy,
-          observations: yield* AppObservations,
+          clock: yield* Clock,
+          entropy: yield* Entropy,
+          observations: yield* ObservationSink,
+          bundles: yield* BundleDefinitions,
+          generations: yield* GenerationLayers,
         };
       }),
     );
@@ -214,17 +209,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
           resource.emitDestroy();
         }),
     );
-    seedKernelPolicyRows();
+    seedKernelPolicyRows(services.bundles.select(services.bundles.names).rows);
 
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
-      clock: services.clock.now,
-      entropy: services.entropy.next,
       dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
         services.clock.now,
       ),
-      observations: services.observations,
       requestDomainRevisions,
       onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
       onInboxCommitted: (ids) => {
@@ -238,9 +230,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
           try: () => authenticateOwner(credential, request.id),
           catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
         }),
-      generation: (snapshot) => resident.generation(snapshot),
     };
-    const requests = createSessionRequests(sessionRuntime);
+    const requests = await runAppBoot(runtime, createSessionRequests(sessionRuntime));
     let recovery: Promise<void> = Promise.resolve();
     await acquire(Effect.void, () => shutdownSessions(sessionRuntime, recovery));
     const actors: readonly RegisteredActor[] = config.actors ?? [];
@@ -311,7 +302,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
-      options.llm ?? {},
     );
     if (host !== undefined) {
       cells = await acquireAppResource(runtime, composeCodemode(host));
@@ -320,15 +310,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
-      compaction: configuredCompaction(config, options.llm ?? {}),
+      compaction: configuredCompaction(config),
+      bundles: services.bundles.names,
       tools: {
+        clock: services.clock.now,
         alarms: await createMonitorPorts(runtime),
         ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         provisioning: provisioningPort,
       },
       sessionRuntime,
-      ...(options.llm === undefined ? {} : { llm: options.llm }),
     });
+
+    await runAppBoot(runtime, services.generations.initialize(resident.definitions));
 
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
       const admission = await runAppEffect(runtime, messages.ingest(sender, facts));
@@ -364,7 +357,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       answer: (answer) =>
         runAppEffect(
           runtime,
-          requests.answer({ ...answer, receivedAt: (sessionRuntime.clock ?? Date.now)() }),
+          requests.answer({ ...answer, receivedAt: services.clock.now() }),
         ),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
@@ -443,7 +436,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
               void wake(row.sessionId);
             });
           },
-          clock: sessionRuntime.clock,
+          clock: services.clock.now,
         },
         {
           deliveryRoutes,
@@ -482,10 +475,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
         alarms: services.ledger.alarms,
         requestTimeout: requests.timeout,
         observations: Bus,
-        clock: sessionRuntime.clock,
+        clock: services.clock.now,
         wake: (id) =>
           Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(
-            Effect.provideService(AppScope, services.scope),
+            Effect.provide(services.context),
           ),
         failure: (error) => console.error("alarm worker failure", error),
       }),
@@ -544,6 +537,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
     if (awaitingOwner) {
       void recovery.catch((error: Error) => console.error("session recovery failed", error));
     } else await recovery;
+    let stopping: Promise<void> | undefined;
+    const stop = async () => {
+      await boundServer.stop(true);
+      await supervisor.stopAll();
+      await runAppEffect(runtime, shutdownSessions(sessionRuntime, recovery));
+      if (cells !== undefined) await runAppEffect(runtime, cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))));
+      await runtime.dispose();
+    };
     return {
       port: boundPort,
       gateway,
@@ -552,7 +553,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
       runtime,
-      stop: runtime.dispose,
+      stop: () => {
+        stopping ??= stop().catch((error: Error) => { stopping = undefined; throw error; });
+        return stopping;
+      },
     };
   } catch (error) {
     await runtime.dispose().catch((disposal: Error) => {

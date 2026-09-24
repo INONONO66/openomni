@@ -55,6 +55,7 @@ describe("@openomni/llm root public surface", () => {
       "ForeignFailure",
       "InvalidProviderData",
       "Llm",
+      "LlmLive",
       "LlmRunFailure",
       "ModelResolutionError",
       "ModelsDev",

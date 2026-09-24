@@ -35,6 +35,7 @@ export function messageMaterialization(input: {
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;
   readonly tools: readonly SessionGeneration.Tool[];
+  readonly bundles?: readonly string[];
   readonly preset: string;
   readonly runner: string;
   readonly at: number;
@@ -43,6 +44,7 @@ export function messageMaterialization(input: {
     generation: 1,
     revertTo: 0,
     tools: input.tools,
+    bundles: input.bundles ?? [],
     system: {
       preset: input.preset,
       blocks: [{ id: "runner", source: "app:runner", content: input.runner }],

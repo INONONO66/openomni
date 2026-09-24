@@ -9,7 +9,8 @@ import { messageMaterialization, prepareMessage } from "../src/composition/messa
 import { acquireAppResource, gatewayRuntime, runAppBoot } from "../src/gateway";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { alarmFixture } from "./helpers/alarm";
-import { runEffect, runSyncEffect } from "./helpers/effect";
+import { generationServices } from "./helpers/generation-services";
+import { runEffect, runSyncEffect, acquireSyncEffect } from "./helpers/effect";
 
 function materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
   return messageMaterialization({ id, parentId, role, runner, tools: [], preset: "", at: 100 });
@@ -98,7 +99,8 @@ test("ingress commit without a receipt becomes a typed corrupt-record commit fai
   Storage.withIsolation(async () => {
     Storage.initialize({ dbPath: ":memory:" });
     seedKernelPolicyRows();
-    const ingress = runSyncEffect(createIngressExecutor((): number => 100));
+    const services = acquireSyncEffect(generationServices({ clock: () => 100 }));
+    const ingress = runSyncEffect(createIngressExecutor().pipe(Effect.provide(services)));
     const sessions = Storage.get().sessions;
     if (sessions === undefined) throw new Error("missing fixture sessions");
     const commit = sessions.commit.bind(sessions);

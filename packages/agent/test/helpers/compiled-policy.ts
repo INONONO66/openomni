@@ -1,3 +1,4 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "@openomni/policy";
 import type { LedgerAction, PolicyRow } from "@openomni/protocol";
 
@@ -24,7 +25,7 @@ export const approveWriteRow: PolicyRow.Row = {
 
 /** A compiled test policy with the mandatory row plus the supplied behavior rows. */
 export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPolicySnapshot {
-  return compilePolicySnapshot({
+  return compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     mandatory: [],
     rows: [mandatoryPolicyRow, ...rows],

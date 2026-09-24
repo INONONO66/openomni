@@ -1,5 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import { findSessionRequest } from "./session-request";
@@ -13,6 +13,7 @@ import { type CommitFailed, ExecutionApprovalError, ForeignFailure, Interrupted,
 import { causeEvidence } from "./executor-outcome";
 import { createRawSlots, RawToolSlots } from "./executor-raw";
 import { GenerationRawSlots } from "./session-generations";
+import { Clock, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "./services";
 import type {
   DurableExecutor, ExecutionBatchItem, ExecutionRequest,
   ExecutionResult, ExecutorOptions,
@@ -25,12 +26,13 @@ export type {
 
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 type Decision = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
+type Admission = Pick<Decision, "generation" | "receipt" | "verdict" | "value" | "reason" | "transforms">;
 type Restore = Parameters<Parameters<typeof Effect.uninterruptibleMask>[0]>[0];
 type Stage<R> = {
   readonly item: ExecutionBatchItem<R>;
   readonly request: ExecutionRequest;
   readonly kind: LedgerAction.Kind;
-  readonly pre: Decision;
+  readonly pre: Admission;
   readonly intent: LedgerAction.Receipt | undefined;
 };
 type BodyExit = {
@@ -54,7 +56,15 @@ function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionErr
     : { terminal: "executed", value: null, failure };
 }
 
-export function createExecutor(options: ExecutorOptions): DurableExecutor {
+export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExecutor, ExecutionError, ProcessServices | SessionLayer> {
+  return Effect.gen(function* () {
+  if (input.approvalTimeoutMs !== undefined && (!Number.isSafeInteger(input.approvalTimeoutMs) || input.approvalTimeoutMs < 0))
+    return yield* new ForeignFailure({ operation: "executor.acquire", cause: "invalid_approval_timeout" });
+  const clock = yield* Clock;
+  const entropy = yield* Entropy;
+  const observations = yield* ObservationSink;
+  const { policy } = yield* SessionLayer;
+  const options = { ...input, clock: clock.now, entropy: entropy.next, observations, policy };
   const record = createExecutionRecord(options);
   const { approvals, awaitApproval } = createExecutionApprovals(options);
   const recovery = createExecutionRecovery(options, record);
@@ -74,6 +84,8 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         intent: { encodingVersion: 1, value: {
           hook: `${point.kind}.${point.phase}`, op: request.op, generation: decision.generation,
           matchedRuleIds: [...decision.matchedRuleIds], verdict: decision.verdict, inputHash: decision.inputHash,
+          transforms: decision.transforms.map((transform) => ({ ...transform })),
+          ...(decision.ref === undefined ? {} : { ref: decision.ref }),
         } },
         effect: { encodingVersion: 1, value: {
           phase: "result", reason: decision.reason ?? null,
@@ -89,6 +101,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
 
   function invocationFor<R>(stage: Omit<Stage<R>, "intent">, waveId: string) {
     return {
+      policyDecisionId: stage.pre.receipt.action.id,
       effectHash: canonicalDigest(stage.request.effect), effect: stage.request.effect,
       callId: stage.request.toolObservation?.callId ?? stage.pre.receipt.action.id,
       turnId, waveId,
@@ -99,6 +112,41 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     };
   }
 
+  function admit(request: ExecutionRequest): Effect.Effect<Admission, ExecutionError> {
+    const original = request.originalAction;
+    if (original === undefined) return decide(request, "pre", request.intent);
+    return Effect.try({ try: () => {
+      const intent = object(original.intent.value);
+      const inputHash = canonicalDigest({ ...policyPoint(request, "pre"), role: options.identity.role,
+        sessionId: options.identity.sessionId, ...(request.message === undefined ? {} : { message: request.message }), value: request.intent });
+      const action = recordedDecision(options.ledger.actions?.() ?? [], original, intent.policyDecisionId, inputHash);
+      if (action === undefined || intent.value === undefined) throw new ExecutionApprovalError({ code: "stale_approval" });
+      const verdict = recordedVerdict(object(action.intent.value).verdict);
+      const recorded = SessionHistory.PolicyDecision.parse({ ...object(action.intent.value),
+        revision: action.ordinal, actionId: action.id, subjectActionId: action.parentId, turnId: options.identity.turnId ?? null,
+        reason: object(action.effect.value).reason ?? null,
+      });
+      if (recorded.inputHash !== inputHash || recorded.generation !== options.policy.generation ||
+          recorded.hook !== `${policyPoint(request, "pre").kind}.pre` || recorded.op !== request.op)
+        throw new ExecutionApprovalError({ code: "stale_approval" });
+      return { generation: recorded.generation, verdict, transforms: recorded.transforms,
+        value: intent.value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
+        receipt: { action, revision: action.ordinal } };
+    }, catch: (cause) => cause instanceof ExecutionApprovalError ? cause : new ForeignFailure({ operation: "executor.recover_admission", cause: String(cause) }) });
+  }
+
+  /** Denied stages record nothing; recovered stages reuse the original intent; fresh stages append one. */
+  function stageIntent<R>(stage: Omit<Stage<R>, "intent">, waveId: string): Effect.Effect<LedgerAction.Receipt | undefined, ExecutionError> {
+    const original = stage.request.originalAction;
+    if (stage.pre.verdict === "deny") return Effect.succeed(undefined);
+    if (original !== undefined) return Effect.succeed({ action: original, revision: original.ordinal });
+    return record.appendIntent({
+      parentId: options.identity.parentActionId, kind: stage.kind, op: stage.request.op, value: stage.pre.value,
+      ...(stage.pre.transforms.length === 0 ? {} : { originalArgs: stage.request.intent }),
+      invocation: invocationFor(stage, waveId),
+    });
+  }
+
   function stageAll<R>(items: readonly ExecutionBatchItem<R>[]): Effect.Effect<Stage<R>[], ExecutionError> {
     const [item] = items;
     if (items.length === 1 && item !== undefined) {
@@ -107,16 +155,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (!kinds.has(request.kind))
           return Effect.fail(new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
         const kind = request.kind as LedgerAction.Kind;
-        return decide(request, "pre", request.intent).pipe(Effect.flatMap((pre) => {
+        return admit(request).pipe(Effect.flatMap((pre) => {
           const stage = { item, request, kind, pre };
-          const original = request.originalAction;
-          const intent: Effect.Effect<LedgerAction.Receipt | undefined, ExecutionError> = pre.verdict === "deny" ? Effect.succeed(undefined)
-            : original !== undefined ? Effect.succeed({ action: original, revision: original.ordinal })
-            : record.appendIntent({
-              parentId: options.identity.parentActionId, kind, op: request.op, value: pre.value,
-              invocation: invocationFor(stage, pre.receipt.action.id),
-            });
-          return intent.pipe(Effect.map((receipt) => [{ ...stage, intent: receipt }]));
+          return stageIntent(stage, pre.receipt.action.id).pipe(Effect.map((receipt) => [{ ...stage, intent: receipt }]));
         }));
       });
     }
@@ -127,18 +168,12 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (!kinds.has(request.kind))
           return yield* new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` });
         const kind = request.kind as LedgerAction.Kind;
-        const pre = yield* decide(request, "pre", request.intent);
+        const pre = yield* admit(request);
         staged.push({ item, request, kind, pre });
       }
       const admitted: Stage<R>[] = [];
       for (const stage of staged) {
-        const original = stage.request.originalAction;
-        const intent = stage.pre.verdict === "deny" ? undefined
-          : original !== undefined ? { action: original, revision: original.ordinal }
-          : yield* record.appendIntent({
-          parentId: options.identity.parentActionId, kind: stage.kind, op: stage.request.op, value: stage.pre.value,
-          invocation: invocationFor(stage, staged[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id),
-        });
+        const intent = yield* stageIntent(stage, staged[0]?.pre.receipt.action.id ?? stage.pre.receipt.action.id);
         admitted.push({ ...stage, intent });
       }
       return admitted;
@@ -173,7 +208,9 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (captured !== undefined && options.ledger.validateRequest?.(captured) === false)
           return Effect.fail(new ExecutionApprovalError({ code: "stale_approval" }));
         started();
-        return stage.item.body(intent);
+        const admitted = object(intent.action.intent.value).value;
+        if (admitted === undefined) return Effect.die("missing admitted input");
+        return stage.item.body(intent, immutableInput(structuredClone(admitted)));
       };
       if (!guarded) return enter();
       const id = `${intent.action.id}:application`;
@@ -211,10 +248,10 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
           Effect.flatMap((exit) => {
             signal.removeEventListener("abort", abort);
             if (slots.pending() === 0) return Effect.succeed(exit);
-            const grace = Effect.fork(Effect.interruptible(slots.awaitSettled).pipe(
+            const grace = Effect.forkScoped(Effect.interruptible(slots.awaitSettled).pipe(
               Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
             ));
-            return grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit));
+            return Effect.scoped(grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit)));
           }),
         );
         if (options.retainEffect === undefined)
@@ -320,12 +357,12 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     });
   }
 
-  function runSingle<R>(single: Stage<R>, signal: AbortSignal, controller: AbortController, restore: Restore) {
+  function runSingle<R>(single: Stage<R>, signal: AbortSignal, controller: AbortController, restore: Restore, scope: Scope.Scope) {
     return approval(single, signal).pipe(Effect.flatMap((decision) => {
       if (single.pre.verdict === "deny" || decision !== "approve")
         return finishStage(single, decision, undefined).pipe(Effect.map((result) => [result]));
       let body: BodyExit | undefined;
-      return Effect.fork(executeBody(single, signal, false, (result) => { body = result; })).pipe(
+      return Effect.forkIn(executeBody(single, signal, false, (result: BodyExit) => { body = result; }), scope).pipe(
         Effect.flatMap((fiber) => Effect.exit(restore(Fiber.await(fiber))).pipe(
           Effect.flatMap((awaited) => Exit.isFailure(awaited)
             ? Effect.sync(() => controller.abort()).pipe(Effect.flatMap(() => Fiber.await(fiber)))
@@ -337,7 +374,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     }));
   }
 
-  function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore) {
+  function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore, scope: Scope.Scope) {
     return Effect.gen(function* () {
       const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
       const exits = new Map<number, BodyExit>();
@@ -355,7 +392,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
         if (!shouldExecute(stage, index)) continue;
         if (stage.item.sequential) { yield* join; group.length = 0; }
         const work = executeBody(stage, signal, guarded, (result) => { exits.set(index, result); });
-        const fiber = yield* Effect.fork(work);
+        const fiber = yield* Effect.forkIn(work, scope);
         group.push(fiber);
         if (stage.item.sequential) { yield* join; group.length = 0; }
       }
@@ -368,18 +405,18 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
     return Effect.uninterruptibleMask((restore) => {
       const controller = new AbortController();
       const signal = combinedSignal(controller.signal, control.signal, options.signal);
-      return stageAll(items).pipe(Effect.flatMap((stages) => {
+      return Effect.scopedWith((scope) => stageAll(items).pipe(Effect.flatMap((stages: Stage<R>[]) => {
         const guarded = stages.some((stage) => needsApproval(stage) || stage.request.originalAction !== undefined);
         const single = stages.length === 1 ? stages[0] : undefined;
         return single !== undefined && !guarded
-          ? runSingle(single, signal, controller, restore)
-          : runStages(stages, signal, controller, guarded, restore);
-      }));
+          ? runSingle(single, signal, controller, restore, scope)
+          : runStages(stages, signal, controller, guarded, restore, scope);
+      })));
     });
   }
 
   function run<T extends PlainValue, R>(request: ExecutionRequest,
-    body: (intent: LedgerAction.Receipt) => Effect.Effect<T, ExecutionError, R>) {
+    body: (intent: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.Effect<T, ExecutionError, R>) {
     return runBatch([{ request, body }], { signal: options.signal ?? new AbortController().signal }).pipe(
       Effect.flatMap((results) => {
         const result = results[0];
@@ -413,6 +450,7 @@ export function createExecutor(options: ExecutorOptions): DurableExecutor {
   const judgeStop = createStopJudge(options,
     (op, value) => decide({ kind: "turn", op, intent: value, effect: {} }, "post", value), record.commit);
   return { run, runBatch, runExisting, runAttempts, judgeStop, approvals, recover: recovery.recover };
+  });
 }
 
 function policyPoint(request: ExecutionRequest, phase: "pre" | "post"): Pick<PolicyEvaluationInput, "kind" | "phase" | "op"> {
@@ -420,8 +458,19 @@ function policyPoint(request: ExecutionRequest, phase: "pre" | "post"): Pick<Pol
     ? { kind: "turn", phase: "post", op: request.op === "compact" ? "compaction" : request.op }
     : { kind: request.kind, phase, op: request.op };
 }
-function needsApproval(stage: { readonly pre: PolicyEvaluation; readonly request: ExecutionRequest }) {
+function needsApproval(stage: { readonly pre: Pick<PolicyEvaluation, "verdict">; readonly request: ExecutionRequest }) {
   return stage.pre.verdict === "require_approval" || stage.request.approval?.required === true;
+}
+/** The single pre-decision an original intent was admitted under, by id when recorded, else by input hash. */
+function recordedDecision(actions: readonly LedgerAction.Node[], original: LedgerAction.Node, decisionId: PlainValue | undefined, inputHash: string) {
+  const candidates = actions.filter((action) => action.kind === "policy.decision" && action.ordinal < original.ordinal &&
+    (decisionId === undefined ? object(action.intent.value).inputHash === inputHash : action.id === decisionId));
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
+  const parsed = RowVerdictType.safeParse(verdict);
+  if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
+  return parsed.data;
 }
 function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof findSessionRequest>): void {
   if (captured !== undefined && request.domainRevisions !== undefined &&
@@ -431,6 +480,14 @@ function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof find
 /** Body results cross the durable boundary as canonical JSON: non-finite numbers become null. */
 function clonePlainValue(value: PlainValue): PlainValue {
   return JSON.parse(JSON.stringify(value)) as PlainValue;
+}
+
+export function immutableInput(value: PlainValue): PlainValue {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) immutableInput(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 function settlePost(request: ExecutionRequest, post: PolicyEvaluation, value: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
   const transformed = post.verdict === "transform" ? object(post.value).result : value;

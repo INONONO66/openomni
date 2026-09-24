@@ -1,3 +1,5 @@
+import { runAgentSync } from "../../helpers/executor";
+import { catalogLayer } from "../../helpers/service-layers";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { describe, expect, it } from "bun:test";
 import { Tool } from "@openomni/protocol";
@@ -44,7 +46,7 @@ describe("tool post-policy refusal", () => {
     const observations = recordingToolObservations();
     const resultCommit = actionCommitGate("account:result");
     const recording = recordingExecutor({ policy: accountOutputDeniedPolicy(), onCommit: resultCommit.onCommit, onObservation: observations.observe });
-    const running = yield* Effect.forkScoped(createDispatcher([definition], { executor: recording.executor }).execute(call, context));
+    const running = yield* Effect.forkScoped(runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([definition])))).execute(call, context));
     yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
     expect(observations.names).toHaveLength(1);
     expect(observations.names[0]).toBe(Tool.Events.Started.name);
@@ -55,26 +57,26 @@ describe("tool post-policy refusal", () => {
   }))));
 
   it("returns an error result through the model door", async () => isolated(Effect.scoped(Effect.gen(function* () {
-    const result = yield* createDispatcher([definition], { executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).execute(call, context);
+    const result = yield* runAgentSync(createDispatcher({ executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).pipe(Effect.provide(catalogLayer([definition])))).execute(call, context);
     expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
     expect(result.output).toContain("output_denied");
   }))));
 
   it("throws through the cell door", async () => isolated(Effect.scoped(Effect.gen(function* () {
-    const exit = yield* Effect.exit(createDispatcher([definition], { executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).executeCell(call, context));
+    const exit = yield* Effect.exit(runAgentSync(createDispatcher({ executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).pipe(Effect.provide(catalogLayer([definition])))).executeCell(call, context));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ToolRefused);
   }))));
 
   for (const door of ["model", "cell"] as const) {
     it(`${door} door uses a valid transformed output`, async () => isolated(Effect.scoped(Effect.gen(function* () {
-      const dispatcher = createDispatcher([definition], { executor: transformingExecutor("masked") });
+      const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor("masked") }).pipe(Effect.provide(catalogLayer([definition]))));
       const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
       expect(result.output).toEqual(door === "model" ? "masked" : { id: "masked" });
     }))));
 
     it(`${door} door rejects a transformed output that breaks the schema`, async () => isolated(Effect.scoped(Effect.gen(function* () {
-      const dispatcher = createDispatcher([definition], { executor: transformingExecutor(null) });
+      const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor(null) }).pipe(Effect.provide(catalogLayer([definition]))));
       const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
       expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
     }))));

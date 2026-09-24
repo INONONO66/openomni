@@ -18,6 +18,17 @@ export const EncodedPayload = z
 export type EncodedPayload = z.infer<typeof EncodedPayload>;
 
 export namespace LedgerAction {
+  /** Canonical admitted args plus optional pre-transform provenance. */
+  export const Intent = z
+    .object({
+      phase: z.literal("intent"),
+      op: Identifier,
+      value: PlainValueSchema,
+      originalArgs: PlainValueSchema.optional(),
+    })
+    .catchall(PlainValueSchema);
+  export type Intent = z.infer<typeof Intent>;
+
   export const Kind = z.enum([
     "prompt",
     "turn",
@@ -236,6 +247,14 @@ export namespace LedgerSession {
 }
 
 export namespace SessionGeneration {
+  export const Id = z
+    .object({
+      sessionId: Identifier,
+      generation: z.number().int().positive(),
+    })
+    .strict();
+  export type Id = z.infer<typeof Id>;
+
   export const ToolCategory = z.enum(["query", "mutation", "authority", "execution"]);
   export type ToolCategory = z.infer<typeof ToolCategory>;
 
@@ -264,6 +283,14 @@ export namespace SessionGeneration {
       revertTo: z.number().int().nonnegative(),
       tools: z.array(Tool),
       toolsHash: z.string().min(1),
+      bundles: z
+        .array(z.string().regex(/^[a-z][a-z0-9-]*$/))
+        .refine(
+          (names) => names.every((name, index) => index === 0 || (names[index - 1] ?? "") < name),
+          { message: "Bundle names must be sorted and unique" },
+        )
+        .default([])
+        .readonly(),
       systemPreset: z.string(),
       systemBlocks: z.array(SystemBlock),
       systemValue: z.string(),

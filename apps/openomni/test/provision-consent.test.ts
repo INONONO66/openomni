@@ -1,7 +1,8 @@
+import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
-import { createDispatcher, eraseTool } from "@openomni/agent";
+import { eraseTool } from "@openomni/agent";
 import type { PlainObject } from "@openomni/protocol";
 import { createProvisionTool, PROVISION_POLICY_ROWS } from "../src/tools/provision";
 import { createTools } from "../src/tools/core/catalog";
@@ -45,7 +46,7 @@ it("consent is a require_approval policy row on the two contact authority ops, n
   );
 });
 it("the model cannot mint or decide Owner consent, and workers cannot see provision", async () => {
-  const dispatcher = createDispatcher([provision()], { executor });
+  const dispatcher = dispatcherFixture([provision()], { executor });
   const forged: readonly PlainObject[] = [
     { op: "request", args: { actorId: "contact:mallory" } },
     { op: "decide", args: { approvalId: "invented", decision: "approved" } },
@@ -153,7 +154,7 @@ it("invalidates a merge when the source identity changes without moving its endp
   }
 });
 it("refuses malformed output at the real dispatcher boundary", async () => {
-  const result = await runEffect(createDispatcher(
+  const result = await runEffect(dispatcherFixture(
     [{ ...provision(), execute: async () => ({ op: "contact_promote" }) }],
     { executor },
   ).execute(

@@ -1,14 +1,15 @@
+import { testExecutor } from "../../helpers/executor";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import type { LedgerAction } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
-import { createExecutor } from "../../../src/executor";
 import { stopState, type StopObservation } from "../../../src/core/execution/stop-chain";
 import { recordingLedger } from "../../helpers/g0-effect";
 
 function harness(limit = 3) {
   const record = recordingLedger();
-  const policy = compilePolicySnapshot({
+  const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     rows: SEEDED_POLICY_ROWS.map((row: (typeof SEEDED_POLICY_ROWS)[number]) => ({
       ...row,
@@ -27,7 +28,7 @@ function harness(limit = 3) {
   });
   return {
     ...record,
-    executor: createExecutor({
+    executor: testExecutor({
       policy,
       ledger: record.ledger,
       identity: { sessionId: "session", role: "resident", parentActionId: "turn" },

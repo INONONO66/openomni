@@ -5,7 +5,7 @@ import { channelTransaction } from "../helpers/channel-transaction";
 import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
-import { compilePolicySnapshot } from "@openomni/policy";
+import { KERNEL_POLICY_REGISTRY, compilePolicySnapshot } from "@openomni/policy";
 import {
   ActorRegistry,
   ChannelGrantStore,
@@ -92,6 +92,7 @@ export async function ownerMessageTargets(
 // The real compiler evaluates perimeter A rows and actor grants; app tests cover the full executor/tree.
 export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {
   const policy = compilePolicySnapshot({
+    registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     rows: [
       {
