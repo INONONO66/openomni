@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790131964267,
+  "lastUpdate": 1790262200100,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74677,6 +74677,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 229516,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bdabc64bc5980f06c275c8bf79f25b892dd8279f",
+          "message": "kernel(w0.5): consumed Effect Layer floor, bundle contract, declared-unused Tags deleted (#1188)\n\n* wip(w0.5): consumed layers, bundle contract, checker rules, ledger test runner helper\n\n* docs(w0.5): extension points, SLOP B6 receipt, implementation-status and scripts-lanes sync\n\n* feat(w0.5): delete declared-unused Effect Tags, route agent test runners through helpers, tighten boundary checker\n\nPart of #1184 / #930\n\n* fix(w0.5): review r1 findings M1-M4 + verdict validation\n\n* perf(w0.5): remove per-sample fixture layer churn from turn benchmarks\n\nPin pure benchmark service contexts once, retain fresh per-turn executors and dispatchers, and restore the reference no-op observation port. Pass the batch scope directly to owned action fibers rather than installing it in the Effect context. Preserve record-before-act ordering and scope cleanup.\n\n* test(script): anchor strict reach-probe programs to the repository type roots\n\nts.sys memoizes process.cwd() on first use. check-deps.test.ts now runs the\nchecker in-process from a temporary fixture directory in the same shard, so\nthe first ts.sys cwd read pinned type-root discovery to a deleted tmp dir and\n'types: [\"bun\"]' stopped resolving (scripts-tooling-1 red on PR #1188).\nResolve @types against the repository explicitly instead of the process cwd.\n\n* refactor(w0.5): inject clock/entropy into AgentProcessLive instead of provide-then-shadow (review M8)\n\n* test(w0.5): cover invocation frame, generation drain/retain and channels barrel (patch coverage)",
+          "timestamp": "2026-09-24T23:59:51+09:00",
+          "tree_id": "001e7a78e843133f9b6845806af8109a395f3a37",
+          "url": "https://github.com/INONONO66/openomni/commit/bdabc64bc5980f06c275c8bf79f25b892dd8279f"
+        },
+        "date": 1790262199188,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1421,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1628843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 407800,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6588845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 136,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 174530,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 858872,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 635905,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3792,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 107821462,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 10524184,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19822,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 192947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 982897,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 260757,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 20485334,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 100,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 191836,
             "unit": "ns/op"
           }
         ]
