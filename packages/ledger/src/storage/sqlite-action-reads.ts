@@ -119,7 +119,8 @@ export function createActionReads(db: Database): Reads {
           AND json_extract(a.intent, '$.phase') = 'intent' AND a.ordinal > ?
           AND a.id NOT IN (SELECT json_extract(effect, '$.turnId') FROM action
             WHERE session_id = ? AND kind = 'turn'
-            AND json_extract(effect, '$.phase') = 'terminal')
+            AND json_extract(effect, '$.phase') = 'terminal'
+            AND json_extract(effect, '$.turnId') IS NOT NULL)
         ORDER BY a.ordinal LIMIT ?`)
           .all(sessionId, cursor, sessionId, pageSize.parse(limit)),
       );

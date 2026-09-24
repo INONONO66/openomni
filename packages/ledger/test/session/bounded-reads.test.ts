@@ -132,6 +132,20 @@ test("open turns page by original ordinal even when their latest update is beyon
   expect(() => kernel.openTurnsPage("bounded", 0, 257)).toThrow();
 });
 
+test("a terminal row without a turnId does not hide every open turn", () => {
+  turn("open");
+  append(
+    "orphan-terminal",
+    "turn",
+    { phase: "terminal" },
+    { phase: "terminal", kind: "result", text: "done", boundaryActionId: "open", resumeCount: 0 },
+    "open",
+  );
+  expect(kernel.openTurnsPage("bounded").map((entry) => entry.turnId)).toEqual(["open"]);
+  terminal("open");
+  expect(kernel.openTurnsPage("bounded")).toEqual([]);
+});
+
 test("snapshot pages retain all deliveries for the selected turn without loading unrelated actions", () => {
   turn("older");
   terminal("older");
