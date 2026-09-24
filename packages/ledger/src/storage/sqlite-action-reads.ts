@@ -12,7 +12,7 @@ type Reads = Pick<
   | "latestTurnTerminal"
   | "latestTurnUpdate"
   | "turnIntentsPage"
-  | "turnDeliveriesPage"
+  | "turnTailPage"
   | "openTurnsPage"
   | "resultFor"
   | "requestInputById"
@@ -101,27 +101,27 @@ export function createActionReads(db: Database): Reads {
           .all(sessionId, beforeRevision, pageSize.parse(limit)),
       );
     },
-    turnDeliveriesPage(sessionId, turnId, cursor, limit) {
+    turnTailPage(sessionId, cursor, limit) {
       return decodeRows(
         db
-          .query<ActionSqlRow, [string, string, number, number]>(`
-        SELECT * FROM action WHERE session_id = ? AND kind = 'inbox.deliver'
-          AND json_extract(effect, '$.turnId') = ? AND ordinal > ?
+          .query<ActionSqlRow, [string, number, number]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'inbox.deliver')
+          AND ordinal > ?
         ORDER BY ordinal LIMIT ?`)
-          .all(sessionId, turnId, cursor, pageSize.parse(limit)),
+          .all(sessionId, cursor, pageSize.parse(limit)),
       );
     },
     openTurnsPage(sessionId, cursor, limit) {
       return decodeRows(
         db
-          .query<ActionSqlRow, [string, number, number]>(`
+          .query<ActionSqlRow, [string, number, string, number]>(`
         SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'turn'
           AND json_extract(a.intent, '$.phase') = 'intent' AND a.ordinal > ?
-          AND NOT EXISTS (SELECT 1 FROM action WHERE session_id = a.session_id
-            AND kind = 'turn' AND json_extract(effect, '$.phase') = 'terminal'
-            AND json_extract(effect, '$.turnId') = a.id)
+          AND a.id NOT IN (SELECT json_extract(effect, '$.turnId') FROM action
+            WHERE session_id = ? AND kind = 'turn'
+            AND json_extract(effect, '$.phase') = 'terminal')
         ORDER BY a.ordinal LIMIT ?`)
-          .all(sessionId, cursor, pageSize.parse(limit)),
+          .all(sessionId, cursor, sessionId, pageSize.parse(limit)),
       );
     },
     resultFor(sessionId, parentId) {

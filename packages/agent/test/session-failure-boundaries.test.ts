@@ -3,7 +3,7 @@ import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixt
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
-import type { LedgerAction } from "@openomni/protocol";
+import { PlainObjectSchema, type LedgerAction } from "@openomni/protocol";
 import { session, type SessionRunnerInput } from "../src/session-handle";
 import { isolated } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
@@ -81,28 +81,49 @@ test("an idle request transition preserves a competing owner's lease and typed r
   expect(SessionHandleStore.requestRows(handle.id)).toEqual([]);
 }))));
 
-test("zero-grace shutdown seals pending tool evidence before releasing the turn lease", () => isolated(Effect.scoped(Effect.gen(function* () {
-  seedPolicy();
-  const entered = yield* Deferred.make<void>();
-  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 }; return yield* withSessionServices(session({
-    id: "shutdown-pending", role: "resident",
-    runner: (input: SessionRunnerInput) => Effect.gen(function* () {
-      yield* input.ledger.commit({
-        id: "pending-tool", sessionId: input.sessionId, parentId: input.turnId, kind: "tool",
-        intent: { encodingVersion: 1, value: { phase: "intent" } },
-        effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: 100, irreversible: true,
-      }).pipe(Effect.orDie);
-      yield* Deferred.succeed(entered, undefined);
-      return yield* Effect.never;
-    }),
-  }, fixture), fixture); });
-  const running = yield* Effect.fork(handle.prompt("start"));
-  yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
-  yield* handle.close();
-  yield* Fiber.join(running);
-  const results = sessionTree(handle.id).filter((action: LedgerAction.Node) => action.parentId === "pending-tool");
-  expect(results).toContainEqual(expect.objectContaining({
-    kind: "tool", effect: { encodingVersion: 1, value: { phase: "result", terminal: "outcome_unknown", reason: "shutdown_grace_exhausted" } },
-  }));
-  expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-}))));
+for (const count of [1, 257]) {
+  test(`zero-grace shutdown seals ${count} open turns and pending tools before releasing the lease`, () => isolated(Effect.scoped(Effect.gen(function* () {
+    seedPolicy();
+    const entered = yield* Deferred.make<SessionRunnerInput>();
+    const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 };
+    const handle = yield* withSessionServices(session({
+      id: "shutdown-pending", role: "resident",
+      runner: (input: SessionRunnerInput) => Effect.gen(function* () {
+        const turn = SessionHandleStore.actionById(input.turnId);
+        if (turn === undefined) throw new Error("missing active turn");
+        const intent = PlainObjectSchema.parse(turn.intent.value);
+        for (let index = 1; index < count; index += 1) {
+          yield* input.ledger.commit({
+            id: `open-turn:${index}`, sessionId: input.sessionId, parentId: input.turnId, kind: "turn",
+            intent: { encodingVersion: 1, value: { ...intent, resultId: `open-turn:${index}:result` } },
+            effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: 100, irreversible: true,
+          }).pipe(Effect.orDie);
+        }
+        // All operations belong to the oldest turn, beyond the first reverse page.
+        for (let index = 0; index < count; index += 1) {
+          yield* input.ledger.commit({
+            id: `pending-tool:${index}`, sessionId: input.sessionId, parentId: input.turnId, kind: "tool",
+            intent: { encodingVersion: 1, value: { phase: "intent", turnId: input.turnId } },
+            effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: 100, irreversible: true,
+          }).pipe(Effect.orDie);
+        }
+        yield* Deferred.succeed(entered, input);
+        return yield* Effect.never;
+      }),
+    }, fixture), fixture);
+    const running = yield* Effect.fork(handle.prompt("start"));
+    const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
+    yield* handle.close();
+    yield* Fiber.join(running);
+    for (let index = 0; index < count; index += 1) {
+      expect(SessionHandleStore.resultFor(handle.id, `pending-tool:${index}`)?.effect.value).toEqual({
+        phase: "result", terminal: "outcome_unknown", reason: "shutdown_grace_exhausted",
+      });
+      const turnId = index === 0 ? input.turnId : `open-turn:${index}`;
+      expect(SessionHandleStore.turnTerminalFor(handle.id, turnId)?.kind).toBe("interrupted");
+    }
+    expect(SessionHandleStore.openTurnsPage(handle.id)).toEqual([]);
+    expect(SessionHandleStore.openOperationsPage(handle.id, input.turnId)).toEqual([]);
+    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+  }))));
+}

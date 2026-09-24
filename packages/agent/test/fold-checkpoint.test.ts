@@ -10,6 +10,7 @@ import { bounded } from "./helpers/bounded";
 import { effectOf, intentOf } from "./helpers/crash-matrix";
 import { nth } from "./helpers/nth";
 import { requestLedger } from "./helpers/request-ledger";
+import { textMessage } from "./helpers/messages";
 import {
   paddingActions,
   reconstructionFixture,
@@ -173,6 +174,45 @@ test("a compaction below N commits result and checkpoint together, rolls both ba
       projection: PlainValueSchema.parse(loaded.history),
     }),
   });
+});
+
+test("legacy compaction without captured context reconstructs its predecessor before committing the successor", () => {
+  const recording = requestLedger({ legacy: true });
+  const sessionId = recording.identity.sessionId;
+  const prior = hydrateSessionHistory(sessionId);
+  const history = [textMessage("assistant", "legacy summary", sessionId, "legacy-summary")];
+  const projection = PlainValueSchema.parse(history);
+  const predecessorProjectionHash = canonicalDigest({
+    foldVersion: 1,
+    projection: PlainValueSchema.parse(prior.history),
+  });
+  expect(adapter.actions.append({
+    id: "legacy-compaction", sessionId, parentId: recording.identity.turnId,
+    kind: "compaction", ts: 100, irreversible: true,
+    intent: { encodingVersion: 1, value: { phase: "intent", op: "compact" } },
+    effect: { encodingVersion: 1, value: { phase: "pending" } },
+  }, prior.revision)?.revision).toBe(prior.revision + 1);
+  expect(recording.commitBatch([{
+    id: "legacy-compaction:result", sessionId, parentId: "legacy-compaction",
+    kind: "compaction", ts: 100, irreversible: true,
+    intent: { encodingVersion: 1, value: { phase: "result", op: "compact" } },
+    effect: { encodingVersion: 1, value: {
+      phase: "result", terminal: "executed", result: { projection },
+    } },
+  }]).ok).toBe(true);
+  const result = SessionHandleStore.resultFor(sessionId, "legacy-compaction");
+  if (result === undefined) throw new Error("missing legacy compaction result");
+  expect(effectOf(result).result).toEqual({
+    sourceRevision: prior.revision,
+    foldVersion: 1,
+    predecessorActionId: null,
+    predecessorProjectionHash,
+    successorActionId: "legacy-compaction:result",
+    messageIds: ["legacy-summary"],
+    projection,
+    projectionHash: canonicalDigest({ foldVersion: 1, projection }),
+  });
+  expect(expectReplay(sessionId).history).toEqual(history);
 });
 
 for (const change of ["replacement", "delivered-tail"] as const) {

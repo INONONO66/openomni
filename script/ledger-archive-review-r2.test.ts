@@ -1,13 +1,20 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { HistoricalWait } from "../packages/ledger/src/storage/historical-request-format";
 import { SqliteStorageAdapter } from "../packages/ledger/src/storage/sqlite-storage";
 import { inspect967Projections } from "../packages/ledger/src/storage/u967-projection";
-import { U967_MIGRATION } from "../packages/ledger/src/storage/u967-preflight";
+import {
+  FOLD_CHECKPOINT_MIGRATION,
+  U967Error,
+  U967_MIGRATION,
+} from "../packages/ledger/src/storage/u967-preflight";
+import { ACTION_HASH_MIGRATION } from "../packages/ledger/src/storage/l0-hash";
+import { Migration } from "../packages/ledger/src/storage/migration-runner";
+import { ORDERED_MIGRATIONS } from "../packages/ledger/src/storage/sqlite-schema-lifecycle";
 import {
   createDispositionFixture,
   seedRetiredWait,
@@ -18,7 +25,7 @@ import {
   disposeCli,
   manifestHash,
 } from "../packages/ledger/test/helpers/disposition-967-cli";
-import { fileSha256 } from "./ledger-archive-snapshot";
+import { assertArchiveEquality, fileSha256 } from "./ledger-archive-snapshot";
 
 type Fixture = ReturnType<typeof createDispositionFixture>;
 
@@ -267,6 +274,43 @@ describe("967 review R2-1 literal CLI eligibility probes", () => {
     expect(readFileSync(fixture.manifest)).toEqual(receipt);
     expect(manifestHash(fixture)).toBe(hash);
   });
+});
+
+describe("967 review R2-2 in-process migration archives", () => {
+  test.each([ACTION_HASH_MIGRATION, FOLD_CHECKPOINT_MIGRATION])(
+    "verifies an archive stopping before %s after fold-checkpoint migration",
+    (migration: string) => {
+      using fixture = createDispositionFixture(false);
+      fixture.db.run("DELETE FROM wait");
+      fixture.db.run("DELETE FROM bus_event");
+      fixture.db.run("INSERT INTO policy VALUES ('old','tool','pre','{}','{}',1,0,1)");
+      const migrationDir = resolve(import.meta.dir, "../packages/ledger/migration");
+      const cutoff = ORDERED_MIGRATIONS.findIndex(
+        (entry: Migration.Definition) => entry.name === migration,
+      );
+      Migration.applyOrdered(fixture.db, migrationDir, ORDERED_MIGRATIONS.slice(0, cutoff));
+      copyFileSync(fixture.path, fixture.archive);
+      using archived = new Database(fixture.archive, { readonly: true, safeIntegers: true });
+      const archiveHash = fileSha256(fixture.archive);
+      expect(archived.query("SELECT name FROM _migrations WHERE name = ?").all(migration)).toEqual([]);
+      expect(assertArchiveEquality(fixture.db, archived, true)).toBeUndefined();
+
+      Migration.applyOrdered(fixture.db, migrationDir, ORDERED_MIGRATIONS);
+      expect(
+        fixture.db.query("SELECT name FROM _migrations ORDER BY rowid DESC LIMIT 1").get(),
+      ).toEqual({ name: FOLD_CHECKPOINT_MIGRATION });
+      const before = snapshotDatabase(fixture.db);
+      expect(() => assertArchiveEquality(fixture.db, archived)).toThrow(new U967Error("stale_archive"));
+      expect(assertArchiveEquality(fixture.db, archived, true)).toBeUndefined();
+      expect(snapshotDatabase(fixture.db)).toEqual(before);
+
+      fixture.db.run("UPDATE policy SET priority = 1 WHERE name = 'old'");
+      expect(() => assertArchiveEquality(fixture.db, archived, true)).toThrow(
+        new U967Error("stale_archive:policy"),
+      );
+      expect(fileSha256(fixture.archive)).toBe(archiveHash);
+    },
+  );
 });
 
 describe("967 review R2-2 same-schema archives", () => {

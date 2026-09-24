@@ -646,49 +646,74 @@ function configurationSnapshot(
   return effect.success ? effect.data.snapshot : undefined;
 }
 
+/** The newest `count` turns: locate the oldest tail intent, then fold one ascending window. */
 function turnTails(sessionId: string, revision: number, count: number): SessionTurn.Tail[] {
-  const tails: SessionTurn.Tail[] = [];
-  let cursor = revision + 1;
-  while (tails.length < count) {
-    const intents = requiredActions().turnIntentsPage(
-      sessionId,
-      cursor,
-      Math.min(256, count - tails.length),
-    );
-    for (const intent of intents) tails.push(turnTail(intent));
-    if (intents.length === 0) break;
-    cursor = intents.at(-1)?.ordinal ?? cursor;
-  }
-  return tails.reverse();
-}
-
-function turnTail(intent: LedgerAction.Node): SessionTurn.Tail {
   const actions = requiredActions();
-  const messages: SessionTurn.Message[] = [];
-  let cursor = 0;
+  const intents: LedgerAction.Node[] = [];
+  let before = revision + 1;
+  while (intents.length < count) {
+    const page = actions.turnIntentsPage(sessionId, before, Math.min(256, count - intents.length));
+    intents.push(...page);
+    if (page.length === 0) break;
+    before = page.at(-1)?.ordinal ?? before;
+  }
+  const oldest = intents.at(-1);
+  if (oldest === undefined) return [];
+  const tails = new Map<string, TailFold>();
+  for (const intent of intents.reverse()) {
+    tails.set(intent.id, { intent, messages: [] });
+  }
+  // Deliveries commit before their turn intent, so the window opens after the previous turn.
+  let cursor = actions.turnIntentsPage(sessionId, oldest.ordinal, 1).at(0)?.ordinal ?? 0;
   for (;;) {
-    const page = actions.turnDeliveriesPage(intent.sessionId, intent.id, cursor, 256);
-    for (const action of page) {
-      const delivered = delivery(action);
-      if (delivered?.kind === "prompt") messages.push({ role: "user", text: delivered.content });
-    }
+    const page = actions.turnTailPage(sessionId, cursor, 256);
+    for (const action of page) foldTailAction(tails, action);
     if (page.length < 256) break;
     cursor = page.at(-1)?.ordinal ?? cursor;
   }
-  const action = actions.turnTerminalFor(intent.sessionId, intent.id);
-  const terminal = turnTerminal(action);
-  if (terminal !== undefined && terminal.text.length > 0)
-    messages.push({ role: "assistant", text: terminal.text });
+  return [...tails.values()].map(tail);
+}
+
+interface TailFold {
+  readonly intent: LedgerAction.Node;
+  readonly messages: SessionTurn.Message[];
+  terminal?: { readonly action: LedgerAction.Node; readonly effect: SessionTurn.Terminal };
+}
+
+function foldTailAction(tails: Map<string, TailFold>, action: LedgerAction.Node): void {
+  const delivered = delivery(action);
+  if (delivered !== undefined) {
+    if (delivered.kind === "prompt")
+      tails.get(delivered.turnId)?.messages.push({ role: "user", text: delivered.content });
+    return;
+  }
+  const effect = turnTerminal(action);
+  if (effect === undefined) return;
+  const fold = tails.get(effect.turnId);
+  if (fold !== undefined) fold.terminal = { action, effect };
+}
+
+function tail({ intent, messages, terminal }: TailFold): SessionTurn.Tail {
+  if (terminal !== undefined && terminal.effect.text.length > 0)
+    messages.push({ role: "assistant", text: terminal.effect.text });
   return {
     turnId: intent.id,
     startedAt: intent.ts,
     state:
-      terminal === undefined ? "running" : terminal.kind === "interrupted" ? "interrupted" : "idle",
+      terminal === undefined
+        ? "running"
+        : terminal.effect.kind === "interrupted"
+          ? "interrupted"
+          : "idle",
     messages,
-    ...(terminal === undefined || action === undefined
+    ...(terminal === undefined
       ? {}
       : {
-          terminal: { kind: terminal.kind, actionId: action.id, at: action.ts },
+          terminal: {
+            kind: terminal.effect.kind,
+            actionId: terminal.action.id,
+            at: terminal.action.ts,
+          },
         }),
   };
 }

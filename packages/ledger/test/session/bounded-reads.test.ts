@@ -122,6 +122,11 @@ test("open turns page by original ordinal even when their latest update is beyon
   expect(kernel.latestTurnTerminal("bounded")).toEqual({ action: closed, effect });
   expect(kernel.latestOpenTurn("bounded")?.turnId).toBe("turn-255");
   expect(kernel.openTurnsPage("bounded", 0, 1).map((entry) => entry.turnId)).toEqual(["turn-0"]);
+  const tailIntent = kernel.openTurnsPage("bounded", 0, 255).at(-1)?.action;
+  if (tailIntent === undefined) throw new Error("missing open turn");
+  expect(
+    kernel.openTurnsPage("bounded", tailIntent.ordinal).map((entry) => entry.turnId),
+  ).toEqual(["turn-255"]);
   expect(kernel.openTurnsPage("missing")).toEqual([]);
   expect(kernel.latestTurnTerminal("missing")).toBeUndefined();
   expect(() => kernel.openTurnsPage("bounded", 0, 257)).toThrow();
@@ -160,6 +165,64 @@ test("snapshot pages retain all deliveries for the selected turn without loading
     "current",
   ]);
   expect(kernel.getSnapshot("bounded", 0).turns).toEqual([]);
+});
+
+test("snapshot tails fold deliveries committed before their turn intent and stay per turn", () => {
+  const deliver = (id: string, turnId: string, content: string, parentId: string) =>
+    append(
+      id,
+      "inbox.deliver",
+      {},
+      {
+        phase: "delivery",
+        turnId,
+        inboxId: id,
+        kind: "prompt",
+        content,
+        origin: { encodingVersion: 1, value: {} },
+        boundary: "before_llm",
+      },
+      parentId,
+    );
+  deliver("d-first", "first", "hello", "bounded:configure");
+  turn("first");
+  terminal("first");
+  deliver("d-second", "second", "again", "first:result");
+  turn("second");
+  append(
+    "d-interrupt",
+    "inbox.deliver",
+    {},
+    {
+      phase: "delivery",
+      turnId: "second",
+      inboxId: "d-interrupt",
+      kind: "interrupt",
+      content: "",
+      origin: { encodingVersion: 1, value: {} },
+      boundary: "before_llm",
+    },
+    "second",
+  );
+  expect(kernel.turnIntentsPage("bounded", Number.MAX_SAFE_INTEGER).map((a) => a.id)).toEqual([
+    "second",
+    "first",
+  ]);
+  expect(kernel.getSnapshot("bounded", 1).turns).toMatchObject([
+    { turnId: "second", state: "running", messages: [{ role: "user", text: "again" }] },
+  ]);
+  expect(kernel.getSnapshot("bounded", 2).turns).toMatchObject([
+    {
+      turnId: "first",
+      state: "idle",
+      messages: [
+        { role: "user", text: "hello" },
+        { role: "assistant", text: "done" },
+      ],
+      terminal: { kind: "result", actionId: "first:result" },
+    },
+    { turnId: "second", state: "running" },
+  ]);
 });
 
 test("operation reads exclude administrative checkpoints and reject mismatched result identities", () => {

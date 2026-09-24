@@ -18,12 +18,8 @@ export namespace Storage {
     latestTurnTerminal(sessionId: string): LedgerAction.Node | undefined;
     latestTurnUpdate(sessionId: string, turnId: string): LedgerAction.Node | undefined;
     turnIntentsPage(sessionId: string, beforeRevision: number, limit: number): LedgerAction.Node[];
-    turnDeliveriesPage(
-      sessionId: string,
-      turnId: string,
-      cursor: number,
-      limit: number,
-    ): LedgerAction.Node[];
+    /** `turn` and `inbox.deliver` actions after `cursor`, ascending: one window feeds every tail. */
+    turnTailPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
     openTurnsPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
     resultFor(sessionId: string, parentId: string): LedgerAction.Node | undefined;
     requestInputById(sessionId: string, inputId: string): LedgerAction.Node | undefined;
