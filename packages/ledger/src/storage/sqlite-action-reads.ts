@@ -4,6 +4,8 @@ import { z } from "zod";
 import { ActionSqlRow, decodeAction } from "./sqlite-l0-rows";
 
 const pageSize = z.number().int().positive().max(256);
+const windowCount = z.number().int().nonnegative();
+const OrdinalRow = z.object({ ordinal: z.number().int().positive() }).nullable();
 type Reads = Pick<
   Storage.ActionSubAdapter,
   | "priorModelAttempt"
@@ -12,6 +14,7 @@ type Reads = Pick<
   | "latestTurnTerminal"
   | "latestTurnUpdate"
   | "turnIntentsPage"
+  | "turnWindowStart"
   | "turnTailPage"
   | "openTurnsPage"
   | "resultFor"
@@ -100,6 +103,17 @@ export function createActionReads(db: Database): Reads {
         ORDER BY ordinal DESC LIMIT ?`)
           .all(sessionId, beforeRevision, pageSize.parse(limit)),
       );
+    },
+    turnWindowStart(sessionId, beforeRevision, count) {
+      const row = OrdinalRow.parse(
+        db
+          .query<{ ordinal: number }, [string, number, number]>(`
+        SELECT ordinal FROM action WHERE session_id = ? AND kind = 'turn'
+          AND json_extract(intent, '$.phase') = 'intent' AND ordinal < ?
+        ORDER BY ordinal DESC LIMIT 1 OFFSET ?`)
+          .get(sessionId, beforeRevision, windowCount.parse(count)),
+      );
+      return row === null ? 0 : row.ordinal;
     },
     turnTailPage(sessionId, cursor, limit) {
       return decodeRows(

@@ -646,32 +646,31 @@ function configurationSnapshot(
   return effect.success ? effect.data.snapshot : undefined;
 }
 
-/** The newest `count` turns: locate the oldest tail intent, then fold one ascending window. */
+/**
+ * The newest `count` turns: one ascending window opens after the intent preceding them, because
+ * deliveries commit before their own turn intent. The window carries the intents themselves.
+ */
 function turnTails(sessionId: string, revision: number, count: number): SessionTurn.Tail[] {
+  if (count === 0) return [];
   const actions = requiredActions();
-  const intents: LedgerAction.Node[] = [];
-  let before = revision + 1;
-  while (intents.length < count) {
-    const page = actions.turnIntentsPage(sessionId, before, Math.min(256, count - intents.length));
-    intents.push(...page);
-    if (page.length === 0) break;
-    before = page.at(-1)?.ordinal ?? before;
-  }
-  const oldest = intents.at(-1);
-  if (oldest === undefined) return [];
-  const tails = new Map<string, TailFold>();
-  for (const intent of intents.reverse()) {
-    tails.set(intent.id, { intent, messages: [] });
-  }
-  // Deliveries commit before their turn intent, so the window opens after the previous turn.
-  let cursor = actions.turnIntentsPage(sessionId, oldest.ordinal, 1).at(0)?.ordinal ?? 0;
+  const fold: TailWindow = { tails: new Map(), pending: new Map() };
+  let cursor = actions.turnWindowStart(sessionId, revision + 1, count);
   for (;;) {
     const page = actions.turnTailPage(sessionId, cursor, 256);
-    for (const action of page) foldTailAction(tails, action);
-    if (page.length < 256) break;
-    cursor = page.at(-1)?.ordinal ?? cursor;
+    const last = page.at(-1);
+    for (const action of page) {
+      if (action.ordinal > revision) return [...fold.tails.values()].map(tail);
+      foldTailAction(fold, action);
+    }
+    if (last === undefined || page.length < 256) return [...fold.tails.values()].map(tail);
+    cursor = last.ordinal;
   }
-  return [...tails.values()].map(tail);
+}
+
+interface TailWindow {
+  readonly tails: Map<string, TailFold>;
+  /** Prompt deliveries seen before their turn intent, keyed by turn id. */
+  readonly pending: Map<string, SessionTurn.Message[]>;
 }
 
 interface TailFold {
@@ -680,13 +679,25 @@ interface TailFold {
   terminal?: { readonly action: LedgerAction.Node; readonly effect: SessionTurn.Terminal };
 }
 
-function foldTailAction(tails: Map<string, TailFold>, action: LedgerAction.Node): void {
-  const delivered = delivery(action);
-  if (delivered !== undefined) {
-    if (delivered.kind === "prompt")
-      tails.get(delivered.turnId)?.messages.push({ role: "user", text: delivered.content });
+/** Route each window row by its stored phase so only the needed schema parses. */
+function foldTailAction({ tails, pending }: TailWindow, action: LedgerAction.Node): void {
+  if (action.kind === "inbox.deliver") {
+    const delivered = delivery(action);
+    if (delivered === undefined || delivered.kind !== "prompt") return;
+    const message = { role: "user" as const, text: delivered.content };
+    const open = tails.get(delivered.turnId);
+    if (open !== undefined) open.messages.push(message);
+    else pending.set(delivered.turnId, [...(pending.get(delivered.turnId) ?? []), message]);
     return;
   }
+  if (action.kind !== "turn") return;
+  const phase = PlainObjectSchema.parse(action.intent.value).phase;
+  if (phase === "intent") {
+    tails.set(action.id, { intent: action, messages: pending.get(action.id) ?? [] });
+    pending.delete(action.id);
+    return;
+  }
+  if (phase !== "terminal") return;
   const effect = turnTerminal(action);
   if (effect === undefined) return;
   const fold = tails.get(effect.turnId);
