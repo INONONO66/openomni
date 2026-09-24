@@ -6,6 +6,7 @@ import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
 import { allowConfigure } from "./helpers/generation-services";
+import { configureAuthority } from "../src/composition/generation-layers";
 
 test("AppLive retains distinct same-number session generations", async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:" });
@@ -102,3 +103,30 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
   } finally { await runtime.dispose(); }
   expect(closed.sort()).toEqual(acquired.sort());
 });
+
+for (const verdict of ["require_approval", "deny"] as const) {
+  test(`configureAuthority refuses session.configure when the pinned pre-policy yields ${verdict}`, async () => {
+    const runtime = gatewayRuntime({ dbPath: ":memory:" });
+    try {
+      const decisions = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
+        const generations = yield* GenerationLayers;
+        const policyGeneration = seedKernelPolicyRows([{
+          name: `configure-${verdict}`, kind: "session.configure", phase: "pre", priority: 1_000,
+          match: { encodingVersion: 1, value: { sessionId: "guarded" } },
+          verdict: { encodingVersion: 1, value: verdict === "deny" ? { type: "deny", reason: "pinned" } : { type: "require_approval", reason: "pinned" } },
+        }]);
+        yield* generations.initialize({ resident: [], worker: [] });
+        for (const id of ["guarded", "open"]) yield* SessionHandleStore.materialize({
+          id, parentId: null, role: "resident", tools: [], system: { preset: id, blocks: [] },
+          policyGeneration, actionId: `${id}-create`, at: 1,
+        });
+        const authority = configureAuthority(generations);
+        return {
+          guarded: yield* authority({ sessionId: "guarded", role: "resident", operation: "tools.add", generation: 1 }),
+          open: yield* authority({ sessionId: "open", role: "resident", operation: "tools.add", generation: 1 }),
+        };
+      })));
+      expect(decisions).toEqual({ guarded: false, open: true });
+    } finally { await runtime.dispose(); }
+  });
+}

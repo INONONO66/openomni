@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { runFixtureSync } from "./helpers/effect-result";
+import { runAgentSync } from "./helpers/executor";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
@@ -194,7 +194,7 @@ for (const change of ["replacement", "delivered-tail"] as const) {
     );
     if (change === "replacement") await fixture.compact(async () => "replacement");
     else {
-      const incoming = runFixtureSync(SessionHandleStore.commitReceivedMessage({
+      const incoming = runAgentSync(SessionHandleStore.commitReceivedMessage({
         id: "concurrent",
         sessionId: reconstructionSession,
         kind: "prompt",

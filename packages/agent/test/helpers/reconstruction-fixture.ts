@@ -5,7 +5,7 @@ import type { ExecutionLedger } from "../../src/executor";
 import { Effect } from "effect";
 import { ForeignFailure } from "../../src/errors";
 import { testExecutor } from "./executor";
-import { runFixture } from "./effect-result";
+import { runAgent } from "./executor";
 import { RunEvents } from "../../src/core/execution/events";
 import { executeCompaction } from "../../src/compaction/execute-cut";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
@@ -91,7 +91,7 @@ export async function reconstructionFixture(
       reconstructionSession,
       index < scale.updates - 1 ? "same-id" : "answer",
     );
-    await runFixture(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+    await runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
       Effect.succeed(PlainValueSchema.parse(message)),
     ));
   }
@@ -110,14 +110,14 @@ export async function reconstructionFixture(
     callID: "open-call",
     state: { status: "pending", input: {} },
   });
-  await runFixture(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+  await runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
     Effect.succeed(PlainValueSchema.parse(tool)),
   ));
   const padded = recording.commitBatch(
     paddingActions(reconstructionSession, recording.identity.turnId, scale.padding),
   );
   requireCommit(padded);
-  await runFixture(executor.run(
+  await runAgent(executor.run(
     {
       kind: "tool",
       op: "read",
@@ -162,7 +162,7 @@ export async function reconstructionFixture(
   );
   requireCommit(changed);
   const compact = (summarize = async () => "durable summary") =>
-    runFixture(executeCompaction({
+    runAgent(executeCompaction({
       history: hydrateSessionHistory(reconstructionSession).history,
       executor,
       events: {
@@ -182,7 +182,7 @@ export async function reconstructionFixture(
       dispatch: { trigger: "yield" },
     }));
   const suffix = () =>
-    runFixture(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+    runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
       Effect.succeed(PlainValueSchema.parse(textMessage("assistant", "suffix", reconstructionSession, "suffix"))),
     ));
   return { recording, executor, bodies, publications, compact, suffix };

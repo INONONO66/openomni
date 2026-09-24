@@ -1,4 +1,4 @@
-import { runFixtureSync } from "./effect-result";
+import { runAgentSync } from "./executor";
 import { executionReads } from "./execution-reads";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
@@ -151,7 +151,7 @@ export function requestLedger(
   return {
     commitBatch(actions: readonly LedgerAction.Append[], overrides: Partial<LedgerSession.Commit> = {}) {
       const row = SessionHandleStore.row(id);
-      return runFixtureSync(commitFoldBatch({
+      return runAgentSync(commitFoldBatch({
         sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: row.revision,
         actions: [...actions], consumeInboxIds: [], state: row.state, releaseLease: false,
         ...overrides,

@@ -10,7 +10,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { Effect } from "effect";
-import { runFixture } from "./effect-result";
+import { runAgent } from "./executor";
 import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
 import { createExecutor } from "../../src/executor";
 import { closeSessions, wakeSession } from "../../src/session-handle";
@@ -81,7 +81,7 @@ export async function reconstructionMain(
   const witness = reconstructionSnapshot();
   if (stage !== "wake") return witness;
   const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100_000, authorizeConfigure: allowConfigure };
-  return runFixture(Effect.scoped(withSessionServices(Effect.gen(function* () {
+  return runAgent(Effect.scoped(withSessionServices(Effect.gen(function* () {
     yield* wakeSession(
       reconstructionSession,
       (input) => Effect.gen(function* () {

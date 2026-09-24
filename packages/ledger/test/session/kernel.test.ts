@@ -1,4 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
+import { runLedgerSync } from "../helpers/effect";
 import { Effect, Either } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -82,7 +83,7 @@ afterEach(() => {
 
 function materialize(id: string) {
   return Either.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.either(
         SessionHandleStore.materialize({
           id,

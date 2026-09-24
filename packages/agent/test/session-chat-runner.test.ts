@@ -1,4 +1,4 @@
-import { runFixtureSync } from "./helpers/effect-result";
+import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
@@ -41,7 +41,7 @@ function input(
   boundary: SessionRunnerInput["boundary"],
   messages: SessionRunnerInput["messages"] = [{ role: "user", text: "initial" }],
 ): SessionRunnerInput {
-  const seeded = runFixtureSync(SessionHandleStore.materialize({
+  const seeded = runAgentSync(SessionHandleStore.materialize({
     id: "session-1", parentId: null, role: "resident", tools: [], system: { preset: "system", blocks: [] },
     policyGeneration: 0, actionId: "fixture-configure", at: 1,
   }));

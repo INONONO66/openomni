@@ -1,9 +1,8 @@
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import { testExecutor } from "./executor";
+import { runAgent, testExecutor } from "./executor";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { foldCrashMain, foldCrashPoint, foldCrashProof } from "./fold-crash";
 import { reconstructionCut, reconstructionPoint } from "./crash-reconstruction";
-import { runFixture } from "./effect-result";
 import { turnTestLayer, catalogLayer, runnerTestLayer } from "./service-layers";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
@@ -393,12 +392,12 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
     Storage.initialize({ dbPath });
     seedPolicy();
     const reconstruct = reconstructionPoint.safeParse(cut);
-    if (reconstruct.success) return runFixture(reconstructionCut(reconstruct.data, dbPath,
+    if (reconstruct.success) return runAgent(reconstructionCut(reconstruct.data, dbPath,
       (bodies, pending, proof) => stop(cut, bodies, pending, proof)));
     const fold = foldCrashPoint.safeParse(cut);
     if (fold.success) return foldCrashMain(fold.data, (bodies, pending, proof) => stop(cut, bodies, pending, proof));
     const point = crashPoint.parse(cut);
-    return runFixture(Effect.scoped(Effect.gen(function* () {
+    return runAgent(Effect.scoped(Effect.gen(function* () {
       const bodies: string[] = [];
       if (stage === "resume") {
         const fixture: SessionFixture = { observations, clock: () => 100_000, authorizeConfigure: allowConfigure };

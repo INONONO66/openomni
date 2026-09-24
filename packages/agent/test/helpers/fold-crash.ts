@@ -8,7 +8,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { Effect } from "effect";
-import { runFixture } from "./effect-result";
+import { runAgent } from "./executor";
 import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
 import { CompactionPredecessorError } from "../../src/compaction/successor";
 import { closeSessions, session } from "../../src/session-handle";
@@ -87,7 +87,7 @@ async function tamperedCut(stop: Stop) {
     state: hydrateSessionHistory(reconstructionSession).state,
   });
   const effect = FoldCheckpoint.Effect.parse(checkpoint.effect.value);
-  const receipt = await runFixture(recording.ledger.commit({
+  const receipt = await runAgent(recording.ledger.commit({
     ...checkpoint,
     effect: {
       encodingVersion: 1,
@@ -102,7 +102,7 @@ async function tamperedCut(stop: Stop) {
 
 async function contextCut(stop: Stop) {
   const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100, authorizeConfigure: allowConfigure };
-  return runFixture(Effect.scoped(withSessionServices(Effect.gen(function* () {
+  return runAgent(Effect.scoped(withSessionServices(Effect.gen(function* () {
   const handle = yield* session(
     {
       id: reconstructionSession,

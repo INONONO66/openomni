@@ -1,6 +1,6 @@
 import { runAgentSync } from "../test/helpers/executor";
 import { chatServices } from "../test/helpers/chat-services";
-import { type SessionFixture, withSessionServices } from "../test/helpers/session-services";
+import { allowConfigure, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
 import { catalogLayer, executorLayer } from "../test/helpers/service-layers";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import {
@@ -134,7 +134,7 @@ export function toolDispatch() {
 export async function roundTrip() {
   Storage.initialize({ dbPath: ":memory:", observationSink: events });
   seedPolicy();
-  const runtime: SessionFixture = { observations: events };
+  const runtime: SessionFixture = { observations: events, authorizeConfigure: allowConfigure };
   const scope = await runBenchEffect(Scope.make());
   const services = Context.pick(Llm)(await runBenchEffect(Layer.buildWithScope(chatLayer, scope)));
   const runner = createSessionChatRunner({

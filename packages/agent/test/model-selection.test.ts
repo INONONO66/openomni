@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { runFixtureSync } from "./helpers/effect-result";
+import { runAgentSync } from "./helpers/executor";
 import { LedgerAction, type PlainObject } from "@openomni/protocol";
 import { pinnedModelSelection } from "../src/model-selection";
 
@@ -9,7 +9,7 @@ afterEach(() => Storage.reset());
 function selection(actions: readonly LedgerAction.Node[], turnId: string) {
   Storage.reset();
   Storage.initialize({ dbPath: ":memory:" });
-  runFixtureSync(SessionHandleStore.materialize({ id: "session", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "initial", at: 1 }));
+  runAgentSync(SessionHandleStore.materialize({ id: "session", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "initial", at: 1 }));
   const adapter = Storage.get().actions;
   if (adapter === undefined) throw new Error("missing action adapter");
   for (const { ordinal, prevHash, actionHash, ...action } of actions) {

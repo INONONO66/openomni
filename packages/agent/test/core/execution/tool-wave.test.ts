@@ -3,7 +3,7 @@ import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
 import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
 import { PlainObjectSchema, type LedgerAction, type Message, type ToolExecutionContext } from "@openomni/protocol";
-import { Deferred, Effect, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { requestLedger } from "../../helpers/effect-g1";
 import { createTestAgent } from "../../helpers/effect-g2";
@@ -409,6 +409,28 @@ it("settles a defective fallback slot without interrupting its sibling or losing
   expect(built.turn.turnAssistant.message.parts).toMatchObject([
     { callID: "A", state: { status: "error" } },
     { callID: "B", state: { status: "completed", output: "survived" } },
+  ]);
+})));
+
+it("propagates a fallback body's interruption instead of settling the slot as an error", () => isolated(Effect.gen(function* () {
+  const input = runInput([]);
+  const state = createRunState(input);
+  const config: ObservedChatAgentConfig = {
+    events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    toolExecutor: (call) => call.id === "A"
+      ? Effect.interrupt
+      : Effect.succeed({ id: call.id, toolCallId: call.id, output: "settled" }),
+  };
+  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
+    onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined,
+  });
+  if (built.type !== "ready") throw new Error("turn unavailable");
+  built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
+  const exit = yield* Effect.exit(settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds")));
+  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(built.turn.turnAssistant.message.parts).toMatchObject([
+    { callID: "A", state: { status: "pending" } },
+    { callID: "B", state: { status: "pending" } },
   ]);
 })));
 
