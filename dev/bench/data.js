@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790262200100,
+  "lastUpdate": 1790284327283,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -74811,6 +74811,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 191836,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8820c1d9a9a7e37b90ec7a841feda36affe989b8",
+          "message": "perf(ledger): fold snapshot tails from one action window (#1189)\n\nsession-hydration/get-messages regressed +24% against main on CI because\nturnTails paged turn intents first, then re-read the same rows through the\ntail window, and every window row went through three zod safeParse passes.\n\n- ActionSubAdapter.turnWindowStart: one indexed ordinal lookup for the intent\n  preceding the newest count turns (0 when the window opens at session start)\n- turnTails: one ascending window from that ordinal feeding the fold; the\n  window carries the intents, so the separate intents loop and cursor lookup\n  are gone\n- foldTailAction: route by stored kind/phase so a row parses exactly one schema\n\nLocal paired bench vs bdabc64b: 190/193 us vs 240/240 us (was 268-316 us).\nSemantics unchanged: single-window fold, deliveries before their intent,\nNULL-safe terminal predicate; bounded-reads tests extended with the window\nstart contract.\n\nPart of #1108 / #930",
+          "timestamp": "2026-09-24T21:08:44Z",
+          "tree_id": "8f1b8f74682c1c6305ff3172109fc81916b2f0a1",
+          "url": "https://github.com/INONONO66/openomni/commit/8820c1d9a9a7e37b90ec7a841feda36affe989b8"
+        },
+        "date": 1790284326861,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 969,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1307,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1567947,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 386592,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6217124,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 156,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 177577,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 737589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 450158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11777145,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1441067,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 172358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 863400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 253948,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16074377,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 96,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 194663,
             "unit": "ns/op"
           }
         ]
