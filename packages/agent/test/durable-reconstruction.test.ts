@@ -15,6 +15,7 @@ import {
   reconstructionMain,
   reconstructionProcessMain,
   reconstructionWitness,
+  writeWitness,
 } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
@@ -299,3 +300,15 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
       rmSync(directory, { recursive: true, force: true });
     }
   }));
+
+test("writeWitness retries short pipe writes until every byte is written", () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ witness: "x".repeat(1000) }));
+  const chunks: number[] = [];
+  writeWitness(bytes, (chunk) => {
+    const written = Math.min(chunk.byteLength, 7);
+    chunks.push(written);
+    return written;
+  });
+  expect(chunks.reduce((sum, n) => sum + n, 0)).toBe(bytes.byteLength);
+  expect(chunks.length).toBe(Math.ceil(bytes.byteLength / 7));
+});

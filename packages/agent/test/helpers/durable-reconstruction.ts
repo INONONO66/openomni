@@ -143,9 +143,18 @@ export async function reconstructionProcessMain(
   }
 }
 
+/** Write the whole witness to fd 1: a pipe accepts short writes, and exit must not cut the tail. */
+export function writeWitness(bytes: Uint8Array, write: (chunk: Uint8Array) => number): void {
+  let offset = 0;
+  while (offset < bytes.byteLength) offset += write(bytes.subarray(offset));
+}
+
 if (import.meta.main)
   await reconstructionProcessMain(
     process.argv.slice(2),
-    (value) => writeSync(1, `${JSON.stringify(value)}\n`),
+    (value) =>
+      writeWitness(new TextEncoder().encode(`${JSON.stringify(value)}\n`), (chunk) =>
+        writeSync(1, chunk),
+      ),
     (code) => process.exit(code),
   );
