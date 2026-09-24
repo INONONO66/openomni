@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { ForeignFailure } from "../src/errors";
@@ -222,6 +222,7 @@ it("a gateway answer cannot borrow another live owner's lease", () => persisted(
   const gateway = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 200,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* failure(gateway.answer(ownerAnswer(request)))).toMatchObject({
     _tag: "CommitFailed", error: {
@@ -235,6 +236,7 @@ it("a gateway answer cannot borrow another live owner's lease", () => persisted(
   const dormant = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 40_000,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* dormant.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");

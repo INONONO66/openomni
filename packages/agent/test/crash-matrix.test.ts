@@ -1,6 +1,6 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import type { ExecutionError } from "../src/errors";
 import { Effect, Either } from "effect";
@@ -13,7 +13,9 @@ import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
 import { closeSessions, wakeSession } from "../src/session-handle";
-import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/session-lifecycle/history";
+import { killAtCrashBarrier } from "./helpers/crash-channel";
+import { corruptCheckpoint, reconstructionPoint, reconstructionRecovery } from "./helpers/crash-reconstruction";
 import { bounded } from "./helpers/bounded";
 import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
 import { compiledPolicy } from "./helpers/compiled-policy";
@@ -65,28 +67,10 @@ function terminalClass(action: LedgerAction.Node) {
 const SPAWNED_CHILD_MS = 30_000;
 
 async function crash(point: CrashPoint, dbPath: string, stage = "initial"): Promise<Witness> {
-  const child = Bun.spawn([process.execPath, worker, point, dbPath, stage], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  try {
-    const [code, stdout, stderr] = await bounded(
-      Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]),
-      point,
-      SPAWNED_CHILD_MS,
-    );
-    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-    const witness = crashWitness.parse(JSON.parse(stdout));
-    expect(witness.crashPoint).toBe(point);
-    return witness;
-  } finally {
-    child.kill();
-  }
+  const stdout = await killAtCrashBarrier(worker, [point, dbPath, stage]);
+  const witness = crashWitness.parse(JSON.parse(stdout));
+  expect(witness.crashPoint).toBe(point);
+  return witness;
 }
 
 function recoverExecutor(witness: Witness) {
@@ -101,6 +85,12 @@ function recoverExecutor(witness: Witness) {
   yield* executor.recover();
   expect(actions()).toEqual(recovered);
   switch (witness.crashPoint) {
+    case "compaction_summary_before_boundary_commit":
+      expect(witness.bodies).toEqual(["summary"]);
+      expect(before.filter((action) => action.kind === "compaction" && effectOf(action).phase === "boundary")).toEqual([]);
+      expect(results("compaction").map(effectOf)).toMatchObject([{ terminal: "interrupted", recovery: { proof: "absent" } }]);
+      expect(foldSessionHistory(sessionId, recovered)).toEqual(history);
+      return "not_durable";
     case "llm_body_before_attempt_result_commit":
       expect(witness.bodies).toEqual(["llm"]);
       expect(witness.pending).toMatchObject({ kind: "attempt", effect: { terminal: "executed" } });
@@ -185,6 +175,7 @@ function recoverAdmission(witness: Witness) {
   const calls = { model: 0 };
   let deliveries = 0;
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     observations,
     clock: () => 100_000,
     dispatchOutbound: ({ message }) => Effect.gen(function* () {
@@ -316,7 +307,7 @@ function recoverTurn(witness: Witness, resumeCount: number, onModel: () => Effec
   const original = crashWitness.shape.openTurns.element.parse(witness.openTurns[0]);
   expect(witness.openTurns).toHaveLength(1);
   const calls = { model: 0 };
-  const runtime: SessionRuntime = { observations, clock: () => 200_000 };
+  const runtime: SessionRuntime = { observations, clock: () => 200_000, authorizeConfigure: allowConfigure };
   const runner = countingRunner(runtime, calls, onModel);
   try {
     const terminals = yield* wakeAfterCrash(witness, runner, runtime, before);
@@ -427,9 +418,13 @@ function recoverStaleOwner(witness: Witness) {
     return undefined;
   }));
   expect(refusals).toBe(1);
+  expect(results("attempt").filter((action) => action.parentId === staleAction.parentId).map(effectOf)).toMatchObject([
+    { terminal: "outcome_unknown", recovery: { site: "crash", rawSettled: false } },
+  ]);
+  // Write disposition and ambiguous effect disposition are independent assertions.
   // The typed rejection is atomic: the stale writer's effect row never appears.
   expect(actions().some((action) => action.id === staleAction.id)).toBe(false);
-  return "rejected";
+  return "lost";
   });
 }
 
@@ -505,6 +500,7 @@ function recoverOutbound(witness: Witness, dbPath: string) {
   let deliveries = 0;
   const calls = { model: 0 };
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     observations,
     clock: () => 200_000,
     dispatchOutbound: ({ message }) => Effect.gen(function* () {
@@ -585,6 +581,78 @@ async function crashCell(point: CrashPoint, dbPath: string) {
   return resumed;
 }
 
+function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, witness: Witness, dbPath: string) {
+  return Effect.gen(function* () {
+    Storage.reset(); Storage.initialize({ dbPath });
+    const before = actions();
+    const full = foldHistoryState(sessionId, before);
+    const projection = foldSessionHistory(sessionId, before);
+    if (point !== "captured_generation_missing_after_restart") {
+      expect(witness.fold?.checkpointId).not.toBeNull();
+      expect(hydrateSessionHistory(sessionId).state).toEqual(full);
+    }
+    Storage.reset();
+    if (point === "fold_checkpoint_tampered_before_load") corruptCheckpoint(dbPath);
+    const reopened = Bun.spawn([process.execPath, new URL("./helpers/crash-reconstruction.ts", import.meta.url).pathname, point, dbPath], {
+      stdin: "ignore", stdout: "pipe", stderr: "pipe",
+    });
+    const [code, stdout, stderr] = yield* Effect.promise(() => bounded(Promise.all([
+      reopened.exited, new Response(reopened.stdout).text(), new Response(reopened.stderr).text(),
+    ]), "fresh reconstruction process", SPAWNED_CHILD_MS));
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    const recovered = reconstructionRecovery.parse(JSON.parse(stdout));
+    if (point === "fold_checkpoint_tampered_before_load") {
+      expect(recovered).toMatchObject({ refusal: "FoldCheckpointIntegrityError", runnerCount: 0, loaded: null, rangeReads: [] });
+      Storage.initialize({ dbPath });
+      expect(Storage.get().actions?.verifyChain(sessionId).kind).toBe("intact");
+      return "rejected";
+    }
+    if (point === "captured_generation_missing_after_restart") {
+      expect(recovered).toMatchObject({ refusal: "GenerationUnavailable", runnerCount: 0, loaded: null, captures: [1] });
+      return "rejected";
+    }
+    expect(recovered.refusal).toBeNull();
+    expect(recovered.loaded?.state).toEqual(full);
+    expect(recovered.loaded?.history).toEqual(projection);
+    expect(recovered.rangeReads.every((read) => read.limit <= 256 && read.cursor > 0)).toBe(true);
+    Storage.initialize({ dbPath });
+    if (point === "fold_checkpoint_committed_before_wake") {
+      expect(before.at(-1)?.ordinal).toBe(257);
+      expect(before.at(-1)?.kind).toBe("fold.checkpoint");
+    }
+    if (point === "same_id_result_after_checkpoint_before_wake") {
+      expect(projection.map((message) => message.info.id)).toEqual(["same-id"]);
+      expect(projection[0]?.parts).toMatchObject([{ type: "text", text: "after checkpoint" }]);
+    }
+    if (point === "context_restore_checkpoint_committed_before_publish") {
+      expect(witness.bodies).toEqual(["summary"]);
+      expect(projection.map((message) => message.info.id)).toEqual(["same-id", "answer"]);
+      expect(witness.fold?.publicationCount).toBe(0);
+    }
+    if (point === "open_tool_checkpoint_before_terminal") {
+      expect(witness.bodies).toEqual(["tool"]);
+      expect(full.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool")).toMatchObject([
+        { callID: "open-call", state: { status: "pending" } },
+      ]);
+      expect(readFileSync(`${dbPath}.effect`, "utf8")).toBe("write-once\n");
+      const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
+      const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
+      yield* executor.recover();
+      expect(results("tool").map(effectOf)).toMatchObject([{ terminal: "outcome_unknown", recovery: { site: "crash", rawSettled: false } }]);
+      const settled = actions();
+      yield* executor.recover();
+      expect(actions()).toEqual(settled);
+      expect(readFileSync(`${dbPath}.effect`, "utf8")).toBe("write-once\n");
+      expect(hydrateSessionHistory(sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
+      return "lost";
+    }
+    expect(recovered.runnerCount).toBe(1);
+    expect(recovered.runnerHistory).toEqual(projection);
+    expect(hydrateSessionHistory(sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
+    return "resumed_without_reexecution";
+  });
+}
+
 test("the authoritative crash matrix names every crash point once", () => {
   expect(matrix.version).toBe(2);
   expect(matrix.rows.map((row) => row.crashPoint).sort()).toEqual([...crashPoint.options].sort());
@@ -599,9 +667,14 @@ for (const row of matrix.rows) {
     try {
       const result = await isolated(Effect.scoped(Effect.gen(function* () {
         const dbPath = join(directory, "kernel.sqlite");
-        if (row.crashPoint === "fiber_exit_after_execute_before_action_commit")
+        if (row.crashPoint === "fiber_exit_after_execute_before_action_commit") {
+          expect(yield* Effect.promise(() => fiberCrashCell(`${dbPath}.receipt`, "present"))).toBe("resumed_without_reexecution");
           return yield* Effect.promise(() => fiberCrashCell(dbPath));
+        }
         const witness = yield* Effect.promise(() => crashCell(row.crashPoint, dbPath));
+        const reconstruction = reconstructionPoint.safeParse(row.crashPoint);
+        if (reconstruction.success)
+          return yield* recoverReconstructionCell(reconstruction.data, witness, dbPath);
         Storage.reset();
         Storage.initialize({ dbPath });
         const persisted = actions();

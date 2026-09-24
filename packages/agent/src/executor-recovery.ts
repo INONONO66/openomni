@@ -160,8 +160,8 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
     );
   }
 
-  /** Provider attempts carry the external effect; an open one makes the
-   * logical llm ambiguous, while settled attempts leave only the local commit. */
+  /** An open attempt or an already visible prefix cannot be proven absent.
+   * Only non-visible settled attempts leave a purely local commit to recover. */
   function settleLlm(action: LedgerAction.Node) {
     return Effect.gen(function* () {
       let ambiguous = false;
@@ -172,6 +172,7 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
         const settled = terminal(attempt.id);
         if (settled !== undefined) {
           lastSettled = settled;
+          ambiguous ||= hasVisiblePrefix(settled);
           continue;
         }
         ambiguous = true;
@@ -199,6 +200,13 @@ export function createExecutionRecovery(options: ExecutorOptions, record: Record
   }
 
   return { recover };
+}
+
+function hasVisiblePrefix(action: LedgerAction.Node): boolean {
+  const evidence = object(object(action.effect.value).evidence);
+  if (evidence.visibleOutput === true) return true;
+  return Array.isArray(evidence.failures) &&
+    evidence.failures.some((failure) => object(failure).visibleOutput === true);
 }
 
 function* operationRecords(

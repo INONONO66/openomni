@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -46,7 +46,7 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
       const second = yield* Effect.exit(alarms.cancel(alarmId, rearmSessionId, 100_000));
       expect(second._tag).toBe("Failure");
       const calls = { model: 0 };
-      const runtime: SessionRuntime = { observations: { publish: () => undefined }, clock: () => 200_000 };
+      const runtime: SessionRuntime = { observations: { publish: () => undefined }, clock: () => 200_000, authorizeConfigure: allowConfigure };
       const runner = countingRunner(runtime, calls);
       yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(rearmSessionId, runner, fixture), fixture); });
       expect(calls.model).toBe(1);

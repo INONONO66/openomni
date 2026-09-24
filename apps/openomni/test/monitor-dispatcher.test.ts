@@ -25,6 +25,7 @@ import { seedKernelPolicyRows } from "../src/policy-seed";
 import { createMonitorTool } from "../src/tools/monitor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { runEffect } from "./helpers/effect";
+import { allowConfigure } from "./helpers/generation-services";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -183,7 +184,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
     const storage = Storage.get();
     if (storage.alarms === undefined) throw new Error("fixture alarm storage missing");
     seedKernelPolicyRows();
-    const runtime: SessionRuntime = {};
+    const runtime: SessionRuntime = { authorizeConfigure: allowConfigure };
     const scope = await runEffect(Scope.make());
     const definitions = [eraseTool(monitorTool)];
     let calls = 0;

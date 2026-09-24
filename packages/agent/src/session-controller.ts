@@ -6,7 +6,7 @@ import type { SessionController, SessionControllerLifecycle, ResolvedSessionRunt
 import { toolSnapshot, internalOrigin, turnTerminalAction } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { createSessionTurn } from "./session-turn";
-import { createSessionAdmission, commitSessionRequest } from "./session-admission";
+import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session-admission";
 import { createSessionConfiguration } from "./session-configuration";
 import { dispatchSessionOutbound } from "./session-outbound";
 import { inspectSession } from "./session-lifecycle/inspect";
@@ -197,18 +197,24 @@ export function createController(
       });
     }
 
-    function driveInbox(pending: readonly Inbox.Row[]): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
+    function driveInbox(): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
       return Effect.gen(function* () {
-        if (pending.length === 0) return { stop: true };
-        if (SessionHandleStore.row(sessionId).state === "interrupted") {
-          const resume = pending.find((item) => item.kind === "resume");
-          if (resume === undefined) return { stop: true };
-          return { stop: false, result: yield* admission.resumeInterrupted(resume) };
+        const decision = decideSessionAdmission({
+          row: SessionHandleStore.row(sessionId),
+          pending: SessionHandleStore.pendingInbox(sessionId),
+          open: SessionHandleStore.latestOpenTurn(sessionId),
+          terminal: SessionHandleStore.latestTurnTerminal(sessionId),
+        });
+        switch (decision.kind) {
+          case "stop": return { stop: true };
+          case "refused": return yield* new ForeignFailure({ operation: "session.admission", cause: "invalid_state" });
+          case "start": return { stop: false, result: yield* admission.startTurn() };
+          case "recover": return { stop: false, result: yield* admission.resumeTurn(decision.open) };
+          case "resume": return { stop: false, result: yield* admission.resumeInterrupted(decision.item) };
+          case "consume":
+            yield* admission.consumeNoopInbox(decision.items);
+            return { stop: false };
         }
-        const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
-        if (firstPrompt === 0) return { stop: false, result: yield* admission.startTurn() };
-        yield* admission.consumeNoopInbox(firstPrompt > 0 ? pending.slice(0, firstPrompt) : pending);
-        return { stop: false };
       });
     }
 
@@ -220,9 +226,7 @@ export function createController(
             state.fence = yield* acquire(SessionHandleStore.row(sessionId).leaseFence);
           yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, true);
           }
-          const open = SessionHandleStore.latestOpenTurn(sessionId);
-          if (open !== undefined) { result = yield* admission.resumeTurn(open); continue; }
-          const next = yield* driveInbox(SessionHandleStore.pendingInbox(sessionId));
+          const next = yield* driveInbox();
           if (next.stop) break;
           result = next.result ?? result;
         }

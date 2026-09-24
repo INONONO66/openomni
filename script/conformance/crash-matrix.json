@@ -88,8 +88,43 @@
     },
     {
       "crashPoint": "owner_reclaimed_before_stale_transcript_flush",
+      "recovery": "lost",
+      "note": "Successor fence rejects the stale result atomically; separately, executor recovery settles the old attempt outcome_unknown without replay. This does not prove shared-lineage alias rejection."
+    },
+    {
+      "crashPoint": "compaction_summary_before_boundary_commit",
+      "recovery": "not_durable",
+      "note": "B6 pre-boundary fault variant: summary returned but no boundary/result committed; recovery cannot publish the uncommitted summary."
+    },
+    {
+      "crashPoint": "fold_checkpoint_committed_before_wake",
+      "recovery": "resumed_without_reexecution",
+      "note": "R1 crosswalk to imported draft ID: exact 256-action threshold commits its checkpoint before owner exit; fresh-process bounded hydration equals the full oracle."
+    },
+    {
+      "crashPoint": "context_restore_checkpoint_committed_before_publish",
+      "recovery": "resumed_without_reexecution",
+      "note": "R2: selected context restoration result and fold checkpoint commit before the executor releases publication; exact projection survives fresh-process hydration."
+    },
+    {
+      "crashPoint": "fold_checkpoint_tampered_before_load",
       "recovery": "rejected",
-      "note": "Cut at the model attempt result commit after its body returns while owner A holds the lease. After expiry a successor acquires a higher fence; A's commit with its old fence is rejected as a typed stale outcome at commit time, atomically, leaving no partial row. B settles the original turn once."
+      "note": "R3 crosswalk to imported draft ID: SIGKILL after a valid checkpoint, then deliberate seed-hash corruption with intact action chain; fresh wake refuses FoldCheckpointIntegrityError with zero runner entries and zero range reads. Not a power-loss simulation."
+    },
+    {
+      "crashPoint": "same_id_result_after_checkpoint_before_wake",
+      "recovery": "resumed_without_reexecution",
+      "note": "R4: a post-checkpoint snapshot updates the existing message identity; fresh bounded state and projection equal the complete action-tree oracle exactly."
+    },
+    {
+      "crashPoint": "open_tool_checkpoint_before_terminal",
+      "recovery": "lost",
+      "note": "R5: checkpoint retains the entered tool intent before its terminal; recovery retains the captured identity and records outcome_unknown without re-entering the tool."
+    },
+    {
+      "crashPoint": "captured_generation_missing_after_restart",
+      "recovery": "rejected",
+      "note": "R6 fault cell: after killing an open generation-one turn with generation two selected, the fresh executable provider omits the captured generation; GenerationUnavailable refuses before runner entry, never substituting generation two."
     }
   ]
 }

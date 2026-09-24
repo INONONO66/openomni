@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { Inbox, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
@@ -217,6 +217,7 @@ beforeEach(() => {
   nextId = 0;
   sink = new TestObservationSink();
   runtime = {
+    authorizeConfigure: allowConfigure,
     observations: sink,
     clock: () => now,
     entropy: () => `session-test-id-${++nextId}`,
@@ -1716,6 +1717,39 @@ describe("durable session handle", () => {
       }),
     ));
 
+  test("immediate configure interrupts the old turn before selecting and resuming the new generation", () =>
+    testProgram(Effect.gen(function* () {
+      const entered = signal<void>();
+      const inputs: SessionRunnerInput[] = [];
+      const runner: SessionRunner = (input) => Effect.gen(function* () {
+        inputs.push(input);
+        if (inputs.length === 1) {
+          entered.resolve();
+          yield* Effect.never;
+        }
+        return { kind: "result", text: "resumed" };
+      });
+      const handle = yield* withSessionServices(session(residentOptions("immediate-configure", runner), runtime), runtime);
+      const running = yield* Effect.fork(handle.prompt("start"));
+      yield* awaitSignal(bounded(entered.promise, "old generation entry"));
+      yield* handle.interrupt();
+      expect(yield* awaitSignal(bounded(running, "interrupted old turn"))).toMatchObject({ kind: "interrupted" });
+      expect(handle.get().state).toBe("interrupted");
+      yield* handle.tools.add([tool("search")]);
+      expect(inputs).toHaveLength(1);
+      yield* handle.resume();
+      expect(inputs.map((input) => [input.toolsGeneration, input.resumeCount])).toEqual([[1, 0], [2, 1]]);
+      expect(inputs[1]?.tools.map((entry) => entry.name)).toEqual(["read", "search"]);
+      const tree = sessionTree(handle.id);
+      const terminal = tree.find((action) => SessionHandleStore.turnTerminal(action)?.kind === "interrupted");
+      const selected = tree.find((action) => action.kind === "session.configure" && action.ordinal > 1);
+      const resumed = tree.find((action) => SessionHandleStore.turnIntent(action)?.toolsGeneration === 2);
+      if (terminal === undefined || selected === undefined || resumed === undefined) throw new Error("missing immediate configure boundary");
+      expect(terminal.ordinal).toBeLessThan(selected.ordinal);
+      expect(selected.ordinal).toBeLessThan(resumed.ordinal);
+      expect(SessionHandleStore.inboxRows(handle.id).map((item) => item.kind)).toEqual(["prompt", "interrupt", "resume"]);
+    })));
+
   test("rejects an existing tool name before committing a configure action", () =>
     testProgram(
       Effect.gen(function* () {
@@ -1824,6 +1858,7 @@ describe("durable session handle", () => {
             return { kind: "result", text: "complete" };
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = {
+          authorizeConfigure: allowConfigure,
           observations: sink,
           clock: runtime.clock,
           entropy: runtime.entropy,

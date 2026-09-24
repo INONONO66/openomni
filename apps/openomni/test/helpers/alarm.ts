@@ -4,7 +4,7 @@ import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/led
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
 import { runEffect, acquireSyncEffect, runSyncEffect } from "./effect";
-import { generationServices } from "./generation-services";
+import { allowConfigure, generationServices } from "./generation-services";
 
 type AlarmWorker = Effect.Effect.Success<ReturnType<typeof createAlarmWorker>>;
 
@@ -56,7 +56,7 @@ export function alarmFixture(
   const errors: Error[] = [];
   const wakes: string[] = [];
   const services = acquireSyncEffect(generationServices({ clock: () => at, observations: events }));
-  const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
+  const requests = runSyncEffect(createSessionRequests({ authorizeConfigure: allowConfigure }).pipe(Effect.provide(services)));
   const workerFixture = alarmWorkerFixture({
     alarms: storage.alarms,
     observations: events,

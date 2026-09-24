@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
@@ -59,6 +59,7 @@ test("gateway request port commits physical bindings and receiving intake under 
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
     onInboxCommitted: (ids) => {
       expect(SessionHandleStore.row("source").leaseOwner).toBeNull();
       received.push(...ids);
@@ -107,6 +108,7 @@ test("gateway timeout resolves the original action without creating conversation
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => now,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   yield* port.open(opening("first"));
   yield* port.timeout("first", 199);
@@ -175,6 +177,7 @@ test("request opening uses its original turn generation, never a later catalog",
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* port.open(opening("pinned"))).toMatchObject({
     turnId: "turn",
@@ -227,6 +230,7 @@ test("gateway port refuses missing original actions and mismatched physical rece
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
+    authorizeConfigure: allowConfigure,
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing"))))).toBe(true);
   yield* port.open(opening("first"));

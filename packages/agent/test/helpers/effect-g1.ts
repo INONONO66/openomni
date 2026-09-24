@@ -1,7 +1,7 @@
 import { executionReads } from "./execution-reads";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./executor";
-import type { SessionFixture as SessionRuntime } from "./session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Cause, Effect, Exit } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -64,7 +64,7 @@ export function requestLedger(input: { id?: string; clock?: () => number; onRequ
       sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: SessionHandleStore.row(id).revision, consumeInboxIds: [], state: "running", releaseLease: false,
       actions: [{ id: turnId, sessionId: id, parentId: `${id}:configure`, kind: "turn", intent: { encodingVersion: 1, value: { phase: "intent", resultId: `${id}:result`, inboxIds: [], resumeCount: 0, boundaryActionId: null, toolsGeneration: generation.generation, toolsHash: generation.toolsHash, systemHash: generation.systemHash, policyGeneration: 1 } }, effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: clock(), irreversible: true }],
     });
-    const runtime: SessionRuntime = { clock, observations: { publish: () => undefined }, requestDomainRevisions: input.domainRevisions };
+    const runtime: SessionRuntime = { clock, observations: { publish: () => undefined }, requestDomainRevisions: input.domainRevisions, authorizeConfigure: allowConfigure };
     const ledger: ExecutionLedger = {
       ...executionReads(id),
       commit: (action: LedgerAction.Append) => Effect.gen(function* () {

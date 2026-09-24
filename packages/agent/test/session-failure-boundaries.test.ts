@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
@@ -10,6 +10,7 @@ import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
 
 const runtime: SessionRuntime = {
+  authorizeConfigure: allowConfigure,
   observations: { publish: (): void => undefined },
   clock: (): number => 100,
   scheduleHeartbeat: (): (() => void) => (): void => undefined,

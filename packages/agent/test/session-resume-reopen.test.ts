@@ -2,7 +2,7 @@ import { PlainValueSchema } from "@openomni/protocol";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -28,6 +28,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
           const directory = mkdtempSync(join(tmpdir(), "937-resume-"));
           const dbPath = join(directory, "chat.sqlite");
           let runtime: SessionRuntime = {
+            authorizeConfigure: allowConfigure,
             observations: { publish: () => undefined },
             clock: () => 1000,
           };
@@ -182,7 +183,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             yield* awaitSignal(closeSessions(runtime));
             Storage.reset();
             Storage.initialize({ dbPath });
-            runtime = { observations: { publish: () => undefined }, clock: () => 2000 };
+            runtime = { observations: { publish: () => undefined }, clock: () => 2000, authorizeConfigure: allowConfigure };
             yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
             const recovered = inputs.at(-1);
             if (recovered === undefined) throw new Error("missing recovered invocation");

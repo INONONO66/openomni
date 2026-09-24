@@ -1,6 +1,6 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { isolated } from "./helpers/isolated";
@@ -21,6 +21,7 @@ function setup() {
     const suspended = Promise.withResolvers<void>();
     const effects: string[] = [];
     runtime = {
+      authorizeConfigure: allowConfigure,
       clock: () => now,
       entropy: () => crypto.randomUUID(),
       observations: {

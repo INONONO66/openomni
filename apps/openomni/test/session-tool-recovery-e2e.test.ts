@@ -1,6 +1,6 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
-import { generationServices } from "./helpers/generation-services";
+import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { observationService } from "../../../packages/agent/test/helpers/service-layers";
 import { beforeEach, expect, test } from "bun:test";
 import { acquireEffect, runEffect } from "./helpers/effect";
@@ -75,7 +75,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     });
     let saved = false;
     const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
-    const runtime: SessionRuntime = {};
+    const runtime: SessionRuntime = { authorizeConfigure: allowConfigure };
     const observations = observationService({
         publish(event, payload) {
           Bus.publish(event, payload);

@@ -13,6 +13,7 @@ import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "..
 import { installShutdownHandlers } from "../src/index";
 import { Clock, GenerationLayers } from "@openomni/agent";
 import { AppLifecycleFailure } from "../src/runtime";
+import { allowConfigure } from "./helpers/generation-services";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
@@ -117,6 +118,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     render: (_args, output) => output,
   }));
   const sessionRuntime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     closeGraceMs: 0,
     onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };

@@ -10,6 +10,7 @@ import type { RunInput, Sink } from "@openomni/llm";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
+import { allowConfigure } from "./helpers/generation-services";
 
 const directory = mkdtempSync(join(tmpdir(), "openomni-resident-tool-wiring-"));
 
@@ -57,6 +58,7 @@ test("a resident tool call is executed and observed through the durable executor
       },
     },
     sessionRuntime: {
+      authorizeConfigure: allowConfigure,
       observations,
       clock: () => 10,
       entropy: (() => {

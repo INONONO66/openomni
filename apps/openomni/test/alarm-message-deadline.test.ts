@@ -4,7 +4,7 @@ import { createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { Effect } from "effect";
-import { generationServices } from "./helpers/generation-services";
+import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { runEffect, acquireSyncEffect, runSyncEffect } from "./helpers/effect";
 import { alarmFixture } from "./helpers/alarm";
 
@@ -23,7 +23,7 @@ for (const replyFirst of [false, true]) {
       });
       let at = 1000;
       const services = acquireSyncEffect(generationServices({ clock: () => at, observations: fixture.events }));
-      const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
+      const requests = runSyncEffect(createSessionRequests({ authorizeConfigure: allowConfigure }).pipe(Effect.provide(services)));
       try {
         await runEffect(
           SessionHandleStore.materialize({

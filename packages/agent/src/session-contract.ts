@@ -125,7 +125,8 @@ export interface SessionRuntime {
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly processId?: string;
-  readonly authorizeConfigure?: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
+  /** Required pinned pre-policy authority for `session.configure`; there is no allow fallback. */
+  readonly authorizeConfigure: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,

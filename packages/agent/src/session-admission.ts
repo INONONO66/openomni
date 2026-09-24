@@ -38,6 +38,48 @@ import { hydrateSessionHistory } from "./session-lifecycle/history";
 
 type AdmissionError = SessionError;
 
+interface AdmissionSnapshot {
+  readonly row: LedgerSession.Row;
+  readonly pending: readonly Inbox.Row[];
+  readonly open?: SessionHandleStore.OpenTurn;
+  readonly terminal?: ReturnType<typeof SessionHandleStore.latestTurnTerminal>;
+}
+
+type AdmissionDecision =
+  | { readonly kind: "stop" | "refused" | "start" }
+  | { readonly kind: "recover"; readonly open: SessionHandleStore.OpenTurn }
+  | { readonly kind: "resume"; readonly item: Inbox.Row }
+  | { readonly kind: "consume"; readonly items: readonly Inbox.Row[] };
+
+/** Pure routing of the durable S/T/I views; dispatch remains behind the ledger CAS. */
+export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDecision {
+  const { row, pending, open, terminal } = snapshot;
+  if (pending.some((item) => item.sessionId !== row.id || item.status !== "pending")) return { kind: "refused" };
+  if (open !== undefined && open.action.sessionId !== row.id) return { kind: "refused" };
+  if (terminal !== undefined && terminal.action.sessionId !== row.id) return { kind: "refused" };
+  switch (row.state) {
+    case "running":
+      return open === undefined ? { kind: "refused" } : { kind: "recover", open };
+    case "interrupted": {
+      if (open !== undefined) return { kind: "recover", open };
+      const item = pending.find((input) => input.kind === "resume");
+      if (item === undefined) return { kind: "stop" };
+      return terminal?.effect.kind === "interrupted"
+        ? { kind: "resume", item }
+        : { kind: "consume", items: [item] };
+    }
+    case "idle":
+      return open === undefined ? decideIdleInbox(pending) : { kind: "refused" };
+  }
+}
+
+function decideIdleInbox(pending: readonly Inbox.Row[]): AdmissionDecision {
+  if (pending.length === 0) return { kind: "stop" };
+  const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
+  if (firstPrompt === 0) return { kind: "start" };
+  return { kind: "consume", items: firstPrompt > 0 ? pending.slice(0, firstPrompt) : pending };
+}
+
 export function createSessionAdmission(
   sessionId: string,
   runtime: ResolvedSessionRuntime,
@@ -242,16 +284,18 @@ export function createSessionAdmission(
       const current = SessionHandleStore.row(sessionId);
       state.fence = yield* acquire(current.leaseFence);
       return yield* Effect.scoped(Effect.gen(function* () {
-        requireCompactionIntent(SessionHandleStore.actionById(compactionId));
+        const source = requireCompactionIntent(SessionHandleStore.actionById(compactionId));
+        if (source.sessionId !== sessionId) return yield* new ForeignFailure({ operation: "session.restore", cause: "foreign_compaction" });
         const record = recordedCompaction(compactionId, SessionHandleStore.resultFor(sessionId, compactionId));
         const history = hydrateSessionHistory(sessionId).history;
+        const restored = restoredContextProjection(history, compactionId, record);
         const projectionHash = canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(history) });
         const captured = yield* runtime.generations.capture({ sessionId, generation: SessionHandleStore.latestGenerationFor(sessionId).generation });
         const executor = yield* captured.provide(createExecutor({
           ledger: createExecutionLedger(),
           identity: { sessionId, role: current.role, parentActionId: compactionId },
         })).pipe(Effect.provide(runtime.services));
-        return yield* captured.provide(executor.run(restoreContextRequest(compactionId, projectionHash), () => Effect.succeed(restoredContextProjection(history, compactionId, record))));
+        return yield* captured.provide(executor.run(restoreContextRequest(compactionId, projectionHash), () => Effect.succeed(restored)));
       })).pipe(Effect.onExit(() => releaseHeldLease().pipe(Effect.orDie)));
     });
   }
@@ -284,7 +328,7 @@ export function createSessionAdmission(
     return Effect.gen(function* () {
       yield* awaitRetainedRunner();
       const terminal = SessionHandleStore.latestTurnTerminal(sessionId);
-      if (terminal === undefined) {
+      if (terminal?.effect.kind !== "interrupted") {
         yield* consumeNoopInbox([item]);
         return undefined;
       }
@@ -318,7 +362,8 @@ function requestIdentity(payload: SessionTransition.Payload): string {
     case "request.open": return payload.request.requestId;
     case "request.answer": return payload.answer.requestId;
     case "request.delivery": return payload.receipt.requestId;
-    default: return payload.requestId;
+    case "request.timeout":
+    case "request.cancel": return payload.requestId;
   }
 }
 

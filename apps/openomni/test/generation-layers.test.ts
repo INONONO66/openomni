@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
+import { allowConfigure } from "./helpers/generation-services";
 
 test("AppLive retains distinct same-number session generations", async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:" });
@@ -70,7 +71,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
       yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
       seedKernelPolicyRows();
-      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, {});
+      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { authorizeConfigure: allowConfigure });
     }));
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;

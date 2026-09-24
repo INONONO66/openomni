@@ -1,7 +1,7 @@
 import { runFixtureSync } from "./effect-result";
 import { executionReads } from "./execution-reads";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import type { SessionFixture as SessionRuntime } from "./session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
 import { Effect, Either } from "effect";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { ExecutionLedger } from "../../src/executor";
@@ -107,6 +107,7 @@ export function requestLedger(
     if (!opened.ok) throw new Error("test turn refused");
   }
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     clock,
     observations: collector(),
     requestDomainRevisions: input.domainRevisions,

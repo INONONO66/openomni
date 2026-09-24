@@ -22,6 +22,7 @@ import {
   scopeObservation,
 } from "@openomni/agent";
 import { Gateway as GatewayProtocol } from "@openomni/protocol";
+import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
@@ -310,7 +311,7 @@ export function createResidentGateway(
   return Effect.gen(function* () {
     registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
     const externalRun = yield* createIngressExecutor();
-    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({}));
+    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers) }));
     return createGatewayRouter({
       ...ports,
       transaction: channelTransaction,

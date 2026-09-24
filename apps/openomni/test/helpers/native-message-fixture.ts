@@ -9,7 +9,7 @@ import { Effect, Exit, Scope } from "effect";
 import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
 import { commitMessageInbox, messageMaterialization, prepareMessage } from "../../src/composition/message-session";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
-import { generationServices } from "./generation-services";
+import { allowConfigure, generationServices } from "./generation-services";
 import { ToolCatalog } from "@openomni/agent";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/send-message";
@@ -24,6 +24,7 @@ export async function nativeMessageFixture(role: LedgerSession.Role, messaging: 
   const scope = await runEffect(Scope.make());
   const sessionId = "sender";
   const runtime: SessionRuntime = {
+    authorizeConfigure: allowConfigure,
     dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), () => 100),
   };
   const context = acquireSyncEffect(generationServices({ clock: () => 100 }));

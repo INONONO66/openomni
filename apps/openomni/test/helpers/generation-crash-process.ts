@@ -7,6 +7,7 @@ import { acquireAppResource, gatewayRuntime, runAppEffect } from "../../src/gate
 import { AppScope } from "../../src/runtime";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { auditBundle } from "./bundle-fixture";
+import { allowConfigure } from "./generation-services";
 
 const [dbPath, auditPath] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
 const audit = auditBundle(auditPath);
@@ -22,7 +23,7 @@ await acquireAppResource(runtime, Effect.gen(function* () {
   const held = yield* Deferred.make<void>();
   const handle = yield* session({ id: "crash-session", role: "resident", bundles: ["audit-log"],
     runner: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(held)), Effect.as({ kind: "result" as const, text: "unused" })),
-  }, {});
+  }, { authorizeConfigure: allowConfigure });
   yield* Effect.forkIn(handle.prompt("hold g1"), yield* AppScope);
   yield* Deferred.await(entered);
   yield* handle.system.blocks.set([{ id: "next", source: "test", content: "generation-two" }]);

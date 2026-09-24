@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
 import { prepareChatFixture } from "../../helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
 import { Effect, Queue } from "effect";
 import { expect, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
@@ -19,6 +19,7 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
   return isolated(Effect.scoped(Effect.gen(function* () {
     const runtime: SessionRuntime = {
       observations: { publish: () => undefined },
+      authorizeConfigure: allowConfigure,
       ...(mode === "stall" ? { openIntent: () => Effect.succeed([{ actionId: "unanswered-message", kind: "message" as const }]) } : {}),
     };
     const rows: PolicyRow.Row[] = SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }));

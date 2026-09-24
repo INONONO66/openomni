@@ -515,6 +515,33 @@ describe("crash-open recovery", () => {
     });
   });
 
+  test.each(["success", "failure", "reasoning"] as const)("recovery keeps billed %s evidence and never proves a visible prefix absent", async (outcome: "success" | "failure" | "reasoning") => {
+    const { actions, options } = harness();
+    const usage = { inputTokens: 19, outputTokens: 7, reasoningTokens: 3 };
+    const visibleOutput = outcome !== "reasoning";
+    const evidence: PlainObject = outcome === "success" ? { usage, visibleOutput } : {
+      failures: [{ tag: "LlmRunFailure", usage, visibleOutput, provider: "failed-route" }],
+      defects: [], interrupted: false,
+    };
+    await isolated(Effect.gen(function* () {
+      yield* options.ledger.commit(openIntent("prefix-llm", "llm", "turn", { op: "chat", value: {} }));
+      yield* options.ledger.commit(openIntent("prefix-attempt", "attempt", "prefix-llm", { op: "chat", value: {} }));
+      yield* options.ledger.commit(settledResult("prefix-attempt", "attempt", { terminal: "executed", evidence }));
+    }));
+    const before = structuredClone(actions);
+    const executor = testExecutor(options);
+    await recover(executor);
+    expect(actions.slice(0, before.length)).toEqual(before);
+    expect(actions).toHaveLength(before.length + 1);
+    expect(actions.at(-1)?.effect.value).toMatchObject({
+      terminal: visibleOutput ? "outcome_unknown" : "interrupted",
+      recovery: { proof: visibleOutput ? "indeterminate" : "absent" },
+    });
+    const settled = structuredClone(actions);
+    await recover(executor);
+    expect(actions).toEqual(settled);
+  });
+
   test("an llm whose attempts all settled is interrupted from that evidence under a resume parent", async () => {
     const { actions, options } = harness();
     await isolated(options.ledger.commit({

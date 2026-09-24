@@ -1,7 +1,7 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, test } from "bun:test";
@@ -21,6 +21,7 @@ let nextId = 0;
 let bodies = 0;
 let scope: Scope.Scope;
 const runtime: SessionRuntime = {
+  authorizeConfigure: allowConfigure,
   observations: Bus,
   clock: () => 1_000,
   entropy: () => `inspect-id-${++nextId}`,

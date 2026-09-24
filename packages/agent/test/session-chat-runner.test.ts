@@ -2,7 +2,7 @@ import { runFixtureSync } from "./helpers/effect-result";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
@@ -136,6 +136,7 @@ function runDurably(
     Bus.reset();
     let nextId = 0;
     const runtime: SessionRuntime = {
+      authorizeConfigure: allowConfigure,
       observations: Bus,
       clock: () => 1_000,
       entropy: () => `boundary-id-${++nextId}`,

@@ -74,6 +74,7 @@ import {
   toolPorts,
   webSocketCallbacks,
 } from "./gateway";
+import { configureAuthority } from "./composition/generation-layers";
 import { createResident } from "./resident";
 import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
 import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
@@ -230,6 +231,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           try: () => authenticateOwner(credential, request.id),
           catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
         }),
+      authorizeConfigure: configureAuthority(services.generations),
     };
     const requests = await runAppBoot(runtime, createSessionRequests(sessionRuntime));
     let recovery: Promise<void> = Promise.resolve();

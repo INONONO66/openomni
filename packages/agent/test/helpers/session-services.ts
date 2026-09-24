@@ -12,6 +12,9 @@ import type { SessionRuntime } from "../../src/session-contract";
 import { Clock, Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";
 import { observationService } from "./service-layers";
 
+/** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
+export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
+
 export interface SessionFixture extends SessionRuntime {
   readonly clock?: () => number;
   readonly entropy?: () => string;

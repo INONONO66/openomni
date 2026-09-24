@@ -2,6 +2,7 @@ import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, spyOn, test } from "bun:test";
 import { isolated } from "./helpers/isolated";
+import { allowConfigure } from "./helpers/session-services";
 import { openRequest } from "./helpers/open-request";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
@@ -49,7 +50,7 @@ function open(request: SessionTransition.Request) {
     { kind: "request.open", request },
     `${request.requestId}:open`,
     100,
-    {},
+    { authorizeConfigure: allowConfigure },
   );
 }
 

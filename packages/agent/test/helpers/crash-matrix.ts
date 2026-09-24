@@ -2,9 +2,10 @@ import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./executor";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { foldCrashMain, foldCrashPoint, foldCrashProof } from "./fold-crash";
+import { reconstructionCut, reconstructionPoint } from "./crash-reconstruction";
 import { runFixture } from "./effect-result";
 import { turnTestLayer, catalogLayer, runnerTestLayer } from "./service-layers";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
@@ -40,6 +41,7 @@ export const crashPoint = z.enum([
   "tool_wave_between_result_commits",
   "retry_backoff_wait",
   "compaction_summary_before_result_commit",
+  "compaction_summary_before_boundary_commit",
   "inbox_admitted_before_turn_open",
   "outbound_reply_before_delivery_settle",
   "recovery_dispatch_identity_committed_before_rpc",
@@ -51,6 +53,7 @@ export const crashPoint = z.enum([
   "compaction_concurrent_tail_committed_before_owner_crash",
   "outbound_flood_deadline_before_timer_rearm",
   "owner_reclaimed_before_stale_transcript_flush",
+  ...reconstructionPoint.options,
 ]);
 export const recovery = z.enum([
   "resumed_without_reexecution",
@@ -66,7 +69,7 @@ export const matrixSchema = z
     rows: z.array(z.object({ crashPoint, recovery, note: z.string().min(1) }).strict()).min(17),
   })
   .strict();
-const allCrashPoints = z.enum([...crashPoint.options, ...foldCrashPoint.options]);
+const allCrashPoints = z.enum([...new Set([...crashPoint.options, ...foldCrashPoint.options])]);
 export const crashWitness = z
   .object({
     crashPoint: allCrashPoints,
@@ -147,6 +150,8 @@ function stop(point: z.infer<typeof allCrashPoints>, bodies: string[], pending?:
 }
 
 function beforeResult(point: CrashPoint, action: LedgerAction.Append, toolResults: number) {
+  if (point === "compaction_summary_before_boundary_commit")
+    return action.kind === "compaction" && effectOf(action).phase === "boundary";
   if (effectOf(action).phase !== "result") return false;
   switch (point) {
     case "llm_body_before_attempt_result_commit":
@@ -228,6 +233,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
     }
     if (
       point === "compaction_summary_before_result_commit" ||
+      point === "compaction_summary_before_boundary_commit" ||
       committedCompactionPoints.has(point)
     ) {
       const history = [
@@ -324,6 +330,7 @@ function outboundPort(
 function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
   return Effect.gen(function* () {
     const runtime: SessionRuntime = {
+      authorizeConfigure: allowConfigure,
       observations,
       clock: () => workerClock(point, bodies),
       dispatchOutbound: outboundPort(point, bodies, dbPath),
@@ -385,13 +392,16 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
   return witnessSink.run(emit, async () => {
     Storage.initialize({ dbPath });
     seedPolicy();
+    const reconstruct = reconstructionPoint.safeParse(cut);
+    if (reconstruct.success) return runFixture(reconstructionCut(reconstruct.data, dbPath,
+      (bodies, pending, proof) => stop(cut, bodies, pending, proof)));
     const fold = foldCrashPoint.safeParse(cut);
     if (fold.success) return foldCrashMain(fold.data, (bodies, pending, proof) => stop(cut, bodies, pending, proof));
     const point = crashPoint.parse(cut);
     return runFixture(Effect.scoped(Effect.gen(function* () {
       const bodies: string[] = [];
       if (stage === "resume") {
-        const fixture: SessionFixture = { observations, clock: () => 100_000 };
+        const fixture: SessionFixture = { observations, clock: () => 100_000, authorizeConfigure: allowConfigure };
         yield* withSessionServices(wakeSession(sessionId, () => Effect.sync(() => {
           stop(point, bodies);
           return { kind: "result" as const, text: "" };

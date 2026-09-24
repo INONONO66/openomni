@@ -1,8 +1,11 @@
-import { AgentProcessLive, Bus, BundlesLive, GenerationLayers, type ObservationSink } from "@openomni/agent";
+import { AgentProcessLive, Bus, BundlesLive, GenerationLayers, type ObservationSink, type SessionRuntime } from "@openomni/agent";
 import { Llm, LlmLive } from "@openomni/llm";
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { GenerationLayersLive } from "../../src/composition/generation-layers";
+
+/** Tests grant configure EXPLICITLY; the app composition wires the real pinned pre-policy. */
+export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
 
 /** A borrowed-storage composition for package-boundary app fixtures. */
 export function generationServices(options: {

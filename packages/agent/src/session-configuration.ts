@@ -25,9 +25,9 @@ export function createSessionConfiguration(
     return Effect.gen(function* () {
       const before = SessionHandleStore.latestGenerationFor(sessionId);
       const generation = before.generation + 1;
-      const accepted = yield* (runtime.authorizeConfigure?.({
+      const accepted = yield* runtime.authorizeConfigure({
         sessionId, role: SessionHandleStore.row(sessionId).role, operation, generation,
-      }) ?? Effect.succeed(true));
+      });
       if (!accepted) return yield* new ForeignFailure({ operation: "session.configure", cause: "denied" });
       const current = SessionHandleStore.row(sessionId);
       const previous = SessionHandleStore.latestGenerationFor(sessionId);

@@ -112,7 +112,7 @@ export function decideRequestTransition(
   )
     return rejected;
   const inputDigest = requestInputDigest(command.payload);
-  return repeatedInput(snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
+  return repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
 }
 
 type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;
@@ -151,13 +151,12 @@ function transitionExisting(
   payload: ExistingPayload,
   inputDigest: string,
 ): RequestDecision {
-  if (payload.kind === "request.delivery") {
-    return recordDelivery(command, request, payload.receipt, inputDigest);
+  switch (payload.kind) {
+    case "request.delivery": return recordDelivery(command, request, payload.receipt, inputDigest);
+    case "request.answer": return answerRequest(command, snapshot, request, payload.answer, inputDigest);
+    case "request.timeout":
+    case "request.cancel": return closeRequest(command, request, payload, inputDigest);
   }
-  if (payload.kind === "request.answer") {
-    return answerRequest(command, snapshot, request, payload.answer, inputDigest);
-  }
-  return closeRequest(command, request, payload, inputDigest);
 }
 
 function ownsRequestRevision(command: SessionTransition.Command, row: LedgerSession.Row): boolean {
@@ -188,11 +187,20 @@ function replayedInput(
 }
 
 function repeatedInput(
+  command: SessionTransition.Command,
   snapshot: RequestSnapshot,
   inputDigest: string,
 ): RequestDecision | undefined {
   const previous = snapshot.inputRecord;
   if (previous === undefined) return undefined;
+  const requestId = command.payload.kind === "request.open"
+    ? command.payload.request.requestId : targetRequestId(command.payload);
+  if (!all(
+    previous.sessionId === command.sessionId,
+    previous.parentId === requestId,
+    previous.id === `${requestId}:input:${command.inputId}`,
+    objectValue(previous.intent.value)?.inputId === command.inputId,
+  )) return rejected;
   return replayedInput(previous, snapshot.request, inputDigest);
 }
 
@@ -387,6 +395,7 @@ function originalInvocationMatches(
   const invocation = recordedInvocation(snapshot.invocation, snapshot.row.id);
   if (invocation === undefined || invocation.value === undefined) return false;
   return all(
+    snapshot.invocation?.id === next.requestId,
     canonicalDigest(invocation.originalArgs ?? invocation.value) === next.inputHash,
     canonicalDigest(next.parsedInput) === next.inputHash,
     invocation.effectHash === next.effectHash,
@@ -409,8 +418,11 @@ function recordDelivery(
   inputDigest: string,
 ): RequestDecision {
   let request = current;
-  if (receipt.sessionId !== command.sessionId || receipt.sourceActionId !== request.requestId)
-    return rejected;
+  if (!all(
+    receipt.sessionId === command.sessionId,
+    receipt.sourceActionId === request.requestId,
+    receipt.inputId === command.inputId,
+  )) return rejected;
   if (receipt.externalMessageId !== undefined) {
     request = {
       ...request,
@@ -498,7 +510,7 @@ function answerRequest(
   inputDigest: string,
 ): RequestDecision {
   if (!answerAddressed(answer, command)) return rejected;
-  if (answer.receivedAt >= current.deadline)
+  if (Math.max(command.at, answer.receivedAt) >= current.deadline)
     return lateAnswer(command, current, answer, inputDigest);
   if (!answerBindingMatches(answer, current, snapshot))
     return recordRequest(command, current, inputDigest, "rejected");
@@ -593,8 +605,10 @@ function closeRequest(
   inputDigest: string,
 ): RequestDecision {
   if (current.state !== "open") return recordRequest(command, current, inputDigest, "duplicate");
-  if (payload.kind === "request.timeout") return expireRequest(command, current, inputDigest);
-  return cancelRequest(command, current, payload.principal, inputDigest);
+  switch (payload.kind) {
+    case "request.timeout": return expireRequest(command, current, inputDigest);
+    case "request.cancel": return cancelRequest(command, current, payload.principal, inputDigest);
+  }
 }
 
 function requestInputDigest(payload: SessionTransition.Payload): string {

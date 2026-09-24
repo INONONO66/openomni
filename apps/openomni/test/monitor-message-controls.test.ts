@@ -10,7 +10,7 @@ import { createMonitorTool } from "../src/tools/monitor";
 import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
 import { nativeMessageFixture } from "./helpers/native-message-fixture";
 import { actorPolicy } from "./helpers/message-scenarios";
-import { generationServices } from "./helpers/generation-services";
+import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { runEffect, acquireSyncEffect, runSyncEffect } from "./helpers/effect";
 
 function alarmStore() {
@@ -49,7 +49,7 @@ for (const status of ["armed", "fired"] as const) {
         });
         const scope = await runEffect(Scope.make());
         const services = acquireSyncEffect(generationServices({ clock: () => at }));
-        const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
+        const requests = runSyncEffect(createSessionRequests({ authorizeConfigure: allowConfigure }).pipe(Effect.provide(services)));
         const makeWorker = () => runEffect(Scope.extend(
           createAlarmWorker({
             alarms: alarmStore(),

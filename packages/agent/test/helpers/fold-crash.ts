@@ -9,7 +9,7 @@ import {
 import { z } from "zod";
 import { Effect } from "effect";
 import { runFixture } from "./effect-result";
-import { withSessionServices, type SessionFixture } from "./session-services";
+import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
 import { CompactionPredecessorError } from "../../src/compaction/successor";
 import { closeSessions, session } from "../../src/session-handle";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
@@ -101,7 +101,7 @@ async function tamperedCut(stop: Stop) {
 }
 
 async function contextCut(stop: Stop) {
-  const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100 };
+  const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100, authorizeConfigure: allowConfigure };
   return runFixture(Effect.scoped(withSessionServices(Effect.gen(function* () {
   const handle = yield* session(
     {

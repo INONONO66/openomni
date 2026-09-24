@@ -16,6 +16,7 @@ import type { AppRuntime } from "./runtime";
 import { Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { createCompletionPort } from "./composition/completion";
+import { configureAuthority } from "./composition/generation-layers";
 import { createResident } from "./resident";
 import { commitMessageInbox, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -54,6 +55,7 @@ export function serveProcessSession(
   const runtime: SessionRuntime = {
     onInboxCommitted: committed,
     dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), Date.now),
+    authorizeConfigure: configureAuthority(generations),
   };
   const messages = {
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>

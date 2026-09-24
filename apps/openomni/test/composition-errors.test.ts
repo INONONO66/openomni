@@ -5,6 +5,7 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { Component } from "@openomni/protocol";
 import { observeComponent } from "../src/observation/component";
 import { createResident } from "../src/resident";
+import { allowConfigure } from "./helpers/generation-services";
 
 test("component failure observation preserves an unprintable rejection", async () => {
   const failure = {
@@ -45,7 +46,7 @@ test("resident materialization refuses unregistered runners before storage", () 
     model: { provider: "fixture", id: "fixture" },
     apiKey: "fixture",
     tools: {},
-    sessionRuntime: {},
+    sessionRuntime: { authorizeConfigure: allowConfigure },
   });
   expect(() => resident.materialize("invalid", null, "resident", "missing")).toThrow();
 });

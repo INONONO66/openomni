@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { Effect } from "effect";
 import { runFixture } from "./effect-result";
-import { withSessionServices, type SessionFixture } from "./session-services";
+import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
 import { createExecutor } from "../../src/executor";
 import { closeSessions, wakeSession } from "../../src/session-handle";
 import {
@@ -80,7 +80,7 @@ export async function reconstructionMain(
   }
   const witness = reconstructionSnapshot();
   if (stage !== "wake") return witness;
-  const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100_000 };
+  const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100_000, authorizeConfigure: allowConfigure };
   return runFixture(Effect.scoped(withSessionServices(Effect.gen(function* () {
     yield* wakeSession(
       reconstructionSession,

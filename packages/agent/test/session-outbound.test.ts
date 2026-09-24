@@ -1,5 +1,5 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Cause, Chunk, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -61,6 +61,7 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
       Effect.gen(function* () {
         const runtime: SessionRuntime = {
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: () => Effect.fail(foreign("receiver", "unavailable")),
         };
@@ -111,6 +112,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
         function runtime(at: number, loseAck: boolean): SessionRuntime {
           const value: SessionRuntime = {
             observations: { publish: () => undefined },
+            authorizeConfigure: allowConfigure,
             clock: () => at,
             dispatchOutbound: ({
               message,
@@ -173,6 +175,7 @@ test("a destination receipt for different bytes is refused and the obligation st
       Effect.gen(function* () {
         const prompted = commissionedChild({
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: ({
             message,
@@ -201,6 +204,7 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
       Effect.gen(function* () {
         const prompted = commissionedChild({
           observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
           clock: () => 100,
           dispatchOutbound: ({
             message,

@@ -8,6 +8,7 @@ import type { createExecutionRecord } from "./executor-record";
 import { PolicyDenied, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { attachFailureFacts } from "./core/retry";
+import { attemptRouteChange } from "./model-selection";
 
 type RecordPort = ReturnType<typeof createExecutionRecord>;
 type Admission = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
@@ -52,7 +53,7 @@ export function createAttemptRunner(
       return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
     });
   }
-  function admitAttempt<T extends PlainValue>(parent: LedgerAction.Receipt, attempts: LlmAttempts<T>, attempt: number, failures: readonly string[]): Effect.Effect<{ prepared: Prepared<T>; intent: LedgerAction.Receipt }, ExecutionError> {
+  function admitAttempt<T extends PlainValue>(parent: LedgerAction.Receipt, attempts: LlmAttempts<T>, attempt: number, failures: readonly string[], previous: LedgerAction.Receipt | undefined): Effect.Effect<{ prepared: Prepared<T>; intent: LedgerAction.Receipt }, ExecutionError> {
     return attempts.prepare(attempt, failures).pipe(Effect.flatMap((prepared) => {
       const policyEffect: Effect.Effect<Admission | undefined, ExecutionError> = attempt === 1
         ? Effect.succeed<Admission | undefined>(undefined)
@@ -64,7 +65,11 @@ export function createAttemptRunner(
           Effect.flatMap((): Effect.Effect<void, ExecutionError> => options.signal?.aborted ? Effect.interrupt : Effect.void),
           Effect.flatMap(() => record.appendIntent({
             kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
-            invocation: { effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS, retryReason: failures.at(-1) ?? null },
+            invocation: {
+              effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS,
+              retryReason: failures.at(-1) ?? null,
+              routeChange: attemptRouteChange(previous, prepared.request.intent),
+            },
           })),
           Effect.flatMap((intent) => approveAttempt(prepared.request, intent, policy).pipe(
             Effect.as({ prepared, intent }),
@@ -107,9 +112,11 @@ export function createAttemptRunner(
     return Effect.suspend(() => {
       const failures: string[] = [];
       let instantFailures = 0;
+      let previous: LedgerAction.Receipt | undefined;
       const loop = (attempt: number): Effect.Effect<T, ExecutionError> => {
         if (options.signal?.aborted) return Effect.interrupt;
-        return admitAttempt(parent, attempts, attempt, failures).pipe(Effect.flatMap(({ prepared, intent }) => {
+        return admitAttempt(parent, attempts, attempt, failures, previous).pipe(Effect.flatMap(({ prepared, intent }) => {
+          previous = intent;
           const started = options.clock();
           return executeAttempt(prepared, attempts, intent).pipe(Effect.flatMap((outcome) => {
             if (Exit.isSuccess(outcome)) return Effect.succeed(outcome.value);
