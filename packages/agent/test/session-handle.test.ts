@@ -20,6 +20,8 @@ import {
   type SessionTurn,
 } from "@openomni/protocol";
 import { CommitFailed } from "../src/errors";
+import { GenerationOwnership } from "../src/services";
+import { GenerationRawSlots } from "../src/session-generations";
 import { Bus } from "../src/index";
 
 interface Signal<T> {
@@ -1316,6 +1318,37 @@ describe("durable session handle", () => {
         expect(maximumActive).toBe(1);
       }),
     ));
+
+  test("retained turn ownership holds the generation and lease until released", () =>
+    testProgram(Effect.gen(function* () {
+      const retained = signal<{ readonly release: () => void; readonly pending: () => number }>();
+      const runner: SessionRunner = () => Effect.gen(function* () {
+        const ownership = yield* GenerationOwnership;
+        const owners = yield* ownership.provide(GenerationRawSlots);
+        // Admission and the running turn each own a capture.
+        const before = owners.pending();
+        const release = ownership.retain();
+        retained.resolve({ release, pending: owners.pending });
+        expect(before).toBe(2);
+        expect(owners.pending()).toBe(before + 1);
+        return { kind: "result", text: "retained" };
+      });
+      const { handle, hibernated } = yield* hibernatingSession("retained-generation", runner);
+      const result = yield* bounded(handle.prompt("retain ownership"), "retained turn terminal");
+      const owner = yield* bounded(retained.promise, "generation retained");
+      try {
+        expect(result).toEqual({ kind: "result", text: "retained" });
+        expect(owner.pending()).toBe(1);
+        expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+        expect(yield* failure(contendLease(handle))).toMatchObject({ _tag: "LeaseRefused", reason: "held" });
+      } finally {
+        owner.release();
+      }
+      expect(owner.pending()).toBe(0);
+      yield* bounded(hibernated.promise, "retained ownership released");
+      expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    })),
+  );
 
   test("keeps the durable lease held through an ignored abort so no other runtime can resume", () =>
     testProgram(

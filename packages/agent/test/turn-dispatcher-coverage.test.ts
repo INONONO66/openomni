@@ -12,7 +12,8 @@ import {
   type Executor,
 } from "./helpers/effect-g3-dispatcher";
 import { ForeignFailure } from "../src/errors";
-import { ExecutorContextError } from "../src/executor-context";
+import { currentInvocation, ExecutorContextError } from "../src/executor-context";
+import { GenerationOwnership, SessionLayer } from "../src/services";
 import { z } from "zod";
 import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
 import { allowAllPolicy, opPhaseOf } from "./helpers/compiled-policy";
@@ -40,6 +41,36 @@ const context = { sessionId: "session-1", turnId: "turn-1" };
 const call = (name: string) => ({ id: `call-${name}`, tool: name, input: {} });
 
 describe("createTurnDispatcher", () => {
+  it("exposes the captured invocation only inside its dispatched tool body", () =>
+    isolated(Effect.gen(function* () {
+      expect(currentInvocation).toThrow(ExecutorContextError);
+      const generation = yield* GenerationOwnership;
+      const { policy } = yield* SessionLayer;
+      const recording = recordingLedger();
+      let bodies = 0;
+      const dispatcher = yield* createTurnDispatcher({
+        sessionId: context.sessionId,
+        role: "resident",
+        actionId: context.turnId,
+        ledger: recording.ledger,
+      }, {}).pipe(Effect.provide(catalogLayer([
+        tool("invocation", async () => {
+          const frame = currentInvocation();
+          expect(frame.executor).toBe(currentExecutor());
+          expect(frame.executor.run).toBe(dispatcher.executor.run);
+          expect(frame.cell.executeCell).toBe(dispatcher.executeCell);
+          expect(frame.policy).toBe(policy);
+          expect(frame.generation).toBe(generation);
+          bodies += 1;
+          return "captured";
+        }),
+      ])));
+      expect(yield* dispatcher.execute(call("invocation"), context)).toMatchObject({ output: "captured" });
+      expect(bodies).toBe(1);
+      expect(currentInvocation).toThrow(ExecutorContextError);
+    })),
+  );
+
   it("composes a durable executor and commits intent before result", async () => {
     const recording = recordingLedger();
     const dispatcher = createTurnDispatcher(
