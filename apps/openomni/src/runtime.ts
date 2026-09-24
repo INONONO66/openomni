@@ -1,4 +1,4 @@
-import { AgentProcessLive, Bus, type BundleDefinitions, BundlesLive, Clock, Entropy, type GenerationLayers, type ObservationSink, type SessionError } from "@openomni/agent";
+import { AgentProcessLive, Bus, type BundleDefinitions, BundlesLive, type Clock, type Entropy, type GenerationLayers, type ObservationSink, type SessionError } from "@openomni/agent";
 import { LedgerStorageLive, type LedgerWrites, type LedgerError } from "@openomni/ledger";
 import { LlmLive, type Llm } from "@openomni/llm";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
@@ -26,10 +26,7 @@ export interface AppRuntimeOptions {
 export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
   const observations = options.observations ?? Bus;
   const ledger = LedgerStorageLive({ dbPath: options.dbPath, observationSink: observations });
-  const process = AgentProcessLive(observations).pipe(
-    Layer.merge(Layer.succeed(Clock, { now: options.clock ?? Date.now })),
-    Layer.merge(Layer.succeed(Entropy, { next: options.entropy ?? (() => crypto.randomUUID()) })),
-  );
+  const process = AgentProcessLive(observations, { clock: options.clock, entropy: options.entropy });
   const generations = GenerationLayersLive.pipe(Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)));
   return Layer.mergeAll(
     Layer.scoped(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),

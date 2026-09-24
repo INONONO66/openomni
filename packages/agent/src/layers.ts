@@ -16,11 +16,16 @@ export function AgentGenerationLive(options: AgentLayerOptions) {
   );
 }
 
+export interface AgentProcessOptions {
+  readonly clock?: () => number;
+  readonly entropy?: () => string;
+}
+
 /** Pure clock/entropy values and a borrowed root observation port. */
-export function AgentProcessLive(observations: Context.Tag.Service<typeof ObservationSink>) {
+export function AgentProcessLive(observations: Context.Tag.Service<typeof ObservationSink>, options: AgentProcessOptions = {}) {
   return Layer.mergeAll(
-    Layer.succeed(Clock, { now: Date.now }),
-    Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
+    Layer.succeed(Clock, { now: options.clock ?? Date.now }),
+    Layer.succeed(Entropy, { next: options.entropy ?? (() => crypto.randomUUID()) }),
     Layer.succeed(ObservationSink, observations),
   );
 }

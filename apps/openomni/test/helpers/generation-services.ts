@@ -1,4 +1,4 @@
-import { AgentProcessLive, Bus, BundlesLive, Clock, Entropy, GenerationLayers, type ObservationSink } from "@openomni/agent";
+import { AgentProcessLive, Bus, BundlesLive, GenerationLayers, type ObservationSink } from "@openomni/agent";
 import { Llm, LlmLive } from "@openomni/llm";
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
@@ -14,10 +14,7 @@ export function generationServices(options: {
 } = {}) {
   return Effect.gen(function* () {
     const scope = yield* Scope.Scope;
-    const process = Layer.mergeAll(AgentProcessLive(options.observations ?? Bus), BundlesLive([])).pipe(
-      Layer.merge(Layer.succeed(Clock, { now: options.clock ?? Date.now })),
-      Layer.merge(Layer.succeed(Entropy, { next: options.entropy ?? (() => crypto.randomUUID()) })),
-    );
+    const process = Layer.mergeAll(AgentProcessLive(options.observations ?? Bus, { clock: options.clock, entropy: options.entropy }), BundlesLive([]));
     const layer = GenerationLayersLive.pipe(Layer.provideMerge(process), Layer.merge(options.llm === undefined ? LlmLive : Layer.succeed(Llm, options.llm)));
     const context = yield* Layer.buildWithScope(layer, scope);
     yield* Effect.flatMap(GenerationLayers, (generations) => generations.initialize(options.definitions ?? { resident: [], worker: [] })).pipe(Effect.provide(context));
