@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import { writeSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   canonicalDigest,
@@ -143,18 +143,11 @@ export async function reconstructionProcessMain(
   }
 }
 
-/** Write the whole witness to fd 1: a pipe accepts short writes, and exit must not cut the tail. */
-export function writeWitness(bytes: Uint8Array, write: (chunk: Uint8Array) => number): void {
-  let offset = 0;
-  while (offset < bytes.byteLength) offset += write(bytes.subarray(offset));
-}
-
-if (import.meta.main)
+if (import.meta.main) {
+  const [witnessPath, ...rest] = process.argv.slice(2);
   await reconstructionProcessMain(
-    process.argv.slice(2),
-    (value) =>
-      writeWitness(new TextEncoder().encode(`${JSON.stringify(value)}\n`), (chunk) =>
-        writeSync(1, chunk),
-      ),
+    rest,
+    (value) => writeFileSync(z.string().min(1).parse(witnessPath), `${JSON.stringify(value)}\n`),
     (code) => process.exit(code),
   );
+}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalDigest, FoldCheckpoint, NamedError, PlainValueSchema } from "@openomni/protocol";
@@ -15,7 +15,6 @@ import {
   reconstructionMain,
   reconstructionProcessMain,
   reconstructionWitness,
-  writeWitness,
 } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
@@ -23,8 +22,10 @@ import { bounded } from "./helpers/bounded";
 const worker = new URL("./helpers/durable-reconstruction.ts", import.meta.url).pathname;
 const witnessSchema = reconstructionWitness;
 
+/** The witness travels through a regular file: the child's stdout pipe is non-blocking on Linux. */
 async function child(stage: string, dbPath: string) {
-  const process = Bun.spawn([Bun.which("bun") ?? "bun", worker, stage, dbPath], {
+  const witnessPath = `${dbPath}.${stage}.witness.json`;
+  const process = Bun.spawn([Bun.which("bun") ?? "bun", worker, witnessPath, stage, dbPath], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -39,7 +40,8 @@ async function child(stage: string, dbPath: string) {
       `reconstruction ${stage}`,
     );
     expect(stderr).toBe("");
-    return { code, value: JSON.parse(stdout) };
+    expect(stdout).toBe("");
+    return { code, value: JSON.parse(readFileSync(witnessPath, "utf8")) };
   } finally {
     process.kill();
   }
@@ -300,15 +302,3 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
       rmSync(directory, { recursive: true, force: true });
     }
   }));
-
-test("writeWitness retries short pipe writes until every byte is written", () => {
-  const bytes = new TextEncoder().encode(JSON.stringify({ witness: "x".repeat(1000) }));
-  const chunks: number[] = [];
-  writeWitness(bytes, (chunk) => {
-    const written = Math.min(chunk.byteLength, 7);
-    chunks.push(written);
-    return written;
-  });
-  expect(chunks.reduce((sum, n) => sum + n, 0)).toBe(bytes.byteLength);
-  expect(chunks.length).toBe(Math.ceil(bytes.byteLength / 7));
-});
