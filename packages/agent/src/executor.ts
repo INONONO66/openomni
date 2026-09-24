@@ -1,5 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import { findSessionRequest } from "./session-request";
@@ -121,6 +121,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         sessionId: options.identity.sessionId, ...(request.message === undefined ? {} : { message: request.message }), value: request.intent });
       const action = recordedDecision(options.ledger.actions?.() ?? [], original, intent.policyDecisionId, inputHash);
       if (action === undefined || intent.value === undefined) throw new ExecutionApprovalError({ code: "stale_approval" });
+      const verdict = recordedVerdict(object(action.intent.value).verdict);
       const recorded = SessionHistory.PolicyDecision.parse({ ...object(action.intent.value),
         revision: action.ordinal, actionId: action.id, subjectActionId: action.parentId, turnId: options.identity.turnId ?? null,
         reason: object(action.effect.value).reason ?? null,
@@ -128,7 +129,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       if (recorded.inputHash !== inputHash || recorded.generation !== options.policy.generation ||
           recorded.hook !== `${policyPoint(request, "pre").kind}.pre` || recorded.op !== request.op)
         throw new ExecutionApprovalError({ code: "stale_approval" });
-      return { generation: recorded.generation, verdict: recordedVerdict(recorded.verdict), transforms: recorded.transforms,
+      return { generation: recorded.generation, verdict, transforms: recorded.transforms,
         value: intent.value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
         receipt: { action, revision: action.ordinal } };
     }, catch: (cause) => cause instanceof ExecutionApprovalError ? cause : new ForeignFailure({ operation: "executor.recover_admission", cause: String(cause) }) });
@@ -466,11 +467,10 @@ function recordedDecision(actions: readonly LedgerAction.Node[], original: Ledge
     (decisionId === undefined ? object(action.intent.value).inputHash === inputHash : action.id === decisionId));
   return candidates.length === 1 ? candidates[0] : undefined;
 }
-function recordedVerdict(verdict: string): PolicyEvaluation["verdict"] {
-  switch (verdict) {
-    case "allow": case "deny": case "require_approval": case "transform": case "obligation": return verdict;
-    default: throw new ExecutionApprovalError({ code: "stale_approval" });
-  }
+function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
+  const parsed = RowVerdictType.safeParse(verdict);
+  if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
+  return parsed.data;
 }
 function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof findSessionRequest>): void {
   if (captured !== undefined && request.domainRevisions !== undefined &&

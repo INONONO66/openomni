@@ -8,7 +8,7 @@ import {
   type SessionWriteAdapter,
 } from "../packages/ledger/src/index";
 import type { IpcServer } from "../packages/ipc/src/index";
-import { checkEffectBoundaryFindings, effectServiceInventory } from "./check-effect-boundaries";
+import { checkEffectBoundaryFindings, effectServiceInventory, type BoundaryFinding, type ServiceUsage } from "./check-effect-boundaries";
 
 /**
  * Tag keys are machine-consumed identities: two packages built at different
@@ -48,18 +48,18 @@ test("ledger write receipts are the ok arms of the protocol results", () => {
 
 test("every production Tag is consumed or has an exact existing-debt receipt", () => {
   const inventory = effectServiceInventory();
-  expect(inventory.map((service) => service.key)).toEqual(expect.arrayContaining([
+  expect(inventory.map((service: ServiceUsage) => service.key)).toEqual(expect.arrayContaining([
     "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink",
     "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
     "@openomni/ledger/LedgerWrites", "@openomni/llm/Llm",
   ]));
-  expect(inventory.map((service) => service.key)).not.toEqual(expect.arrayContaining([
+  expect(inventory.map((service: ServiceUsage) => service.key)).not.toEqual(expect.arrayContaining([
     "@openomni/ipc/Ipc", "@openomni/machines/Machines", "@openomni/codemode/Codemode", "@openomni/channels/WebSocketFrames",
   ]));
-  const debt = checkEffectBoundaryFindings().filter((entry) => entry.code === "R9_UNUSED_TAG");
-  expect(debt.filter((entry) => entry.failing)).toEqual([]);
+  const debt = checkEffectBoundaryFindings().filter((entry: BoundaryFinding) => entry.code === "R9_UNUSED_TAG");
+  expect(debt.filter((entry: BoundaryFinding) => entry.failing)).toEqual([]);
   for (const service of inventory) {
-    if (service.reads > 0 || service.appLive) continue;
+    if (service.reads > 0) continue;
     expect(debt).toContainEqual(expect.objectContaining({ file: service.file, line: service.line, failing: false }));
   }
-});
+}, 15000);

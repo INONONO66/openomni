@@ -37,6 +37,7 @@ export const RowVerdict = PlainValueSchema.pipe(
   ]),
 );
 export type RowVerdict = z.infer<typeof RowVerdict>;
+export const RowVerdictType = z.enum(RowVerdict.out.options.map((variant) => variant.shape.type.value));
 
 const HistoricRedact = z
   .object({

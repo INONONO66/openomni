@@ -498,7 +498,7 @@ function serviceInventory(sources: readonly ts.SourceFile[], worktree: string, p
   for (const read of reads) { const usage = tags.get(read); if (usage) usage.reads++; }
   for (const provided of appLiveProviders(sources, worktree, provenance)) { const usage = tags.get(provided); if (usage) usage.appLive = true; }
   return [...tags.values()].map((usage) => {
-    if (!usage.reads && !usage.appLive) sites.add("R9_UNUSED_TAG", usage.file, usage.tag);
+    if (!usage.reads) sites.add("R9_UNUSED_TAG", usage.file, usage.tag);
     return { file: usage.file, line: lineOf(usage.tag), key: tagKey(usage.tag), reads: usage.reads, appLive: usage.appLive };
   });
 }
@@ -625,10 +625,9 @@ function formatFinding(entry: BoundaryFinding): string {
 export function checkEffectBoundaries(worktree = root): string[] {
   return checkEffectBoundaryFindings(worktree).map(formatFinding);
 }
-export function main(argv = Bun.argv.slice(2)): number {
-  const args = argv.filter((argument) => argument !== "--strict");
-  if (argv.length - args.length > 1 || (args.length !== 0 && !(args.length === 2 && args[0] === "--root" && args[1] && !args[1].startsWith("--")))) {
-    console.log(JSON.stringify({ code: "INVALID_ARGUMENTS", message: "Expected [--strict] [--root <dir>]; baseline updates are forbidden" }));
+export function main(args = Bun.argv.slice(2)): number {
+  if (args.length !== 0 && !(args.length === 2 && args[0] === "--root" && args[1] && !args[1].startsWith("--"))) {
+    console.log(JSON.stringify({ code: "INVALID_ARGUMENTS", message: "Expected [--root <dir>]; baseline updates are forbidden" }));
     return 1;
   }
   const findings = checkEffectBoundaryFindings(resolve(args[1] ?? root));

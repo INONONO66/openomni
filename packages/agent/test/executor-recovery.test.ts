@@ -4,7 +4,7 @@ import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
-import { LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { createTurnDispatcher } from "../src/index";
 import type { DurableExecutor, ExecutionBatchItem } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
@@ -124,6 +124,53 @@ const denyWritePost: Parameters<typeof compiledPolicy>[0] = [
     generation: 1,
   },
 ];
+
+test("the body receives deeply frozen admitted input", async () => {
+  const { options } = harness();
+  const admittedInput = { nested: { items: [{ value: "admitted" }] } };
+  const result = await isolated(testExecutor(options).run(
+    { ...toolRequest, intent: admittedInput },
+    (_receipt: LedgerAction.Receipt, input: PlainValue) => Effect.sync(() => {
+      const nested = record(record(input).nested ?? null);
+      const items = nested.items;
+      expect(input).toEqual(admittedInput);
+      expect(Object.isFrozen(input)).toBe(true);
+      expect(Object.isFrozen(nested)).toBe(true);
+      expect(Array.isArray(items)).toBe(true);
+      expect(Object.isFrozen(items)).toBe(true);
+      expect(Object.isFrozen(Array.isArray(items) ? items[0] : null)).toBe(true);
+      return { status: "success" };
+    }),
+  ));
+  expect(result).toEqual({ terminal: "executed", value: { status: "success" } });
+  expect(Object.isFrozen(admittedInput)).toBe(false);
+});
+
+test.each(["corrupted", null, 42])("recovery rejects a corrupted recorded verdict (%j) before the body", async (verdict: PlainValue) => {
+  const { actions, options } = harness();
+  const decision = await isolated(options.ledger.commit({
+    ...openIntent("decision", "policy.decision", "turn", {}),
+    intent: { encodingVersion: 1, value: {
+      hook: "tool.pre", op: toolRequest.op, generation: options.policy.generation,
+      matchedRuleIds: [], verdict,
+      inputHash: canonicalDigest({ kind: "tool", phase: "pre", op: toolRequest.op,
+        role: "resident", sessionId: "session", value: toolRequest.intent }),
+    } },
+    effect: { encodingVersion: 1, value: { reason: null } },
+  }));
+  const original = await isolated(options.ledger.commit(openIntent("original", "tool", "turn", {
+    op: toolRequest.op, policyDecisionId: decision.action.id, value: toolRequest.intent,
+  })));
+  const before = structuredClone(actions);
+  let bodies = 0;
+  const error = await isolated(failure(testExecutor(options).run(
+    { ...toolRequest, originalAction: original.action },
+    () => Effect.sync(() => { bodies++; return {}; }),
+  )));
+  expect(error).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
+  expect(bodies).toBe(0);
+  expect(actions).toEqual(before);
+});
 
 describe("completion recovery", () => {
   for (const site of ["before_persist", "after_persist"] as const) {

@@ -311,8 +311,8 @@ test("rejects runtime allowance and update flags without changing the ratchet", 
   const root = fixture([]);
   const path = join(root, "script/conformance/effect-runner-sites.json");
   const before = readFileSync(path, "utf8");
-  for (const flag of ["--update", "--allow-runtime", "--allow-runners"]) {
-    const result = run(root, [flag]);
+  for (const option of ["update", "allow-runtime", "allow-runners", "strict"]) {
+    const result = run(root, [`--${option}`]);
     expect(result.code).toBe(1);
     expect(result.output).toContain('"code":"INVALID_ARGUMENTS"');
   }
@@ -371,7 +371,7 @@ test.each([
 ])("ratchets %s with symbol provenance", (code: string, source: string): void => {
   const root = fixture([{ path: "packages/agent/src/violation.ts", source }]);
   expect(codes(root)).toContain(code);
-  expect(run(root, ["--strict"]).code).toBe(1);
+  expect(run(root).code).toBe(1);
 });
 
 test("does not mistake shadowed APIs, pure Layers, and local lets for debt", (): void => {
@@ -384,7 +384,7 @@ test("does not mistake shadowed APIs, pure Layers, and local lets for debt", ():
     'function shadow(Effect, Context, Layer) { let n = 1; Effect.raceAll([]); Effect.fork({}); Context.Tag("bad"); Layer.succeed(Clock, {}); }',
   ].join("\n") }]);
   expect(findings(root)).toEqual([]);
-  expect(run(root, ["--strict"]).code).toBe(0);
+  expect(run(root).code).toBe(0);
 });
 
 test.each([
@@ -412,12 +412,14 @@ test("test reads and disconnected providers do not consume production Tags", ():
   expect(effectServiceInventory(root)).toEqual([{ file: "packages/agent/src/service.ts", line: 1, key: "@openomni/agent/S", reads: 0, appLive: false }]);
 });
 
-test("counts providers whose Layers reach AppLive's returned composition", (): void => {
+test("reports unread Tags even when their providers reach AppLive's returned composition", (): void => {
   const root = fixture([
     { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.GenericTag<number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
     { path: "apps/openomni/src/runtime.ts", source: 'import { Live } from "@openomni/agent"; import { Layer } from "effect"; export const AppLive = () => Layer.mergeAll(Live);' },
   ]);
-  expect(findings(root)).toEqual([]);
+  expect(effectServiceInventory(root)).toEqual([{ file: "packages/agent/src/index.ts", line: 1, key: "@openomni/agent/S", reads: 0, appLive: true }]);
+  expect(findings(root)).toEqual([expect.objectContaining({ code: "R9_UNUSED_TAG", failing: true })]);
+  expect(run(root).code).toBe(1);
 });
 
 test("ratchets resource succeed but accepts pure definition-only service values", (): void => {
@@ -432,7 +434,7 @@ test("ratchets resource succeed but accepts pure definition-only service values"
   expect(codes(root)).toEqual(["R10_RESOURCE_SUCCEED"]);
 });
 
-test("strict accepts exact debt and refuses growth, stale sites and updates", (): void => {
+test("accepts exact debt and refuses growth, stale sites and updates", (): void => {
   const file = "packages/agent/src/race.ts";
   const source = 'import { Effect } from "effect"; export const race = () => Effect.raceAll([]);';
   const root = fixture([{ path: file, source }]);
@@ -440,13 +442,13 @@ test("strict accepts exact debt and refuses growth, stale sites and updates", ()
   const debt = findings(root).filter((entry) => entry.code === "R5_RACE_ALL");
   expect(debt).toHaveLength(1);
   writeFileSync(debtPath, JSON.stringify(debt.map(({ code, file, site }) => ({ code, file, site }))));
-  expect(run(root, ["--strict"]).code).toBe(0);
+  expect(run(root).code).toBe(0);
   const runnerPath = join(root, "script/conformance/effect-runner-sites.json");
   const before = [readFileSync(debtPath, "utf8"), readFileSync(runnerPath, "utf8")];
-  expect(run(root, ["--strict", "--update"]).code).toBe(1);
+  expect(run(root, ["--update"]).code).toBe(1);
   expect([readFileSync(debtPath, "utf8"), readFileSync(runnerPath, "utf8")]).toEqual(before);
   writeFileSync(join(root, file), `${source}\nEffect.raceAll([]);`);
-  expect(run(root, ["--strict"]).code).toBe(1);
+  expect(run(root).code).toBe(1);
   writeFileSync(join(root, file), "export const race = () => 1;");
   expect(codes(root)).toContain("BOUNDARY_STALE_BASELINE");
 });
@@ -563,10 +565,9 @@ test("unused AppLive locals and test-only Tags do not enter the service graph", 
   expect(effectServiceInventory(root)).toHaveLength(1);
 });
 
-test("service inventory refuses fatal parse errors and CLI refuses duplicate strict", (): void => {
+test("service inventory refuses fatal parse errors", (): void => {
   const root = fixture([{ path: "packages/agent/src/broken.ts", source: "const broken = ;" }]);
   expect(() => effectServiceInventory(root)).toThrow();
-  expect(run(root, ["--strict", "--strict"]).code).toBe(1);
 });
 
 test("exact sites survive line movement but not substituted call operands or duplicate occurrences", (): void => {
