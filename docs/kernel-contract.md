@@ -63,6 +63,102 @@ Install lifecycle: **detect → register → consent → wire → verify.** Cons
 
 Each installation carries an endpoint profile: task types, default timeout/retry/autonomy, driver capabilities, and an evidence-backed track record per task type, updated by the Governor — the routing table by which work is assigned to installed apps. **Version drift is an incident**: a version outside `testedVersions` triggers re-verification — smoke test passes → provisional allow plus ledger record; fails → app disabled plus Owner alert. Upgrades thereby ride the Governor's incident pipeline for free.
 
+### Extension points (4) and bundle contract
+
+W0.5 (#1184) defines the consumed Effect Layer floor. These are normative
+boundaries; [Implementation Status](implementation-status.md) records branch
+wiring, and [SLOP](SLOP.md#w05-consumed-layer-floor-1184) keeps residual callback
+authority explicit. A bundle has exactly four extension points:
+
+| Extension point | Contract | Source |
+| --- | --- | --- |
+| Tool catalog and system configuration | `ToolCatalog` supplies definitions; recorded `session.configure` operations `tools.add`, `tools.remove` and `system.blocks.set` select the next generation, never replace an in-flight catalog. | `packages/agent/src/services.ts`, `packages/agent/src/session-configuration.ts` |
+| Policy rows | Data-only pre/post verdicts are `allow`, `deny`, `require_approval`, `transform` or `obligation`. Named implementations come from the captured bundle Layer, not a callback-registration API. | `packages/policy/src/row-compiler.ts`, `packages/agent/src/bundle.ts` |
+| Observation subscriptions | `ObservationSink.subscribe` observes committed execution; it never decides admission or writes durable truth. Subscriptions belong to their Scope. | `packages/agent/src/observation/bus.ts`, `apps/openomni/src/composition/generation-layers.ts` |
+| Inbox messages | A bundle addresses a session through `send_message` / gateway ingestion and existing inbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/session-requests.ts` |
+
+Anything else requires a kernel change. No arbitrary code-callback registration,
+middleware registry, custom action writer, or raw ledger/control service is a
+fifth extension point. Tool bodies, pure named transformers, observation
+subscribers and ordinary Effect callbacks are not banned by this rule.
+
+**Consumed services and Scope ownership.** Effect factories resolve Tags with
+`yield*` at acquisition and retain the selected services; parallel plain-option
+service APIs are not the floor. The executor consumes `Clock`, `Entropy`,
+`ObservationSink` and `SessionLayer`; the dispatcher consumes `ToolCatalog`
+(`packages/agent/src/executor.ts`, `packages/agent/src/tool-dispatcher.ts`).
+LLM work consumes `Llm` (`packages/agent/src/core/execution/run.ts`), and app
+write consumers resolve `LedgerWrites` (`apps/openomni/src/index.ts`).
+
+Resource-owning Layers use scoped acquisition and release: `Layer.scoped` with
+`Effect.acquireRelease` for the generation observation bus and bundle-owned
+subscriptions/files. The ledger's `Layer.unwrapScoped` acquisition owns the
+real storage close; `LedgerLive(storage)` only borrows existing ports
+(`packages/ledger/src/layers.ts`). Pure Clock/Entropy values, immutable session
+snapshots and definition-only catalogs may use `Layer.succeed`; a synthetic
+no-op finalizer is not resource ownership.
+
+`AppLive` is one final `Layer.mergeAll` over already-wired package Layers,
+`AppScope`, bundle definitions and generation management
+(`apps/openomni/src/runtime.ts`). Dependency provision, not merge argument
+order, determines resource lifetime. L0-L2 infrastructure is process-owned;
+L4 bundle resources, tools, system and policy snapshots are generation-owned;
+LLM/tool execution fibers are turn/action-owned. Protocol remains Effect-free:
+these tiers describe ownership, not runtime objects in wire schemas. No service
+kind is categorically unloadable; a process-scoped service simply has no
+session generation in which to be replaced. There is no second mount/unmount
+lifecycle owner.
+
+**Definition and composition.** `packages/agent/src/bundle.ts` owns
+`bundle({ name, requires, provides, layer, tools?, rows?, events? })` and
+`compose(seed, bundles)`. Infer a Layer value first, then pass it to `bundle`;
+its genuine Tag tuples must exactly match the Layer inputs and outputs.
+Definition validation and composition revalidation copy/freeze metadata and
+reject duplicate names, provided Tag keys, tool names, row identities and event
+identities; invalid namespaces; callable/non-plain row data; kernel collisions;
+and unavailable, self or later-only requirements. Composition preserves order:
+earlier acquired outputs actually provide later Layers, rather than merely
+passing metadata checks beside sibling `mergeAll` inputs. An observer may have
+`provides: []` and use a scoped discard Layer.
+
+- Namespace: `[a-z][a-z0-9-]*`; tool: `<ns>__<tool>`; event: `<ns>.<kind>` with a positive version; provided Tag: `@openomni/bundle/<ns>/<Service>`; policy reference: `<ns>/<verb>`.
+- The acquisition seed is exactly Clock, Entropy, generation-local ObservationSink and immutable ToolCatalog. SessionLayer is assembled after policy contributions, not required during their acquisition.
+- `bundlePolicyTag(ns)` supplies the reserved `@openomni/bundle/<ns>/Policy` service containing immutable `transformers` and `obligations`. Pure transformer `apply(args, config)` implementations are named; rows store `ref` and optional JSON config (default `null`), never closures. There is no `registerTransformer(callback)`.
+- Missing transformer/obligation references fail compilation before execution. Decisions retain ordered `{ruleId, ref}` transforms and singular `ref` only for one transform. A pre-transform preserves `originalArgs` beside committed transformed arguments; dispatch validates and executes those admitted arguments. Approval retains original-input identity and recovery does not reapply a current transformer (`packages/agent/src/executor.ts`, `packages/agent/src/executor-record.ts`, `packages/agent/src/tool-dispatcher.ts`).
+- Bundle modules may not import sibling bundle implementation modules; `script/check-deps.ts` guards that band. W0.5 adds no concrete production bundle.
+
+**Generation LayerMap.** `SessionGeneration.Id` is `{sessionId, generation}`
+(`packages/protocol/src/ledger/l0.ts`). The app's
+`apps/openomni/src/composition/generation-layers.ts` owns a session-keyed map of
+retained managers; `packages/agent/src/session-generations.ts` owns each
+manager's numeric entries and acquired contexts. This is one live owner, not
+an unused Layer cache plus controller rebuilds. Boot initializes immutable
+role definitions once before ingress/recovery; bundle definitions alone live
+in process scope, while selected bundle resources build in generation scopes.
+
+`Snapshot.bundles` records sorted unique membership (historic absence decodes
+as `[]`); acquisition follows the validated installed manifest order. New
+sessions record installed names, and existing configure operations preserve
+them. Bundle rows enter the existing durable policy generation before capture,
+not an unrecorded compiler overlay. Installing definitions affects new sessions;
+tools still require recorded catalog selection. W0.5 adds no membership setter
+or unmount operation (`apps/openomni/src/index.ts`,
+`apps/openomni/src/policy-seed.ts`, `packages/agent/src/session-configuration.ts`).
+
+Capture pins one context, policy, catalog, named registry and local observation
+bus. Same-session acquisition/configure is serialized; the same Id cannot
+silently change snapshot hashes. A candidate activates only after commit;
+failed acquisition/commit closes it without selecting it. In-flight work keeps
+its old generation, while later turns use the new one; revert records a new
+number. Current entries survive hibernation. Closed entries are tombstones
+within a process; restart reconstructs committed current or explicitly captured
+historical selections from durable facts, never substitutes latest on a miss.
+Retirement waits for owning fibers and actual raw/cell settlement or witnessed
+physical termination. Interruption/disconnection alone is not that witness;
+unsettled shutdown must refuse and retain resources, not fabricate finalizers.
+This floor does not claim JavaScript-stack durability or the complete W3 G1
+crash contract.
+
 ## 2. Authority and External Actors
 
 ### Identity
@@ -198,7 +294,7 @@ Every native `prompt`, `turn`, `llm`, and `tool` operation crosses the session-p
 
 Who owns the action record differs by kind. `llm` and `tool` operations are executor-owned: the executor commits an intent before invoking the body and exactly one linked terminal result (`executed`, `blocked_post`, or typed `failed`); a retried model call adds a child `attempt` intent/result pair per attempt. `prompt` and `turn` are decided over records the session machine already owns, the durable inbox action and the turn envelope, so the executor adds policy decisions and a verdict, never a duplicate intent or result. A pre denial never invokes the body, and for the executor-owned kinds it commits no intent. Post denial records `reverted` when a reverter exists and `irreversible` otherwise. Tool lifecycle observations are projections emitted only after the corresponding intent/result commit; observations are never authority or truth.
 
-Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine or callback registration surface. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
+Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine. The target forbids arbitrary callback registration; retained configure-authority and approval-binding seams are explicitly tracked by [SLOP B6](SLOP.md#w05-consumed-layer-floor-1184), not declared deleted here. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
 The live policy contract is compiled-row evaluation, not general effect composition. PR #1030 removes the unconsumed `composeEffects` subsystem and its 29 tests without a successor. Its deny/pending/allow composition, safe-effect ceiling on deny, conflict fail-closed merging, effect deduplication and retry-ceiling merging are not active kernel capabilities. Rows retain descending-priority evaluation and stop at the first matched deny or approval requirement; captured budget-obligation limits and channel ceilings are separate, unchanged controls. `Policy.EffectiveDecision` was deleted in G002 (#930); no replacement composition surface was introduced.
 

@@ -1,10 +1,39 @@
 # Implementation Status
 
-Policy/ledger ownership updated on `kernel/s1-authority-cut-2`, 2026-09-18: G002 (#930) deletes the unused composition schema and moves app action reads to narrow SQL-backed ports.
+W0.5 (#1184) source wiring inspected on `kernel/1184-consumed-layers-20260924`, 2026-09-24. This stamp covers the Layer/bundle slice below, not a re-verification of historical receipts or a merge/CI claim.
 
 | Slice | Status | Scope |
 | --- | --- | --- |
-| Effect foundation (#1122), 2026-09-21 | in PR | Pins Effect 3.22.2; ships package-owned error unions, ledger native write ports, one app runtime, and the Effect boundary gate. W1 (#1108) must shrink the runner-site allowlist to empty. |
+| Consumed Effect Layer floor (#1184), 2026-09-24 | wired in worktree; full acceptance not asserted | Effect factories consume Tags; AppLive composes package Layers and an app-owned generation map; validated bundle definitions and named policy contributions build in captured generation scopes. Sources and remaining boundaries follow below. |
+
+`packages/agent/src/executor.ts` resolves Clock, Entropy, ObservationSink and
+SessionLayer; `packages/agent/src/tool-dispatcher.ts` resolves ToolCatalog.
+`packages/agent/src/core/execution/run.ts` and
+`apps/openomni/src/composition/completion.ts` resolve Llm and ObservationSink.
+App boot and gateway resolve LedgerWrites (`apps/openomni/src/index.ts`,
+`apps/openomni/src/gateway.ts`); `packages/ledger/src/layers.ts` distinguishes
+owning storage acquisition/release from borrowed LedgerLive ports.
+
+`apps/openomni/src/runtime.ts` builds AppLive with a final Layer.mergeAll.
+`apps/openomni/src/composition/generation-layers.ts` constructs the selected
+catalog, scoped local observations, named registry and compiled policy; its
+session-keyed managers use `packages/agent/src/session-generations.ts` for
+capture/configure and retirement. Boot initializes immutable role definitions
+before recovery. Installed bundle names are passed to new sessions, and bundle
+rows enter existing policy seeding (`apps/openomni/src/index.ts`,
+`apps/openomni/src/policy-seed.ts`). Existing configure operations carry recorded
+membership unchanged (`packages/agent/src/session-configuration.ts`).
+
+`packages/agent/src/bundle.ts` validates definitions and ordered composition,
+including named policy services. The executor records original arguments when
+pre-transforms apply (`packages/agent/src/executor.ts`,
+`packages/agent/src/executor-record.ts`). These are source-inspection claims,
+not receipts for every runtime, crash, performance or patch-coverage gate.
+B6 remains open: configure authority and approval-binding callbacks survive
+([SLOP](SLOP.md#w05-consumed-layer-floor-1184)); W0.5 does not claim their W1
+migration, a bundle membership API, full W3 G1, or concrete production bundles.
+
+Policy/ledger ownership was updated on `kernel/s1-authority-cut-2`, 2026-09-18: G002 (#930) deletes the unused composition schema and moves app action reads to narrow SQL-backed ports.
 
 **G003 durable spine (`kernel/s1-durable-spine`, 2026-09-18, #930):** the volatile `waitRetry` seam is deleted; a provider retry commits an `alarm.arm` action carrying a `retry.scheduled` spec (kind `at`, id `<intent>:retry:<attempt>`) before any wait, and the live waiter or boot alarm worker consumes it exactly once through the fenced cancel CAS (now admitting one-shot alarms) and wakes the session without an inbox prompt (`packages/agent/src/executor-retry-alarm.ts`, `apps/openomni/src/composition/alarm-worker.ts`). A boundary-flagged execution (compaction) commits summary + successor projection + accounting as one ledger transaction before result commit or publication; crash recovery settles the open intent executed-from-boundary without resummarizing (`packages/agent/src/executor.ts`, `executor-recovery.ts`, `compaction/execute-cut.ts`). Commit-time writer fencing is recorded as taxonomy: a stale fence gets the typed `{ok:false, reason:"stale"}` rejection atomically with no partial row, proven fence-only under the same owner name (`packages/ledger/test/session/commit-fencing.test.ts`). Crash-matrix rows `retry_backoff_wait` -> `rearmed`, `compaction_summary_before_result_commit` -> `resumed_without_reexecution`, `owner_reclaimed_before_stale_transcript_flush` -> `rejected`.
 
@@ -92,7 +121,7 @@ WebSocket/path wake still commits one fired pair and reaches revision 59.
 | Runtime administration | The `provision` op union uses the live supervisor for channel/secret changes and status. Person mutations suspend their original invocation for authenticated approval when `approvalRequirement` demands one (editing the existing owner Person, or raising a tier above collaborator); other declarations and non-sole-owner `person_remove` apply directly. `contact_promote` and `contact_merge` suspend under the `require_approval` policy row until the Owner's answer re-admits the original invocation; the separate `approval` tool was deleted in `239b4273` (2026-09-08). | `apps/openomni/src/tools/provision.ts`, `apps/openomni/src/provisioning/supervisor.ts` |
 | Resident and native workers | Shared durable session handles and one app runner. Native and real process child-to-parent delivery pass targeted tests; the old app delegation subtree and tools are removed. | `apps/openomni/src/resident.ts`, `apps/openomni/src/process-entry.ts`, `apps/openomni/src/composition/process-session.ts` |
 | Session durability | Fenced single-flight execution, durable inbox/alarms, parent-linked rows, action history, generation snapshots, boot recovery, idle release, authoritative reads, revision-gap observation, bounded revision history pages (`history()`) and redacted causal inspection (`inspect()`) derived from committed actions (#972). Legacy public CRUD/message/TTL ownership is removed, not aliased. | `packages/agent/src/session-handle.ts`, `packages/agent/src/session-controller.ts`, `packages/agent/src/session-lifecycle/inspect.ts`, `packages/ledger/src/session/kernel.ts`, `packages/ledger/src/storage/sqlite-l0-adapter.ts` |
-| Action executor and policy | Session-pinned compiled policy rows govern prompt/turn/model/tool/message pre/post decisions; message post is obligation-only. The executor owns model/tool intents and linked terminals; prompt/turn records remain session-owned. Old callback registries are deleted (#965); unconsumed general effect composition is deleted without replacement (#1030). | `packages/agent/src/executor.ts`, `packages/policy/src/row-compiler.ts`, `apps/openomni/src/policy-seed.ts` |
+| Action executor and policy | Session-pinned compiled policy rows govern prompt/turn/model/tool/message pre/post decisions; message post is obligation-only. The executor owns model/tool intents and linked terminals; prompt/turn records remain session-owned. Old policy callback registries are deleted (#965); configure-authority and approval-binding seams remain tracked by B6/H6. Unconsumed general effect composition is deleted without replacement (#1030). | `packages/agent/src/executor.ts`, `packages/policy/src/row-compiler.ts`, `apps/openomni/src/policy-seed.ts` |
 | LLM | Canonical model/auth resolution, provider classification, retry-after/backoff, and corrected additive token accounting. The processor performs one attempt; session execution owns retry and re-admission. The unused public fact tap is removed (#976); ephemeral transcript folding and message/tool callbacks remain. | `packages/llm/src/`, `packages/agent/src/executor-attempts.ts` |
 | Compaction | App-configured summarization and agent-owned speculative/synchronous compaction, with durable projection/range/hash/revert evidence and reconstruction from canonical actions. The summarizer is wired, not dormant. | `apps/openomni/src/compaction/`, `packages/agent/src/compaction/`, `packages/agent/src/session-lifecycle/history.ts` |
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/observation/`, `apps/openomni/src/observation/` |

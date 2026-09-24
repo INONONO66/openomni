@@ -29,6 +29,23 @@ Updated on `kernel/s1-authority-cut-2`, 2026-09-18. These closure rows are new h
 | `throw new Error` ledger write refusals | ⏳ pending merge (#1122 PR) |
 | dual Promise adapter surface | ⏳ pending merge (#1122 PR) |
 
+## W0.5 consumed Layer floor (#1184)
+
+Source inspection on `kernel/1184-consumed-layers-20260924`, 2026-09-24;
+this is branch wiring, not merge, CI or global callback-zero evidence.
+The four extension points and consumed-service contract are in
+[Kernel Contract](kernel-contract.md#extension-points-4-and-bundle-contract).
+
+| Row | Contract | Status and evidence |
+| --- | --- | --- |
+| B6 | No arbitrary code-callback registration; bundles only, through the four extension points. | **OPEN.** `packages/agent/src/bundle.ts` supplies validated Layer definitions, ordered composition and named policy services. `packages/agent/src/session-configuration.ts` still calls optional `authorizeConfigure` with an allow fallback (W1/H6), and `packages/agent/src/tool-dispatcher.ts` retains `approvalBindings` for original-invocation/domain-precondition binding. W0.5 does not delete those seams or claim a callback-zero census. Close only with actual deletion/census and PR evidence. |
+
+Observation subscribers, tool bodies, named pure transformer implementations
+and ordinary Effect callbacks are allowed implementations, not an arbitrary
+authority-registration API. No concrete hooks/MCP/LSP bundle or W3 membership
+mount/unmount API is delivered by this floor. `Snapshot.bundles` records
+selection; it does not make volatile scopes durable or establish full G1.
+
 ## Receipt location and scope
 
 This is the tracked successor for the #948 rows formerly recorded in `.omo/reports/operation-architecture-20260902/SLOP.md`. PRs #981/#982 removed tracked agent artifacts; no `.omo/` file is recreated. Historical ledger/design text remains in git history, not an active contract. This file synchronizes the I09 rows and #811 disposition only; it does not mark unrelated historical SLOP rows closed.
@@ -397,7 +414,7 @@ Read-only sweep of slop not already recorded above and not named by the W1–W5 
 | H3 (SD06) | `AGENTS.md` header | "retains the legacy catalog entries pending stage 2" after stage 2 landed | PR #1114 | ✅ `374de398` |
 | H4 (AU09) | `apps/openomni/src/tools/completion.ts` | Per-cell 32-call budget (#842) was one process-wide counter: `createTools` caches one catalog per `CatalogPorts`, so the closure counter was shared by every cell and session. Budget now keyed by `ctx.turnId` (= cell id at the cell door) | PR #1115 | ⏳ pending merge |
 | H5 | `packages/ipc/src/server.ts` vs `peer-request-table.ts` | Two wire-message classifiers (`decodeMessage` and `dispatch`) | PR #1115: `classifyIpcMessage` single owner | ⏳ pending merge |
-| H6 (S13) | `packages/agent/src/session-lifecycle/session-configuration.ts:23-30` | `authorizeConfigure` direct callback with `?? true` bypasses the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 (#1108, same files) | 🔁 deferred |
+| H6 (S13) | `packages/agent/src/session-configuration.ts` | `authorizeConfigure` direct callback with `?? true` bypasses the compiled policy snapshot; KERNEL rule is `session.configure` through pre policy | W1 (#1108, same files) | 🔁 deferred |
 | H7 (AU07) | `apps/openomni/src/resident.ts:74-91` | Evidence-only authority is a string-prefix check on the prompt with a fabricated refusal text; must be a typed policy input at kernel admission | W3 #1111 | open |
 | H8 (S6) | `packages/policy/src/row-compiler.ts:580-654` vs ledger `policies.appendGeneration` | Two policy-generation writers; agent stubs `append: () => false` | W3 #1111 | open |
 | H9 | `packages/ledger/src/storage/sqlite-l0-write.ts:89-115` | Hand-written `alarm` INSERT bypassing `armAlarm` — second alarm writer | W2 #1110 | open |
