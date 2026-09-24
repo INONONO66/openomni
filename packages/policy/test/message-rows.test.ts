@@ -1,3 +1,4 @@
+import { KERNEL_POLICY_REGISTRY } from "../src/named-registry";
 import { expect, test } from "bun:test";
 import { compilePolicySnapshot } from "../src/row-compiler";
 import { atGeneration, compaction, draft } from "./row-fixtures";
@@ -14,6 +15,7 @@ const workerRule = {
 
 test("message policy selects worker actor denial without matching external senders", () => {
   const policy = compilePolicySnapshot({
+    registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     rows: [
       atGeneration(compaction, 1),
@@ -66,7 +68,11 @@ test("message policy selects worker actor denial without matching external sende
 });
 
 test("send_message cannot bypass admission by omitting its authenticated context", () => {
-  const policy = compilePolicySnapshot({ generation: 1, rows: [atGeneration(compaction, 1)] });
+  const policy = compilePolicySnapshot({
+    registry: KERNEL_POLICY_REGISTRY,
+    generation: 1,
+    rows: [atGeneration(compaction, 1)],
+  });
   expect(
     policy.evaluate({ kind: "message", phase: "pre", op: "send_message", value: {} }),
   ).toMatchObject({
@@ -81,7 +87,7 @@ test("message post denial is rejected during compilation", () => {
     atGeneration(compaction, 1),
     atGeneration(draft("late-denial", "message", "post", { type: "deny" }), 1),
   ];
-  expect(() => compilePolicySnapshot({ generation: 1, rows })).toThrow(
-    expect.objectContaining({ code: "invalid_verdict" }),
-  );
+  expect(() =>
+    compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows }),
+  ).toThrow(expect.objectContaining({ code: "invalid_verdict" }));
 });

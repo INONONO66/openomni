@@ -7,11 +7,7 @@ import { websocketCallbacks } from "./helpers/websocket-server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createSessionRequests,
-  decideRequestTransition,
-  requestBindingDigest,
-} from "@openomni/agent";
+import { decideRequestTransition, requestBindingDigest } from "@openomni/agent";
 import { BlacklistStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   Gateway,
@@ -22,7 +18,7 @@ import {
 } from "@openomni/protocol";
 import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";
-import { originalAction } from "./helpers/requests";
+import { originalAction, requestPort } from "./helpers/requests";
 import { requestFixture } from "./helpers/request-record";
 
 const credential = "owner-frame-secret";
@@ -128,9 +124,7 @@ function router(
 ) {
   return makeRouter({
     clock: () => at,
-    requests: channelRequests(createSessionRequests({
-      clock: () => at,
-      observations: { publish: () => undefined },
+    requests: channelRequests(requestPort(() => at, undefined, {
       requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
     })),
     authenticateAnswer: (who: Gateway.IngestSender & { kind: "external" }, proof: string, requestId: string) => Effect.try({

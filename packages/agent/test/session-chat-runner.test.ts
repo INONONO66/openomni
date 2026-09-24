@@ -1,4 +1,9 @@
+import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
+import { prepareChatFixture } from "./helpers/chat-services";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect } from "effect";
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { isolated } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -7,14 +12,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Retry as LlmRetry } from "@openomni/llm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import type { LedgerAction, Model } from "@openomni/protocol";
-import {
-  Bus,
-  closeSessions,
-  createSessionChatRunner,
-  createTurnDispatcher,
-  type Executor,
-  type SessionRuntime,
-} from "../src/index";
+import { Bus, closeSessions, createSessionChatRunner, createTurnDispatcher, type Executor } from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { turnExecutor, nullRetryAlarm, failure, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
@@ -27,7 +25,7 @@ import {
   mockProviderModel,
 } from "./helpers/mock-llm";
 
-const policy = compilePolicySnapshot({
+const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
   generation: 0,
   rows: SEEDED_POLICY_ROWS.map(
     (row: Omit<import("@openomni/protocol").PolicyRow.Row, "generation">) => ({
@@ -52,7 +50,6 @@ function input(
           throw new Error("session runner fixture does not commit ledger actions");
         }),
     },
-    policy,
     resultId: "result-1",
     parentActionId: null,
     boundaryActionId: null,
@@ -133,17 +130,14 @@ function runDurably(
     Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input: import("../src/session-handle").SessionRunnerInput) => {
-        return {
-          config: config(run, createTurnDispatcher([], input, runtime).executor, fallbacks),
+      prepare: (input: import("../src/session-handle").SessionRunnerInput) => Effect.gen(function* () {
+        return prepareChatFixture({
+          config: config(run, (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); })).executor, fallbacks),
           traceContext,
-        };
-      },
+        });
+      }),
     });
-    const handle = yield* session(
-      { id: "boundary-session", role: "resident", runner: chatRunner },
-      runtime,
-    );
+    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "boundary-session", role: "resident", runner: chatRunner }, fixture), fixture); });
 
     try {
       yield* promptTurns(handle, prompts);
@@ -167,13 +161,13 @@ describe("session chat runner", () => {
         Effect.gen(function* () {
           let calls = 0;
           const runner = createSessionChatRunner({
-            prepare: () => ({
+            prepare: () => Effect.gen(function* () { return prepareChatFixture(({
               config: config(async () => {
                 calls += 1;
                 return createStopOutcome();
               }),
               traceContext,
-            }),
+            })); }),
           });
 
           const result = yield* runner(
@@ -255,7 +249,7 @@ describe("session chat runner", () => {
         Effect.gen(function* () {
           for (const interruptedAt of ["after_llm", "after_tools"] as const) {
             const runner = createSessionChatRunner({
-              prepare: () => ({ config: config(completeModel), traceContext }),
+              prepare: () => Effect.sync(() => prepareChatFixture({ config: config(completeModel), traceContext })),
             });
             const result = yield* runner(
               input((boundary: import("@openomni/protocol").SessionTurn.Boundary) =>
@@ -441,7 +435,7 @@ describe("session chat runner", () => {
           });
           Reflect.deleteProperty(preparedConfig, "executor");
           const runner = createSessionChatRunner({
-            prepare: () => ({ config: preparedConfig, traceContext }),
+            prepare: () => Effect.sync(() => prepareChatFixture({ config: preparedConfig, traceContext })),
           });
 
           expect(
@@ -461,10 +455,10 @@ describe("session chat runner", () => {
           const cause = foreign("chat", "failed");
           const prepared = { config: config(completeModel), traceContext };
           const reported = createSessionChatRunner({
-            prepare: () => prepared,
+            prepare: () => Effect.sync(() => prepareChatFixture(prepared)),
             reportError: (error: Error) => (error === cause ? "reported" : undefined),
           });
-          const unreported = createSessionChatRunner({ prepare: () => prepared });
+          const unreported = createSessionChatRunner({ prepare: () => Effect.sync(() => prepareChatFixture(prepared)) });
           const ready = input(() => Effect.fail(cause));
 
           expect(yield* reported(ready)).toEqual({
@@ -476,9 +470,9 @@ describe("session chat runner", () => {
           expect(yield* failure(unreported(ready))).toBe(cause);
           const defect = new Error("prepare failed");
           const defective = createSessionChatRunner({
-            prepare: () => {
+            prepare: () => Effect.sync(() => {
               throw defect;
-            },
+            }),
           });
           expect(yield* failure(defective(ready))).toBe(defect);
         }),

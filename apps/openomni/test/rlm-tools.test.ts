@@ -1,9 +1,10 @@
+import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
-import { createDispatcher, toolSpec, type Executor } from "@openomni/agent";
-import { createCompletionPort as completionPort } from "../src/composition/completion";
+import { toolSpec, type Executor } from "@openomni/agent";
+import { completionFixture as completionPort } from "./helpers/completion-fixture";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
 
 import { assistantMessage } from "./helpers/assistant-message";
@@ -20,7 +21,7 @@ const MAX_COMPLETION_CALLS = 32;
 import { admittedEffect } from "./helpers/admitted-effect";
 import { executor as productionExecutor } from "./helpers/executor";
 
-function createCompletionPort(...args: Parameters<typeof completionPort>) {
+function completionFixture(...args: Parameters<typeof completionPort>) {
   const port = completionPort(...args);
   return (call: string | Parameters<typeof port>[0]) =>
     admittedEffect(port(typeof call === "string" ? { prompt: call } : call));
@@ -128,7 +129,7 @@ describe("the completion tool", () => {
       },
       RESIDENT,
     );
-    const dispatcher = createDispatcher(entries, { executor });
+    const dispatcher = dispatcherFixture(entries, { executor });
     let nextId = 0;
     const run = (cellId: string, prompt: string) =>
       runEffect(
@@ -174,7 +175,7 @@ describe("the completion tool", () => {
       },
       RESIDENT,
     );
-    const dispatcher = createDispatcher(entries, { executor });
+    const dispatcher = dispatcherFixture(entries, { executor });
 
     const result = await runEffect(
       dispatcher.execute(
@@ -218,7 +219,7 @@ describe("the completion tool", () => {
       ["nowhere", "listed"],
     ] as const) {
       await expect(
-        createCompletionPort({ provider, id, apiKey: "key" }, { run })("hello"),
+        completionFixture({ provider, id, apiKey: "key" }, { run })("hello"),
       ).rejects.toMatchObject({
         _tag: "ForeignFailure",
         operation: "completion.resolve",
@@ -230,7 +231,7 @@ describe("the completion tool", () => {
 
   it("dispatches the cell door without a target eligibility fold", async () => {
     const entries = createTools({ llm: async () => "ok" }, RESIDENT);
-    const dispatcher = createDispatcher(entries, { executor });
+    const dispatcher = dispatcherFixture(entries, { executor });
     const result = await runEffect(
       dispatcher.executeCell(
         { id: "1", tool: COMPLETION_TOOL_NAME, input: { prompt: "hi" } },
@@ -254,7 +255,7 @@ describe("the completion port", () => {
   /** A completion port whose run records its input and answers with the given text. */
   function recordingPort(text: string) {
     const inputs: RunInput[] = [];
-    const port = createCompletionPort(MODEL, {
+    const port = completionFixture(MODEL, {
       resolveModel,
       run: (input, sink) =>
         Effect.sync(() => {
@@ -301,7 +302,7 @@ describe("the completion port", () => {
   });
 
   it("ignores non-assistant messages when reading the answer", async () => {
-    const port = createCompletionPort(MODEL, {
+    const port = completionFixture(MODEL, {
       resolveModel,
       run: (input, sink) =>
         Effect.sync(() => {
@@ -319,7 +320,7 @@ describe("the completion port", () => {
   });
 
   it("throws the provider's failure instead of returning it as data", async () => {
-    const port = createCompletionPort(MODEL, {
+    const port = completionFixture(MODEL, {
       resolveModel,
       run: () =>
         Effect.succeed({ type: "error" as const, error: providerFailure("provider on fire") }),
@@ -329,7 +330,7 @@ describe("the completion port", () => {
   });
 
   it("names the outcome when a non-stop run carries no error", async () => {
-    const port = createCompletionPort(MODEL, {
+    const port = completionFixture(MODEL, {
       resolveModel,
       run: () => Effect.succeed({ type: "aborted" as const }),
     });
@@ -338,7 +339,7 @@ describe("the completion port", () => {
   });
 
   it("rejects a run that asks to continue: a one-step toolless call has nothing to continue", async () => {
-    const port = createCompletionPort(MODEL, {
+    const port = completionFixture(MODEL, {
       resolveModel,
       run: () => Effect.succeed({ type: "continue" as const }),
     });
@@ -411,7 +412,7 @@ describe("catalog gating for the rlm tools", () => {
     const names = createTools({}, RESIDENT).map((entry) => entry.name);
     expect(names).toContain(COMPLETION_TOOL_NAME);
     const result = await runEffect(
-      createDispatcher(createTools({}, RESIDENT), { executor }).executeCell(
+      dispatcherFixture(createTools({}, RESIDENT), { executor }).executeCell(
         { id: "unwired", tool: COMPLETION_TOOL_NAME, input: { prompt: "x" } },
         { sessionId: RESIDENT.sessionId, turnId: "turn" },
       ),

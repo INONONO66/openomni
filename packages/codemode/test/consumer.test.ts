@@ -100,6 +100,36 @@ async function codemodeFailure(action: () => void): Promise<InstanceType<typeof 
   return failure;
 }
 
+test("running nested cells retain generation ownership until terminal completion", async () => {
+  const gate = holdGate();
+  const settled = Promise.withResolvers<void>();
+  let owners = 0;
+  let acquired = 0;
+  const ownership = { retain() {
+    owners += 1;
+    acquired += 1;
+    let released = false;
+    return () => {
+      if (released) throw new Error("duplicate generation release");
+      released = true;
+      owners -= 1;
+      if (owners === 0) settled.resolve();
+    };
+  } };
+  await pair(async ({ mode }) => {
+    const running = mode.cell.run(`codemode.getMachine('B').eval('tool.hold()')`, "owned", { waitMs: 0, ownership });
+    await gate.entered.promise;
+    const result = await running;
+    expect(result.status).toBe("running");
+    expect(acquired).toBe(2);
+    expect(owners).toBe(2);
+    gate.release.resolve();
+    await settled.promise;
+    expect(owners).toBe(0);
+    if (result.status === "running") expect((await mode.cell.peek(result.cellId, "owned")).status).toBe("completed");
+  }, gate.tools);
+}, 15000);
+
 test("SDK handles and Python globals share raw endpoints across two machines", async () => {
   await pair(async ({ mode, a, b }) => {
     expect(mode.listMachines().map((entry) => entry.machineId)).toEqual(["A", "B"]);

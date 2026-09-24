@@ -12,7 +12,7 @@ const MONITOR_WAKE_BUDGET: Omit<PolicyRow.Row, "generation"> = {
   match: { encodingVersion: 1, value: { op: "monitor" } },
   verdict: {
     encodingVersion: 1,
-    value: { type: "obligation", name: "budget_clamp", metric: "notifications", limit: 8 },
+    value: { type: "obligation", ref: "kernel/budget-clamp", metric: "notifications", limit: 8 },
   },
 };
 
@@ -25,11 +25,11 @@ const KERNEL_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
 ];
 
 /** Seeds the kernel's mandatory generation before any durable session is materialized. */
-export function seedKernelPolicyRows(): number {
+export function seedKernelPolicyRows(bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = []): number {
   const policies = Storage.get().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
   return policies.appendGeneration((current) => {
-    const next = new Map(KERNEL_POLICY_ROWS.map((row) => [policyId(row), row]));
+    const next = new Map([...KERNEL_POLICY_ROWS, ...bundleRows].map((row) => [policyId(row), row]));
     // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
     for (const row of current) next.set(policyId(row), row);
     const currentIds = new Set(current.map(policyId));

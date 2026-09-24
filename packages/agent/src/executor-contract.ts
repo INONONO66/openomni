@@ -162,7 +162,7 @@ export interface ExecutionApprovals {
 export interface ExecutionBatchItem<R = never> {
   readonly request: ExecutionRequest;
   readonly sequential?: true;
-  body(intent: LedgerAction.Receipt): Effect.Effect<PlainValue, ExecutionError, R>;
+  body(intent: LedgerAction.Receipt, admittedInput: PlainValue): Effect.Effect<PlainValue, ExecutionError, R>;
 }
 export type ExecutionBatchResult = ExecutionResult;
 
@@ -180,7 +180,7 @@ export interface Executor {
   ): Effect.Effect<readonly ExecutionBatchResult[], ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>>;
   run<T extends PlainValue, R>(
     request: ExecutionRequest,
-    body: (intent: LedgerAction.Receipt) => Effect.Effect<T, ExecutionError, R>,
+    body: (intent: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.Effect<T, ExecutionError, R>,
   ): Effect.Effect<ExecutionResult, ExecutionError, Exclude<R, RawToolSlots | Scope.Scope>>;
 }
 
@@ -214,15 +214,19 @@ export interface ExecutorOptions {
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly closeGraceMs?: number;
   readonly approvalTimeoutMs?: number;
-  readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
-  readonly observations: ObservationSink | BusEvent.Sink;
   readonly identity: ExecutionIdentity;
-  readonly clock: () => number;
-  readonly entropy: () => string;
   readonly extensionKinds?: readonly ExecutionKindRegistration[];
   readonly authorizeApproval?: (
     credential: string,
     request: ExecutionApprovalRequest,
   ) => Effect.Effect<OwnerApprovalEvidence, ExecutionError>;
+}
+
+/** Package-private resolved values; public acquisition accepts no service options. */
+export interface ResolvedExecutorOptions extends ExecutorOptions {
+  readonly policy: CompiledPolicySnapshot;
+  readonly observations: ObservationSink | BusEvent.Sink;
+  readonly clock: () => number;
+  readonly entropy: () => string;
 }

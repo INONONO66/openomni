@@ -14,6 +14,8 @@ import { ChannelGrantStore, DecisionFacts, LedgerWrites, type LedgerError } from
 import type { Actor, Gateway } from "@openomni/protocol";
 import {
   Bus,
+  Clock, Entropy, GenerationLayers, currentInvocation,
+  type SessionEntryServices, type BundleDefinitions,
   createSessionRequests,
   currentExecutor,
   ForeignFailure,
@@ -26,8 +28,6 @@ import { outboundMessage } from "./composition/terminal-message";
 import { Cause, Effect, Either, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
 import { MonitorRefused, type MonitorPorts } from "./tools/monitor";
 import {
-  AppClock,
-  AppEntropy,
   AppLifecycleFailure,
   AppLive,
   AppScope,
@@ -42,12 +42,24 @@ export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
   if (processRuntime !== undefined) return processRuntime;
   const runtime = ManagedRuntime.make(AppLive(options));
   const dispose = runtime.dispose.bind(runtime);
+  const disposeEffect = runtime.disposeEffect;
+  let disposed = false;
   let disposal: Promise<void> | undefined;
   Object.assign(runtime, {
+    disposeEffect: disposeEffect.pipe(Effect.ensuring(Effect.sync(() => {
+      disposed = true;
+      if (processRuntime === runtime) processRuntime = undefined;
+    }))),
     dispose: () => {
-      disposal ??= dispose().finally(() => {
+      if (disposed) {
+        disposal ??= dispose();
+        return disposal;
+      }
+      disposal ??= runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
+        Effect.mapError((error) => new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) })),
+      )).catch((error: Error) => { disposal = undefined; throw error; }).then(() => dispose().finally(() => {
         if (processRuntime === runtime) processRuntime = undefined;
-      });
+      }));
       return disposal;
     },
   });
@@ -68,7 +80,7 @@ export function runAppEffect<A, E>(
 
 export function acquireAppResource<A, E>(
   runtime: AppRuntime,
-  effect: Effect.Effect<A, E, Scope.Scope>,
+  effect: Effect.Effect<A, E, Scope.Scope | AppServices>,
 ): Promise<A> {
   return runAppEffect(
     runtime,
@@ -126,7 +138,6 @@ export function toolPorts(
       cells === undefined
         ? undefined
         : {
-            bindTools: cells.bindTools,
             cell: {
               run: (code, tenant, options) =>
                 runAppEffect(runtime, cells.cell.run(code, tenant, options), options.signal),
@@ -134,7 +145,7 @@ export function toolPorts(
               stop: (id, tenant) => runAppEffect(runtime, cells.cell.stop(id, tenant)),
             },
           },
-    llm: (call) => runAppEffect(runtime, ports.completion(call)),
+    llm: (call) => runAppEffect(runtime, currentInvocation().generation.provide(ports.completion(call))),
     messages: { ingest: (...args) => runAppEffect(runtime, ports.messages.ingest(...args)) },
   };
 }
@@ -161,8 +172,8 @@ export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPo
     Effect.gen(function* () {
       return {
         alarms: (yield* LedgerWrites).alarms,
-        clock: yield* AppClock,
-        entropy: yield* AppEntropy,
+        clock: yield* Clock,
+        entropy: yield* Entropy,
       };
     }),
   );
@@ -274,7 +285,7 @@ export function channelTransaction<A>(
 }
 
 export function channelRequests(
-  requests: ReturnType<typeof createSessionRequests>,
+  requests: Effect.Effect.Success<ReturnType<typeof createSessionRequests>>,
 ): Parameters<typeof createGatewayRouter>[0]["requests"] {
   return {
     list: requests.list,
@@ -295,16 +306,15 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError> {
+): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError, SessionEntryServices | BundleDefinitions> {
   return Effect.gen(function* () {
     registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
-    const externalRun = yield* createIngressExecutor(ports.clock ?? Date.now);
+    const externalRun = yield* createIngressExecutor();
+    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({}));
     return createGatewayRouter({
       ...ports,
       transaction: channelTransaction,
-      requests:
-        ports.requests ??
-        channelRequests(createSessionRequests({ observations: Bus, clock: ports.clock })),
+      requests,
       sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
       run: (sender, request, body) =>
         Effect.gen(function* () {

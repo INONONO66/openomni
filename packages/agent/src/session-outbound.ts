@@ -1,14 +1,14 @@
 import { Effect } from "effect";
-import { CommitFailed, type ExecutionError } from "./errors";
+import { CommitFailed, } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   canonicalDigest,
   PlainValueSchema,
   type LedgerAction,
   SessionTransition,
 } from "@openomni/protocol";
-import type { SessionRuntime } from "./session-contract";
+import type { ResolvedSessionRuntime } from "./session-contract";
+import type { SessionError } from "./errors";
 
 export function outboundOpen(
   message: SessionTransition.OutboundMessage,
@@ -35,7 +35,7 @@ export function outboundOpen(
   };
 }
 
-function policyGeneration(message: SessionTransition.OutboundMessage): number {
+function toolsGeneration(message: SessionTransition.OutboundMessage): number {
   const actions = SessionHandleStore.tree(message.sourceSessionId);
   const terminal = SessionHandleStore.turnTerminal(
     actions.find((action) => action.id === message.sourceActionId),
@@ -45,7 +45,7 @@ function policyGeneration(message: SessionTransition.OutboundMessage): number {
       ? undefined
       : SessionHandleStore.turnIntent(actions.find((action) => action.id === terminal.turnId));
   if (intent === undefined) throw new Error("outbound original turn is missing");
-  return intent.policyGeneration;
+  return intent.toolsGeneration;
 }
 
 function acknowledge(
@@ -92,13 +92,12 @@ function acknowledge(
 /** Drains recorded source obligations. It never seals again or writes a destination session. */
 export function dispatchSessionOutbound(
   sessionId: string,
-  runtime: SessionRuntime,
+  runtime: ResolvedSessionRuntime,
   owner: string,
   fence: number,
   clock: () => number,
-  pinPolicy: (generation: number) => CompiledPolicySnapshot,
   releaseLease: boolean,
-): Effect.Effect<void, ExecutionError> {
+): Effect.Effect<void, SessionError> {
   return Effect.suspend(() => {
     const commit = (actions: LedgerAction.Append[], release: boolean) => Effect.suspend(() => {
       const row = SessionHandleStore.row(sessionId);
@@ -107,17 +106,17 @@ export function dispatchSessionOutbound(
         actions, consumeInboxIds: [], state: row.state, releaseLease: release,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
     });
-    const dispatch = Effect.forEach(SessionHandleStore.outboundRows(sessionId), (item) => Effect.gen(function* () {
+    const dispatch = Effect.forEach(SessionHandleStore.outboundRows(sessionId), (item) => Effect.scoped(Effect.gen(function* () {
       if (item.state === "delivered") return;
       if (runtime.dispatchOutbound === undefined)
         return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
-      const receipt = yield* runtime.dispatchOutbound({
+      const captured = yield* runtime.generations.capture({ sessionId, generation: toolsGeneration(item.message) });
+      const receipt = yield* captured.provide(runtime.dispatchOutbound({
         message: item.message,
         authority: { owner, fence },
-        policy: pinPolicy(policyGeneration(item.message)),
-      });
+      })).pipe(Effect.provide(runtime.services));
       yield* commit([acknowledge(item.message, receipt, clock())], false);
-    }), { discard: true });
+    })), { discard: true });
     return releaseLease ? dispatch.pipe(Effect.onExit(() => commit([], true).pipe(Effect.orDie))) : dispatch;
   });
 }

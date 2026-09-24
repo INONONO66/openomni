@@ -1,4 +1,7 @@
 import { Glob } from "bun";
+import { realpathSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import ts from "typescript";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
@@ -160,11 +163,11 @@ type ScannedSource = { filePath: string; source: string };
  * rule, one read. Every validator below consumes this instead of repeating the
  * scan options.
  */
-async function* scanRepositorySources(pattern: string): AsyncGenerator<ScannedSource> {
+async function* scanRepositorySources(pattern: string, root = "."): AsyncGenerator<ScannedSource> {
   const sourceGlob = new Glob(pattern);
 
   for await (const filePath of sourceGlob.scan({
-    cwd: ".",
+    cwd: root,
     absolute: false,
     dot: false,
     onlyFiles: true,
@@ -174,8 +177,285 @@ async function* scanRepositorySources(pattern: string): AsyncGenerator<ScannedSo
       continue;
     }
 
-    yield { filePath, source: await Bun.file(filePath).text() };
+    yield { filePath, source: await Bun.file(join(root, filePath)).text() };
   }
+}
+
+const BUNDLE_PREFIX = "apps/openomni/src/bundles/";
+const BUNDLE_CORE_IMPORTS = new Set<string>(
+  TOPOLOGY.flatMap((workspace) => (workspace.key === "openomniApp" ? workspace.allowedDeps : [])),
+);
+
+function bundleNamespace(file: string): string | undefined {
+  const path = file.startsWith(BUNDLE_PREFIX) ? file.slice(BUNDLE_PREFIX.length) : "";
+  return path.includes("/") ? path.split("/")[0] : undefined;
+}
+
+export type BundleImportFinding = {
+  readonly code:
+    | "BUNDLE_CROSS_NAMESPACE"
+    | "BUNDLE_COMPUTED_IMPORT"
+    | "BUNDLE_PARSE_ERROR"
+    | "BUNDLE_UNRESOLVED_IMPORT"
+    | "BUNDLE_IMPORT_NOT_ALLOWED"
+    | "BUNDLE_CONFIG_ERROR";
+  readonly file: string;
+  readonly line: number;
+};
+
+type ModuleEdge = { readonly line: number; readonly specifier: string | undefined };
+type Loader = "require" | "createRequire" | "module";
+
+function nodeModuleImport(node: ts.Node): boolean {
+  if (ts.isSourceFile(node)) return false;
+  if (ts.isImportDeclaration(node)) {
+    return (
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      ["module", "node:module"].includes(node.moduleSpecifier.text)
+    );
+  }
+  return nodeModuleImport(node.parent);
+}
+
+function isCreateRequireProperty(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  seen: Set<ts.Symbol>,
+): boolean {
+  if (ts.isPropertyAccessExpression(node)) {
+    return (
+      node.name.text === "createRequire" &&
+      loaderOrigin(node.expression, checker, seen) === "module"
+    );
+  }
+  return (
+    ts.isElementAccessExpression(node) &&
+    ts.isStringLiteralLike(node.argumentExpression) &&
+    node.argumentExpression.text === "createRequire" &&
+    loaderOrigin(node.expression, checker, seen) === "module"
+  );
+}
+
+function declaredLoader(
+  node: ts.Node,
+  declaration: ts.Declaration,
+  checker: ts.TypeChecker,
+  seen: Set<ts.Symbol>,
+): Loader | undefined {
+  if (
+    (ts.isNamespaceImport(declaration) || ts.isImportClause(declaration)) &&
+    nodeModuleImport(declaration)
+  )
+    return "module";
+  if (
+    ts.isBindingElement(declaration) &&
+    (declaration.propertyName ?? declaration.name).getText() === "createRequire"
+  ) {
+    const variable = declaration.parent.parent;
+    if (
+      ts.isVariableDeclaration(variable) &&
+      variable.initializer &&
+      loaderOrigin(variable.initializer, checker, seen) === "module"
+    )
+      return "createRequire";
+  }
+  if (
+    ts.isImportSpecifier(declaration) &&
+    nodeModuleImport(declaration) &&
+    (declaration.propertyName ?? declaration.name).text === "createRequire"
+  )
+    return "createRequire";
+  if (
+    ts.isIdentifier(node) &&
+    node.text === "require" &&
+    declaration.getSourceFile().isDeclarationFile
+  )
+    return "require";
+  return undefined;
+}
+
+/** Follow bindings, not spellings: local shadowed require functions are ordinary calls. */
+function loaderOrigin(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>(),
+): Loader | undefined {
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node))
+    return loaderOrigin(node.expression, checker, seen);
+  if (ts.isCallExpression(node)) {
+    return loaderOrigin(node.expression, checker, seen) === "createRequire" ? "require" : undefined;
+  }
+  if (isCreateRequireProperty(node, checker, seen)) return "createRequire";
+  const symbol = checker.getSymbolAtLocation(node);
+  if (!symbol) return ts.isIdentifier(node) && node.text === "require" ? "require" : undefined;
+  if (seen.has(symbol)) return undefined;
+  seen.add(symbol);
+  const declarations = [
+    ...(symbol.declarations ?? []),
+    ...(symbol.flags & ts.SymbolFlags.Alias
+      ? (checker.getAliasedSymbol(symbol).declarations ?? [])
+      : []),
+  ];
+  for (const declaration of declarations) {
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+      return loaderOrigin(declaration.initializer, checker, seen);
+    }
+    const origin = declaredLoader(node, declaration, checker, seen);
+    if (origin) return origin;
+  }
+  return undefined;
+}
+
+function moduleArgument(node: ts.Node, checker: ts.TypeChecker): ts.Node | undefined {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+    return node.moduleReference.expression;
+  }
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument))
+    return node.argument.literal;
+  if (
+    ts.isCallExpression(node) &&
+    (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      loaderOrigin(node.expression, checker) === "require")
+  ) {
+    return node.arguments[0] ?? node;
+  }
+  return undefined;
+}
+
+function moduleEdges(source: ts.SourceFile, checker: ts.TypeChecker): readonly ModuleEdge[] {
+  const edges: ModuleEdge[] = [];
+  function visit(node: ts.Node): void {
+    const argument = moduleArgument(node, checker);
+    if (argument) {
+      edges.push({
+        line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+        specifier: ts.isStringLiteralLike(argument) ? argument.text : undefined,
+      });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return edges;
+}
+
+function bundleCompilerOptions(root: string, findings: BundleImportFinding[]): ts.CompilerOptions {
+  const defaults: ts.CompilerOptions = {
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    allowJs: true,
+  };
+  const config = ts.findConfigFile(join(root, "apps/openomni"), ts.sys.fileExists);
+  if (!config) return defaults;
+  const parsed = ts.getParsedCommandLineOfConfigFile(
+    config,
+    {},
+    {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: () => {
+        findings.push({ code: "BUNDLE_CONFIG_ERROR", file: relative(root, config), line: 1 });
+      },
+    },
+  );
+  for (const diagnostic of parsed?.errors ?? []) {
+    findings.push({
+      code: "BUNDLE_CONFIG_ERROR",
+      file: relative(root, diagnostic.file?.fileName ?? config),
+      line: diagnostic.file
+        ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line + 1
+        : 1,
+    });
+  }
+  return { ...defaults, ...parsed?.options };
+}
+
+function isLocalSpecifier(specifier: string, options: ts.CompilerOptions): boolean {
+  return (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("#") ||
+    Object.keys(options.paths ?? {}).some((alias) =>
+      specifier.startsWith(alias.split("*")[0] ?? alias),
+    )
+  );
+}
+
+/** Single import-ban owner. Follow all local edges, including type edges and barrels. */
+export async function checkBundleImports(
+  directory = process.cwd(),
+): Promise<readonly BundleImportFinding[]> {
+  const root = realpathSync(directory);
+  const roots: string[] = [];
+  for await (const { filePath } of scanRepositorySources(
+    "{apps,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+    root,
+  )) {
+    roots.push(join(root, filePath));
+  }
+  const bundles = roots.filter((file) => bundleNamespace(relative(root, file)));
+  if (bundles.length === 0) return [];
+  const findings: BundleImportFinding[] = [];
+  const options = bundleCompilerOptions(root, findings);
+  if (findings.length > 0) return findings;
+  const program = ts.createProgram(roots, options);
+  const checker = program.getTypeChecker();
+  const edges = new Map<string, readonly ModuleEdge[]>();
+  const visited = new Set<string>();
+  function follow(edge: ModuleEdge, file: string, namespace: string): void {
+    const location = { file: relative(root, file), line: edge.line };
+    if (edge.specifier === undefined) {
+      findings.push({ code: "BUNDLE_COMPUTED_IMPORT", ...location });
+      return;
+    }
+    if (edge.specifier.startsWith("@openomni/") && !BUNDLE_CORE_IMPORTS.has(edge.specifier)) {
+      findings.push({ code: "BUNDLE_IMPORT_NOT_ALLOWED", ...location });
+      return;
+    }
+    const target = ts.resolveModuleName(edge.specifier, file, options, ts.sys).resolvedModule
+      ?.resolvedFileName;
+    if (!target) {
+      if (isLocalSpecifier(edge.specifier, options)) {
+        findings.push({ code: "BUNDLE_UNRESOLVED_IMPORT", ...location });
+      }
+      return;
+    }
+    const targetPath = relative(root, resolve(target));
+    const targetNamespace = bundleNamespace(targetPath);
+    if (targetNamespace && targetNamespace !== namespace) {
+      findings.push({ code: "BUNDLE_CROSS_NAMESPACE", ...location });
+    } else if (!targetPath.includes("node_modules/") && !targetPath.startsWith("../")) {
+      visit(resolve(target), namespace);
+    }
+  }
+  function visit(file: string, namespace: string): void {
+    const key = `${namespace}:${file}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+    const path = relative(root, file);
+    const source = program.getSourceFile(file);
+    if (!source) {
+      findings.push({ code: "BUNDLE_UNRESOLVED_IMPORT", file: path, line: 1 });
+      return;
+    }
+    for (const diagnostic of program.getSyntacticDiagnostics(source)) {
+      findings.push({
+        code: "BUNDLE_PARSE_ERROR",
+        file: path,
+        line: source.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line + 1,
+      });
+    }
+    const imports = edges.get(file) ?? moduleEdges(source, checker);
+    edges.set(file, imports);
+    for (const edge of imports) follow(edge, file, namespace);
+  }
+  for (const file of bundles) {
+    const namespace = bundleNamespace(relative(root, file));
+    if (namespace) visit(file, namespace);
+  }
+  return [
+    ...new Map(
+      findings.map((finding) => [`${finding.code}:${finding.file}:${finding.line}`, finding]),
+    ).values(),
+  ];
 }
 
 async function validateDependencyDirection(): Promise<string[]> {
@@ -787,12 +1067,13 @@ function selfTest(): void {
   process.exit(0);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   assertTopologyComplete();
   if (Bun.argv.includes("--self-test")) selfTest();
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
   const channelsBandingViolations = await validateChannelsIntraPackageBanding();
+  const bundleViolations = await checkBundleImports();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
   const goldenViolations = await validateGoldenPrinciples();
@@ -801,6 +1082,9 @@ async function main(): Promise<void> {
     ...depViolations,
     ...sourceImportViolations,
     ...channelsBandingViolations,
+    ...bundleViolations.map(
+      (finding) => `VIOLATION: ${finding.code} ${finding.file}:${finding.line}`,
+    ),
     ...deepImportViolations,
     ...deepRelativeImportViolations,
     ...goldenViolations,
@@ -815,19 +1099,21 @@ async function main(): Promise<void> {
     console.log(
       "OK: dependency direction, import boundaries, golden principles, and doc freshness are valid",
     );
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
 
   if (violations.length === 0 && freshnessWarnings.length > 0) {
     console.log(`OK: no violations, but ${freshnessWarnings.length} stale doc(s) detected`);
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
 
   for (const violation of violations) {
     console.error(violation);
   }
 
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 if (import.meta.main) {

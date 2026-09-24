@@ -45,10 +45,10 @@ describe("Resident compaction", () => {
     const resident = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      compaction: {
+      compaction: Effect.succeed({
         contextWindowTokens: 700,
         elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-      },
+      }),
       tools: {},
       llm: {
         resolveModel: (model) => Effect.succeed(({

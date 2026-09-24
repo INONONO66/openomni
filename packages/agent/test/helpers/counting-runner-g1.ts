@@ -1,6 +1,9 @@
+import { turnTestLayer, catalogLayer } from "./service-layers";
+import { prepareChatFixture } from "./chat-services";
+import type { SessionFixture as SessionRuntime } from "./session-services";
 import { Effect } from "effect";
 import type { RunInput, Sink } from "@openomni/llm";
-import type { SessionRunnerInput, SessionRunner, SessionRuntime } from "../../src/session-handle";
+import type { SessionRunnerInput, SessionRunner } from "../../src/session-handle";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import type { ExecutionError } from "../../src/errors";
@@ -13,9 +16,9 @@ export function countingRunner(
   onModel: () => Effect.Effect<void, ExecutionError> = () => Effect.void,
 ): SessionRunner {
   return createSessionChatRunner({
-    prepare(input: SessionRunnerInput) {
-      const dispatcher = createTurnDispatcher([], input, runtime);
-      return {
+    prepare: (input: SessionRunnerInput) => Effect.gen(function* () {
+      const dispatcher = (yield* Effect.gen(function* () { const turnInput = input; const turnRuntime = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+      return prepareChatFixture({
         traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
         config: {
           events: { publish: () => undefined },
@@ -31,7 +34,6 @@ export function countingRunner(
             }),
           },
         },
-      };
-    },
+      }); }),
   });
 }

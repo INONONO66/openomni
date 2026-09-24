@@ -1,3 +1,5 @@
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { executorLayer } from "./helpers/service-layers";
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber, Supervisor } from "effect";
 import { createExecutor } from "../src/executor";
@@ -5,7 +7,7 @@ import { isolated } from "./helpers/isolated";
 import { nativeExecutorOptions } from "./helpers/native-executor";
 
 test("an unguarded action owns one body fiber and closes its scope before returning", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const executor = createExecutor(yield* nativeExecutorOptions());
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = yield* nativeExecutorOptions(); return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const supervisor = yield* Supervisor.track;
   const entered = yield* Deferred.make<void>();
   const release = yield* Deferred.make<void>();

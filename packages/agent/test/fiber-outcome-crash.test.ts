@@ -1,3 +1,6 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { executorLayer } from "./helpers/service-layers";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,7 +39,7 @@ for (const receipt of ["absent", "present"] as const) {
 test("interrupted fiber seals one interrupted action after its entry signal", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   const entered = yield* Deferred.make<void>();
-  const executor = createExecutor(options);
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = options; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const fiber = yield* Effect.fork(executor.run(request, () =>
     Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never))));
   yield* Deferred.await(entered);
@@ -49,13 +52,13 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
 test("pre denied commits its policy node and enters zero bodies", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   let bodies = 0;
-  const executor = createExecutor({ ...options, policy: compilePolicySnapshot({
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options, policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1, rows: [...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })), {
       name: "no-write", kind: "tool", phase: "pre", generation: 1, priority: 1,
       match: { encodingVersion: 1, value: { op: "write" } },
       verdict: { encodingVersion: 1, value: { type: "deny", reason: "policy" } },
     }],
-  }) });
+  }) }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   expect(yield* executor.run(request, () => Effect.sync(() => { bodies += 1; return "no"; })))
     .toEqual({ terminal: "blocked_pre", reason: "policy" });
   expect(bodies).toBe(0);
@@ -65,7 +68,7 @@ test("pre denied commits its policy node and enters zero bodies", () => isolated
 })));
 
 test("expected failures, defects and child finalizer defects have distinct serializable evidence", () => isolated(Effect.gen(function* () {
-  const executor = createExecutor(yield* nativeExecutorOptions());
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = yield* nativeExecutorOptions(); return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   yield* Effect.exit(executor.run(request, () => Effect.fail(new ToolBodyFailed({ tool: "write", cause: "EIO" }))));
   yield* Effect.exit(executor.run(request, () => Effect.die(new Error("defect-code"))));
   yield* Effect.exit(executor.run(request, () => Effect.gen(function* () {
@@ -89,7 +92,7 @@ test("expected failures, defects and child finalizer defects have distinct seria
 test("terminal commit refusal publishes no success and leaves the intent open", () => isolated(Effect.gen(function* () {
   const options = yield* nativeExecutorOptions();
   const published: string[] = [];
-  const executor = createExecutor({ ...options,
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options,
     observations: { publish: (event) => { published.push(event.name); } },
     ledger: { ...options.ledger, commit: (action) =>
       action.kind === "tool" && effectValue(action).phase === "result"
@@ -97,7 +100,7 @@ test("terminal commit refusal publishes no success and leaves the intent open", 
             currentRevision: 1, fence: 1, currentFence: 2 }))
         : options.ledger.commit(action),
     },
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const exit = yield* Effect.either(executor.run(request, () => Effect.succeed({ status: "success" })));
   expect(exit).toMatchObject({ _tag: "Left", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
   expect(results()).toEqual([]);
@@ -110,7 +113,7 @@ test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or
   const entered = yield* Deferred.make<void>();
   const released = Promise.withResolvers<string>();
   const retained: Promise<void>[] = [];
-  const executor = createExecutor({ ...options, closeGraceMs: 0, retainEffect: (slot) => retained.push(slot) });
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = { ...options, closeGraceMs: 0, retainEffect: (slot) => retained.push(slot) }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const definition = {
     name: "write", description: "write", category: "mutation" as const,
     input: z.object({}), output: z.string(), visibility: { model: [] as const, cell: [] as const },

@@ -1,3 +1,4 @@
+import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -5,7 +6,7 @@ import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "
 import { type PlainObject, Provisioning } from "@openomni/protocol";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { createTools } from "../src/tools/core/catalog";
-import { createDispatcher, eraseTool } from "@openomni/agent";
+import { eraseTool } from "@openomni/agent";
 import { createProvisionTool, type ProvisionPort } from "../src/tools/provision";
 import { executor } from "./helpers/executor";
 import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
@@ -91,7 +92,7 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
-    const result = await runEffect(createDispatcher([{ ...tool, execute: async () => ({ op: "status" }) }], {
+    const result = await runEffect(dispatcherFixture([{ ...tool, execute: async () => ({ op: "status" }) }], {
       executor,
     }).execute(
       {
@@ -558,7 +559,7 @@ describe("refusal branches", () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port));
     for (const approvalId of ["contact-approval", "another-person-approval"]) {
-      const result = await runEffect(createDispatcher([tool], { executor }).execute(
+      const result = await runEffect(dispatcherFixture([tool], { executor }).execute(
         {
           id: approvalId,
           tool: "provision",
@@ -575,7 +576,7 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await runEffect(Effect.either(createDispatcher([eraseTool(createProvisionTool(port))], {
+    const result = await runEffect(Effect.either(dispatcherFixture([eraseTool(createProvisionTool(port))], {
       executor,
     }).execute(
       {

@@ -91,13 +91,14 @@ test("actionById returns the exact committed node globally or absence", () => {
 });
 
 test("latestGenerationFor folds only ordered configure rows and skips malformed snapshots", () => {
-  const snapshot = SessionHandleStore.generationSnapshot({
+  const generation = SessionHandleStore.generationSnapshot({
     generation: 2,
     revertTo: 1,
     tools: [],
     system: { preset: "latest", blocks: [] },
     policyGeneration: 3,
   });
+  const snapshot = { ...generation, bundles: [...generation.bundles] };
   append("configured", "session.configure", null, { phase: "configured", snapshot });
   append("malformed", "session.configure", null, { phase: "configured", snapshot: null });
   append("not-configure", "turn", null, {

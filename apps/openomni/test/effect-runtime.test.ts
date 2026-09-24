@@ -5,7 +5,8 @@ import { bootResource } from "../src/composition/boot";
 import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
 
 import { startOpenOmni } from "../src/index";
-import { AppClock, AppEntropy, AppLifecycleFailure } from "../src/runtime";
+import { Clock, Entropy } from "@openomni/agent";
+import { AppLifecycleFailure } from "../src/runtime";
 import { runEffect } from "./helpers/effect";
 
 const config = {
@@ -45,25 +46,22 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
   expect<unknown>(await handle?.exec("true", "/")).toBe(exec);
 });
 
-test("two server edges share the gateway runtime and its injected services", async () => {
+test("the server edge consumes the shared gateway runtime and its injected services", async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => 123, entropy: () => "fixed" });
   const first = await startOpenOmni({ config, runtime });
   try {
-    const second = await startOpenOmni({ config });
     expect(first.runtime).toBe(runtime);
-    expect(second.runtime).toBe(runtime);
     expect(gatewayRuntime({ dbPath: ":memory:" })).toBe(runtime);
     expect(
       await runtime.runPromise(
         Effect.gen(function* () {
-          return [(yield* AppClock).now(), (yield* AppEntropy).next()];
+          return [(yield* Clock).now(), (yield* Entropy).next()];
         }),
       ),
     ).toEqual([123, "fixed"]);
     expect((await fetch(`http://127.0.0.1:${first.port}/health`)).status).toBe(200);
-    expect((await fetch(`http://127.0.0.1:${second.port}/health`)).status).toBe(200);
     const stop = first.stop();
-    expect(second.stop()).toBe(stop);
+    expect(first.stop()).toBe(stop);
     await stop;
     expect(Storage.getInitializedDbPath()).toBeNull();
   } finally {

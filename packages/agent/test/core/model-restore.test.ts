@@ -1,3 +1,6 @@
+import { type ChatFixture, chatServices } from "../helpers/chat-services";
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
+import { executorLayer } from "../helpers/service-layers";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { recordingLedger } from "../helpers/effect-g2";
@@ -40,7 +43,7 @@ async function turn(options: {
 }) {
   const recording = recordingLedger();
   const resolved: Model.Ref[] = [];
-  const executor = createExecutor({
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
     policy: compiledPolicy(options.rows),
     ledger: recording.ledger,
     observations: { publish: () => undefined },
@@ -52,9 +55,9 @@ async function turn(options: {
       parentActionId: "turn-2",
       turnId: "turn-2",
     },
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const result = await isolated(
-    runAgent(runInput([{ role: "user", content: "go" }]), {
+    Effect.gen(function* () { const fixture: ChatFixture = {
       executor,
       execution: executor,
       events: { publish: () => undefined },
@@ -73,7 +76,7 @@ async function turn(options: {
             return { id: model.id, name: model.id, providerID: model.provider };
           }),
       },
-    }),
+    }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "go" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
   );
   const llm = recording.committed.filter(
     (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === "llm",

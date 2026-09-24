@@ -39,6 +39,7 @@ function isEventData<T, U>(
 }
 
 export interface ObservationBus extends ObservationSink {
+  scope(identity: Readonly<BusEvent.Metadata>): ObservationSink;
   subscribe<T>(
     event: BusEvent.Descriptor<T>,
     handler: (data: T) => void,

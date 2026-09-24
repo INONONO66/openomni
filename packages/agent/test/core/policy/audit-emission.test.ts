@@ -1,3 +1,6 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { executorLayer } from "../../helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import { createExecutor } from "../../../src/index";
@@ -29,8 +32,8 @@ it("awaits policy.decision commit before publishing its observation", async () =
       });
     },
   };
-  const executor = createExecutor({
-    policy: compilePolicySnapshot({ generation: 7, mandatory: ["compaction"], rows: [
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 7, mandatory: ["compaction"], rows: [
       { ...policyRow("compaction", "turn", "post", { type: "allow" }), match: { encodingVersion: 1, value: {} } },
       policyRow("allow-read", "tool", "pre", { type: "allow" }),
     ] }),
@@ -39,7 +42,7 @@ it("awaits policy.decision commit before publishing its observation", async () =
     identity: { sessionId: "session-audit", role: "resident", parentActionId: "turn-parent" },
     clock: () => 42,
     entropy: (() => { let index = 0; return () => `audit-${++index}`; })(),
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   const running = yield* Effect.forkScoped(executor.run({ kind: "tool", op: "read", intent: { path: "/tmp/a" }, effect: { ok: true } }, () => Effect.succeed("done")));
   yield* Effect.promise(() => reached.promise).pipe(Effect.timeout("5 seconds"));
   expect(appended).toHaveLength(0);

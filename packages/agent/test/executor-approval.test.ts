@@ -1,9 +1,11 @@
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { executorLayer } from "./helpers/service-layers";
 import { expect, it } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect, Fiber } from "effect";
 import { ExecutionApprovalError, ForeignFailure } from "../src/errors";
-import { createExecutor, type ExecutorOptions } from "../src/executor";
+import { createExecutor, } from "../src/executor";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { isolated } from "./helpers/isolated";
@@ -19,7 +21,7 @@ const request = {
   toolObservation: { turnId: "turn", callId: "call-1" },
 };
 
-function fixture(overrides: Partial<ExecutorOptions> = {}) {
+function fixture(overrides: Partial<ResolvedExecutorOptions> = {}) {
   return Effect.gen(function* () {
     const opened = Promise.withResolvers<SessionTransition.Request>();
     const recording = yield* requestLedger({
@@ -28,13 +30,13 @@ function fixture(overrides: Partial<ExecutorOptions> = {}) {
         if (request.state === "open") opened.resolve(request);
       },
     });
-    const executor = createExecutor({
+    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
       ...recording,
       policy,
       authorizeApproval: () => Effect.succeed(evidence),
       observations: { publish: () => undefined },
       ...overrides,
-    });
+    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
     const approvals = executor.approvals;
     if (approvals === undefined) throw new Error("missing approvals");
     const executorIdentity = overrides.identity ?? recording.identity;
@@ -225,14 +227,14 @@ it("handles immediate expiry through the durable alarm transition", () => isolat
 it("rejects invalid deadlines before admitting execution", () => isolated(Effect.gen(function* () {
   const recording = yield* requestLedger();
   for (const approvalTimeoutMs of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-    expect(() =>
-      createExecutor({
+    expect(yield* Effect.flip(
+      Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
         ...recording,
         policy,
         observations: { publish: () => undefined },
         approvalTimeoutMs,
-      }),
-    ).toThrow(TypeError);
+      }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }),
+    )).toMatchObject({ _tag: "ForeignFailure", operation: "executor.acquire", cause: "invalid_approval_timeout" });
   }
 })));
 

@@ -1,3 +1,5 @@
+import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { executorLayer } from "../../helpers/service-layers";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
@@ -5,7 +7,7 @@ import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
 import { ForeignFailure } from "../../../src/errors";
 import { LlmRunFailure } from "@openomni/llm";
 import { Storage } from "@openomni/ledger";
-import { createExecutor, type ExecutorOptions } from "../../../src/executor";
+import { createExecutor, } from "../../../src/executor";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { Alarm, LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";
@@ -33,7 +35,7 @@ function providerFailure(visibleOutput = false) {
   });
 }
 
-function harness(overrides: Partial<ExecutorOptions> = {}) {
+function harness(overrides: Partial<ResolvedExecutorOptions> = {}) {
   const waits: number[] = [];
   return {
     ...turnExecutor(compiledPolicy(), undefined, {
@@ -321,11 +323,11 @@ test.each([
 
 test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", () => isolated(Effect.scoped(Effect.gen(function* () {
   const recording = yield* requestLedger();
-  const executor = createExecutor({
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
     ...recording,
     policy: compiledPolicy(),
     observations: { publish: () => undefined },
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   let calls = 0;
   yield* runChatAttempts(executor, () => Effect.gen(function* () {
       calls += 1;

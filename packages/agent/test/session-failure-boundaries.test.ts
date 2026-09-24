@@ -1,8 +1,9 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
-import { session, type SessionRunnerInput, type SessionRuntime } from "../src/session-handle";
+import { session, type SessionRunnerInput } from "../src/session-handle";
 import { isolated } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -16,10 +17,10 @@ const runtime: SessionRuntime = {
 test("a completed turn's captured ledger rejects late writes without appending", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
   const entered = yield* Deferred.make<SessionRunnerInput>();
-  const handle = yield* session({
+  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
     id: "late-write", role: "resident",
     runner: (input: SessionRunnerInput) => Deferred.succeed(entered, input).pipe(Effect.as({ kind: "result" as const, text: "done" })),
-  }, runtime);
+  }, fixture), fixture); });
   yield* handle.prompt("start");
   const input = yield* Deferred.await(entered);
   const before = SessionHandleStore.tree(handle.id);
@@ -38,14 +39,14 @@ test("request transitions cannot renew an expired lease beneath a live runner", 
   let now = 100;
   const entered = yield* Deferred.make<SessionRunnerInput>();
   const release = yield* Deferred.make<void>();
-  const handle = yield* session({
+  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = { ...runtime, clock: (): number => now }; return yield* withSessionServices(session({
     id: "expired-transition", role: "resident",
     runner: (input: SessionRunnerInput) => Effect.gen(function* () {
       yield* Deferred.succeed(entered, input);
       yield* Deferred.await(release);
       return { kind: "result", text: "done" };
     }),
-  }, { ...runtime, clock: (): number => now });
+  }, fixture), fixture); });
   const running = yield* Effect.fork(handle.prompt("start"));
   const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
   const before = SessionHandleStore.row(handle.id);
@@ -63,9 +64,9 @@ test("request transitions cannot renew an expired lease beneath a live runner", 
 
 test("an idle request transition preserves a competing owner's lease and typed refusal", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
-  const handle = yield* session({
+  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
     id: "held-transition", role: "resident", runner: () => Effect.succeed({ kind: "result", text: "unused" }),
-  }, runtime);
+  }, fixture), fixture); });
   yield* SessionHandleStore.acquireLease({
     sessionId: handle.id, owner: "other", expectedFence: 0, now: 100, expiresAt: 1000,
   });
@@ -81,7 +82,7 @@ test("an idle request transition preserves a competing owner's lease and typed r
 test("zero-grace shutdown seals pending tool evidence before releasing the turn lease", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
   const entered = yield* Deferred.make<void>();
-  const handle = yield* session({
+  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 }; return yield* withSessionServices(session({
     id: "shutdown-pending", role: "resident",
     runner: (input: SessionRunnerInput) => Effect.gen(function* () {
       yield* input.ledger.commit({
@@ -92,7 +93,7 @@ test("zero-grace shutdown seals pending tool evidence before releasing the turn 
       yield* Deferred.succeed(entered, undefined);
       return yield* Effect.never;
     }),
-  }, { ...runtime, closeGraceMs: 0 });
+  }, fixture), fixture); });
   const running = yield* Effect.fork(handle.prompt("start"));
   yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
   yield* handle.close();

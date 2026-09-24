@@ -10,7 +10,8 @@ import { Effect } from "effect";
 import { bootResource } from "../src/composition/boot";
 import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "../src/gateway";
 import { installShutdownHandlers } from "../src/index";
-import { AppClock, AppObservations, AppLifecycleFailure } from "../src/runtime";
+import { Clock, GenerationLayers } from "@openomni/agent";
+import { AppLifecycleFailure } from "../src/runtime";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
@@ -23,7 +24,7 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
   await runAppBoot(
     runtime,
     Effect.gen(function* () {
-      const clock = yield* AppClock;
+      const clock = yield* Clock;
       yield* bootResource(Effect.void, () =>
         Effect.promise(async () => {
           events.push("sessions.close", clock.now());
@@ -97,9 +98,7 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
 for (const settleAfterTurn of [false, true]) {
 test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
   const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => 1000 });
-  const services = await runAppBoot(runtime, Effect.gen(function* () {
-    return { clock: yield* AppClock, observations: yield* AppObservations };
-  }));
+  await runAppBoot(runtime, Effect.void);
   seedKernelPolicyRows();
   const entered = eventSignal<void>("raw tool entered");
   const interrupted = eventSignal<void>("raw tool interrupted");
@@ -117,17 +116,17 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     render: (_args, output) => output,
   }));
   const sessionRuntime: SessionRuntime = {
-    observations: services.observations, clock: services.clock.now, closeGraceMs: 0,
-    generation: (snapshot) => resident.generation(snapshot),
+    closeGraceMs: 0,
     onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };
   const resident = createResident({ model: { provider: "test", id: "test" }, apiKey: "test", tools: {}, toolDefinitions: [tool], sessionRuntime });
+  await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.initialize(resident.definitions)));
   const handle = await acquireAppResource(runtime, session({
     id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],
-    runner: (input) => createTurnDispatcher([tool], input, sessionRuntime).execute(
+    runner: (input) => Effect.flatMap(createTurnDispatcher(input, sessionRuntime), (dispatcher) => dispatcher.execute(
       { id: "hold-call", tool: tool.name, input: {} },
       { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
-    ).pipe(Effect.as({ kind: "result" as const, text: "settled" })),
+    )).pipe(Effect.as({ kind: "result" as const, text: "settled" })),
   }, sessionRuntime));
   const turn = runAppEffect(runtime, handle.prompt("hold raw tool"));
   try {
@@ -142,6 +141,9 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
       const value = action.effect.value;
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
     })).toBe(true);
+    await expect(runtime.dispose()).rejects.toMatchObject({ _tag: "AppLifecycleFailure", operation: "shutdown.raw_unsettled" });
+    expect(Storage.getInitializedDbPath()).toBe(":memory:");
+    expect(gatewayRuntime({ dbPath: ":memory:" })).toBe(runtime);
     if (settleAfterTurn) await turn;
     raw.resolve("late raw settlement");
     await turn;

@@ -1,3 +1,4 @@
+import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, it } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
@@ -41,18 +42,17 @@ describe("createTurnDispatcher", () => {
   it("composes a durable executor and commits intent before result", async () => {
     const recording = recordingLedger();
     const dispatcher = createTurnDispatcher(
-      [tool("echo", async () => "ok")],
       {
         sessionId: "session-1",
         role: "resident",
         actionId: "turn-1",
-        policy: allowAllPolicy,
         ledger: recording.ledger,
       },
-      { observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy },
-    );
+      {},
+    ).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")])),
+      Effect.provide(executorLayer({ policy: allowAllPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy })));
 
-    const result = await isolated(dispatcher.execute(call("echo"), context));
+    const result = await isolated(Effect.flatMap(dispatcher, (value) => value.execute(call("echo"), context)));
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("ok");
@@ -66,10 +66,7 @@ describe("createTurnDispatcher", () => {
 describe("wave tracking", () => {
   it("hands every model wave to trackWave as a settlement promise", async () => {
     const tracked: Promise<void>[] = [];
-    const dispatcher = createDispatcher(
-      [tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))],
-      { executor: passThrough, trackWave: (wave) => tracked.push(wave) },
-    );
+    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough, trackWave: (wave) => tracked.push(wave) }).pipe(Effect.provide(catalogLayer([tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))]))));
 
     const results = await isolated(dispatcher.executeWave([call("ok"), call("boom")], context));
     await isolated(dispatcher.execute(call("ok"), context));
@@ -87,15 +84,12 @@ describe("currentExecutor", () => {
 
   it("returns the executor running the tool body", async () => {
     let seen: Executor | undefined;
-    const dispatcher = createDispatcher(
-      [
+    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
         tool("probe", async () => {
           seen = currentExecutor();
           return "probed";
         }),
-      ],
-      { executor: passThrough },
-    );
+      ]))));
 
     await isolated(dispatcher.execute(call("probe"), context));
 
@@ -105,13 +99,10 @@ describe("currentExecutor", () => {
 
 describe("tool body outcomes", () => {
   it("settles a never-resolving body as timed_out", async () => {
-    const dispatcher = createDispatcher(
-      [tool("stall", () => new Promise<string>(() => undefined))],
-      {
+    const dispatcher = Effect.runSync(createDispatcher({
         executor: passThrough,
         timeoutMs: 5,
-      },
-    );
+      }).pipe(Effect.provide(catalogLayer([tool("stall", () => new Promise<string>(() => undefined))]))));
 
     const result = await isolated(dispatcher.execute(call("stall"), context));
 
@@ -122,8 +113,7 @@ describe("tool body outcomes", () => {
     const caller = new AbortController();
     const bodyEntered = Promise.withResolvers<void>();
     let seenReason: Error | undefined;
-    const dispatcher = createDispatcher(
-      [
+    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(Effect.provide(catalogLayer([
         tool("abortable", (_input, { signal }) => {
           bodyEntered.resolve();
           return new Promise<string>((_resolve, reject) => {
@@ -137,9 +127,7 @@ describe("tool body outcomes", () => {
             );
           });
         }),
-      ],
-      { executor: passThrough, timeoutMs: 1000 },
-    );
+      ]))));
 
     const result = await isolated(Effect.gen(function* () {
       const fiber = yield* Effect.fork(dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }));
@@ -153,10 +141,10 @@ describe("tool body outcomes", () => {
   });
 
   it("clears the timer when the body finishes inside the timeout", async () => {
-    const dispatcher = createDispatcher([tool("fast", async () => "done")], {
+    const dispatcher = Effect.runSync(createDispatcher({
       executor: passThrough,
       timeoutMs: 1000,
-    });
+    }).pipe(Effect.provide(catalogLayer([tool("fast", async () => "done")]))));
 
     const result = await isolated(dispatcher.execute(call("fast"), context));
 
@@ -165,16 +153,13 @@ describe("tool body outcomes", () => {
   });
 
   it("fails closed when the body violates the output schema", async () => {
-    const dispatcher = createDispatcher(
-      [
+    const dispatcher = Effect.runSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
         tool(
           "bad-output",
           async () => "anything",
           z.string().refine(() => false),
         ),
-      ],
-      { executor: passThrough },
-    );
+      ]))));
 
     const result = await isolated(dispatcher.execute(call("bad-output"), context));
 
@@ -191,7 +176,7 @@ describe("tool body outcomes", () => {
         return Effect.fail(failure);
       },
     };
-    const dispatcher = createDispatcher([tool("echo", async () => "ok")], { executor: failing });
+    const dispatcher = Effect.runSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
     const result = await isolated(Effect.either(dispatcher.execute(call("echo"), context)));
     expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "test" } });

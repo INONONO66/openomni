@@ -1,6 +1,4 @@
-import { AgentGenerationLive } from "@openomni/agent";
-import { compilePolicySnapshot } from "@openomni/policy";
-import { LedgerAction, type SessionGeneration } from "@openomni/protocol";
+import { ObservationSink } from "@openomni/agent";
 import { Effect } from "effect";
 import {
   createSessionChatRunner,
@@ -38,8 +36,8 @@ export interface ResidentOptions {
   readonly modelFallbacks?: readonly Model.Ref[];
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
-  readonly llm?: ChatAgentConfig["llm"];
-  readonly compaction?: ChatAgentConfig["compaction"];
+  readonly bundles?: readonly string[];
+  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>, never, import("@openomni/llm").Llm | ObservationSink>;
   readonly tools: CatalogPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;
@@ -47,7 +45,7 @@ export interface ResidentOptions {
 
 /** Resident and worker use the same session-owned runner and dispatcher. */
 export function createResident(options: ResidentOptions) {
-  const ports = { ...options.tools, clock: options.sessionRuntime.clock ?? Date.now };
+  const ports = options.tools;
   const definitions = new Map<LedgerSession.Role, readonly AnyToolDefinition[]>();
   const definitionsFor = (id: string, role: LedgerSession.Role) => {
     const cached = definitions.get(role);
@@ -62,8 +60,9 @@ export function createResident(options: ResidentOptions) {
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
     (input) => Effect.gen(function* () {
-      const definitions = definitionsFor(row.id, row.role);
-      const dispatcher = createTurnDispatcher(definitions, input, options.sessionRuntime);
+      const dispatcher = yield* createTurnDispatcher(input, options.sessionRuntime);
+      const observations = yield* ObservationSink;
+      const compaction = options.compaction === undefined ? undefined : yield* options.compaction;
       const traceId = newTraceId();
       const observation = observeComponent({
         traceId,
@@ -74,7 +73,7 @@ export function createResident(options: ResidentOptions) {
         componentId: `${row.role}.agent`,
         componentGeneration: input.resumeCount + 1,
         pluginName: `builtin.${row.role}`,
-      });
+      }, observations);
       const evidenceOnly =
         input.messages
           .filter((message) => message.role === "user")
@@ -83,9 +82,8 @@ export function createResident(options: ResidentOptions) {
       const offered = new Set(input.tools.map((tool) => tool.name));
       const tools = evidenceOnly ? [] : dispatcher.specs.filter((tool) => offered.has(tool.name));
       const runner = createSessionChatRunner({
-        prepare: () => ({
+        prepare: () => Effect.succeed({
           config: {
-            events: observation.events,
             executor: dispatcher.executor,
             systemPrompt: input.system,
             tools,
@@ -102,7 +100,7 @@ export function createResident(options: ResidentOptions) {
             ...(options.modelFallbacks === undefined
               ? {}
               : { modelFallbacks: [...options.modelFallbacks] }),
-            ...(options.compaction === undefined ? {} : { compaction: options.compaction }),
+            ...(compaction === undefined ? {} : { compaction }),
             ...chatProviderConfig(options),
           },
           traceContext: {
@@ -116,9 +114,7 @@ export function createResident(options: ResidentOptions) {
         reportError: (error) =>
           failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
       });
-      options.tools.cells?.bindTools(row.id, definitions);
-      try {
-        const result = yield* runner(input);
+        const result = yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
         const origin = SessionHandleStore.inboxRows(row.id)
           .filter((item) => {
             const value = item.origin.value;
@@ -151,23 +147,10 @@ export function createResident(options: ResidentOptions) {
           );
         }
         return result;
-      } finally {
-        options.tools.cells?.bindTools(row.id, []);
-      }
     });
   return {
     runnerFor,
-    generation(snapshot: SessionGeneration.Snapshot) {
-      const definitions = [...new Set([...definitionsFor("generation", "resident"), ...definitionsFor("generation", "worker")])];
-      return { snapshot, layer: AgentGenerationLive({
-        snapshot,
-        definitions: definitions.filter((tool) => snapshot.tools.some((offered) => offered.name === tool.name)),
-        now: options.sessionRuntime.clock ?? Date.now,
-        next: options.sessionRuntime.entropy ?? (() => crypto.randomUUID()),
-        observations: options.sessionRuntime.observations,
-        policy: compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options }),
-      }) };
-    },
+    definitions: { resident: definitionsFor("catalog", "resident"), worker: definitionsFor("catalog", "worker") },
     materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new Error(`runner is not registered: ${runner}`);
@@ -178,8 +161,9 @@ export function createResident(options: ResidentOptions) {
         role,
         runner,
         tools: definitionsFor(id, role).map(sessionTool),
+        bundles: options.bundles ?? [],
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
-        at: (options.sessionRuntime.clock ?? Date.now)(),
+        at: (ports.clock ?? Date.now)(),
       });
     },
   };

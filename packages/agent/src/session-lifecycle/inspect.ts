@@ -263,6 +263,8 @@ function policyDecisionOf(
       op: intent.op,
       generation: intent.generation,
       matchedRuleIds: intent.matchedRuleIds,
+      transforms: intent.transforms,
+      ref: intent.ref,
       verdict: intent.verdict,
       reason: effect.reason ?? null,
       inputHash: intent.inputHash,

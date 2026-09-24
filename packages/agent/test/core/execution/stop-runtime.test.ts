@@ -1,10 +1,13 @@
+import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
+import { prepareChatFixture } from "../../helpers/chat-services";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
 import { Effect, Queue } from "effect";
 import { expect, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { z } from "zod";
 import type { PolicyRow } from "@openomni/protocol";
-import { session, closeSessions, type SessionRuntime } from "../../../src/session-handle";
+import { session, closeSessions } from "../../../src/session-handle";
 import { defineTool, eraseTool, sessionTool, createTurnDispatcher } from "../../../src/tool-dispatcher";
 import { createSessionChatRunner } from "../../../src/session-chat-runner";
 import { assistantStep } from "../../helpers/dispatching-runner";
@@ -35,9 +38,9 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
       if (mode === "progress") yield* SessionHandleStore.commitInbox({ id: `progress-${bodies}`, sessionId: "stop", kind: "prompt", content: `state ${bodies}`, origin: { encodingVersion: 1, value: { source: "fixture" } }, createdAt: Date.now(), parentActionId: null });
       request.resolve("ok");
     })));
-    const runner = createSessionChatRunner({ prepare(input) {
-      const dispatcher = createTurnDispatcher(definitions, input, runtime);
-      return {
+    const runner = createSessionChatRunner({ prepare: (input) => Effect.gen(function* () {
+      const dispatcher = (yield* Effect.gen(function* () { const turnInput = input; const turnRuntime = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+      return prepareChatFixture({
         traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
         config: {
           events: collector(), executor: dispatcher.executor, model: { provider: "test", id: "test" }, tools: [...dispatcher.specs],
@@ -53,9 +56,8 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
             }),
           },
         },
-      };
-    } });
-    const handle = yield* session({ id: "stop", role: "resident", runner, tools: definitions.map(sessionTool) }, runtime);
+      }); }) });
+    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "stop", role: "resident", runner, tools: definitions.map(sessionTool) }, fixture), fixture); });
     if (mode === "prior-alarm") yield* (Storage.get().alarms?.arm({ id: "old-alarm", sessionId: handle.id, kind: "at", fireAt: Date.now() + 60000 }) ?? Effect.die("missing alarms"));
     const result = yield* handle.prompt("work");
     const outcome = { result, calls, bodies, snapshot: handle.get(), actions: SessionHandleStore.tree(handle.id) };

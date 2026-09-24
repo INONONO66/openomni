@@ -9,7 +9,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { run, type Provider } from "@openomni/llm";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
-import { startOpenOmni } from "../../src/index";
+import { appFixture } from "./app-fixture";
 import { closeSocket, nextMessage, openSocket } from "./ws";
 
 import { messageStart, messageEnd } from "./anthropic-sse";
@@ -97,7 +97,7 @@ try {
     billed.output += event.outputTokens;
   });
   // When: the production app calls the same real SDK through its configured transport.
-  const app = await startOpenOmni({
+  const app = await appFixture({
     config: {
       dbPath,
       host: "127.0.0.1",

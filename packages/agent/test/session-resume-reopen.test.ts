@@ -1,3 +1,6 @@
+import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
+import { prepareChatFixture } from "./helpers/chat-services";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -10,13 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { SessionTurn } from "@openomni/protocol";
-import {
-  session,
-  closeSessions,
-  sweepSessions,
-  type SessionRuntime,
-  type SessionRunnerInput,
-} from "../src/session-handle";
+import { session, closeSessions, sweepSessions, type SessionRunnerInput } from "../src/session-handle";
 import { createSessionChatRunner } from "../src/session-chat-runner";
 import { createTurnDispatcher } from "../src/tool-dispatcher";
 import { createAssistantMessage } from "../src/core/message-factory";
@@ -36,9 +33,9 @@ for (const mode of ["interrupted", "crash-open"] as const) {
           const inputs: SessionRunnerInput[] = [];
           let opening = mode === "interrupted";
           const runner = createSessionChatRunner({
-            prepare(input: SessionRunnerInput) {
+            prepare: (input: SessionRunnerInput) => Effect.gen(function* () {
               inputs.push(input);
-              return {
+              return prepareChatFixture({
                 traceContext: {
                   traceId: "trace",
                   sessionId: input.sessionId,
@@ -46,7 +43,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                 },
                 config: {
                   events: { publish: () => undefined },
-                  executor: createTurnDispatcher([], input, runtime).executor,
+                  executor: (yield* Effect.gen(function* () { const turnInput = input; const turnRuntime = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); })).executor,
                   model: { provider: "test", id: "test" },
                   llm: {
                     resolveModel: () =>
@@ -65,8 +62,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                       }),
                   },
                 },
-              };
-            },
+              }); }),
           });
           try {
             Storage.reset();
@@ -75,7 +71,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             let originalTurn = "crashed-turn";
             let originalResult = "crashed-result";
             if (mode === "interrupted") {
-              const handle = yield* session({ id: "resume", role: "resident", runner }, runtime);
+              const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "resume", role: "resident", runner }, fixture), fixture); });
               const first = yield* Effect.fork(handle.prompt("original"));
               yield* boundedSignal(entered.promise, "provider entered");
               yield* awaitSignal(handle.interrupt());
@@ -185,7 +181,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             Storage.reset();
             Storage.initialize({ dbPath });
             runtime = { observations: { publish: () => undefined }, clock: () => 2000 };
-            yield* awaitSignal(sweepSessions(() => runner, runtime));
+            yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
             const recovered = inputs.at(-1);
             if (recovered === undefined) throw new Error("missing recovered invocation");
             expect(recovered.toolsGeneration).toBe(mode === "crash-open" ? 1 : 2);

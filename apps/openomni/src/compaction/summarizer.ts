@@ -1,8 +1,8 @@
-import { ForeignFailure, type CompactionOptions } from "@openomni/agent";
-import type { RunInput } from "@openomni/llm";
+import { type ObservationSink, ForeignFailure, type CompactionOptions } from "@openomni/agent";
+import type { Llm, RunInput } from "@openomni/llm";
 import { Effect, Either } from "effect";
 import type { Message, PlainObject } from "@openomni/protocol";
-import { runResolvedText, type LlmIo } from "../composition/completion";
+import { runResolvedText } from "../composition/completion";
 
 export type SummarizerErrorKind = "empty" | "overflow";
 
@@ -23,7 +23,6 @@ interface SummarizerConfig {
     readonly apiKey: string;
     readonly transport?: RunInput["transport"];
   };
-  readonly io?: LlmIo;
 }
 
 const INSTRUCTION =
@@ -65,8 +64,10 @@ function nonemptySummary(answer: string) {
 
 export function createCompactionSummarizer(
   config: SummarizerConfig,
-): NonNullable<CompactionOptions["onSummarize"]> {
-  return (messages, previousAnchor, budget, signal) => Effect.gen(function* () {
+): Effect.Effect<NonNullable<CompactionOptions["onSummarize"]>, never, Llm | ObservationSink> {
+  return Effect.gen(function* () {
+  const services = yield* Effect.context<Llm | ObservationSink>();
+  const summarize: NonNullable<CompactionOptions["onSummarize"]> = (messages, previousAnchor, budget, signal) => Effect.gen(function* () {
     const anchor = previousAnchor ?? "(none)";
     const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
     let working = messages;
@@ -84,8 +85,7 @@ export function createCompactionSummarizer(
             ),
             providerOptions: reasoningOptions(config.model.provider),
           },
-          config.io,
-        ));
+        ).pipe(Effect.provide(services)));
       if (Either.isRight(answer)) return yield* nonemptySummary(answer.right);
       const error = answer.left;
       if (error._tag !== "LlmRunFailure" || !error.contextOverflow) return yield* Effect.fail(error);
@@ -93,5 +93,7 @@ export function createCompactionSummarizer(
         return yield* new SummarizerError("overflow", "compaction summarizer context overflow");
       working = working.slice(1);
     }
+  });
+  return summarize;
   });
 }

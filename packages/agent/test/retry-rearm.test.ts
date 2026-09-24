@@ -1,3 +1,4 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -8,7 +9,7 @@ import { Alarm } from "@openomni/protocol";
 import { bounded } from "./helpers/bounded";
 import { countingRunner } from "./helpers/counting-runner-g1";
 import { rearmSessionId, WAIT_SIGNAL } from "./helpers/retry-rearm-g3t";
-import { wakeSession, closeSessions, type SessionRuntime } from "../src/session-handle";
+import { wakeSession, closeSessions } from "../src/session-handle";
 import { isolated } from "./helpers/isolated";
 
 const worker = new URL("./helpers/retry-rearm-g3t.ts", import.meta.url).pathname;
@@ -46,11 +47,11 @@ test("killing the kernel during the retry wait leaves a durable schedule that bo
       const calls = { model: 0 };
       const runtime: SessionRuntime = { observations: { publish: () => undefined }, clock: () => 200_000 };
       const runner = countingRunner(runtime, calls);
-      yield* wakeSession(rearmSessionId, runner, runtime);
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(rearmSessionId, runner, fixture), fixture); });
       expect(calls.model).toBe(1);
       expect(SessionHandleStore.openTurns(SessionHandleStore.tree(rearmSessionId))).toEqual([]);
       const settled = SessionHandleStore.tree(rearmSessionId);
-      yield* wakeSession(rearmSessionId, runner, runtime);
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(rearmSessionId, runner, fixture), fixture); });
       expect(SessionHandleStore.tree(rearmSessionId)).toEqual(settled);
       expect(calls.model).toBe(1);
       yield* closeSessions(runtime);

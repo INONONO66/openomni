@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { createObservationBus } from "../src/observation/bus";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { AgentStopError, ContextAdmissionError } from "../src/errors";
 import { failureEvidence } from "../src/executor-outcome";
@@ -24,7 +25,7 @@ test("the generation layer supplies the captured policy, tools, observations, cl
     system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "configure", at: 1,
   });
   const snapshot = SessionHandleStore.latestGenerationFor("layer-session");
-  const observations = { publish: (): void => undefined };
+  const observations = createObservationBus();
   const options = {
     now: (): number => 123, next: (): string => "fixed-id", observations,
     snapshot, policy: allowAllPolicy, definitions: [],
@@ -34,7 +35,9 @@ test("the generation layer supplies the captured policy, tools, observations, cl
       time: (yield* Clock).now(), id: (yield* Entropy).next(),
       observations: yield* ObservationSink, session: yield* SessionLayer, tools: yield* ToolCatalog,
     };
-  }).pipe(Effect.provide(AgentGenerationLive(options)));
+  }).pipe(Effect.provide(Layer.mergeAll(AgentGenerationLive(options),
+    Layer.succeed(Clock, { now: options.now }), Layer.succeed(Entropy, { next: options.next }),
+    Layer.succeed(ObservationSink, observations))));
   expect(services.time).toBe(123);
   expect(services.id).toBe("fixed-id");
   expect(services.observations).toBe(observations);

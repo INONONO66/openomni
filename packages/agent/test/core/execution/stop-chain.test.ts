@@ -1,3 +1,7 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { Effect } from "effect";
+import { executorLayer } from "../../helpers/service-layers";
 import type { LedgerAction } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
@@ -8,7 +12,7 @@ import { recordingLedger } from "../../helpers/g0-effect";
 
 function harness(limit = 3) {
   const record = recordingLedger();
-  const policy = compilePolicySnapshot({
+  const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     rows: SEEDED_POLICY_ROWS.map((row: (typeof SEEDED_POLICY_ROWS)[number]) => ({
       ...row,
@@ -27,14 +31,14 @@ function harness(limit = 3) {
   });
   return {
     ...record,
-    executor: createExecutor({
+    executor: Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
       policy,
       ledger: record.ledger,
       identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
       clock: () => 1,
       entropy: record.entropy,
       observations: { publish: () => undefined },
-    }),
+    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })),
   };
 }
 const ordinary: StopObservation = {

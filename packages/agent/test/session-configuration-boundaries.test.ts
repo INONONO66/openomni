@@ -1,12 +1,8 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
-import {
-  session,
-  closeSessions,
-  type SessionRuntime,
-  type SessionHandle,
-} from "../src/session-handle";
+import { session, closeSessions, type SessionHandle } from "../src/session-handle";
 import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";
 import { isolated } from "./helpers/isolated";
@@ -28,14 +24,11 @@ function withSession<E, R>(
     };
     seedPolicy();
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    const handle = yield* session(
-      {
+    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
         id: "configuration-session",
         role: "resident",
         runner: () => Effect.succeed({ kind: "result", text: "done" }),
-      },
-      runtime,
-    );
+      }, fixture), fixture); });
     yield* test(handle);
   });
 }

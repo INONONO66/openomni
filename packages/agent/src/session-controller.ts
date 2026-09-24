@@ -1,10 +1,8 @@
-import { Effect, Fiber, Option, Scope } from "effect";
+import { Effect, Fiber, Option, type Scope } from "effect";
 import { LeaseRefused, SessionHandleStore } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
-import { entropyOf } from "./core/entropy";
 import { CommitFailed, ExecutionApprovalError, ForeignFailure, type SessionError } from "./errors";
-import type { SessionController, SessionControllerLifecycle, SessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionToolsHandle, SessionSystemBlocksHandle } from "./session-contract";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionToolsHandle, SessionSystemBlocksHandle } from "./session-contract";
 import { toolSnapshot, internalOrigin, turnTerminalAction } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { createSessionTurn } from "./session-turn";
@@ -12,20 +10,18 @@ import { createSessionAdmission, commitSessionRequest } from "./session-admissio
 import { createSessionConfiguration } from "./session-configuration";
 import { dispatchSessionOutbound } from "./session-outbound";
 import { inspectSession } from "./session-lifecycle/inspect";
-import { makeSessionGenerations } from "./session-generations";
 import { createRawSlots } from "./executor-raw";
 
 export function createController(
   sessionId: string,
   runner: SessionRunner,
-  runtime: SessionRuntime,
+  runtime: ResolvedSessionRuntime,
   lifecycle: SessionControllerLifecycle,
-  pinPolicy: (generation: number) => CompiledPolicySnapshot,
   scope: Scope.Scope,
 ): Effect.Effect<SessionController, SessionError> {
   return Effect.gen(function* () {
-    const clock = runtime.clock ?? Date.now;
-    const entropy = entropyOf(runtime);
+    const clock = runtime.clock;
+    const entropy = runtime.entropy;
     const owner = `${runtime.processId ?? String(process.pid)}:${entropy()}`;
     const state: SessionControllerState = {
       active: undefined, controller: undefined, fence: SessionHandleStore.row(sessionId).leaseFence,
@@ -33,22 +29,19 @@ export function createController(
       heartbeat: undefined, retainedRunner: undefined, retainedFailure: undefined,
       rawSlots: createRawSlots(), activeApprovals: undefined,
     };
-    const generations = yield* Effect.cached(Effect.suspend(() => runtime.generation === undefined
-      ? Effect.succeed(undefined)
-      : makeSessionGenerations(runtime.generation(SessionHandleStore.latestGenerationFor(sessionId))).pipe(Effect.provideService(Scope.Scope, scope))));
     const { configure, acquire, leaseLive, releaseHeldLease } = createSessionConfiguration(
-      sessionId, runtime, state, owner, clock, entropy, { hibernate, generations },
+      sessionId, runtime, state, owner, clock, entropy, { hibernate },
     );
     const { runTurn, seal } = createSessionTurn(
       sessionId, runner, runtime, state, owner, clock, entropy, runtime.scheduleHeartbeat ?? defaultHeartbeat,
-      pinPolicy, scope, {
+      scope, {
         createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
         evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
         consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
-        releaseHeldLease, hibernate, generations,
+        releaseHeldLease, hibernate,
       },
     );
-    const admission = createSessionAdmission(sessionId, runtime, state, owner, clock, entropy, pinPolicy, {
+    const admission = createSessionAdmission(sessionId, runtime, state, owner, clock, entropy, {
       awaitRetainedRunner, acquire, runTurn, seal, releaseHeldLease,
     });
 
@@ -224,7 +217,7 @@ export function createController(
         while (!state.closed) {
           if (SessionHandleStore.outboundRows(sessionId).some((item) => item.state === "pending")) {
             state.fence = yield* acquire(SessionHandleStore.row(sessionId).leaseFence);
-            yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, true);
+          yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, true);
           }
           const open = SessionHandleStore.openTurns(SessionHandleStore.tree(sessionId)).at(-1);
           if (open !== undefined) { result = yield* admission.resumeTurn(open); continue; }

@@ -1,7 +1,8 @@
+import { executorLayer, runnerTestLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { Effect } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
-import { createDispatcher, createExecutor, currentExecutor } from "@openomni/agent";
+import { createTurnDispatcher, currentExecutor } from "@openomni/agent";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
@@ -30,21 +31,14 @@ for (const stop of [false, true]) {
     let nextId = 0;
     const origin = { role: "resident", sessionId: `completion-${stop}` } as const;
     // Only storage IO is replaced: real policy, record construction and settlement execute.
-    const executor = createExecutor({
-      policy: seededPolicy,
-      ledger: {
+    const ledger: Parameters<typeof createTurnDispatcher>[0]["ledger"] = {
         commit(append) {
           const ordinal = actions.length + 1;
           const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
           actions.push(action);
           return Effect.succeed({ action, revision: action.ordinal });
         },
-      },
-      observations: { publish: () => undefined },
-      identity: { sessionId: origin.sessionId, role: origin.role, parentActionId: null },
-      clock: () => 1,
-      entropy: () => `${origin.sessionId}-${++nextId}`,
-    });
+      };
     const path = socketPath();
     let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
@@ -80,7 +74,7 @@ for (const stop of [false, true]) {
       {
         cells: cellPorts(cells),
         llm: async () => {
-          expect(currentExecutor()).toBe(executor);
+          expect(currentExecutor().run).toBe(dispatcher.executor.run);
           calls += 1;
           entered.resolve();
           await release.promise;
@@ -89,8 +83,9 @@ for (const stop of [false, true]) {
       },
       origin,
     );
-    cells.bindTools(origin.sessionId, definitions);
-    const dispatcher = createDispatcher(definitions, { executor });
+    const dispatcher = acquireSyncEffect(createTurnDispatcher({
+      sessionId: origin.sessionId, role: origin.role, actionId: "completion-turn", ledger,
+    }, {}).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerTestLayer)));
     let nextCall = 0;
     const execute = (operation: PlainObject) =>
       bounded(

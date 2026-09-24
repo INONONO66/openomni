@@ -1,16 +1,20 @@
 import { describe, expect, it } from "bun:test";
-import { entropyOf } from "../../src/core/entropy";
+import { Effect, Layer } from "effect";
+import { AgentProcessLive } from "../../src/layers";
+import { Entropy } from "../../src/services";
+import { createObservationBus } from "../../src/observation/bus";
 
-describe("entropyOf", () => {
-  it("returns the injected source untouched", () => {
-    const entropy = () => "fixed";
-    expect(entropyOf({ entropy })).toBe(entropy);
+describe("process entropy", () => {
+  it("returns the supplied source untouched", () => {
+    const next = () => "fixed";
+    const entropy = Effect.runSync(Entropy.pipe(Effect.provide(Layer.succeed(Entropy, { next }))));
+    expect(entropy.next).toBe(next);
   });
 
-  it("defaults to a fresh uuid per call", () => {
-    const entropy = entropyOf({});
-    const first = entropy();
+  it("supplies a fresh uuid per call", () => {
+    const entropy = Effect.runSync(Entropy.pipe(Effect.provide(AgentProcessLive(createObservationBus()))));
+    const first = entropy.next();
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
-    expect(entropy()).not.toBe(first);
+    expect(entropy.next()).not.toBe(first);
   });
 });

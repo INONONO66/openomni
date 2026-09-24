@@ -1,3 +1,4 @@
+import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, it } from "bun:test";
@@ -14,8 +15,8 @@ import { recordingExecutor } from "./helpers/effect-g2";
 import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
 
-function dispatcher(definitions: Parameters<typeof createDispatcher>[0]) {
-  return createDispatcher(definitions, { executor: recordingExecutor().executor });
+function dispatcher(definitions: readonly import("@openomni/protocol").AnyToolDefinition[]) {
+  return Effect.runSync(createDispatcher({ executor: recordingExecutor().executor }).pipe(Effect.provide(catalogLayer(definitions))));
 }
 
 function definition(options: {
@@ -50,17 +51,14 @@ describe("tool dispatcher public contract", () => {
               await released.promise;
             },
           });
-          const dispatch = createDispatcher(
-            [
+          const dispatch = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
               definition({
                 execute: async () => {
                   bodies += 1;
                   return "result";
                 },
               }),
-            ],
-            { executor: recording.executor },
-          );
+            ]))));
           const running = yield* Effect.forkScoped(dispatch.execute(call, context));
           yield* Effect.promise(() => reached.promise).pipe(Effect.timeout("5 seconds"));
           expect(recording.committed[0]?.kind).toBe("policy.decision");
@@ -147,9 +145,9 @@ describe("tool dispatcher public contract", () => {
           ]);
           const failure = new Error("TOOL_FAILURE_SENTINEL");
           const recording = recordingExecutor();
-          const failed = createDispatcher([
+          const failed = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
             definition({ execute: () => Promise.reject(failure) }),
-          ], { executor: recording.executor });
+          ]))));
 
           expect(yield* refused.execute(call, context)).toMatchObject({
             isError: true,

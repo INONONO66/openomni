@@ -1,3 +1,5 @@
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
+import { executorLayer } from "./service-layers";
 import type { LedgerError } from "@openomni/ledger";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import { LedgerAction } from "@openomni/protocol";
@@ -12,7 +14,7 @@ export function recoveryRecording(options: {
 } = {}) {
   const committed: LedgerAction.Node[] = [];
   let sequence = 0;
-  const executor = createExecutor({
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
     policy: options.policy ?? compiledPolicy(),
     ledger: {
       actions: () => committed,
@@ -28,6 +30,6 @@ export function recoveryRecording(options: {
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: () => 1,
     entropy: () => `action-${++sequence}`,
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   return { executor, committed };
 }

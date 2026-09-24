@@ -1,11 +1,13 @@
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { type LedgerAction, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { ExecutionLedger, ExecutorOptions } from "../../src/executor-contract";
+import type { ExecutionLedger, } from "../../src/executor-contract";
 
 export const fiberSessionId = "fiber-session";
-export const nativePolicy = compilePolicySnapshot({
+export const nativePolicy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
   generation: 1,
   rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
 });
@@ -52,6 +54,6 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId) {
       policy: nativePolicy, ledger, observations: { publish: () => undefined },
       clock: () => now, entropy: () => `${id}:${now}:${++sequence}`,
       identity: { sessionId: id, role: "resident", parentActionId: turnId, turnId },
-    } satisfies ExecutorOptions;
+    } satisfies ResolvedExecutorOptions;
   });
 }

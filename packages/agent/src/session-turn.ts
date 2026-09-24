@@ -1,20 +1,18 @@
 import { Cause, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
 import { canonicalDigest, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
 import { foldSessionHistory } from "./session-lifecycle/history";
 import { sessionStopEvidence } from "./session-stop-evidence";
-import type { SessionPolicyRefusal, SessionRuntime, SessionRunner, SessionRunnerResult, SessionActionCommitPort, SessionBoundaryResult } from "./session-contract";
+import type { SessionPolicyRefusal, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionActionCommitPort, SessionBoundaryResult } from "./session-contract";
 import { sessionMessages, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
-import type { makeSessionGenerations } from "./session-generations";
+import { GenerationOwnership, ObservationSink, type RunnerServices } from "./services";
 import { parentReply } from "./session-parent-reply";
 import { dispatchSessionOutbound, outboundOpen } from "./session-outbound";
 import { observeDrained } from "./session-message-observation";
 
-type Generations = Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>;
 interface TurnInput {
   readonly turnId: string;
   readonly resultId: string;
@@ -28,21 +26,19 @@ interface TurnInput {
 export function createSessionTurn(
   sessionId: string,
   runner: SessionRunner,
-  runtime: SessionRuntime,
+  runtime: ResolvedSessionRuntime,
   state: SessionControllerState,
   owner: string,
   clock: () => number,
   entropy: () => string,
   scheduleHeartbeat: (callback: () => void, intervalMs: number) => () => void,
-  pinPolicy: (generation: number) => CompiledPolicySnapshot,
   scope: Scope.Scope,
   ports: {
     readonly createExecutionLedger: (turnId?: string) => SessionActionCommitPort;
-    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[], policy: CompiledPolicySnapshot) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError>;
+    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices>;
     readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[], releaseLease: boolean) => Effect.Effect<void, ExecutionError>;
     readonly releaseHeldLease: () => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
-    readonly generations: Effect.Effect<Generations | undefined, SessionError>;
   },
 ) {
   function heartbeat(controller: AbortController) {
@@ -64,46 +60,50 @@ export function createSessionTurn(
 
   function runTurn(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError> {
     return Effect.scoped(Effect.gen(function* () {
-      const generations = yield* ports.generations;
-      const captured = generations === undefined ? undefined : yield* generations.capture(input.generation.generation);
-      return yield* (captured === undefined ? runCaptured(input) : captured.provide(runCaptured(input)));
+      const captured = yield* runtime.generations.capture({ sessionId, generation: input.generation.generation });
+      const ownership = { ...captured, retain() {
+        const generation = captured.retain();
+        const session = state.rawSlots.open();
+        return () => { generation(); session(); };
+      } };
+      return yield* captured.provide(runCaptured(input).pipe(Effect.provideService(GenerationOwnership, ownership))).pipe(Effect.provide(runtime.services));
     }));
   }
 
-  function runCaptured(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError> {
+  function runCaptured(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError, RunnerServices> {
     return Effect.gen(function* () {
+      const services = yield* Effect.context<RunnerServices>();
       const row = SessionHandleStore.row(sessionId);
       const controller = new AbortController();
       state.controller = controller;
       state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope);
       let parentActionId = input.parentActionId;
       let boundaryActionId = input.boundaryActionId;
-      const policy = pinPolicy(input.generation.policyGeneration);
       const ledger = ports.createExecutionLedger(input.turnId);
       const retainEffect = (raw: Promise<void>) => {
         const settle = state.rawSlots.open();
         void raw.then(settle);
       };
-      const execution = createExecutor({
+      const execution = yield* createExecutor({
         retryAlarm: runtime.retryAlarm, signal: controller.signal, retainEffect,
-        closeGraceMs: runtime.closeGraceMs, policy, ledger, observations: runtime.observations,
-        identity: { sessionId, role: row.role, parentActionId: input.turnId }, clock, entropy,
+        closeGraceMs: runtime.closeGraceMs, ledger,
+        identity: { sessionId, role: row.role, parentActionId: input.turnId },
       });
       const boundary = (kind: SessionTurn.Boundary): Effect.Effect<SessionBoundaryResult, ExecutionError> => Effect.gen(function* () {
         if (controller.signal.aborted) return { messages: [], interrupted: true };
-        const drained = yield* drainBoundary(input, kind, parentActionId, policy);
+        const drained = yield* drainBoundary(input, kind, parentActionId);
         parentActionId = drained.parentActionId;
         boundaryActionId = drained.boundaryActionId;
         if (drained.interrupted) controller.abort();
         return { messages: drained.messages, interrupted: drained.interrupted };
-      });
+      }).pipe(Effect.provide(services));
       let runnerResult: SessionRunnerResult = policyRefusalResult("invalid_output");
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
         runnerResult = yield* runner({
           sessionId, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
-          policy, stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
+          stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
           resultId: input.resultId, parentActionId, boundaryActionId,
           messages: sessionMessages(SessionHandleStore.tree(sessionId)),
           history: foldSessionHistory(sessionId, SessionHandleStore.tree(sessionId)),
@@ -156,10 +156,11 @@ export function createSessionTurn(
     });
   }
 
-  function drainBoundary(input: TurnInput, boundary: SessionTurn.Boundary, parentActionId: string, policy: CompiledPolicySnapshot) {
+  function drainBoundary(input: TurnInput, boundary: SessionTurn.Boundary, parentActionId: string) {
     return Effect.gen(function* () {
+      const observations = yield* ObservationSink;
       const pending = SessionHandleStore.pendingInbox(sessionId);
-      const refusal = yield* ports.evaluatePromptPolicies(pending, policy);
+      const refusal = yield* ports.evaluatePromptPolicies(pending);
       if (refusal !== undefined) {
         yield* ports.consumePolicyBlockedInbox(pending, false);
         return yield* new ForeignFailure({ operation: "session.prompt", cause: refusal.reason });
@@ -176,7 +177,7 @@ export function createSessionTurn(
         actions: [checkpoint, ...deliveries], consumeInboxIds: pending.map((item) => item.id),
         state: current.state === "interrupted" ? "interrupted" : "running", releaseLease: false,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      observeDrained(pending, input.turnId, boundary, clock(), runtime.observations);
+      observeDrained(pending, input.turnId, boundary, clock(), observations);
       return {
         messages: pending.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
         interrupted: pending.some((item) => item.kind === "interrupt"),
@@ -185,7 +186,7 @@ export function createSessionTurn(
     });
   }
 
-  function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult, releaseLease: boolean): Effect.Effect<void, ExecutionError> {
+  function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult, releaseLease: boolean): Effect.Effect<void, SessionError> {
     return Effect.gen(function* () {
       const current = SessionHandleStore.row(sessionId);
       const actions = SessionHandleStore.tree(sessionId);
@@ -203,7 +204,7 @@ export function createSessionTurn(
         releaseLease: reply === undefined && releaseLease,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
-      if (reply !== undefined) yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, pinPolicy, releaseLease);
+      if (reply !== undefined) yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, releaseLease);
     });
   }
   return { runTurn, seal };

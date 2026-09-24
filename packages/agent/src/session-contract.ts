@@ -1,9 +1,7 @@
-import type { Effect, } from "effect";
+import { Effect, type Context } from "effect";
 import type { SessionError, ExecutionError } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
-import type { GenerationBundle } from "./session-generations";
 import type { SessionHandleStore } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type {
   Inbox,
   LedgerAction,
@@ -16,6 +14,7 @@ import type {
 } from "@openomni/protocol";
 import type { ChatAgentConfig } from "./core/types";
 import type { ExecutionApprovals, ExecutionResult, ExecutorOptions } from "./executor";
+import { Clock, Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices } from "./services";
 
 export interface SessionTool {
   readonly name: string;
@@ -37,6 +36,7 @@ export interface SessionCreateOptions {
   readonly tools?: readonly SessionTool[];
   readonly system?: Partial<SessionSystem>;
   readonly policyGeneration?: number;
+  readonly bundles?: readonly string[];
 }
 
 interface SessionGetOptions {
@@ -54,7 +54,6 @@ export interface SessionRunnerInput {
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
-  readonly policy: CompiledPolicySnapshot;
   readonly stopEvidence?: ChatAgentConfig["stopEvidence"];
   readonly resultId: string;
   readonly parentActionId: string | null;
@@ -108,15 +107,14 @@ export type SessionRunnerResult =
       readonly reported?: true;
     };
 
-export type SessionRunner = (input: SessionRunnerInput) => Effect.Effect<SessionRunnerResult, ExecutionError>;
+export type SessionRunner = (input: SessionRunnerInput) => Effect.Effect<SessionRunnerResult, ExecutionError, RunnerServices>;
 
 export interface SessionRuntime {
   /** Dispatches only an already committed source obligation through gateway admission. */
   readonly dispatchOutbound?: (input: {
     readonly message: SessionTransition.OutboundMessage;
     readonly authority: { readonly owner: string; readonly fence: number };
-    readonly policy: CompiledPolicySnapshot;
-  }) => Effect.Effect<LedgerAction.Receipt, ExecutionError>;
+  }) => Effect.Effect<LedgerAction.Receipt, ExecutionError, RunnerServices>;
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   readonly openIntent?: (input: {
@@ -126,10 +124,7 @@ export interface SessionRuntime {
   }) => Effect.Effect<readonly { actionId: string; kind: "message" | "approval" }[], ExecutionError>;
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
-  readonly clock?: () => number;
-  readonly entropy?: () => string;
   readonly processId?: string;
-  readonly observations: ObservationSink;
   readonly authorizeConfigure?: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
   readonly requestDomainRevisions?: (
@@ -149,7 +144,6 @@ export interface SessionRuntime {
    * heartbeat timer is unref'd so a detached runner never pins the process.
    */
   readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
-  readonly generation?: (snapshot: SessionGeneration.Snapshot) => GenerationBundle;
   readonly onHibernate?: (sessionId: string) => Effect.Effect<void, ExecutionError>;
   /**
    * How long `close()` waits for an abort-ignoring runner to settle before
@@ -159,6 +153,26 @@ export interface SessionRuntime {
    * off while it may still be alive. `0` detaches immediately.
    */
   readonly closeGraceMs?: number;
+}
+
+/** Captured once by registry/request acquisition, never an alternate public service API. */
+export interface ResolvedSessionRuntime extends SessionRuntime {
+  readonly clock: () => number;
+  readonly entropy: () => string;
+  readonly observations: ObservationSink;
+  readonly generations: Context.Tag.Service<typeof GenerationLayers>;
+  readonly services: Context.Context<SessionEntryServices>;
+}
+
+export function resolveSessionRuntime(runtime: SessionRuntime): Effect.Effect<ResolvedSessionRuntime, never, SessionEntryServices> {
+  return Effect.gen(function* () {
+    const services = yield* Effect.context<SessionEntryServices>();
+    const clock = yield* Clock;
+    const entropy = yield* Entropy;
+    const observations = yield* ObservationService;
+    const generations = yield* GenerationLayers;
+    return { ...runtime, clock: clock.now, entropy: entropy.next, observations, generations, services };
+  });
 }
 
 export interface SessionToolsHandle {

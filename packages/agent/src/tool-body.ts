@@ -8,7 +8,7 @@ import { Effect, Option } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "./errors";
 import { RawToolSlots } from "./executor-raw";
-import { withExecutor } from "./executor-context";
+import { withExecutor, withInvocation, type InvocationFrame } from "./executor-context";
 import type { Executor } from "./executor-contract";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
@@ -16,7 +16,7 @@ export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("error"),
     message: z.string(),
-    errorKind: z.enum(["precondition_failed", "execution_failed", "invalid_output"]),
+    errorKind: z.enum(["invalid_input", "precondition_failed", "execution_failed", "invalid_output"]),
   }).strict(),
   z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
 ]);
@@ -29,6 +29,7 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   context: ToolExecutionContext,
   timeoutMs: number | undefined,
   executor?: Executor,
+  invocation?: InvocationFrame,
 ): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
   return Effect.flatMap(RawToolSlots, (slots) => {
     const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
@@ -38,9 +39,9 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
         ...context,
         signal: AbortSignal.any([context.signal, controller.signal]),
       };
-      const raw = Promise.resolve().then(() => executor === undefined
-        ? definition.execute(input, scopedContext)
-        : withExecutor(executor, () => definition.execute(input, scopedContext)));
+      const enter = () => executor === undefined ? definition.execute(input, scopedContext)
+        : withExecutor(executor, () => definition.execute(input, scopedContext));
+      const raw = Promise.resolve().then(() => invocation === undefined ? enter() : withInvocation(invocation, enter));
       raw.then(
         (value) => {
           settle();

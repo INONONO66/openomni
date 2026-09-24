@@ -2,7 +2,7 @@ import { Retry } from "@openomni/llm";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
 import { Cause, Effect, Exit, Option } from "effect";
-import type { AttemptRequest, ExecutorOptions, LlmAttempts } from "./executor-contract";
+import type { AttemptRequest, ResolvedExecutorOptions, LlmAttempts } from "./executor-contract";
 import { createRetryAlarmPort } from "./executor-retry-alarm";
 import type { createExecutionRecord } from "./executor-record";
 import { PolicyDenied, type ExecutionError } from "./errors";
@@ -35,7 +35,7 @@ function retryDelay(recover: boolean, decision: ReturnType<typeof Retry.decide>)
 }
 
 export function createAttemptRunner(
-  options: ExecutorOptions,
+  options: ResolvedExecutorOptions,
   record: Pick<RecordPort, "appendIntent" | "appendResult" | "appendFailure">,
   admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
   approve: (request: AttemptRequest, intent: LedgerAction.Receipt, admission: Admission) => Effect.Effect<"approve" | "refuse" | "timeout", ExecutionError>,

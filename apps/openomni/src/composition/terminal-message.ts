@@ -1,5 +1,5 @@
 import { Effect, FiberRef } from "effect";
-import { Bus, createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
+import { createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
 import type { LedgerAction } from "@openomni/protocol";
@@ -7,7 +7,7 @@ import type { LedgerAction } from "@openomni/protocol";
 type OutboundInput = Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0];
 interface OutboundContext {
   readonly input: OutboundInput;
-  readonly executor: ReturnType<typeof createExecutor>;
+  readonly executor: Effect.Effect.Success<ReturnType<typeof createExecutor>>;
   receipt?: LedgerAction.Receipt;
 }
 
@@ -19,17 +19,13 @@ export function dispatchOutboundMessage(
   clock: () => number,
 ): NonNullable<SessionRuntime["dispatchOutbound"]> {
   return (input) => Effect.gen(function* () {
-    const { message, authority, policy } = input;
-    const executor = createExecutor({
+    const { message, authority } = input;
+    const executor = yield* createExecutor({
       identity: {
         sessionId: message.sourceSessionId,
         role: SessionHandleStore.row(message.sourceSessionId).role,
         parentActionId: `${message.sourceActionId}:outbound`,
       },
-      policy,
-      observations: Bus,
-      clock,
-      entropy: () => crypto.randomUUID(),
       ledger: {
         commit: (action) => Effect.gen(function* () {
           const row = SessionHandleStore.row(message.sourceSessionId);

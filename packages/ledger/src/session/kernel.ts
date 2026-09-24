@@ -26,6 +26,7 @@ interface MaterializeInput {
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;
   readonly tools: readonly SessionGeneration.Tool[];
+  readonly bundles?: readonly string[];
   readonly system: {
     readonly preset: string;
     readonly blocks: readonly SessionGeneration.SystemBlock[];
@@ -50,6 +51,7 @@ export function materialize(
       generation: 1,
       revertTo: 0,
       tools: input.tools,
+      bundles: input.bundles,
       system: input.system,
       policyGeneration: input.policyGeneration,
     }),
@@ -269,6 +271,7 @@ export function generationSnapshot(input: {
   readonly generation: number;
   readonly revertTo: number;
   readonly tools: readonly SessionGeneration.Tool[];
+  readonly bundles?: readonly string[];
   readonly system: {
     readonly preset: string;
     readonly blocks: readonly SessionGeneration.SystemBlock[];
@@ -284,6 +287,7 @@ export function generationSnapshot(input: {
     revertTo: input.revertTo,
     tools,
     toolsHash: canonicalDigest(tools),
+    bundles: [...(input.bundles ?? [])].sort(),
     systemPreset: input.system.preset,
     systemBlocks: blocks,
     systemValue: [input.system.preset, ...blocks.map((block) => block.content)]
@@ -315,7 +319,7 @@ export function configureAction(input: {
       encodingVersion: 1,
       value: {
         phase: "configured",
-        snapshot: input.snapshot,
+        snapshot: { ...input.snapshot, bundles: [...input.snapshot.bundles] },
       },
     },
     revert: {

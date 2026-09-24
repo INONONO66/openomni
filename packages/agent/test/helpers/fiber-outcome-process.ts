@@ -1,3 +1,5 @@
+import type { ResolvedExecutorOptions } from "../../src/executor-contract";
+import { executorLayer } from "./service-layers";
 import { appendFileSync, writeSync } from "node:fs";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Effect } from "effect";
@@ -12,7 +14,7 @@ if (import.meta.main) {
   Storage.initialize({ dbPath });
   await Effect.runPromise(Effect.gen(function* () {
     const options = yield* nativeExecutorOptions(mode === "execute" ? 100 : 100_000);
-    const executor = createExecutor({
+    const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
       ...options,
       ledger: { ...options.ledger, commit: (action) => {
         if (mode === "execute" && action.kind === "tool" && effectValue(action).phase === "result") {
@@ -22,7 +24,7 @@ if (import.meta.main) {
         }
         return options.ledger.commit(action);
       } },
-    });
+    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
     if (mode === "recover") {
       const before = SessionHandleStore.tree(fiberSessionId);
       yield* executor.recover();

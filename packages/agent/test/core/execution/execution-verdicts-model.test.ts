@@ -1,3 +1,6 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { executorLayer } from "../../helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it, mock } from "bun:test";
@@ -38,8 +41,8 @@ const mandatory: PolicyRow.Row = {
 
 function harness(rows: readonly PolicyRow.Row[]) {
   const { committed: actions, ledger } = recordingLedger();
-  const executor = createExecutor({
-    policy: compilePolicySnapshot({
+  const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows: [mandatory, ...rows],
       mandatory: ["compaction"],
@@ -52,7 +55,7 @@ function harness(rows: readonly PolicyRow.Row[]) {
       let value = 0;
       return () => `action-${++value}`;
     })(),
-  });
+  }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
   return { actions, executor };
 }
 
@@ -118,8 +121,8 @@ describe("the single L2 executor's four-kind verdict model", () => {
         Effect.gen(function* () {
           const actions: LedgerAction.Append[] = [];
           let revision = 0;
-          const executor = createExecutor({
-            policy: compilePolicySnapshot({
+          const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
               generation: 1,
               rows: [mandatory],
               mandatory: ["compaction"],
@@ -153,7 +156,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
                 inputSchema: { type: "object" },
               },
             ],
-          });
+          }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
 
           const result = yield* executor.run(
             { kind: "channel.send", op: "test", intent: {}, effect: {} },
@@ -184,8 +187,8 @@ describe("the single L2 executor's four-kind verdict model", () => {
               return { ok: true };
             }),
           );
-          const executor = createExecutor({
-            policy: compilePolicySnapshot({
+          const executor = Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
+            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
               generation: 1,
               rows: [mandatory],
               mandatory: ["compaction"],
@@ -221,7 +224,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             },
             clock: () => 100,
             entropy: () => `receipt-${revision + 1}`,
-          });
+          }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); }));
 
           const running = yield* Effect.forkScoped(
             executor.run({ kind: "llm", op: "test", intent: {}, effect: {} }, body),

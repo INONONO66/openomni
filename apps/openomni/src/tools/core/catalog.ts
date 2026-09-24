@@ -1,6 +1,5 @@
 import { eraseTool, toolSpec } from "@openomni/agent";
 import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
-import type { ComposedCodemode } from "../../composition/codemode";
 import type { FilePorts } from "./filesystem";
 import { createBashTool } from "../bash";
 import { createCompletionTool, type LlmPort } from "../completion";
@@ -24,7 +23,7 @@ export interface CatalogPorts {
   readonly alarms?: MonitorPorts;
   readonly messages?: MessagePort;
   readonly machines?: FilePorts["machines"];
-  readonly cells?: Pick<ComposedCodemode, "bindTools"> & { readonly cell: Cell };
+  readonly cells?: { readonly cell: Cell };
   readonly llm?: LlmPort;
   readonly provisioning?: ProvisionPort;
   /** The session runtime clock; deadlines are computed against it, never wall time. */

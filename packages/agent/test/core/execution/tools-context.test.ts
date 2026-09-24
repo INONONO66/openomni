@@ -1,3 +1,4 @@
+import { catalogLayer } from "../../helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { boundedSignal } from "../../helpers/g0-signals";
 import { isolated } from "../../helpers/isolated";
@@ -31,7 +32,7 @@ describe("tool execution context", () => {
       render: (_input: Record<string, never>, output: string) => output,
     });
     const { executor } = recordingExecutor();
-    const dispatcher = createDispatcher([eraseTool(definition)], { executor });
+    const dispatcher = Effect.runSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)]))));
 
     await isolated(
       Effect.scoped(
@@ -67,7 +68,7 @@ describe("tool execution context", () => {
     });
     const { executor } = recordingExecutor();
     const result = await isolated(
-      createDispatcher([eraseTool(definition)], { executor }).execute(
+      Effect.runSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)])))).execute(
         { id: "cancelled", tool: "capture", input: {} },
         { sessionId: "session-call", turnId: "turn", signal: controller.signal },
       ),

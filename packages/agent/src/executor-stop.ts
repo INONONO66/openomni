@@ -8,11 +8,11 @@ import {
   type StopObservation,
   type StopMetric,
 } from "./core/execution/stop-chain";
-import type { ExecutorOptions } from "./executor-contract";
+import type { ResolvedExecutorOptions } from "./executor-contract";
 
 /** Projects limits from the captured compiler; never repeats policy row names or numeric limits. */
 export function createStopJudge(
-  options: ExecutorOptions,
+  options: ResolvedExecutorOptions,
   decide: (op: string, value: PlainValue) => Effect.Effect<PolicyEvaluation, ExecutionError>,
   commit: (action: LedgerAction.Append) => Effect.Effect<LedgerAction.Receipt, ExecutionError>,
 ) {
@@ -22,7 +22,7 @@ export function createStopJudge(
       const op = metric === "continuation" ? "continue" : metric;
       const decision = yield* decide(op, { metric });
       const rows = decision.obligations.filter(
-        (row) => row.name === "budget_clamp" && row.metric === metric,
+        (row) => row.ref === "kernel/budget-clamp" && row.metric === metric,
       );
       const row = rows[0];
       if (

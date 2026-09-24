@@ -1,7 +1,9 @@
+import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
+import { executorLayer, catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
 import type { LedgerAction, ToolExecutionContext } from "@openomni/protocol";
 import { Effect, Fiber } from "effect";
-import { createExecutor, type ExecutorOptions } from "../../../src/executor";
+import { createExecutor, } from "../../../src/executor";
 import { createRawSlots } from "../../../src/executor-raw";
 import { GenerationRawSlots } from "../../../src/session-generations";
 import { createDispatcher } from "../../../src/tool-dispatcher";
@@ -16,11 +18,11 @@ import { timedQueryTool } from "../../helpers/query-tool";
 const request = { kind: "tool", op: "test", intent: {}, effect: {} };
 const call = { id: "timed-call", tool: "timed", input: {} };
 const context = { sessionId: "session-1", turnId: "turn-1" };
-function recording(overrides: Partial<ExecutorOptions> = {}) {
+function recording(overrides: Partial<ResolvedExecutorOptions> = {}) {
   const record = recordingLedger();
   return {
     ...record,
-    executor: createExecutor({
+    executor: Effect.runSync(Effect.gen(function* () { const { policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy, ...executorOptions }: ResolvedExecutorOptions = {
       policy: allowAllPolicy,
       ledger: record.ledger,
       observations: { publish: () => undefined },
@@ -29,7 +31,7 @@ function recording(overrides: Partial<ExecutorOptions> = {}) {
       entropy: record.entropy,
       closeGraceMs: 0,
       ...overrides,
-    }),
+    }; return yield* createExecutor(executorOptions).pipe(Effect.provide(executorLayer({ policy: capturedPolicy, observations: capturedObservations, clock: capturedClock, entropy: capturedEntropy }))); })),
   };
 }
 function toolResults(actions: readonly LedgerAction.Append[]) {
@@ -58,18 +60,18 @@ for (const door of ["cell", "wave"] as const) {
       };
       const generation = createRawSlots(owner === "generation" ? retain : undefined);
       const record = recording(owner === "bound" ? { retainEffect: retain } : {});
-      const dispatcher = createDispatcher([
+      const dispatcher = Effect.runSync(createDispatcher({
+        executor: record.executor,
+        timeoutMs: 0,
+        retainEffect: () => { foreignRetentions += 1; },
+      }).pipe(Effect.provide(catalogLayer([
         timedQueryTool("actual timed rejection", async (_input: Record<string, never>, execution: ToolExecutionContext) => {
           execution.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
           await gate.promise;
           rawSettled = true;
           throw new Error("raw definition rejected");
         }),
-      ], {
-        executor: record.executor,
-        timeoutMs: 0,
-        retainEffect: () => { foreignRetentions += 1; },
-      });
+      ]))));
       const work = Effect.gen(function* () {
         return door === "cell"
           ? [yield* dispatcher.executeCell(call, context)]
@@ -109,9 +111,9 @@ for (const door of ["cell", "wave"] as const) {
 
   it(`reports timed ${door} rejection before timeout`, () => isolated(Effect.gen(function* () {
     const record = recording();
-    const dispatcher = createDispatcher([
+    const dispatcher = Effect.runSync(createDispatcher({ executor: record.executor, timeoutMs: 0 }).pipe(Effect.provide(catalogLayer([
       timedQueryTool("immediate rejection", async () => { throw new Error("raw definition rejected"); }),
-    ], { executor: record.executor, timeoutMs: 0 });
+    ]))));
     const results = door === "cell"
       ? [yield* dispatcher.executeCell(call, context)]
       : yield* dispatcher.executeWave([call], context);
@@ -127,14 +129,14 @@ for (const door of ["cell", "wave"] as const) {
       const gate = Promise.withResolvers<void>();
       const timedOut = Promise.withResolvers<void>();
       const generation = createRawSlots();
-      const dispatcher = createDispatcher([
+      const dispatcher = Effect.runSync(createDispatcher({ executor: recording().executor, timeoutMs: 0 }).pipe(Effect.provide(catalogLayer([
         timedQueryTool("timed effect", async (_input: Record<string, never>, execution: ToolExecutionContext) => {
           execution.signal.addEventListener("abort", () => timedOut.resolve(), { once: true });
           await gate.promise;
           if (rejects) throw new Error("raw effect rejected");
           return "effect";
         }),
-      ], { executor: recording().executor, timeoutMs: 0 });
+      ]))));
       const wave = yield* Effect.forkScoped(Effect.gen(function* () {
         const results = door === "cell"
           ? [yield* dispatcher.executeCell(call, context)]

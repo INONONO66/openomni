@@ -1,9 +1,14 @@
+import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { turnTestLayer } from "../test/helpers/service-layers";
+import { prepareChatFixture } from "../test/helpers/chat-services";
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
+import { catalogLayer } from "../test/helpers/service-layers";
 import { Effect, Exit, Scope } from "effect";
 import { Storage } from "@openomni/ledger";
 import { accumulateUsage } from "@openomni/llm";
 import type { ObservationSink, Token } from "@openomni/protocol";
 import type { Bench } from "tinybench";
-import { closeSessions, session, type SessionRuntime } from "../src/session-handle";
+import { closeSessions, session } from "../src/session-handle";
 import { createSessionChatRunner } from "../src/session-chat-runner";
 import { createDispatcher, createTurnDispatcher } from "../src/tool-dispatcher";
 import { recordingExecutor } from "../test/helpers/effect-g2";
@@ -38,10 +43,7 @@ export async function firstDelta(now: () => number) {
 
 export function toolDispatch() {
   const recording = recordingExecutor();
-  const dispatcher = createDispatcher(
-    [valueTool({ name: "echo", execute: async (value) => value })],
-    { executor: recording.executor },
-  );
+  const dispatcher = Effect.runSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([valueTool({ name: "echo", execute: async (value) => value })]))));
   return {
     committed: recording.committed,
     run: () => runBenchEffect(dispatcher.execute(
@@ -56,19 +58,19 @@ export async function roundTrip() {
   seedPolicy();
   const runtime: SessionRuntime = { observations: events };
   const runner = createSessionChatRunner({
-    prepare: (input) => ({
+    prepare: (input) => Effect.gen(function* () { return prepareChatFixture(({
       config: {
         events,
         model,
         llm: mockLlm(completeModel),
-        executor: createTurnDispatcher([], input, runtime).executor,
+        executor: (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); })).executor,
       },
       traceContext: {
         traceId: "trace-agent-bench",
         sessionId: input.sessionId,
         runId: input.turnId,
       },
-    }),
+    })); }),
   });
   const scope = await runBenchEffect(Scope.make());
   const close = () => runBenchEffect(closeSessions(runtime).pipe(
@@ -77,7 +79,7 @@ export async function roundTrip() {
   ));
   try {
     const handle = await runBenchEffect(
-      session({ id: "bench-turn", role: "resident", runner }, runtime).pipe(Scope.extend(scope)),
+      Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "bench-turn", role: "resident", runner }, fixture), fixture); }).pipe(Scope.extend(scope)),
     );
     return { handle, run: () => runBenchEffect(handle.prompt("hello")), close };
   } catch (error) {

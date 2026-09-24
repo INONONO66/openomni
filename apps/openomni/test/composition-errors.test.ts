@@ -45,7 +45,7 @@ test("resident materialization refuses unregistered runners before storage", () 
     model: { provider: "fixture", id: "fixture" },
     apiKey: "fixture",
     tools: {},
-    sessionRuntime: { observations: Bus },
+    sessionRuntime: {},
   });
   expect(() => resident.materialize("invalid", null, "resident", "missing")).toThrow();
 });

@@ -18,6 +18,7 @@ import {
   type SessionWriteAdapter,
 } from "../packages/ledger/src/index";
 import { Machines } from "../packages/machines/src/index";
+import { checkEffectBoundaryFindings, effectServiceInventory } from "./check-effect-boundaries";
 
 /**
  * The runtime packages' SDK surface is one Effect service Tag per package plus the
@@ -98,4 +99,19 @@ test("the ipc server contract is the service surface behind Ipc.listen", () => {
   void keys;
   void listen;
   expect(Context.isTag(Ipc)).toBe(true);
+});
+
+test("every production Tag is consumed or has an exact existing-debt receipt", () => {
+  const inventory = effectServiceInventory();
+  expect(inventory.map((service) => service.key)).toEqual(expect.arrayContaining([
+    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink",
+    "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
+    "@openomni/ledger/LedgerWrites", "@openomni/llm/Llm",
+  ]));
+  const debt = checkEffectBoundaryFindings().filter((entry) => entry.code === "R9_UNUSED_TAG");
+  expect(debt.filter((entry) => entry.failing)).toEqual([]);
+  for (const service of inventory) {
+    if (service.reads > 0 || service.appLive) continue;
+    expect(debt).toContainEqual(expect.objectContaining({ file: service.file, line: service.line, failing: false }));
+  }
 });

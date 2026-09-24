@@ -3,7 +3,8 @@ import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
 import { createAlarmWorker } from "../../src/composition/alarm-worker";
-import { runEffect } from "./effect";
+import { runEffect, acquireSyncEffect, runSyncEffect } from "./effect";
+import { generationServices } from "./generation-services";
 
 type AlarmWorker = Effect.Effect.Success<ReturnType<typeof createAlarmWorker>>;
 
@@ -54,12 +55,14 @@ export function alarmFixture(
   let at = 1000;
   const errors: Error[] = [];
   const wakes: string[] = [];
+  const services = acquireSyncEffect(generationServices({ clock: () => at, observations: events }));
+  const requests = runSyncEffect(createSessionRequests({}).pipe(Effect.provide(services)));
   const workerFixture = alarmWorkerFixture({
     alarms: storage.alarms,
     observations: events,
     clock: () => at,
     schedule: () => () => undefined,
-    requestTimeout: createSessionRequests({ observations: events, clock: () => at }).timeout,
+    requestTimeout: requests.timeout,
     failure: (error) => {
       errors.push(error);
       onFailure?.(error);

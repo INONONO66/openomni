@@ -15,8 +15,11 @@ export {
 export { createExecutor, ExecutionApprovalError } from "./executor";
 export * from "./errors";
 export * from "./services";
-export { AgentGenerationLive } from "./layers";
-export { ExecutorContext, executorContext, ExecutorContextError } from "./executor-context";
+export * from "./bundle";
+export { AgentGenerationLive, AgentProcessLive } from "./layers";
+export { ExecutorContext, executorContext, ExecutorContextError, currentInvocation } from "./executor-context";
+export { makeSessionGenerations } from "./session-generations";
+export type { GenerationBundle } from "./session-generations";
 export type { ExecutionApprovalRequest } from "./executor";
 export { SEEDED_POLICY_ROWS } from "@openomni/policy";
 export type { Executor } from "./executor";

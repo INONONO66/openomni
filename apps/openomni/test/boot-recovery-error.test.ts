@@ -6,7 +6,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Cause, Effect, Exit, Option } from "effect";
 import { gatewayRuntime } from "../src/gateway";
 import { AppLifecycleFailure } from "../src/runtime";
-import { startOpenOmni } from "../src/index";
+import { appFixture } from "./helpers/app-fixture";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { approvalRequest } from "./helpers/approval-request";
 import { bounded } from "./helpers/protected-dispatch";
@@ -18,7 +18,7 @@ test("a pending Owner request keeps the server available while failed recovery i
   const log = spyOn(console, "error").mockImplementation((_message: string, error: Error) =>
     reported.resolve(error),
   );
-  let app: Awaited<ReturnType<typeof startOpenOmni>> | undefined;
+  let app: Awaited<ReturnType<typeof appFixture>> | undefined;
   try {
     const seed = gatewayRuntime({ dbPath });
     await seed.runPromise(Effect.void);
@@ -71,7 +71,7 @@ test("a pending Owner request keeps the server available while failed recovery i
       ),
     ).toBeDefined();
     await seed.dispose();
-    app = await startOpenOmni({
+    app = await appFixture({
       sessionRuntime: { clock: () => 100 },
       config: {
         dbPath,
@@ -84,7 +84,7 @@ test("a pending Owner request keeps the server available while failed recovery i
     expect(failure).toBeInstanceOf(Error);
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
     const shutdown = await app.runtime.runPromise(Effect.exit(app.runtime.disposeEffect));
-    await app.stop();
+    await app.runtime.dispose();
     app = undefined;
     expect(Exit.isFailure(shutdown)).toBe(true);
     if (Exit.isFailure(shutdown)) {

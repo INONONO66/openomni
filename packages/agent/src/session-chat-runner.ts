@@ -7,22 +7,23 @@ import type { SessionRunner, SessionRunnerInput, SessionRunnerResult } from "./s
 import { foldSessionHistory } from "./session-lifecycle/history";
 import { pinnedModelSelection } from "./model-selection";
 import type { ExecutionError } from "./errors";
+import type { RunnerServices } from "./services";
 
 interface SessionChatRun {
   readonly config: ChatAgentConfig & { readonly executor: Executor };
   readonly traceContext: TraceContext.Type;
-  readonly around?: (operation: Effect.Effect<AgentResult, ExecutionError>) => Effect.Effect<AgentResult, ExecutionError>;
+  readonly around?: (operation: Effect.Effect<AgentResult, ExecutionError, RunnerServices>) => Effect.Effect<AgentResult, ExecutionError, RunnerServices>;
 }
 
 interface SessionChatRunnerOptions {
-  readonly prepare: (input: SessionRunnerInput) => SessionChatRun;
+  readonly prepare: (input: SessionRunnerInput) => Effect.Effect<SessionChatRun, ExecutionError, RunnerServices>;
   readonly reportError?: (error: Error, input: SessionRunnerInput) => string | undefined;
 }
 
 export function createSessionChatRunner(options: SessionChatRunnerOptions): SessionRunner {
   return (input) => Effect.gen(function* () {
     const messages = input.messages.map((message) => ({ role: message.role, content: message.text, id: message.id }));
-    const prepared = options.prepare(input);
+    const prepared = yield* options.prepare(input);
     const executor = prepared.config.executor;
     if (executor.recover === undefined || executor.runAttempts === undefined || executor.judgeStop === undefined)
       return yield* Effect.die(new Error("durable chat runner requires session authority"));

@@ -1,4 +1,5 @@
 import { Effect, Either } from "effect";
+import { runLedgerSync } from "../helpers/effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
 import { createSqliteActorRegistryAdapter } from "../../src/storage/sqlite-actor-registry-adapter";
@@ -57,7 +58,7 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
     publish: () => undefined,
   });
   Either.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.either(
         store.sessions.create(
           LedgerSession.Row.parse({

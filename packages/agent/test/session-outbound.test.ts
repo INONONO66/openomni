@@ -1,17 +1,11 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Cause, Chunk, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
 import { isolated } from "./helpers/isolated";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
-import {
-  session,
-  closeSessions,
-  sweepSessions,
-  wakeSession,
-  type SessionRuntime,
-  type SessionRunner,
-} from "../src/session-handle";
+import { session, closeSessions, sweepSessions, wakeSession, type SessionRunner } from "../src/session-handle";
 import type { LedgerSession } from "@openomni/protocol";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -53,12 +47,9 @@ function commissionedChild(runtime: SessionRuntime) {
   return Effect.gen(function* () {
     seedPolicy();
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    yield* session({ id: "parent", role: "resident", runner: parentRunner }, runtime);
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
     appendCommission();
-    const child = yield* session(
-      { id: "child", parentId: "parent", role: "worker", runner: childRunner },
-      runtime,
-    );
+    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "child", parentId: "parent", role: "worker", runner: childRunner }, fixture), fixture); });
     return yield* child.prompt("work", origin);
   });
 }
@@ -74,11 +65,8 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
         };
         seedPolicy();
         yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-        yield* session({ id: "parent", role: "resident", runner: parentRunner }, runtime);
-        const child = yield* session(
-          { id: "child", parentId: "parent", role: "worker", runner: childRunner },
-          runtime,
-        );
+        yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
+        const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "child", parentId: "parent", role: "worker", runner: childRunner }, fixture), fixture); });
         const before = SessionHandleStore.tree("parent");
         expect(yield* failure(child.prompt("work", origin))).toMatchObject({
           _tag: "ForeignFailure",
@@ -129,7 +117,7 @@ test("restart after receiving commit retries exact bytes without another inbox o
               Effect.gen(function* () {
                 sent.push(JSON.stringify(message));
                 const received = yield* receiveOutbound(message, at);
-                yield* wakeSession(message.destinationSessionId, receive, value).pipe(
+                yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(wakeSession(message.destinationSessionId, receive, fixture), fixture); }).pipe(
                   Effect.provideService(Scope.Scope, scope),
                   Effect.orDie,
                 );
@@ -141,17 +129,14 @@ test("restart after receiving commit retries exact bytes without another inbox o
         }
         let current = runtime(100, true);
         try {
-          yield* session({ id: "parent", role: "resident", runner: receive }, current);
+          yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: receive }, fixture), fixture); });
           appendCommission();
-          const child = yield* session(
-            {
+          const child = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({
               id: "child",
               parentId: "parent",
               role: "worker",
               runner: () => Effect.succeed({ kind: "result", text: "exact answer" }),
-            },
-            current,
-          );
+            }, fixture), fixture); });
           expect(yield* failure(child.prompt("work", origin))).toMatchObject({
             _tag: "ForeignFailure",
             operation: "source.ack",
@@ -164,11 +149,8 @@ test("restart after receiving commit retries exact bytes without another inbox o
           Storage.reset();
           Storage.initialize({ dbPath });
           current = runtime(200, false);
-          yield* sweepSessions(
-            (row: LedgerSession.Row) =>
-              row.id === "parent" ? receive : () => Effect.die(new Error("sealed child replayed")),
-            current,
-          );
+          yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) =>
+              row.id === "parent" ? receive : () => Effect.die(new Error("sealed child replayed")), fixture), fixture); });
           expect(sent).toHaveLength(2);
           expect(sent[1]).toBe(sent[0]);
           expect(consumed).toBe(1);

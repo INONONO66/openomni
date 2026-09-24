@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EpochMs } from "../time.js";
+import { PolicyRef, PolicyTransform } from "../policy/row-verdict.js";
 import { LedgerAction } from "./l0.js";
 
 const Id = z.string().min(1);
@@ -130,6 +131,8 @@ export namespace SessionHistory {
       op: z.string(),
       generation: z.number().int().nonnegative(),
       matchedRuleIds: z.array(z.string()),
+      transforms: z.array(PolicyTransform).default([]),
+      ref: PolicyRef.optional(),
       verdict: z.string(),
       reason: z.string().nullable(),
       inputHash: z.string(),

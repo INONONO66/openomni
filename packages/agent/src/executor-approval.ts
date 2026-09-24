@@ -8,17 +8,14 @@ import { Deferred, Effect, Exit } from "effect";
 import type {
   ExecutionApprovals,
   ExecutionApprovalRequest,
-  ExecutorOptions,
+  ResolvedExecutorOptions,
 } from "./executor-contract";
 import { ExecutionApprovalError, type ExecutionError } from "./errors";
 import { createApprovalRequest, findSessionRequest } from "./session-request";
 
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
-export function createExecutionApprovals(options: ExecutorOptions) {
-  if (options.approvalTimeoutMs !== undefined &&
-      (!Number.isSafeInteger(options.approvalTimeoutMs) || options.approvalTimeoutMs < 0))
-    throw new TypeError("approval timeout must be a nonnegative integer");
+export function createExecutionApprovals(options: ResolvedExecutorOptions) {
   const pending = new Map<string, {
     request: ExecutionApprovalRequest;
     signal: AbortSignal;

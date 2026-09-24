@@ -1,13 +1,10 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
-import { activeExecutor, ExecutorContextError } from "./executor-context";
+import { activeInvocation, ExecutorContextError, type InvocationFrame } from "./executor-context";
 export { currentExecutor } from "./executor-context";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
 import {
   type AnyToolDefinition,
-  type BusEvent,
   type LedgerSession,
   type LedgerAction,
-  type ObservationSink,
   type PlainValue,
   PlainValueSchema,
   canonicalDigest,
@@ -18,14 +15,15 @@ import {
   type ToolExecutionContext,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { entropyOf } from "./core/entropy";
 import { Effect } from "effect";
+import { GenerationOwnership, ToolCatalog, type ProcessServices, SessionLayer } from "./services";
 
 const NEVER_ABORTED = new AbortController().signal;
-import type { ExecutionError } from "./errors";
+import { ForeignFailure, type ExecutionError } from "./errors";
 import type { RawToolSlots } from "./executor-raw";
 import {
   createExecutor,
+  immutableInput,
   type DurableExecutor,
   type ExecutionLedger,
   type Executor,
@@ -80,7 +78,7 @@ interface DispatchContext {
   readonly signal?: AbortSignal;
 }
 
-interface Dispatcher {
+export interface Dispatcher {
   readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
   execute(call: Tool.Call, context: DispatchContext): Effect.Effect<ToolDispatchResult, ExecutionError>;
@@ -203,9 +201,15 @@ function approvalFromOriginal(
 }
 
 export function createDispatcher(
-  definitions: readonly AnyToolDefinition[],
   options?: DispatcherOptions,
-): Dispatcher {
+): Effect.Effect<Dispatcher, ExecutionError, ToolCatalog> {
+  return Effect.gen(function* () {
+  const { definitions } = yield* ToolCatalog;
+  return buildDispatcher(definitions, options);
+  });
+}
+
+function buildDispatcher(definitions: readonly AnyToolDefinition[], options?: DispatcherOptions, invocation?: () => InvocationFrame): Dispatcher {
   /**
    * The cell door builds its dispatcher at tool-definition time, well ahead of every
    * execution context exists, so the ambient executor is resolved per dispatch:
@@ -216,7 +220,7 @@ export function createDispatcher(
    * unrelated prior session into a context-less cell dispatch.
    */
   const resolveExecutor = (): Executor | undefined =>
-    options?.executor ?? activeExecutor.getStore();
+    options?.executor ?? activeInvocation.getStore()?.executor;
   const known = new Map(definitions.map((definition) => [definition.name, definition]));
   type Prepared =
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
@@ -224,7 +228,7 @@ export function createDispatcher(
         readonly kind: "ready";
         readonly executor: Executor;
          readonly request: ExecutionRequest;
-        readonly body: () => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
+        readonly body: (receipt: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
         readonly sequential?: true;
         readonly finish: (
           result: ExecutionBatchResult,
@@ -278,20 +282,27 @@ export function createDispatcher(
             domainRevisions: () => binding?.(parsedValue).domainRevisions ?? {},
           }),
     };
-    const body = () => executeToolBody(
+    let admittedValue = parsedValue;
+    const body = (_receipt: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.suspend(() => {
+      const admitted = definition.input.safeParse(admittedInput);
+      if (!admitted.success) return Effect.succeed({ status: "error" as const, errorKind: "invalid_input" as const, message: invalidInputReason(admitted.error) });
+      admittedValue = immutableInput(PlainValueSchema.parse(admitted.data));
+      return executeToolBody(
       definition,
-      parsedInput.data,
+      admittedValue,
       {
         ...context,
         ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
       },
       options?.timeoutMs,
       executor,
-    ).pipe(Effect.map(PlainValueSchema.parse));
+      invocation?.(),
+      ).pipe(Effect.map(PlainValueSchema.parse));
+    });
     const finish = (
       execution: ExecutionBatchResult,
     ): ToolDispatchResult | CellToolDispatchResult =>
-      finishResult(call, definition, parsedValue, door, execution);
+      finishResult(call, definition, admittedValue, door, execution);
     let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
@@ -426,7 +437,6 @@ interface TurnDispatchInput {
   readonly toolsGeneration?: number;
   readonly toolsHash?: string;
   readonly systemHash?: string;
-  readonly policy: CompiledPolicySnapshot;
   readonly ledger: ExecutionLedger;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
@@ -464,7 +474,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
     )
       continue;
     if (settledIntents.has(action.id)) continue;
-    const parsed = PlainValueSchema.parse(intent.value);
+    const parsed = PlainValueSchema.parse(intent.originalArgs ?? intent.value);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
       throw new Error(`invalid durable invocation: ${action.id}`);
     const group = groups.get(intent.waveId) ?? [];
@@ -479,9 +489,6 @@ interface TurnDispatchRuntime {
   readonly closeGraceMs?: ExecutorOptions["closeGraceMs"];
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
-  readonly observations: ObservationSink | BusEvent.Sink;
-  readonly clock?: () => number;
-  readonly entropy?: () => string;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
 }
 
@@ -491,29 +498,30 @@ interface TurnDispatchRuntime {
  * "how a turn's tools commit durably" a single owner.
  */
 export function createTurnDispatcher(
-  definitions: readonly AnyToolDefinition[],
   input: TurnDispatchInput,
   runtime: TurnDispatchRuntime,
-): Dispatcher & { readonly executor: DurableExecutor } {
+): Effect.Effect<Dispatcher & { readonly executor: DurableExecutor }, ExecutionError, ProcessServices | SessionLayer | ToolCatalog | GenerationOwnership> {
+  return Effect.gen(function* () {
+  const { definitions } = yield* ToolCatalog;
+  const generation = yield* GenerationOwnership;
+  const { policy } = yield* SessionLayer;
   for (const captured of input.tools ?? []) {
     const definition = definitions.find((candidate) => candidate.name === captured.name);
     if (
       definition === undefined ||
       canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
     ) {
-      throw new Error(`captured catalog mismatch: ${captured.name}`);
+      return yield* new ForeignFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
     }
   }
-  const executor = createExecutor({
+  const executor = yield* createExecutor({
     retryAlarm: runtime.retryAlarm,
     closeGraceMs: runtime.closeGraceMs,
     signal: input.signal,
     retainEffect: input.retainEffect,
-    policy: input.policy,
     authorizeApproval: runtime.authorizeApproval,
     approvalTimeoutMs: runtime.approvalTimeoutMs,
     ledger: input.ledger,
-    observations: runtime.observations,
     identity: {
       sessionId: input.sessionId,
       role: input.role,
@@ -523,8 +531,6 @@ export function createTurnDispatcher(
       toolsHash: input.toolsHash,
       systemHash: input.systemHash,
     },
-    clock: runtime.clock ?? Date.now,
-    entropy: entropyOf(runtime),
   });
   if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
   const pinnedNames =
@@ -533,11 +539,12 @@ export function createTurnDispatcher(
     pinnedNames === undefined
       ? definitions
       : definitions.filter((definition) => pinnedNames.has(definition.name));
-  const dispatcher = createDispatcher(pinnedDefinitions, {
+  const dispatcher = buildDispatcher(pinnedDefinitions, {
     executor,
     retainEffect: input.retainEffect,
     trackWave: input.trackWave,
-  });
+  }, () => frame);
+  const frame: InvocationFrame = { executor, cell: dispatcher, policy, generation };
   return {
     ...dispatcher,
     executor: {
@@ -555,6 +562,7 @@ export function createTurnDispatcher(
       },
     },
   };
+  });
 }
 
 export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {

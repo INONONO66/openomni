@@ -5,7 +5,6 @@ import { runEffect } from "./effect";
 /** The test boundary mirrors the app's Promise-facing tool ports. */
 export function cellPorts(cells: ComposedCodemode): NonNullable<CatalogPorts["cells"]> {
   return {
-    bindTools: cells.bindTools,
     cell: {
       run: (code, tenant, options) => runEffect(cells.cell.run(code, tenant, options)),
       peek: (id, tenant) => runEffect(cells.cell.peek(id, tenant)),

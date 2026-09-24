@@ -175,7 +175,7 @@ describe("Resident terminal LLM failure surfacing", () => {
     const gateway = await runEffect(createResidentGateway({
       inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
       prepare: prepareMessage(resident.materialize),
-    }));
+    }).pipe(Effect.provide(resident.services)));
 
     const result = await runEffect(gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
@@ -194,7 +194,7 @@ describe("Resident terminal LLM failure surfacing", () => {
       result.handle.target,
       resident.runnerFor(SessionHandleStore.row(result.handle.target)),
       resident.runtime,
-    ));
+    ).pipe(Effect.provide(resident.services)));
     expect(completed?.text).toContain("rate limited upstream");
     expect(SessionHandleStore.getSnapshot(result.handle.target).turns.at(-1)?.terminal?.kind).toBe(
       "error",

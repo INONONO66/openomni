@@ -1,3 +1,4 @@
+import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { describe, expect, test } from "bun:test";
 import { Cause, Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
@@ -6,12 +7,7 @@ import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated } from "./helpers/isolated";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
-import {
-  Bus,
-  createTurnDispatcher,
-  type SessionRunner,
-  type SessionRuntime,
-} from "../src/index";
+import { Bus, createTurnDispatcher, type SessionRunner } from "../src/index";
 import { session } from "../src/session-handle";
 import type { SessionHandle, SessionRunnerInput } from "../src/session-contract";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
@@ -56,14 +52,11 @@ function program<E>(
       seed(rows);
 
       const current = runtime();
-      const compactingRunner: SessionRunner = (input: SessionRunnerInput) => {
-        const { executor } = createTurnDispatcher([], input, current);
-        return answerThenCompact(executor, input);
-      };
-      const handle = yield* session(
-        { id: "ctx", role: "resident", runner: compactingRunner },
-        current,
-      );
+      const compactingRunner: SessionRunner = (input: SessionRunnerInput) => Effect.gen(function* () {
+        const { executor } = yield* createTurnDispatcher(input, current);
+        return yield* answerThenCompact(executor, input);
+      });
+      const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture), fixture); });
       yield* handle.prompt("hello");
       const before = SessionHandleStore.tree("ctx");
       yield* body(handle, before);

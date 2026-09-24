@@ -1,3 +1,5 @@
+import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { catalogLayer } from "./helpers/service-layers";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "bun:test";
 import { stringQueryTool, valueTool } from "./helpers/query-tool";
@@ -8,7 +10,7 @@ import { allowAllPolicy as allowAll, opPhaseOf } from "./helpers/compiled-policy
 import { turnExecutor } from "./helpers/effect-g1";
 import { isolated } from "./helpers/isolated";
 
-const denyPre = compilePolicySnapshot({ generation: 1, mandatory: [], rows: [{
+const denyPre = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, mandatory: [], rows: [{
   name: "compaction", kind: "tool", phase: "pre", match: { encodingVersion: 1, value: { op: "echo" } },
   verdict: { encodingVersion: 1, value: { type: "deny", reason: "not_allowed" } }, priority: 1, generation: 1,
 }] });
@@ -16,7 +18,7 @@ function echoTool(onRun: () => void) {
   return valueTool({ name: "echo", description: "Echo input", execute: async (value) => { onRun(); return value; } });
 }
 function durableExecutor(policy: CompiledPolicySnapshot, committed?: LedgerAction.Append[]) { return turnExecutor(policy, committed).executor; }
-function deniedDispatcher(executions: { count: number }) { return createDispatcher([echoTool(() => { executions.count += 1; })], { executor: durableExecutor(denyPre) }); }
+function deniedDispatcher(executions: { count: number }) { return Effect.runSync(createDispatcher({ executor: durableExecutor(denyPre) }).pipe(Effect.provide(catalogLayer([echoTool(() => { executions.count += 1; })])))); }
 const call = { id: "call-1", tool: "echo", input: { value: "secret" } };
 const context = { sessionId: "session-1", turnId: "turn-1" };
 
@@ -49,18 +51,18 @@ describe("cell-door executor propagation", () => {
   it("inherits the enclosing executor so nested cell tools commit durably", async () => isolated(Effect.gen(function* () {
     const committed: LedgerAction.Append[] = [];
     const executor = durableExecutor(allowAll, committed);
-    const inner = createDispatcher([echoTool(() => undefined)]);
-    const outer = createDispatcher([stringQueryTool("outer", "Runs a nested cell tool", async () => {
+    const inner = Effect.runSync(createDispatcher().pipe(Effect.provide(catalogLayer([echoTool(() => undefined)]))));
+    const outer = Effect.runSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([stringQueryTool("outer", "Runs a nested cell tool", async () => {
       const nested = await isolated(inner.executeCell({ id: "call-inner", tool: "echo", input: { value: "nested" } }, context));
       return String(nested.output);
-    })], { executor });
+    })]))));
     const result = yield* outer.execute({ id: "call-outer", tool: "outer", input: {} }, context);
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("nested");
     expect(committed.filter((action) => action.kind === "tool").map(opPhaseOf).sort()).toEqual(["echo:intent", "echo:result", "outer:intent", "outer:result"]);
   })));
   it("refuses a cell tool that has no enclosing executor at all", async () => isolated(Effect.gen(function* () {
-    const exit = yield* Effect.exit(createDispatcher([echoTool(() => undefined)]).executeCell({ id: "call-orphan", tool: "echo", input: { value: "x" } }, context));
+    const exit = yield* Effect.exit(Effect.runSync(createDispatcher().pipe(Effect.provide(catalogLayer([echoTool(() => undefined)])))).executeCell({ id: "call-orphan", tool: "echo", input: { value: "x" } }, context));
     expect(failureOf(exit)).toMatchObject({ name: "ExecutorContextError", code: "executor_context_missing" });
   })));
 });
