@@ -17,6 +17,11 @@ export class ToolBodyFailed extends Data.TaggedError("ToolBodyFailed")<{
   readonly cause: string;
 }> {}
 
+export class InvocationClosed extends Data.TaggedError("InvocationClosed")<{
+  readonly tool: string;
+  readonly reason: "settled" | "interrupted";
+}> {}
+
 export class Interrupted extends Data.TaggedError("Interrupted")<Record<never, never>> {}
 
 export class CommitFailed extends Data.TaggedError("CommitFailed")<{
@@ -67,6 +72,8 @@ export type ExecutionError =
   | LlmRunFailure
   | PolicyDenied
   | ToolBodyFailed
+  | InvocationClosed
+  | GenerationUnavailable
   | Interrupted
   | ContextAdmissionError
   | CommitFailed

@@ -1,19 +1,16 @@
-import { createCodemode } from "@openomni/codemode";
-import { currentInvocation, ForeignFailure } from "@openomni/agent";
-import { ForeignFailure as CodeFailure } from "@openomni/codemode";
-import { Effect, type Scope } from "effect";
+import { createCodemode, ForeignFailure as CodeFailure, type RunOptions } from "@openomni/codemode";
+import { forkInvocation, ForeignFailure, type InvocationFrame } from "@openomni/agent";
+import { Effect, Exit, type Scope } from "effect";
 import type { MachineHost } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
 
 /** Bind product dispatch; interpreter state and cell provenance live in codemode. */
 export type ComposedCodemode = Effect.Effect.Success<ReturnType<typeof createCodemode>>;
 
-export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
-  return Effect.gen(function* () {
-  const mode = yield* createCodemode({
-    machines,
+function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
+  return {
     boundary() {
-      const { executor } = currentInvocation();
+      const { executor } = frame;
       return (call, body) => Effect.gen(function* () {
         if (!call.name.startsWith("codemode.")) return yield* body();
         const result = yield* executor.run(
@@ -39,8 +36,7 @@ export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCo
       }).pipe(Effect.mapError((error) => new CodeFailure({ operation: call.name, cause: String(error) })));
     },
     tools(tenant) {
-      // Capture executor authority in the dispatcher, not in a lazy Effect's construction context.
-      const { cell: dispatcher } = currentInvocation();
+      const { cell: dispatcher } = frame;
       return (call) => Effect.gen(function* () {
         const result = yield* dispatcher.executeCell(
             {
@@ -57,16 +53,35 @@ export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCo
         );
       }).pipe(Effect.mapError((error) => new CodeFailure({ operation: call.name, cause: String(error) })));
     },
-  });
-  return {
-    ...mode,
-    cell: {
-      ...mode.cell,
-      run: (code, tenant, options = {}) => {
-        const frame = currentInvocation();
-        return frame.generation.provide(mode.cell.run(code, tenant, { ...options, ownership: frame.generation }));
-      },
-    },
   };
+}
+
+export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const mode = yield* createCodemode({ machines });
+    return {
+      ...mode,
+      cell: {
+        ...mode.cell,
+        run: (code, tenant, options = {}) => {
+          const owned = forkInvocation("eval.cell");
+          let owners = 0;
+          const ownership = { interrupt: () => owned.close("interrupted"), retain() {
+            const release = owned.frame.generation.retain();
+            owners += 1;
+            return () => {
+              release();
+              owners -= 1;
+              if (owners === 0) owned.close("settled");
+            };
+          } };
+          return owned.frame.generation.provide(mode.cell.run(code, tenant, {
+            ...options, ownership, bindings: bindings(owned.frame),
+          })).pipe(Effect.onExit((exit) => Effect.sync(() => {
+            if (owners === 0) owned.close(Exit.isFailure(exit) ? "interrupted" : "settled");
+          })));
+        },
+      },
+    };
   });
 }

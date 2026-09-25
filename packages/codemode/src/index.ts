@@ -13,7 +13,8 @@ export interface RunOptions {
   readonly timeoutMs?: number;
   readonly waitMs?: number;
   readonly signal?: AbortSignal;
-  readonly ownership?: { retain(): () => void };
+  readonly ownership?: { retain(): () => void; interrupt?(): void };
+  readonly bindings?: Pick<Options, "tools" | "boundary">;
 }
 interface BackgroundCell {
   readonly tenant: string;
@@ -164,7 +165,7 @@ export function createCodemode(options: Options = {}) {
         return yield* settle(cellId, entry);
       });
     }
-    function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = options.boundary?.(tenant)) {
+    function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = (runOptions.bindings ?? options).boundary?.(tenant)) {
       return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
         const timeoutMs = runOptions.timeoutMs ?? 15_000;
         const cellId = crypto.randomUUID();
@@ -172,6 +173,9 @@ export function createCodemode(options: Options = {}) {
         const signal = AbortSignal.any([lifetime.signal, controller.signal, ...(runOptions.signal ? [runOptions.signal] : [])]);
         const handle = yield* Effect.try({ try: () => machines().get(id), catch: decodeCodeFailure("cell.launch") });
         const release = runOptions.ownership?.retain();
+        const interrupt = () => runOptions.ownership?.interrupt?.();
+        signal.addEventListener("abort", interrupt, { once: true });
+        if (signal.aborted) interrupt();
         live.set(cellId, { caller, tenant, timeoutMs, signal, boundary, ownership: runOptions.ownership });
         const settled = yield* Deferred.make<void>();
         running.add(settled);
@@ -185,6 +189,8 @@ export function createCodemode(options: Options = {}) {
         const entry: BackgroundCell = { tenant, machineId: id, controller, execution,
           get done() { return done; }, get quarantined() { return quarantined; } };
         execution.addObserver((exit) => {
+          signal.removeEventListener("abort", interrupt);
+          if (Exit.isFailure(exit)) interrupt();
           done = true;
           quarantined = entered && Exit.isFailure(exit) && release !== undefined;
           if (!quarantined) { release?.(); live.delete(cellId); }
@@ -227,7 +233,7 @@ export function createCodemode(options: Options = {}) {
         run: (code: string, tenant: string, runOptions: RunOptions = {}): Effect.Effect<Machine.CellState, Failure> => Effect.gen(function* () {
           const target = yield* Effect.try({ try: () => machines().list().find((entry) => entry.capabilities.includes(Machine.WellKnownCapability.pythonKernel)), catch: decodeCodeFailure("cell.select") });
           if (!target) return { status: "refused", reason: "kernel_not_available" };
-          const caller = options.tools?.(tenant) ?? (() => Effect.succeed({ status: "failed", error: "this cell exposes no tools" } as const));
+          const caller = (runOptions.bindings ?? options).tools?.(tenant) ?? (() => Effect.succeed({ status: "failed", error: "this cell exposes no tools" } as const));
           const started = yield* launch(target.machineId, code, tenant, caller, runOptions);
           if (runOptions.waitMs === undefined) return yield* Fiber.join(started.entry.execution);
           background.set(started.cellId, started.entry);

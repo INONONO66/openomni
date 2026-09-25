@@ -20,6 +20,10 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return { tag: error._tag, phase: error.phase, ruleIds: [...error.ruleIds] };
     case "ToolBodyFailed":
       return { tag: error._tag, tool: error.tool, cause: error.cause };
+    case "InvocationClosed":
+      return { tag: error._tag, tool: error.tool, reason: error.reason };
+    case "GenerationUnavailable":
+      return { tag: error._tag, generation: error.generation };
     case "ForeignFailure":
       return { tag: error._tag, operation: error.operation, cause: error.cause };
     case "CommitFailed":

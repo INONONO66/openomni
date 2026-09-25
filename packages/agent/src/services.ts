@@ -20,6 +20,7 @@ export interface CapturedGeneration {
   readonly id: SessionGeneration.Id;
   readonly snapshot: SessionGeneration.Snapshot;
   provide<A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, GenerationServices | GenerationRawSlots | GenerationOwnership>>;
+  isSelected(): boolean;
   retain(): () => void;
 }
 

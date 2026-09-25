@@ -8,7 +8,7 @@ import { Effect, Option } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "./errors";
 import { RawToolSlots } from "./executor-raw";
-import { withExecutor, withInvocation, type InvocationFrame } from "./executor-context";
+import { openInvocation, withExecutor, withInvocation, type InvocationFrame } from "./executor-context";
 import type { Executor } from "./executor-contract";
 
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
@@ -34,15 +34,25 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
   return Effect.gen(function* () {
     const slots = yield* RawToolSlots;
     const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
-      const settle = slots.open();
+      const release = slots.open();
       const controller = new AbortController();
       const scopedContext = {
         ...context,
         signal: AbortSignal.any([context.signal, controller.signal]),
       };
-      const enter = () => executor === undefined ? definition.execute(input, scopedContext)
-        : withExecutor(executor, () => definition.execute(input, scopedContext));
-      const raw = Promise.resolve().then(() => invocation === undefined ? enter() : withInvocation(invocation, enter));
+      const owned = invocation === undefined ? undefined : openInvocation(invocation, definition.name);
+      const abort = () => owned?.close("interrupted");
+      scopedContext.signal.addEventListener("abort", abort, { once: true });
+      if (scopedContext.signal.aborted) abort();
+      const settle = () => {
+        owned?.close("settled");
+        scopedContext.signal.removeEventListener("abort", abort);
+        release();
+      };
+      const activeExecutor = owned?.frame.executor ?? executor;
+      const enter = () => activeExecutor === undefined ? definition.execute(input, scopedContext)
+        : withExecutor(activeExecutor, () => definition.execute(input, scopedContext));
+      const raw = Promise.resolve().then(() => owned === undefined ? enter() : withInvocation(owned.frame, enter));
       raw.then(
         (value) => {
           settle();

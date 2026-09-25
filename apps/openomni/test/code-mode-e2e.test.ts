@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
 import { SessionHandleStore } from "@openomni/ledger";
-import { Bus } from "@openomni/agent";
+import { Bus, currentInvocation, type InvocationFrame } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
 import {
   attachMachineDaemon as attachDaemon,
@@ -470,6 +470,56 @@ async function startHeldCompletionHarness() {
   expect(await harness.run("0")).toBe("0");
   return { ...harness, entered, release, calls: () => calls };
 }
+
+test("a detached eval cell admits nested calls after run returns and refuses them after stop", async () => {
+  const firstEntered = Promise.withResolvers<void>();
+  const firstReply = Promise.withResolvers<string>();
+  const secondEntered = Promise.withResolvers<InvocationFrame>();
+  const secondReply = Promise.withResolvers<string>();
+  const pendingEntered = Promise.withResolvers<void>();
+  const bounded = <A>(promise: Promise<A>): Promise<A> =>
+    runEffect(Effect.promise(() => promise).pipe(Effect.timeout("5 seconds")));
+  let calls = 0;
+  let nestedBodies = 0;
+  const harness = await startCellHarness({ llm: async () => {
+    calls += 1;
+    if (calls === 1) { firstEntered.resolve(); return firstReply.promise; }
+    secondEntered.resolve(currentInvocation());
+    return secondReply.promise;
+  } });
+  try {
+    expect(await harness.run("0")).toBe("0");
+    const starting = harness.executeResult({ operation: {
+      op: "run", code: "completion('hold')\ncompletion('after-detach')", timeout: 1,
+    } });
+    await bounded(firstEntered.promise);
+    expect(await starting).not.toHaveProperty("isError", true);
+    const state = harness.states.at(-1);
+    expect(state?.status).toBe("running");
+    if (state?.status !== "running") throw new Error("expected detached cell");
+    firstReply.resolve("first");
+    const frame = await bounded(secondEntered.promise);
+    expect(calls).toBe(2);
+    const request = { kind: "tool", op: "cell-lifetime", intent: {}, effect: { category: "query" } };
+    expect(await runEffect(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "after-detach";
+    })))).toEqual({ terminal: "executed", value: "after-detach" });
+    const pending = runEffect(Effect.either(frame.executor.run(request, () =>
+      Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)))));
+    await bounded(pendingEntered.promise);
+    expect(await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } })).not.toHaveProperty("isError", true);
+    expect(await bounded(pending)).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed", reason: "interrupted" } });
+    expect(await runEffect(Effect.either(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "forbidden";
+    }))))).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed" } });
+    expect(nestedBodies).toBe(1);
+  } finally {
+    firstReply.resolve("cleanup");
+    secondReply.resolve("cleanup");
+  }
+}, 15_000);
 
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
