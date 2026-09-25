@@ -7,7 +7,9 @@ import {
   SEEDED_POLICY_ROWS,
   type PolicyEvaluationInput,
 } from "../src/index";
-import { atGeneration, compaction, draft, MemoryPolicyRows } from "./row-fixtures";
+import type { PolicyRow, Storage } from "@openomni/protocol";
+import { PolicyGenerationRefused } from "../../ledger/src/errors";
+import { atGeneration, compaction, draft, MemoryPolicyRows, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input: PolicyEvaluationInput = {
   kind: "tool",
@@ -37,11 +39,12 @@ function preservesPolicyCompileErrorNarrowing(error: unknown): PolicyCompileErro
   return undefined;
 }
 
-async function catchAppend(run: () => Promise<number>): Promise<PolicyCompileError> {
+function catchAppend(run: () => number): PolicyGenerationRefused {
   try {
-    await run();
+    run();
   } catch (error) {
-    if (PolicyCompileError.isInstance(error)) return error;
+    if (error instanceof PolicyGenerationRefused) return error;
+    throw error;
   }
   throw new Error("expected append failure");
 }
@@ -106,7 +109,7 @@ describe("policy row compiler enforcement", () => {
     [
       "transformer",
       draft("bad-transform", "tool", "post", { type: "transform", ref: "demo/not-registered" }),
-      "unknown_transformer",
+      "unknown_ref",
     ],
     [
       "obligation",
@@ -116,9 +119,9 @@ describe("policy row compiler enforcement", () => {
         metric: "fanout",
         limit: 2,
       }),
-      "unknown_obligation",
+      "unknown_ref",
     ],
-  ] as const)("rejects an unregistered %s with exact machine fields", (_label, badRow, code) => {
+  ] as const)("rejects an unregistered %s with exact machine fields", (_label: string, badRow: PolicyRowDraft, code: PolicyCompileError["code"]) => {
     const error = catchCompile(() =>
       compilePolicySnapshot({
         registry: KERNEL_POLICY_REGISTRY,
@@ -143,7 +146,7 @@ describe("policy row compiler enforcement", () => {
       "invalid_verdict",
       atGeneration(draft("bad-verdict", "tool", "pre", { type: "unexpected" }), 1),
     ],
-  ] as const)("rejects malformed rows with %s", (code, badRow) => {
+  ] as const)("rejects malformed rows with %s", (code: PolicyCompileError["code"], badRow: PolicyRow.Row) => {
     const error = catchCompile(() =>
       compilePolicySnapshot({
         registry: KERNEL_POLICY_REGISTRY,
@@ -213,36 +216,32 @@ describe("policy row compiler enforcement", () => {
     });
   });
 
-  it("reports append storage failures with the rejected row identity", async () => {
-    const source = new MemoryPolicyRows([atGeneration(compaction, 1)]);
-    source.append = () => false;
-    const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, source });
-
-    const error = await catchAppend(() => compiler.append([]));
-
+  it("rolls back the entire generation on a conflicting row with typed identity", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    source.appendGeneration(() => [compaction]);
+    const before = source.rows();
+    const error = catchAppend(() => source.appendGeneration(() => [compaction, compaction]));
     expect(error).toMatchObject({
-      data: { code: "snapshot_append_failed", generation: 2, ruleName: "compaction" },
+      _tag: "PolicyGenerationRefused", reason: "conflict", generation: 2, ruleName: "compaction",
     });
-  });
+    expect(source.rows()).toEqual(before);
+    expect(source.appendGeneration(() => [compaction])).toBe(2);
+  }));
 
-  it("reports append load failures as typed compile errors", async () => {
-    const source = new MemoryPolicyRows();
-    source.rows = () => {
-      throw new Error("unavailable");
-    };
+  it("refuses empty generations and leaves no durable or cached partial snapshot", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    const error = catchAppend(() => source.appendGeneration(() => []));
+    expect(error).toMatchObject({ _tag: "PolicyGenerationRefused", reason: "empty", generation: 1 });
+    expect(source.rows()).toEqual([]);
+    expect(source.appendGeneration(() => [compaction])).toBe(1);
     const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, source });
-
-    const error = await catchAppend(() => compiler.append([]));
-
-    expect(error.code).toBe("snapshot_load_failed");
-    expect(error.generation).toBe(0);
-  });
+    expect(compiler.pin(1).evaluate(input).verdict).toBe("allow");
+    expect(source.appendGeneration(() => undefined)).toBe(1);
+  }));
 
   it("ships every kernel limit as seeded policy data", () => {
     const snapshot = compilePolicySnapshot({
       registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
-      rows: SEEDED_POLICY_ROWS.map((row) => atGeneration(row, 1)),
+      rows: SEEDED_POLICY_ROWS.map((row: PolicyRowDraft) => atGeneration(row, 1)),
     });
     const cases = [
       ["turn", "post", "continue", "continuation", 8],

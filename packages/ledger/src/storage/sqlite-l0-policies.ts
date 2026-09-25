@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { PolicyRow, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { PolicyGenerationRefused } from "../errors.js";
 import { PolicySqlRow, decodePolicy } from "./sqlite-l0-rows.js";
 
 export function createPolicies(
@@ -13,11 +14,11 @@ export function createPolicies(
         const latest = Math.max(0, ...all.map((row) => row.generation));
         const drafts = derive(all.filter((row) => row.generation === latest));
         if (drafts === undefined) return latest;
-        if (drafts.length === 0) throw new Error("policy generation must not be empty");
         const generation = latest + 1;
+        if (drafts.length === 0) throw new PolicyGenerationRefused({ generation, reason: "empty" });
         for (const draft of drafts) {
           if (!this.append({ ...draft, generation })) {
-            throw new Error(`could not append policy row: ${draft.name}`);
+            throw new PolicyGenerationRefused({ generation, reason: "conflict", ruleName: draft.name });
           }
         }
         return generation;

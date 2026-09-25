@@ -35,7 +35,7 @@ function sessionServices(fixture: SessionFixture) {
     const managers = new Map<string, Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
     const observations = observationService(fixture.observations);
     const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, kinds: LedgerAction.Kind.options,
-      source: { append: () => false, rows: (generation) => SessionHandleStore.policyRows(generation) } });
+      source: { rows: (generation?: number) => SessionHandleStore.policyRows(generation) } });
     function bundle(sessionId: string, snapshot: SessionGeneration.Snapshot): GenerationBundle {
       return {
         id: { sessionId, generation: snapshot.generation }, snapshot, activate: Effect.void,
@@ -57,15 +57,15 @@ function sessionServices(fixture: SessionFixture) {
     }
     const generations: Context.Tag.Service<typeof GenerationLayers> = {
       initialize: () => Effect.void,
-      capture: (id) => Effect.gen(function* () {
+      capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
         const snapshot = SessionHandleStore.generationByNumber(sessionTree(id.sessionId), id.generation);
         if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
         const owner = yield* manager(id.sessionId);
         return yield* owner.capture(bundle(id.sessionId, snapshot));
       }),
       configure: <A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>) =>
-        Effect.flatMap(manager(id.sessionId), (owner) => owner.configure(bundle(id.sessionId, snapshot), commit)),
-      drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner) => owner.drain, { discard: true })),
+        Effect.flatMap(manager(id.sessionId), (owner: Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.configure(bundle(id.sessionId, snapshot), commit)),
+      drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.drain, { discard: true })),
     };
     const context = yield* Layer.buildWithScope(Layer.mergeAll(
       LlmLive, Layer.succeed(Clock, { now: fixture.clock ?? Date.now }),
@@ -78,5 +78,5 @@ function sessionServices(fixture: SessionFixture) {
 }
 
 export function withSessionServices<A, E, R>(work: Effect.Effect<A, E, R>, fixture: SessionFixture) {
-  return Effect.flatMap(sessionServices(fixture), (context) => Effect.provide(work, context));
+  return Effect.flatMap(sessionServices(fixture), (context: Context.Context<SessionEntryServices>) => Effect.provide(work, context));
 }

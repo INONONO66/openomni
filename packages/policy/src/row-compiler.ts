@@ -30,10 +30,8 @@ const CompileErrorCode = z.enum([
   "unknown_kind",
   "invalid_match",
   "invalid_verdict",
-  "unknown_transformer",
-  "unknown_obligation",
+  "unknown_ref",
   "snapshot_load_failed",
-  "snapshot_append_failed",
 ]);
 type PolicyCompileErrorCode = z.infer<typeof CompileErrorCode>;
 
@@ -92,14 +90,10 @@ function compileErrorMessage(options: CompileErrorOptions): string {
       return `policy rule ${options.ruleName ?? "<unnamed>"} has an invalid match`;
     case "invalid_verdict":
       return `policy rule ${options.ruleName ?? "<unnamed>"} has an invalid verdict`;
-    case "unknown_transformer":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered transformer ${options.ref ?? "<missing>"}`;
-    case "unknown_obligation":
-      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered obligation ${options.ref ?? "<missing>"}`;
+    case "unknown_ref":
+      return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered policy ${options.ref ?? "<missing>"}`;
     case "snapshot_load_failed":
       return `policy generation ${options.generation} could not be loaded`;
-    case "snapshot_append_failed":
-      return `policy generation ${options.generation} could not be appended`;
   }
 }
 
@@ -295,7 +289,7 @@ function resolveVerdict(
       const transformer = registry.transformers.find(({ name }) => name === verdict.ref);
       if (transformer === undefined)
         throw new PolicyCompileError({
-          code: "unknown_transformer",
+          code: "unknown_ref",
           generation,
           ruleName: row.name,
           kind: row.kind,
@@ -307,7 +301,7 @@ function resolveVerdict(
     case "obligation":
       if (!registry.obligations.some(({ name }) => name === verdict.ref))
         throw new PolicyCompileError({
-          code: "unknown_obligation",
+          code: "unknown_ref",
           generation,
           ruleName: row.name,
           kind: row.kind,
@@ -545,14 +539,13 @@ function failedSnapshot(error: PolicyCompileError): CompiledPolicySnapshot {
 
 type PolicyRowDraft = Omit<PolicyRow.Row, "generation">;
 
-interface PolicyCompiler {
+export interface PolicyCompiler {
   pin(generation: number): CompiledPolicySnapshot;
-  append(rows: readonly PolicyRowDraft[]): Promise<number>;
 }
 
 export function createPolicyCompiler(options: {
   readonly registry: NamedPolicyRegistry;
-  readonly source: Pick<Storage.PolicyRowSubAdapter, "append" | "rows">;
+  readonly source: Pick<Storage.PolicyRowSubAdapter, "rows">;
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
 }): PolicyCompiler {
@@ -586,50 +579,7 @@ export function createPolicyCompiler(options: {
     return compiled;
   }
 
-  async function append(drafts: readonly PolicyRowDraft[]): Promise<number> {
-    let all: PolicyRow.Row[];
-    try {
-      all = options.source.rows();
-    } catch {
-      throw new PolicyCompileError({ code: "snapshot_load_failed", generation: 0 });
-    }
-    const currentGeneration = all.reduce((latest, row) => Math.max(latest, row.generation), 0);
-    const generation = currentGeneration + 1;
-    const next = new Map<string, PolicyRowDraft>();
-    for (const row of all) {
-      if (row.generation !== currentGeneration) continue;
-      const { generation: _generation, ...draft } = row;
-      next.set(rowKey(row), draft);
-    }
-    for (const draft of drafts) next.set(rowKey(draft), draft);
-    const rows = [...next.values()].map((draft) => ({
-      ...draft,
-      generation,
-      verdict: { ...draft.verdict, value: readVerdict({ ...draft, generation }) },
-    }));
-    const compiled = compilePolicySnapshot({
-      registry,
-      generation,
-      rows,
-      mandatory,
-      ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
-    });
-    for (const row of rows) {
-      if (!options.source.append(row)) {
-        throw new PolicyCompileError({
-          code: "snapshot_append_failed",
-          generation,
-          ruleName: row.name,
-          kind: row.kind,
-          phase: row.phase,
-        });
-      }
-    }
-    cache.set(generation, compiled);
-    return generation;
-  }
-
-  return { pin, append };
+  return { pin };
 }
 
 function seeded(

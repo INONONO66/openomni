@@ -34,5 +34,6 @@ export {
   toolInputSchema,
   toolSpec,
 } from "./tool-dispatcher";
+export type { ToolDispatchDefinition } from "./tool-dispatcher";
 export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

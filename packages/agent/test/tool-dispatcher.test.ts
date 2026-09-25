@@ -123,11 +123,19 @@ describe("tool dispatcher public contract", () => {
             }),
           ]);
 
-          const missing = yield* dispatch.execute({ ...call, tool: "missing" }, context);
-          const invalid = yield* dispatch.execute({ ...call, input: {} }, context);
-
-          expect(missing).toMatchObject({ isError: true, errorKind: "unregistered_tool" });
-          expect(invalid).toMatchObject({ isError: true, errorKind: "invalid_input" });
+          const rejected = [
+            { id: "missing-call", tool: "missing", input: call.input },
+            { ...call, id: "invalid-call", input: {} },
+          ];
+          const wave = yield* dispatch.executeWave(rejected, context);
+          for (const [index, rejectedCall] of rejected.entries()) {
+            for (const result of [wave[index], yield* dispatch.execute(rejectedCall, context), yield* dispatch.executeCell(rejectedCall, context)]) {
+              expect(result).toMatchObject({
+                id: rejectedCall.id, toolCallId: rejectedCall.id, toolName: rejectedCall.tool,
+                isError: true, errorKind: index === 0 ? "unregistered_tool" : "invalid_input",
+              });
+            }
+          }
           expect(executions).toBe(0);
         }),
       ),
