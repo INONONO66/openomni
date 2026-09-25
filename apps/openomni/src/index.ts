@@ -49,7 +49,7 @@ import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import { resolveKek } from "./provisioning/vault-key";
-import type { ProvisionPort } from "./tools/provision";
+import type { ProvisionPort } from "./provisioning/channels";
 import {
   assertWsExposure,
   loadConfig,
@@ -315,9 +315,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       compaction: configuredCompaction(config),
       bundles: services.bundles.names,
       tools: {
+        ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         clock: services.clock.now,
         alarms: await createMonitorPorts(runtime),
-        ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         provisioning: provisioningPort,
       },
       sessionRuntime,

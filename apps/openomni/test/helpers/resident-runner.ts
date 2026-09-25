@@ -1,3 +1,4 @@
+import { testToolPorts } from "./tool-ports";
 import { Effect } from "effect";
 import { Provider, run } from "@openomni/llm";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
@@ -21,7 +22,7 @@ afterEach(async () => {
 });
 
 export function residentRunner(
-  options: Omit<ResidentOptions, "sessionRuntime"> & { llm?: Partial<FixtureLlm>; sessionRuntime?: SessionRuntime & { readonly clock?: () => number; readonly entropy?: () => string; readonly observations?: ObservationSink } },
+  options: Omit<ResidentOptions, "sessionRuntime" | "tools"> & { tools: Partial<ResidentOptions["tools"]>; llm?: Partial<FixtureLlm>; sessionRuntime?: SessionRuntime & { readonly clock?: () => number; readonly entropy?: () => string; readonly observations?: ObservationSink } },
 ) {
   const runtime = options.sessionRuntime ?? {
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
@@ -30,7 +31,7 @@ export function residentRunner(
   };
   const scope = effectScope();
   seedKernelPolicyRows();
-  const resident = createResident({ ...options, sessionRuntime: runtime });
+  const resident = createResident({ ...options, tools: { ...testToolPorts, ...options.tools }, sessionRuntime: runtime });
   const context = scope.runSync(generationServices({
     clock: runtime.clock, entropy: runtime.entropy,
     observations: runtime.observations === undefined ? Bus : observationService(runtime.observations),

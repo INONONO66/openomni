@@ -178,7 +178,7 @@ describe("lint-tools definition invariants", () => {
     const snapshot = [{ name: "read", safe: true }];
     expect(diffToolSchemaSnapshots(snapshot, snapshot)).toEqual([]);
     expect(diffToolSchemaSnapshots(snapshot, [{ name: "write", safe: false }])).toMatchObject([
-      { check: "tool-schema-snapshot", subject: "TOOL_DEFINITIONS" },
+      { check: "tool-schema-snapshot", subject: "catalogDefinitions" },
     ]);
   });
 });

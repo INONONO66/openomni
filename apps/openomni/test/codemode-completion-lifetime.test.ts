@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { executorLayer, runnerTestLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { Effect } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
@@ -9,7 +10,7 @@ import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol
 import { z } from "zod";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
-import { createTools } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
 import { fixtureHashes } from "../../../packages/agent/test/helpers/compiled-policy";
 import { seededPolicy } from "./helpers/executor";
@@ -70,8 +71,8 @@ for (const stop of [false, true]) {
     cells = acquireSyncEffect(composeCodemode(host));
     suite.defer(async () => { await runEffect(cells.close()); });
     let calls = 0;
-    const definitions = createTools(
-      {
+    const definitions = catalogDefinitions(
+      { ...testToolPorts,
         cells: cellPorts(cells),
         llm: async () => {
           expect(currentExecutor().run).toBe(dispatcher.executor.run);
@@ -81,7 +82,6 @@ for (const stop of [false, true]) {
           return "late";
         },
       },
-      origin,
     );
     const dispatcher = acquireSyncEffect(createTurnDispatcher({
       sessionId: origin.sessionId, role: origin.role, actionId: "completion-turn", ledger,

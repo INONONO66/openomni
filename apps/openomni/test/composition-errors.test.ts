@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
@@ -45,7 +46,7 @@ test("resident materialization refuses unregistered runners before storage", () 
   const resident = createResident({
     model: { provider: "fixture", id: "fixture" },
     apiKey: "fixture",
-    tools: {},
+    tools: { ...testToolPorts,},
     sessionRuntime: { authorizeConfigure: allowConfigure },
   });
   expect(() => resident.materialize("invalid", null, "resident", "missing")).toThrow();

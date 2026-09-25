@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, mock, spyOn, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
@@ -5,7 +6,7 @@ import { acquireAppResource, gatewayRuntime } from "../src/gateway";
 import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, sessionTool } from "@openomni/agent";
-import { createTools } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
 import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
@@ -71,7 +72,7 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const fixture = messageFixture(
     "resident",
     undefined,
-    createTools({}, { sessionId: "worker", role: "worker" }).map(sessionTool),
+    catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool),
   );
   const stdin = new PassThrough();
   let requests = 0;
@@ -150,7 +151,7 @@ test.each([
   const fixture = messageFixture(
     "resident",
     undefined,
-    toolSend ? createTools({}, { sessionId: "worker", role: "worker" }).map(sessionTool) : [],
+    toolSend ? catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool) : [],
   );
   let requests = 0;
   const provider = Bun.serve({

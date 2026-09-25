@@ -26,8 +26,16 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { collectToolSpecs, TOOL_DEFINITIONS } from "../apps/openomni/src/tools/core/catalog.js";
+import { toolSpec } from "../packages/agent/src/index.js";
+import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
+
+// Schema inspection never executes ports; absent capabilities are explicit test doubles.
+const schemaPorts: ToolPorts = {
+  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  llm: undefined, provisioning: undefined, clock: () => 0,
+};
+const definitions = catalogDefinitions(schemaPorts);
 
 interface Violation {
   readonly check:
@@ -252,7 +260,7 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 function collectToolSurfaces(): ToolSurface[] {
-  return collectToolSpecs().map((spec) => ({
+  return definitions.map(toolSpec).map((spec) => ({
     name: spec.name,
     description: spec.description,
     inputSchema: spec.inputSchema,
@@ -381,7 +389,7 @@ export function definitionInvariantViolations(
       violations.push({
         check: "earned-check",
         subject: `${item.filePath}:${item.definition.name}`,
-        message: "exported tool definition is not wired into TOOL_DEFINITIONS",
+        message: "exported tool definition is not wired into catalogDefinitions",
       });
     }
   }
@@ -438,8 +446,8 @@ export function definitionInvariantViolations(
 
 async function checkEarned(): Promise<Violation[]> {
   return definitionInvariantViolations(
-    TOOL_DEFINITIONS,
-    await locateExportedDefinitions(TOOL_DEFINITIONS),
+    definitions,
+    await locateExportedDefinitions(definitions),
   );
 }
 
@@ -566,7 +574,7 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
 }
 
 export function buildToolSchemaSnapshot(): readonly unknown[] {
-  return collectToolSpecs();
+  return definitions.map(toolSpec);
 }
 
 export function diffToolSchemaSnapshots(
@@ -587,7 +595,7 @@ export function diffToolSchemaSnapshots(
   return [
     {
       check: "tool-schema-snapshot",
-      subject: "TOOL_DEFINITIONS",
+      subject: "catalogDefinitions",
       message: `derived tool specs differ from the reviewed snapshot (before: ${previousNames.join(", ")}; now: ${currentNames.join(", ")}) — run --update only with review authorization`,
     },
   ];
@@ -613,7 +621,7 @@ const badTool: ToolSurface = {
 };
 
 function definitionSelfTest(failures: string[]): void {
-  const exemplar = TOOL_DEFINITIONS[0];
+  const exemplar = definitions[0];
   if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
   if (exemplar === undefined) return;
   const unsafeQuery = {

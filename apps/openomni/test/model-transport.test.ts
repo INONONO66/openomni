@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { mkdtempSync } from "node:fs";
@@ -69,7 +70,7 @@ describe("operator transport reaches every model caller", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: {
         resolveModel,
         run: (input, sink) => Effect.sync(() => {

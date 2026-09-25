@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { mkdtempSync } from "node:fs";
@@ -22,7 +23,7 @@ describe("Resident compaction", () => {
     const seed = createResident({
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: {
         resolveModel: (model) => Effect.succeed(({
           id: model.id,
@@ -49,7 +50,7 @@ describe("Resident compaction", () => {
         contextWindowTokens: 700,
         elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
       }),
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: {
         resolveModel: (model) => Effect.succeed(({
           id: model.id,

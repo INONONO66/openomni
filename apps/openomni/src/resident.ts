@@ -17,7 +17,7 @@ import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET, WORKER_PRESET } from "./prompt/roles";
-import { createTools, type CatalogPorts } from "./tools/core/catalog";
+import { catalogDefinitions, toolCatalogLayer, type GenerationDefinitions, type ToolPorts } from "./tools/core/catalog";
 
 function refuseEvidenceOnly(call: Tool.Call): Tool.Result {
   return {
@@ -37,7 +37,7 @@ export interface ResidentOptions {
   readonly transport?: ChatAgentConfig["transport"];
   readonly bundles?: readonly string[];
   readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>, never, import("@openomni/llm").Llm | ObservationSink>;
-  readonly tools: CatalogPorts;
+  readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;
 }
@@ -45,16 +45,15 @@ export interface ResidentOptions {
 /** Resident and worker use the same session-owned runner and dispatcher. */
 export function createResident(options: ResidentOptions) {
   const ports = options.tools;
-  const definitions = new Map<LedgerSession.Role, readonly AnyToolDefinition[]>();
-  const definitionsFor = (id: string, role: LedgerSession.Role) => {
-    const cached = definitions.get(role);
-    if (cached !== undefined) return cached;
-    const visible = [
-      ...createTools(ports, { sessionId: id, role }),
-      ...(options.toolDefinitions ?? []),
-    ];
-    definitions.set(role, visible);
-    return visible;
+  const catalog = catalogDefinitions(ports);
+  const definitionsFor = (role: LedgerSession.Role) => [
+    ...catalog.filter((tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
+    ...(options.toolDefinitions ?? []),
+  ];
+  const definitions: GenerationDefinitions = {
+    resident: definitionsFor("resident"),
+    worker: definitionsFor("worker"),
+    catalogLayer: (select) => toolCatalogLayer(ports, (tools) => select([...tools, ...(options.toolDefinitions ?? [])])),
   };
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
@@ -117,7 +116,7 @@ export function createResident(options: ResidentOptions) {
     });
   return {
     runnerFor,
-    definitions: { resident: definitionsFor("catalog", "resident"), worker: definitionsFor("catalog", "worker") },
+    definitions,
     materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new Error(`runner is not registered: ${runner}`);
@@ -127,10 +126,10 @@ export function createResident(options: ResidentOptions) {
         parentId,
         role,
         runner,
-        tools: definitionsFor(id, role).map(sessionTool),
+        tools: definitions[role].map(sessionTool),
         bundles: options.bundles ?? [],
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
-        at: (ports.clock ?? Date.now)(),
+        at: ports.clock(),
       });
     },
   };

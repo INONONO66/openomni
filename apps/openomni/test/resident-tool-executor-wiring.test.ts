@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
@@ -40,7 +41,7 @@ test("a resident tool call is executed and observed through the durable executor
   const resident = createResident({
     model: { provider: "fake", id: "resident-test" },
     apiKey: "test-key",
-    tools: {
+    tools: { ...testToolPorts,
       cells: {
         cell: {
           async run() {

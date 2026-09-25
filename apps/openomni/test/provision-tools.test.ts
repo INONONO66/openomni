@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
@@ -5,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "@openomni/ledger";
 import { type PlainObject, Provisioning } from "@openomni/protocol";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
-import { createTools } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
 import { eraseTool } from "@openomni/agent";
-import { createProvisionTool, type ProvisionPort } from "../src/tools/provision";
+import { createProvisionTool } from "../src/tools/provision";
+import type { ProvisionPort } from "../src/provisioning/channels";
 import { executor } from "./helpers/executor";
 import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
@@ -467,20 +469,9 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
   test("catalog gate: provisioning administration is the Resident's alone", () => {
     const { port } = portWith();
     const provisionTools = ["provision"];
-    const resident = createTools(
-      { provisioning: port },
-      {
-        role: "resident",
-        sessionId: "s",
-      },
-    ).map((entry) => entry.name);
-    const worker = createTools(
-      { provisioning: port },
-      {
-        role: "worker",
-        sessionId: "s",
-      },
-    ).map((entry) => entry.name);
+    const definitions = catalogDefinitions({ ...testToolPorts, provisioning: port });
+    const resident = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("resident")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
+    const worker = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("worker")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
     for (const name of provisionTools) {
       expect(resident).toContain(name);
       expect(worker).not.toContain(name);

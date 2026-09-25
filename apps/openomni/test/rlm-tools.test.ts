@@ -1,8 +1,9 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { createTools, collectToolSpecs } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
 import { toolSpec, type Executor } from "@openomni/agent";
 import { completionFixture as completionPort } from "./helpers/completion-fixture";
 import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
@@ -72,7 +73,7 @@ describe("the completion tool", () => {
   });
 
   it("forwards system and model to the port and validates a schema-shaped answer", async () => {
-    const seen: Array<Parameters<NonNullable<Parameters<typeof createTools>[0]["llm"]>>[0]> = [];
+    const seen: Array<Parameters<NonNullable<Parameters<typeof catalogDefinitions>[0]["llm"]>>[0]> = [];
     const answers = ['```json\n{"n": 7}\n```', '{"n": "seven"}', "not json at all"];
     const run = dispatchModelTool(
       COMPLETION_TOOL_NAME,
@@ -120,14 +121,13 @@ describe("the completion tool", () => {
     // drew from ONE process-wide budget. The cell door dispatches with
     // turnId = cellId; the budget must be keyed by that identity.
     let invoked = 0;
-    const entries = createTools(
-      {
+    const entries = catalogDefinitions(
+      { ...testToolPorts,
         llm: async () => {
           invoked += 1;
           return `call ${invoked}`;
         },
       },
-      RESIDENT,
     );
     const dispatcher = dispatcherFixture(entries, { executor });
     let nextId = 0;
@@ -167,13 +167,12 @@ describe("the completion tool", () => {
     // The defect this pins: a failing llm call returned as a completed string
     // lets cell code store failure text as if it were model output. The
     // dispatcher must mark it isError so the cell door raises ToolError.
-    const entries = createTools(
-      {
+    const entries = catalogDefinitions(
+      { ...testToolPorts,
         llm: async () => {
           throw new Error("llm failed: provider on fire");
         },
       },
-      RESIDENT,
     );
     const dispatcher = dispatcherFixture(entries, { executor });
 
@@ -230,7 +229,7 @@ describe("the completion tool", () => {
   });
 
   it("dispatches the cell door without a target eligibility fold", async () => {
-    const entries = createTools({ llm: async () => "ok" }, RESIDENT);
+    const entries = catalogDefinitions({ ...testToolPorts, llm: async () => "ok" });
     const dispatcher = dispatcherFixture(entries, { executor });
     const result = await runEffect(
       dispatcher.executeCell(
@@ -404,15 +403,15 @@ describe("the completion port", () => {
 
 describe("catalog gating for the rlm tools", () => {
   it("lists the completion spec in the shippable surface the lint reads", () => {
-    const names = collectToolSpecs().map((spec) => spec.name);
+    const names = catalogDefinitions(testToolPorts).map(toolSpec).map((spec) => spec.name);
     expect(names).toContain(COMPLETION_TOOL_NAME);
   });
 
   it("stays in the static catalog without a wired port and refuses at execution", async () => {
-    const names = createTools({}, RESIDENT).map((entry) => entry.name);
+    const names = catalogDefinitions(testToolPorts).map((entry) => entry.name);
     expect(names).toContain(COMPLETION_TOOL_NAME);
     const result = await runEffect(
-      dispatcherFixture(createTools({}, RESIDENT), { executor }).executeCell(
+      dispatcherFixture(catalogDefinitions(testToolPorts), { executor }).executeCell(
         { id: "unwired", tool: COMPLETION_TOOL_NAME, input: { prompt: "x" } },
         { sessionId: RESIDENT.sessionId, turnId: "turn" },
       ),
@@ -422,7 +421,7 @@ describe("catalog gating for the rlm tools", () => {
   });
 
   it("projects completion without target metadata", () => {
-    const specs = createTools({ llm: async () => "" }, RESIDENT).map((entry) => toolSpec(entry));
+    const specs = catalogDefinitions({ ...testToolPorts, llm: async () => "" }).map((entry) => toolSpec(entry));
     expect(specs.map((spec) => spec.name)).toContain(COMPLETION_TOOL_NAME);
     expect(specs.every((spec) => spec.placement === undefined)).toBe(true);
   });

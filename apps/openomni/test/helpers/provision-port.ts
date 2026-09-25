@@ -1,5 +1,5 @@
 import { ChannelInstanceStore, PersonStore, SecretStore, Vault } from "@openomni/ledger";
-import type { ProvisionPort } from "../../src/tools/provision";
+import type { ProvisionPort } from "../../src/provisioning/channels";
 
 /** Real durable stores under a quiet supervisor: enough for address-book authority tests. */
 export function provisionPort(): ProvisionPort {

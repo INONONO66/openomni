@@ -1,14 +1,14 @@
 import { Effect, Either } from "effect";
 import type { MachineHost } from "@openomni/machines";
 import type { ComposedCodemode } from "../../src/composition/codemode";
-import type { CatalogPorts } from "../../src/tools/core/catalog";
+import type { ToolPorts } from "../../src/tools/core/catalog";
 import { runEffect } from "./effect";
 
 async function runTyped<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   return Either.getOrThrowWith(await runEffect(Effect.either(effect)), (error) => error);
 }
 
-export function testMachinePorts(host: MachineHost): NonNullable<CatalogPorts["machines"]> {
+export function testMachinePorts(host: MachineHost): NonNullable<ToolPorts["machines"]> {
   return { get: (id) => {
     const handle = host.get(id);
     return {
@@ -23,7 +23,7 @@ export function testMachinePorts(host: MachineHost): NonNullable<CatalogPorts["m
   } };
 }
 
-export function testCellPorts(cells: ComposedCodemode): NonNullable<CatalogPorts["cells"]> {
+export function testCellPorts(cells: ComposedCodemode): NonNullable<ToolPorts["cells"]> {
   return {
     cell: {
       run: (code, tenant, options) => runTyped(cells.cell.run(code, tenant, options)),

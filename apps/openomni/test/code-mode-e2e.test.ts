@@ -15,7 +15,7 @@ import {
 } from "@openomni/machines";
 import type { Machine, PlainObject } from "@openomni/protocol";
 import type { CatalogOrigin } from "../src/tools/core/catalog";
-import type { CatalogPorts } from "../src/tools/core/catalog";
+import type { ToolPorts } from "../src/tools/core/catalog";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
 import { createCodemode } from "@openomni/codemode";
@@ -403,7 +403,7 @@ const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
  * executor, with the catalog's ports swapped for fakes — the same seam
  * startOpenOmni wires at boot, exercised without booting the app.
  */
-async function startCellHarness(ports: CatalogPorts) {
+async function startCellHarness(ports: Partial<ToolPorts>) {
   const socketPath = testSocketPath();
   let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
   const host = await createMachineHost({

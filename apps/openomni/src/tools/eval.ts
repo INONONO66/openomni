@@ -1,3 +1,4 @@
+import { CELL_CEILING_MS, describe } from "./core/cell-output";
 import { CodemodeError, type RunOptions } from "@openomni/codemode";
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { Machine } from "@openomni/protocol";
@@ -8,12 +9,6 @@ export interface Cell {
   peek(cellId: string, tenant: string): Promise<Machine.CellState>;
   stop(cellId: string, tenant: string): Promise<Machine.CellState>;
 }
-
-/**
- * A cell left in the background is `timed_out` at this deadline: the model
- * has `stop`, and an interpreter must not outlive its session's interest.
- */
-const CELL_CEILING_MS = 10 * 60_000;
 
 const cellId = z.string().min(1).describe("The cell_id a run answered with while still running.");
 const operation = z.discriminatedUnion("op", [
@@ -37,22 +32,6 @@ const operation = z.discriminatedUnion("op", [
 type Operation = z.output<typeof operation>;
 // Like monitor and provision: an object root keeps the op union out of the wire root.
 const Input = z.object({ operation }).strict();
-
-function outputOf(output: Machine.CellOutput): string {
-  const streams = [output.stdout, output.stderr].filter((stream) => stream !== "");
-  return streams.length === 0 ? "" : `\n${streams.join("\n")}`;
-}
-
-function describe(state: Machine.CellState): string {
-  if (state.status === "completed") return state.value ?? state.output.stdout;
-  if (state.status === "raised") return `the cell raised: ${state.error}${outputOf(state.output)}`;
-  if (state.status === "running")
-    return `cell ${state.cellId} is still running; peek or stop it by cell_id${outputOf(state.output)}`;
-  if (state.status === "timed_out")
-    return `the cell was stopped at the ${CELL_CEILING_MS / 60_000} minute ceiling${outputOf(state.output)}`;
-  if (state.status === "cancelled") return `the cell was stopped${outputOf(state.output)}`;
-  return state.reason;
-}
 
 function executeOperation(
   cell: Cell,
