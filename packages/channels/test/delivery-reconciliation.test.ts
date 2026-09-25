@@ -116,6 +116,40 @@ test("uncertain reconciliation custody does not expire with an inbound dedupe wi
   }
 });
 
+test("proven sends age out of custody in send order while uncertain keys stay forever", async () => {
+  const reconciliation = new DeliveryReconciliation(2);
+  const sends = new Map<string, number>();
+  const send = (key: string, id: string | undefined) =>
+    deliverKeyed(
+      reconciliation,
+      key,
+      async () => {
+        sends.set(key, (sends.get(key) ?? 0) + 1);
+        return id;
+      },
+      () => false,
+      () => undefined,
+    );
+  await send("lost", undefined);
+  await send("a", "1");
+  await send("b", "2");
+  // Within retention: proven keys are still remembered.
+  await send("a", "1");
+  await send("b", "2");
+  expect(sends.get("a")).toBe(1);
+  expect(sends.get("b")).toBe(1);
+  // A third proven key evicts only the oldest proven key.
+  await send("c", "3");
+  await send("b", "2");
+  await send("c", "3");
+  await send("a", "1");
+  await send("lost", undefined);
+  expect(sends.get("a")).toBe(2);
+  expect(sends.get("b")).toBe(1);
+  expect(sends.get("c")).toBe(1);
+  expect(sends.get("lost")).toBe(1);
+});
+
 test("GitHub uncertainty is terminal even when comment read-back would show no marker", async () => {
   let physicalSends = 0;
   const server = Bun.serve({

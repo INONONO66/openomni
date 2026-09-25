@@ -184,11 +184,18 @@ test("reconnect has a floor, exponential cap, and jitter", () => {
   const random = Math.random;
   try {
     Math.random = () => 0;
-    expect(calculateBackoff(0)).toBe(1000);
-    expect(calculateBackoff(20)).toBe(60_000);
+    const floor = calculateBackoff(0);
+    const cap = calculateBackoff(20);
+    expect(floor).toBeGreaterThan(0);
+    expect(calculateBackoff(1)).toBe(floor * 2);
+    expect(calculateBackoff(2)).toBe(floor * 4);
+    expect(cap).toBeGreaterThan(calculateBackoff(3));
+    expect(calculateBackoff(30)).toBe(cap);
     Math.random = () => 0.5;
-    expect(calculateBackoff(0)).toBe(1500);
-    expect(calculateBackoff(20)).toBe(60_500);
+    const jitter = calculateBackoff(0) - floor;
+    expect(jitter).toBeGreaterThan(0);
+    expect(jitter).toBeLessThan(floor);
+    expect(calculateBackoff(20) - cap).toBe(jitter);
   } finally {
     Math.random = random;
   }

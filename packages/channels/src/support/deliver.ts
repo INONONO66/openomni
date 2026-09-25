@@ -16,9 +16,15 @@ const NotConnected = z.object({
   code: z.enum(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ConnectionRefused"]),
 });
 
+/** Proven sends are safe to forget once the platform has the message; uncertain keys never expire. */
+const SENT_RETENTION = 4096;
+
 /** Physical-send custody, not an inbox dedupe window: uncertain keys must not expire. */
 export class DeliveryReconciliation {
   private readonly attempts = new Map<string, Promise<DeliveryReceipt>>();
+  private readonly sent = new Set<string>();
+
+  constructor(private readonly sentRetention = SENT_RETENTION) {}
 
   run(key: string, send: () => Promise<DeliveryReceipt>): Promise<DeliveryReceipt> {
     const existing = this.attempts.get(key);
@@ -27,11 +33,21 @@ export class DeliveryReconciliation {
       .then(send)
       .then((receipt) => {
         if (receipt.value === "not_sent") this.attempts.delete(key);
+        if (receipt.value === "sent") this.retainSent(key);
         return receipt;
       });
     // A rejected attempt is retained too: absent adapter proof, retry is unsafe.
     this.attempts.set(key, attempt);
     return attempt;
+  }
+
+  private retainSent(key: string): void {
+    this.sent.add(key);
+    for (const oldest of this.sent) {
+      if (this.sent.size <= this.sentRetention) break;
+      this.sent.delete(oldest);
+      this.attempts.delete(oldest);
+    }
   }
 }
 

@@ -114,7 +114,7 @@ export function resolveIngressActor(event: Gateway.DeliveredEvent): Gateway.Deli
   // Identity provenance is the authenticated sender, never inbound meta.actor.
   const projected: Gateway.DeliveredEvent = {
     ...event,
-    meta: { ...event.meta, actor: { id: externalId, role: "user" } },
+    meta: { ...event.meta, actor: { ...(externalId ? { id: externalId } : {}), role: "user" } },
   };
   if (!externalId || !ActorRegistry.isConfigured()) return projected;
 

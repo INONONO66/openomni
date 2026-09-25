@@ -19,13 +19,12 @@ interface GitHubEventContent {
   issueKind: "issue" | "pr";
 }
 
-const UnsupportedEvent = z.object({
-  kind: z.literal("unsupported_event"),
-  event: z.string(),
-  action: z.string().nullable(),
-  reason: z.enum(["unsupported_event", "unsupported_action", "invalid_payload"]),
-});
-type UnsupportedEvent = z.infer<typeof UnsupportedEvent>;
+interface UnsupportedEvent {
+  readonly kind: "unsupported_event";
+  readonly event: string;
+  readonly action: string | null;
+  readonly reason: "unsupported_event" | "unsupported_action" | "invalid_payload";
+}
 
 function refusal(
   event: string,
