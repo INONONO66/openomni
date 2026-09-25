@@ -6,7 +6,6 @@ export {
 } from "./row-compiler";
 export type {
   CompiledPolicySnapshot,
-  PolicyCompiler,
   PolicyEvaluation,
   PolicyEvaluationInput,
 } from "./row-compiler";

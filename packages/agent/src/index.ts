@@ -16,8 +16,8 @@ export { createExecutor, ExecutionApprovalError } from "./executor";
 export * from "./errors";
 export * from "./services";
 export * from "./bundle";
-export { AgentGenerationLive, AgentProcessLive } from "./layers";
-export { ExecutorContext, executorContext, ExecutorContextError, currentInvocation, requireOpenInvocation, forkInvocation } from "./executor-context";
+export { AgentProcessLive } from "./layers";
+export { ExecutorContext, executorContext, ExecutorContextError, currentInvocation, forkInvocation } from "./executor-context";
 export type { InvocationFrame } from "./executor-context";
 export { makeSessionGenerations } from "./session-generations";
 export type { GenerationBundle } from "./session-generations";
@@ -35,6 +35,5 @@ export {
   toolInputSchema,
   toolSpec,
 } from "./tool-dispatcher";
-export type { ToolDispatchDefinition } from "./tool-dispatcher";
 export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

@@ -8,7 +8,7 @@ import {
 } from "../tools/core/contact-mutations";
 import { z } from "zod";
 import type { ProvisionPort } from "./channels";
-export const MANIFEST_INPUT = z
+const MANIFEST_INPUT = z
   .object({
     id: z.string().min(1).describe("Person id, person:<slug>."),
     displayName: z.string().min(1).optional(),

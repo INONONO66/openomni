@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "@openomni/policy";
-import { type LedgerAction, type PlainValue } from "@openomni/protocol";
+import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/bundle";

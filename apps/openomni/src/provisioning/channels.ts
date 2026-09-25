@@ -20,7 +20,7 @@ export const CHANNEL_DECLARE_INPUT = z
       .describe("Plaintext credential payload; sealed into the vault, never stored bare."),
   })
   .strict();
-export const INSTANCE_INPUT = z.object({ instanceId: z.string().min(1) }).strict();
+const INSTANCE_INPUT = z.object({ instanceId: z.string().min(1) }).strict();
 export const SECRET_ROTATE_INPUT = z
   .object({
     secretId: z.string().min(1),
@@ -81,7 +81,7 @@ export interface ProvisionPort {
   readonly removeIdentity: (id: string) => boolean;
 }
 
-export async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
+async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
   return port.supervisor.reconcile();
 }
 
