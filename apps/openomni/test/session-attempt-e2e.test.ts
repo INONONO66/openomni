@@ -5,7 +5,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
@@ -67,7 +67,7 @@ for (const visible of ["none", "text", "tool"] as const) {
     });
     const app = await suite.boot({ config });
     const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-    const reply = nextMessage(socket);
+    const reply = nextResidentTurn();
     socket.send(JSON.stringify({ type: "message", text: "attempt" }));
     await reply;
     const sessionId = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0]
@@ -211,7 +211,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
   await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }));
   const app = await suite.boot({ config });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-  const reply = nextMessage(socket);
+  const reply = nextResidentTurn();
   socket.send(JSON.stringify({ type: "message", text: "fallback" }));
   await reply;
   expect(authorization.map((request) => request.key)).toEqual([

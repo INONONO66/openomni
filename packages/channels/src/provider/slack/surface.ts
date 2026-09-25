@@ -1,12 +1,12 @@
 import { type Channel, Operational } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
-import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
+import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
 import { SLACK_RENDER } from "./format";
 import type { PublishPort } from "../../types";
 import { SlackClient } from "./client";
-import { SlackApiError, SlackEndpointKeyError, SlackHandlerMissingError, RateLimited } from "../../errors";
+import { DeliveryNotSent, SlackApiError, SlackEndpointKeyError, SlackHandlerMissingError, RateLimited } from "../../errors";
 import { SlackNormalizer } from "./normalizer";
 import { SlackSocket } from "./socket";
 import type { SlackMessageEvent, SocketEnvelope } from "./types";
@@ -17,7 +17,7 @@ export class SlackAdapter implements Channel.Surface {
   private readonly client: SlackClient;
   private readonly socket: SlackSocket;
   private readonly dedupe = new Dedupe();
-  private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
+  private readonly outbound = new DeliveryReconciliation();
   private normalizer: SlackNormalizer | null = null;
   private botUserId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -90,10 +90,12 @@ export class SlackAdapter implements Channel.Surface {
       });
     }
     return deliverKeyed(
-      this.outboundDedupe,
+      this.outbound,
       idempotencyKey,
       async (traceId) => {
-        const channelId = await this.client.openDm(user, traceId);
+        const channelId = await this.client.openDm(user, traceId).catch((error) => {
+          throw new DeliveryNotSent({ operation: "slack.openDm", cause: String(error) });
+        });
         return await sendText(body, SLACK_RENDER, (chunk) =>
           this.client.send(channelId, chunk, traceId),
         );

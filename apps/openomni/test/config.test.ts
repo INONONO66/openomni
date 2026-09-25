@@ -3,6 +3,9 @@ import { assertWsExposure, ConfigurationError, loadConfig, parseWsPort } from ".
 import { startOpenOmni } from "../src/index";
 
 const ENV_KEYS = [
+  "DISCORD_BOT_TOKEN",
+  "TELEGRAM_BOT_TOKEN",
+  "GITHUB_WEBHOOK_SECRET",
   "OPENOMNI_DB_PATH",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
@@ -46,6 +49,26 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+describe("declared channel cutover", () => {
+  it.each(["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"])(
+    "refuses legacy %s with the typed provisioning replacement",
+    (key) => {
+      process.env[key] = "legacy-secret";
+      const error = thrownBy(loadConfig);
+      expect(ConfigurationError.isInstance(error)).toBe(true);
+      if (!ConfigurationError.isInstance(error)) throw error;
+      expect(error.data.code).toBe("legacy_channel_credentials");
+      expect(error.data.replacement).toEqual({ tool: "provision", op: "channel_add" });
+    },
+  );
+
+  it("ignores blank legacy variables", () => {
+    process.env.DISCORD_BOT_TOKEN = " ";
+    process.env.TELEGRAM_BOT_TOKEN = "";
+    expect(loadConfig().model.provider).toBe("fake");
+  });
 });
 
 describe("compaction summarizer config", () => {

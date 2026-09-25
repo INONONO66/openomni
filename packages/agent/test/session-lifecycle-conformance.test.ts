@@ -1418,8 +1418,7 @@ function assertLossBoundary(result: TraceResult, parentChild: ReturnType<typeof 
     });
     expect(delivered.destinationReceipt?.id).toBe(delivered.message.messageId);
     expect(ackedParent.inbox.map((row: Inbox.Row) => row.id)).toEqual([delivered.message.messageId]);
-    expect(parentChild.sent()).toHaveLength(2);
-    expect(parentChild.sent()[0]).toBe(parentChild.sent()[1]);
+    expect(parentChild.sent()).toHaveLength(1);
     expect(parentChild.consumed()).toBe(1);
 }
 // ---------------------------------------------------------------------------

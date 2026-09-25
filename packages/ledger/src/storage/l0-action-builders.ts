@@ -1,4 +1,4 @@
-import { type Alarm, type Inbox, LedgerAction } from "@openomni/protocol";
+import { Alarm, type Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
 type AlarmOccurrence = {
   readonly actionId: string;
   readonly inboxId: string;
@@ -17,6 +17,34 @@ export function inboxAppend(row: Inbox.Commit): LedgerAction.Append {
     effect: { encodingVersion: 1, value: { inboxKind: row.kind, content: row.content } },
     irreversible: true,
     ts: row.createdAt,
+  });
+}
+
+/** The alarm row projected by a canonical request/reply state action in its commit. */
+export function requestDeadline(action: LedgerAction.Append): Alarm.Row | undefined {
+  if (action.kind !== "request" && action.kind !== "reply") return undefined;
+  const effect = action.effect.value;
+  if (
+    effect === null ||
+    typeof effect !== "object" ||
+    Array.isArray(effect) ||
+    effect.phase !== "state"
+  )
+    return undefined;
+  const request = SessionTransition.Request.parse(effect.request);
+  return Alarm.Row.parse({
+    id: `${request.requestId}:deadline`,
+    sessionId: request.sessionId,
+    kind: "at",
+    fireAt: request.deadline,
+    spec: {
+      encodingVersion: 1,
+      value: { kind: "request_deadline", requestId: request.requestId },
+    },
+    status:
+      request.state === "open" ? "armed" : request.state === "expired" ? "fired" : "cancelled",
+    createdAt: request.createdAt,
+    updatedAt: action.ts,
   });
 }
 

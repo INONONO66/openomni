@@ -1,6 +1,6 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
@@ -9,13 +9,14 @@ import { L0Observation, SessionTransition, SessionTurn } from "@openomni/protoco
 import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 const suite = residentSuite();
 
 test.each([
   "?actor=owner",
   "",
-])("startOpenOmni delivers the final response through an actor send for connection %s", async (query) => {
+])("an external turn never dispatches an unsolicited reply for connection %s", async (query) => {
   const app = await suite.boot({
     config: suite.config("message-e2e-", {
       wsToken: "token",
@@ -47,13 +48,52 @@ test.each([
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws${query}`, ["auth", "token"]);
+  const ingest = spyOn(app.gateway, "ingest");
+  suite.defer(() => ingest.mockRestore());
   const receipt = nextFrame(ws, (frame) => frame.type === "receipt");
-  const final = nextFrame(ws, (frame) => frame.type === "message");
+  const terminal = nextResidentTurn();
   ws.send(JSON.stringify({ text: "start" }));
   expect(await receipt).toMatchObject({ type: "receipt", status: "accepted" });
-  expect(await final).toMatchObject({ type: "message", text: "FINAL_SENTINEL" });
+  expect((await terminal).text).toBe("FINAL_SENTINEL");
+  expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([]);
   const actions = SessionHandleStore.listRows().flatMap((row) => sessionTree(row.id));
-  expect(actions.some((action) => action.kind === "message")).toBe(true);
+  expect(actions.filter((action) => action.kind === "outbound")).toEqual([]);
+});
+
+test("an explicit model send_message routes through MessagePort.ingest to the external surface", async () => {
+  const app = await suite.boot({
+    config: suite.config("explicit-message-", {
+      wsToken: "token",
+      actors: [{ actorId: "owner", externalId: "owner", kind: "human", trustTier: "owner" }],
+      socialBudgets: [{ id: "owner-budget", targetActorId: "owner", maxPerWindow: 1, windowMs: 1000, cooldownMs: 0 }],
+    }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        const result = requestToolStep(input, sink, {
+          id: "explicit-send", tool: "send_message",
+          input: { to: { kind: "contact", id: "owner" }, message: "EXPLICIT_SENTINEL" },
+        });
+        if (result === undefined) return { type: "stop" };
+        expect(result.isError).not.toBe(true);
+        sink.onMessage(assistantMessage(input, { text: "LOCAL_ONLY_SENTINEL" }));
+        return { type: "stop" };
+      }),
+    },
+  });
+  const ingest = spyOn(app.gateway, "ingest");
+  suite.defer(() => ingest.mockRestore());
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "token"]);
+  const delivered = nextFrame(ws, (frame) => frame.type === "message");
+  const terminal = nextResidentTurn();
+  ws.send(JSON.stringify({ text: "send explicitly" }));
+  expect(await delivered).toMatchObject({ text: "EXPLICIT_SENTINEL" });
+  expect((await terminal).text).toBe("LOCAL_ONLY_SENTINEL");
+  expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([
+    [expect.objectContaining({ kind: "session" }), expect.objectContaining({
+      to: { kind: "actor", actorId: "owner" }, content: "EXPLICIT_SENTINEL",
+    })],
+  ]);
 });
 
 test("a child session terminal commits exactly one parent reply with the original reply binding", async () => {

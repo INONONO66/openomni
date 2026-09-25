@@ -35,7 +35,7 @@ describe("internal actor projection sanitization", () => {
   test("legacy actor id is not an authenticated external id", () => {
     registerOwnerEndpoint("guild");
     const { userId: _userId, ...event } = makeEvent("user-1", spoof);
-    expect(resolveIngressActor(event).meta?.actor).toEqual({ role: "user", id: "user-1" });
+    expect(resolveIngressActor(event).meta?.actor).toEqual({ role: "user", id: undefined });
   });
 
   test("same external id on another surface has no canonical identity", () => {

@@ -13,7 +13,6 @@ import {
 } from "@openomni/ledger";
 import { Actor, type Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
-import type { OpenOmniConfig } from "../src/config";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
 import {
   desiredChannels,
@@ -37,16 +36,6 @@ function instance(overrides: Partial<Provisioning.ChannelInstance>): Provisionin
     revision: 0,
     createdBy: "test",
     updatedAt: NOW,
-    ...overrides,
-  };
-}
-
-function baseConfig(overrides: Partial<OpenOmniConfig> = {}): OpenOmniConfig {
-  return {
-    dbPath: ":memory:",
-    host: "127.0.0.1",
-    wsPort: 0,
-    model: { provider: "anthropic", id: "claude", apiKey: "unused" },
     ...overrides,
   };
 }
@@ -206,17 +195,10 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     await rm(home, { recursive: true });
   });
 
-  const envConfig = baseConfig({ channels: { telegram: { token: "env-token" } } });
-
-  test("with no declarations the env path mounts exactly as before", () => {
-    const selection = desiredChannels(envConfig, {}, home);
-    expect(selection.source).toBe("env");
-    expect(selection.rows.map((row) => row.component.id)).toEqual(["telegram"]);
-    // Env rows carry a constant bounce key: only process restart re-reads env.
-    expect(selection.rows[0]?.instanceId).toBe("env:telegram");
-    expect(selection.rows[0]?.key).toBe("env");
-    // #931: env config declares no tier, so the row mounts at the mount tier.
-    expect(selection.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
+  test("no declarations means no external channels", () => {
+    const selection = desiredChannels({}, home);
+    expect(selection.source).toBe("declared");
+    expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([]);
   });
 
@@ -234,18 +216,18 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     // (e.g. observer -> owner) fails here rather than surviving on one literal.
     for (const tier of Actor.TrustTier.options) {
       ChannelInstanceStore.put(instance({ grant: { defaultTier: tier } }));
-      const declaredTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      const declaredTier = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
       expect(declaredTier.rows[0]?.defaultTier).toBe(tier);
     }
 
     ChannelInstanceStore.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
-    const noTier = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const noTier = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
     expect(noTier.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
   });
 
-  test("§8.1 env ghost law: one disabled declaration shadows a live env token", () => {
+  test("a disabled declaration stays unmounted", () => {
     ChannelInstanceStore.put(instance({ enabled: false, credentialRef: undefined }));
-    const selection = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const selection = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([
@@ -255,7 +237,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
 
   test("§8.4 locked vault: enabled declarations become vault_locked statuses, nothing mounts", () => {
     ChannelInstanceStore.put(instance({}));
-    const selection = desiredChannels(envConfig, {}, home);
+    const selection = desiredChannels({}, home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses[0]?.state).toBe("vault_locked");
@@ -273,7 +255,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     const get = spyOn(SecretStore, "get");
     let before: ReturnType<typeof desiredChannels>;
     try {
-      before = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      before = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
       expect(get.mock.calls).toEqual([["secret:channel-telegram-main"]]);
     } finally {
       get.mockRestore();
@@ -290,7 +272,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
       createdAt: NOW,
       rotatedAt: NOW + 50,
     });
-    const after = desiredChannels(envConfig, { OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const after = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
     expect(after.rows[0]?.key).toBe(`4:${NOW + 50}`);
   });
 });

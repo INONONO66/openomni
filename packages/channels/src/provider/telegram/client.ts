@@ -53,7 +53,7 @@ export class TelegramClient implements ChannelClient {
     try {
       return await this.sendMessage(channelId, text, traceId, "MarkdownV2");
     } catch (error) {
-      if (!/can't parse entities/i.test(String(error))) throw error;
+      if (!(error instanceof TelegramApiError && error.rejected && /can't parse entities/i.test(error.message))) throw error;
       this.publish(Operational.Events.Warn, {
         traceId,
         time: Date.now(),

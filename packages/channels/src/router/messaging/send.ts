@@ -9,7 +9,7 @@ import {
   type SessionTransition,
 } from "@openomni/protocol";
 import type { GatewayRouterPorts } from "../message-ports.js";
-import type { DeliveryReceipt } from "../../support/deliver";
+import type { KernelDeliveryReceipt } from "../../support/deliver";
 import { authorizeSend } from "./authorize";
 import { admitSend } from "./admission";
 
@@ -35,7 +35,7 @@ type MessagingPorts = Readonly<{
   requests: GatewayRouterPorts["requests"];
   transaction: GatewayRouterPorts["transaction"];
   /** Delivery owners reconcile retries using the stable idempotency key. */
-  deliver: (message: OutboundMessage) => DeliveryReceipt | Promise<DeliveryReceipt>;
+  deliver: (message: OutboundMessage) => KernelDeliveryReceipt | Promise<KernelDeliveryReceipt>;
   publish: BusEvent.Sink["publish"];
 }> &
   Pick<NonNullable<GatewayRouterPorts["messaging"]>, "grants" | "budgets">;
@@ -90,12 +90,13 @@ function deliverSend(
     target,
     ...(request === undefined ? {} : { requestId: request.requestId }),
   }), catch: decodeChannelFailure("message.deliver") });
-  if (request === undefined) return { request, value: delivery.value };
+  const value = delivery.value;
+  if (request === undefined) return { request, value };
   const recorded = yield* ports.requests.receipt({
     inputId: canonicalKey([
       input.messageId,
       "delivery",
-      delivery.value,
+      value,
       delivery.externalMessageId ?? null,
       input.at,
     ]),
@@ -105,10 +106,10 @@ function deliverSend(
     ...(delivery.externalMessageId === undefined
       ? {}
       : { externalMessageId: delivery.externalMessageId }),
-    value: delivery.value,
+    value,
     at: input.at,
   });
-  return { request: recorded, value: delivery.value };
+  return { request: recorded, value };
   });
 }
 

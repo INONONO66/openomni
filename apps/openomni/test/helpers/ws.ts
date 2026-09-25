@@ -67,23 +67,6 @@ export function closeSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
   });
 }
 
-/** The next application message/error; an admission receipt is not a response. */
-export function nextMessage(ws: WebSocket, timeoutMs = 10_000): Promise<MessageEvent> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`WebSocket reply timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
-    const listener = (event: MessageEvent) => {
-      const frame = Frame.parse(JSON.parse(String(event.data)));
-      if (frame.type !== "message" && frame.type !== "error") return;
-      clearTimeout(timeout);
-      ws.removeEventListener("message", listener);
-      resolve(event);
-    };
-    ws.addEventListener("message", listener);
-  });
-}
 
 /** The next JSON frame the predicate accepts; earlier frames are skipped. */
 export function nextFrame(

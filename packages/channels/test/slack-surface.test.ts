@@ -153,7 +153,7 @@ describe("SlackAdapter", () => {
       expect(api.calls.find((call) => call.method === "conversations.open")?.body).toEqual({
         users: "U5",
       });
-      expect(await receipt).toEqual({ value: "accepted", externalMessageId: "999.1" });
+      expect(await receipt).toEqual({ value: "sent", externalMessageId: "999.1" });
       await expect(adapter.deliver("U5", "no workspace", "message-2")).rejects.toBeInstanceOf(
         SlackEndpointKeyError,
       );

@@ -23,7 +23,7 @@ import { modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
-import { nextFrame } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { cellDaemonOptions } from "./helpers/cell-daemon";
 
@@ -140,7 +140,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   });
   suite.defer(() => runEffect(daemon.close()));
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-  const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
+  const reply = nextResidentTurn(15_000);
   ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
   const answer = String((await reply).text);
   expect(answer).toContain("[0, 255, 128, 65]");
@@ -211,7 +211,7 @@ test("a cell creates three child sessions through send_message", async () => {
     "auth",
     WS_TOKEN,
   ]);
-  const reply = nextFrame(ws, (frame) => frame.type === "message", 30_000);
+  const reply = nextResidentTurn(30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
   const answer = String((await reply).text);
@@ -278,7 +278,7 @@ test("the catalog remains available while machine execution refuses without atta
     "auth",
     WS_TOKEN,
   ]);
-  const reply = nextFrame(ws, (frame) => frame.type === "message", 15_000);
+  const reply = nextResidentTurn(15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
   const answer = String((await reply).text);

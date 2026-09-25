@@ -219,7 +219,10 @@ Every native Resident or worker is a normal durable session row. The row carries
 
 ### Alarm and monitor baseline
 
-One durable `alarm` owner stores both `at` and `watch`. The app worker band,
+One durable `alarm` owner stores both `at` and `watch`, and one writer inserts
+alarm rows: explicit arming and the request-deadline projection of a
+request/reply state action go through the same transaction-local insert,
+never a second SQL path (W2 #1110). The app worker band,
 not session residency, owns PTY command and filesystem source handles. A firing
 commits `alarm.fired`, a prompt action and its inbox row with alarm-id origin in
 one transaction. Observation and the session doorbell follow the commit; due
@@ -237,7 +240,9 @@ derived from `(alarmId, epoch, sourceKey)`, where `sourceKey` is what the source
 observed (timer slot, PTY line slot, path stat identity). The ledger alone
 admits a delivery: it rejects stale fences, consecutive equal poll batches and
 already-committed occurrences, and reads the deadline and notification budget
-from the persisted spec. Evaluators report; they do not judge.
+from the persisted spec. Evaluators report; they do not judge. The worker
+mints no occurrence id and renders no timeout verdict: a watch timeout is
+reported as a clock observation and the ledger decides expiry.
 
 [Stage-1 decisions](alarm-monitor-stage-1.md) specify framing, source cleanup,
 restart and operator behavior. [Implementation Status](implementation-status.md)
@@ -249,6 +254,8 @@ cursor-capable backends were not added.
 ### Unified message boundary
 
 `send_message({to, message, kind?, reply_to?, deadline_ms?})` folds onto the gateway send and enters `gateway.ingest(sender, envelope)`; `to.kind` is `session | new_session | contact`, and `kind` defaults to `prompt`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery calls the injected inbox commit; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
+
+The Resident never replies on its own initiative. No reply is sent to an external actor after a turn unless the model calls `send_message` explicitly or a policy row obliges it; the only implicit obligation is a child's terminal reaching its parent inbox. Physical adapters report facts, not hopes: a send is `sent` (platform receipt), `not_sent` (typed refusal, preflight failure, or proof the connection was never established) or `unknown` (lost ACK, reset, timeout, partial or malformed receipt). Only `not_sent` permits another physical attempt under the same idempotency key; `sent` and `unknown` keep custody. The kernel receipt vocabulary `accepted | rejected | unknown` is a translation of that evidence at one boundary. A surface that receives an event it does not open records a typed `unsupported_event` refusal rather than dropping it silently.
 
 A child seals its terminal and a source-owned outbound obligation atomically, without changing the parent. The recorded bytes traverse gateway admission, an idempotent receiving inbox, and the receiving executor. Only a verified destination receipt permits the source acknowledgement; retries never reseal the child or repeat the receiving invocation. Process response maps correlate physical replies only. Mandatory terminal mail answers the original request under its existing deadline/CAS, never a new request. Native child admission commits the original request, deadline projection, child configuration and first inbox together.
 
@@ -352,7 +359,10 @@ correspondence). Every multi-operation tool takes `operation: { op, ... }`
 with one discriminator named `op`: `eval.op = run | peek | stop`,
 `monitor.op = create | rearm | cancel`,
 `provision.op = contact_add | contact_remove | contact_promote | contact_merge |
-channel_add | channel_enable | channel_disable | secret_rotate | status`. The
+channel_add | channel_enable | channel_disable | secret_rotate | status`. Declared
+ChannelInstance rows are the only channel provisioning owner; channel
+credentials in environment variables are refused at config load, and
+`provision.channel_add` is the replacement. The
 root of every input schema is an object. There is no `approval` tool: Owner
 consent for `provision.contact_promote` and `provision.contact_merge` is a
 `require_approval` policy row that the executor resolves through the kernel

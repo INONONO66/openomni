@@ -1,4 +1,9 @@
 import { expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
+import { Effect } from "effect";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { childAdmission, fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import { openRequest } from "./helpers/open-request";
 import {
   canonicalDigest,
@@ -441,3 +446,50 @@ it("gives timeout and cancellation only one terminal winner", () => {
     decide({ kind: "request.timeout", requestId: pending.requestId }, cancelled.request).resolution,
   ).toBe("duplicate");
 });
+
+it.each([false, true])("child admission commits as one SQLite unit (inbox fault: %s)", (fault: boolean) => fileRequest((dbPath) => Effect.gen(function* () {
+  const { port, opening } = yield* requestPlane();
+  const before = sessionTree("parent");
+  using raw = new Database(dbPath);
+  if (fault) raw.run(`CREATE TRIGGER refuse_child BEFORE INSERT ON inbox
+    BEGIN SELECT RAISE(ABORT, 'test inbox fault'); END`);
+  const admission = childAdmission("plane:request:request", SessionHandleStore.row("parent").leaseFence + 1);
+  const opened = port.open({ ...opening, admission });
+  if (fault) {
+    expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "ForeignFailure" } });
+    expect(sessionTree("parent")).toEqual(before);
+    expect(SessionHandleStore.requestById("invocation")).toBeUndefined();
+    expect(Storage.get().alarms?.get("invocation:deadline")).toBeUndefined();
+    expect(SessionHandleStore.listRows().map(({ id }) => id)).toEqual(["parent"]);
+    expect(SessionHandleStore.inboxRows("child")).toEqual([]);
+    expect(sessionTree("child")).toEqual([]);
+    return;
+  }
+  expect(yield* opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, state: "open" });
+  expect(Storage.get().alarms?.get("invocation:deadline")).toMatchObject({ status: "armed", fireAt: 200 });
+  expect(sessionTree("child").map(({ id }) => id)).toEqual(["child:configure", "child:prompt"]);
+  expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
+  expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "child" }, { id: "parent" }]);
+  expect(SessionHandleStore.row("parent").leaseOwner).toBeNull();
+})));
+
+it.each([
+  { resolution: "first", threshold: 1 },
+  { resolution: "quorum", threshold: 2 },
+  { resolution: "all", threshold: 3 },
+] as const)("file-backed %s answers only the captured invocation", ({ resolution, threshold }: { resolution: "first" | "quorum" | "all"; threshold: number }) => fileRequest(() => Effect.gen(function* () {
+  const { port, opening } = yield* requestPlane();
+  const opened = yield* port.open({ ...opening, resolution, threshold, expectedResponders: ["a", "b", "c"] });
+  expect(opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, effectHash: canonicalDigest({ route: "children" }) });
+  expect(yield* port.answer({ ...planeAnswer(opened, "a", "ambiguous"), bindingDigest: "wrong-request" })).toBe("rejected");
+  expect(SessionHandleStore.pendingInbox("parent")).toEqual([]);
+  for (const [index, responder] of ["a", "b", "c"].entries()) {
+    const reply = planeAnswer(opened, responder);
+    const resolution = index + 1 < threshold ? "attached" : index + 1 === threshold ? "resolved" : "duplicate";
+    expect(yield* port.answer(reply)).toBe(resolution);
+    expect(yield* port.answer({ ...reply, inputId: `${responder}:again` })).toBe("duplicate");
+  }
+  expect(SessionHandleStore.requestById(opened.requestId)).toMatchObject({ state: "resolved", replies: opened.expectedResponders.slice(0, threshold).map((responderId) => ({ responderId })) });
+  expect(SessionHandleStore.pendingInbox("parent").map(({ id }) => SessionHandleStore.actionById(id)?.parentId)).toEqual(Array.from({ length: threshold }, () => "invocation"));
+  expect(sessionTree("parent").filter(({ id }) => id === "invocation:resolution")).toHaveLength(1);
+})));

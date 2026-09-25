@@ -1,3 +1,4 @@
+import { bounded } from "./helpers/bounded";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
@@ -443,7 +444,7 @@ describe("discord gateway state machine (#520)", () => {
 
     let fetchCalls = 0;
     const secondFetch = Promise.withResolvers<void>();
-    const retryDelay = Promise.withResolvers<void>();
+    const reconnectDone = Promise.withResolvers<void>();
     let delayCalls = 0;
     const fetchGatewayUrl = () => {
       fetchCalls += 1;
@@ -454,7 +455,6 @@ describe("discord gateway state machine (#520)", () => {
     };
     const delay = () => {
       delayCalls += 1;
-      if (delayCalls === 2) retryDelay.resolve();
       return Promise.resolve();
     };
 
@@ -470,15 +470,18 @@ describe("discord gateway state machine (#520)", () => {
       delay,
     );
 
-    // First socket drops before READY → start()'s open promise rejects; the
-    // reconnect chain proceeds through the close handler. The second fetch
-    // stops the gateway before rejecting, then the retry-delay event proves
-    // the rejection path observed that stop without scheduling another fetch.
-    await gateway.start().catch(() => undefined);
-    await secondFetch.promise;
-    await retryDelay.promise;
-    await Promise.resolve();
+    const shell = Reflect.get(gateway, "shell") as SocketReconnectShell;
+    const schedule = shell.scheduleReconnect.bind(shell);
+    shell.scheduleReconnect = async (...args) => {
+      await schedule(...args);
+      reconnectDone.resolve();
+    };
+    // Await the exact reconnect completion: a stopped fetch must not even sleep again.
+    await expect(gateway.start()).rejects.toBeInstanceOf(Error);
+    await bounded(secondFetch.promise);
+    await bounded(reconnectDone.promise);
     expect(fetchCalls).toBe(2);
+    expect(delayCalls).toBe(1);
   });
 
   it("re-identifies (never resumes) after a non-resumable INVALID_SESSION", async () => {

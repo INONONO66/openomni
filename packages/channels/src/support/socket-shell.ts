@@ -8,6 +8,7 @@ export interface SocketSettle {
   readonly resolveOnce: () => void;
   readonly rejectOnce: (err: Error) => void;
   readonly settled: () => boolean;
+  readonly current: () => boolean;
 }
 
 /** The per-surface log lines the shell speaks with — pinned by the surface tests. */
@@ -38,6 +39,8 @@ export class SocketReconnectShell {
   private attempt = 0;
   private ws: WebSocket | null = null;
   private active = false;
+  private generation = 0;
+  private cancelOpen: (() => void) | undefined;
 
   constructor(
     private readonly publish: PublishPort,
@@ -53,19 +56,31 @@ export class SocketReconnectShell {
   }
 
   begin(): void {
+    this.stop();
     this.active = true;
   }
 
-  /** Mark stopped without touching the socket (e.g. a pre-ready close already closed it). */
+  /** Mark stopped and retire every callback and pending reconnect. */
   end(): void {
-    this.active = false;
+    this.stop();
   }
 
-  /** Intentional stop: mark stopped, close cleanly, release the socket. */
+  /** Intentional stop: invalidate before close, whose callback may be synchronous. */
   stop(): void {
     this.active = false;
-    this.ws?.close(1000);
+    this.generation++;
+    const ws = this.ws;
     this.ws = null;
+    this.cancelOpen?.();
+    this.cancelOpen = undefined;
+    ws?.close(1000);
+  }
+
+  /** Initial URL lookup has the same retirement boundary as reconnect. */
+  async connect(fetchUrl: () => Promise<string>): Promise<void> {
+    const generation = this.generation;
+    const url = await fetchUrl();
+    if (this.active && generation === this.generation) await this.open(url);
   }
 
   /** The connection reached its ready state — backoff starts over. */
@@ -83,11 +98,13 @@ export class SocketReconnectShell {
     fetchUrl: () => Promise<string>,
     traceId: string,
   ): Promise<string | undefined> {
+    const generation = this.generation;
     let url: string | undefined;
-    while (url === undefined && this.active) {
+    while (url === undefined && this.active && generation === this.generation) {
       try {
         url = await fetchUrl();
       } catch (err) {
+        if (!this.active || generation !== this.generation) return undefined;
         this.attempt++;
         const backoffMs = calculateBackoff(this.attempt);
         this.publish(Operational.Events.Error, {
@@ -100,14 +117,14 @@ export class SocketReconnectShell {
         await this.delay(backoffMs);
       }
     }
-    return url;
+    return this.active && generation === this.generation ? url : undefined;
   }
 
   /** Fetch-under-backoff, then open: the shared tail of both surfaces' reconnect. */
   async reconnectVia(fetchUrl: () => Promise<string>, traceId: string): Promise<void> {
+    const generation = this.generation;
     const url = await this.fetchUrlUnderBackoff(fetchUrl, traceId);
-    // Stopped during the fetch-retry loop → end cleanly, no socket, no schedule.
-    if (url === undefined) return;
+    if (url === undefined || !this.active || generation !== this.generation) return;
     await this.open(url);
   }
 
@@ -116,6 +133,7 @@ export class SocketReconnectShell {
     closeCode: number,
     reconnect: (traceId: string) => Promise<void>,
   ): Promise<void> {
+    const generation = this.generation;
     this.attempt++;
     const backoffMs = calculateBackoff(this.attempt);
     const traceId = newTraceId();
@@ -127,10 +145,11 @@ export class SocketReconnectShell {
       context: { code: closeCode, backoffMs: Math.round(backoffMs) },
     });
     await this.delay(backoffMs);
-    if (this.active) {
+    if (this.active && generation === this.generation) {
       try {
         await reconnect(traceId);
       } catch (error) {
+        if (!this.active || generation !== this.generation) return;
         this.publish(Operational.Events.Error, {
           traceId,
           time: Date.now(),
@@ -150,16 +169,24 @@ export class SocketReconnectShell {
    */
   openWebSocket(url: string, wire: (ws: WebSocket, settle: SocketSettle) => void): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      const previous = this.ws;
+      this.ws = null;
+      this.cancelOpen?.();
+      previous?.close(1000);
+      this.generation++;
       const ws = new WebSocket(url);
       this.ws = ws;
       let resolved = false;
+      const resolveOnce = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+      this.cancelOpen = resolveOnce;
+      const current = () => this.active && this.ws === ws;
       wire(ws, {
-        resolveOnce: () => {
-          if (!resolved) {
-            resolved = true;
-            resolve();
-          }
-        },
+        resolveOnce,
         rejectOnce: (err) => {
           if (!resolved) {
             resolved = true;
@@ -167,8 +194,12 @@ export class SocketReconnectShell {
           }
         },
         settled: () => resolved,
+        current,
       });
-      ws.addEventListener("error", this.socketErrorListener());
+      const onError = this.socketErrorListener();
+      ws.addEventListener("error", (event) => {
+        if (current()) onError(event);
+      });
     });
   }
 

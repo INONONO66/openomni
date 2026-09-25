@@ -4,6 +4,7 @@ import * as Errors from "../src/errors";
 import type { ChannelError } from "../src/errors";
 
 const failures = {
+  DeliveryNotSent: new Errors.DeliveryNotSent({ operation: "fixture.preflight", cause: "refused" }),
   ForeignFailure: Errors.decodeChannelFailure("fixture")(new Error("foreign")),
   InvalidInbound: new Errors.InvalidInbound({ operation: "websocket.frame", reason: "invalid_json" }),
   DiscordGatewayFetchError: new Errors.DiscordGatewayFetchError({ message: "fixture" }),

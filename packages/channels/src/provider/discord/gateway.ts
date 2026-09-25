@@ -75,19 +75,9 @@ export class DiscordGateway {
   }
 
   async start(): Promise<void> {
+    this.heartbeat.stop();
     this.shell.begin();
-    await this.openSocket(await this.fetchTrustedGatewayUrl());
-  }
-
-  /** Fetch a gateway URL and remember its origin as the trusted resume anchor. */
-  private async fetchTrustedGatewayUrl(): Promise<string> {
-    const url = await this.fetchGatewayUrl();
-    try {
-      this.gatewayOrigin = new URL(url).origin;
-    } catch {
-      this.gatewayOrigin = null;
-    }
-    return url;
+    await this.shell.connect(this.fetchGatewayUrl);
   }
 
   stop(): void {
@@ -99,15 +89,21 @@ export class DiscordGateway {
     // Socket failures retry through close handling; only URL fetches use the REST backoff.
     return this.resumeUrl && this.sessionId
       ? this.openSocket(this.resumeUrl)
-      : this.shell.reconnectVia(() => this.fetchTrustedGatewayUrl(), traceId);
+      : this.shell.reconnectVia(this.fetchGatewayUrl, traceId);
   }
 
   private openSocket(url: string): Promise<void> {
+    try {
+      this.gatewayOrigin = new URL(url).origin;
+    } catch {
+      this.gatewayOrigin = null;
+    }
     return this.shell.openWebSocket(url, (ws, settle) => this.wireSocket(ws, settle));
   }
 
   private wireSocket(ws: WebSocket, settle: SocketSettle): void {
     ws.addEventListener("message", (event) => {
+      if (!settle.current()) return;
       let frame: ReturnType<typeof GatewayFrameSchema.safeParse>;
       try {
         frame = GatewayFrameSchema.safeParse(JSON.parse(String(event.data)));
@@ -125,6 +121,7 @@ export class DiscordGateway {
     });
 
     ws.addEventListener("close", async (event) => {
+      if (!settle.current()) return;
       this.heartbeat.stop();
       settle.rejectOnce(new Error(`WebSocket closed before ready: ${event.code}`));
       if (FATAL_CLOSE_CODES.has(event.code)) {

@@ -28,49 +28,24 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
 }
 
 describe("request matcher — ingress evidence", () => {
-  test("credits a bearer token only when no actor is pinned", () => {
-    const bearer: ResponderTarget = {
-      responderId: "endpoint-1",
-      endpointId: "endpoint-1",
-      tokenHash: correlation.tokenHash,
-    };
+  test("a matching bearer and direct userId cannot replace a resolved actor", () => {
     const pinned: ResponderTarget = {
       responderId: "actor-pinned",
       targetActorId: "actor-pinned",
       endpointId: "endpoint-1",
-      tokenHash: correlation.tokenHash,
     };
-    const evidence = Matcher.ingressEvidence(directEvent(), correlation);
-
-    expect(Matcher.responderCandidates([bearer], evidence)).toEqual(["endpoint-1"]);
+    const evidence = Matcher.ingressEvidence(directEvent({ userId: "endpoint-1" }), correlation);
     expect(Matcher.responderCandidates([pinned], evidence)).toEqual([]);
   });
 
   test("rejects a claimed endpoint that contradicts the expected one", () => {
-    const target: ResponderTarget = { responderId: "endpoint-2", endpointId: "endpoint-2" };
-    const evidence = Matcher.ingressEvidence(directEvent(), {
-      ...correlation,
-      tokenHash: undefined,
-    });
-
-    expect(Matcher.responderCandidates([target], evidence)).toEqual([]);
-  });
-
-  test("matches an identity-less direct sender through the userId endpoint forms", () => {
     const target: ResponderTarget = {
-      responderId: "telegram:seller-1",
-      endpointId: "telegram:seller-1",
+      responderId: "actor-pinned",
+      targetActorId: "actor-pinned",
+      endpointId: "endpoint-2",
     };
-    const claim = {
-      endpointId: "telegram:seller-1",
-      channelId: correlation.channelId,
-    } satisfies SessionTransition.Correlation;
-
-    const suffixMatch = Matcher.ingressEvidence(directEvent({ userId: "seller-1" }), claim);
-    const mismatch = Matcher.ingressEvidence(directEvent({ userId: "intruder-2" }), claim);
-
-    expect(Matcher.responderCandidates([target], suffixMatch)).toEqual(["telegram:seller-1"]);
-    expect(Matcher.responderCandidates([target], mismatch)).toEqual([]);
+    const evidence = Matcher.ingressEvidence(directEvent(), correlation);
+    expect(Matcher.responderCandidates([target], evidence)).toEqual([]);
   });
 
   test("requires resolved-actor endpoint evidence for a pinned target actor", () => {

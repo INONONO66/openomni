@@ -17,7 +17,6 @@ import { ChannelProviders } from "@openomni/channels";
 import type { Channel, Provisioning } from "@openomni/protocol";
 import { Bus } from "@openomni/agent";
 import type { z } from "zod";
-import type { OpenOmniConfig } from "./config";
 
 export interface BuiltChannel {
   readonly surface: Channel.Surface;
@@ -35,10 +34,8 @@ export interface ChannelComponent {
 
 /**
  * One row: construct the provider runtime with the installation's typed
- * credential and bind the Resident handler. Credential admission happened
- * where the values entered the process (config.ts: a blank token is an
- * absent channel, never a mounted-empty one) — one enforcement layer per
- * invariant, so no re-validation here.
+ * credential and bind the Resident handler. Credential admission happens
+ * through the provider schema when the declared vault payload is opened.
  */
 function providerRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
@@ -57,43 +54,6 @@ function providerRow<TCredentials, TId extends keyof typeof ChannelProviders>(
       };
     },
   };
-}
-
-/** One row per configured channel, in composition order. */
-export function channelProfile(
-  config: OpenOmniConfig,
-  providers: typeof ChannelProviders = ChannelProviders,
-): ChannelComponent[] {
-  const rows: ChannelComponent[] = [];
-
-  const telegramConfig = config.channels?.telegram;
-  if (telegramConfig !== undefined) {
-    rows.push(providerRow(providers.telegram, { token: telegramConfig.token }, {}));
-  }
-
-  const githubConfig = config.channels?.github;
-  if (githubConfig !== undefined) {
-    rows.push(
-      providerRow(
-        providers.github,
-        {
-          secret: githubConfig.secret,
-          ...(githubConfig.token === undefined ? {} : { token: githubConfig.token }),
-          ...(githubConfig.botUsername === undefined
-            ? {}
-            : { botUsername: githubConfig.botUsername }),
-        },
-        {},
-      ),
-    );
-  }
-
-  const discordConfig = config.channels?.discord;
-  if (discordConfig !== undefined) {
-    rows.push(providerRow(providers.discord, { token: discordConfig.token }, {}));
-  }
-
-  return rows;
 }
 
 type DeclaredChannelState =

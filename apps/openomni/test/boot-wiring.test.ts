@@ -24,7 +24,7 @@ import {
 } from "../src/provisioning/supervisor";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextFrame, nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { persistedSession } from "./helpers/storage-evidence";
 
@@ -52,10 +52,10 @@ describe("boot tool catalog", () => {
       "auth",
       "boot-catalog-token",
     ]);
-    const reply = nextFrame(ws, (frame) => frame.type === "message");
+    const reply = nextResidentTurn();
     ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
-    expect(await reply).toMatchObject({ type: "message", text: "ready" });
+    expect(await reply).toMatchObject({ text: "ready" });
     expect(await toolNames).not.toContain("work_items");
     expect(await toolNames).not.toContain("complete_work");
   });
@@ -95,7 +95,7 @@ test("967 boot preserves promoted expired session", async () => {
   // Capture the real app's catalog, not a dummy runner or a parallel declaration.
   const first = await suite.boot(options);
   const ws = await suite.openSocket(`ws://127.0.0.1:${first.port}/ws`, ["auth", "history-token"]);
-  const response = nextMessage(ws);
+  const response = nextResidentTurn();
   ws.send(JSON.stringify({ type: "message", text: "catalog seed" }));
   await response;
   const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
@@ -459,8 +459,8 @@ describe("channel supervisor", () => {
     const calls: string[] = [];
     const channel = fakeChannel("telegram", calls);
     const { supervisor } = supervisorFor(() => ({
-      source: "env",
-      rows: [row(channel, "env", "env:telegram")],
+      source: "declared",
+      rows: [row(channel, "0:0", "channel:telegram:main")],
       statuses: [],
     }));
     const runtime = gatewayRuntime({ dbPath: ":memory:" });
@@ -473,7 +473,7 @@ describe("channel supervisor", () => {
     await supervisor.reconcile();
 
     expect(calls).toEqual(["start:telegram"]);
-    expect(supervisor.source()).toBe("env");
+    expect(supervisor.source()).toBe("declared");
     await runtime.dispose();
     expect(calls).toEqual(["start:telegram", "stop:telegram"]);
     expect(supervisor.status()).toEqual([]);

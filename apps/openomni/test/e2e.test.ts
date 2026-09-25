@@ -7,10 +7,11 @@ import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import type { Sink } from "@openomni/llm";
 import { SessionHandleStore, SurfaceKey } from "@openomni/ledger";
-import { loadConfig, type OpenOmniConfig } from "../src/config";
+import { ConfigurationError, loadConfig, type OpenOmniConfig } from "../src/config";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
+import { declareChannel } from "./helpers/declared-channel";
 import { expectAbsentWebhook } from "./helpers/http";
 
 const REPLY = "A deterministic Resident reply.";
@@ -73,13 +74,8 @@ async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }>
   return { port: app.port };
 }
 
-function bootApp(channels?: NonNullable<OpenOmniConfig["channels"]>): Promise<{ port: number }> {
-  return bootWithConfig(
-    suite.config("openomni-resident-", {
-      wsToken: WS_TOKEN,
-      ...(channels === undefined ? {} : { channels }),
-    }),
-  );
+function bootApp(): Promise<{ port: number }> {
+  return bootWithConfig(suite.config("openomni-resident-", { wsToken: WS_TOKEN }));
 }
 
 /**
@@ -176,10 +172,10 @@ describe("OpenOmni Resident WebSocket", () => {
 
       const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
       expect(ws.protocol).toBe("auth");
-      const response = nextMessage(ws);
+      const response = nextResidentTurn();
       ws.send(JSON.stringify({ type: "message", text: "967-U1 input" }));
-      const reply = JSON.parse(String((await response).data));
-      expect(reply).toMatchObject({ type: "message", text: REPLY });
+      const reply = await response;
+      expect(reply).toMatchObject({ text: REPLY });
       expect(providerCalls).toBe(1);
       expect(
         SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress"),
@@ -264,11 +260,10 @@ describe("OpenOmni Resident WebSocket", () => {
 
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
     expect(ws.protocol).toBe("auth");
-    const reply = nextMessage(ws);
+    const reply = nextResidentTurn();
     ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
 
-    const event = await reply;
-    expect(JSON.parse(String(event.data))).toMatchObject({ type: "message", text: REPLY });
+    expect(await reply).toMatchObject({ text: REPLY });
 
     const sessions = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
     expect(sessions).toHaveLength(1);
@@ -288,37 +283,35 @@ describe("OpenOmni Resident WebSocket", () => {
 
   it("boots WebSocket-only through loadConfig when channel env vars are unset", async () => {
     await withConfigEnv(configEnvFor(suite.tempDir("openomni-resident-")), async () => {
-      // The real env/config path: with no channel credentials present, the
-      // env-presence gate must leave every driver unwired.
+      // Without declared instances, only the built-in WebSocket surface mounts.
       const config = loadConfig();
-      expect(config.channels).toBeUndefined();
 
       const app = await bootWithConfig(config);
       await expectAbsentWebhook(app.port);
     });
   });
 
-  it("wires only the credentialed driver through loadConfig when env is partially set", async () => {
+  it("refuses boot configuration with a legacy channel credential", async () => {
     const env = {
       ...configEnvFor(suite.tempDir("openomni-resident-")),
       GITHUB_WEBHOOK_SECRET: "github-webhook-secret",
     };
     await withConfigEnv(env, async () => {
-      const config = loadConfig();
-      expect(config.channels).toEqual({ github: { secret: "github-webhook-secret" } });
-
-      const app = await bootWithConfig(config);
-      const webhook = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
-        method: "POST",
-        body: "{}",
-      });
-      expect(webhook.status).toBe(401);
-      expect(await webhook.text()).toBe("Missing signature");
+      try {
+        loadConfig();
+        throw new Error("legacy channel credential accepted");
+      } catch (error) {
+        if (!ConfigurationError.isInstance(error)) throw error;
+        expect(error.data.code).toBe("legacy_channel_credentials");
+        expect(error.data.replacement).toEqual({ tool: "provision", op: "channel_add" });
+      }
     });
   });
 
-  it("mounts a configured GitHub driver on the existing HTTP server", async () => {
-    const app = await bootApp({ github: { secret: "github-webhook-secret" } });
+  it("mounts a declared GitHub driver on the existing HTTP server", async () => {
+    const config = suite.config("declared-github-", { wsToken: WS_TOKEN });
+    suite.defer(declareChannel(config.dbPath, "github", { secret: "github-webhook-secret" }));
+    const app = await bootWithConfig(config);
 
     const response = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
       method: "POST",

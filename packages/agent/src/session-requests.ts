@@ -18,6 +18,13 @@ import { commitSessionRequest } from "./session-admission";
 export interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
   timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError>;
+  cancel(input: {
+    requestId: string;
+    sessionId: string;
+    inputId: string;
+    principal: SessionTransition.Principal;
+    at: number;
+  }): Effect.Effect<SessionTransition.Resolution, ExecutionError>;
   open(input: {
     requestId: string;
     sessionId: string;
@@ -117,6 +124,19 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
   return {
     list: () => SessionHandleStore.requestRows(),
     timeout,
+    cancel(input) {
+      return Effect.gen(function* () {
+        const result = yield* transition(
+          input.sessionId,
+          { kind: "request.cancel", requestId: input.requestId, principal: input.principal },
+          input.inputId,
+          input.at,
+        );
+        if (result.actions.length > 0 && result.request?.mode === "approval" && result.request.state !== "open")
+          runtime.onRequestReady?.(input.sessionId);
+        return result.resolution;
+      });
+    },
     open(input) {
       return Effect.gen(function* () {
       const intent = originalInvocation(input.requestId);

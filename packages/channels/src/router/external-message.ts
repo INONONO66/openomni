@@ -71,7 +71,6 @@ export function externalMessage(
     mode: "direct",
     meta: {
       surfaceKey,
-      actor: { id: sender.externalId, role: "user" },
       correlation: {
         ...reply,
         endpointId:

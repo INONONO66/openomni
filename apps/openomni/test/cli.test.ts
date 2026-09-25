@@ -397,12 +397,11 @@ describe("onboarding", () => {
     };
   }
 
-  test("gathers required model config, applies defaults, keeps non-empty optionals", async () => {
+  test("gathers model config and leaves channel provisioning to declarations", async () => {
     const entries = await gatherOnboarding(
       scriptedAsk({
         "Model id": "claude-x",
         "Model API key": "sk-1",
-        "Discord bot token": "discord-1",
       }),
     );
     expect(entries).toEqual([
@@ -410,7 +409,6 @@ describe("onboarding", () => {
       { key: "OPENOMNI_MODEL_ID", value: "claude-x" },
       { key: "OPENOMNI_MODEL_API_KEY", value: "sk-1" },
       { key: "OPENOMNI_WS_PORT", value: "3000" },
-      { key: "DISCORD_BOT_TOKEN", value: "discord-1" },
     ]);
   });
 
@@ -472,12 +470,7 @@ describe("onboarding", () => {
       if (question.startsWith("Model API key")) return Promise.resolve("k");
       return Promise.resolve("");
     });
-    expect(secretQuestions).toEqual([
-      "Model API key",
-      "Discord bot token (optional)",
-      "Telegram bot token (optional)",
-      "GitHub webhook secret (optional)",
-    ]);
+    expect(secretQuestions).toEqual(["Model API key"]);
   });
 });
 
@@ -496,6 +489,18 @@ describe("doctor", () => {
     lingerEnabled: undefined,
     probeHealth: () => Promise.resolve(true),
   };
+
+  test.each(["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"])(
+    "legacy channel credential %s fails doctor",
+    async (key) => {
+      const report = await runDoctor({
+        ...healthyPorts,
+        effectiveEnv: new Map([...healthyPorts.effectiveEnv, [key, "legacy"]]),
+      });
+      expect(report.ok).toBe(false);
+      expect(doctorStatuses(report).get("channel config")).toBe("fail");
+    },
+  );
 
   test("all green: ok verdict and the configured port is probed", async () => {
     let probed = 0;

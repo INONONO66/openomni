@@ -9,13 +9,13 @@ import type {
   PlainValue,
   SessionTransition,
 } from "@openomni/protocol";
-import type { DeliveryReceipt } from "../support/deliver";
+import type { KernelDeliveryReceipt } from "../support/deliver";
 
 export type ChannelDeliveryRoute = (
   externalId: string,
   content: string,
   idempotencyKey: string,
-) => Promise<DeliveryReceipt>;
+) => Promise<KernelDeliveryReceipt>;
 
 interface MessageExecution {
   readonly kind: "message";

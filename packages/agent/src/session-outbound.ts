@@ -107,6 +107,15 @@ export function dispatchSessionOutbound(
     });
     const dispatch = Effect.forEach(SessionHandleStore.outboundRows(sessionId), (item) => Effect.scoped(Effect.gen(function* () {
       if (item.state === "delivered") return;
+      // The receiver's durable commit is the proof, not a second dispatch. This
+      // also works after it consumed the prompt and the sender lost the ACK.
+      const received = SessionHandleStore.outboundReceipt(
+        item.message.destinationSessionId, item.message.messageId,
+      );
+      if (received !== undefined) {
+        yield* commit([acknowledge(item.message, received, clock())], false);
+        return;
+      }
       if (runtime.dispatchOutbound === undefined)
         return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
       const captured = yield* runtime.generations.capture({ sessionId, generation: toolsGeneration(item.message) });

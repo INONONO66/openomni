@@ -28,7 +28,7 @@ export interface DesiredChannelRow {
 }
 
 export interface DesiredChannels {
-  readonly source: "declared" | "env";
+  readonly source: "declared";
   readonly rows: readonly DesiredChannelRow[];
   /** Declarations that could not produce a row, verbatim from the profile. */
   readonly statuses: readonly DeclaredChannelStatus[];
@@ -72,8 +72,8 @@ export interface ChannelSupervisor {
   resume(instanceId: string): boolean;
   /** Last reconcile's verdict per instance plus what is mounted right now. */
   status(): ChannelRuntimeStatus[];
-  /** Where channel truth came from on the last reconcile (env ghost law visibility). */
-  source(): "declared" | "env";
+  /** Channel truth comes only from declared instances. */
+  source(): "declared";
   /** Reverse-order teardown of every running stage (composer disposer). */
   stopAll(): Promise<void>;
 }
@@ -85,7 +85,7 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
   const mounted = new Map<string, MountedRow>();
   const failures = new Map<string, number>();
   let lastStatuses: ChannelRuntimeStatus[] = [];
-  let lastSource: DesiredChannels["source"] = "env";
+  let lastSource: DesiredChannels["source"] = "declared";
 
   async function mountRow(row: DesiredChannelRow): Promise<void> {
     const built = deps.build(row.component);
@@ -186,7 +186,7 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
     status(): ChannelRuntimeStatus[] {
       return [...lastStatuses];
     },
-    source(): "declared" | "env" {
+    source(): "declared" {
       return lastSource;
     },
     stopAll: async (): Promise<void> => {

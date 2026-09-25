@@ -63,18 +63,18 @@
     },
     {
       "crashPoint": "platform_send_committed_before_local_ack_reconciled_sent",
-      "recovery": "replayed",
-      "note": "Cut after receiveOutbound commits destination admission but before returning its receipt. Recovery invokes the dispatcher once more; the destination inbox still has one identical row because inbox dedupe masks the duplicate external send. The target requires adapter receipt reconciliation, which is absent."
+      "recovery": "resumed_without_reexecution",
+      "note": "SIGKILL after a counted external stand-in send and destination SQLite admission, before returning the receipt. A fresh process reconciles the receiver's durable receipt without dispatch, consumes one destination prompt and preserves one source terminal; the non-deduplicating external counter stays one. This proves ledger-visible sent receipts, not remote adapters without a durable receipt."
     },
     {
       "crashPoint": "platform_attempt_marker_before_send_reconciled_not_sent",
       "recovery": "rearmed",
-      "note": "Nearest cut is after the outbound open row, at dispatcher entry and before any platform-side effect; no durable send-attempt marker exists, and no action of any kind follows open before recovery. Wake sends the same obligation once and records delivered; there is no not_sent reconciliation."
+      "note": "SIGKILL at dispatcher entry after the outbound open row, before any platform-side effect. A fresh process sends once and a second wake sends nothing. No durable attempt marker or not_sent reconciliation exists: the current outbound contract only admits pending/delivered. Target proof remains blocked, not claimed by the rearmed class."
     },
     {
       "crashPoint": "platform_send_ambiguous_without_reconciliation",
       "recovery": "replayed",
-      "note": "External stand-in appends messageId to a non-deduplicating side file, then crashes before returning a receipt. Recovery blindly sends again; the file contains exactly the same messageId twice. The lost target requires uncertain-delivery terminalization and reconciliation rather than blind resend, neither of which exists."
+      "note": "External stand-in appends messageId to a non-deduplicating side file, then SIGKILL before any receiver receipt. Fresh-process recovery sends again; external count is two. The lost/outcome_unknown target is blocked: the ledger's strict outbound projection admits only pending/delivered, with no attempt/reconciliation/unknown state. No alternate agent-owned state store was introduced."
     },
     {
       "crashPoint": "compaction_concurrent_tail_committed_before_owner_crash",
@@ -84,7 +84,12 @@
     {
       "crashPoint": "outbound_flood_deadline_before_timer_rearm",
       "recovery": "rearmed",
-      "note": "Cut after the dispatcher throws flood and the refusal propagates; no persisted flood deadline; retried immediately on wake. Recovery makes one successful delivery and records delivered, without a retry timer or remaining-delay reconstruction."
+      "note": "SIGKILL after flood refusal propagates; a fresh process retries immediately and then sends nothing on repeated wake. No persisted outbound notBefore/deadline or atomic outbound+alarm transition exists. Residual rearm and zero attempts before the deadline remain blocked; this is only the honest current rearmed class."
+    },
+    {
+      "crashPoint": "alarm_fire_committed_before_hibernated_doorbell",
+      "recovery": "rearmed",
+      "note": "SIGKILL immediately after alarm.fire commits its occurrence and inbox prompt for a hibernated session, before a doorbell. A fresh process reopens the same SQLite database and wakes once; one runner consumes the original prompt, the alarm stays fired with one occurrence, and another wake does not execute. TestClock supplies logical time; the ledger mints the occurrence identity."
     },
     {
       "crashPoint": "owner_reclaimed_before_stale_transcript_flush",
