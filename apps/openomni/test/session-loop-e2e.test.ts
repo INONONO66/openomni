@@ -8,7 +8,7 @@ import { SessionHandleStore } from "@openomni/ledger";
 import type { Provider } from "@openomni/llm";
 import { z } from "zod";
 import { residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
@@ -67,12 +67,9 @@ test("real app SSE compaction commits reversible evidence through the session ex
   expect(socket.protocol).toBe("auth");
   // When: enough completed turns cross the actual compaction threshold.
   for (let index = 0; index < 4; index += 1) {
-    const received = nextMessage(socket, 5000);
+    const received = nextResidentTurn(5000);
     socket.send(JSON.stringify({ type: "message", text: `input-${index}` }));
-    const reply = z
-      .object({ type: z.literal("message"), messageId: z.string(), text: z.string() })
-      .parse(JSON.parse(String((await received).data)));
-    expect(reply.text).toBe("retained evidence ".repeat(160).trimEnd());
+    expect((await received).text).toBe("retained evidence ".repeat(160).trimEnd());
   }
   // Then: the real durable action has content-addressed original evidence.
   const rows = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");

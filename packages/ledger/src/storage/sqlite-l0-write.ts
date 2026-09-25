@@ -1,14 +1,14 @@
 import { z } from "zod";
 import type { Database } from "bun:sqlite";
 import {
+  type Alarm,
   Deadline,
   Inbox,
   LedgerAction,
   type LedgerSession,
-  SessionTransition,
 } from "@openomni/protocol";
 import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
-import { inboxAppend } from "./l0-action-builders.js";
+import { inboxAppend, requestDeadline } from "./l0-action-builders.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
 import { CorruptRecord, InboxCommitRefused } from "../errors";
 import type { RefuseWrite } from "./write-effect";
@@ -112,34 +112,34 @@ export function appendAction(
     prevHash,
     actionHash,
   );
-  projectRequestDeadline(db, action);
+  const deadline = requestDeadline(action);
+  if (deadline !== undefined) insertAlarm(db, deadline, "request-state");
   const node = LedgerAction.Node.parse({ ...action, ordinal: revision, prevHash, actionHash });
   return { action: node, revision };
 }
 
-function projectRequestDeadline(db: Database, action: LedgerAction.Append): void {
-  if (action.kind !== "request" && action.kind !== "reply") return;
-  const effect = action.effect.value;
-  if (
-    effect === null ||
-    typeof effect !== "object" ||
-    Array.isArray(effect) ||
-    effect.phase !== "state"
-  )
-    return;
-  const request = SessionTransition.Request.parse(effect.request);
-  const status =
-    request.state === "open" ? "armed" : request.state === "expired" ? "fired" : "cancelled";
-  db.query(`INSERT INTO alarm (id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated)
-    VALUES (?, ?, 'at', ?, ?, 1, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET status = excluded.status, time_updated = excluded.time_updated`).run(
-    `${request.requestId}:deadline`,
-    request.sessionId,
-    request.deadline,
-    JSON.stringify({ kind: "request_deadline", requestId: request.requestId }),
-    status,
-    request.createdAt,
-    action.ts,
+/** Insert within the caller's transaction; request transitions update only projected state. */
+export function insertAlarm(
+  db: Database,
+  row: Alarm.Row,
+  conflict: "reject" | "request-state" = "reject",
+): void {
+  const onConflict =
+    conflict === "request-state"
+      ? "ON CONFLICT(id) DO UPDATE SET status = excluded.status, time_updated = excluded.time_updated"
+      : "";
+  db.query(`INSERT INTO alarm (
+    id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ${onConflict}`).run(
+    row.id,
+    row.sessionId,
+    row.kind,
+    row.fireAt,
+    row.spec === undefined ? null : JSON.stringify(row.spec.value),
+    row.spec?.encodingVersion ?? 1,
+    row.status,
+    row.createdAt,
+    row.updatedAt,
   );
 }
 

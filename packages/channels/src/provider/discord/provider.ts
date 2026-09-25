@@ -1,3 +1,4 @@
+import { kernelDeliveryReceipt } from "../../support/deliver.js";
 import { z } from "zod";
 import type { ChannelProvider } from "../contract.js";
 import { DISCORD_RENDER } from "./format.js";
@@ -29,7 +30,7 @@ export const DiscordProvider: ChannelProvider<DiscordCredentials, "discord"> = {
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>
-        surface.deliver(externalId, body, idempotencyKey),
+        surface.deliver(externalId, body, idempotencyKey).then(kernelDeliveryReceipt),
     };
   },
 };

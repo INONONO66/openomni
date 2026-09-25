@@ -1,4 +1,4 @@
-import { ConfigurationError, parseWsPort } from "../config";
+import { assertDeclaredChannelConfig, ConfigurationError, parseWsPort } from "../config";
 
 /**
  * Read-only diagnostics. Every fact arrives through `DoctorPorts` so the
@@ -86,6 +86,13 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
       ? { name: "model config", status: "pass", detail: "provider, id, and API key set" }
       : { name: "model config", status: "fail", detail: `missing ${missing.join(", ")}` },
   );
+
+  try {
+    assertDeclaredChannelConfig(Object.fromEntries(ports.effectiveEnv));
+  } catch (error) {
+    if (!ConfigurationError.isInstance(error)) throw error;
+    checks.push({ name: "channel config", status: "fail", detail: error.data.message });
+  }
 
   if (ports.unitInstalled) {
     checks.push(

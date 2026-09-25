@@ -341,11 +341,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const deliveryRoutes = new Map<string, ChannelDeliveryRoute>();
     deliveryRoutes.set("ws", wsRoute);
     // One runtime owner for external channels (provisioning §5): boot
-    // reconcile and every tool-driven mutation run the SAME diff — any
-    // declared ChannelInstance shadows env channel config entirely (§8.1).
+    // reconcile and every tool-driven mutation run the SAME diff over
+    // declared ChannelInstances, the only source of external channel config.
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
-      desired: () => desiredChannels(config),
+      desired: () => desiredChannels(),
       build: (component) => component.build(routingHandler),
       // The tier is the row's, never this call site's: mounting a named
       // surface materializes no owner authority (#931).
@@ -535,6 +535,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const awaitingOwner = requests
       .list()
       .some((request) => request.mode === "approval" && request.state === "open");
+    // Alarm fire commits its prompt and inbox atomically. A crash before the
+    // worker's wake is repaired by this same inbox sweep, even for fired alarms
+    // that no longer appear in alarms.due(). Never refire to recover a wake.
     recovery = acquireAppResource(runtime, sweepSessions(resident.runnerFor, sessionRuntime));
     if (awaitingOwner) {
       void recovery.catch((error: Error) => console.error("session recovery failed", error));

@@ -64,7 +64,7 @@ for (const text of ["ambient event", "@owner review @bot", "@bot"]) {
   });
 }
 
-for (const value of ["accepted", "rejected", "unknown"] as const) {
+for (const value of ["sent", "not_sent", "unknown"] as const) {
   test(`GitHub actor delivery reports ${value} through its real client`, async () => {
     const realFetch = globalThis.fetch;
     let posts = 0;
@@ -73,14 +73,14 @@ for (const value of ["accepted", "rejected", "unknown"] as const) {
         if (init?.method === "GET") return Response.json([]);
         posts += 1;
         if (value === "unknown") throw new TypeError("connection reset");
-        return Response.json({ id: 99 }, { status: value === "accepted" ? 201 : 403 });
+        return Response.json({ id: 99 }, { status: value === "sent" ? 201 : 403 });
       },
       { preconnect: realFetch.preconnect },
     );
     try {
       const adapter = new GitHubAdapter("secret", {}, () => undefined, "token");
       expect(await adapter.deliver("owner/repo#7", "content", "stable-key")).toEqual(
-        value === "accepted" ? { value, externalMessageId: "99" } : { value },
+        value === "sent" ? { value, externalMessageId: "99" } : { value },
       );
       expect(posts).toBe(1);
     } finally {
@@ -107,7 +107,7 @@ test("GitHub refuses malformed destinations and missing credentials before effec
       "owner/..#7",
       "owner/repo#999999999999999999999",
     ]) {
-      expect(await adapter.deliver(endpoint, "content", endpoint)).toEqual({ value: "rejected" });
+      expect(await adapter.deliver(endpoint, "content", endpoint)).toEqual({ value: "not_sent" });
     }
     expect(calls).toBe(0);
   } finally {

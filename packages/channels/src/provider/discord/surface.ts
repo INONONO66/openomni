@@ -1,10 +1,10 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
-import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
+import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
-import { DiscordApiError, DiscordHandlerMissingError, RateLimited } from "../../errors";
+import { DeliveryNotSent, DiscordApiError, DiscordHandlerMissingError, RateLimited } from "../../errors";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import { type DiscordMessage, DiscordMessageSchema } from "./types";
@@ -18,7 +18,7 @@ export class DiscordAdapter implements Channel.Surface {
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
   private readonly dedupe = new Dedupe();
-  private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
+  private readonly outbound = new DeliveryReconciliation();
   private normalizer: DiscordNormalizer | null = null;
   private botId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -95,10 +95,12 @@ export class DiscordAdapter implements Channel.Surface {
    */
   deliver(externalId: string, body: string, idempotencyKey: string): Promise<DeliveryReceipt> {
     return deliverKeyed(
-      this.outboundDedupe,
+      this.outbound,
       idempotencyKey,
       async (traceId) => {
-        const channelId = await this.client.createDmChannel(externalId, traceId);
+        const channelId = await this.client.createDmChannel(externalId, traceId).catch((error) => {
+          throw new DeliveryNotSent({ operation: "discord.createDmChannel", cause: String(error) });
+        });
         return await sendText(body, DISCORD_RENDER, (chunk) =>
           this.client.send(channelId, chunk, traceId),
         );

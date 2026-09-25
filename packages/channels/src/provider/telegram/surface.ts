@@ -1,8 +1,8 @@
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
-import { Dedupe, DedupeWindow } from "../../support/dedupe";
+import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
-import { type DeliveryReceipt, deliverKeyed } from "../../support/deliver";
+import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { requireHandler } from "../../support/handler-frame";
 import { sendText } from "../../support/send-text";
 import { RateLimited, TelegramApiError } from "../../errors";
@@ -18,7 +18,7 @@ export class TelegramAdapter implements Channel.Surface {
 
   private readonly client: TelegramClient;
   private readonly dedupe = new Dedupe();
-  private readonly outboundDedupe = new DedupeWindow<DeliveryReceipt>();
+  private readonly outbound = new DeliveryReconciliation();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
   private handler: Channel.MessageHandler | null = null;
@@ -93,7 +93,7 @@ export class TelegramAdapter implements Channel.Surface {
    */
   deliver(externalId: string, body: string, idempotencyKey: string): Promise<DeliveryReceipt> {
     return deliverKeyed(
-      this.outboundDedupe,
+      this.outbound,
       idempotencyKey,
       (traceId) =>
         sendText(body, TELEGRAM_RENDER, (chunk) =>

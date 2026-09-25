@@ -7,6 +7,10 @@ export class ForeignFailure extends Data.TaggedError("ForeignFailure")<
   z.infer<typeof ForeignFailureFields>
 > {}
 
+export class DeliveryNotSent extends Data.TaggedError("DeliveryNotSent")<
+  z.infer<typeof ForeignFailureFields>
+> {}
+
 const InvalidInboundFields = z.object({
   operation: z.string(),
   cause: z.string().optional(),
@@ -82,6 +86,7 @@ export class RateLimited extends Data.TaggedError("RateLimited")<
 
 export type ChannelError =
   | ForeignFailure
+  | DeliveryNotSent
   | InvalidInbound
   | DiscordGatewayFetchError
   | DiscordApiError

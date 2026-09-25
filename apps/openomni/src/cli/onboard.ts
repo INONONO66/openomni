@@ -52,14 +52,6 @@ export async function gatherOnboarding(ask: Ask): Promise<readonly EnvEntry[]> {
     { key: "OPENOMNI_WS_PORT", value: port },
   ];
 
-  const optional: readonly { readonly key: string; readonly question: string }[] = [
-    { key: "DISCORD_BOT_TOKEN", question: "Discord bot token (optional)" },
-    { key: "TELEGRAM_BOT_TOKEN", question: "Telegram bot token (optional)" },
-    { key: "GITHUB_WEBHOOK_SECRET", question: "GitHub webhook secret (optional)" },
-  ];
-  for (const { key, question } of optional) {
-    const value = (await ask(question, { secret: true })).trim();
-    if (value.length > 0) entries.push({ key, value });
-  }
+  // External channels are declared with provision/channel_add, never env credentials.
   return entries;
 }

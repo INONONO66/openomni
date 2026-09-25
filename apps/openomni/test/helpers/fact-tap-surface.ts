@@ -11,7 +11,8 @@ import { run, type Provider } from "@openomni/llm";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";
-import { closeSocket, nextMessage, openSocket } from "./ws";
+import { closeSocket, openSocket } from "./ws";
+import { nextResidentTurn } from "./resident-turn";
 
 import { messageStart, messageEnd } from "./anthropic-sse";
 
@@ -148,14 +149,12 @@ try {
   stopApp = app.stop;
   appPort = app.port;
   ws = await openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fixture-token"]);
-  const replyEvent = nextMessage(ws, 5000);
+  const terminal = nextResidentTurn(5000);
   ws.send(JSON.stringify({ type: "message", text: "967 input" }));
-  const reply = z
-    .object({ type: z.literal("message"), text: z.string() })
-    .parse(JSON.parse(String((await replyEvent).data)));
+  const reply = await terminal;
 
-  // Then: the transport reply and committed SQLite terminal agree.
-  assert.deepEqual(reply, { type: "message", text: "retained reply" });
+  // Then: the committed turn retains the provider reply without external dispatch.
+  assert.equal(reply.text, "retained reply");
   assert.equal(requests, 3);
   assert.deepEqual(billed, { input: 16, output: 20 });
   assert.deepEqual(calls, [{ id: "paired", tool: "lookup", input: {} }]);

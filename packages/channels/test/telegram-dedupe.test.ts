@@ -3,7 +3,8 @@ import type { Channel, PlainValue } from "@openomni/protocol";
 import type { TelegramMessage } from "../src/provider/telegram/types";
 import { DiscordAdapter } from "../src/provider/discord/surface";
 import { TelegramAdapter } from "../src/provider/telegram/surface";
-import { Dedupe, DedupeWindow } from "../src/support/dedupe";
+import { Dedupe } from "../src/support/dedupe";
+import { DeliveryReconciliation, type DeliveryReceipt } from "../src/support/deliver";
 
 /**
  * D1: telegram message_id is a PER-CHAT counter, so two different chats can
@@ -114,7 +115,7 @@ type DeliveryOwner = Readonly<{
     body: string,
     idempotencyKey: string,
   ): Promise<{
-    value: "accepted" | "rejected" | "unknown";
+    value: "sent" | "not_sent" | "unknown";
     externalMessageId?: string;
   }>;
 }>;
@@ -189,20 +190,19 @@ describe("outbound adapter delivery dedupe capability", () => {
     const receipt = await owner.deliver("recipient-1", "a".repeat(2001), "chunked-message");
 
     expect(outboundCalls()).toBe(2);
-    expect(receipt).toEqual({ value: "accepted", externalMessageId: "discord-message-2" });
+    expect(receipt).toEqual({ value: "sent", externalMessageId: "discord-message-2" });
   });
 
-  test("a failed keyed delivery is evicted so a retry can make progress", async () => {
-    const dedupe = new DedupeWindow<string>();
+  test("only a proven not-sent delivery releases custody for retry", async () => {
+    const reconciliation = new DeliveryReconciliation();
     let attempts = 0;
-    const operation = async () => {
+    const operation = async (): Promise<DeliveryReceipt> => {
       attempts += 1;
-      if (attempts === 1) throw new Error("transient owner failure");
-      return "delivered";
+      return { value: attempts === 1 ? "not_sent" : "sent" };
     };
 
-    await expect(dedupe.run("message-1", operation)).rejects.toThrow("transient owner failure");
-    expect(await dedupe.run("message-1", operation)).toBe("delivered");
+    expect(await reconciliation.run("message-1", operation)).toEqual({ value: "not_sent" });
+    expect(await reconciliation.run("message-1", operation)).toEqual({ value: "sent" });
     expect(attempts).toBe(2);
   });
 

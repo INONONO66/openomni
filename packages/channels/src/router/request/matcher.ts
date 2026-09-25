@@ -7,17 +7,13 @@ type Correlation = SessionTransition.Correlation;
 type ResponderTarget = Readonly<{
   /** Responder id credited to the fold when this target matches. */
   responderId: string;
-  /** Pinned actor identity; when present the sender must resolve to it. */
-  targetActorId?: string;
+  /** Pinned actor identity; the sender must resolve to it. */
+  targetActorId: string;
   /** Expected endpoint; when present the sender must prove control of it. */
   endpointId?: string;
-  /** Bearer credential: a matching tokenHash stands in for identity when no actor is pinned. */
-  tokenHash?: string;
 }>;
 
 type SenderEvidence = Readonly<{
-  /** Bearer credential presented via correlation. */
-  tokenHash?: string;
   /** Endpoint the sender claims via correlation (consistency-checked, not proof). */
   claimedEndpointId?: string;
   /** Resolved sender identity, when the phase could establish one. */
@@ -26,20 +22,8 @@ type SenderEvidence = Readonly<{
   provesEndpoint: (expectedEndpointId: string) => boolean;
 }>;
 
-/**
- * Core match rule, shared by both phases:
- * 1. bearer tokenHash matches an unpinned target;
- * 2. a claimed endpoint must not contradict the expected one;
- * 3. a pinned targetActorId must equal the resolved sender identity;
- * 4. an expected endpoint must be proven by phase evidence; without an
- *    expected endpoint the resolved identity match alone carries.
- */
+/** Request targets always pin an actor; endpoint claims are consistency checks, not proof. */
 function matchesTarget(target: ResponderTarget, evidence: SenderEvidence): boolean {
-  const bearerMatch =
-    target.targetActorId === undefined &&
-    target.tokenHash !== undefined &&
-    evidence.tokenHash === target.tokenHash;
-  if (bearerMatch) return true;
   if (
     target.endpointId !== undefined &&
     evidence.claimedEndpointId !== undefined &&
@@ -47,11 +31,8 @@ function matchesTarget(target: ResponderTarget, evidence: SenderEvidence): boole
   ) {
     return false;
   }
-  if (target.targetActorId !== undefined && evidence.actorId !== target.targetActorId) {
-    return false;
-  }
-  if (target.endpointId !== undefined) return evidence.provesEndpoint(target.endpointId);
-  return target.targetActorId !== undefined;
+  if (evidence.actorId !== target.targetActorId) return false;
+  return target.endpointId === undefined || evidence.provesEndpoint(target.endpointId);
 }
 
 export function responderCandidates(
@@ -65,18 +46,17 @@ export function responderCandidates(
   ];
 }
 
-/** Ingress evidence extension: resolved-actor endpoint proof with the direct-mode userId fallback. */
+/** Registry-resolved actor endpoint proof. */
 export function ingressEvidence(
   // Structural pick (#707 stage 2): the gateway router matches evidence on
   // the routed event BEFORE the brain-owned AgentDef exists, so the full
   // DirectEvent (which requires `agent`) is deliberately not demanded here.
-  event: Pick<Ingress.InboundEvent, "mode" | "surface" | "userId" | "meta">,
+  event: Pick<Ingress.InboundEvent, "meta">,
   correlation: Correlation,
 ): SenderEvidence {
   const actor = event.meta?.actor;
   const actorId = typeof actor?.actorId === "string" ? actor.actorId : undefined;
   return {
-    ...(correlation.tokenHash === undefined ? {} : { tokenHash: correlation.tokenHash }),
     claimedEndpointId: correlation.endpointId,
     ...(actorId === undefined ? {} : { actorId }),
     provesEndpoint: (expected) => {
@@ -89,10 +69,7 @@ export function ingressEvidence(
           `${endpoint.channel}:${endpoint.externalId}` === expected
         );
       }
-      if (event.mode !== "direct" || typeof event.userId !== "string") return false;
-      // The prefixed form is bound to the event surface: a same-named user id
-      // on a different surface must not prove this endpoint.
-      return event.userId === expected || expected === `${event.surface}:${event.userId}`;
+      return false;
     },
   };
 }

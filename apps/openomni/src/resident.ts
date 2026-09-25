@@ -10,7 +10,6 @@ import {
   type SessionRunner,
   type SessionRuntime,
 } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { AnyToolDefinition, LedgerSession, Model, Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { messageMaterialization } from "./composition/message-session";
@@ -114,39 +113,7 @@ export function createResident(options: ResidentOptions) {
         reportError: (error) =>
           failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
       });
-        const result = yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
-        const origin = SessionHandleStore.inboxRows(row.id)
-          .filter((item) => {
-            const value = item.origin.value;
-            return (
-              value !== null &&
-              typeof value === "object" &&
-              !Array.isArray(value) &&
-              value.kind === "external"
-            );
-          })
-          .at(-1)?.origin.value;
-        if (
-          (result.kind === "result" || (result.kind === "error" && result.reported)) &&
-          origin !== null &&
-          typeof origin === "object" &&
-          !Array.isArray(origin) &&
-          origin.kind === "external" &&
-          typeof origin.actorId === "string"
-        ) {
-          yield* dispatcher.execute(
-            {
-              id: crypto.randomUUID(),
-              tool: "send_message",
-              input: {
-                to: { kind: "contact", id: origin.actorId },
-                message: result.text,
-              },
-            },
-            { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
-          );
-        }
-        return result;
+      return yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
     });
   return {
     runnerFor,

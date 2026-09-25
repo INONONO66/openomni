@@ -1,3 +1,4 @@
+import { DeliveryNotSent } from "../../errors";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
@@ -31,7 +32,7 @@ export class GitHubClient {
         msg: "github token missing — reply not posted",
         context: { repo, issueNumber },
       });
-      return { value: "rejected" };
+      return { value: "not_sent" };
     }
 
     const url = `https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`;
@@ -42,7 +43,10 @@ export class GitHubClient {
       "User-Agent": "openomni-server",
     };
     const marker = `<!-- openomni-delivery:${encodeURIComponent(deliveryId)} -->`;
-    if (await this.hasComment(url, headers, marker, traceId)) {
+    const posted = await this.hasComment(url, headers, marker, traceId).catch((error) => {
+      throw new DeliveryNotSent({ operation: "github.listComments", cause: String(error) });
+    });
+    if (posted) {
       this.publish(Operational.Events.Debug, {
         traceId,
         time: Date.now(),
@@ -50,7 +54,7 @@ export class GitHubClient {
         msg: "github comment already posted",
         context: { repo, issueNumber, deliveryId },
       });
-      return { value: "accepted" };
+      return { value: "sent" };
     }
 
     const response = await fetchWithRetry(
@@ -76,7 +80,7 @@ export class GitHubClient {
         msg: "GitHub rejected comment delivery",
         context: { status: response.status, detail: text },
       });
-      return { value: response.status < 500 ? "rejected" : "unknown" };
+      return { value: response.status < 500 ? "not_sent" : "unknown" };
     }
     const result = z.object({ id: z.number().optional() }).parse(await response.json());
 
@@ -88,7 +92,7 @@ export class GitHubClient {
       context: { repo, issueNumber },
     });
     return {
-      value: "accepted",
+      value: "sent",
       ...(result.id === undefined ? {} : { externalMessageId: String(result.id) }),
     };
   }

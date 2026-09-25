@@ -1,3 +1,4 @@
+import { kernelDeliveryReceipt } from "../../support/deliver.js";
 import { z } from "zod";
 import type { ChannelProvider } from "../contract.js";
 import { TELEGRAM_RENDER } from "./format.js";
@@ -21,7 +22,7 @@ export const TelegramProvider: ChannelProvider<TelegramCredentials, "telegram"> 
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>
-        surface.deliver(externalId, body, idempotencyKey),
+        surface.deliver(externalId, body, idempotencyKey).then(kernelDeliveryReceipt),
     };
   },
 };

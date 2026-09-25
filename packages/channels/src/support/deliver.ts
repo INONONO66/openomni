@@ -1,23 +1,73 @@
+import { DeliveryNotSent } from "../errors";
 import { Operational } from "@openomni/protocol";
+import { z } from "zod";
 import type { PublishPort } from "../types";
-import type { DedupeWindow } from "./dedupe";
 import { PartialDeliveryError } from "./send-text";
 import { newTraceId } from "./trace";
 
-export interface DeliveryReceipt {
-  value: "accepted" | "rejected" | "unknown";
-  externalMessageId?: string;
+export const DeliveryReceipt = z.object({
+  value: z.enum(["sent", "not_sent", "unknown"]),
+  externalMessageId: z.string().optional(),
+});
+export type DeliveryReceipt = z.infer<typeof DeliveryReceipt>;
+
+// These failures prove the connection was never established, unlike a reset or timeout.
+const NotConnected = z.object({
+  code: z.enum(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ConnectionRefused"]),
+});
+
+/** Proven sends are safe to forget once the platform has the message; uncertain keys never expire. */
+const SENT_RETENTION = 4096;
+
+/** Physical-send custody, not an inbox dedupe window: uncertain keys must not expire. */
+export class DeliveryReconciliation {
+  private readonly attempts = new Map<string, Promise<DeliveryReceipt>>();
+  private readonly sent = new Set<string>();
+
+  constructor(private readonly sentRetention = SENT_RETENTION) {}
+
+  run(key: string, send: () => Promise<DeliveryReceipt>): Promise<DeliveryReceipt> {
+    const existing = this.attempts.get(key);
+    if (existing !== undefined) return existing;
+    const attempt = Promise.resolve()
+      .then(send)
+      .then((receipt) => {
+        if (receipt.value === "not_sent") this.attempts.delete(key);
+        if (receipt.value === "sent") this.retainSent(key);
+        return receipt;
+      });
+    // A rejected attempt is retained too: absent adapter proof, retry is unsafe.
+    this.attempts.set(key, attempt);
+    return attempt;
+  }
+
+  private retainSent(key: string): void {
+    this.sent.add(key);
+    for (const oldest of this.sent) {
+      if (this.sent.size <= this.sentRetention) break;
+      this.sent.delete(oldest);
+      this.attempts.delete(oldest);
+    }
+  }
 }
 
-/**
- * Shared `deliver()` shell for the existing-agent delivery seam: report the
- * platform message id of the final chunk (the message a reply would
- * reference). Origin: the messaging kernel's deliver seam does not thread the
- * sender's trace yet — each delivery is its own causal chain. The required
- * idempotency key shares one in-flight or completed result in the window.
- */
+export type KernelDeliveryReceipt = {
+  value: "accepted" | "rejected" | "unknown";
+  externalMessageId?: string;
+};
+
+/** Translate physical evidence only at the kernel receipt boundary. */
+export function kernelDeliveryReceipt(receipt: DeliveryReceipt): KernelDeliveryReceipt {
+  return {
+    ...receipt,
+    value:
+      receipt.value === "sent" ? "accepted" : receipt.value === "not_sent" ? "rejected" : "unknown",
+  };
+}
+
+/** Report the final chunk's platform id; partial acceptance is never safe to resend. */
 export function deliverKeyed(
-  window: DedupeWindow<DeliveryReceipt>,
+  reconciliation: DeliveryReconciliation,
   idempotencyKey: string,
   send: (traceId: string) => Promise<string | undefined>,
   isRejected: (error: Error) => boolean,
@@ -29,7 +79,7 @@ export function deliverKeyed(
       const externalMessageId = await send(traceId);
       return externalMessageId === undefined
         ? { value: "unknown" }
-        : { value: "accepted", externalMessageId };
+        : { value: "sent", externalMessageId };
     } catch (error) {
       if (!(error instanceof Error)) throw error;
       if (error instanceof PartialDeliveryError) {
@@ -49,8 +99,15 @@ export function deliverKeyed(
         });
         return { value: "unknown" };
       }
-      return { value: isRejected(error) ? "rejected" : "unknown" };
+      return {
+        value:
+          error instanceof DeliveryNotSent ||
+          isRejected(error) ||
+          NotConnected.safeParse(error).success
+            ? "not_sent"
+            : "unknown",
+      };
     }
   };
-  return window.run(idempotencyKey, attempt);
+  return reconciliation.run(idempotencyKey, attempt);
 }

@@ -11,7 +11,7 @@ import type { Gateway, PlainObject } from "@openomni/protocol";
 import { ActorRegistry, EgressBudgetStore, Storage, SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
-import type { DeliveryReceipt } from "../../../src/support/deliver";
+import type { KernelDeliveryReceipt } from "../../../src/support/deliver";
 
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
 import {
@@ -566,7 +566,7 @@ type Probe = Readonly<{
 }>;
 
 async function probe(point: FaultPoint): Promise<Probe> {
-  const external = new Map<string, DeliveryReceipt>();
+  const external = new Map<string, KernelDeliveryReceipt>();
   let attempts = 0;
   let failBeforeEffect = point === "after_debit" || point === "after_wait";
   let failAfterEffect = point === "after_effect";

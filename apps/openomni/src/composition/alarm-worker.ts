@@ -94,7 +94,7 @@ export function createAlarmWorker(options: {
     }
     function summary(
       row: Alarm.Row,
-      reason: "exit" | "timeout" | "restart" | "source_error",
+      reason: "exit" | "restart" | "source_error",
       exitCode: number | null,
     ) {
       return deliver(
@@ -141,7 +141,8 @@ export function createAlarmWorker(options: {
       return Effect.gen(function* () {
         const { watch } = Alarm.WatchSpec.parse(owned.spec?.value);
         if (watch.timeout_ms !== undefined && now() >= owned.fireAt + watch.timeout_ms)
-          return yield* summary(owned, "timeout", null);
+          // Observe the clock; only the ledger decides expiry and renders its verdict.
+          return yield* deliver(owned, `timer:${owned.fireAt + watch.timeout_ms}`, "", false);
         if (recovering && preAcquireFence > 0 && watch.persistent !== true)
           return yield* summary(owned, "restart", null);
         const source = yield* Effect.try({
@@ -197,7 +198,7 @@ export function createAlarmWorker(options: {
           return yield* release(entry.row);
         const { watch } = Alarm.WatchSpec.parse(current.spec?.value);
         if (watch.timeout_ms !== undefined && now() >= current.fireAt + watch.timeout_ms)
-          yield* summary(current, "timeout", null);
+          yield* deliver(current, `timer:${current.fireAt + watch.timeout_ms}`, "", false);
         else entry.source.observe?.();
       });
     }

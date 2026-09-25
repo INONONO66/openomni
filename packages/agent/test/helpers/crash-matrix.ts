@@ -51,6 +51,7 @@ export const crashPoint = z.enum([
   "platform_send_ambiguous_without_reconciliation",
   "compaction_concurrent_tail_committed_before_owner_crash",
   "outbound_flood_deadline_before_timer_rearm",
+  "alarm_fire_committed_before_hibernated_doorbell",
   "owner_reclaimed_before_stale_transcript_flush",
   ...reconstructionPoint.options,
 ]);
@@ -316,6 +317,8 @@ function outboundPort(
         point === "delivery_ack_committed_before_owner_cleanup" ||
         point === "platform_send_committed_before_local_ack_reconciled_sent"
       ) {
+        if (point === "platform_send_committed_before_local_ack_reconciled_sent")
+          appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
         const { receipt } = receiveOutbound(message, 100);
         bodies.push("accepted");
         if (point === "platform_send_committed_before_local_ack_reconciled_sent")

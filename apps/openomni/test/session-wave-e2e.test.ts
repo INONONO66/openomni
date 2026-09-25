@@ -23,7 +23,7 @@ import {
 } from "@openomni/protocol";
 import { createAlarmWorker } from "../src/composition/alarm-worker";
 import { residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 import { runEffect } from "./helpers/effect";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
@@ -125,7 +125,7 @@ test("real provider returns calls before any app tool body starts", async () => 
   );
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
   // When: the public channel triggers a model step with a native tool call.
-  const response = nextMessage(socket, 5000);
+  const response = nextResidentTurn(5000);
   socket.send(JSON.stringify({ type: "message", text: "read current status" }));
   await response;
   // Then: provider I/O did not execute the body before returning its calls.
@@ -326,7 +326,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
     ),
   );
   const { socket, received, dbPath, cleanup } = await waveApp(definitions, ["A", "B", "C", "D"]);
-  const response = nextMessage(socket, 5000);
+  const response = nextResidentTurn(5000);
   try {
     // When: complete parallel bodies in reverse while D is a sequential barrier.
     socket.send(JSON.stringify({ type: "message", text: "run wave" }));
@@ -399,7 +399,7 @@ for (const decision of ["approve", "refuse"] as const) {
     const { app, socket, received } = await waveApp(definitions, ["A", "B", "C"]);
     requireBApproval();
     const waiting = nextApproval(app);
-    const response = nextMessage(socket, 5000);
+    const response = nextResidentTurn(5000);
     socket.send(JSON.stringify({ type: "message", text: "approved wave" }));
     const { handle, request } = await bounded(waiting);
     expect(started).toEqual([]);
@@ -848,7 +848,7 @@ test("approval-time prompts retain durable identities and enter the next model s
   const { app, socket, received } = await waveApp([waveTool("B", async () => "B")], ["B"]);
   requireBApproval();
   const waiting = nextApproval(app);
-  const response = nextMessage(socket, 5000);
+  const response = nextResidentTurn(5000);
   socket.send(JSON.stringify({ type: "message", text: "initial" }));
   const { handle, request } = await bounded(waiting);
   // When: two SDK prompts arrive while the wave is held, before any next boundary.
@@ -900,7 +900,7 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   });
   requireBApproval();
   const waiting = nextApproval(app);
-  const response = nextMessage(socket, 5000);
+  const response = nextResidentTurn(5000);
   socket.send(JSON.stringify({ type: "message", text: "deadline wave" }));
   const { handle, request } = await bounded(waiting);
   try {

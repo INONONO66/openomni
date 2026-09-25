@@ -1,5 +1,4 @@
 [
-  "apps/openomni/test/alarm-boot-durability.test.ts:18",
   "apps/openomni/test/helpers/alarm.ts:alarmFixture",
   "apps/openomni/test/helpers/alarm.ts:alarmWorkerFixture",
   "apps/openomni/test/helpers/effect-scope.ts:effectScope",
@@ -223,5 +222,5 @@
   "packages/machines/test/exec.test.ts:12",
   "packages/machines/test/exec.test.ts:14",
   "packages/machines/test/exec.test.ts:19",
-  "script/effect-error-contract.test.ts:128"
+  "script/effect-error-contract.test.ts:129"
 ]

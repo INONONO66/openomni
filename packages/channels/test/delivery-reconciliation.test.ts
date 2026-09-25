@@ -1,0 +1,242 @@
+import { expect, test } from "bun:test";
+import { deliveryFixture, installDeliveryFetch } from "./helpers/delivery";
+import { TelegramAdapter } from "../src/provider/telegram/surface";
+import { GitHubAdapter } from "../src/provider/github/surface";
+import { DeliveryReconciliation, deliverKeyed } from "../src/support/deliver";
+import { bounded } from "./helpers/bounded";
+
+for (const provider of ["discord", "slack", "telegram"] as const) {
+  test(`${provider}: lost ACK never repeats a physical send at a non-deduplicating destination`, async () => {
+    const arrived = Promise.withResolvers<void>();
+    const ack = Promise.withResolvers<void>();
+    let physicalSends = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        physicalSends++;
+        arrived.resolve();
+        return ack.promise.then(() =>
+          Response.json({ id: "ack", ok: true, ts: "ack", result: { message_id: 1 } }),
+        );
+      },
+    });
+    const fetch = globalThis.fetch;
+    const controller = new AbortController();
+    const restore = installDeliveryFetch(() =>
+      fetch(server.url, {
+        method: "POST",
+        body: "SENTINEL",
+        signal: controller.signal,
+      }),
+    );
+    try {
+      const { adapter, address } = deliveryFixture(provider);
+      const first = adapter.deliver(address, "SENTINEL", "lost-ack");
+      const concurrent = adapter.deliver(address, "SENTINEL", "lost-ack");
+      await bounded(arrived.promise);
+      controller.abort();
+      expect(await bounded(first)).toEqual({ value: "unknown" });
+      expect(await bounded(concurrent)).toEqual({ value: "unknown" });
+      expect(await adapter.deliver(address, "SENTINEL", "lost-ack")).toEqual({ value: "unknown" });
+      expect(physicalSends).toBe(1);
+      // The destination does NOT suppress repeated content or delivery keys.
+      ack.resolve();
+      await fetch(server.url, { method: "POST", body: "SENTINEL" });
+      expect(physicalSends).toBe(2);
+    } finally {
+      ack.resolve();
+      restore();
+      await server.stop(true);
+    }
+  });
+
+  test(`${provider}: proof of no connection permits retry, sent then remains terminal`, async () => {
+    let physicalSends = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        physicalSends++;
+        return Response.json({ id: "ack", ok: true, ts: "ack", result: { message_id: "ack" } });
+      },
+    });
+    const fetch = globalThis.fetch;
+    let refuse = true;
+    const restore = installDeliveryFetch(() => {
+      if (refuse)
+        throw Object.assign(new TypeError("connection unavailable"), { code: "ECONNREFUSED" });
+      return fetch(server.url, { method: "POST" });
+    });
+    try {
+      const { adapter, address } = deliveryFixture(provider);
+      expect(await adapter.deliver(address, "SENTINEL", "retryable")).toEqual({
+        value: "not_sent",
+      });
+      expect(physicalSends).toBe(0);
+      refuse = false;
+      expect(await adapter.deliver(address, "SENTINEL", "retryable")).toEqual({
+        value: "sent",
+        externalMessageId: "ack",
+      });
+      expect(await adapter.deliver(address, "SENTINEL", "retryable")).toEqual({
+        value: "sent",
+        externalMessageId: "ack",
+      });
+      expect(physicalSends).toBe(1);
+    } finally {
+      restore();
+      await server.stop(true);
+    }
+  });
+}
+
+test("uncertain reconciliation custody does not expire with an inbound dedupe window", async () => {
+  const reconciliation = new DeliveryReconciliation();
+  const original = Date.now;
+  let physicalSends = 0;
+  const send = () =>
+    deliverKeyed(
+      reconciliation,
+      "stable",
+      async () => {
+        physicalSends++;
+        return undefined;
+      },
+      () => false,
+      () => undefined,
+    );
+  try {
+    expect(await send()).toEqual({ value: "unknown" });
+    Date.now = () => original() + 24 * 60 * 60_000;
+    expect(await send()).toEqual({ value: "unknown" });
+    expect(physicalSends).toBe(1);
+  } finally {
+    Date.now = original;
+  }
+});
+
+test("proven sends age out of custody in send order while uncertain keys stay forever", async () => {
+  const reconciliation = new DeliveryReconciliation(2);
+  const sends = new Map<string, number>();
+  const send = (key: string, id: string | undefined) =>
+    deliverKeyed(
+      reconciliation,
+      key,
+      async () => {
+        sends.set(key, (sends.get(key) ?? 0) + 1);
+        return id;
+      },
+      () => false,
+      () => undefined,
+    );
+  await send("lost", undefined);
+  await send("a", "1");
+  await send("b", "2");
+  // Within retention: proven keys are still remembered.
+  await send("a", "1");
+  await send("b", "2");
+  expect(sends.get("a")).toBe(1);
+  expect(sends.get("b")).toBe(1);
+  // A third proven key evicts only the oldest proven key.
+  await send("c", "3");
+  await send("b", "2");
+  await send("c", "3");
+  await send("a", "1");
+  await send("lost", undefined);
+  expect(sends.get("a")).toBe(2);
+  expect(sends.get("b")).toBe(1);
+  expect(sends.get("c")).toBe(1);
+  expect(sends.get("lost")).toBe(1);
+});
+
+test("GitHub uncertainty is terminal even when comment read-back would show no marker", async () => {
+  let physicalSends = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (request.method === "GET") return Response.json([]);
+      physicalSends++;
+      return new Response("lost response body");
+    },
+  });
+  const fetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(
+    (_input: string | URL | Request, init?: RequestInit) => fetch(server.url, init),
+    { preconnect: fetch.preconnect },
+  );
+  try {
+    const adapter = new GitHubAdapter("secret", {}, () => undefined, "token");
+    expect(await adapter.deliver("owner/repo#1", "SENTINEL", "key")).toEqual({ value: "unknown" });
+    expect(await adapter.deliver("owner/repo#1", "SENTINEL", "key")).toEqual({ value: "unknown" });
+    expect(physicalSends).toBe(1);
+    await fetch(server.url, { method: "POST" });
+    expect(physicalSends).toBe(2);
+  } finally {
+    globalThis.fetch = fetch;
+    await server.stop(true);
+  }
+});
+
+for (const provider of ["discord", "slack", "github"] as const) {
+  test(`${provider}: a failed preflight is not_sent and can retry without resending a message`, async () => {
+    const nativeFetch = globalThis.fetch;
+    let sends = 0;
+    let failPreflight = true;
+    globalThis.fetch = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (
+          init?.method === "GET" ||
+          url.endsWith("/users/@me/channels") ||
+          url.endsWith("/conversations.open")
+        ) {
+          if (failPreflight) throw new TypeError("preflight lost ACK");
+          return init?.method === "GET"
+            ? Response.json([])
+            : Response.json({ id: "dm", ok: true, channel: { id: "dm" } });
+        }
+        sends++;
+        return Response.json({ id: provider === "github" ? 1 : "1", ok: true, ts: "1" });
+      },
+      { preconnect: nativeFetch.preconnect },
+    );
+    try {
+      const { adapter, address } =
+        provider === "github"
+          ? {
+              adapter: new GitHubAdapter("secret", {}, () => undefined, "token"),
+              address: "owner/repo#1",
+            }
+          : deliveryFixture(provider);
+      expect(await adapter.deliver(address, "SENTINEL", "preflight")).toEqual({
+        value: "not_sent",
+      });
+      expect(sends).toBe(0);
+      failPreflight = false;
+      expect(await adapter.deliver(address, "SENTINEL", "preflight")).toMatchObject({
+        value: "sent",
+      });
+      expect(sends).toBe(1);
+    } finally {
+      globalThis.fetch = nativeFetch;
+    }
+  });
+}
+
+test("Telegram never retries a transport failure whose prose resembles a parse refusal", async () => {
+  let sends = 0;
+  const restore = installDeliveryFetch(() => {
+    sends++;
+    throw new TypeError("can't parse entities: lost ACK");
+  });
+  try {
+    const adapter = new TelegramAdapter("token", {}, () => undefined);
+    expect(await adapter.deliver("1", "SENTINEL", "key")).toEqual({ value: "unknown" });
+    expect(await adapter.deliver("1", "SENTINEL", "key")).toEqual({ value: "unknown" });
+    expect(sends).toBe(1);
+  } finally {
+    restore();
+  }
+});

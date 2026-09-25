@@ -8,7 +8,7 @@ import { loadConfig } from "../src/config";
 import { configuredCompaction } from "../src/compaction/strategy";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 
 const KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
@@ -83,12 +83,12 @@ describe("compaction composition configuration", () => {
       "root-compaction-token",
     ]);
     for (let index = 0; index < 6; index += 1) {
-      const reply = nextMessage(ws);
+      const reply = nextResidentTurn();
       ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
       await reply;
     }
     constrained = true;
-    const reply = nextMessage(ws);
+    const reply = nextResidentTurn();
     ws.send(JSON.stringify({ type: "message", text: "compact now" }));
     await reply;
 

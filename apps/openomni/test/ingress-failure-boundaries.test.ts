@@ -6,6 +6,7 @@ import { fakeProviders } from "./helpers/channel-providers";
 import { eventSignal } from "./helpers/event-signal";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
+import { declareChannel } from "./helpers/declared-channel";
 
 const suite = residentSuite();
 
@@ -13,8 +14,10 @@ test("a mounted driver receives a rejected promise when message policy refuses a
   const providers = fakeProviders();
   const telegram = spyOn(ChannelProviders.telegram, "create").mockImplementation(providers.providers.telegram.create);
   try {
+    const config = suite.config("driver-refusal-");
+    suite.defer(declareChannel(config.dbPath, "telegram", { token: "fixture" }));
     const app = await suite.boot({
-      config: suite.config("driver-refusal-", { channels: { telegram: { token: "fixture" } } }),
+      config,
       llm: { resolveModel: fakeProviderModel },
     });
     const policies = Storage.get().policies;

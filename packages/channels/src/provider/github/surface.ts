@@ -1,3 +1,4 @@
+import { DeliveryNotSent, RateLimited } from "../../errors";
 import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { z } from "zod";
@@ -6,7 +7,7 @@ import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
 import { GitHubWebhookPayloadSchemas } from "./types";
 import type { PublishPort } from "../../types";
-import type { DeliveryReceipt } from "../../support/deliver";
+import { type DeliveryReceipt, DeliveryReconciliation } from "../../support/deliver";
 import { authenticateGitHubWebhook } from "../../authn/github";
 import type { ChannelAuthnDecisionObserver } from "../../authn/types";
 
@@ -16,6 +17,21 @@ interface GitHubEventContent {
   repo: string;
   issueNumber: number;
   issueKind: "issue" | "pr";
+}
+
+interface UnsupportedEvent {
+  readonly kind: "unsupported_event";
+  readonly event: string;
+  readonly action: string | null;
+  readonly reason: "unsupported_event" | "unsupported_action" | "invalid_payload";
+}
+
+function refusal(
+  event: string,
+  action: string | undefined,
+  reason: UnsupportedEvent["reason"],
+): UnsupportedEvent {
+  return { kind: "unsupported_event", event, action: action ?? null, reason };
 }
 
 interface GitHubAuthOptions {
@@ -36,7 +52,7 @@ function issueContent(
   text: string,
   user: { login: string },
   payload: z.infer<typeof GitHubWebhookPayloadSchemas.issues>,
-): GitHubEventContent | null {
+): GitHubEventContent {
   return {
     text,
     sender: user.login,
@@ -46,15 +62,18 @@ function issueContent(
   };
 }
 
-function extractContent(event: string, raw: object): GitHubEventContent | null {
+function extractContent(event: string, raw: object): GitHubEventContent | UnsupportedEvent {
+  const action = actionOf(raw);
   if (event === "issue_comment") {
+    if (action !== "created") return refusal(event, action, "unsupported_action");
     const parsed = GitHubWebhookPayloadSchemas.issue_comment.safeParse(raw);
-    if (!parsed.success || parsed.data.action !== "created") return null;
+    if (!parsed.success) return refusal(event, action, "invalid_payload");
     return issueContent(parsed.data.comment.body, parsed.data.comment.user, parsed.data);
   }
   if (event === "issues") {
+    if (action !== "opened") return refusal(event, action, "unsupported_action");
     const parsed = GitHubWebhookPayloadSchemas.issues.safeParse(raw);
-    if (!parsed.success || parsed.data.action !== "opened") return null;
+    if (!parsed.success) return refusal(event, action, "invalid_payload");
     // `||`, not `??`: GitHub sends empty-STRING bodies too — an issue opened
     // with no body must fall back to its title, or the empty normalization
     // drop (#606) silently vanishes a label-triggered event.
@@ -64,7 +83,7 @@ function extractContent(event: string, raw: object): GitHubEventContent | null {
       parsed.data,
     );
   }
-  return null;
+  return refusal(event, action, "unsupported_event");
 }
 
 type PreparedWebhook = Readonly<{
@@ -82,6 +101,7 @@ export class GitHubAdapter implements Channel.Surface {
 
   private readonly client: GitHubClient;
   private readonly dedupe = new Dedupe();
+  private readonly outbound = new DeliveryReconciliation();
   private handler: Channel.MessageHandler | null = null;
 
   constructor(
@@ -100,23 +120,28 @@ export class GitHubAdapter implements Channel.Surface {
     idempotencyKey: string,
   ): Promise<DeliveryReceipt> {
     const target = /^([a-zA-Z0-9-]+\/[a-zA-Z0-9_.-]+)#([1-9][0-9]*)$/.exec(externalId);
-    if (target?.[1] === undefined || target[2] === undefined) return { value: "rejected" };
+    if (target?.[1] === undefined || target[2] === undefined) return { value: "not_sent" };
     const issueNumber = Number(target[2]);
     if (!Number.isSafeInteger(issueNumber) || target[1].endsWith("/.") || target[1].endsWith("/.."))
-      return { value: "rejected" };
-    const traceId = newTraceId();
-    try {
-      return await this.client.postComment(target[1], issueNumber, body, traceId, idempotencyKey);
-    } catch (error) {
-      this.publish(Operational.Events.Warn, {
-        traceId,
-        time: Date.now(),
-        component: "github",
-        msg: "GitHub delivery outcome is uncertain",
-        context: { error: String(error) },
-      });
-      return { value: "unknown" };
-    }
+      return { value: "not_sent" };
+    const repo = target[1];
+    return this.outbound.run(idempotencyKey, async () => {
+      const traceId = newTraceId();
+      try {
+        return await this.client.postComment(repo, issueNumber, body, traceId, idempotencyKey);
+      } catch (error) {
+        const value = error instanceof DeliveryNotSent || (error instanceof RateLimited && error.status === 429)
+          ? "not_sent" : "unknown";
+        this.publish(Operational.Events.Warn, {
+          traceId,
+          time: Date.now(),
+          component: "github",
+          msg: "GitHub delivery failed",
+          context: { error: String(error), value },
+        });
+        return { value };
+      }
+    });
   }
 
   onMessage(handler: Channel.MessageHandler): void {
@@ -162,6 +187,21 @@ export class GitHubAdapter implements Channel.Surface {
     return this.dispatchWebhook(preparation);
   }
 
+  private observeUnsupported(
+    observation: UnsupportedEvent,
+    deliveryId: string | null,
+    traceId: string,
+  ): WebhookPreparation {
+    this.publish(Operational.Events.Warn, {
+      traceId,
+      time: Date.now(),
+      component: "github",
+      msg: "github event not ingested",
+      context: { ...observation, deliveryId },
+    });
+    return { response: Response.json(observation) };
+  }
+
   private prepareWebhook(
     request: Request,
     body: ReturnType<typeof WebhookBodySchema.safeParse>,
@@ -177,7 +217,8 @@ export class GitHubAdapter implements Channel.Surface {
     const event = request.headers.get("x-github-event");
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
-    if (!body.success) return { response: new Response("Unsupported event", { status: 200 }) };
+    if (!body.success)
+      return this.observeUnsupported(refusal(event, undefined, "invalid_payload"), deliveryId, traceId);
     const raw = body.data;
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
@@ -191,9 +232,7 @@ export class GitHubAdapter implements Channel.Surface {
     });
 
     const content = extractContent(event, raw);
-    if (!content) {
-      return { response: new Response("Unsupported event", { status: 200 }) };
-    }
+    if ("kind" in content) return this.observeUnsupported(content, deliveryId, traceId);
 
     if (deliveryId === null || deliveryId.length === 0)
       return { response: new Response("Missing delivery id", { status: 400 }) };

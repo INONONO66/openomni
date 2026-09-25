@@ -146,8 +146,8 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
         expect(sends).toBe(expectedSends);
         expect(receipt).toEqual(
           scenario.value === "accepted"
-            ? { value: "accepted", externalMessageId: "chunk-2" }
-            : { value: scenario.value },
+            ? { value: "sent", externalMessageId: "chunk-2" }
+            : { value: scenario.value === "rejected" ? "not_sent" : scenario.value },
         );
         expect(partial).toEqual(
           scenario.reason === undefined
@@ -168,8 +168,10 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
           expect(traceIds[0]).not.toBe("");
         }
         // A cached uncertain receipt cannot retry or invent a correlation anchor.
-        expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
-        expect(sends).toBe(expectedSends);
+        if (receipt.value !== "not_sent") {
+          expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
+          expect(sends).toBe(expectedSends);
+        }
         expect(partial).toHaveLength(scenario.reason === undefined ? 0 : 1);
       } finally {
         timer?.restore();

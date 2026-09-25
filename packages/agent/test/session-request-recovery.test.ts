@@ -16,6 +16,7 @@ import { compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger, crashAfterRequestOpen, failure, type RequestLedger } from "./helpers/effect-g1";
 import { bounded } from "./helpers/bounded";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
+import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import type { RunnerServices } from "../src/services";
 
 function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>) {
@@ -241,4 +242,31 @@ it("a gateway answer cannot borrow another live owner's lease", () => persisted(
   expect(yield* dormant.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");
   expect(SessionHandleStore.row(request.sessionId).leaseOwner).toBeNull();
+})));
+
+it.each(["answer", "timeout", "cancel"] as const)("%s wins once across a request-port restart", (winner: "answer" | "timeout" | "cancel") => fileRequest((dbPath) => Effect.gen(function* () {
+  let now = 100;
+  const { port, runtime, opening } = yield* requestPlane(() => now);
+  const opened = yield* port.open(opening);
+  const answer = planeAnswer(opened);
+  const cancel = {
+    requestId: opened.requestId, sessionId: opened.sessionId, inputId: "cancel",
+    principal: { kind: "session" as const, principalId: opened.sessionId, evidenceId: "original-owner" }, at: 100,
+  };
+  expect(yield* port.cancel({ ...cancel, inputId: "foreign-cancel", principal: { ...cancel.principal, principalId: "stranger" } })).toBe("rejected");
+  if (winner === "answer") expect(yield* port.answer(answer)).toBe("resolved");
+  if (winner === "cancel") expect(yield* port.cancel(cancel)).toBe("cancelled");
+  if (winner === "timeout") { now = 200; yield* port.timeout(opened.requestId, now); }
+  const terminal = SessionHandleStore.actionById("invocation:resolution");
+  Storage.reset();
+  Storage.initialize({ dbPath });
+  const reopened = yield* withSessionServices(createSessionRequests(runtime), runtime);
+  expect(yield* reopened.cancel({ ...cancel, inputId: "cancel-after-reopen" })).toBe("duplicate");
+  now = 200;
+  yield* reopened.timeout(opened.requestId, now);
+  expect(yield* reopened.answer({ ...answer, inputId: "late-answer", receivedAt: 199 })).toBe("late_unknown");
+  expect(SessionHandleStore.actionById("invocation:resolution")).toEqual(terminal);
+  expect(SessionHandleStore.requestById(opened.requestId)?.state).toBe(({ answer: "resolved", timeout: "expired", cancel: "cancelled" } as const)[winner]);
+  expect(SessionHandleStore.pendingInbox("parent")).toHaveLength(winner === "answer" ? 1 : 0);
+  expect(Storage.get().alarms?.get("invocation:deadline")?.status).toBe(winner === "timeout" ? "fired" : "cancelled");
 })));

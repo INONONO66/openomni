@@ -1,17 +1,7 @@
-import type { Actor, Gateway, Ingress } from "@openomni/protocol";
+import type { Actor, Gateway } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/ledger";
 import { matchBlacklist } from "./blacklist.js";
 import { resolveChannelGrant } from "./channel-grant.js";
-
-type LegacyActor = Pick<Ingress.Actor, "id" | "role">;
-
-function legacyActorFields(actor: LegacyActor | undefined): LegacyActor | undefined {
-  if (!actor) return undefined;
-  const legacyActor: LegacyActor = {};
-  if (actor.id) legacyActor.id = actor.id;
-  if (actor.role) legacyActor.role = actor.role;
-  return legacyActor;
-}
 
 function externalActorId(event: Gateway.DeliveredEvent): string | undefined {
   return event.userId;
@@ -121,28 +111,17 @@ function resolvedActorEvent(
 
 export function resolveIngressActor(event: Gateway.DeliveredEvent): Gateway.DeliveredEvent {
   const externalId = externalActorId(event);
-  if (!externalId || !ActorRegistry.isConfigured()) {
-    return {
-      ...event,
-      meta: {
-        ...event.meta,
-        actor: legacyActorFields(event.meta?.actor),
-      },
-    };
-  }
+  // Identity provenance is the authenticated sender, never inbound meta.actor.
+  const projected: Gateway.DeliveredEvent = {
+    ...event,
+    meta: { ...event.meta, actor: { ...(externalId ? { id: externalId } : {}), role: "user" } },
+  };
+  if (!externalId || !ActorRegistry.isConfigured()) return projected;
 
   const resolved =
     ActorRegistry.resolveEndpoint(event.surface, externalId, event.workspace) ??
     mintProvisionalContact(event, externalId, Date.now());
-  if (!resolved) {
-    return {
-      ...event,
-      meta: {
-        ...event.meta,
-        actor: legacyActorFields(event.meta?.actor),
-      },
-    };
-  }
+  if (!resolved) return projected;
 
   return resolvedActorEvent(event, resolved);
 }

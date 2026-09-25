@@ -6,17 +6,15 @@ import {
   SecretStore,
   Vault,
 } from "@openomni/ledger";
-import { type CredentialReader, channelProfile, declaredChannelProfile } from "../channels";
-import type { OpenOmniConfig } from "../config";
+import { type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";
 import { type KekResolution, resolveKek } from "./vault-key";
 
 /**
  * Boot-time reconciliation of the provisioning store
- * (docs/provisioning-and-providers.md §6, §8.1): once any ChannelInstance is
- * declared, the store is the sole source of channel truth and env channel
- * config is a ghost — visible in the selection's `source`, never mounted.
+ * (docs/provisioning-and-providers.md §6): ChannelInstanceStore is the sole
+ * source of channel truth, including when no instances are declared.
  */
 
 /** Binds the vault seam for `declaredChannelProfile`: store row + KEK → plaintext or a locked reason. */
@@ -42,32 +40,16 @@ export function vaultCredentialReader(
 }
 
 /**
- * What the supervisor should be running right now (`declared` iff at least
- * one ChannelInstance row exists — env config is shadowed then, §8.1). The
+ * What the supervisor should be running from ChannelInstance declarations. The
  * bounce key folds the declaration revision with the secret's rotation epoch,
  * so `channel_add` edits and `secret_rotate` both bounce exactly the
  * stages they touch (§8.7) while everything else keeps running.
  */
 export function desiredChannels(
-  config: OpenOmniConfig,
   env: Record<string, string | undefined> = process.env,
   home: string = homedir(),
 ): DesiredChannels {
   const instances = ChannelInstanceStore.list();
-  if (instances.length === 0) {
-    return {
-      source: "env",
-      rows: channelProfile(config).map((component) => ({
-        instanceId: `env:${component.id}`,
-        key: "env",
-        component,
-        // Env channel config declares credentials only — it carries no Owner
-        // tier decision, so env rows mount at the mount tier (#931).
-        defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER,
-      })),
-      statuses: [],
-    };
-  }
   const secrets = new Map<string, ReturnType<typeof SecretStore.get>>();
   const readSecret: typeof SecretStore.get = (ref) => {
     if (!secrets.has(ref)) secrets.set(ref, SecretStore.get(ref));

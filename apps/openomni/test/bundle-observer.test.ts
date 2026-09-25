@@ -11,7 +11,7 @@ import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { residentSuite } from "./helpers/resident-suite";
 import { auditBundle, ProviderRequest, providerResponse } from "./helpers/bundle-fixture";
-import { nextMessage } from "./helpers/ws";
+import { nextResidentTurn } from "./helpers/resident-turn";
 import { eventSignal } from "./helpers/event-signal";
 
 const suite = residentSuite();
@@ -38,7 +38,7 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
-  const reply = nextMessage(ws);
+  const reply = nextResidentTurn();
   ws.send(JSON.stringify({ type: "message", text: "echo" }));
   await reply;
   const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
@@ -88,7 +88,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
-  const first = nextMessage(ws);
+  const first = nextResidentTurn();
   try {
     ws.send(JSON.stringify({ type: "message", text: "hold" }));
     await entered.promise;
@@ -103,7 +103,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     release.resolve();
     await first;
     await retired.promise;
-    const second = nextMessage(ws);
+    const second = nextResidentTurn();
     ws.send(JSON.stringify({ type: "message", text: "next" }));
     await second;
     expect(offered.slice(0, 2).every((names) => !names.includes(demo.name))).toBe(true);

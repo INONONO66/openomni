@@ -26,7 +26,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
     let connected = false;
     let closed = false;
     const peer = new PeerRequestTable({
-      send: (_peer, frame) => socket.write(encode(frame)),
+      send: (_peer, frame) => { if (connected && !closed) socket.write(encode(frame)); },
       onRequest: opts.onRequest ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond) ?? Effect.void : undefined,
       onNotification: (_peer, method, params) => opts.onNotification?.(method, params) ?? Effect.void,
       missingRequestHandlerMessage: (method) => `client has no request handler for ${method}`,

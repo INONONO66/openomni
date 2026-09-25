@@ -74,6 +74,7 @@ const agent = {
 } satisfies { [K in Agent.SessionError["_tag"]]: Extract<Agent.SessionError, { _tag: K }> };
 const channels = {
   ForeignFailure: new Channels.ForeignFailure(diagnostic),
+  DeliveryNotSent: new Channels.DeliveryNotSent(diagnostic),
   InvalidInbound: new Channels.InvalidInbound({ operation: "frame", reason: "invalid_json" }),
   DiscordGatewayFetchError: new Channels.DiscordGatewayFetchError(message),
   DiscordApiError: new Channels.DiscordApiError(message),

@@ -6,8 +6,9 @@ import { z } from "zod";
 export const ConfigurationError = NamedError.create(
   "OpenOmniConfigurationError",
   z.object({
-    code: z.enum(["invalid_compaction_summarizer", "invalid_ws_port"]),
+    code: z.enum(["invalid_compaction_summarizer", "invalid_ws_port", "legacy_channel_credentials"]),
     message: z.string(),
+    replacement: z.object({ tool: z.literal("provision"), op: z.literal("channel_add") }).optional(),
   }),
 );
 export type ConfigurationError = InstanceType<typeof ConfigurationError>;
@@ -57,16 +58,6 @@ export interface OpenOmniConfig {
    * ungranted rather than the driver being unwired.
    */
   readonly actors?: readonly RegisteredActor[];
-  /** External channel credentials. A missing credential leaves that driver unwired. */
-  readonly channels?: {
-    readonly discord?: { readonly token: string };
-    readonly telegram?: { readonly token: string };
-    readonly github?: {
-      readonly secret: string;
-      readonly token?: string;
-      readonly botUsername?: string;
-    };
-  };
   /** Owner-declared allowances for cold proactive sends; absent denies all. */
   readonly socialBudgets?: readonly Gateway.SocialBudget[];
   /**
@@ -258,26 +249,19 @@ function channelAllowedSendersFromEnv(): OpenOmniConfig["channelAllowedSenders"]
   return parseEnvJson("OPENOMNI_CHANNEL_ALLOWED_SENDERS", ChannelAllowedSenders);
 }
 
-function channelsFromEnv(): OpenOmniConfig["channels"] {
-  const discordToken = process.env.DISCORD_BOT_TOKEN?.trim();
-  const telegramToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  const githubSecret = process.env.GITHUB_WEBHOOK_SECRET?.trim();
-  const githubToken = process.env.GITHUB_TOKEN?.trim();
-  const githubBotUsername = process.env.GITHUB_BOT_USERNAME?.trim();
-  if (!discordToken && !telegramToken && !githubSecret) return undefined;
-  return {
-    ...(discordToken ? { discord: { token: discordToken } } : {}),
-    ...(telegramToken ? { telegram: { token: telegramToken } } : {}),
-    ...(githubSecret
-      ? {
-          github: {
-            secret: githubSecret,
-            ...(githubToken ? { token: githubToken } : {}),
-            ...(githubBotUsername ? { botUsername: githubBotUsername } : {}),
-          },
-        }
-      : {}),
-  };
+/** Declared ChannelInstance rows are the sole channel provisioning owner. */
+export function assertDeclaredChannelConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+  const legacy = ["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"]
+    .filter((key) => (env[key]?.trim().length ?? 0) > 0);
+  if (legacy.length > 0) {
+    throw new ConfigurationError({
+      code: "legacy_channel_credentials",
+      message: `Remove ${legacy.join(", ")}; use the provision tool with op channel_add to declare channels.`,
+      replacement: { tool: "provision", op: "channel_add" },
+    });
+  }
 }
 
 function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
@@ -314,11 +298,11 @@ function machinesFromEnv(home: string): OpenOmniConfig["machines"] {
 }
 
 export function loadConfig(home: string = homedir()): OpenOmniConfig {
+  assertDeclaredChannelConfig();
   const host = process.env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
   const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
   const machines = machinesFromEnv(home);
   const actors = actorsFromEnv();
-  const channels = channelsFromEnv();
   const socialBudgets = socialBudgetsFromEnv();
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
@@ -330,7 +314,6 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
     model: modelFromEnv(),
     ...(machines === undefined ? {} : { machines }),
     ...(actors === undefined ? {} : { actors }),
-    ...(channels === undefined ? {} : { channels }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
   };

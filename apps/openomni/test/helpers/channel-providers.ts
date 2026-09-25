@@ -78,4 +78,3 @@ export function fakeProviders() {
   return { surfaces, providers, delivered, webhookCalls };
 }
 
-export type FakeBuild = ReturnType<typeof fakeProviders>;

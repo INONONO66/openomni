@@ -42,7 +42,7 @@ export class SlackSocket {
 
   async start(): Promise<void> {
     this.shell.begin();
-    await this.openSocket(await this.fetchSocketUrl(newTraceId()));
+    await this.shell.connect(() => this.fetchSocketUrl(newTraceId()));
   }
 
   stop(): void {
@@ -62,6 +62,7 @@ export class SlackSocket {
   private openSocket(url: string): Promise<void> {
     return this.shell.openWebSocket(url, (ws, settle) => {
       ws.addEventListener("message", (event) => {
+        if (!settle.current()) return;
         const envelope = this.parseEnvelope(String(event.data));
         if (envelope === undefined) return;
         if (envelope.type === "hello") {
@@ -73,12 +74,13 @@ export class SlackSocket {
       });
 
       ws.addEventListener("close", async (event) => {
+        if (!settle.current()) return;
         if (!settle.settled()) {
           // A close before hello fails THIS start() — the caller owns retry
           // policy at boot; a rejected start must not leave a zombie
           // reconnect loop behind.
-          this.shell.end();
           settle.rejectOnce(new Error(`slack socket closed before hello: ${event.code}`));
+          this.shell.end();
           return;
         }
         if (!this.shell.running) return;

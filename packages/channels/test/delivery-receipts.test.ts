@@ -42,11 +42,13 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
         expect(sends).toBe(failure === "partial" ? 2 : 1);
         expect(receipt).toEqual(
           failure === "accepted"
-            ? { value: "accepted", externalMessageId: "physical-id" }
-            : { value: failure === "forbidden" ? "rejected" : "unknown" },
+            ? { value: "sent", externalMessageId: "physical-id" }
+            : { value: failure === "forbidden" ? "not_sent" : "unknown" },
         );
-        expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
-        expect(sends).toBe(failure === "partial" ? 2 : 1);
+        if (receipt.value !== "not_sent") {
+          expect(await adapter.deliver(address, content, "stable-key")).toEqual(receipt);
+          expect(sends).toBe(failure === "partial" ? 2 : 1);
+        }
       } finally {
         restoreFetch();
       }

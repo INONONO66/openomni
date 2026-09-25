@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { Alarm, canonicalDigest, type ObservationSink } from "@openomni/protocol";
 import { alarmAppend, alarmFired, alarmPrompt, inboxAppend } from "./l0-action-builders.js";
 import { AlarmSqlRow, decodeAlarm } from "./sqlite-l0-rows.js";
-import { selectSession, appendAction, insertInbox } from "./sqlite-l0-write.js";
+import { selectSession, appendAction, insertAlarm, insertInbox } from "./sqlite-l0-write.js";
 import { publishCommitted } from "./sqlite-l0-observation";
 import { AlarmRefused, CorruptRecord } from "../errors";
 import type { AlarmWriteAdapter } from "../services";
@@ -84,19 +84,7 @@ function armAlarm(db: Database, parsed: Alarm.Arm, refuse: RefuseWrite) {
     createdAt: parsed.fireAt,
     updatedAt: parsed.fireAt,
   });
-  db.query(`INSERT INTO alarm (
-		id, session_id, kind, fire_at, spec, encoding_version, status, time_created, time_updated
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    row.id,
-    row.sessionId,
-    row.kind,
-    row.fireAt,
-    row.spec === undefined ? null : JSON.stringify(row.spec.value),
-    row.spec?.encodingVersion ?? 1,
-    row.status,
-    row.createdAt,
-    row.updatedAt,
-  );
+  insertAlarm(db, row);
   return { receipt, row };
 }
 

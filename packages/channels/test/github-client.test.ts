@@ -29,14 +29,14 @@ describe("GitHubClient", () => {
     try {
       const client = new GitHubClient(() => undefined, "token");
       expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
-        value: "accepted",
+        value: "sent",
         externalMessageId: "1",
       });
       expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
-        value: "accepted",
+        value: "sent",
       });
       expect(await client.postComment("owner/repo", 1, "answer", "trace", "id")).toEqual({
-        value: "accepted",
+        value: "sent",
         externalMessageId: "2",
       });
       expect(posted).toEqual([

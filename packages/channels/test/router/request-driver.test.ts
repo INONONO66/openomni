@@ -5,6 +5,8 @@ import { channelRequests } from "../helpers/channel-requests";
 import { afterEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
+import { kernelDeliveryReceipt } from "../../src/support/deliver";
+import type { ChannelDeliveryRoute } from "../../src/router/message-ports";
 import { TelegramAdapter } from "../../src/provider/telegram/surface";
 import { TelegramNormalizer } from "../../src/provider/telegram/normalizer";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
@@ -46,7 +48,7 @@ test("router opens the immutable original message action before real Telegram de
       grants: () => [
         { id: "grant", senderId: "source", targetActorId: "target", operations: ["awaited"] },
       ],
-      deliveryRoutes: new Map([["telegram", driver.deliver.bind(driver)]]),
+      deliveryRoutes: new Map<string, ChannelDeliveryRoute>([["telegram", (externalId, body, key) => driver.deliver(externalId, body, key).then(kernelDeliveryReceipt)]]),
     },
   });
   const result = await runEffect(router.ingest(
@@ -101,7 +103,7 @@ test.each([
       { id: "grant", senderId: "source-session", targetActorId: "target", operations: ["awaited"] },
     ],
     deliver: (message: OutboundMessage) =>
-      driver.deliver(message.target.externalId, message.body, message.idempotencyKey),
+      driver.deliver(message.target.externalId, message.body, message.idempotencyKey).then(kernelDeliveryReceipt),
     publish: () => undefined,
   });
   const input = {

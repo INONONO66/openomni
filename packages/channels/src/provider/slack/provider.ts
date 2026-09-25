@@ -1,3 +1,4 @@
+import { kernelDeliveryReceipt } from "../../support/deliver.js";
 import { z } from "zod";
 import type { ChannelProvider } from "../contract.js";
 import { SLACK_RENDER } from "./format.js";
@@ -41,7 +42,7 @@ export const SlackProvider: ChannelProvider<SlackCredentials, "slack"> = {
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>
-        surface.deliver(externalId, body, idempotencyKey),
+        surface.deliver(externalId, body, idempotencyKey).then(kernelDeliveryReceipt),
     };
   },
 };

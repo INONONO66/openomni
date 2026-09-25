@@ -5,7 +5,7 @@ import { isolated } from "./helpers/isolated";
 import type { ExecutionError } from "../src/errors";
 import { Effect, Either } from "effect";
 import { expect, test } from "bun:test";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -15,6 +15,7 @@ import { renderAnchorText } from "../src/compaction/summary";
 import { closeSessions, wakeSession } from "../src/session-handle";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/session-lifecycle/history";
 import { killAtCrashBarrier } from "./helpers/crash-channel";
+import { messagePlanePoint, messagePlaneProof } from "./helpers/crash-message-plane";
 import { corruptCheckpoint, reconstructionPoint, reconstructionRecovery } from "./helpers/crash-reconstruction";
 import { bounded } from "./helpers/bounded";
 import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
@@ -42,6 +43,7 @@ const matrix = matrixSchema.parse(
   await Bun.file(new URL("../../../script/conformance/crash-matrix.json", import.meta.url)).json(),
 );
 const worker = new URL("./helpers/crash-matrix-g1.ts", import.meta.url).pathname;
+const planeWorker = new URL("./helpers/crash-message-plane.ts", import.meta.url).pathname;
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
@@ -457,93 +459,71 @@ function assertOutboundCut(witness: Witness) {
   return { item, acked, destination };
 }
 
-function reclaimAcknowledgedLease(witness: Witness) {
-  return Effect.gen(function* () {
-  const row = SessionHandleStore.row(sessionId);
-  expect(row.leaseOwner).toBe(witness.lease.owner);
-  expect(row.leaseFence).toBe(witness.lease.fence);
-  expect(z.number().parse(row.leaseExpiresAt)).toBeLessThan(200_000);
-  const owner = "cleanup-owner";
-  const lease = (yield* SessionHandleStore.acquireLease({
-          sessionId,
-          owner,
-          expectedFence: row.leaseFence,
-          now: 200_000,
-          expiresAt: 200_000 + SessionHandleStore.LEASE_TTL_MS,
-        }));
-  expect(lease.ok).toBe(true);
-  if (!lease.ok) throw new Error("acknowledged lease was not reacquirable");
-  expect(
-    (yield* SessionHandleStore.commit({
-            sessionId,
-            owner,
-            fence: lease.fence,
-            now: 200_000,
-            expectedRevision: row.revision,
-            actions: [],
-            consumeInboxIds: [],
-            state: row.state,
-            releaseLease: true,
-          })).ok,
-  ).toBe(true);
-  expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
+async function recoverMessagePlane(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
+  const child = Bun.spawn([process.execPath, planeWorker, "recover", point, dbPath], {
+    stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
+  // Exit and receipt subscriptions precede the worker's explicit start gate.
+  const receipt = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  child.stdin.write("S");
+  try {
+    const [code, stdout, stderr] = await bounded(receipt, "fresh message-plane recovery", SPAWNED_CHILD_MS);
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    return messagePlaneProof.parse(JSON.parse(stdout));
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    child.stdin.end();
+  }
 }
 
 function recoverOutbound(witness: Witness, dbPath: string) {
   return Effect.gen(function* () {
-  const before = actions();
-  const { item, acked, destination } = assertOutboundCut(witness);
-  const external = witness.crashPoint === "platform_send_ambiguous_without_reconciliation";
-  const platformPath = `${dbPath}.platform`;
-  if (external) expect(readFileSync(platformPath, "utf8")).toBe(`${item.message.messageId}\n`);
-  let deliveries = 0;
-  const calls = { model: 0 };
-  const runtime: SessionRuntime = {
-    authorizeConfigure: allowConfigure,
-    observations,
-    clock: () => 200_000,
-    dispatchOutbound: ({ message }) => Effect.gen(function* () {
-      deliveries += 1;
-      expect(message).toEqual(item.message);
-      if (external) appendFileSync(platformPath, `${message.messageId}\n`);
-      return (yield* receiveOutbound(message, 200_000)).receipt;
-    }),
-  };
-  const runner = countingRunner(runtime, calls);
-  try {
-    yield* wakeAfterCrash(witness, runner, runtime, before);
-    expect(calls.model).toBe(0);
-    expect(deliveries).toBe(acked ? 0 : 1);
-    expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([
-      { state: "delivered", message: item.message },
-    ]);
-    const received = SessionHandleStore.inboxRows(item.message.destinationSessionId).filter(
-      (row) => row.id === item.message.messageId,
-    );
+    const before = actions();
+    const { item, acked, destination } = assertOutboundCut(witness);
+    const point = messagePlanePoint.parse(witness.crashPoint);
+    const ambiguous = point === "platform_send_ambiguous_without_reconciliation";
+    const sent = point === "platform_send_committed_before_local_ack_reconciled_sent";
+    Storage.reset();
+    const proof = yield* Effect.promise(() => recoverMessagePlane(point, dbPath));
+    expect(proof.before).toEqual(before);
+    expect(proof.after.slice(0, before.length)).toEqual(before);
+    expect(proof.repeated).toEqual(proof.after);
+    expect(proof.sourceRuns).toBe(0);
+    expect(proof.destinationRuns).toBe(1);
+    expect(proof.dispatches).toBe(acked || sent ? 0 : 1);
+    expect(proof.outboundAfter).toMatchObject([{ state: "delivered", message: item.message }]);
+    const received = proof.inboxAfter.filter((row) => row.id === item.message.messageId);
     expect(received).toHaveLength(1);
-    if (destination.length === 1) expect(received).toEqual(destination);
-    expect(
-      actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined),
-    ).toHaveLength(1);
-    if (acked) yield* reclaimAcknowledgedLease(witness);
-    expect(SessionHandleStore.row(sessionId).leaseOwner).toBeNull();
-    const revision = SessionHandleStore.row(sessionId).revision;
-    const recovered = actions();
-    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
-    expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
-    expect(actions()).toEqual(recovered);
-    expect(deliveries).toBe(acked ? 0 : 1);
-    expect(calls.model).toBe(0);
-    if (external)
-      expect(readFileSync(platformPath, "utf8")).toBe(
-        `${item.message.messageId}\n${item.message.messageId}\n`,
-      );
-    if (acked) return "resumed_without_reexecution";
-    return external || destination.length === 1 ? "replayed" : "rearmed";
-  } finally {
-    yield* closeSessions(runtime);
-  }
+    expect(received[0]?.status).toBe("consumed");
+    if (destination.length === 1) expect(received[0]?.content).toBe(destination[0]?.content);
+    expect(proof.after.filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toHaveLength(1);
+    expect(proof.leaseReleased).toBe(true);
+    if (sent || ambiguous) {
+      expect(proof.externalBefore).toEqual([item.message.messageId]);
+      expect(proof.externalAfter).toEqual(Array.from({ length: sent ? 1 : 2 }, () => item.message.messageId));
+    }
+    if (acked || sent) return "resumed_without_reexecution";
+    return ambiguous ? "replayed" : "rearmed";
+  });
+}
+
+function alarmDoorbellCell(dbPath: string) {
+  return Effect.gen(function* () {
+    const point = "alarm_fire_committed_before_hibernated_doorbell";
+    const witness = crashWitness.parse(JSON.parse(yield* Effect.promise(() => killAtCrashBarrier(planeWorker, ["crash", point, dbPath]))));
+    expect(witness).toMatchObject({ crashPoint: point, bodies: [], openTurns: [], lease: { owner: null } });
+    const proof = yield* Effect.promise(() => recoverMessagePlane(point, dbPath));
+    expect(proof.alarm).toMatchObject({ kind: "at", status: "fired", notifications: 0 });
+    expect(proof.before.filter(({ kind }) => kind === "alarm.fired")).toHaveLength(1);
+    const pending = proof.inboxBefore.filter(({ status }) => status === "pending");
+    expect(pending).toHaveLength(1);
+    expect(proof.inboxAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);
+    expect(proof.after.slice(0, proof.before.length)).toEqual(proof.before);
+    expect(proof.repeated).toEqual(proof.after);
+    expect(proof.sourceRuns).toBe(1);
+    expect(proof.dispatches).toBe(0);
+    expect(proof.leaseReleased).toBe(true);
+    return "rearmed";
   });
 }
 
@@ -667,6 +647,8 @@ for (const row of matrix.rows) {
     try {
       const result = await isolated(Effect.scoped(Effect.gen(function* () {
         const dbPath = join(directory, "kernel.sqlite");
+        if (row.crashPoint === "alarm_fire_committed_before_hibernated_doorbell")
+          return yield* alarmDoorbellCell(dbPath);
         if (row.crashPoint === "fiber_exit_after_execute_before_action_commit") {
           expect(yield* Effect.promise(() => fiberCrashCell(`${dbPath}.receipt`, "present"))).toBe("resumed_without_reexecution");
           return yield* Effect.promise(() => fiberCrashCell(dbPath));
