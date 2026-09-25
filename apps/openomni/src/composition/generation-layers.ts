@@ -6,10 +6,22 @@ import {
 } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
-import { LedgerAction, type AnyToolDefinition, type SessionGeneration } from "@openomni/protocol";
+import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope } from "effect";
 
-import type { GenerationDefinitions } from "../tools/core/catalog";
+import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
+
+export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
+
+/** App sessions carry a Layer recipe alongside the schema-only materialization surface. */
+export interface GenerationDefinitions extends Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>> {
+  readonly catalogLayer?: (select: CatalogSelection) => Layer.Layer<ToolCatalog>;
+}
+
+/** The generation manager builds this Layer once per generation and retains its acquired service. */
+export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (definitions) => definitions) {
+  return Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze([...select(catalogDefinitions(ports))]) }));
+}
 
 /** The app owns construction; the package manager alone owns acquired contexts. */
 export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(function* () {

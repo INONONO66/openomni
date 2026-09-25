@@ -1,6 +1,5 @@
-import { eraseTool, ToolCatalog } from "@openomni/agent";
+import { eraseTool } from "@openomni/agent";
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
-import { Layer } from "effect";
 import type { FilePorts } from "./filesystem";
 import { createBashTool } from "../bash";
 import { createCompletionTool, type LlmPort } from "../completion";
@@ -49,16 +48,4 @@ export function catalogDefinitions(ports: ToolPorts): readonly AnyToolDefinition
     eraseTool(createProvisionTool(ports.provisioning)),
     eraseTool(createCompletionTool(ports.llm)),
   ]);
-}
-
-export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
-
-/** The generation manager builds this Layer once and retains its acquired service. */
-export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (definitions) => definitions) {
-  return Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze([...select(catalogDefinitions(ports))]) }));
-}
-
-/** App sessions carry a Layer recipe alongside the schema-only materialization surface. */
-export interface GenerationDefinitions extends Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>> {
-  readonly catalogLayer?: (select: CatalogSelection) => Layer.Layer<ToolCatalog>;
 }

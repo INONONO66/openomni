@@ -5,7 +5,7 @@ import { Effect, type Layer } from "effect";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { createResident } from "../src/resident";
-import type { CatalogSelection, GenerationDefinitions } from "../src/tools/core/catalog";
+import type { CatalogSelection, GenerationDefinitions } from "../src/composition/generation-layers";
 import { testToolPorts } from "./helpers/tool-ports";
 import { allowConfigure } from "./helpers/generation-services";
 
