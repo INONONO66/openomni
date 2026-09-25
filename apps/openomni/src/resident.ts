@@ -6,6 +6,7 @@ import {
   failureFacts,
   newTraceId,
   sessionTool,
+  ToolRefused,
   type ChatAgentConfig,
   type SessionRunner,
   type SessionRuntime,
@@ -17,14 +18,17 @@ import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
 import { RESIDENT_PRESET, WORKER_PRESET } from "./prompt/roles";
-import { catalogDefinitions, toolCatalogLayer, type GenerationDefinitions, type ToolPorts } from "./tools/core/catalog";
+import { toolCatalogLayer, type GenerationDefinitions } from "./composition/generation-layers";
+import { catalogDefinitions, type ToolPorts } from "./tools/core/catalog";
 
-function refuseEvidenceOnly(call: Tool.Call): Tool.Result {
+export function refuseEvidenceOnly(call: Tool.Call): Tool.Result & { readonly errorKind: "precondition_failed" } {
+  const refusal = new ToolRefused(call.tool, "evidence-only message");
   return {
     id: call.id,
     toolCallId: call.id,
     toolName: call.tool,
-    output: "tool execution denied: evidence-only message",
+    output: refusal.message,
+    errorKind: refusal.errorKind,
     isError: true,
     settlement: "settled",
   };
@@ -72,11 +76,7 @@ export function createResident(options: ResidentOptions) {
         componentGeneration: input.resumeCount + 1,
         pluginName: `builtin.${row.role}`,
       }, observations);
-      const evidenceOnly =
-        input.messages
-          .filter((message) => message.role === "user")
-          .at(-1)
-          ?.text.startsWith("[SYSTEM: the following is an OBSERVATION") === true;
+      const evidenceOnly = input.authority === "evidence_only";
       const offered = new Set(input.tools.map((tool) => tool.name));
       const tools = evidenceOnly ? [] : dispatcher.specs.filter((tool) => offered.has(tool.name));
       const runner = createSessionChatRunner({

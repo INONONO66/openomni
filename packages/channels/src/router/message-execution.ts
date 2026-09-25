@@ -74,8 +74,8 @@ function inboxAdmission(
     ...(prepared.limits === undefined ? {} : { limits: prepared.limits }),
     origin: {
       encodingVersion: 1,
-      value:
-        prepared.origin ??
+      value: {
+        ...(prepared.origin ??
         (sender.kind === "session"
           ? Inbox.MessageOrigin.parse({
               kind: "message",
@@ -91,7 +91,9 @@ function inboxAdmission(
               surface: sender.surface,
               externalId: sender.externalId,
               actorId: external?.event.meta?.actor?.actorId ?? "",
-            }),
+            })),
+        ...(external === undefined ? {} : { inboundTreatment: external.route.decision.inboundTreatment ?? "full_access" }),
+      },
     },
   };
 }

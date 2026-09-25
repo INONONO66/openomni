@@ -234,6 +234,10 @@ test("authenticated Owner executes the captured Person invocation once across SI
       { id: `${request.requestId}:application`, effect: { value: { phase: "application" } } },
       { effect: { value: { phase: "result", terminal: "executed" } } },
     ]);
+    expect(await answer(ownerSocket, request, "second-owner-decision")).toMatchObject({
+      status: "blocked_pre",
+      reasonCode: "request_answer.rejected",
+    });
     const committed = await second.inspect();
     expect(committed.person).toMatchObject({ ...PERSON, revision: 0 });
     expect(requestOf(committed).state).toBe("resolved");

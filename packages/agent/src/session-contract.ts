@@ -46,6 +46,8 @@ interface SessionGetOptions {
 export interface SessionActionCommitPort extends ExecutionLedger {}
 
 export interface SessionRunnerInput {
+  /** Authenticated inbox treatment, independent of model-visible message text. */
+  readonly authority?: "act" | "evidence_only";
   readonly sessionId: string;
   readonly role: LedgerSession.Role;
   readonly turnId: string;

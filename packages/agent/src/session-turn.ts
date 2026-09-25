@@ -1,4 +1,5 @@
 import { Cause, Effect, Exit, Fiber, Option, type Scope } from "effect";
+import { z } from "zod";
 import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
@@ -13,6 +14,8 @@ import { GenerationOwnership, ObservationSink, type RunnerServices } from "./ser
 import { parentReply } from "./session-parent-reply";
 import { dispatchSessionOutbound, outboundOpen } from "./session-outbound";
 import { observeDrained } from "./session-message-observation";
+
+const InboundOrigin = z.object({ inboundTreatment: z.enum(["full_access", "evidence_only"]) });
 
 interface TurnInput {
   readonly turnId: string;
@@ -102,7 +105,11 @@ export function createSessionTurn(
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
         const hydrated = hydrateSessionHistory(sessionId);
+        const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
+        const origin = SessionHandleStore.inboxRows(sessionId).find((item) => item.id === promptId)?.origin;
+        const treatment = InboundOrigin.safeParse(origin?.value);
         runnerResult = yield* runner({
+          authority: treatment.success && treatment.data.inboundTreatment === "evidence_only" ? "evidence_only" : "act",
           sessionId, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
           stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
