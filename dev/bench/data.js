@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790428675953,
+  "lastUpdate": 1790429248492,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75347,6 +75347,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 167868,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc1e5c4d5d6cb2a07d97945ca101d18ff149a631",
+          "message": "docs: stamp W3 #1111 merge SHA 75d28562 on SLOP E7/H7/H8/H15, AGENTS.md and implementation-status (#1194)\n\nDocs-only. Replaces the \"pending merge\" cells with the merged SHAs:\n- W3 #1111 -> 75d28562 (PR #1193): SLOP E7, H7, H8, H15; AGENTS.md and\n  docs/implementation-status.md header stamps.\n- W1 #1108 -> 851a71fc and W2 #1110 -> d5b48a1b (PR #1190) on the same\n  header lines and SLOP H6, which still read \"pending merge\".\n- F #1122 -> 6e1cd457 (PR #1176) on the four ownership-census rows.\n\nPart of #1111 / #949 / #930.",
+          "timestamp": "2026-09-26T13:24:43Z",
+          "tree_id": "1d0947e33a159e368c9861859e914f1e0d210d75",
+          "url": "https://github.com/INONONO66/openomni/commit/fc1e5c4d5d6cb2a07d97945ca101d18ff149a631"
+        },
+        "date": 1790429247555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1176,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1088456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 272752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4743391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 91,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 396,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 90093,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 494477,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 291581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2096,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 7568295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 994381,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12090,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 115883,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 576931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 187011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 13524726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 70,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 113690,
             "unit": "ns/op"
           }
         ]
