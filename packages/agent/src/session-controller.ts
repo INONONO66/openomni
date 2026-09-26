@@ -255,8 +255,11 @@ export function createController(
       });
     }
 
-    function sealUnknown() {
+    // The revision is read before the scan so any executor terminal that lands after
+    // the read refuses this commit's CAS; the fresh rescan then sees that terminal.
+    function sealUnknown(): Effect.Effect<void, SessionError> {
       return Effect.gen(function* () {
+        const current = SessionHandleStore.row(sessionId);
         const openTurns = [...openSessionTurns(sessionId)];
         const unresolved = shutdownOperations(sessionId);
         const pending: LedgerAction.Append[] = unresolved.map((action) => ({
@@ -271,11 +274,13 @@ export function createController(
           boundaryActionId: open.boundaryActionId, at: clock(),
         }));
         if (pending.length === 0) return;
-        const current = SessionHandleStore.row(sessionId);
         yield* commitFoldBatch({
           sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
           actions: pending, consumeInboxIds: [], state: "interrupted", releaseLease: false,
-        });
+        }).pipe(Effect.catchIf(
+          (error) => error._tag === "CommitRefused" && error.reason === "revision",
+          () => sealUnknown(),
+        ));
         state.terminalFrozen = true;
       });
     }
