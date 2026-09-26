@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790358711205,
+  "lastUpdate": 1790428675953,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75213,6 +75213,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 90850,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75d28562709423451eb2ef2d045c362fed78f852",
+          "message": "kernel: W3 executor/policy centralization + 12-tool catalog (#1111, #949 stage 4) (#1193)\n\n* A-agent-policy: centralize policy writes and captured tool dispatch\n\n* B-bridge-tests: assert typed background eval and stop outcomes\n\n* C-app-catalog: seal generation catalogs and slim tool adapters\n\n* B2-bridge-lifetime: revoke settled invocation frames and own detached cell lifetimes\n\n* C-fix: tools/** stays Effect-free; catalog Layer recipe owned by composition/generation-layers\n\n* D-app-authority: typed inbox authority, provision Owner-request CAS, structure-only prompt pins\n\n* E-docs: stamp W3 #1111 receipts\n\n* V: delete new unused exports, import type in generation-policy test\n\n* agent: seal unknown outcome when close grace expires before the body settles\n\nclose() no longer surfaces a raw CommitRefused when the running turn's body\nis still unsettled after the shutdown grace; the controller records\nshutdown_grace_exhausted / raw_body_unsettled_after_grace as the unknown\nreason and the regression is pinned with a zero-grace fixture (RED without\nthe fix).\n\n* agent: review-r1 fixes — typed inbound authority, test-only generation layer, failed close reason\n\n- M2: inboundAuthority() decodes the external origin's inboundTreatment\n  against a literal schema; anything but a proven full_access external origin\n  is evidence_only (fail-closed), internal origins act.\n- M3: drop the tautological expect in prompt.test.ts.\n- L1: AgentGenerationLive moves to test/helpers/generation-layer.ts; src\n  layers.ts keeps only AgentProcessLive.\n- L2: tool bodies close the owned invocation with reason failed on rejection.\n\n* agent: assert both close orders, pin failed-body closure, bound seal rescans, cover patch lines\n\n- session-wave-e2e: the nested raw effect has two legal outcome_unknown reasons\n  (raw_body_unsettled_after_grace | shutdown_grace_exhausted); assert exactly one\n  inner result row with either reason and only the interrupt prompt besides it\n- tool-capability-bridge: detached requests after a rejected body fail with\n  InvocationClosed reason \"failed\"; forked invocation lifetime independent of its view\n- session-controller: sealUnknown revision rescans bounded by SEAL_RESCAN_BUDGET\n- executor-outcome: InvocationClosed / GenerationUnavailable evidence pins\n- lint-tools: export checkToolLint/checkEarned and run them in-process on the baseline\n\nPart of #1111 / #949 / #930\n\n* test(app): drop stray blank line left by the debug-dump revert\n\n* script: anchor lint-tools source scan and conformance paths on the repo root\n\nCI scripts-contracts ran the in-process catalog test after a sibling test had chdir-ed into a fixture; Bun.Glob scanned cwd \".\" and found no tool sources, so every catalog definition reported [tool-source-location]. Every path now resolves from import.meta.dir.\n\n* test(lint-tools): drive vocab ratchet and naming checks in-process from a foreign cwd",
+          "timestamp": "2026-09-26T13:14:45Z",
+          "tree_id": "3a10d7fb6f389f0fbd0de3c80f5e8c0e047d9242",
+          "url": "https://github.com/INONONO66/openomni/commit/75d28562709423451eb2ef2d045c362fed78f852"
+        },
+        "date": 1790428675040,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1025,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1615130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 381703,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6435400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 718,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 147991,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 750340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 436844,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11751434,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1420433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18442,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 172566,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 857911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 225391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15576733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 97,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 167868,
             "unit": "ns/op"
           }
         ]
