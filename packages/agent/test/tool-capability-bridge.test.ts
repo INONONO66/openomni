@@ -5,8 +5,8 @@ import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext 
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";
 import { NamedPolicyRegistry } from "../src/bundle";
-import { CommitFailed, ToolBodyFailed, type ExecutionError } from "../src/errors";
-import { currentInvocation } from "../src/executor-context";
+import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/errors";
+import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/executor-context";
 import type { ExecutionResult } from "../src/executor-contract";
 import { createObservationBus } from "../src/observation/bus";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
@@ -189,6 +189,44 @@ test("bridge: detached late requests after settle fail with InvocationClosed and
   for (const work of pending) expect(failure(yield* Effect.exit(work))).toMatchObject({ _tag: "InvocationClosed", tool: "outer", reason: "settled" });
   expect(bodies).toBe(0);
   expect(sessionTree(fiberSessionId)).toEqual(before);
+})));
+
+test("bridge: detached late requests after a rejected body fail with InvocationClosed reason failed", () => isolated(Effect.gen(function* () {
+  const ready = yield* Deferred.make<readonly Effect.Effect<PlainValue, ExecutionError>[]>();
+  let bodies = 0;
+  const fixture = yield* setup([
+    tool("outer", async () => {
+      const frame = currentInvocation();
+      Deferred.unsafeDone(ready, Exit.succeed([
+        frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
+        frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
+      ]));
+      throw new Error("outer-rejected");
+    }),
+    tool("inner", async () => { bodies += 1; return "forbidden"; }),
+  ]);
+  expect(yield* fixture.run).toMatchObject({ isError: true, errorKind: "execution_failed", output: "Error: outer-rejected" });
+  const pending = yield* awaitSignal(ready);
+  const before = sessionTree(fiberSessionId);
+  for (const work of pending) expect(failure(yield* Effect.exit(work))).toMatchObject({ _tag: "InvocationClosed", tool: "outer", reason: "failed" });
+  expect(bodies).toBe(0);
+  expect(sessionTree(fiberSessionId)).toEqual(before);
+})));
+
+test("bridge: a forked invocation owns its lifetime independently of the body view it was forked from", () => isolated(Effect.gen(function* () {
+  const frames = yield* Deferred.make<{ readonly view: InvocationFrame; readonly forked: ReturnType<typeof forkInvocation> }>();
+  const fixture = yield* setup([tool("outer", async () => {
+    const view = currentInvocation();
+    Deferred.unsafeDone(frames, Exit.succeed({ view, forked: forkInvocation("forked") }));
+    return "forked";
+  })]);
+  expect(yield* fixture.run).toMatchObject({ output: "forked" });
+  const { view, forked } = yield* awaitSignal(frames);
+  expect(() => withInvocation(view, () => requireOpenInvocation())).toThrow(new InvocationClosed({ tool: "outer", reason: "settled" }));
+  expect(withInvocation(forked.frame, () => requireOpenInvocation())).toBe(forked.frame);
+  forked.close("failed");
+  expect(() => withInvocation(forked.frame, () => requireOpenInvocation())).toThrow(new InvocationClosed({ tool: "forked", reason: "failed" }));
+  expect(() => withInvocation(forked.frame, () => forkInvocation("again"))).toThrow(new InvocationClosed({ tool: "forked", reason: "failed" }));
 })));
 
 test("bridge: generation-one frame refuses nested dispatch after committed generation-two selection", () => isolated(Effect.gen(function* () {

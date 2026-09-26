@@ -228,6 +228,7 @@ function nextTerminal(): Promise<void> {
   });
 }
 
+
 function activeRow() {
   const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing app session");
@@ -633,7 +634,18 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         left: { _tag: "LeaseRefused", reason: "held" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
-      const beforeActions = sessionTree(row.id).length;
+      // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
+      // point after the wrapper settles: the executor's grace row when it wins the close race,
+      // close's seal otherwise. Every other count below excludes that one row.
+      const innerIntent = sessionTree(row.id).find(
+        (action) =>
+          action.kind === "tool" &&
+          z.object({ phase: z.literal("intent"), callId: z.literal("inner-call") }).safeParse(action.intent.value).success,
+      );
+      if (innerIntent === undefined) throw new Error("missing inner intent row");
+      const innerRows = () => sessionTree(row.id).filter((action) => action.parentId === innerIntent.id);
+      const otherRows = () => sessionTree(row.id).filter((action) => action.parentId !== innerIntent.id);
+      const beforeActions = otherRows().length;
       let staleBodyStarts = 0;
       const stale = () =>
         executor.run(request, () =>
@@ -646,7 +658,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         _tag: "InvocationClosed", reason: "settled",
       });
       expect(staleBodyStarts).toBe(0);
-      expect(sessionTree(row.id)).toHaveLength(beforeActions);
+      expect(otherRows()).toHaveLength(beforeActions);
       gate.resolve();
       await bounded(completed.promise);
       // Close joins the raw effect after its exact completion signal.
@@ -661,14 +673,21 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         _tag: "InvocationClosed", reason: "settled",
       });
       expect(staleBodyStarts).toBe(0);
-      // Raw completion commits nothing; close only adds its interrupt.
+      expect(innerRows().map((action) => ({ kind: action.kind, effect: action.effect.value }))).toEqual([
+        {
+          kind: "tool",
+          effect: expect.objectContaining({
+            phase: "result",
+            terminal: "outcome_unknown",
+            reason: expect.stringMatching(/^(raw_body_unsettled_after_grace|shutdown_grace_exhausted)$/),
+          }),
+        },
+      ]);
+      // Raw completion commits nothing else; close only adds its interrupt.
       expect(
-        sessionTree(row.id)
+        otherRows()
           .slice(beforeActions)
-          .map((action) => ({
-            kind: action.kind,
-            effect: action.effect.value,
-          })),
+          .map((action) => ({ kind: action.kind, effect: action.effect.value })),
       ).toEqual([
         { kind: "prompt", effect: { inboxKind: "interrupt", content: "" } },
       ]);

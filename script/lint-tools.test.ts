@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
 import {
+  checkEarned,
+  checkToolLint,
   definitionInvariantViolations,
   diffToolSchemaSnapshots,
   lintToolSurface,
   selfTest,
+  type Baseline,
   type LocatedDefinition,
 } from "./lint-tools";
 
@@ -181,6 +185,12 @@ describe("lint-tools definition invariants", () => {
       { check: "tool-schema-snapshot", subject: "catalogDefinitions" },
     ]);
   });
+});
+
+test("the shipped catalog passes tool lint and earned-definition checks in-process", async () => {
+  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  expect(await checkToolLint(baseline)).toEqual([]);
+  expect(await checkEarned()).toEqual([]);
 });
 
 test("the self-test discriminates on its known-bad fixtures in-process", () => {

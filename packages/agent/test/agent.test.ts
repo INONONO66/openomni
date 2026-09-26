@@ -10,7 +10,7 @@ import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import { failureEvidence } from "../src/executor-outcome";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
-import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted } from "../src/errors";
+import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
 import type { LedgerError } from "@openomni/ledger";
 import {
   completeModel,
@@ -39,6 +39,8 @@ test("agent foundation tags and failure evidence are runtime contracts", () => {
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
   expect(failureEvidence(new ForeignFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "ForeignFailure", operation: "x", cause: "bad" });
+  expect(failureEvidence(new InvocationClosed({ tool: "x", reason: "failed" }))).toEqual({ tag: "InvocationClosed", tool: "x", reason: "failed" });
+  expect(failureEvidence(new GenerationUnavailable({ generation: 2 }))).toEqual({ tag: "GenerationUnavailable", generation: 2 });
   expect(failureEvidence(new CommitFailed({ error: {} as LedgerError }))).toMatchObject({ tag: "CommitFailed" });
   expect(failureEvidence(new ExecutionApprovalError({ code: "stale_approval" }))).toEqual({ tag: "ExecutionApprovalError", code: "stale_approval" });
   expect(failureEvidence(new OutcomeUnknown({ reason: "lost" }))).toEqual({ tag: "OutcomeUnknown", reason: "lost" });

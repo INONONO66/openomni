@@ -49,7 +49,7 @@ interface Violation {
   readonly message: string;
 }
 
-interface Baseline {
+export interface Baseline {
   readonly vocab: { readonly unmappedNamespaces: readonly string[] };
   // Absent when no tool needs an exception — an empty exceptions map cannot
   // be written without an added baseline line, so the key simply disappears.
@@ -267,7 +267,7 @@ function collectToolSurfaces(): ToolSurface[] {
   }));
 }
 
-async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
+export async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
   const surfaces = collectToolSurfaces();
   const violations: Violation[] = [];
 
@@ -444,7 +444,7 @@ export function definitionInvariantViolations(
   return violations;
 }
 
-async function checkEarned(): Promise<Violation[]> {
+export async function checkEarned(): Promise<Violation[]> {
   return definitionInvariantViolations(
     definitions,
     await locateExportedDefinitions(definitions),

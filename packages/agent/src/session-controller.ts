@@ -13,6 +13,8 @@ import { inspectSession } from "./session-lifecycle/inspect";
 import { createRawSlots } from "./executor-raw";
 import { commitFoldBatch } from "./session-fold-commit";
 
+const SEAL_RESCAN_BUDGET = 8;
+
 export function createController(
   sessionId: string,
   runner: SessionRunner,
@@ -257,7 +259,9 @@ export function createController(
 
     // The revision is read before the scan so any executor terminal that lands after
     // the read refuses this commit's CAS; the fresh rescan then sees that terminal.
-    function sealUnknown(): Effect.Effect<void, SessionError> {
+    // Each rescan needs a foreign commit under a closed session, so the retry budget
+    // bounds shutdown against a writer that never stops; exhaustion surfaces the refusal.
+    function sealUnknown(rescans = SEAL_RESCAN_BUDGET): Effect.Effect<void, SessionError> {
       return Effect.gen(function* () {
         const current = SessionHandleStore.row(sessionId);
         const openTurns = [...openSessionTurns(sessionId)];
@@ -278,8 +282,8 @@ export function createController(
           sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
           actions: pending, consumeInboxIds: [], state: "interrupted", releaseLease: false,
         }).pipe(Effect.catchIf(
-          (error) => error._tag === "CommitRefused" && error.reason === "revision",
-          () => sealUnknown(),
+          (error) => rescans > 0 && error._tag === "CommitRefused" && error.reason === "revision",
+          () => sealUnknown(rescans - 1),
         ));
         state.terminalFrozen = true;
       });
