@@ -88,6 +88,7 @@ export function makeSessionGenerations(initial: GenerationBundle) {
         const ownership: CapturedGeneration = {
           id: captured.bundle.id,
           snapshot: captured.bundle.snapshot,
+          isSelected: () => captured === current,
           retain: () => captured.owners.open(),
           provide: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.provide(work, context),
         };

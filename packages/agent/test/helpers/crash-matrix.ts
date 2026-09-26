@@ -2,6 +2,7 @@ import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { runAgent, testExecutor } from "./executor";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { foldCrashMain, foldCrashPoint, foldCrashProof } from "./fold-crash";
+import { configureCrashPoint } from "./crash-configure";
 import { reconstructionCut, reconstructionPoint } from "./crash-reconstruction";
 import { turnTestLayer, catalogLayer, runnerTestLayer } from "./service-layers";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
@@ -33,6 +34,7 @@ import { seedPolicy } from "./seed-policy";
 import { CommitFailed, ForeignFailure, type SessionError } from "../../src/errors";
 
 export const crashPoint = z.enum([
+  configureCrashPoint,
   "turn_intent_before_llm_entry",
   "llm_body_before_attempt_result_commit",
   "fiber_exit_after_execute_before_action_commit",

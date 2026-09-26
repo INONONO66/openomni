@@ -6,20 +6,20 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
 import { SessionHandleStore } from "@openomni/ledger";
-import { Bus } from "@openomni/agent";
+import { Bus, currentInvocation, type InvocationFrame } from "@openomni/agent";
 import type { RunInput, Sink } from "@openomni/llm";
 import {
   attachMachineDaemon as attachDaemon,
   createMachineHost as createHost,
   type MachineDaemon,
 } from "@openomni/machines";
-import type { Machine } from "@openomni/protocol";
+import type { Machine, PlainObject } from "@openomni/protocol";
 import type { CatalogOrigin } from "../src/tools/core/catalog";
-import type { CatalogPorts } from "../src/tools/core/catalog";
+import type { ToolPorts } from "../src/tools/core/catalog";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
 import { createCodemode } from "@openomni/codemode";
-import { modelToolOutput } from "./helpers/tool-dispatch";
+import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
@@ -403,7 +403,7 @@ const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
  * executor, with the catalog's ports swapped for fakes — the same seam
  * startOpenOmni wires at boot, exercised without booting the app.
  */
-async function startCellHarness(ports: CatalogPorts) {
+async function startCellHarness(ports: Partial<ToolPorts>) {
   const socketPath = testSocketPath();
   let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
   const host = await createMachineHost({
@@ -417,9 +417,24 @@ async function startCellHarness(ports: CatalogPorts) {
   expect(daemon.attachment.status).toBe("attached");
   cells = acquireSyncEffect(composeCodemode(host));
   suite.defer(() => runEffect(cells.close()));
-  const execute = modelToolOutput("eval", { ...ports, cells: cellPorts(cells) }, CELL_ORIGIN);
+  const states: Machine.CellState[] = [];
+  const portsForCells = cellPorts(cells);
+  const recordState = async (result: Promise<Machine.CellState>): Promise<Machine.CellState> => {
+    const state = await result;
+    states.push(state);
+    return state;
+  };
+  const observedCells: typeof portsForCells = { cell: {
+    run: (...args: Parameters<typeof portsForCells.cell.run>) => recordState(portsForCells.cell.run(...args)),
+    peek: (...args: Parameters<typeof portsForCells.cell.peek>) => recordState(portsForCells.cell.peek(...args)),
+    stop: (...args: Parameters<typeof portsForCells.cell.stop>) => recordState(portsForCells.cell.stop(...args)),
+  } };
+  const executeResult = dispatchModelTool("eval", { ...ports, cells: observedCells }, CELL_ORIGIN);
+  const execute = async (input: PlainObject): Promise<string> => String((await executeResult(input)).output);
   return {
+    states,
     socketPath,
+    executeResult,
     execute,
     run: (code: string, timeout = 15) => execute({ operation: { op: "run", code, timeout } }),
     runWith: (origin: CatalogOrigin, code: string) =>
@@ -456,6 +471,56 @@ async function startHeldCompletionHarness() {
   return { ...harness, entered, release, calls: () => calls };
 }
 
+test("a detached eval cell admits nested calls after run returns and refuses them after stop", async () => {
+  const firstEntered = Promise.withResolvers<void>();
+  const firstReply = Promise.withResolvers<string>();
+  const secondEntered = Promise.withResolvers<InvocationFrame>();
+  const secondReply = Promise.withResolvers<string>();
+  const pendingEntered = Promise.withResolvers<void>();
+  const bounded = <A>(promise: Promise<A>): Promise<A> =>
+    runEffect(Effect.promise(() => promise).pipe(Effect.timeout("5 seconds")));
+  let calls = 0;
+  let nestedBodies = 0;
+  const harness = await startCellHarness({ llm: async () => {
+    calls += 1;
+    if (calls === 1) { firstEntered.resolve(); return firstReply.promise; }
+    secondEntered.resolve(currentInvocation());
+    return secondReply.promise;
+  } });
+  try {
+    expect(await harness.run("0")).toBe("0");
+    const starting = harness.executeResult({ operation: {
+      op: "run", code: "completion('hold')\ncompletion('after-detach')", timeout: 1,
+    } });
+    await bounded(firstEntered.promise);
+    expect(await starting).not.toHaveProperty("isError", true);
+    const state = harness.states.at(-1);
+    expect(state?.status).toBe("running");
+    if (state?.status !== "running") throw new Error("expected detached cell");
+    firstReply.resolve("first");
+    const frame = await bounded(secondEntered.promise);
+    expect(calls).toBe(2);
+    const request = { kind: "tool", op: "cell-lifetime", intent: {}, effect: { category: "query" } };
+    expect(await runEffect(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "after-detach";
+    })))).toEqual({ terminal: "executed", value: "after-detach" });
+    const pending = runEffect(Effect.either(frame.executor.run(request, () =>
+      Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)))));
+    await bounded(pendingEntered.promise);
+    expect(await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } })).not.toHaveProperty("isError", true);
+    expect(await bounded(pending)).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed", reason: "interrupted" } });
+    expect(await runEffect(Effect.either(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "forbidden";
+    }))))).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed" } });
+    expect(nestedBodies).toBe(1);
+  } finally {
+    firstReply.resolve("cleanup");
+    secondReply.resolve("cleanup");
+  }
+}, 15_000);
+
 test("cells from different sessions never share interpreter state", async () => {
   const { runWith } = await startCellHarness({ llm: async () => "ok" });
   const sessionA: CatalogOrigin = { role: "resident", sessionId: "session-a" };
@@ -476,52 +541,55 @@ test("cells from different sessions never share interpreter state", async () => 
  * The wait window is the behavior under test here: a held cell cannot settle,
  * so the one-second `timeout` is exactly what makes run answer `running`.
  */
-test("eval run answers running after its wait; peek shows the output so far; stop interrupts once", async () => {
-  const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
+test("eval background run and peek stay running; stop settles the typed cancelled state once", async () => {
+  const { run, executeResult, states, entered, release, calls } = await startHeldCompletionHarness();
   try {
-  const started = await run("print('started')\ncompletion('hold')\nprint('never')", 1);
-  const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
-    started,
-  )?.[1];
-  if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // The callback reaches its release boundary while run still owns the
-  // completion IPC; entered is the exact signal for that boundary.
-  await entered.promise;
-  expect(calls()).toBe(1);
-  expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toBe(
-    `cell ${cellId} is still running; peek or stop it by cell_id\nstarted\n`,
-  );
-  expect(await execute({ operation: { op: "stop", cell_id: cellId } })).toBe(
-    "the cell was stopped\nstarted\n",
-  );
-  // The settled state was handed over by stop; the id is spent and the code never re-runs.
-  expect(await execute({ operation: { op: "peek", cell_id: cellId } })).toContain(
-    "no such cell_id",
-  );
-  release.resolve();
-  expect(await run("6 * 7")).toBe("42");
-  expect(calls()).toBe(1);
+    const starting = executeResult({ operation: {
+      op: "run", code: "print('started')\ncompletion('hold')\nprint('never')", timeout: 1,
+    } });
+    await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
+    expect(await starting).not.toHaveProperty("isError", true);
+    const started = states.at(-1);
+    expect(started?.status).toBe("running");
+    if (started?.status !== "running") return;
+    const cellId = started.cellId;
+    expect(started.output).toEqual({ stdout: "started\n", stderr: "" });
+    expect(calls()).toBe(1);
+    expect(await executeResult({ operation: { op: "peek", cell_id: cellId } })).not.toHaveProperty("isError", true);
+    expect(states.at(-1)).toEqual(started);
+    expect(await executeResult({ operation: { op: "stop", cell_id: cellId } })).not.toHaveProperty("isError", true);
+    expect(states.at(-1)).toEqual({ ...started, status: "cancelled" });
+    expect(await executeResult({ operation: { op: "peek", cell_id: cellId } })).toMatchObject({
+      isError: true, errorKind: "precondition_failed",
+    });
+    release.resolve();
+    expect(await run("6 * 7")).toBe("42");
+    expect(calls()).toBe(1);
   } finally {
     release.resolve();
   }
 }, 40_000);
 
-test("eval peek and stop racing on one cell: exactly one is answered, the other finds the id spent", async () => {
-  const { run, execute, entered, release, calls } = await startHeldCompletionHarness();
+test("eval background peek and stop race spends the cell id and settles cancelled exactly once", async () => {
+  const { executeResult, states, entered, release, calls } = await startHeldCompletionHarness();
   try {
-  const started = await run("completion('hold')", 1);
-  const cellId = /^cell (\S+) is still running; peek or stop it by cell_id$/.exec(started)?.[1];
-  if (cellId === undefined) throw new Error(`expected a running cell, got: ${started}`);
-  // entered fires only after the callback reaches its release boundary.
-  await entered.promise;
-  expect(calls()).toBe(1);
-  const [peeked, stopped] = await Promise.all([
-    execute({ operation: { op: "peek", cell_id: cellId } }),
-    execute({ operation: { op: "stop", cell_id: cellId } }),
-  ]);
-  expect(stopped).toBe("the cell was stopped");
-  expect(peeked).toContain("no such cell_id");
-  release.resolve();
+    const starting = executeResult({ operation: { op: "run", code: "completion('hold')", timeout: 1 } });
+    await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
+    expect(await starting).not.toHaveProperty("isError", true);
+    const started = states.at(-1);
+    expect(started?.status).toBe("running");
+    if (started?.status !== "running") return;
+    expect(calls()).toBe(1);
+    const [peeked, stopped] = await Promise.all([
+      executeResult({ operation: { op: "peek", cell_id: started.cellId } }),
+      executeResult({ operation: { op: "stop", cell_id: started.cellId } }),
+    ]);
+    expect(stopped).not.toHaveProperty("isError", true);
+    expect(peeked).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+    expect(states.filter((state: Machine.CellState) => state.status === "cancelled")).toEqual([
+      { ...started, status: "cancelled" },
+    ]);
+    expect(calls()).toBe(1);
   } finally {
     release.resolve();
   }

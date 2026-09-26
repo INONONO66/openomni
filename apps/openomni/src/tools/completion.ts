@@ -1,3 +1,4 @@
+import { conform, systemText } from "./core/completion-format";
 import { Machine, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import { defineTool, ToolRefused } from "@openomni/agent";
@@ -25,37 +26,10 @@ const Input = Machine.CompletionRequest;
 
 const COMPLETION_TOOL_NAME = "completion";
 
-function schemaInstruction(schema: NonNullable<Machine.CompletionRequest["schema"]>): string {
-  return `Answer with one JSON value that satisfies this JSON Schema, and nothing else:\n${JSON.stringify(schema)}`;
-}
-
-/** Strip a Markdown code fence a model may wrap its JSON in; the content is what gets validated. */
-function unfence(text: string): string {
-  const fenced = /^\s*```[a-zA-Z]*\s*([\s\S]*?)\s*```\s*$/.exec(text);
-  return fenced?.[1] ?? text;
-}
-
-/** The answer as canonical JSON text once it satisfies the schema; otherwise a refusal the cell can catch. */
-function conform(answer: string, schema: NonNullable<Machine.CompletionRequest["schema"]>): string {
-  const validator = z.fromJSONSchema(schema);
-  let checked: ReturnType<typeof validator.safeParse>;
-  try {
-    checked = validator.safeParse(JSON.parse(unfence(answer)));
-  } catch {
-    throw new ToolRefused(COMPLETION_TOOL_NAME, `sub-model answer is not JSON: ${answer}`);
-  }
-  if (!checked.success)
-    throw new ToolRefused(
-      COMPLETION_TOOL_NAME,
-      `sub-model answer does not satisfy the schema: ${checked.error.message}`,
-    );
-  return JSON.stringify(checked.data);
-}
-
 /**
  * Budgets keyed by the cell that spends them. The cell door dispatches with
- * `turnId` = cell id, and one catalog serves every cell of a ports object, so
- * a counter in the tool closure would be one process-wide budget.
+ * `turnId` = cell id, and one catalog serves every cell of a generation, so
+ * a single counter in the tool closure would pool unrelated cells' budgets.
  */
 function executeCompletion(llm: LlmPort | undefined) {
   const spent = new Map<string, number>();
@@ -78,14 +52,6 @@ function executeCompletion(llm: LlmPort | undefined) {
     });
     return input.schema === undefined ? answer : conform(answer, input.schema);
   };
-}
-
-/** The sub-model's system text: the cell's own system text, then the schema instruction when a schema is given. */
-function systemText(input: z.output<typeof Input>): string {
-  const parts: string[] = [];
-  if (input.system !== undefined) parts.push(input.system);
-  if (input.schema !== undefined) parts.push(schemaInstruction(input.schema));
-  return parts.join("\n\n");
 }
 
 /** Cell-only: batching is the cell's `parallel()`, so the input is one prompt. */

@@ -1,11 +1,23 @@
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
+import { Effect, Fiber } from "effect";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTurnDispatcher } from "@openomni/agent";
+import type { AnyToolDefinition, LedgerAction } from "@openomni/protocol";
+import { requestLedger, crashAfterRequestOpen, type RequestLedger } from "../../../packages/agent/test/helpers/effect-g1";
+import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
+import { compiledPolicy } from "../../../packages/agent/test/helpers/compiled-policy";
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { requestDomainRevisions } from "../src/tools/core/request-domain-revisions";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
 import { eraseTool } from "@openomni/agent";
 import type { PlainObject } from "@openomni/protocol";
 import { createProvisionTool, PROVISION_POLICY_ROWS } from "../src/tools/provision";
-import { createTools } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
+import { testToolPorts } from "./helpers/tool-ports";
 import { executor } from "./helpers/executor";
 import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { provisionPort } from "./helpers/provision-port";
@@ -63,8 +75,9 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
     ).toBe("invalid_input");
   }
   expect(
-    createTools({ provisioning: provisionPort() }, { role: "worker", sessionId: "worker" }).some(
-      (tool) => tool.name === "provision",
+    catalogDefinitions({ ...testToolPorts, provisioning: provisionPort() }).some(
+      (tool: AnyToolDefinition) => tool.name === "provision" &&
+        (tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")),
     ),
   ).toBe(false);
   expect(malloryStanding()).toBe("provisional");
@@ -182,3 +195,98 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
     await Promise.all(pending.map((f) => f.close()));
   }
 });
+
+function restartDispatcher(recording: RequestLedger, ready?: () => void) {
+  return Effect.gen(function* () {
+    const dispatcher: Effect.Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher({
+      ...recording.identity, actionId: recording.identity.parentActionId,
+      ledger: {
+        ...recording.ledger,
+        requestById: (id: string) => {
+          if ((dispatcher.executor.approvals?.pending().length ?? 0) > 0) ready?.();
+          return recording.ledger.requestById?.(id);
+        },
+      },
+    }, {
+      authorizeApproval: () => Effect.succeed({ kind: "owner" as const, principalId: "owner", evidenceId: "authenticated" }),
+    }).pipe(
+      Effect.provide(catalogLayer([provision()])),
+      Effect.provide(executorLayer({
+        clock: recording.clock, entropy: recording.entropy, observations: { publish: () => undefined },
+        policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row: (typeof PROVISION_POLICY_ROWS)[number]) => ({ ...row, generation: 1 }))),
+      })),
+    );
+    return dispatcher;
+  });
+}
+
+for (const operation of [PROMOTE, MERGE]) {
+  for (const decision of ["approve", "refuse"] as const) {
+    it(`${operation.op} preserves Owner Wait across SQLite reopen and ${decision} settles exactly once`, async () => {
+      const directory = mkdtempSync(join(tmpdir(), "provision-restart-"));
+      const dbPath = join(directory, "ledger.sqlite");
+      Storage.reset();
+      Storage.initialize({ dbPath });
+      ActorRegistry.mintProvisional(
+        { id: "contact:mallory", kind: "unknown", trustTier: "observer", standing: "provisional" },
+        { id: "ep:mallory", channel: "whatsapp", externalId: "mallory" },
+      );
+      ActorRegistry.registerIdentity({ id: "actor:alice", kind: "human", trustTier: "collaborator" });
+      try {
+        await runEffect(Effect.scoped(Effect.gen(function* () {
+          const initial = yield* requestLedger({ domainRevisions: requestDomainRevisions });
+          const crashed = yield* restartDispatcher(crashAfterRequestOpen(initial, "provision.crash"));
+          const call = { id: "original", tool: "provision", input: { operation } };
+          expect(yield* Effect.either(crashed.executeWave([call], {
+            sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
+          }))).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "provision.crash" } });
+          const original = SessionHandleStore.requestRows()[0];
+          if (original === undefined) throw new Error("missing Owner request");
+          expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,
+            expectedResponders: ["owner"], parsedInput: call.input });
+          expect(malloryStanding()).toBe("provisional");
+          expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+          const firstStore = Storage.get();
+          Storage.reset();
+          Storage.initialize({ dbPath });
+          expect(Storage.get()).not.toBe(firstStore);
+          expect(SessionHandleStore.requestById(original.requestId)).toEqual(original);
+          const ready = Promise.withResolvers<void>();
+          const recovered = yield* restartDispatcher(yield* requestLedger({ domainRevisions: requestDomainRevisions }), ready.resolve);
+          const recovery = recovered.executor.recover;
+          if (recovery === undefined) throw new Error("missing recovery");
+          const running = yield* Effect.forkScoped(recovery());
+          yield* Effect.promise(() => bounded(ready.promise));
+          const approvals = recovered.executor.approvals;
+          const pending = approvals?.pending()[0];
+          if (approvals === undefined || pending === undefined) throw new Error("missing recovered approval");
+          expect(pending.durable).toEqual(original);
+          yield* approvals.answer({ request: pending, decision, credential: "owner" });
+          yield* Fiber.join(running);
+          expect(yield* Effect.either(approvals.answer({ request: pending, decision, credential: "owner" })))
+            .toMatchObject({ _tag: "Left", left: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
+          expect(SessionHandleStore.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
+          const settled = sessionTree(initial.identity.sessionId);
+          expect(settled.filter((action: LedgerAction.Node) => action.id === `${original.requestId}:application`))
+            .toHaveLength(decision === "approve" ? 1 : 0);
+          const result = settled.find((action: LedgerAction.Node) => {
+            const value = action.effect.value;
+            return action.kind === "tool" && value !== null && typeof value === "object" && !Array.isArray(value)
+              && value.phase === "result" && value.callId === call.id;
+          });
+          expect(result?.effect.value).toMatchObject(decision === "approve"
+            ? { terminal: "executed", toolResult: { toolCallId: call.id } }
+            : { terminal: "blocked_pre", toolResult: { toolCallId: call.id, isError: true } });
+          expect(malloryStanding()).toBe(decision === "approve" && operation.op === "contact_promote" ? "registered" : "provisional");
+          expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId)
+            .toBe(decision === "approve" && operation.op === "contact_merge" ? "actor:alice" : "contact:mallory");
+          yield* recovery();
+          expect(sessionTree(initial.identity.sessionId)).toEqual(settled);
+        })).pipe(Effect.provide(runnerTestLayer)));
+      } finally {
+        Storage.reset();
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  }
+}

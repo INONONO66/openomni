@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalDigest, type PlainValue, RowVerdict, PolicyRow } from "@openomni/protocol";
+import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
 import {
   compilePolicySnapshot,
   createNamedPolicyRegistry,
@@ -9,7 +9,7 @@ import {
   PolicyCompileError,
   SEEDED_POLICY_ROWS,
 } from "../src/index";
-import { atGeneration, compaction, draft, MemoryPolicyRows } from "./row-fixtures";
+import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input = {
   kind: "tool",
@@ -19,8 +19,8 @@ const input = {
 } as const;
 
 describe("immutable named policy registry", () => {
-  test("copy-on-write append emits refs while retaining historical generation bytes", async () => {
-    const source = new MemoryPolicyRows([
+  test("transactional derivation emits refs while retaining historical generation bytes", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    source.appendGeneration(() => [
       atGeneration(compaction, 1),
       atGeneration(
         draft("redact", "tool", "pre", { type: "transform", name: "redact", paths: ["secret"] }),
@@ -30,9 +30,11 @@ describe("immutable named policy registry", () => {
     const bytes = JSON.stringify(source.rows(1));
     const compiler = createPolicyCompiler({ source, registry: KERNEL_POLICY_REGISTRY });
     const before = compiler.pin(1);
-    const generation = await compiler.append([]);
+    const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) => current.map((row: PolicyRow.Row) => ({
+      ...row, verdict: { ...row.verdict, value: RowVerdictRead.parse(row.verdict.value) },
+    })));
     expect(generation).toBe(2);
-    expect(source.rows(2).find((row) => row.name === "redact")?.verdict.value).toEqual({
+    expect(source.rows(2).find((row: PolicyRow.Row) => row.name === "redact")?.verdict.value).toEqual({
       type: "transform",
       ref: "kernel/redact",
       config: { paths: ["secret"] },
@@ -40,12 +42,12 @@ describe("immutable named policy registry", () => {
     expect(JSON.stringify(source.rows(1))).toBe(bytes);
     expect(compiler.pin(2).evaluate(input).value).toEqual(before.evaluate(input).value);
     expect(compiler.pin(2).contentHash).not.toBe(before.contentHash);
-  });
+  }));
 
   test.each([
     "transform",
     "obligation",
-  ] as const)("missing %s refs fail typed before execution", (type) => {
+  ] as const)("missing %s refs fail typed before execution", (type: "transform" | "obligation") => {
     const verdict: PlainValue =
       type === "transform"
         ? { type, ref: "demo/missing" }
@@ -64,7 +66,7 @@ describe("immutable named policy registry", () => {
       expect(error).toBeInstanceOf(PolicyCompileError);
       if (!(error instanceof PolicyCompileError)) throw error;
       expect(error.data).toMatchObject({
-        code: type === "transform" ? "unknown_transformer" : "unknown_obligation",
+        code: "unknown_ref",
         generation: 7,
         ruleName: "missing",
         ref: "demo/missing",
@@ -134,8 +136,8 @@ describe("immutable named policy registry", () => {
       rows,
     });
     const identity = rows
-      .map(({ generation: _generation, ...row }) => row)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map(({ generation: _generation, ...row }: PolicyRow.Row) => row)
+      .sort((a: PolicyRowDraft, b: PolicyRowDraft) => a.name.localeCompare(b.name));
     expect(snapshot.contentHash).toBe(canonicalDigest(identity));
     expect(snapshot.evaluate(input)).toMatchObject({
       ref: "kernel/redact",
@@ -179,7 +181,7 @@ describe("immutable named policy registry", () => {
       transformers: [
         {
           name: "demo/observe",
-          apply: (args, config) => {
+          apply: (args: PlainValue, config: PlainValue) => {
             frozen.push(Object.isFrozen(config));
             if (config !== null && typeof config === "object" && !Array.isArray(config))
               frozen.push(Object.isFrozen(config.nested));
@@ -208,7 +210,7 @@ describe("immutable named policy registry", () => {
   });
 
   test("historical seeded budgets reopen with identical named obligations", () => {
-    const historical = SEEDED_POLICY_ROWS.map((row) => {
+    const historical = SEEDED_POLICY_ROWS.map((row: PolicyRowDraft) => {
       const verdict = RowVerdict.parse(row.verdict.value);
       if (verdict.type !== "obligation") return atGeneration(row, 1);
       return atGeneration(

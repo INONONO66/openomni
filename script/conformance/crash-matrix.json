@@ -2,6 +2,11 @@
   "version": 2,
   "rows": [
     {
+      "crashPoint": "session_configure_commit_before_hibernate",
+      "recovery": "resumed_without_reexecution",
+      "note": "G1: SIGKILL after session.configure commits and selects generation two, before hibernate. A fresh process reopens the committed generation, dispatches a probe turn under its captured snapshot, and an idle wake neither reconfigures nor reruns the turn. This proves process-crash recovery, not power-loss durability."
+    },
+    {
       "crashPoint": "turn_intent_before_llm_entry",
       "recovery": "resumed_without_reexecution",
       "note": "The original open turn resumes after lease expiry; the first model body has not run."

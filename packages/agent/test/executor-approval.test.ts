@@ -1,7 +1,7 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
-import { executorLayer } from "./helpers/service-layers";
+import { executorLayer, catalogLayer } from "./helpers/service-layers";
 import { expect, it } from "bun:test";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
@@ -11,6 +11,8 @@ import { createExecutor, } from "../src/executor";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { isolated } from "./helpers/isolated";
+import { z } from "zod";
+import { createDispatcher, defineTool } from "../src/tool-dispatcher";
 import { bounded } from "./helpers/bounded";
 
 const policy = compiledPolicy([approveWriteRow]);
@@ -251,6 +253,36 @@ it("does not treat an uncommitted notification as approval authority", () => iso
   f.controller.abort();
   yield* Fiber.join(f.running);
   expect(f.bodies).toEqual([]);
+}))));
+
+it("the captured table retains approval binding through catalog copying and later metadata changes", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const opened = Promise.withResolvers<SessionTransition.Request>();
+  const recording = yield* requestLedger({
+    onRequest: (request: SessionTransition.Request) => { if (request.state === "open") opened.resolve(request); },
+    domainRevisions: () => ({ domain: 7 }),
+  });
+  const executor = testExecutor({ ...recording, policy, authorizeApproval: () => Effect.succeed(evidence), observations: { publish: () => undefined } });
+  let bodies = 0;
+  const Input = z.object({ path: z.string() });
+  const copied = { ...defineTool({
+    name: "write", description: "write", category: "mutation", input: Input, output: z.string(),
+    visibility: { model: ["resident"], cell: [] },
+    execute: async () => { bodies += 1; return "done"; },
+    render: (_input: z.infer<typeof Input>, output: string) => output,
+  }, (_input: z.infer<typeof Input>) => ({ required: true, domainRevisions: { domain: 7 } })) };
+  const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([copied])));
+  // The table must own this binding, not re-read mutable metadata or object identity.
+  copied.approval = () => ({ required: false, domainRevisions: { domain: 99 } });
+  const running = yield* Effect.forkScoped(dispatcher.execute({ id: "copied-call", tool: "write", input: request.intent },
+    { sessionId: recording.identity.sessionId, turnId: recording.identity.turnId }));
+  const durable = yield* Effect.promise(() => bounded(opened.promise, "copied binding approval"));
+  expect(durable).toMatchObject({ parsedInput: request.intent, domainRevisions: { domain: 7 } });
+  expect(bodies).toBe(0);
+  const pending = executor.approvals?.pending()[0];
+  if (pending === undefined || executor.approvals === undefined) return yield* Effect.die("missing copied approval");
+  yield* executor.approvals.answer({ request: pending, credential: "owner-token", decision: "approve" });
+  expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "copied-call", output: "done" });
+  expect(bodies).toBe(1);
 }))));
 
 it("propagates a failed deadline commit without settling the live suspension", () => isolated(Effect.scoped(Effect.gen(function* () {

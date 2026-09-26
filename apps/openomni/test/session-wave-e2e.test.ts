@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import {
   Bus,
   currentExecutor,
+  InvocationClosed,
   type ExecutionApprovalRequest,
   type SessionHandle,
 } from "@openomni/agent";
@@ -534,7 +535,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
     const completed = Promise.withResolvers<void>();
     const outerDone = Promise.withResolvers<void>();
     const parentSettled = Promise.withResolvers<void>();
-    const wrapperSettled = Promise.withResolvers<string>();
+    const wrapperSettled = Promise.withResolvers<string | InvocationClosed>();
     const directory = suite.tempDir("openomni-937-nested-effect-");
     const marker = join(directory, "effect.bin");
     const bytes = new Uint8Array([9, 3, 7]);
@@ -548,7 +549,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
     const request = { kind: "tool", op: "nested-effect", intent: {}, effect: {} };
     let signal = new AbortController().signal;
     let sessionId = "";
-    const invoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string> => {
+    const invoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string | InvocationClosed> => {
       try {
         switch (door) {
           case "captured-cell":
@@ -565,6 +566,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
           }
         }
       } catch (error) {
+        if (error instanceof InvocationClosed) return error;
         if (!(error instanceof Error)) throw error;
         return error.name;
       }
@@ -611,7 +613,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         await bounded(interrupted);
       }
       await bounded(parentSettled.promise);
-      expect(await bounded(wrapperSettled.promise)).toBe("CommitFailed");
+      expect(await bounded(wrapperSettled.promise)).toMatchObject({ _tag: "InvocationClosed", reason: "settled" });
       expect(existsSync(marker)).toBe(false);
       expect(signal.aborted).toBe(true);
       expect(
@@ -631,7 +633,18 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         left: { _tag: "LeaseRefused", reason: "held" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
-      const beforeActions = sessionTree(row.id).length;
+      // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
+      // point after the wrapper settles: the executor's grace row when it wins the close race,
+      // close's seal otherwise. Every other count below excludes that one row.
+      const innerIntent = sessionTree(row.id).find(
+        (action) =>
+          action.kind === "tool" &&
+          z.object({ phase: z.literal("intent"), callId: z.literal("inner-call") }).safeParse(action.intent.value).success,
+      );
+      if (innerIntent === undefined) throw new Error("missing inner intent row");
+      const innerRows = () => sessionTree(row.id).filter((action) => action.parentId === innerIntent.id);
+      const otherRows = () => sessionTree(row.id).filter((action) => action.parentId !== innerIntent.id);
+      const beforeActions = otherRows().length;
       let staleBodyStarts = 0;
       const stale = () =>
         executor.run(request, () =>
@@ -641,11 +654,10 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
           }),
         );
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-        _tag: "CommitFailed",
-        error: { _tag: "CommitRefused", reason: "fence" },
+        _tag: "InvocationClosed", reason: "settled",
       });
       expect(staleBodyStarts).toBe(0);
-      expect(sessionTree(row.id)).toHaveLength(beforeActions);
+      expect(otherRows()).toHaveLength(beforeActions);
       gate.resolve();
       await bounded(completed.promise);
       // Close joins the raw effect after its exact completion signal.
@@ -657,29 +669,26 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       if (Either.isRight(next)) competitorFence = next.right.fence;
       expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-        _tag: "CommitFailed",
-        error: { _tag: "CommitRefused", reason: "fence" },
+        _tag: "InvocationClosed", reason: "settled",
       });
       expect(staleBodyStarts).toBe(0);
-      // Close records its interrupt and seals the captured intent whose late result
-      // was refused by the already-sealed turn; raw completion itself commits nothing.
-      expect(
-        sessionTree(row.id)
-          .slice(beforeActions)
-          .map((action) => ({
-            kind: action.kind,
-            effect: action.effect.value,
-          })),
-      ).toEqual([
-        { kind: "prompt", effect: { inboxKind: "interrupt", content: "" } },
+      expect(innerRows().map((action) => ({ kind: action.kind, effect: action.effect.value }))).toEqual([
         {
           kind: "tool",
-          effect: {
+          effect: expect.objectContaining({
             phase: "result",
             terminal: "outcome_unknown",
-            reason: "shutdown_grace_exhausted",
-          },
+            reason: expect.stringMatching(/^(raw_body_unsettled_after_grace|shutdown_grace_exhausted)$/),
+          }),
         },
+      ]);
+      // Raw completion commits nothing else; close only adds its interrupt.
+      expect(
+        otherRows()
+          .slice(beforeActions)
+          .map((action) => ({ kind: action.kind, effect: action.effect.value })),
+      ).toEqual([
+        { kind: "prompt", effect: { inboxKind: "interrupt", content: "" } },
       ]);
       expect(received).toHaveLength(2);
     } finally {
@@ -804,9 +813,10 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
             }),
           );
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "CommitRefused", reason: "fence" },
+          _tag: "InvocationClosed", reason: "settled",
         });
+        expect(staleStarts).toBe(0);
+        expect(sessionTree(sessionId)).toHaveLength(beforeActions);
         rawGate.resolve();
         await bounded(rawDone.promise);
         await bounded(runEffect(handle?.close() ?? Effect.void));
@@ -817,8 +827,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         if (Either.isRight(next)) competitorFence = next.right.fence;
         expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "CommitRefused", reason: "fence" },
+          _tag: "InvocationClosed", reason: "settled",
         });
         expect(staleStarts).toBe(0);
         expect(

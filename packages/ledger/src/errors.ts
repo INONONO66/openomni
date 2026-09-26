@@ -38,6 +38,18 @@ export class AlarmRefused extends Data.TaggedError("AlarmRefused")<{
   readonly reason: "missing" | "session" | "state" | "fence" | "occurrence" | "append" | "prompt";
 }> {}
 
+export class PolicyGenerationRefused extends Data.TaggedError("PolicyGenerationRefused")<{
+  readonly generation: number;
+  readonly reason: "empty" | "conflict";
+  readonly ruleName?: string;
+}> {
+  override get message(): string {
+    return this.reason === "empty"
+      ? "policy generation must not be empty"
+      : `could not append policy row: ${this.ruleName}`;
+  }
+}
+
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
   readonly capability: "storage" | "sessions" | "actions" | "inbox" | "alarms" | "policies";
 }> {}
@@ -59,6 +71,7 @@ export type LedgerError =
   | CommitRefused
   | InboxCommitRefused
   | AlarmRefused
+  | PolicyGenerationRefused
   | StorageUnavailable
   | CorruptRecord
   | ForeignFailure;

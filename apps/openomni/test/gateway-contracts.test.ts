@@ -226,8 +226,7 @@ describe("authenticated gateway ingress", () => {
     expect(calls[0]?.tools).toHaveLength(0);
     expect(calls[0]?.toolChoice).toBe("none");
     const text = SessionHandleStore.inboxRows("session:evidence")[0]?.content;
-    expect(text).toContain("EVIDENCE_SENTINEL");
-    expect(text).not.toBe("EVIDENCE_SENTINEL");
+    expect(text).toBe("EVIDENCE_SENTINEL");
   });
   test("a normal prompt restores tool driving after an evidence-only turn", async () => {
     const outputs: string[] = [];

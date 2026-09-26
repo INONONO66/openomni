@@ -9,6 +9,7 @@ import { Context, type Effect, type Scope } from "effect";
 import type { SessionError } from "./errors";
 import type { NamedPolicyRegistry } from "./bundle";
 import type { GenerationRawSlots } from "./session-generations";
+import type { ToolDispatchDefinition } from "./tool-dispatcher";
 
 export type ProcessServices = Clock | Entropy | ObservationSink;
 export type GenerationServices = SessionLayer | ToolCatalog | ObservationSink | NamedPolicyRegistry;
@@ -19,6 +20,7 @@ export interface CapturedGeneration {
   readonly id: SessionGeneration.Id;
   readonly snapshot: SessionGeneration.Snapshot;
   provide<A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, GenerationServices | GenerationRawSlots | GenerationOwnership>>;
+  isSelected(): boolean;
   retain(): () => void;
 }
 
@@ -55,5 +57,5 @@ export class SessionLayer extends Context.Tag("@openomni/agent/SessionLayer")<
 
 export class ToolCatalog extends Context.Tag("@openomni/agent/ToolCatalog")<
   ToolCatalog,
-  { readonly definitions: readonly AnyToolDefinition[] }
+  { readonly definitions: readonly ToolDispatchDefinition[] }
 >() {}

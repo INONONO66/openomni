@@ -1,9 +1,9 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
-import { PlainObjectSchema, type LedgerAction } from "@openomni/protocol";
+import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { PlainObjectSchema, type LedgerAction, type LedgerSession } from "@openomni/protocol";
 import { session, type SessionRunnerInput } from "../src/session-handle";
 import { isolated } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
@@ -127,3 +127,59 @@ for (const count of [1, 257]) {
     expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
   }))));
 }
+
+test("zero-grace shutdown rescans when an executor terminal lands after its seal scan", () => isolated(Effect.scoped(Effect.gen(function* () {
+  seedPolicy();
+  const entered = yield* Deferred.make<SessionRunnerInput>();
+  const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 };
+  const handle = yield* withSessionServices(session({
+    id: "shutdown-race", role: "resident",
+    runner: (input: SessionRunnerInput) => Effect.gen(function* () {
+      yield* input.ledger.commit({
+        id: "racing-tool", sessionId: input.sessionId, parentId: input.turnId, kind: "tool",
+        intent: { encodingVersion: 1, value: { phase: "intent", turnId: input.turnId } },
+        effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: 100, irreversible: true,
+      }).pipe(Effect.orDie);
+      yield* Deferred.succeed(entered, input);
+      return yield* Effect.never;
+    }),
+  }, fixture), fixture);
+  const running = yield* Effect.fork(handle.prompt("start"));
+  const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
+  const sessions = Storage.get().sessions;
+  if (sessions === undefined) throw new Error("missing session adapter");
+  const commit = sessions.commit;
+  const terminalReason = (action: LedgerAction.Append) =>
+    action.parentId === "racing-tool" && action.kind === "tool" ? PlainObjectSchema.parse(action.effect.value).reason : undefined;
+  let sealAttempts = 0;
+  const executorTerminal: LedgerAction.Append = {
+    id: "racing-tool:result", sessionId: handle.id, parentId: "racing-tool", kind: "tool",
+    intent: { encodingVersion: 1, value: { phase: "result" } },
+    effect: { encodingVersion: 1, value: { phase: "result", terminal: "outcome_unknown", reason: "raw_body_unsettled_after_grace" } },
+    ts: 100, irreversible: true,
+  };
+  // The executor's own grace terminal for the pending tool lands between the seal's scan and its CAS commit.
+  const race = spyOn(sessions, "commit").mockImplementation((batch: LedgerSession.Commit) => {
+    if (!batch.actions.map(terminalReason).includes("shutdown_grace_exhausted")) return commit(batch);
+    sealAttempts += 1;
+    const current = SessionHandleStore.row(handle.id);
+    return commit({
+      sessionId: handle.id, owner: batch.owner, fence: batch.fence, now: batch.now, expectedRevision: current.revision,
+      actions: [executorTerminal], consumeInboxIds: [], state: current.state, releaseLease: false,
+    }).pipe(Effect.andThen(commit(batch)));
+  });
+  try {
+    yield* handle.close().pipe(Effect.timeout("5 seconds"));
+  } finally {
+    race.mockRestore();
+  }
+  yield* Fiber.join(running);
+  expect(sealAttempts).toBe(1);
+  const toolRows = sessionTree(handle.id).filter((action) => action.kind === "tool" && action.parentId === "racing-tool");
+  expect(toolRows.map(terminalReason)).toEqual(["raw_body_unsettled_after_grace"]);
+  expect(SessionHandleStore.turnTerminalFor(handle.id, input.turnId)?.kind).toBe("interrupted");
+  expect(SessionHandleStore.openTurnsPage(handle.id)).toEqual([]);
+  expect(SessionHandleStore.openOperationsPage(handle.id, input.turnId)).toEqual([]);
+  expect(sessionTree(handle.id).filter((action) => action.kind === "prompt").map((action) => PlainObjectSchema.parse(action.effect.value).inboxKind)).toEqual(["prompt", "interrupt"]);
+  expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+}))));

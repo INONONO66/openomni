@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
 import { Storage, SessionHandleStore } from "@openomni/ledger";
@@ -122,7 +123,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     closeGraceMs: 0,
     onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };
-  const resident = createResident({ model: { provider: "test", id: "test" }, apiKey: "test", tools: {}, toolDefinitions: [tool], sessionRuntime });
+  const resident = createResident({ model: { provider: "test", id: "test" }, apiKey: "test", tools: { ...testToolPorts,}, toolDefinitions: [tool], sessionRuntime });
   await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.initialize(resident.definitions)));
   const handle = await acquireAppResource(runtime, session({
     id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],

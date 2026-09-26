@@ -3,7 +3,7 @@ import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { NamedPolicyRegistry } from "../../src/bundle";
-import { AgentGenerationLive } from "../../src/layers";
+import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/session-generations";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, FoldCheckpoint, Message, PlainObjectSchema, PlainValueSchema, type LedgerAction } from "@openomni/protocol";

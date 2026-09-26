@@ -5,7 +5,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { AgentStopError, ContextAdmissionError } from "../src/errors";
 import { failureEvidence } from "../src/executor-outcome";
 import { createRetryAlarmPort } from "../src/executor-retry-alarm";
-import { AgentGenerationLive } from "../src/layers";
+import { AgentGenerationLive } from "./helpers/generation-layer";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { allowAllPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";

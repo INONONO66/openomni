@@ -34,10 +34,10 @@ import {
 } from "./executor";
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
-const approvalBindings = new WeakMap<
-  AnyToolDefinition,
-  (input: PlainValue) => NonNullable<ExecutionRequest["approval"]>
->();
+/** Executable catalog data copied into each captured generation's dispatch table. */
+export type ToolDispatchDefinition<In extends z.ZodType = z.ZodType, Out extends z.ZodType = z.ZodType> = ToolDefinition<In, Out> & {
+  readonly approval?: (input: PlainValue) => NonNullable<ExecutionRequest["approval"]>;
+};
 
 export class ToolRefused extends Error {
   readonly errorKind = "precondition_failed";
@@ -93,15 +93,18 @@ export interface Dispatcher {
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
   approval?: (input: z.output<In>) => NonNullable<ExecutionRequest["approval"]>,
-): ToolDefinition<In, Out> {
+): ToolDispatchDefinition<In, Out> {
   if (definition.name.trim() === "") throw new Error("tool name must not be empty");
   if (definition.description.trim() === "") throw new Error("tool description must not be empty");
   if (toolInputSchema(definition).type !== "object") {
     throw new Error(`${definition.name} input schema root must be an object`);
   }
-  if (approval !== undefined)
-    approvalBindings.set(definition, (input) => approval(definition.input.parse(input)));
-  return definition;
+  return {
+    ...definition,
+    ...(approval === undefined ? {} : {
+      approval: (input: PlainValue) => approval(definition.input.parse(input)),
+    }),
+  };
 }
 
 export function eraseTool<In extends z.ZodType, Out extends z.ZodType>(
@@ -209,7 +212,7 @@ export function createDispatcher(
   });
 }
 
-function buildDispatcher(definitions: readonly AnyToolDefinition[], options?: DispatcherOptions, invocation?: () => InvocationFrame): Dispatcher {
+function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options?: DispatcherOptions, invocation?: () => InvocationFrame): Dispatcher {
   /**
    * The cell door builds its dispatcher at tool-definition time, well ahead of every
    * execution context exists, so the ambient executor is resolved per dispatch:
@@ -221,7 +224,10 @@ function buildDispatcher(definitions: readonly AnyToolDefinition[], options?: Di
    */
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeInvocation.getStore()?.executor;
-  const known = new Map(definitions.map((definition) => [definition.name, definition]));
+  const toolsGeneration = new Map(definitions.map((definition) => [
+    definition.name,
+    Object.freeze({ definition, approval: definition.approval }),
+  ]));
   type Prepared =
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
     | {
@@ -241,13 +247,14 @@ function buildDispatcher(definitions: readonly AnyToolDefinition[], options?: Di
     originalAction?: LedgerAction.Node,
   ): Prepared {
     const context = executionContext(call, providedContext);
-    const definition = known.get(call.tool);
-    if (definition === undefined) {
+    const entry = toolsGeneration.get(call.tool);
+    if (entry === undefined) {
       return {
         kind: "refused",
         result: failed(call, `unregistered tool: ${call.tool}`, "unregistered_tool"),
       };
     }
+    const { definition, approval: binding } = entry;
     const parsedInput = definition.input.safeParse(call.input);
     if (!parsedInput.success) {
       const reason = invalidInputReason(parsedInput.error);
@@ -262,7 +269,6 @@ function buildDispatcher(definitions: readonly AnyToolDefinition[], options?: Di
       throw new ExecutorContextError();
     }
     const parsedValue = PlainValueSchema.parse(parsedInput.data);
-    const binding = approvalBindings.get(definition);
     const approval = approvalFromOriginal(originalAction?.intent.value, binding?.(parsedValue));
     const request: ExecutionRequest = {
       kind: "tool",

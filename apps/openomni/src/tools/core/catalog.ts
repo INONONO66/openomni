@@ -1,5 +1,5 @@
-import { eraseTool, toolSpec } from "@openomni/agent";
-import type { AnyToolDefinition, LedgerSession, Tool } from "@openomni/protocol";
+import { eraseTool } from "@openomni/agent";
+import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import type { FilePorts } from "./filesystem";
 import { createBashTool } from "../bash";
 import { createCompletionTool, type LlmPort } from "../completion";
@@ -8,8 +8,10 @@ import { createEvalTool, type Cell } from "../eval";
 import { createFindTool } from "../find";
 import { createGrepTool } from "../grep";
 import { createLsTool } from "../ls";
-import { createMonitorTool, type MonitorPorts } from "../monitor";
-import { createProvisionTool, type ProvisionPort } from "../provision";
+import { createMonitorTool } from "../monitor";
+import type { MonitorPorts } from "./monitor-ports";
+import { createProvisionTool } from "../provision";
+import type { ProvisionPort } from "../../provisioning/channels";
 import { createReadTool } from "../read";
 import { createSendMessageTool, type MessagePort } from "../send-message";
 import { createWriteTool } from "../write";
@@ -19,30 +21,20 @@ export interface CatalogOrigin {
   readonly sessionId: string;
 }
 
-export interface CatalogPorts {
-  readonly alarms?: MonitorPorts;
-  readonly messages?: MessagePort;
-  readonly machines?: FilePorts["machines"];
-  readonly cells?: { readonly cell: Cell };
-  readonly llm?: LlmPort;
-  readonly provisioning?: ProvisionPort;
-  /** The session runtime clock; deadlines are computed against it, never wall time. */
-  readonly clock?: () => number;
+/** Every dependency is declared; unavailable capabilities are explicitly undefined. */
+export interface ToolPorts {
+  readonly alarms: MonitorPorts | undefined;
+  readonly messages: MessagePort | undefined;
+  readonly machines: FilePorts["machines"];
+  readonly cells: { readonly cell: Cell } | undefined;
+  readonly llm: LlmPort | undefined;
+  readonly provisioning: ProvisionPort | undefined;
+  readonly clock: () => number;
 }
 
-const catalogs = new WeakMap<
-  CatalogPorts,
-  Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>
->();
-
-/** Immutable ports own one catalog; session composition owns cell binding. */
-export function createTools(
-  ports: CatalogPorts,
-  origin: CatalogOrigin,
-): readonly AnyToolDefinition[] {
-  const cached = catalogs.get(ports);
-  if (cached !== undefined) return cached[origin.role];
-  const tools: AnyToolDefinition[] = [
+/** Pure construction: generation acquisition, not a process cache, owns identity. */
+export function catalogDefinitions(ports: ToolPorts): readonly AnyToolDefinition[] {
+  return Object.freeze([
     eraseTool(createReadTool(ports)),
     eraseTool(createWriteTool(ports)),
     eraseTool(createEditTool(ports)),
@@ -55,22 +47,5 @@ export function createTools(
     eraseTool(createSendMessageTool(ports.messages, ports.clock)),
     eraseTool(createProvisionTool(ports.provisioning)),
     eraseTool(createCompletionTool(ports.llm)),
-  ];
-  const visible = (role: LedgerSession.Role) =>
-    tools.filter(
-      (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
-    );
-  const catalog = { resident: visible("resident"), worker: visible("worker") };
-  catalogs.set(ports, catalog);
-  return catalog[origin.role];
-}
-
-/** Schema-only exhaustive list used by repository conformance tooling. */
-export const TOOL_DEFINITIONS: readonly AnyToolDefinition[] = createTools(
-  {},
-  { role: "resident", sessionId: "catalog" },
-);
-
-export function collectToolSpecs(): readonly Tool.Spec[] {
-  return TOOL_DEFINITIONS.map(toolSpec);
+  ]);
 }

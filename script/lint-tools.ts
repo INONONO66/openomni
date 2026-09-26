@@ -26,8 +26,17 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { collectToolSpecs, TOOL_DEFINITIONS } from "../apps/openomni/src/tools/core/catalog.js";
+import { join } from "node:path";
+import { toolSpec } from "../packages/agent/src/index.js";
+import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
+
+// Schema inspection never executes ports; absent capabilities are explicit test doubles.
+const schemaPorts: ToolPorts = {
+  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  llm: undefined, provisioning: undefined, clock: () => 0,
+};
+const definitions = catalogDefinitions(schemaPorts);
 
 interface Violation {
   readonly check:
@@ -41,7 +50,7 @@ interface Violation {
   readonly message: string;
 }
 
-interface Baseline {
+export interface Baseline {
   readonly vocab: { readonly unmappedNamespaces: readonly string[] };
   // Absent when no tool needs an exception — an empty exceptions map cannot
   // be written without an added baseline line, so the key simply disappears.
@@ -51,11 +60,15 @@ interface Baseline {
 
 type SchemaSnapshot = Readonly<Record<string, readonly string[]>>;
 
-const BASELINE_PATH = "script/conformance/lint-tools-baseline.json";
-const SNAPSHOT_PATH = "script/conformance/schema-snapshot.json";
-const TOOL_SNAPSHOT_PATH = "script/conformance/tool-schema-snapshot.json";
+// Every path is anchored on the repository root, never on process.cwd(): sibling
+// tests in the same bun shard chdir into fixtures, and the in-process checks
+// must still find the catalog sources and conformance files.
+const ROOT = join(import.meta.dir, "..");
+const BASELINE_PATH = join(ROOT, "script/conformance/lint-tools-baseline.json");
+const SNAPSHOT_PATH = join(ROOT, "script/conformance/schema-snapshot.json");
+const TOOL_SNAPSHOT_PATH = join(ROOT, "script/conformance/tool-schema-snapshot.json");
 const PROTOCOL_SRC = "packages/protocol/src";
-const CORE_MODEL_PATH = "docs/core-model.md";
+const CORE_MODEL_PATH = join(ROOT, "docs/core-model.md");
 const TEST_SUFFIXES = [".test.ts", ".test.tsx", ".bench.ts"];
 
 // ---------------------------------------------------------------------------
@@ -91,7 +104,7 @@ export function unmappedNamespaces(
 async function listProtocolNamespaces(): Promise<string[]> {
   const dirs = new Set<string>();
   const glob = new Bun.Glob(`${PROTOCOL_SRC}/*/index.ts`);
-  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+  for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
     const segments = filePath.split("/");
     const dir = segments[segments.length - 2];
     if (dir) {
@@ -101,7 +114,7 @@ async function listProtocolNamespaces(): Promise<string[]> {
   return Array.from(dirs).sort((a, b) => a.localeCompare(b));
 }
 
-async function checkVocabRatchet(baseline: Baseline): Promise<Violation[]> {
+export async function checkVocabRatchet(baseline: Baseline): Promise<Violation[]> {
   const namespaces = await listProtocolNamespaces();
   const tierNouns = extractTierNouns(readFileSync(CORE_MODEL_PATH, "utf8"));
   const unmapped = unmappedNamespaces(namespaces, tierNouns);
@@ -252,14 +265,14 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 function collectToolSurfaces(): ToolSurface[] {
-  return collectToolSpecs().map((spec) => ({
+  return definitions.map(toolSpec).map((spec) => ({
     name: spec.name,
     description: spec.description,
     inputSchema: spec.inputSchema,
   }));
 }
 
-async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
+export async function checkToolLint(baseline: Baseline): Promise<Violation[]> {
   const surfaces = collectToolSurfaces();
   const violations: Violation[] = [];
 
@@ -290,15 +303,15 @@ export function namingOffenders(filePath: string, source: string): string[] {
   return Array.from(offenders);
 }
 
-async function checkNaming(baseline: Baseline): Promise<Violation[]> {
+export async function checkNaming(baseline: Baseline): Promise<Violation[]> {
   const grandfathered = new Set(baseline.naming.grandfathered);
   const violations: Violation[] = [];
   const glob = new Bun.Glob(`${PROTOCOL_SRC}/**/*.ts`);
-  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+  for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) {
       continue;
     }
-    const source = await Bun.file(filePath).text();
+    const source = await Bun.file(join(ROOT, filePath)).text();
     for (const offender of namingOffenders(filePath, source)) {
       if (!grandfathered.has(offender)) {
         violations.push({
@@ -342,9 +355,9 @@ async function locateExportedDefinitions(
 ): Promise<LocatedDefinition[]> {
   const located = new Map<AnyToolDefinition, string>();
   const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
-  for await (const filePath of glob.scan({ cwd: ".", onlyFiles: true })) {
+  for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
-    const source = await Bun.file(filePath).text();
+    const source = await Bun.file(join(ROOT, filePath)).text();
     const module = (await import(`../${filePath}`)) as Record<string, unknown>;
     for (const value of Object.values(module)) {
       if (looksLikeToolDefinition(value)) located.set(value, filePath);
@@ -381,7 +394,7 @@ export function definitionInvariantViolations(
       violations.push({
         check: "earned-check",
         subject: `${item.filePath}:${item.definition.name}`,
-        message: "exported tool definition is not wired into TOOL_DEFINITIONS",
+        message: "exported tool definition is not wired into catalogDefinitions",
       });
     }
   }
@@ -436,10 +449,10 @@ export function definitionInvariantViolations(
   return violations;
 }
 
-async function checkEarned(): Promise<Violation[]> {
+export async function checkEarned(): Promise<Violation[]> {
   return definitionInvariantViolations(
-    TOOL_DEFINITIONS,
-    await locateExportedDefinitions(TOOL_DEFINITIONS),
+    definitions,
+    await locateExportedDefinitions(definitions),
   );
 }
 
@@ -566,7 +579,7 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
 }
 
 export function buildToolSchemaSnapshot(): readonly unknown[] {
-  return collectToolSpecs();
+  return definitions.map(toolSpec);
 }
 
 export function diffToolSchemaSnapshots(
@@ -587,7 +600,7 @@ export function diffToolSchemaSnapshots(
   return [
     {
       check: "tool-schema-snapshot",
-      subject: "TOOL_DEFINITIONS",
+      subject: "catalogDefinitions",
       message: `derived tool specs differ from the reviewed snapshot (before: ${previousNames.join(", ")}; now: ${currentNames.join(", ")}) — run --update only with review authorization`,
     },
   ];
@@ -613,7 +626,7 @@ const badTool: ToolSurface = {
 };
 
 function definitionSelfTest(failures: string[]): void {
-  const exemplar = TOOL_DEFINITIONS[0];
+  const exemplar = definitions[0];
   if (exemplar === undefined) failures.push("definition invariant self-test has no exemplar");
   if (exemplar === undefined) return;
   const unsafeQuery = {

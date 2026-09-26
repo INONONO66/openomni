@@ -1,4 +1,14 @@
+import { SqliteStorageAdapter } from "../../ledger/src/storage/sqlite-storage";
 import type { PlainValue, PolicyRow, Storage } from "@openomni/protocol";
+
+export function withPolicyRows<A>(run: (source: Storage.PolicyRowSubAdapter) => A): A {
+  const storage = new SqliteStorageAdapter(":memory:");
+  try {
+    return run(storage.policies);
+  } finally {
+    storage.close();
+  }
+}
 
 export type PolicyRowDraft = Omit<PolicyRow.Row, "generation">;
 

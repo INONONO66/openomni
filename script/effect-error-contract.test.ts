@@ -50,6 +50,7 @@ const ledger = {
   CommitRefused: new Ledger.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
   InboxCommitRefused: new Ledger.InboxCommitRefused({ sessionId: "session", inboxId: "inbox", reason: "identity" }),
   AlarmRefused: new Ledger.AlarmRefused({ alarmId: "alarm", operation: "arm", reason: "session" }),
+  PolicyGenerationRefused: new Ledger.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
   StorageUnavailable: new Ledger.StorageUnavailable({ capability: "storage" }),
   CorruptRecord: new Ledger.CorruptRecord({ operation: "decode", id: "record" }),
 } satisfies { [K in Ledger.LedgerError["_tag"]]: Extract<Ledger.LedgerError, { _tag: K }> };
@@ -60,6 +61,7 @@ const agent = {
   ForeignFailure: new Agent.ForeignFailure(diagnostic),
   PolicyDenied: new Agent.PolicyDenied({ phase: "pre", ruleIds: [] }),
   ToolBodyFailed: new Agent.ToolBodyFailed({ tool: "fixture", cause: "foreign" }),
+  InvocationClosed: new Agent.InvocationClosed({ tool: "fixture", reason: "settled" }),
   Interrupted: new Agent.Interrupted(),
   ContextAdmissionError: new Agent.ContextAdmissionError(),
   CommitFailed: new Agent.CommitFailed({ error: ledger.CommitRefused }),
@@ -87,7 +89,6 @@ const channels = {
   SendAdmissionConflict: new Channels.SendAdmissionConflict(message),
   RateLimited: new Channels.RateLimited({ ...message, status: 429, attempts: 1, responseHeaders: {}, responseBody: "" }),
 } satisfies { [K in Channels.ChannelError["_tag"]]: Extract<Channels.ChannelError, { _tag: K }> };
-
 type Failure =
   | Agent.SessionError
   | Channels.ChannelError
@@ -115,7 +116,6 @@ const packages: readonly PackageEntry[] = [
   { name: "llm", module: Llm, union: "LlmError", failures: llm },
   { name: "machines", module: Machines, union: "MachineError", failures: machines },
 ];
-
 for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {
     const constructors: ErrorClass[] = Object.values(entry.module).filter(isErrorClass);

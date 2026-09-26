@@ -1,3 +1,4 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { acquireEffect, runEffect } from "./helpers/effect";
 import { decodeChannelFailure } from "@openomni/channels";
@@ -46,7 +47,7 @@ describe("Resident model fallback wiring", () => {
       model: PRIMARY,
       modelFallbacks: [FALLBACK],
       apiKey: "test-key",
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: transientProvider(resolved, auths),
     });
 
@@ -67,7 +68,7 @@ describe("Resident model fallback wiring", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: transientProvider(resolved),
     });
 
@@ -93,7 +94,7 @@ describe("Resident terminal LLM failure surfacing", () => {
     return createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: alwaysFailing(error),
     });
   }
@@ -206,7 +207,7 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = createResident({
       model: PRIMARY,
       apiKey: "test-key",
-      tools: {},
+      tools: { ...testToolPorts,},
       llm: {
         resolveModel: () => Effect.fail(new ForeignFailure({ operation: "resolveModel", cause: "catalog invariant failed" })),
       },

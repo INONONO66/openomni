@@ -1,15 +1,16 @@
+import { testToolPorts } from "./helpers/tool-ports";
 import { executorLayer, runnerTestLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
-import { createTurnDispatcher, currentExecutor } from "@openomni/agent";
-import { createCodemode } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
+import { createTurnDispatcher, currentInvocation } from "@openomni/agent";
+import { createCodemode, type CodeError } from "@openomni/codemode";
+import { attachMachineDaemon, createMachineHost, ForeignFailure as MachineFailure } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
-import { createTools } from "../src/tools/core/catalog";
+import { catalogDefinitions } from "../src/tools/core/catalog";
 import { cellDaemonOptions } from "./helpers/cell-daemon";
 import { fixtureHashes } from "../../../packages/agent/test/helpers/compiled-policy";
 import { seededPolicy } from "./helpers/executor";
@@ -21,18 +22,18 @@ const suite = residentSuite();
 const ActionPhase = z.object({ op: z.string(), phase: z.string() });
 
 for (const stop of [false, true]) {
-  test(`background completion settles under its captured executor after cell stop=${stop}`, async () => {
+  test(`background completion retains generation until settlement; stop=${stop}`, async () => {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const completed = Promise.withResolvers<
-      { result: Machine.ToolCallResult } | { error: string }
+      { result: Machine.ToolCallResult } | { error: Error }
     >();
     const actions: LedgerAction.Node[] = [];
     let nextId = 0;
     const origin = { role: "resident", sessionId: `completion-${stop}` } as const;
     // Only storage IO is replaced: real policy, record construction and settlement execute.
     const ledger: Parameters<typeof createTurnDispatcher>[0]["ledger"] = {
-        commit(append) {
+        commit(append: LedgerAction.Append) {
           const ordinal = actions.length + 1;
           const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
           actions.push(action);
@@ -43,7 +44,7 @@ for (const stop of [false, true]) {
     let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
       socketPath: path,
-      enrollment: (machineId) => ({
+      enrollment: (machineId: string) => ({
         machineId,
         name: "completion-test",
         allowedCapabilities: ["kernel.py"],
@@ -51,14 +52,11 @@ for (const stop of [false, true]) {
       }),
       events: { publish: () => undefined },
       now: () => 1,
-      callTool: (call) => Effect.promise(async () => {
-        const result = await runEffect(cells.callTool(call)).catch((error: Error) => {
-          completed.resolve({ error: String(error) });
-          throw error;
-        });
-        completed.resolve({ result });
-        return result;
-      }),
+      callTool: (call: Machine.ToolCall) => cells.callTool(call).pipe(
+        Effect.tap((result: Machine.ToolCallResult) => Effect.sync(() => completed.resolve({ result }))),
+        Effect.tapError((error: CodeError) => Effect.sync(() => completed.resolve({ error }))),
+        Effect.mapError((error: CodeError) => new MachineFailure({ operation: "code.tool", cause: String(error) })),
+      ),
     }));
     suite.defer(async () => { await runEffect(host.close()); });
     const daemon = await acquireEffect(attachMachineDaemon({
@@ -70,22 +68,22 @@ for (const stop of [false, true]) {
     cells = acquireSyncEffect(composeCodemode(host));
     suite.defer(async () => { await runEffect(cells.close()); });
     let calls = 0;
-    const definitions = createTools(
-      {
+    const definitions = catalogDefinitions(
+      { ...testToolPorts,
         cells: cellPorts(cells),
         llm: async () => {
-          expect(currentExecutor().run).toBe(dispatcher.executor.run);
+          expect(currentInvocation().policy).toBe(seededPolicy);
           calls += 1;
           entered.resolve();
           await release.promise;
           return "late";
         },
       },
-      origin,
     );
+    const runnerServices = acquireSyncEffect(Layer.build(runnerTestLayer));
     const dispatcher = acquireSyncEffect(createTurnDispatcher({
       sessionId: origin.sessionId, role: origin.role, actionId: "completion-turn", ledger,
-    }, {}).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerTestLayer)));
+    }, {}).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerServices)));
     let nextCall = 0;
     const execute = (operation: PlainObject) =>
       bounded(
@@ -95,7 +93,7 @@ for (const stop of [false, true]) {
         )),
       );
     const toolActions = (op: string, phase: string) =>
-      actions.filter((action) => {
+      actions.filter((action: LedgerAction.Node) => {
         const intent = ActionPhase.safeParse(action.intent.value);
         return (
           action.kind === "tool" &&
@@ -130,11 +128,14 @@ for (const stop of [false, true]) {
         );
         expect((await execute({ op: "peek", cell_id: cellId })).isError).toBe(true);
       }
-      // Before the fix the real completion RPC aborts when the outer eval wave returns.
+      // A detached cell keeps authority; stopping it revokes the pending call.
       release.resolve();
-      expect(await bounded(completed.promise)).toEqual({
-        result: { status: "completed", value: "late" },
-      });
+      const completion = await bounded(completed.promise);
+      if (stop) {
+        expect(completion).toMatchObject({ error: { _tag: "ForeignFailure", operation: "code.tool" } });
+      } else {
+        expect(completion).toEqual({ result: { status: "completed", value: "late" } });
+      }
       // Same-tenant execution is a barrier for the Python result/late-answer handling.
       expect((await execute({ op: "run", code: "6 * 7", timeout: 15 })).output).toBe("42");
       if (stop) {
@@ -153,18 +154,20 @@ for (const stop of [false, true]) {
       expect(results[0]).toMatchObject({
         parentId: intents[0]?.id,
         sessionId: origin.sessionId,
-        effect: { value: { terminal: "executed", result: { status: "success", output: "late" } } },
+        effect: { value: stop
+          ? { terminal: "interrupted", reason: "fiber_interrupted" }
+          : { terminal: "executed", result: { status: "success", output: "late" } } },
       });
       expect(
         actions
           .filter(
-            (action) =>
+            (action: LedgerAction.Node) =>
               action.kind === "policy.decision" &&
               z.object({ op: z.literal("completion") }).safeParse(action.intent.value).success,
           )
-          .map((action) => z.object({ hook: z.string() }).parse(action.intent.value).hook),
-      ).toEqual(["tool.pre", "tool.post"]);
-      expect(actions.every((action) => action.sessionId === origin.sessionId)).toBe(true);
+          .map((action: LedgerAction.Node) => z.object({ hook: z.string() }).parse(action.intent.value).hook),
+      ).toEqual(stop ? ["tool.pre"] : ["tool.pre", "tool.post"]);
+      expect(actions.every((action: LedgerAction.Node) => action.sessionId === origin.sessionId)).toBe(true);
       expect(calls).toBe(1);
     } finally {
       release.resolve();

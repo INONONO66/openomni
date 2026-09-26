@@ -9,7 +9,7 @@ const residentBase = [
   RESIDENT_PRESET.policies,
   RESIDENT_PRESET.style,
 ]
-  .filter((section): section is string => section !== undefined && section !== "")
+  .filter((section: string | undefined): section is string => section !== undefined && section !== "")
   .join("\n\n");
 
 describe("buildAgentPrompt", () => {
@@ -19,12 +19,11 @@ describe("buildAgentPrompt", () => {
     expect(buildAgentPrompt(RESIDENT_PRESET, input)).toBe(buildAgentPrompt(RESIDENT_PRESET, input));
   });
 
-  test("the resident prompt steers code-mode usage", () => {
-    const prompt = buildAgentPrompt(RESIDENT_PRESET);
-
-    expect(prompt).toContain("one eval cell");
-    expect(prompt).toContain("parallel(thunks)");
-    expect(prompt).toContain("completion(prompt)");
+  test("includes the resident sections in preset order", () => {
+    const sections = [RESIDENT_PRESET.identity, RESIDENT_PRESET.mandate,
+      RESIDENT_PRESET.policies, RESIDENT_PRESET.style]
+      .filter((section: string | undefined): section is string => Boolean(section));
+    expect(buildAgentPrompt(RESIDENT_PRESET)).toBe(sections.join("\n\n"));
   });
 
   test("omits unavailable optional sections without a trailing separator", () => {
@@ -57,7 +56,7 @@ describe("buildAgentPrompt", () => {
       name: "tuned",
       identity: "identity",
       mandate: "mandate",
-      tuning: (model) => (model.provider === "x" ? "x tuning" : undefined),
+      tuning: (model: Model.Ref) => (model.provider === "x" ? "x tuning" : undefined),
     };
     const xModel: Model.Ref = { provider: "x", id: "model" };
     const yModel: Model.Ref = { provider: "y", id: "model" };

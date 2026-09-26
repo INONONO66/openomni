@@ -52,6 +52,6 @@ test("broadcast channel floors the Owner to evidence-only content", async () => 
     inboundTreatment: "evidence_only",
   });
   expect(commits).toHaveLength(1);
-  expect(commits[0]?.content).not.toBe(ownerFacts.render);
-  expect(commits[0]?.content.endsWith(ownerFacts.render)).toBe(true);
+  expect(commits[0]?.content).toBe(ownerFacts.render);
+  expect(commits[0]?.origin.value).toMatchObject({ inboundTreatment: "evidence_only" });
 });

@@ -1,6 +1,6 @@
 # Implementation Status
 
-W0.5 (#1184) source wiring inspected on `kernel/1184-consumed-layers-20260924`, 2026-09-24. This stamp covers the Layer/bundle slice below, not a re-verification of historical receipts or a merge/CI claim.
+W3 (#1111) on branch `kernel/1111-executor-policy-tools-20260925`, 2026-09-25, not yet merged: single ledger policy-generation writer (compiler `append: () => false` deleted), executor dispatch table with captured toolsGeneration, ToolCatalog Layer built once per generation with tools/** effect-free and sealed 12-tool catalog (read, write, edit, ls, find, grep, bash, eval, monitor, send_message, provision, completion), and typed evidence-only authority (`SessionRunnerInput.authority` from inbox `origin.inboundTreatment`) with OBSERVATION prose prefix deleted. W0.5 (#1184) source wiring inspected on `kernel/1184-consumed-layers-20260924`, 2026-09-24. This stamp covers the Layer/bundle slice below, not a re-verification of historical receipts or a merge/CI claim.
 
 | Slice | Status | Scope |
 | --- | --- | --- |

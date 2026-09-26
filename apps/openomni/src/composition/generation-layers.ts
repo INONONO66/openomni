@@ -1,5 +1,5 @@
 import {
-  AgentGenerationLive, BundleDefinitions, BundleError, type Clock, type Entropy, ForeignFailure,
+  BundleDefinitions, BundleError, type Clock, type Entropy, ForeignFailure,
   GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink, SessionLayer,
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
   type GenerationBundle, type SessionError, type SessionRuntime,
@@ -9,7 +9,19 @@ import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope } from "effect";
 
-type Definitions = Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>;
+import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
+
+export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
+
+/** App sessions carry a Layer recipe alongside the schema-only materialization surface. */
+export interface GenerationDefinitions extends Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>> {
+  readonly catalogLayer?: (select: CatalogSelection) => Layer.Layer<ToolCatalog>;
+}
+
+/** The generation manager builds this Layer once per generation and retains its acquired service. */
+export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (definitions) => definitions) {
+  return Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze([...select(catalogDefinitions(ports))]) }));
+}
 
 /** The app owns construction; the package manager alone owns acquired contexts. */
 export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(function* () {
@@ -19,7 +31,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
   const root = Context.get(process, ObservationSink);
   const lock = yield* Effect.makeSemaphore(1);
   const managers = new Map<string, Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
-  let definitions: Definitions | undefined;
+  let definitions: GenerationDefinitions | undefined;
   let stopping = false;
 
   function bundle(sessionId: string, snapshot: SessionGeneration.Snapshot): Effect.Effect<GenerationBundle, SessionError> {
@@ -31,7 +43,13 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
       });
       const role = SessionHandleStore.row(sessionId).role;
       const offered = new Set(snapshot.tools.map((tool) => tool.name));
-      const catalog = [...definitions[role], ...selected.tools].filter((tool) => offered.has(tool.name));
+      const select = (tools: readonly AnyToolDefinition[]) => [...tools, ...selected.tools].filter(
+        (tool) => offered.has(tool.name) && (tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
+      );
+      const source = definitions;
+      const catalog = Layer.suspend(() => source.catalogLayer === undefined
+        ? Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze(select(source[role])) }))
+        : source.catalogLayer(select));
       let active = false;
       const observations = Layer.scoped(ObservationSink, Effect.acquireRelease(
         Effect.sync(() => {
@@ -45,7 +63,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
         }),
         (sink) => Effect.sync(sink.close),
       ));
-      const seed = Layer.mergeAll(Layer.succeedContext(process), Layer.succeed(ToolCatalog, { definitions: catalog }), observations);
+      const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
       const registry = selected.layer.pipe(Layer.provideMerge(seed));
       const layer = Layer.unwrapEffect(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
@@ -53,7 +71,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
           try: () => compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
           catch: (error) => new ForeignFailure({ operation: "generation.policy", cause: String(error) }),
         });
-        return AgentGenerationLive({ snapshot, policy, definitions: catalog });
+        return Layer.succeed(SessionLayer, { snapshot, policy });
       })).pipe(Layer.provideMerge(registry));
       return { id: { sessionId, generation: snapshot.generation }, snapshot, layer, activate: Effect.sync(() => { active = true; }) };
     });
@@ -73,9 +91,9 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
   }
 
   return {
-    initialize: (input: Definitions) => Effect.suspend(() => {
+    initialize: (input: GenerationDefinitions) => Effect.suspend(() => {
       if (definitions !== undefined) return Effect.fail(new ForeignFailure({ operation: "generation.initialize", cause: "already_initialized" }));
-      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]) });
+      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer });
       return Effect.void;
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {

@@ -5,7 +5,8 @@ import {
   createPolicyCompiler,
   type PolicyEvaluationInput,
 } from "../src/index";
-import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows } from "./row-fixtures";
+import type { PolicyRow, Storage } from "@openomni/protocol";
+import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows, withPolicyRows } from "./row-fixtures";
 
 const request: PolicyEvaluationInput = {
   kind: "tool",
@@ -37,18 +38,18 @@ function initialRows() {
 }
 
 describe("compiled policy snapshot determinism", () => {
-  it("pins a turn to its generation while copy-on-write append advances new evaluators", async () => {
-    const source = new MemoryPolicyRows(initialRows());
+  it("pins a turn while the transactional writer advances new evaluators", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    source.appendGeneration(() => initialRows());
     const compiler = createPolicyCompiler({
       registry: KERNEL_POLICY_REGISTRY,
       source,
       mandatory: ["compaction"],
     });
     const oldEvaluator = compiler.pin(1);
-    const release = Promise.withResolvers<void>();
-    const oldTurn = release.promise.then(() => oldEvaluator.evaluate(request));
+    const before = oldEvaluator.evaluate(request);
 
-    const generation = await compiler.append([
+    const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) => [
+      ...current,
       draft(
         "deny-read",
         "tool",
@@ -58,18 +59,16 @@ describe("compiled policy snapshot determinism", () => {
       ),
     ]);
     const current = compiler.pin(generation);
-    release.resolve();
-
     expect(generation).toBe(2);
-    expect((await oldTurn).verdict).toBe("allow");
+    expect(before.verdict).toBe("allow");
     expect(current.evaluate(request)).toMatchObject({
       generation: 2,
       verdict: "deny",
       matchedRuleIds: ["deny-read"],
       reason: "read suspended",
     });
-    expect(oldEvaluator.evaluate(request)).toEqual(await oldTurn);
-  });
+    expect(oldEvaluator.evaluate(request)).toEqual(before);
+  }));
 
   it("derives the same content hash and result regardless of insertion order", () => {
     const rows = initialRows();
@@ -99,7 +98,7 @@ describe("compiled policy snapshot determinism", () => {
       mandatory: ["compaction"],
     });
     const before = snapshot.evaluate(request);
-    const readRule = rows.find((row) => row.name === "allow-read");
+    const readRule = rows.find((row: PolicyRow.Row) => row.name === "allow-read");
     if (readRule === undefined) throw new Error("missing read rule fixture");
 
     expect(Object.isFrozen(readRule)).toBe(false);

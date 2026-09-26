@@ -1,6 +1,6 @@
 import type { MachineHost } from "@openomni/machines";
 import type { ComposedCodemode } from "./composition/codemode";
-import type { CatalogPorts } from "./tools/core/catalog";
+import type { ToolPorts } from "./tools/core/catalog";
 import type { createCompletionPort } from "./composition/completion";
 import {
   type ChannelDeliveryRoute,
@@ -27,7 +27,7 @@ import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
 import { Cause, Effect, Either, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
-import { MonitorRefused, type MonitorPorts } from "./tools/monitor";
+import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
   AppLive,
@@ -114,10 +114,13 @@ export function toolPorts(
     readonly completion: ReturnType<typeof createCompletionPort>;
     readonly messages: GatewayRouter;
   },
-): Pick<CatalogPorts, "machines" | "cells" | "llm" | "messages"> {
+): ToolPorts {
   const cells = ports.cells;
   const machines = ports.machines;
   return {
+    alarms: undefined,
+    provisioning: undefined,
+    clock: Date.now,
     machines:
       machines === undefined
         ? undefined

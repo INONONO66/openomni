@@ -12,7 +12,7 @@ import {
   type Executor,
 } from "./helpers/effect-g3-dispatcher";
 import { ForeignFailure } from "../src/errors";
-import { currentInvocation, ExecutorContextError } from "../src/executor-context";
+import { currentInvocation, requireOpenInvocation, ExecutorContextError } from "../src/executor-context";
 import { GenerationOwnership, SessionLayer } from "../src/services";
 import { z } from "zod";
 import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
@@ -55,10 +55,10 @@ describe("createTurnDispatcher", () => {
         ledger: recording.ledger,
       }, {}).pipe(Effect.provide(catalogLayer([
         tool("invocation", async () => {
-          const frame = currentInvocation();
+          const frame = requireOpenInvocation();
+          expect(frame).toBe(currentInvocation());
           expect(frame.executor).toBe(currentExecutor());
-          expect(frame.executor.run).toBe(dispatcher.executor.run);
-          expect(frame.cell.executeCell).toBe(dispatcher.executeCell);
+          expect(frame.cell.executor).toBe(frame.executor);
           expect(frame.policy).toBe(policy);
           expect(frame.generation).toBe(generation);
           bodies += 1;

@@ -1,8 +1,8 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
-import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
+import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import type { AnyToolDefinition, LedgerAction, PlainValue, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
 import { CommitFailed, ForeignFailure, GenerationUnavailable } from "../src/errors";
@@ -15,6 +15,7 @@ import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { createObservationBus } from "../src/observation/bus";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
+import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";
 import { isolated } from "./helpers/isolated";
 
 function bundle(generation: number, name: string, finalized: () => void,
@@ -22,11 +23,11 @@ function bundle(generation: number, name: string, finalized: () => void,
   const definition: AnyToolDefinition = {
     name, description: name, category: "query", input: z.object({}), output: z.string(),
     visibility: { model: ["resident"], cell: [] }, execute,
-    render: (_input, output) => String(output),
+    render: (_input: PlainValue, output: PlainValue) => String(output),
   };
   const snapshot = SessionHandleStore.generationSnapshot({
     generation, revertTo: generation - 1,
-    tools: [{ name, category: "query", inputSchema: { type: "object", properties: {} } }],
+    tools: [sessionTool(definition)],
     system: { preset: name, blocks: [] }, policyGeneration: 1,
   });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void, layer: Layer.mergeAll(
@@ -98,6 +99,56 @@ test("committed configure swaps the next captured Layer; old body and terminal s
     action.kind === "tool" && effectValue(action).phase === "result").map(effectValue))
     .toMatchObject([{ terminal: "executed", result: { generation: 1, system: "A" } },
       { terminal: "executed", result: { generation: 2, system: "B" } }]);
+}))));
+
+test("dispatch table stays captured across configure even when the next generation reuses the tool name", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const options = yield* nativeExecutorOptions();
+  const entered = yield* Deferred.make<void>();
+  const retired = yield* Deferred.make<void>();
+  const release = Promise.withResolvers<string>();
+  const a = bundle(1, "echo", () => { Deferred.unsafeDone(retired, Exit.void); }, async () => {
+    Deferred.unsafeDone(entered, Exit.void);
+    return release.promise;
+  });
+  const b = bundle(2, "echo", () => undefined, async () => "B");
+  const generations = yield* makeSessionGenerations(a);
+  const executeCaptured = Effect.scoped(Effect.gen(function* () {
+    const captured = yield* generations.capture();
+    return yield* captured.provide(Effect.gen(function* () {
+      const dispatcher = yield* createTurnDispatcher({
+        ...options.identity, actionId: options.identity.turnId, ledger: options.ledger,
+        tools: captured.snapshot.tools, toolsGeneration: captured.snapshot.generation,
+        toolsHash: captured.snapshot.toolsHash, systemHash: captured.snapshot.systemHash,
+      }, {});
+      return yield* dispatcher.execute({ id: `call-${captured.snapshot.generation}`, tool: "echo", input: {} },
+        { sessionId: fiberSessionId, turnId: options.identity.turnId });
+    }));
+  }));
+  const running = yield* Effect.forkScoped(executeCaptured);
+  yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
+  try {
+    yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
+      Effect.mapError((error: LedgerError) => new CommitFailed({ error })),
+    ));
+    expect(yield* executeCaptured).toMatchObject({ toolCallId: "call-2", output: "B" });
+    release.resolve("A");
+    expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "call-1", output: "A" });
+    yield* Deferred.await(retired).pipe(Effect.timeout("5 seconds"));
+    const results = sessionTree(fiberSessionId).filter((action: LedgerAction.Node) =>
+      action.kind === "tool" && effectValue(action).phase === "result");
+    expect(results.map(effectValue)).toMatchObject([
+      { terminal: "executed", callId: "call-2" },
+      { terminal: "executed", callId: "call-1" },
+    ]);
+    expect(sessionTree(fiberSessionId).filter((action: LedgerAction.Node) =>
+      action.kind === "tool" && effectValue(action).phase !== "result")
+      .map((action: LedgerAction.Node) => action.intent.value)).toMatchObject([
+      { callId: "call-1", toolsGeneration: 1 },
+      { callId: "call-2", toolsGeneration: 2 },
+    ]);
+  } finally {
+    release.resolve("A");
+  }
 }))));
 
 test("unavailable generations fail closed; revert appends a selection", () => isolated(Effect.scoped(Effect.gen(function* () {

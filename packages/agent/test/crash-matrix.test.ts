@@ -14,6 +14,7 @@ import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
 import { closeSessions, wakeSession } from "../src/session-handle";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/session-lifecycle/history";
+import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "./helpers/crash-configure";
 import { killAtCrashBarrier } from "./helpers/crash-channel";
 import { messagePlanePoint, messagePlaneProof } from "./helpers/crash-message-plane";
 import { corruptCheckpoint, reconstructionPoint, reconstructionRecovery } from "./helpers/crash-reconstruction";
@@ -633,6 +634,37 @@ function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, w
   });
 }
 
+async function configureCrashCell(dbPath: string) {
+  const worker = new URL("./helpers/crash-configure.ts", import.meta.url).pathname;
+  const cut = configureCutProof.parse(JSON.parse(await killAtCrashBarrier(worker, ["crash", dbPath])));
+  expect(cut.crashPoint).toBe(configureCrashPoint);
+  expect(cut.hibernations).toBe(0);
+  expect(cut.snapshot).toMatchObject({ generation: 2, revertTo: 1 });
+  const child = Bun.spawn([process.execPath, worker, "recover", dbPath], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const receipt = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  child.stdin.write("S");
+  try {
+    const [code, stdout, stderr] = await bounded(receipt, "fresh configure recovery", SPAWNED_CHILD_MS);
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+    const proof = configureRecoveryProof.parse(JSON.parse(stdout));
+    expect(proof.before).toEqual(cut.actions);
+    expect(proof.idle).toEqual(proof.before);
+    expect(proof.snapshot).toEqual(cut.snapshot);
+    expect(proof.captured).toEqual([cut.snapshot]);
+    expect(proof.runnerGenerations).toEqual([2]);
+    expect(proof.configureCalls).toBe(0);
+    expect(proof.after.slice(0, proof.before.length)).toEqual(proof.before);
+    expect(proof.repeated).toEqual(proof.after);
+    const configured = (actions: readonly LedgerAction.Node[]) => actions.filter((action: LedgerAction.Node) => action.kind === "session.configure");
+    expect(configured(proof.before)).toHaveLength(2);
+    expect(configured(proof.after)).toEqual(configured(proof.before));
+    return "resumed_without_reexecution";
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    child.stdin.end();
+  }
+}
+
 test("the authoritative crash matrix names every crash point once", () => {
   expect(matrix.version).toBe(2);
   expect(matrix.rows.map((row) => row.crashPoint).sort()).toEqual([...crashPoint.options].sort());
@@ -647,6 +679,8 @@ for (const row of matrix.rows) {
     try {
       const result = await isolated(Effect.scoped(Effect.gen(function* () {
         const dbPath = join(directory, "kernel.sqlite");
+        if (row.crashPoint === configureCrashPoint)
+          return yield* Effect.promise(() => configureCrashCell(dbPath));
         if (row.crashPoint === "alarm_fire_committed_before_hibernated_doorbell")
           return yield* alarmDoorbellCell(dbPath);
         if (row.crashPoint === "fiber_exit_after_execute_before_action_commit") {
