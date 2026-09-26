@@ -114,7 +114,7 @@ async function listProtocolNamespaces(): Promise<string[]> {
   return Array.from(dirs).sort((a, b) => a.localeCompare(b));
 }
 
-async function checkVocabRatchet(baseline: Baseline): Promise<Violation[]> {
+export async function checkVocabRatchet(baseline: Baseline): Promise<Violation[]> {
   const namespaces = await listProtocolNamespaces();
   const tierNouns = extractTierNouns(readFileSync(CORE_MODEL_PATH, "utf8"));
   const unmapped = unmappedNamespaces(namespaces, tierNouns);
@@ -303,7 +303,7 @@ export function namingOffenders(filePath: string, source: string): string[] {
   return Array.from(offenders);
 }
 
-async function checkNaming(baseline: Baseline): Promise<Violation[]> {
+export async function checkNaming(baseline: Baseline): Promise<Violation[]> {
   const grandfathered = new Set(baseline.naming.grandfathered);
   const violations: Violation[] = [];
   const glob = new Bun.Glob(`${PROTOCOL_SRC}/**/*.ts`);
