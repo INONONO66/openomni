@@ -19,7 +19,7 @@ export class ToolBodyFailed extends Data.TaggedError("ToolBodyFailed")<{
 
 export class InvocationClosed extends Data.TaggedError("InvocationClosed")<{
   readonly tool: string;
-  readonly reason: "settled" | "interrupted";
+  readonly reason: "settled" | "failed" | "interrupted";
 }> {}
 
 export class Interrupted extends Data.TaggedError("Interrupted")<Record<never, never>> {}

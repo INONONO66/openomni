@@ -6,7 +6,7 @@ import { LedgerAction, type ObservationSink as ObservationPort, type SessionGene
 import { type Context, Effect, Layer, Scope } from "effect";
 import { NamedPolicyRegistry } from "../../src/bundle";
 import { GenerationUnavailable, type SessionError } from "../../src/errors";
-import { AgentGenerationLive } from "../../src/layers";
+import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations, type GenerationBundle } from "../../src/session-generations";
 import type { SessionRuntime } from "../../src/session-contract";
 import { Clock, Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";

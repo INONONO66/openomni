@@ -1,7 +1,7 @@
 import { Cause, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import { z } from "zod";
 import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
+import { canonicalDigest, type PlainValue, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
 import { hydrateSessionHistory } from "./session-lifecycle/history";
@@ -15,7 +15,19 @@ import { parentReply } from "./session-parent-reply";
 import { dispatchSessionOutbound, outboundOpen } from "./session-outbound";
 import { observeDrained } from "./session-message-observation";
 
-const InboundOrigin = z.object({ inboundTreatment: z.enum(["full_access", "evidence_only"]) });
+const ExternalOrigin = z.object({ kind: z.literal("external") });
+const FullAccessOrigin = ExternalOrigin.extend({ inboundTreatment: z.literal("full_access") });
+
+/**
+ * Turn authority from the prompt's inbox origin. Internal senders (session
+ * messages, fixtures) act; an external origin acts only when the perimeter
+ * recorded `full_access` verbatim — a missing or unrecognised treatment on an
+ * external origin fails closed to evidence-only.
+ */
+export function inboundAuthority(origin: PlainValue | undefined): "act" | "evidence_only" {
+  if (!ExternalOrigin.safeParse(origin).success) return "act";
+  return FullAccessOrigin.safeParse(origin).success ? "act" : "evidence_only";
+}
 
 interface TurnInput {
   readonly turnId: string;
@@ -107,9 +119,8 @@ export function createSessionTurn(
         const hydrated = hydrateSessionHistory(sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
         const origin = SessionHandleStore.inboxRows(sessionId).find((item) => item.id === promptId)?.origin;
-        const treatment = InboundOrigin.safeParse(origin?.value);
         runnerResult = yield* runner({
-          authority: treatment.success && treatment.data.inboundTreatment === "evidence_only" ? "evidence_only" : "act",
+          authority: inboundAuthority(origin?.value),
           sessionId, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
           stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),

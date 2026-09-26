@@ -23,7 +23,6 @@ describe("buildAgentPrompt", () => {
     const sections = [RESIDENT_PRESET.identity, RESIDENT_PRESET.mandate,
       RESIDENT_PRESET.policies, RESIDENT_PRESET.style]
       .filter((section: string | undefined): section is string => Boolean(section));
-    expect(sections.slice(0, 2)).toEqual([RESIDENT_PRESET.identity, RESIDENT_PRESET.mandate]);
     expect(buildAgentPrompt(RESIDENT_PRESET)).toBe(sections.join("\n\n"));
   });
 

@@ -44,8 +44,8 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
       const abort = () => owned?.close("interrupted");
       scopedContext.signal.addEventListener("abort", abort, { once: true });
       if (scopedContext.signal.aborted) abort();
-      const settle = () => {
-        owned?.close("settled");
+      const settle = (reason: "settled" | "failed") => {
+        owned?.close(reason);
         scopedContext.signal.removeEventListener("abort", abort);
         release();
       };
@@ -55,11 +55,11 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
       const raw = Promise.resolve().then(() => owned === undefined ? enter() : withInvocation(owned.frame, enter));
       raw.then(
         (value) => {
-          settle();
+          settle("settled");
           resume(Effect.sync(() => decodeOutput(definition, value)));
         },
         (cause: CaughtValue) => {
-          settle();
+          settle("failed");
           // An explicit ToolRefused keeps its model-facing classification; every other
           // foreign rejection is a typed body failure the executor records as evidence.
           resume(isToolRefusal(cause)

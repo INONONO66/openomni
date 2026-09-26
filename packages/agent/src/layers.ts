@@ -1,20 +1,5 @@
 import { Layer, type Context } from "effect";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
-import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
-import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "./services";
-
-export interface AgentLayerOptions {
-  readonly snapshot: SessionGeneration.Snapshot;
-  readonly policy: CompiledPolicySnapshot;
-  readonly definitions: readonly AnyToolDefinition[];
-}
-
-export function AgentGenerationLive(options: AgentLayerOptions) {
-  return Layer.mergeAll(
-    Layer.succeed(SessionLayer, { snapshot: options.snapshot, policy: options.policy }),
-    Layer.succeed(ToolCatalog, { definitions: options.definitions }),
-  );
-}
+import { Clock, Entropy, ObservationSink } from "./services";
 
 export interface AgentProcessOptions {
   readonly clock?: () => number;
