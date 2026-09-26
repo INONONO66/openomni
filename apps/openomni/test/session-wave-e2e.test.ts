@@ -228,7 +228,6 @@ function nextTerminal(): Promise<void> {
   });
 }
 
-
 function activeRow() {
   const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing app session");
