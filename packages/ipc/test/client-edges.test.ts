@@ -111,10 +111,11 @@ describe("IPC client transport edges", () => {
     let serverSocket: net.Socket | undefined;
     const path = await listenRaw((socket) => {
       serverSocket = socket;
-      // The client tears the connection down mid-frame by design; the peer's
-      // read then fails (ECONNRESET on Linux). A raw net.Socket with no error
-      // listener would turn that into an uncaught exception.
-      socket.on("error", () => {});
+      socket.on("error", () => {
+        // The client tears the connection down mid-frame by design; on Linux the
+        // peer's read then fails with ECONNRESET, which a raw net.Socket without a
+        // listener would surface as an uncaught exception.
+      });
       socket.once("data", () => {
         requestReceived.resolve();
         socket.write(payload);
