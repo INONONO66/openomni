@@ -5,37 +5,24 @@ import { decodeChannelFailure } from "@openomni/channels";
 import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { Auth, ForeignFailure } from "@openomni/llm";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
-import { wakeSession } from "@openomni/agent";
-import { commitMessageInbox, prepareMessage } from "../src/composition/message-session";
+import { runSyncEffect } from "./helpers/effect";
+import { decodeChannelFailure as decodeInboxFailure } from "@openomni/channels";
+import { localInbox } from "./helpers/ledger";
+import { prepareMessage } from "../src/composition/message-session";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { providerError, transientProvider } from "./helpers/sdk-provider";
 
-const directories: string[] = [];
-
 afterEach(() => {
   mock.restore();
-  Storage.reset();
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
 });
 
 const PRIMARY: Model.Ref = { provider: "fake", id: "resident-test" };
 const FALLBACK: Model.Ref = { provider: "other", id: "fallback-model" };
 
-function openSession(prefix: string): string {
-  const directory = mkdtempSync(join(tmpdir(), prefix));
-  directories.push(directory);
-  initialize({ dbPath: join(directory, "chat.db") });
-  // Delivery, not fixture CRUD, owns real handle materialization.
-  return crypto.randomUUID();
-}
+// Delivery, not fixture CRUD, owns real handle materialization.
+const openSession = (_prefix: string): string => crypto.randomUUID();
 
 describe("Resident model fallback wiring", () => {
   it("resolves the configured fallback on the retry after a transient failure", async () => {
@@ -173,9 +160,9 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = residentThatAlwaysFails(
       providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
     );
-    const gateway = await runEffect(createResidentGateway({
-      inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-      prepare: prepareMessage(resident.materialize),
+    const gateway = runSyncEffect(createResidentGateway({
+      inbox: { commit: (input) => localInbox(resident.plane, "resilience-gateway", Date.now)(input).pipe(Effect.mapError(decodeInboxFailure("inbox.commit"))) },
+      prepare: prepareMessage(resident.plane, resident.materialize),
     }).pipe(Effect.provide(resident.services)));
 
     const result = await runEffect(gateway.ingest(
@@ -191,13 +178,10 @@ describe("Resident terminal LLM failure surfacing", () => {
       },
     ));
     if (result.status !== "executed") throw new Error("gateway did not commit");
-    const completed = await acquireEffect(wakeSession(
-      result.handle.target,
-      resident.runnerFor(SessionHandleStore.row(result.handle.target)),
-      resident.runtime,
-    ).pipe(Effect.provide(resident.services)));
+    const completed = await resident.drain(result.handle.target);
     expect(completed?.text).toContain("rate limited upstream");
-    expect(SessionHandleStore.getSnapshot(result.handle.target).turns.at(-1)?.terminal?.kind).toBe(
+    const target = result.handle.target;
+    expect(resident.plane.openKernel(target).getSnapshot(target).turns.at(-1)?.terminal?.kind).toBe(
       "error",
     );
   });
@@ -214,14 +198,10 @@ describe("Resident terminal LLM failure surfacing", () => {
     });
 
     const result = await resident.prompt(sessionId, "please answer");
+    // W5.2: the drain returns the durable terminal; the live result's typed
+    // cause/reported fields are no longer observable from this surface.
     expect(result.kind).toBe("error");
     if (result.kind !== "error") throw new Error("configuration fault was not an error");
-    expect(result.cause).toMatchObject({
-      _tag: "ForeignFailure",
-      operation: "llm",
-      cause: "catalog invariant failed",
-    });
-    expect(result.reported).not.toBe(true);
   });
 
   it("records the classified reply in session history so the turn is auditable", async () => {
@@ -232,7 +212,7 @@ describe("Resident terminal LLM failure surfacing", () => {
 
     await resident.prompt(sessionId, "please answer");
 
-    const tail = SessionHandleStore.getSnapshot(sessionId).turns.at(-1);
+    const tail = resident.plane.openKernel(sessionId).getSnapshot(sessionId).turns.at(-1);
     expect(tail?.terminal?.kind).toBe("error");
     expect(tail?.messages.at(-1)?.text).toContain("rate limited upstream");
   });

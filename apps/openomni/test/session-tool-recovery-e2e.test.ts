@@ -2,10 +2,11 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { Effect } from "effect";
 import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { observationService } from "../../../packages/agent/test/helpers/service-layers";
-import { beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { acquireEffect, runEffect } from "./helpers/effect";
+import { effectScope } from "./helpers/effect-scope";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,18 +18,21 @@ import {
   eraseTool,
   session,
   sessionTool,
-  sweepSessions,
   type SessionRuntime,
 } from "@openomni/agent";
-import { initialize, SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
+import {
+  createAppLedger,
+  sessionFilePath,
+  type AppLedgerPlane,
+} from "../src/composition/cluster-runtime";
+import { drainSession, resolvedRuntimeFor } from "./helpers/ledger";
 
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import { bounded, commitInterrupt, ProviderRequest as Request } from "./helpers/session-wave";
-
-beforeEach(() => Storage.reset());
 
 function response(names: readonly string[]): Response {
   const blocks =
@@ -58,8 +62,11 @@ const lostSlot = {
 for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"] as const) {
   test(`real SDK ${mode} preserves committed rendered tool slots without replay`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "937-tool-recovery-"));
-    const dbPath = join(directory, "live.sqlite");
-    const crashPath = join(directory, "crash.sqlite");
+    const catalogPath = join(directory, "catalog.sqlite");
+    const sessionsDir = join(directory, "sessions");
+    const crashCatalogPath = join(directory, "crash-catalog.sqlite");
+    const crashSessionsDir = join(directory, "crash-sessions");
+    mkdirSync(crashSessionsDir, { recursive: true });
     const sessionId = `tool-recovery-${mode}`;
     const names = mode === "partial-wave" || mode === "crash-window" ? ["A", "B"] : ["A"];
     const bodies: string[] = [];
@@ -73,15 +80,34 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         return response(requests.length === 1 ? names : []);
       },
     });
-    let saved = false;
-    const interruptInbox = () => commitInterrupt(sessionId, `interrupt-${mode}`);
-    const runtime: SessionRuntime = { authorizeConfigure: allowConfigure };
+    const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+    const crashRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+    const saved = { current: false };
+    const interruptInbox = () => {
+      const plane = planeRef.current;
+      if (plane === undefined) throw new Error("plane missing at interrupt");
+      void commitInterrupt(plane, sessionId, `interrupt-${mode}`);
+    };
+    const snapshot = (path: string, target: string) => {
+      const source = new Database(path, { readonly: true });
+      try {
+        writeFileSync(target, source.serialize());
+      } finally {
+        source.close();
+      }
+    };
     const observations = observationService({
         publish(event, payload) {
           Bus.publish(event, payload);
-          if (mode === "crash-window" && event === L0Observation.ActionCommittedEvent && !saved) {
+          const plane = planeRef.current;
+          if (
+            mode === "crash-window" &&
+            plane !== undefined &&
+            event === L0Observation.ActionCommittedEvent &&
+            !saved.current
+          ) {
             const committed = L0Observation.ActionCommittedEvent.schema.parse(payload);
-            const action = sessionTree(sessionId).find(
+            const action = sessionTree(sessionId, plane.sessionStore(sessionId).actions).find(
               (node) => node.id === committed.id,
             );
             if (
@@ -92,13 +118,9 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
             ) {
               // Snapshot synchronously at commit, before the next native Effect result.
               // Bus subscriptions are observational microtasks, not commit barriers.
-              const db = new Database(dbPath, { readonly: true });
-              try {
-                writeFileSync(crashPath, db.serialize());
-              } finally {
-                db.close();
-              }
-              saved = true;
+              snapshot(sessionFilePath(sessionsDir, sessionId), sessionFilePath(crashSessionsDir, sessionId));
+              snapshot(catalogPath, crashCatalogPath);
+              saved.current = true;
               interruptInbox();
             }
           }
@@ -106,6 +128,13 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
             throw new Error("crash after committed result");
         },
     });
+    const plane = createAppLedger({ catalogPath, sessionsDir, observationSink: observations });
+    planeRef.current = plane;
+    const runtime: SessionRuntime = {
+      authorizeConfigure: allowConfigure,
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
+    };
     const definitions = names.map((name) =>
       eraseTool(
         defineTool({
@@ -154,11 +183,11 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         });
       },
     });
-    let services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, observations }));
+    const services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, observations, plane }));
     let unsubscribe: () => void = () => undefined;
+    const drainScope = effectScope();
     try {
-      initialize({ dbPath, observationSink: observations });
-      seedKernelPolicyRows();
+      seedKernelPolicyRows(plane.catalog.policies);
       const handle = await acquireEffect(
         session(
           { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
@@ -183,13 +212,20 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       expect((await bounded(first))?.kind).toBe(mode === "error-window" ? "result" : "interrupted");
       unsubscribe();
       expect(requests).toHaveLength(mode === "error-window" ? 2 : 1);
-      let prefix = sessionTree(sessionId);
+      const treeOf = () => {
+        const active = crashRef.current ?? plane;
+        return sessionTree(sessionId, active.sessionStore(sessionId).actions);
+      };
+      let prefix = treeOf();
       if (mode === "crash-window") {
-        expect(saved).toBe(true);
+        expect(saved.current).toBe(true);
         await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
-        Storage.reset();
-        initialize({ dbPath: crashPath });
-        prefix = sessionTree(sessionId);
+        const crashPlane = createAppLedger({
+          catalogPath: crashCatalogPath,
+          sessionsDir: crashSessionsDir,
+        });
+        crashRef.current = crashPlane;
+        prefix = treeOf();
         expect(SessionHandleStore.openTurns(prefix)).toHaveLength(1);
         expect(
           prefix.filter(
@@ -198,14 +234,32 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
               z.object({ terminal: z.literal("executed") }).safeParse(action.effect.value).success,
           ),
         ).toHaveLength(1);
-        const expiresAt = SessionHandleStore.row(sessionId).leaseExpiresAt;
-        if (expiresAt === null) throw new Error("missing crash lease");
-        services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, clock: () => expiresAt + 1 }));
-        await bounded(acquireEffect(sweepSessions(() => runner, runtime).pipe(Effect.provide(services))));
+        // The crashed activation's fence is still on the row; the recovery
+        // drain adopts a higher fence and settles the open turn from evidence.
+        expect(crashPlane.openKernel(sessionId).row(sessionId).leaseOwner).not.toBeNull();
+        const crashRuntime: SessionRuntime = {
+          authorizeConfigure: allowConfigure,
+          openKernel: crashPlane.openKernel,
+          listSessions: crashPlane.listSessions,
+        };
+        const recovered = await acquireEffect(
+          generationServices({ definitions: { resident: definitions, worker: [] }, plane: crashPlane }),
+        );
+        await bounded(
+          drainScope.run(
+            drainSession({
+              plane: crashPlane,
+              sessionId,
+              runner,
+              runtime: resolvedRuntimeFor(crashRuntime, recovered),
+              scope: drainScope.scope,
+            }).pipe(Effect.provide(recovered)),
+          ),
+        );
       } else if (mode !== "error-window") {
         await bounded(runEffect(handle.resume()));
       }
-      expect(sessionTree(sessionId).slice(0, prefix.length)).toEqual(prefix);
+      expect(treeOf().slice(0, prefix.length)).toEqual(prefix);
       const results = requests[1]?.messages.flatMap((message) =>
         typeof message.content === "string"
           ? []
@@ -223,8 +277,10 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     } finally {
       unsubscribe();
       await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
+      await drainScope.close();
+      crashRef.current?.close();
+      plane.close();
       await provider.stop(true);
-      Storage.reset();
       rmSync(directory, { recursive: true, force: true });
     }
   }, 15000);

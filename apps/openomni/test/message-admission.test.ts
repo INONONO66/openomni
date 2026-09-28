@@ -1,18 +1,18 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import { Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
 
 const directories = storageDirectories(true);
 
-function registerTarget() {
-  ActorRegistry.registerIdentity({ id: "target", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+function registerTarget(plane: AppLedgerPlane) {
+  plane.stores.actors.registerIdentity({ id: "target", kind: "human", trustTier: "owner" });
+  plane.stores.actors.registerEndpoint({
     id: "ws:target",
     actorId: "target",
     channel: "ws",
@@ -44,12 +44,12 @@ test.each([
     ],
   });
   directories.push(fixture.directory);
-  registerTarget();
+  registerTarget(fixture.plane);
   const result = await fixture.send(actorMessage("target"));
   expect(result.isError).not.toBe(true);
   const handle = Gateway.SendMessageHandle.parse(JSON.parse(result.output));
   expect(keys).toEqual([handle.messageId]);
-  const receipts = sessionTree(fixture.sessionId).flatMap((action) => {
+  const receipts = sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions).flatMap((action) => {
     const effect = action.effect.value;
     if (
       action.kind !== "message" ||
@@ -67,23 +67,21 @@ test.each([
 test("ungranted app actor send is a compiled pre-denial, never an executed delivery", async () => {
   const { fixture, calls } = ungrantedActor("resident");
   directories.push(fixture.directory);
-  registerTarget();
+  registerTarget(fixture.plane);
   const result = await fixture.send(actorMessage("target"));
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.resident.actor_grant");
   expect(calls()).toBe(0);
-  expect(
-    sessionTree(fixture.sessionId).filter((action) => action.kind === "message"),
-  ).toEqual([]);
-  expect(
-    sessionTree(fixture.sessionId).some((action) => action.kind === "policy.decision"),
-  ).toBe(true);
+  const senderTree = () =>
+    sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions);
+  expect(senderTree().filter((action) => action.kind === "message")).toEqual([]);
+  expect(senderTree().some((action) => action.kind === "policy.decision")).toBe(true);
 });
 
 test("app ingress applies the channel default tier as policy facts, not top-level authority", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  ChannelGrantStore.put({
+  fixture.plane.stores.channelGrants.put({
     id: "observer",
     surface: "discord",
     kind: "trusted_channel",
@@ -105,6 +103,12 @@ test("app ingress applies the channel default tier as policy facts, not top-leve
     )),
   ).toEqual({ status: "blocked_pre", reasonCode: "message.external.grant_tier" });
   expect(
-    SessionHandleStore.listRows().flatMap((row) => SessionHandleStore.inboxRows(row.id)),
+    fixture.plane
+      .listSessions()
+      .flatMap((row) =>
+        sessionTree(row.id, fixture.plane.sessionStore(row.id).actions).filter(
+          (action) => action.kind === "prompt",
+        ),
+      ),
   ).toEqual([]);
 });
