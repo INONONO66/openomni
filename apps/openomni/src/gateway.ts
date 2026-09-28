@@ -157,17 +157,33 @@ export function toolPorts(
 }
 
 export function webSocketCallbacks(runtime: AppRuntime, handler: WebSocketHandler) {
+  const inflight = new Set<Promise<void>>();
   return {
-    ...handler.ws,
-    message(ws: WsConnection, data: string | Buffer): Promise<void> {
-      return runtime.runPromise(
-        handler.handleFrame(ws.data, data).pipe(
-          Effect.match({
-            onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
-            onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
-          }),
-        ),
-      );
+    callbacks: {
+      ...handler.ws,
+      message(ws: WsConnection, data: string | Buffer): Promise<void> {
+        const settled = runtime.runPromise(
+          handler.handleFrame(ws.data, data).pipe(
+            Effect.match({
+              onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
+              onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
+            }),
+          ),
+        );
+        const tracked: Promise<void> = settled
+          .catch(() => undefined)
+          .finally(() => void inflight.delete(tracked));
+        inflight.add(tracked);
+        return settled;
+      },
+    },
+    /**
+     * Shutdown join (W5.2): an accepted frame's ingest captures the
+     * gateway-ingress generation for the whole ingest, so the generation
+     * drain must not start before every in-flight frame has unwound.
+     */
+    settled(): Promise<void> {
+      return Promise.all([...inflight]).then(() => undefined);
     },
   };
 }

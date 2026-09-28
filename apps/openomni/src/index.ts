@@ -643,10 +643,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
     );
 
+    const wsCallbacks = webSocketCallbacks(runtime, wsHandler);
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,
-      websocket: webSocketCallbacks(runtime, wsHandler),
+      websocket: wsCallbacks.callbacks,
       fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
@@ -780,6 +781,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await supervisor.stopAll();
       await runAppEffect(runtime, shutdownSessions(sessionRuntime, recovery));
       if (cells !== undefined) await runAppEffect(runtime, cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))));
+      // Every accepted ws frame's ingest holds a captured ingress generation
+      // until it unwinds; join them before the generation drain.
+      await wsCallbacks.settled();
       await runtime.dispose();
     };
     return {
