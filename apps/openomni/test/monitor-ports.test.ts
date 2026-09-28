@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SessionEntityTimerContext } from "@openomni/agent";
-import { CommitRefused } from "@openomni/ledger";
+import { CommitRefused, ForeignFailure } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import {
@@ -130,6 +130,44 @@ test("watch arm retries one lost revision race before installing the source", as
     expect(armed).toMatchObject({ id: "retry", status: "armed", epoch: 1 });
     expect(commits).toBe(2);
     expect(state.installed).toEqual(["retry"]);
+  } finally {
+    state.plane.close();
+  }
+});
+
+test("watch arm does not retry a commit failure that is not a revision race", async () => {
+  const state = await fixture();
+  let commits = 0;
+  const brokenKernel = new Proxy(state.kernel, {
+    get(target, property, receiver) {
+      if (property !== "commit") return Reflect.get(target, property, receiver);
+      const commit: SessionKernel["commit"] = () => {
+        commits += 1;
+        return Effect.fail(new ForeignFailure({ operation: "commit", cause: "disk full" }));
+      };
+      return commit;
+    },
+  });
+  const ports = portsFor({
+    plane: state.plane,
+    sources: state.sources,
+    openKernel: () => brokenKernel,
+  });
+  try {
+    await expect(
+      ports.arm(
+        {
+          id: "broken",
+          sessionId: SESSION,
+          kind: "watch",
+          fireAt: 1000,
+          spec: { encodingVersion: 1, value: watchSpec },
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("watch commit failed: ForeignFailure");
+    expect(commits).toBe(1);
+    expect(state.installed).toEqual([]);
   } finally {
     state.plane.close();
   }
