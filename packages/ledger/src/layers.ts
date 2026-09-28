@@ -9,7 +9,7 @@ export function LedgerStorageLive(options: {
   readonly dbPath: string;
   readonly observationSink?: ObservationSink;
 }): Layer.Layer<LedgerWrites, ForeignFailure | StorageUnavailable> {
-  return Layer.unwrapScoped(
+  return Layer.unwrap(
     Effect.gen(function* () {
       const storage = yield* Effect.acquireRelease(
         Effect.try({

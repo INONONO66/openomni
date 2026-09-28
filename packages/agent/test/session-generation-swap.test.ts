@@ -35,7 +35,7 @@ function bundle(generation: number, name: string, finalized: () => void,
     Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
     Layer.succeed(SessionLayer, { snapshot, policy }),
     Layer.succeed(ToolCatalog, { definitions: [definition] }),
-    Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
+    Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
   ) };
 }
 function selectAction(snapshot: SessionGeneration.Snapshot) {
@@ -180,7 +180,7 @@ test("configure denied by the captured pre-policy never acquires or selects the 
   const result = yield* captured.provide(Effect.gen(function* () {
     const executor = yield* createExecutor({ ledger: options.ledger, identity: options.identity });
     return yield* executor.runExisting({ kind: "session.configure", op: "system.blocks.set", intent: { generation: 2 }, effect: {} }, () =>
-      generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.scopedDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
+      generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.effectDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
         options.ledger.commit(selectAction(candidate.snapshot)).pipe(Effect.mapError((error) => new CommitFailed({ error }))),
       ).pipe(Effect.as({ generation: 2 }), Effect.mapError((error) => new ForeignFailure({ operation: "generation.configure", cause: String(error) }))),
     );

@@ -33,7 +33,7 @@ test.each([
   Ledger.Storage.withIsolation(() => {
     const events: string[] = [];
     const close = spyOn(Ledger.SqliteStorageAdapter.prototype, "close");
-    const dependent = Layer.scopedDiscard(
+    const dependent = Layer.effectDiscard(
       Effect.gen(function* () {
         const writes = yield* Ledger.LedgerWrites;
         yield* Effect.addFinalizer(() =>

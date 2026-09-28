@@ -29,7 +29,7 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
   const process = AgentProcessLive(observations, { clock: options.clock, entropy: options.entropy });
   const generations = GenerationLayersLive.pipe(Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)));
   return Layer.mergeAll(
-    Layer.scoped(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
+    Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
   );
 }

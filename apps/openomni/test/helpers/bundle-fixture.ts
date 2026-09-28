@@ -20,7 +20,7 @@ export function auditBundle(path: string): {
   const acquired: number[] = [];
   const closed: number[] = [];
   const witnesses = new Map<number, ReturnType<typeof Promise.withResolvers<void>>>();
-  const live = Layer.scopedDiscard(Effect.gen(function* () {
+  const live = Layer.effectDiscard(Effect.gen(function* () {
     const events = yield* ObservationSink;
     yield* Effect.acquireRelease(Effect.sync(() => {
       const id = acquired.length + 1;

@@ -21,7 +21,7 @@ function bundle(generation: number, closed: number[]): GenerationBundle {
       AgentGenerationLive({ snapshot, policy: allowAllPolicy, definitions: [] }),
       Layer.succeed(ObservationSink, createObservationBus()),
       Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
-      Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(() => { closed.push(generation); }))),
+      Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => { closed.push(generation); }))),
     ),
   };
 }

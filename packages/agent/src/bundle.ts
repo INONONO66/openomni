@@ -212,7 +212,7 @@ export function compose<const P extends readonly TagIdentity[], const R extends 
   const seedLayer = seed.layer;
   const selected = Object.freeze([...definitions]);
   const outputs = [...seedProvides, ...selected.flatMap((definition) => definition.provides)];
-  return Layer.scopedContext(Effect.gen(function* () {
+  return Layer.effectContext(Effect.gen(function* () {
     yield* recheck(seedProvides, selected);
     const context = yield* Layer.build(seedLayer);
     if (!contains<O>(context, seedProvides)) return yield* new BundleError({ code: "missing_output", bundle: "kernel", detail: "seed output" });
@@ -248,7 +248,7 @@ export function BundlesLive<const B extends readonly BundleDefinition[]>(definit
       tools: Object.freeze(selected.flatMap((definition) => definition.tools)),
       rows: Object.freeze(selected.flatMap((definition) => definition.rows)),
       events: Object.freeze(selected.flatMap((definition) => definition.events)),
-      layer: Layer.scoped(NamedPolicyRegistry, Effect.gen(function* () {
+      layer: Layer.effect(NamedPolicyRegistry, Effect.gen(function* () {
         yield* recheck(kernelTags, selected);
         const context = yield* Effect.context<SeedServices>();
         const built = yield* acquire(selected, context);

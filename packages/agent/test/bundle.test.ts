@@ -25,11 +25,11 @@ const tool = { name: "number__echo", description: "echo", category: "query", inp
 
 test("ordered acquisition supplies earlier outputs and releases observers before providers", async () => {
   const events: string[] = [];
-  const FirstLive = Layer.scoped(NumberService, Effect.acquireRelease(Effect.sync(() => { events.push("number+"); return 7; }), () => Effect.sync(() => { events.push("number-"); })));
+  const FirstLive = Layer.effect(NumberService, Effect.acquireRelease(Effect.sync(() => { events.push("number+"); return 7; }), () => Effect.sync(() => { events.push("number-"); })));
   const first = bundle({ name: "number", provides: [NumberService], requires: [], layer: FirstLive });
-  const TextLive = Layer.scoped(TextService, Effect.gen(function* () { const value = yield* NumberService; return yield* Effect.acquireRelease(Effect.sync(() => { events.push("text+"); return `${value}x`; }), () => Effect.sync(() => { events.push("text-"); })); }));
+  const TextLive = Layer.effect(TextService, Effect.gen(function* () { const value = yield* NumberService; return yield* Effect.acquireRelease(Effect.sync(() => { events.push("text+"); return `${value}x`; }), () => Effect.sync(() => { events.push("text-"); })); }));
   const second = bundle({ name: "text", provides: [TextService], requires: [NumberService], layer: TextLive });
-  const ObserverLive = Layer.scopedDiscard(Effect.gen(function* () { const value = yield* TextService; yield* Effect.acquireRelease(Effect.sync(() => { events.push(value); }), () => Effect.sync(() => { events.push("observer-"); })); }));
+  const ObserverLive = Layer.effectDiscard(Effect.gen(function* () { const value = yield* TextService; yield* Effect.acquireRelease(Effect.sync(() => { events.push(value); }), () => Effect.sync(() => { events.push("observer-"); })); }));
   const observer = bundle({ name: "observer", provides: [], requires: [TextService], layer: ObserverLive });
   const result = await isolated(Effect.gen(function* () { return [yield* NumberService, yield* TextService]; }).pipe(Effect.provide(compose(seed, [first, second, observer]))));
   expect(result).toEqual([7, "7x"]);
@@ -60,7 +60,7 @@ test("rejects nested service paths and requirements outside the four-service see
   const NestedLive = Layer.succeed(Nested, 1);
   expect(() => bundle({ name: "nested", requires: [], provides: [Nested], layer: NestedLive })).toThrow(BundleError);
   const Control = Context.Service<{ readonly control: true }, number>("@openomni/ledger/Control");
-  const ObserverLive = Layer.scopedDiscard(Effect.asVoid(Control));
+  const ObserverLive = Layer.effectDiscard(Effect.asVoid(Control));
   expect(() => bundle({ name: "observer", requires: [Control], provides: [], layer: ObserverLive })).toThrow(BundleError);
 });
 
@@ -71,7 +71,7 @@ test("runtime forged Tag identities fail definition validation", () => {
 test("seed missing output fails without starting a dependent observer", async () => {
   const observed: number[] = [];
   const MissingSeed = Layer.effectContext(Effect.sync(missingNumberContext));
-  const ObserverLive = Layer.scopedDiscard(Effect.flatMap(NumberService, (value) => Effect.sync(() => { observed.push(value); })));
+  const ObserverLive = Layer.effectDiscard(Effect.flatMap(NumberService, (value) => Effect.sync(() => { observed.push(value); })));
   const observer = bundle({ name: "observer", requires: [NumberService], provides: [], layer: ObserverLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose({ requires: [], provides: [NumberService], layer: MissingSeed }, [observer])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -80,8 +80,8 @@ test("seed missing output fails without starting a dependent observer", async ()
 });
 
 test("defects and interruption remain causes rather than acquisition failures", async () => {
-  const DefectLive = Layer.scopedDiscard(Effect.die("bundle-defect"));
-  const InterruptLive = Layer.scopedDiscard(Effect.interrupt);
+  const DefectLive = Layer.effectDiscard(Effect.die("bundle-defect"));
+  const InterruptLive = Layer.effectDiscard(Effect.interrupt);
   for (const layer of [DefectLive, InterruptLive]) {
     const definition = bundle({ name: "broken", requires: [], provides: [], layer });
     const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [definition])))));
@@ -173,7 +173,7 @@ test("compose snapshots the seed before caller mutation", async () => {
 test("acquisition rejects Tag mutation after composition before any resources open", async () => {
   const events: string[] = [];
   const tag = Context.Service<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
-  const live = Layer.scoped(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
+  const live = Layer.effect(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
   const definition = bundle({ name: "changed", requires: [], provides: [tag], layer: live });
   const composed = compose(seed, [definition]);
   Object.assign(tag, { key: "@openomni/bundle/changed/Other" });
@@ -193,7 +193,7 @@ test("runtime compose refuses missing later-only and seed-colliding providers", 
 
 test("missing runtime outputs fail typed and release resources", async () => {
   const released: string[] = [];
-  const MissingLive = Layer.scopedContext(Effect.acquireRelease(Effect.sync(missingNumberContext), () => Effect.sync(() => { released.push("closed"); })));
+  const MissingLive = Layer.effectContext(Effect.acquireRelease(Effect.sync(missingNumberContext), () => Effect.sync(() => { released.push("closed"); })));
   const missing = bundle({ name: "number", provides: [NumberService], requires: [], layer: MissingLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [missing])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -203,9 +203,9 @@ test("missing runtime outputs fail typed and release resources", async () => {
 
 test("failed later acquisition unwinds once", async () => {
   const released: string[] = [];
-  const FirstLive = Layer.scoped(NumberService, Effect.acquireRelease(Effect.succeed(7), () => Effect.sync(() => { released.push("number"); })));
+  const FirstLive = Layer.effect(NumberService, Effect.acquireRelease(Effect.succeed(7), () => Effect.sync(() => { released.push("number"); })));
   const first = bundle({ name: "number", requires: [], provides: [NumberService], layer: FirstLive });
-  const FailureLive = Layer.scopedDiscard(Effect.andThen(NumberService, Effect.fail("refused")));
+  const FailureLive = Layer.effectDiscard(Effect.andThen(NumberService, Effect.fail("refused")));
   const failed = bundle({ name: "failed", requires: [NumberService], provides: [], layer: FailureLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [first, failed])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -216,9 +216,9 @@ test("failed later acquisition unwinds once", async () => {
 test("BundlesLive acquires only selected generation recipes and captures policy services", async () => {
   const events: string[] = [];
   const Policy = bundlePolicyTag("demo");
-  const PolicyLive = Layer.scoped(Policy, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return { transformers: [{ name: "demo/identity", apply: (value: PlainValue) => value }], obligations: [{ name: "demo/budget" }] }; }), () => Effect.sync(() => { events.push("close"); })));
+  const PolicyLive = Layer.effect(Policy, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return { transformers: [{ name: "demo/identity", apply: (value: PlainValue) => value }], obligations: [{ name: "demo/budget" }] }; }), () => Effect.sync(() => { events.push("close"); })));
   const demo = bundle({ name: "demo", provides: [Policy], requires: [], layer: PolicyLive });
-  const UnselectedLive = Layer.scopedDiscard(Effect.sync(() => { events.push("unselected"); }));
+  const UnselectedLive = Layer.effectDiscard(Effect.sync(() => { events.push("unselected"); }));
   const unselected = bundle({ name: "unselected", provides: [], requires: [], layer: UnselectedLive });
   const definitions = await isolated(BundleDefinitions.pipe(Effect.provide(BundlesLive([demo, unselected]))));
   expect(events).toEqual([]);

@@ -142,7 +142,7 @@ export const reconstructionRecovery = z.object({
 });
 
 function restartGenerations(captures: number[], missing: boolean) {
-  return Layer.scoped(GenerationLayers, Effect.gen(function* () {
+  return Layer.effect(GenerationLayers, Effect.gen(function* () {
     const snapshot = SessionHandleStore.generationFor(sessionId, missing ? 2 : 1);
     if (snapshot === undefined) throw new Error("restart fixture generation missing");
     const observations = yield* ObservationSink;

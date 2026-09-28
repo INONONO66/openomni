@@ -51,7 +51,7 @@ export function catalogLayer(definitions: readonly AnyToolDefinition[]) {
 
 export const runnerTestLayer = Layer.mergeAll(
   LlmLive, Layer.succeed(Clock, { now: Date.now }), Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
-  Layer.scopedContext(Effect.gen(function* () {
+  Layer.effectContext(Effect.gen(function* () {
     const snapshot = SessionHandleStore.generationSnapshot({ generation: 1, revertTo: 0, tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1 });
     const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) });
     const owner = yield* makeSessionGenerations({ id: { sessionId: "fixture", generation: 1 }, snapshot, activate: Effect.void,

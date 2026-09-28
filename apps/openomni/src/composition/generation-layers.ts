@@ -24,7 +24,7 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
 }
 
 /** The app owns construction; the package manager alone owns acquired contexts. */
-export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(function* () {
+export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(function* () {
   const scope = yield* Effect.scope;
   const installed = yield* BundleDefinitions;
   const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
@@ -51,7 +51,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
         ? Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze(select(source[role])) }))
         : source.catalogLayer(select));
       let active = false;
-      const observations = Layer.scoped(ObservationSink, Effect.acquireRelease(
+      const observations = Layer.effect(ObservationSink, Effect.acquireRelease(
         Effect.sync(() => {
           const bus = createObservationBus();
           const sink: Context.Service.Shape<typeof ObservationSink> = {
@@ -65,7 +65,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
       ));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
       const registry = selected.layer.pipe(Layer.provideMerge(seed));
-      const layer = Layer.unwrapEffect(Effect.gen(function* () {
+      const layer = Layer.unwrap(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
           try: () => compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),

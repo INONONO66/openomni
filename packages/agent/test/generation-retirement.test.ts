@@ -19,7 +19,7 @@ function generation(number: number, close: () => void) {
         generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) }) }),
       Layer.succeed(ToolCatalog, { definitions: [] }), Layer.succeed(ObservationSink, createObservationBus()),
       Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
-      Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(close))),
+      Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(close))),
     ),
   };
 }
