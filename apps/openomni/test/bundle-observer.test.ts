@@ -4,8 +4,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { bundle, bundlePolicyTag, BundlesLive, defineTool, eraseTool, sessionTool } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import { Llm, run } from "@openomni/llm";
+import { sessionFilePath } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
@@ -32,20 +33,23 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-observer-db-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ dbPath: config.dbPath,
+  const runtime = gatewayRuntime({ catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
     bundles: enabled ? BundlesLive([audit.definition]) : BundlesLive([]),
     llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
+  const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
-  const reply = nextResidentTurn();
+  const reply = nextResidentTurn(plane);
   ws.send(JSON.stringify({ type: "message", text: "echo" }));
   await reply;
-  const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
+  const row = plane.listSessions().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing resident");
-  const hooks = sessionTree(row.id).filter((action) => action.kind === "policy.decision").map((action) => action.intent.value);
+  const hooks = sessionTree(row.id, plane.sessionStore(row.id).actions).filter((action) => action.kind === "policy.decision").map((action) => action.intent.value);
   expect(hooks).toEqual(expect.arrayContaining([expect.objectContaining({ hook: "tool.pre", op: "echo" }), expect.objectContaining({ hook: "tool.post", op: "echo" })]));
-  const db = new Database(config.dbPath, { readonly: true });
+  const sessionsDir = config.sessionsDir;
+  if (sessionsDir === undefined) throw new Error("suite config is missing sessionsDir");
+  const db = new Database(sessionFilePath(sessionsDir, row.id), { readonly: true });
   try { expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM action WHERE kind = 'policy.decision'").get()?.count).toBeGreaterThan(0); }
   finally { db.close(); }
   expect(existsSync(path)).toBe(enabled);
@@ -83,16 +87,17 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-bundle-swap-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ dbPath: config.dbPath, bundles: BundlesLive([audit.definition, definition]),
+  const runtime = gatewayRuntime({ catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, bundles: BundlesLive([audit.definition, definition]),
     llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
+  const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
-  const first = nextResidentTurn();
+  const first = nextResidentTurn(plane);
   try {
     ws.send(JSON.stringify({ type: "message", text: "hold" }));
     await entered.promise;
-    const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
+    const row = plane.listSessions().find((row) => row.id !== "gateway-ingress");
     if (row === undefined) throw new Error("missing resident");
     const handle = app.sessions.get(row.id);
     if (handle === undefined) throw new Error("missing live session");
@@ -103,7 +108,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     release.resolve();
     await first;
     await retired.promise;
-    const second = nextResidentTurn();
+    const second = nextResidentTurn(plane);
     ws.send(JSON.stringify({ type: "message", text: "next" }));
     await second;
     expect(offered.slice(0, 2).every((names) => !names.includes(demo.name))).toBe(true);
@@ -113,7 +118,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     const observed = readFileSync(path, "utf8").trim().split("\n").map((line) => z.object({ acquisition: z.number(), data: z.object({ toolName: z.string() }) }).parse(JSON.parse(line)));
     expect(observed.filter((entry) => entry.data.toolName === "echo").map((entry) => entry.acquisition)).toEqual([2, 2]);
     expect(observed.filter((entry) => entry.data.toolName === "demo__echo").map((entry) => entry.acquisition)).toEqual([3, 3]);
-    const actions = sessionTree(row.id);
+    const actions = sessionTree(row.id, plane.sessionStore(row.id).actions);
     expect(actions.map((action) => action.intent.value)).toEqual(expect.arrayContaining([
       expect.objectContaining({ op: "echo", originalArgs: { text: "/home/private" }, value: { text: "redacted" } }),
       expect.objectContaining({ hook: "tool.pre", ref: "demo/redact-home", transforms: [{ ruleId: "demo/redact", ref: "demo/redact-home" }] }),

@@ -4,13 +4,24 @@ import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
-import { ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { Gateway, SessionTransition } from "@openomni/protocol";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
 
 const suite = residentSuite();
+/** Received-message evidence: prompt actions in one session's chain (W5.2). */
+function receivedMessages(plane: AppLedgerPlane, sessionId: string) {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
+    .filter((action) => action.kind === "prompt")
+    .map((action) => ({
+      content: (action.effect.value as { content?: string }).content ?? "",
+      origin: { value: action.intent.value },
+    }));
+}
 
 test("startOpenOmni reports pre-denied socket admission as an error, not accepted", async () => {
   const app = await suite.boot({
@@ -20,7 +31,8 @@ test("startOpenOmni reports pre-denied socket admission as an error, not accepte
       run: () => Effect.die(new Error("denied input reached model")),
     },
   });
-  ChannelGrantStore.put({
+  const plane = await planeOf(app.runtime);
+  plane.stores.channelGrants.put({
     id: "openomni-resident-ws",
     surface: "ws",
     kind: "blocked_channel",
@@ -31,7 +43,7 @@ test("startOpenOmni reports pre-denied socket admission as an error, not accepte
   socket.send(JSON.stringify({ text: "DENIED_INPUT" }));
   expect(await response).toMatchObject({ type: "error" });
   expect(
-    SessionHandleStore.listRows().flatMap((row) => SessionHandleStore.inboxRows(row.id)),
+    plane.listSessions().flatMap((row) => receivedMessages(plane, row.id)),
   ).toEqual([]);
 });
 
@@ -61,13 +73,16 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       unsubscribe();
       release.resolve();
     });
+    const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
     const app = await suite.boot({
       config: suite.config("message-child-bound-"),
       sessionRuntime: { clock: () => 100 },
       llm: {
         resolveModel: fakeProviderModel,
         run: (input, sink) => Effect.gen(function* () {
-          if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
+          const runPlane = planeRef.current;
+          if (runPlane === undefined) throw new Error("plane not resolved before model run");
+          if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
             entered.resolve(input.trace.sessionId);
             if (kind === "interrupted") yield* Effect.promise(() => release.promise);
             if (kind === "error") throw new Error("CHILD_ERROR");
@@ -89,6 +104,8 @@ for (const kind of ["result", "error", "interrupted"] as const) {
         }),
       },
     });
+    planeRef.current = await planeOf(app.runtime);
+    const plane = planeRef.current;
     await ownerStart(app, "initial");
     if (kind === "interrupted") {
       const childId = await entered.promise;
@@ -99,14 +116,14 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       await interrupt;
     }
     expect(await delivery).toEqual({ ok: true });
-    const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+    const child = plane.listSessions().find((row) => row.role === "worker");
     if (child === undefined || child.parentId === null) throw new Error("missing child");
-    const terminals = sessionTree(child.id).flatMap((action) => {
+    const terminals = sessionTree(child.id, plane.sessionStore(child.id).actions).flatMap((action) => {
       const terminal = SessionHandleStore.turnTerminal(action);
       return terminal === undefined ? [] : [terminal];
     });
     expect(terminals.map((terminal) => terminal.kind)).toEqual([kind]);
-    const letters = SessionHandleStore.inboxRows(child.parentId).filter(
+    const letters = receivedMessages(plane, child.parentId).filter(
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
     expect(letters).toHaveLength(1);
@@ -118,12 +135,13 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(letters[0]?.content).toBe(terminals[0]?.text);
     // No child-owned request/alarm is opened by the terminal reply.
     expect(
-      sessionTree(child.id).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id, plane.sessionStore(child.id).actions).filter((action) => action.kind === "alarm.arm"),
     ).toEqual([]);
-    expect(SessionHandleStore.requestRows(child.parentId)).toHaveLength(1);
-    expect(SessionHandleStore.requestRows(child.parentId)[0]?.state).toBe("resolved");
+    const parentKernel = plane.openKernel(child.parentId);
+    expect(parentKernel.requestRows(child.parentId)).toHaveLength(1);
+    expect(parentKernel.requestRows(child.parentId)[0]?.state).toBe("resolved");
     expect(
-      SessionHandleStore.inboxRows(child.parentId).filter(
+      receivedMessages(plane, child.parentId).filter(
         (row) =>
           row.origin.value !== null &&
           typeof row.origin.value === "object" &&
@@ -131,6 +149,11 @@ for (const kind of ["result", "error", "interrupted"] as const) {
           row.origin.value.kind === "message_timeout",
       ),
     ).toEqual([]);
-    expect(Storage.get().alarms?.due(1000)).toEqual([]);
+    // W5.2: no alarm rows exist; the resolved request holds no live deadline.
+    expect(
+      parentKernel
+        .requestRows(child.parentId)
+        .filter((row) => row.state === "open" && row.deadline !== null && row.deadline <= 1000),
+    ).toEqual([]);
   });
 }

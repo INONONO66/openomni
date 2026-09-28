@@ -2,9 +2,8 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Cause, Effect, Exit, Option } from "effect";
-import { gatewayRuntime } from "../src/gateway";
+import { createAppLedger } from "../src/composition/cluster-runtime";
 import { AppLifecycleFailure } from "../src/runtime";
 import { appFixture } from "./helpers/app-fixture";
 import { seedKernelPolicyRows } from "../src/policy-seed";
@@ -14,30 +13,30 @@ import { runEffect } from "./helpers/effect";
 
 test("a pending Owner request keeps the server available while failed recovery is reported", async () => {
   const directory = mkdtempSync(join(tmpdir(), "recovery-failure-"));
-  const dbPath = join(directory, "storage.sqlite");
+  const catalogPath = join(directory, "catalog.sqlite");
+  const sessionsDir = join(directory, "sessions");
   const reported = Promise.withResolvers<Error>();
   const log = spyOn(console, "error").mockImplementation((_message: string, error: Error) =>
     reported.resolve(error),
   );
   let app: Awaited<ReturnType<typeof appFixture>> | undefined;
   try {
-    const seed = gatewayRuntime({ dbPath });
-    await seed.runPromise(Effect.void);
-    seedKernelPolicyRows();
-    await seed.runPromise(
-      SessionHandleStore.materialize({
+    const seed = createAppLedger({ catalogPath, sessionsDir });
+    seedKernelPolicyRows(seed.catalog.policies);
+    const kernel = seed.openKernel("session");
+    await Effect.runPromise(
+      kernel.materialize({
         id: "session",
         parentId: null,
         role: "resident",
         tools: [],
         system: { preset: "", blocks: [] },
-        policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+        policyGeneration: kernel.currentPolicyGeneration(),
         actionId: "configure",
         at: 1,
       }),
     );
-    const actions = Storage.get().actions;
-    if (actions === undefined) throw new Error("action storage missing");
+    const actions = seed.sessionStore("session").actions;
     expect(
       actions.append(
         {
@@ -71,11 +70,12 @@ test("a pending Owner request keeps the server available while failed recovery i
         2,
       ),
     ).toBeDefined();
-    await seed.dispose();
+    seed.close();
     app = await appFixture({
       sessionRuntime: { clock: () => 100 },
       config: {
-        dbPath,
+        catalogPath,
+        sessionsDir,
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "fixture", apiKey: "fixture" },
@@ -103,7 +103,6 @@ test("a pending Owner request keeps the server available while failed recovery i
   } finally {
     log.mockRestore();
     if (app !== undefined) await app.stop();
-    Storage.reset();
     rmSync(directory, { recursive: true, force: true });
   }
 });

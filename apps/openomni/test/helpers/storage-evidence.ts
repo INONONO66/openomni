@@ -9,11 +9,3 @@ export function assertNoLegacyRequestStores(dbPath: string): void {
       .all(),
   ).toEqual([]);
 }
-
-export function persistedSession(raw: Database, id: string) {
-  return {
-    session: raw.query("SELECT * FROM session WHERE id = ?").get(id),
-    actions: raw.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(id),
-    inbox: raw.query("SELECT * FROM inbox WHERE session_id = ?").all(id),
-  };
-}
