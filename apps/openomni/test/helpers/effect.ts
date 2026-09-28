@@ -12,7 +12,7 @@ export function runSyncEffect<A, E>(effect: Effect.Effect<A, E, never>): A {
   return Result.getOrThrowWith(Effect.runSync(Effect.result(effect)), (error) => error);
 }
 
-const scopes: Scope.CloseableScope[] = [];
+const scopes: Scope.Closeable[] = [];
 export async function closeAcquiredEffects(): Promise<void> {
   for (const scope of scopes.splice(0).reverse()) {
     await runEffect(Scope.close(scope, Exit.void));
@@ -23,11 +23,11 @@ export async function closeAcquiredEffects(): Promise<void> {
 export function acquireEffect<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): Promise<A> {
   const scope = runSyncEffect(Scope.make());
   scopes.push(scope);
-  return runEffect(Scope.extend(effect, scope));
+  return runEffect(Scope.provide(effect, scope));
 }
 
 export function acquireSyncEffect<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): A {
   const scope = runSyncEffect(Scope.make());
   scopes.push(scope);
-  return runSyncEffect(Scope.extend(effect, scope));
+  return runSyncEffect(Scope.provide(effect, scope));
 }

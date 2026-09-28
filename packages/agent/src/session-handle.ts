@@ -1,4 +1,4 @@
-import { Effect, ExecutionStrategy, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, SessionRunnerResult, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";
@@ -125,7 +125,7 @@ class SessionRegistry {
               if (controller !== undefined && self.entries.get(id)?.controller === controller) self.entries.delete(id);
             },
           };
-          const scope = yield* Scope.fork(self.scope, ExecutionStrategy.sequential);
+          const scope = yield* Scope.fork(self.scope, "sequential");
           controller = yield* createController(id, runner, self.runtime, lifecycle, scope);
           const entry = { runner, controller };
           self.entries.set(id, entry);

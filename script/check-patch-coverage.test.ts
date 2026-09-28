@@ -198,7 +198,7 @@ type SyntaxFixture = { name: string; source: string; uncovered: number[] };
 const syntaxFixtures: SyntaxFixture[] = [
   {
     name: "zero-hit import header before a TaggedError class",
-    source: 'import {\n  Data,\n} from "effect";\nimport type { Effect } from "effect";\nexport class Failure extends Data.TaggedError("Failure") {}\n',
+    source: 'import { \n  Data, \n } from "effect";\nimport type { Effect } from "effect";\nexport class Failure extends Data.TaggedError("Failure") {}\n',
     uncovered: [5],
   },
   {

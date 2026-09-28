@@ -1,4 +1,4 @@
-import { Layer, ManagedRuntime, } from "effect";
+import { Layer, ManagedRuntime } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

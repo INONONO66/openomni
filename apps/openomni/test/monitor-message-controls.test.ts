@@ -50,7 +50,7 @@ for (const status of ["armed", "fired"] as const) {
         const scope = await runEffect(Scope.make());
         const services = acquireSyncEffect(generationServices({ clock: () => at }));
         const requests = runSyncEffect(createSessionRequests({ authorizeConfigure: allowConfigure }).pipe(Effect.provide(services)));
-        const makeWorker = () => runEffect(Scope.extend(
+        const makeWorker = () => runEffect(Scope.provide(
           createAlarmWorker({
             alarms: alarmStore(),
             requestTimeout: requests.timeout,

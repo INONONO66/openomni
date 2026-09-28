@@ -85,7 +85,7 @@ export function acquireAppResource<A, E>(
 ): Promise<A> {
   return runAppEffect(
     runtime,
-    Effect.flatMap(AppScope, (scope) => Scope.extend(effect, scope)),
+    Effect.flatMap(AppScope, (scope) => Scope.provide(effect, scope)),
   );
 }
 

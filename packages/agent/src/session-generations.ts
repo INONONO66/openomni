@@ -19,7 +19,7 @@ export class GenerationRawSlots extends Context.Service<
 interface Entry {
   readonly bundle: GenerationBundle;
   readonly context: Context.Context<GenerationServices>;
-  readonly scope: Scope.CloseableScope;
+  readonly scope: Scope.Closeable;
   readonly owners: ReturnType<typeof createRawSlots>;
   readonly hash: string;
   retired: boolean;

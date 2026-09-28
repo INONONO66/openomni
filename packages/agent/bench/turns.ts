@@ -172,7 +172,7 @@ export async function roundTrip() {
           runtime,
         ),
         runtime,
-      ).pipe(Scope.extend(scope)),
+      ).pipe(Scope.provide(scope)),
     );
     return { handle, run: () => runBenchEffect(handle.prompt("hello")), close };
   } catch (error) {

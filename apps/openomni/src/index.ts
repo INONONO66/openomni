@@ -394,7 +394,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           });
         } else {
           const scope = yield* AppScope;
-          yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
+          yield* Scope.provide(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
         }
       });
     const wake = (id: string) =>

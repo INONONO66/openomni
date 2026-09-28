@@ -6,10 +6,10 @@ export function effectScope() {
   const scope = Effect.runSync(Scope.make());
   return {
     runSync<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): A {
-      return runSyncEffect(Scope.extend(effect, scope));
+      return runSyncEffect(Scope.provide(effect, scope));
     },
     run<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): Promise<A> {
-      return runEffect(Scope.extend(effect, scope));
+      return runEffect(Scope.provide(effect, scope));
     },
     close: () => runEffect(Scope.close(scope, Exit.void)),
   };

@@ -83,7 +83,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       let owner = managers.get(sessionId);
       if (owner === undefined) {
         const initial = yield* bundle(sessionId, SessionHandleStore.latestGenerationFor(sessionId));
-        owner = yield* makeSessionGenerations(initial).pipe(Scope.extend(scope));
+        owner = yield* makeSessionGenerations(initial).pipe(Scope.provide(scope));
         managers.set(sessionId, owner);
       }
       return owner;
