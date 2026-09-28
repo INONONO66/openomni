@@ -346,29 +346,6 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
           at: 100,
         }),
       );
-      // W5.2: the fixture handle is a live writer; an out-of-band fence
-      // adoption here would revoke its authority and fail the send below.
-      // Ingress rides the live owner+fence instead (entity requestCommand).
-      await runEffect(
-        commitReceivedMessage(f.plane.openKernel(f.sessionId), {
-          id: "bound-request",
-          sessionId: f.sessionId,
-          kind: "prompt",
-          content: "work",
-          createdAt: 100,
-          parentActionId: null,
-          origin: {
-            encodingVersion: 1,
-            value: {
-              kind: "message",
-              messageId: "bound-request",
-              senderSessionId: "parent",
-              sourceActionId: "parent:request",
-              deadline: 150,
-            },
-          },
-        }),
-      );
       send = {
         to: { kind: "session", id: "parent" },
         type: "message",
@@ -376,7 +353,32 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         deadline: 151,
       };
     }
-    const result = await f.send(send);
+    // W5.2: pre-turn backlog drains into the turn before the model runs, so
+    // the inherited deadline only binds a message still pending mid-turn. The
+    // bound request arrives inside the running turn (riding the live
+    // owner+fence — an out-of-band fence adoption would revoke the handle).
+    const midTurn =
+      check === "deadline"
+        ? commitReceivedMessage(f.plane.openKernel(f.sessionId), {
+            id: "bound-request",
+            sessionId: f.sessionId,
+            kind: "prompt",
+            content: "work",
+            createdAt: 100,
+            parentActionId: null,
+            origin: {
+              encodingVersion: 1,
+              value: {
+                kind: "message",
+                messageId: "bound-request",
+                senderSessionId: "parent",
+                sourceActionId: "parent:request",
+                deadline: 150,
+              },
+            },
+          }).pipe(Effect.asVoid, Effect.orDie)
+        : undefined;
+    const result = await f.send(send, midTurn);
     expect(result.isError).toBe(true);
     expect(result.output).toContain(`message.resident.${check}`);
   });

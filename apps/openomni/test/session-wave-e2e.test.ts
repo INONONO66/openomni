@@ -32,6 +32,7 @@ import {
   adoptAtFence,
   bounded as waveBounded,
   commitInterrupt,
+  commitPrompt,
   interruptDeliveries,
   ProviderRequest,
   trackedWaveTools,
@@ -306,8 +307,11 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
     }),
   );
   // When: interrupt at the real provider-return boundary, before any tool body.
+  const settled = nextTerminal();
   socket.send(JSON.stringify({ type: "message", text: "run A" }));
   await bounded(interrupted.promise);
+  // The seal is the turn fiber's own commit; await its exact terminal signal.
+  await settled;
   // Then: exactly the original turn is interrupted without a body or second call.
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
@@ -469,7 +473,9 @@ test("interrupting pending B cancels every unstarted positional slot", async () 
   socket.send(JSON.stringify({ type: "message", text: "hold wave" }));
   const { handle, request } = await bounded(waiting);
   expect(started).toEqual([]);
+  const settled = nextTerminal();
   await bounded(runEffect(handle.interrupt()));
+  await settled;
   expect(started).toEqual([]);
   expect(received).toHaveLength(1);
   expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([
@@ -486,7 +492,7 @@ test("interrupting pending B cancels every unstarted positional slot", async () 
   ).toMatchObject({ code: "stale_approval" });
 });
 
-test("noncooperative bodies release the wave but retain the lease and cannot commit late", async () => {
+test("noncooperative bodies release the wave but retain fence ownership and cannot commit late", async () => {
   const gate = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>();
   const late = Promise.withResolvers<string>();
@@ -522,7 +528,9 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     const row = activeRow();
     const handle = app.sessions.get(row.id);
     if (handle === undefined) throw new Error("missing session handle");
+    const settled = nextTerminal();
     await bounded(runEffect(handle.interrupt()));
+    await settled;
     expect(signal?.aborted).toBe(true);
     expect(toolResults(row.id).map((result) => [result.callId, result.terminal])).toEqual([
       ["call-A", "executed"],
@@ -532,8 +540,8 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
     expect(received).toHaveLength(1);
     gate.resolve();
     expect(await bounded(late.promise)).toBe("failed");
-    await bounded(runEffect(handle.close()));
-    // W5.2: fence adoption is permanent; close keeps the last owner on the row.
+    // W5.2: the close plane is gone; the turn's fence adoption is permanent,
+    // so the durable owner stays on the row after the raw body settles.
     expect(plane().openKernel(row.id).row(row.id).leaseOwner).not.toBeNull();
     expect(
       tree(row.id).some(
@@ -548,7 +556,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
 });
 
 for (const door of ["captured-cell", "captured-wave"] as const) {
-  test(`nested raw effects retain the lease through ${door} after caller interruption`, async () => {
+  test(`nested raw effects retain fence ownership through ${door} after caller interruption`, async () => {
     // Given: the review countercase, through the real app/SDK/SSE and file SQLite.
     const captured = Promise.withResolvers<ReturnType<typeof currentExecutor>>();
     const entered = Promise.withResolvers<void>();
@@ -652,9 +660,9 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         failure: { _tag: "LeaseRefused", reason: "stale" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
-      // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
-      // point after the wrapper settles: the executor's grace row when it wins the close race,
-      // close's seal otherwise. Every other count below excludes that one row.
+      // The gated wrapper's grace outcome lands exactly once under the inner
+      // intent: the executor's zero-grace row at wave close. Every other count
+      // below excludes that one row.
       const innerIntent = tree(row.id).find(
         (action) =>
           action.kind === "tool" &&
@@ -678,12 +686,11 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       expect(staleBodyStarts).toBe(0);
       expect(otherRows()).toHaveLength(beforeActions);
       gate.resolve();
+      // The raw effect's own completion signal is the join point (close plane gone).
       await bounded(completed.promise);
-      // Close joins the raw effect after its exact completion signal.
-      await bounded(runEffect(handle.close()));
       expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
       const released = plane().openKernel(row.id).row(row.id);
-      // W5.2: close retains the adopted fence; a strictly newer fence still adopts.
+      // W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts.
       const next = adoptAtFence(plane(), row.id, "nested-contender", released.leaseFence + 1);
       expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
@@ -700,22 +707,23 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
           }),
         },
       ]);
-      // Raw completion commits nothing else; close only adds its interrupt.
+      // Raw completion commits nothing else; the close plane's interrupt
+      // ingress is gone, so no row lands after the wrapper's grace outcome.
       expect(
         otherRows()
           .slice(beforeActions)
           .map((action) => ({ kind: action.kind, effect: action.effect.value })),
-      ).toEqual([
-        { kind: "prompt", effect: { inboxKind: "interrupt", content: "" } },
-      ]);
+      ).toEqual([]);
       expect(received).toHaveLength(2);
     } finally {
       outerDone.resolve();
       gate.resolve();
       await bounded(completed.promise);
       await bounded(wrapperSettled.promise);
-      await bounded(runEffect(handle?.close() ?? Effect.void));
-      await cleanup();
+      await cleanup().catch((error: unknown) => {
+        console.error("DEBUG cleanup", JSON.stringify(error, Object.getOwnPropertyNames(error as object)));
+        throw error;
+      });
       expect(existsSync(directory)).toBe(false);
     }
   }, 15000);
@@ -834,16 +842,17 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         expect(tree(sessionId)).toHaveLength(beforeActions);
         rawGate.resolve();
         await bounded(rawDone.promise);
-        await bounded(runEffect(handle?.close() ?? Effect.void));
         expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
         const released = plane().openKernel(sessionId).row(sessionId);
-        // W5.2: close retains the adopted fence; a strictly newer fence still adopts.
+        // W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts.
         const next = adoptAtFence(plane(), sessionId, "timed-contender", released.leaseFence + 1);
         expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
           _tag: "InvocationClosed", reason: "settled",
         });
         expect(staleStarts).toBe(0);
+        // The close plane's interrupt ingress is gone: raw completion after
+        // the fence handover commits nothing.
         expect(
           tree(sessionId)
             .slice(beforeActions)
@@ -851,13 +860,12 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
               kind: action.kind,
               effect: action.effect.value,
             })),
-        ).toEqual([{ kind: "prompt", effect: { inboxKind: "interrupt", content: "" } }]);
+        ).toEqual([]);
         expect(received).toHaveLength(2);
       } finally {
         outerGate.resolve();
         rawGate.resolve();
         if (rawStarted) await bounded(rawDone.promise);
-        await bounded(runEffect(handle?.close() ?? Effect.void));
         await cleanup();
         expect(existsSync(directory)).toBe(false);
       }
@@ -873,9 +881,10 @@ test("approval-time prompts retain durable identities and enter the next model s
   const response = nextResidentTurn(plane(), 5000);
   socket.send(JSON.stringify({ type: "message", text: "initial" }));
   const { handle, request } = await bounded(waiting);
-  // When: two SDK prompts arrive while the wave is held, before any next boundary.
-  const first = runEffect(handle.prompt("first continuation"));
-  const second = runEffect(handle.prompt("second continuation"));
+  // When: two durable prompts arrive while the wave is held, before any next
+  // boundary - committed under the live activation's borrowed authority.
+  await commitPrompt(plane(), handle.id, "held-prompt-first", "first continuation");
+  await commitPrompt(plane(), handle.id, "held-prompt-second", "second continuation");
   // W5.2: the inbox is the prompt-action chain; pending = not yet delivered.
   const prompts = tree(handle.id).filter(
     (action) =>
@@ -896,7 +905,7 @@ test("approval-time prompts retain durable identities and enter the next model s
   await runEffect(
     handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
   );
-  await bounded(Promise.all([first, second, response]));
+  await bounded(response);
   // Then: canonical next-model admission names the original ordered prompt IDs.
   const modelIntent = z.object({
     phase: z.literal("intent"),
@@ -942,19 +951,17 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   try {
     expect(request.expiresAt).toBe(101);
     expect(started).toEqual([]);
-    // W5.2: the alarm worker is gone; the entity's DeliverAt timer fires the
-    // durable request.timeout transition. Simulate that exact firing here.
+    // W5.2: the alarm worker is gone and the durable DeliverAt Deadline
+    // serializes behind the live turn's own entity RPC; a mid-turn expiry
+    // rides the facade's borrowed-authority request timeout, which notifies
+    // the turn's live approval gate.
     const open = plane()
       .openKernel(handle.id)
       .requestRows(handle.id)
       .find((row) => row.state === "open");
     if (open === undefined) throw new Error("missing open approval request");
     now = 101;
-    await runEffect(
-      handle.requests
-        .transition({ kind: "request.timeout", requestId: open.requestId }, `${open.requestId}:deadline`, now)
-        .pipe(Effect.asVoid),
-    );
+    await runEffect(handle.requests.timeout(open.requestId, now));
     await response;
     expect(started).toEqual(["A", "C"]);
     expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([

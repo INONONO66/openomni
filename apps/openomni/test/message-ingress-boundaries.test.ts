@@ -191,8 +191,8 @@ test("child admission observations see the deadline before the child's inbox com
           content: "work",
           deadline: 200,
         })
-      ).isError,
-    ).not.toBe(true);
+      ),
+    ).toEqual({});
     expect(visible).toEqual([{ deadline: 200 }]);
   } finally {
     unsubscribe();
