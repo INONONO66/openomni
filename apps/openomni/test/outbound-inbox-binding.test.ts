@@ -73,12 +73,18 @@ test("the receiving consumer may only commit the exact outbound letter", async (
     () => 100,
     plane.openKernel,
   );
-  const failure = await runEffect(
-    Effect.scoped(Effect.flip(
-      dispatch({ message, authority: { owner: "runner", fence: 1 } }),
-    ).pipe(Effect.provide(runnerTestLayer))),
-  );
-  expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.outbound" });
+  // W5.2: the receipt-missing invariant surfaces as a dispatch defect (the
+  // throw inside the outbound program), not a typed ForeignFailure; the
+  // observable contract is that the outbound send fails as a whole.
+  await expect(
+    runEffect(
+      Effect.scoped(
+        dispatch({ message, authority: { owner: "runner", fence: 1 } }).pipe(
+          Effect.provide(runnerTestLayer),
+        ),
+      ),
+    ),
+  ).rejects.toThrow("outbound receiving consumer did not commit a receipt");
   // W5.2: the commit-side binding refusal lives in createMessageInboxCommit
   // (entity delivery); this harness commits through a raw test inbox, so the
   // dispatch-side receipt check is the invariant under test: no receipt for

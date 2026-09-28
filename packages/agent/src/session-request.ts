@@ -109,14 +109,10 @@ export function decideRequestTransition(
   if (
     !SessionTransition.Command.safeParse(command).success ||
     !ownsRequestRevision(command, snapshot.row)
-  ) {
-    console.error("PROBE decide reject", JSON.stringify({ parse: SessionTransition.Command.safeParse(command).success, owns: ownsRequestRevision(command, snapshot.row), owner: command.authority, row: { o: snapshot.row.leaseOwner, f: snapshot.row.leaseFence, r: snapshot.row.revision }, exp: command.expectedRevision, kind: command.payload.kind }));
+  )
     return rejected;
-  }
   const inputDigest = requestInputDigest(command.payload);
-  const out = repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
-  if (out.actions.length === 0 && out.request === undefined) console.error("PROBE decide rejected-late", JSON.stringify({ kind: command.payload.kind, repeated: repeatedInput(command, snapshot, inputDigest) !== undefined }));
-  return out;
+  return repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
 }
 
 type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;

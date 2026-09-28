@@ -18,7 +18,6 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   let calls = 0;
   const waiting = Promise.withResolvers<void>();
   const app = await suite.boot({
-    sessionRuntime: { onHibernate: () => Effect.sync(() => waiting.resolve()) },
     config: suite.config("monitor-app-db-", {
       wsToken: "monitor-test",
       compactionSummarizer: false,
@@ -50,14 +49,22 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);
+  const plane = await planeOf(app.runtime);
+  // W5.2: entity turns never call the hibernate hook (their port is a no-op);
+  // the durable suspend signal is the turn terminal "waiting" commit.
+  const unsubscribeWaiting = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "turn") return;
+    const snapshot = plane.openKernel(event.sessionId).getSnapshot(event.sessionId);
+    if (snapshot.turns.at(-1)?.terminal?.kind === "waiting") waiting.resolve();
+  });
   const waitTimer = setTimeout(() => waiting.reject(new Error("monitor did not suspend")), 5000);
   try {
     ws.send(JSON.stringify({ type: "message", text: "watch for the signal" }));
     await waiting.promise;
   } finally {
     clearTimeout(waitTimer);
+    unsubscribeWaiting();
   }
-  const plane = await planeOf(app.runtime);
   const arm = plane
     .listSessions()
     .flatMap((row) =>

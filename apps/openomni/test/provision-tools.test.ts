@@ -129,9 +129,15 @@ describe("provision output boundary", () => {
 
 /** Open the Owner-consent request for declaring one manifest through the protected dispatcher. */
 function consentedDeclare(port: ProvisionPort, manifest: PlainObject) {
-  return protectedDispatch(eraseTool(createProvisionTool(port)), {
-    operation: { op: "contact_add", args: { manifest } },
-  });
+  // The answer-time domain-revision read must consult the same plane the
+  // tool port mutates; a private dispatch plane reads every person as absent
+  // (-1) and rejects the consent as stale.
+  return protectedDispatch(
+    eraseTool(createProvisionTool(port)),
+    { operation: { op: "contact_add", args: { manifest } } },
+    undefined,
+    { plane: plane() },
+  );
 }
 
 describe("original Person invocation consent", () => {

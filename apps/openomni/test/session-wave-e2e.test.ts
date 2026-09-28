@@ -720,10 +720,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       gate.resolve();
       await bounded(completed.promise);
       await bounded(wrapperSettled.promise);
-      await cleanup().catch((error: unknown) => {
-        console.error("DEBUG cleanup", JSON.stringify(error, Object.getOwnPropertyNames(error as object)));
-        throw error;
-      });
+      await cleanup();
       expect(existsSync(directory)).toBe(false);
     }
   }, 15000);
@@ -961,11 +958,8 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
       .find((row) => row.state === "open");
     if (open === undefined) throw new Error("missing open approval request");
     now = 101;
-    console.error("DEBUG before timeout");
     await runEffect(handle.requests.timeout(open.requestId, now));
-    console.error("DEBUG after timeout", JSON.stringify(plane().openKernel(handle.id).requestRows(handle.id).map((r) => ({ id: r.requestId, mode: r.mode, state: r.state, deadline: r.deadline }))));
     await response;
-    console.error("DEBUG after response");
     expect(started).toEqual(["A", "C"]);
     expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([
       ["call-A", "executed"],
