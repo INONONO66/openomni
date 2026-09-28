@@ -2,9 +2,9 @@ import * as Fold from "./fold.js";
 import * as Schema from "./schema.js";
 
 /**
- * Transcript domain (#545 T1): append-only conversation-history facts and the
- * pure fold projecting them into Message.WithParts. Bus event descriptors
- * intentionally do not exist yet — they land with their first consumer (T5).
+ * Transcript domain: append-only conversation-history facts and the pure fold
+ * projecting them into Message.WithParts. Consumed by `packages/llm/src/processor`;
+ * the domain carries no bus event descriptors.
  */
 export namespace Transcript {
   export const Usage = Schema.Usage;

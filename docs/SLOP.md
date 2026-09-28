@@ -426,7 +426,7 @@ Read-only sweep of slop not already recorded above and not named by the W1–W5 
 | H15 | `apps/openomni/src/tools/{monitor,completion,provision}.ts` | 1,006 LOC of tool adapters, 706 over the 100-line adapter rule | W3 #1111 | ✅ merged `75d28562` (PR #1193, W3 #1111, 2026-09-26) |
 | H16 | `apps/desktop/src/renderer/state/store.ts:95-114`, `app.tsx:210-211,309-311` | Provisional client-side truth pending a wire read model | W5 #1113 | open |
 | H17 | `script/check-quality-coverage.ts:155` vs `quality-json.ts:20`; `check-coverage-ratchet.ts:217` vs `quality-native-lcov.ts:62` | Duplicate JSON/LCOV parsers | W5 #1113 | open |
-| H18 | `gateway/schema.ts:105-106,365`, `transcript/index.ts:6-7`, `provider/contract.ts:98-123`, `resolve-route.ts:4-9`, `github/surface.ts:59-60,243` | Stale comments describing deleted behaviour | W5 #1113 (or the wave that deletes the surrounding code first) | open |
+| H18 | `gateway/schema.ts:105-106,365`, `transcript/index.ts:6-7`, `provider/contract.ts:98-123`, `resolve-route.ts:4-9`, `github/surface.ts:59-60,243` | Stale comments describing deleted behaviour | W5.0 #1195 (PR #1198): the five comments now describe the live code (`packages/channels/src/router/messaging` owner, `send_message` consumer, `packages/llm/src/processor` transcript consumer, `channel_add`/`secret_rotate`/`status` gates, external-only route fold, `issues.opened`/handler-throw GitHub semantics); no code change | ✅ PR #1198 |
 | H19 | `docs/DESIGN.md` (475 lines) | Delivery receipt superseded by KERNEL.md / final-kernel-design | W5 #1113 docs | open |
 
 ## §I #1116 lean PR gate: quality-ratchet stack deletion (2026-09-20)

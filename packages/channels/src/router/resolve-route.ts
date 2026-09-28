@@ -2,11 +2,9 @@ import type { Actor, Ingress } from "@openomni/protocol";
 import { effectiveTrustTier } from "./effective-tier.js";
 
 /**
- * External routing arms of THE resolveRoute fold (#707 stage 2). The
- * internal-mode arm (systemActor check + surface-default routing for cron /
- * dispatch events) stayed brain-side as `resolveInternalRoute` — internal
- * mode never crosses the perimeter; this router owns external mode only.
- * Decision strings, stages, and factsUsed are byte-frozen wire vocabulary.
+ * External routing arms of THE resolveRoute fold. Internal mode never crosses
+ * the perimeter, so this router owns external mode only. Decision strings,
+ * stages, and factsUsed are byte-frozen wire vocabulary.
  */
 type RouteInbound = {
   readonly traceId: string;
