@@ -8,7 +8,7 @@ export { createDecisionFactPort } from "./storage/decision-fact-port";
 export * as SessionHandleStore from "./session/kernel.js";
 export { createSurfaceKeyStore } from "./surface-key";
 export { createActorRegistry, type ActorRegistry } from "./actor/index.js";
-export { createBlacklistStore, type BlacklistStore } from "./blacklist/index.js";
+export { createBlacklistStore } from "./blacklist/index.js";
 export { createChannelGrantStore, type ChannelGrantStore } from "./channel-grant/index.js";
 export { createReplyGrantStore } from "./reply-grant/index.js";
 export {

@@ -1,8 +1,6 @@
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
-export type BlacklistStore = ReturnType<typeof createBlacklistStore>;
-
 /** Raw blacklist fact storage over one catalog handle. Active-pattern matching belongs to channels. */
 export function createBlacklistStore(source: {
   readonly blacklist?: ProtocolStorage.BlacklistSubAdapter;
