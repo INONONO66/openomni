@@ -1,0 +1,43 @@
+• turbo 2.8.1
+• Packages in scope: @openomni/agent, @openomni/app, @openomni/channels, @openomni/codemode, @openomni/desktop, @openomni/ipc, @openomni/ledger, @openomni/llm, @openomni/machines, @openomni/policy, @openomni/protocol, @openomni/ui
+• Running check-types in 12 packages
+• Remote caching disabled, using shared worktree cache
+@openomni/ui:check-types: cache bypass, force executing bc2909dde7d8b31f
+@openomni/protocol:check-types: cache bypass, force executing a4fb85b6c9f23ff4
+@openomni/protocol:build: cache bypass, force executing e2353f64acae68bb
+@openomni/desktop:check-types: cache bypass, force executing 468e7a26b6fdd4a5
+@openomni/ui:check-types: $ tsc -p tsconfig.json && tsc -p tsconfig.test.json
+@openomni/protocol:check-types: $ tsc --noEmit && tsc --noEmit -p tsconfig.test.json
+@openomni/protocol:build: $ rm -rf dist && tsc -p tsconfig.build.json
+@openomni/desktop:check-types: $ tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json
+@openomni/llm:check-types: cache bypass, force executing bc29d9e8f6569897
+@openomni/policy:check-types: cache bypass, force executing 66306f2d22624af9
+@openomni/ipc:build: cache bypass, force executing e6cce8260717f5ab
+@openomni/llm:check-types: $ tsc --noEmit && tsc --noEmit -p tsconfig.test.json
+@openomni/ipc:check-types: cache bypass, force executing e3e0fd8f045ba19a
+@openomni/policy:check-types: $ tsc --noEmit
+@openomni/ledger:check-types: cache bypass, force executing 119dea75ad713240
+@openomni/ledger:build: cache bypass, force executing 606a72b69e9286c3
+@openomni/ipc:build: $ rm -rf dist && tsc -p tsconfig.build.json
+@openomni/ipc:check-types: $ tsc --noEmit
+@openomni/ledger:check-types: $ tsc --noEmit && tsc --noEmit -p tsconfig.contract-test.json && tsc --noEmit -p tsconfig.test.json
+@openomni/ledger:build: $ tsc -p tsconfig.json
+@openomni/machines:check-types: cache bypass, force executing 2c48dfb64e6a25d1
+@openomni/codemode:check-types: cache bypass, force executing 6c38a77e80a9ab6b
+@openomni/machines:check-types: $ tsc --noEmit
+@openomni/codemode:check-types: $ tsc --noEmit
+@openomni/agent:build: cache bypass, force executing 666c8d67c8d59c18
+@openomni/agent:check-types: cache bypass, force executing 7cd101c560d231c9
+@openomni/agent:build: $ rm -rf dist && tsc -p tsconfig.build.json
+@openomni/agent:check-types: $ tsc --noEmit && tsc --noEmit -p tsconfig.bench.json && tsc --noEmit -p tsconfig.test.json
+@openomni/channels:build: cache bypass, force executing a6584d3b74b6e6cb
+@openomni/channels:check-types: cache bypass, force executing f9903fbe2a249b0d
+@openomni/channels:build: $ rm -rf dist && tsc -p tsconfig.build.json
+@openomni/channels:check-types: $ tsc --noEmit
+@openomni/app:check-types: cache bypass, force executing d7c3dcfeeee4c2ef
+@openomni/app:check-types: $ tsc --noEmit && tsc --noEmit -p tsconfig.test.json
+
+ Tasks:    17 successful, 17 total
+Cached:    0 cached, 17 total
+  Time:    25.676s 
+
