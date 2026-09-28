@@ -88,7 +88,7 @@ export class MonitorRefused extends ToolRefused {
   readonly _tag = "MonitorRefused";
 
   constructor(readonly failure: LedgerError | Error) {
-    super("monitor", failure instanceof Error ? failure.message : failure._tag);
+    super("monitor", failure.message);
   }
 }
 
@@ -286,7 +286,7 @@ function commitWatchActions(
       })
       .pipe(
         Effect.asVoid,
-        Effect.catchAll((error) =>
+        Effect.catch((error) =>
           retries > 0 && error._tag === "CommitRefused"
             ? commitWatchActions(kernel, sessionId, actions, retries - 1)
             : Effect.fail(new Error(`watch commit failed: ${error._tag}`)),

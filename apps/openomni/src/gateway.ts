@@ -344,7 +344,7 @@ export function createResidentGateway(
       defaultTier: LOOPBACK_BOOTSTRAP_TIER,
     });
     const externalRun = yield* createIngressExecutor(plane);
-    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel) }));
+    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel), openKernel: plane.openKernel, listSessions: plane.listSessions }));
     return createGatewayRouter({
       ...ports,
       stores: ports.stores ?? createChannelStores(channelStoreSource(plane)),

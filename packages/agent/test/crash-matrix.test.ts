@@ -616,7 +616,11 @@ async function recoverReconstructionCell(point: z.infer<typeof reconstructionPoi
     expect(recovered.refusal).toBeNull();
     expect(recovered.loaded?.state).toEqual(full);
     expect(recovered.loaded?.history).toEqual(projection);
-    expect(recovered.rangeReads.every((read) => read.limit <= 256 && read.cursor > 0)).toBe(true);
+    // Chain-fold reads (backlog, received messages) legitimately page from
+    // cursor 0; the fold-reconstruction guard is bounded pages plus at least
+    // one checkpoint-cursored hydration read.
+    expect(recovered.rangeReads.every((read) => read.limit <= 256)).toBe(true);
+    expect(recovered.rangeReads.some((read) => read.cursor > 0)).toBe(true);
     if (point === "fold_checkpoint_committed_before_wake") {
       expect(before.at(-1)?.ordinal).toBe(257);
       expect(before.at(-1)?.kind).toBe("fold.checkpoint");

@@ -1,6 +1,6 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { isolated } from "./helpers/isolated";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "../src/errors";
 import type { SessionHandle } from "../src/session-contract";
@@ -8,23 +8,42 @@ import { Cause, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/effect-g2";
+import { commitReceivedMessage } from "./helpers/ingress";
+import { reactivateSession } from "./helpers/wake-session";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Alarm, type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "../src/cluster/kernel-registry";
+import { createObservationBus } from "../src/observation/bus";
+import { receivedMessages } from "../src/session-record";
+import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { createExecutor } from "../src/index";
 import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/executor";
-import { closeSessions, session, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult, sweepSessions, wakeSession } from "../src/session-handle";
+import { closeSessions, session, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/session-handle";
 import { createSessionRequests } from "../src/session-requests";
 import { commitSessionRequest } from "../src/session-admission";
 import { z } from "zod";
 // ---------------------------------------------------------------------------
 // HARNESS (docs/session-lifecycle-contract.md section 6): real ledger, session
-// controller, executor waves, request transitions, outbound obligations and
-// alarm rows. Every step snapshots the complete durable product of each
-// traced session, checks the standing invariants, and the finished trace is
-// replayed from the file-backed SQLite image with zero dispatch.
+// controller, executor waves, request transitions and outbound obligations on
+// the entity plane (W5.2): handle-scoped kernels, fence adoption instead of
+// TTL leases, chain-fold inbox. Every step snapshots the complete durable
+// product of each traced session, checks the standing invariants, and the
+// finished trace is replayed from the file-backed SQLite image with zero
+// dispatch.
+//
+// Deleted with their planes (W5.2 #1197), not ported:
+// - "lifecycle v1 alarm takeover pause rearm and dedupe": the alarm-row
+//   adapter (arm/fire/acquire/rearm/cancel/due, alarm fences, notification
+//   budgets) is deleted; watch occurrences are chain actions now, proven by
+//   the watch_fired_committed_before_entity_wake crash cell and the
+//   cluster timer-delivery guards.
+// - "T02 concurrent same-session wakes ...": in-process wake dedupe through
+//   the lease-guarded live-controller registry is deleted; the surviving
+//   invariant - a stale activation's commit is refused by the fence CAS and
+//   exactly one turn terminal commits - is proven by T11 below and by the
+//   owner_reclaimed_before_stale_transcript_flush crash cell.
 // ---------------------------------------------------------------------------
 const SIGNAL_TIMEOUT_MS = 2000;
 interface Signal<T> {
@@ -89,17 +108,23 @@ interface SessionSnapshot {
     readonly outbound: readonly SessionTransition.Outbound[];
     readonly tail: SessionTurn.Snapshot;
 }
-function snapshotOf(sessionId: string): SessionSnapshot | undefined {
-    if (!SessionHandleStore.listRows().some((row: LedgerSession.Row) => row.id === sessionId))
+function kernel(): SessionKernel {
+    return isolatedLedger().kernel;
+}
+function snapshotFrom(reads: SessionKernel, sessionId: string): SessionSnapshot | undefined {
+    if (!reads.listRows().some((row: LedgerSession.Row) => row.id === sessionId))
         return undefined;
     return {
-        row: SessionHandleStore.row(sessionId),
-        actions: sessionTree(sessionId),
-        inbox: SessionHandleStore.inboxRows(sessionId),
-        requests: SessionHandleStore.requestRows(sessionId),
-        outbound: SessionHandleStore.outboundRows(sessionId),
-        tail: SessionHandleStore.getSnapshot(sessionId, 4),
+        row: reads.row(sessionId),
+        actions: sessionTree(reads, sessionId),
+        inbox: receivedMessages(reads, sessionId).rows,
+        requests: reads.requestRows(sessionId),
+        outbound: reads.outboundRows(sessionId),
+        tail: reads.getSnapshot(sessionId, 4),
     };
+}
+function snapshotOf(sessionId: string): SessionSnapshot | undefined {
+    return snapshotFrom(kernel(), sessionId);
 }
 function objectValue(value: LedgerAction.Node["intent"]["value"]): Record<string, LedgerAction.Node["intent"]["value"]> | undefined {
     if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -193,11 +218,11 @@ let nextId = 0;
 const runtimes: SessionRuntime[] = [];
 function runtimeFor(overrides: Partial<SessionRuntime> = {}): SessionRuntime {
     const runtime: SessionRuntime = {
+        ...isolatedRuntime(),
         observations: sink,
         clock: () => now,
         entropy: () => `id-${++nextId}`,
         processId: "conformance",
-        scheduleHeartbeat: () => () => undefined,
         authorizeConfigure: allowConfigure,
         authorizeApproval: () => Effect.succeed({
             kind: "owner" as const,
@@ -208,6 +233,11 @@ function runtimeFor(overrides: Partial<SessionRuntime> = {}): SessionRuntime {
     };
     runtimes.push(runtime);
     return runtime;
+}
+/** Entity-plane boot: every durable session is woken through its own activation. */
+function reactivateAll(pick: (row: LedgerSession.Row) => SessionRunner, fixture: SessionFixture) {
+    return Effect.forEach(kernel().listRows(), (row: LedgerSession.Row) =>
+        withSessionServices(reactivateSession(row.id, pick(row), fixture), fixture), { discard: true });
 }
 /** Section 6 harness entry: runs the vector, checks every prefix, then proves effect-free replay. */
 export function runLifecycleTrace(trace: Trace) {
@@ -254,27 +284,35 @@ function replayEffectFree(expected: ReadonlyMap<string, SessionSnapshot>, dispat
         const mark = sink.committedEvents.length;
         const publications = sink.published;
         sink.resetToolTape();
-        Storage.reset();
-        Storage.initialize({ dbPath, observationSink: sink });
-        for (const [sessionId, snapshot] of expected) {
-            const replayed = snapshotOf(sessionId);
-            if (replayed === undefined)
-                throw new Error(`replay lost session ${sessionId}`);
-            expect(replayed.actions).toEqual(snapshot.actions);
-            expect(replayed.inbox).toEqual(snapshot.inbox);
-            expect(replayed.requests).toEqual(snapshot.requests);
-            expect(replayed.outbound).toEqual(snapshot.outbound);
-            expect(replayed.tail.turns).toEqual(snapshot.tail.turns);
-            expect({ ...replayed.row, leaseOwner: null, leaseExpiresAt: null }).toEqual({
-                ...snapshot.row,
-                leaseOwner: null,
-                leaseExpiresAt: null,
-            });
+        // A second independent handle over the same durable image (W5.2 F1):
+        // opening it commits nothing, publishes nothing, dispatches nothing.
+        const replaySink = new TraceSink();
+        const reopenedSession = openSessionStore(dbPath, replaySink);
+        const reopenedCatalog = openCatalogStore(`${dbPath}.catalog`, replaySink);
+        const reopened = SessionHandleStore.createSessionKernel(reopenedSession, reopenedCatalog);
+        try {
+            for (const [sessionId, snapshot] of expected) {
+                const replayed = snapshotFrom(reopened, sessionId);
+                if (replayed === undefined)
+                    throw new Error(`replay lost session ${sessionId}`);
+                expect(replayed.actions).toEqual(snapshot.actions);
+                expect(replayed.inbox).toEqual(snapshot.inbox);
+                expect(replayed.requests).toEqual(snapshot.requests);
+                expect(replayed.outbound).toEqual(snapshot.outbound);
+                expect(replayed.tail.turns).toEqual(snapshot.tail.turns);
+                // The whole row is durable now: owner and fence survive reopen verbatim.
+                expect(replayed.row).toEqual(snapshot.row);
+            }
+            expect(replaySink.committedEvents).toEqual([]);
+            expect(sink.committedEvents.slice(mark)).toEqual([]);
+            expect(sink.published).toBe(publications);
+            expect([sink.started, sink.completed]).toEqual([[], []]);
+            expect(dispatched()).toBe(bodies);
         }
-        expect(sink.committedEvents.slice(mark)).toEqual([]);
-        expect(sink.published).toBe(publications);
-        expect([sink.started, sink.completed]).toEqual([[], []]);
-        expect(dispatched()).toBe(bodies);
+        finally {
+            reopenedSession.close();
+            reopenedCatalog.close();
+        }
     });
 }
 function kinds(snapshot: SessionSnapshot | undefined): string[] {
@@ -290,7 +328,7 @@ function resolutions(snapshot: SessionSnapshot | undefined): [
         .map((action: LedgerAction.Node) => [action.kind, objectValue(action.effect.value)?.resolution]);
 }
 function hookOf(sessionId: string, actionId: string): string | undefined {
-    const action = sessionTree(sessionId).find((node: LedgerAction.Node) => node.id === actionId);
+    const action = sessionTree(kernel(), sessionId).find((node: LedgerAction.Node) => node.id === actionId);
     const hook = action === undefined ? undefined : objectValue(action.intent.value)?.hook;
     return typeof hook === "string" ? hook : undefined;
 }
@@ -420,7 +458,7 @@ function releaseBodies(fixture: WaveFixture, order: readonly WaveCall[]) {
             fixture.gates[call].resolve();
         (yield* waitFor(fixture.entered.D.promise, "sequential body entry after the parallel barrier"));
         expect(fixture.tape).toEqual([...parallel]);
-        expect(sessionTree(fixture.handle.id).some((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
+        expect(sessionTree(kernel(), fixture.handle.id).some((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result")).toBe(false);
         fixture.gates.D.resolve();
     });
 }
@@ -481,7 +519,7 @@ describe("session lifecycle conformance", () => {
                     name: "DONE",
                     run: () => Effect.gen(function* () {
                         const sealed = sink.committed((committed: L0Observation.ActionCommitted) => committed.sessionId === "S" &&
-                            SessionHandleStore.turnTerminal(sessionTree("S").find((action: LedgerAction.Node) => action.id === committed.id)) !== undefined);
+                            SessionHandleStore.turnTerminal(sessionTree(kernel(), "S").find((action: LedgerAction.Node) => action.id === committed.id)) !== undefined);
                         gate.resolve();
                         (yield* waitFor(sealed, "terminal result"));
                         expect((yield* waitFor(plainRunning ?? Promise.reject(new Error("no run")), "result"))).toEqual({
@@ -539,8 +577,6 @@ describe("session lifecycle conformance", () => {
         expect(done?.row).toMatchObject({
             revision: 9,
             state: "idle",
-            leaseOwner: null,
-            leaseFence: 1,
         });
         expect(done?.inbox.map((row: Inbox.Row) => row.status)).toEqual(["consumed"]);
         expect(done?.tail.turns.at(-1)).toMatchObject({
@@ -681,7 +717,7 @@ describe("session lifecycle conformance", () => {
                     : ["request:state", "request:state", "request:state"]),
                 ...blockedTail,
             ]);
-            expect(final?.row).toMatchObject({ revision: 30, state: "idle", leaseOwner: null });
+            expect(final?.row).toMatchObject({ revision: 30, state: "idle" });
             const blocked = final?.actions.find((action: LedgerAction.Node) => action.kind === "tool" && objectValue(action.effect.value)?.terminal === "blocked_pre");
             expect(blocked === undefined ? undefined : objectValue(blocked.effect.value)).toMatchObject({
                 callId: "B",
@@ -783,25 +819,27 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         now = 2000;
                         const swept = signal<SessionRunnerInput>();
-                        (yield* waitFor(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => (input: SessionRunnerInput) => Effect.sync(() => {
+                        // Entity-plane recovery: a fresh activation adopts the next
+                        // fence over the dead owner and drives the open turn to idle.
+                        (yield* waitFor(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(reactivateSession("C", (input: SessionRunnerInput) => Effect.sync(() => {
                             swept.resolve(input);
                             return { kind: "result", text: "recovered" };
-                        }), fixture), fixture); }), "boot sweep"));
-                        const input = (yield* waitFor(swept.promise, "sweep entry"));
+                        }), fixture), fixture); }), "entity wake"));
+                        const input = (yield* waitFor(swept.promise, "wake entry"));
                         expect(input).toMatchObject({ resultId: "R", resumeCount: 1, toolsGeneration: 1 });
-                        expect(SessionHandleStore.row("C").toolsGeneration).toBe(2);
-                        const stale = () => SessionHandleStore.commit({
+                        expect(kernel().row("C").toolsGeneration).toBe(2);
+                        const dead = kernel().row("C");
+                        const stale = () => kernel().commit({
                             sessionId: "C",
                             owner: "dead",
                             fence: 1,
                             now,
-                            expectedRevision: SessionHandleStore.row("C").revision,
+                            expectedRevision: dead.revision,
                             actions: [],
-                            consumeInboxIds: [],
                             state: "running",
-                            releaseLease: false,
                         });
-                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: 2 });
+                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: dead.leaseFence });
+                        expect(dead.leaseFence).toBeGreaterThan(1);
                     }),
                 },
             ],
@@ -824,7 +862,7 @@ describe("session lifecycle conformance", () => {
         expect(recovered?.messages.map((message: SessionRunnerInput["messages"][number]) => [message.role, message.text])).toEqual([
             ["user", "hello"],
         ]);
-        expect(resumed?.row).toMatchObject({ state: "idle", toolsGeneration: 2, leaseFence: 3 });
+        expect(resumed?.row).toMatchObject({ state: "idle", toolsGeneration: 2 });
         expect(resumed?.inbox.map((row: Inbox.Row) => [row.kind, row.status])).toEqual([
             ["prompt", "consumed"],
             ["interrupt", "consumed"],
@@ -838,7 +876,6 @@ describe("session lifecycle conformance", () => {
         expect(crash?.row).toMatchObject({
             state: "idle",
             revision: 7,
-            leaseFence: 2,
             toolsGeneration: 2,
         });
         expect(kinds(crash)).toEqual([
@@ -873,8 +910,8 @@ describe("session lifecycle conformance", () => {
             sessions: [...ids, "PARENT", "CHILD"],
             dispatched: () => parentChild.consumed(),
             steps: [
-                // The loss-boundary sweep recovers every open turn in the store, so it
-                // runs before the request fixtures open their own turns.
+                // The loss-boundary recovery wakes every open session in the store, so
+                // it runs before the request fixtures open their own turns.
                 { name: "CP_SEALED", run: () => Effect.gen(function* () {
                         return (yield* toEffect(parentChild.sealWithoutWake()));
                     }) },
@@ -945,171 +982,6 @@ describe("session lifecycle conformance", () => {
         assertRequestRaces(result);
         assertLossBoundary(result, parentChild);
     })));
-    test("lifecycle v1 alarm takeover pause rearm and dedupe", () => traceTest(() => Effect.gen(function* () {
-        const alarms = Storage.get().alarms;
-        if (alarms === undefined)
-            throw new Error("missing alarm adapter");
-        (yield* SessionHandleStore.materialize({
-            id: "S",
-            parentId: null,
-            role: "resident",
-            tools: [],
-            system: { preset: "", blocks: [] },
-            policyGeneration: 1,
-            actionId: "cfg",
-            at: now,
-        }));
-        const fire = (epoch: number, fence: number, sourceKey: string, content: string, at: number) => alarms.fire({
-            id: "A",
-            epoch,
-            fence,
-            sourceKey,
-            at,
-            content,
-            batchHash: content,
-            terminal: false,
-        });
-        let evaluations = 0;
-        const evaluate = (fired: ReturnType<typeof fire>) => fired.pipe(Effect.tap(() => Effect.sync(() => { evaluations += 1; })));
-        const result = (yield* toEffect(runLifecycleTrace({
-            sessions: ["S"],
-            dispatched: () => evaluations,
-            steps: [
-                {
-                    name: "A_ARM",
-                    run: () => Effect.gen(function* () {
-                        expect((yield* alarms.arm({
-                            id: "A",
-                            sessionId: "S",
-                            kind: "watch",
-                            fireAt: 1000,
-                            spec: {
-                                encodingVersion: 1,
-                                value: {
-                                    watch: { command: "poll", description: "watch-1", persistent: true },
-                                    notificationLimit: 2,
-                                    policyGeneration: 1,
-                                },
-                            },
-                        }))).toMatchObject({ status: "armed", epoch: 1, fence: 0, notifications: 0 });
-                    }),
-                },
-                {
-                    name: "A_LEASE",
-                    run: () => Effect.gen(function* () {
-                        expect((yield* alarms.acquire("A", 0))).toMatchObject({ fence: 1 });
-                        expect((yield* Effect.exit(alarms.acquire("A", 0)))._tag).toBe("Failure");
-                    }),
-                },
-                {
-                    name: "A_OPEN",
-                    run: () => Effect.gen(function* () {
-                        const first = yield* evaluate(fire(1, 1, "poll-1", "A", 1000));
-                        expect(first?.receipts.map((receipt: LedgerAction.Receipt) => receipt.action.id)).toEqual([
-                            Alarm.occurrenceId("A", 1, "poll-1"),
-                            first?.inbox.id ?? "",
-                        ]);
-                        expect(first?.row).toMatchObject({ notifications: 1, lastBatch: "A" });
-                    }),
-                },
-                {
-                    name: "A_DEDUPED",
-                    run: () => Effect.gen(function* () {
-                        expect(yield* failure(evaluate(fire(1, 1, "poll-1", "A", 1000)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect(yield* failure(evaluate(fire(1, 1, "poll-2", "A", 1060)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect(yield* failure(evaluate(fire(1, 0, "poll-3", "B", 1060)))).toMatchObject({ _tag: "AlarmRefused" });
-                    }),
-                },
-                {
-                    name: "A_B",
-                    run: () => Effect.gen(function* () {
-                        expect((yield* evaluate(fire(1, 1, "poll-3", "B", 1060))).row).toMatchObject({
-                            notifications: 2,
-                            lastBatch: "B",
-                            status: "armed",
-                        });
-                    }),
-                },
-                {
-                    name: "A_PAUSED",
-                    run: () => Effect.gen(function* () {
-                        const paused = yield* evaluate(fire(1, 1, "poll-4", "C", 1070));
-                        expect(paused?.row.status).toBe("paused");
-                        expect(paused?.receipts.map((receipt: LedgerAction.Receipt) => receipt.action.kind)).toEqual([
-                            "alarm.paused",
-                            "prompt",
-                        ]);
-                        expect(yield* failure(evaluate(fire(1, 1, "poll-5", "D", 1070)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect(alarms.due(2000).map((row: Alarm.Row) => row.id)).toEqual([]);
-                    }),
-                },
-                {
-                    name: "A_REARMED",
-                    run: () => Effect.gen(function* () {
-                        now = 1080;
-                        const rearmed = (yield* alarms.rearm("A", "S", now));
-                        expect(rearmed).toMatchObject({
-                            status: "armed",
-                            epoch: 2,
-                            notifications: 0,
-                            lastBatch: null,
-                            fireAt: 1080,
-                        });
-                        expect((yield* Effect.exit(alarms.rearm("A", "other", now)))._tag).toBe("Failure");
-                        expect(yield* failure(evaluate(fire(1, rearmed.fence, "poll-6", "A", 1080)))).toMatchObject({ _tag: "AlarmRefused" });
-                    }),
-                },
-                {
-                    name: "A_TAKEN",
-                    run: () => Effect.gen(function* () {
-                        const fence = alarms.get("A")?.fence ?? -1;
-                        const taken = (yield* alarms.acquire("A", fence));
-                        expect(taken?.fence).toBe(fence + 1);
-                        expect(yield* failure(evaluate(fire(2, fence, "poll-7", "A", 1080)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect((yield* evaluate(fire(2, fence + 1, "poll-7", "A", 1080))).row).toMatchObject({
-                            epoch: 2,
-                            notifications: 1,
-                        });
-                    }),
-                },
-                {
-                    name: "ALARM_CANCELLED",
-                    run: () => Effect.gen(function* () {
-                        const fence = alarms.get("A")?.fence ?? -1;
-                        expect((yield* alarms.cancel("A", "S", 1090))?.status).toBe("cancelled");
-                        expect(yield* failure(evaluate(fire(2, fence, "poll-8", "B", 1090)))).toMatchObject({ _tag: "AlarmRefused" });
-                        expect((yield* Effect.exit(alarms.rearm("A", "S", 1090)))._tag).toBe("Failure");
-                        expect((yield* Effect.exit(alarms.acquire("A", fence + 1)))._tag).toBe("Failure");
-                    }),
-                },
-            ],
-        })));
-        const final = result.final.get("S");
-        expect(kinds(final)).toEqual([
-            "session.configure",
-            "alarm.arm",
-            "alarm.fired",
-            "prompt",
-            "alarm.fired",
-            "prompt",
-            "alarm.paused",
-            "prompt",
-            "alarm.arm",
-            "alarm.fired",
-            "prompt",
-            "alarm.arm",
-        ]);
-        expect(final?.inbox.map((row: Inbox.Row) => [row.kind, row.status, row.content])).toEqual([
-            ["prompt", "pending", "A"],
-            ["prompt", "pending", "B"],
-            ["prompt", "pending", expect.stringContaining("wake_budget")],
-            ["prompt", "pending", "A"],
-        ]);
-        expect(new Set(final?.inbox.map((row: Inbox.Row) => row.id)).size).toBe(4);
-        expect(evaluations).toBe(4);
-        // Read through the reopened image: the alarm row survives replay unchanged.
-        expect(Storage.get().alarms?.get("A")).toMatchObject({ status: "cancelled", epoch: 2 });
-    })));
     test("lifecycle v1 product totality and effect-free prefix replay", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
         const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
@@ -1119,7 +991,7 @@ describe("session lifecycle conformance", () => {
             answer: (q: SessionTransition.Request) => port.answer(reply(q, `${q.sessionId}:reply-1`, 1099)),
             refuse: (q: SessionTransition.Request) => port.answer({ ...reply(q, `${q.sessionId}:refuse-1`, 1099), decision: "refuse" }),
             cancel: (q: SessionTransition.Request) => cancelRequest(q, runtime),
-            timeout: (q: SessionTransition.Request) => port.timeout(q.requestId, 1100).pipe(Effect.map(() => SessionHandleStore.requestById(q.requestId)?.state ?? "missing")),
+            timeout: (q: SessionTransition.Request) => port.timeout(q.requestId, 1100).pipe(Effect.map(() => kernel().requestById(q.requestId)?.state ?? "missing")),
         } as const;
         const names = Object.keys(contenders) as (keyof typeof contenders)[];
         const pairs = names.flatMap((first: keyof typeof contenders) => names.filter((second: keyof typeof contenders) => second !== first).map((second: keyof typeof contenders) => [first, second] as const));
@@ -1144,15 +1016,15 @@ describe("session lifecycle conformance", () => {
                         for (const [first, second] of pairs) {
                             const q = requestOf(opened, `${first}-${second}`);
                             (yield* toEffect(contenders[first](q)));
-                            const winner = SessionHandleStore.requestById(q.requestId);
-                            const before = sessionTree(q.sessionId).length;
+                            const winner = kernel().requestById(q.requestId);
+                            const before = sessionTree(kernel(), q.sessionId).length;
                             const loser = (yield* toEffect(contenders[second](q)));
-                            expect(SessionHandleStore.requestById(q.requestId)).toMatchObject({
+                            expect(kernel().requestById(q.requestId)).toMatchObject({
                                 state: winner?.state,
                                 outcome: winner?.outcome,
                                 replies: winner?.replies,
                             });
-                            expect(sessionTree(q.sessionId).length).toBeLessThanOrEqual(before + 1);
+                            expect(sessionTree(kernel(), q.sessionId).length).toBeLessThanOrEqual(before + 1);
                             expect(["duplicate", "late_unknown", winner?.state]).toContain(loser);
                         }
                     }),
@@ -1161,17 +1033,15 @@ describe("session lifecycle conformance", () => {
                     name: "CORRUPT",
                     run: () => Effect.gen(function* () {
                         const q = requestOf(opened, "STALE");
-                        const fresh = SessionHandleStore.row(q.sessionId);
-                        const corruptCommit = SessionHandleStore.commitRequestTransition({
+                        const fresh = kernel().row(q.sessionId);
+                        const corruptCommit = kernel().commitRequestTransition({
                             sessionId: q.sessionId,
                             owner: "stranger",
                             fence: fresh.leaseFence,
                             now: 1099,
                             expectedRevision: fresh.revision,
                             actions: [],
-                            consumeInboxIds: [],
                             state: fresh.state,
-                            releaseLease: false,
                         });
                         expect((yield* Effect.exit(corruptCommit))._tag).toBe("Failure");
                         expect((yield* toEffect(port.answer({ ...reply(q, "corrupt-binding", 1099), bindingDigest: "forged" })))).toBe("rejected");
@@ -1182,30 +1052,30 @@ describe("session lifecycle conformance", () => {
                         })))).toBe("rejected");
                         // Misrouted to a real session: refused there before any record, and
                         // never applied here. The destination row does not move at all.
-                        const destination = SessionHandleStore.row("answer-refuse");
-                        const destinationTree = sessionTree("answer-refuse").length;
+                        const destination = kernel().row("answer-refuse");
+                        const destinationTree = sessionTree(kernel(), "answer-refuse").length;
                         expect((yield* toEffect(port.answer({
                             ...reply(q, "corrupt-session", 1099),
                             sessionId: "answer-refuse",
                         })))).toBe("rejected");
-                        expect(SessionHandleStore.row("answer-refuse").revision).toBe(destination.revision);
-                        expect(sessionTree("answer-refuse")).toHaveLength(destinationTree);
-                        expect(SessionHandleStore.requestById("answer-refuse:q")?.seenReplyIds).toEqual([
+                        expect(kernel().row("answer-refuse").revision).toBe(destination.revision);
+                        expect(sessionTree(kernel(), "answer-refuse")).toHaveLength(destinationTree);
+                        expect(kernel().requestById("answer-refuse:q")?.seenReplyIds).toEqual([
                             "answer-refuse:reply-1",
                             "answer-refuse:refuse-1",
                         ]);
                         expect((yield* failure(port.answer({ ...reply(q, "corrupt-missing", 1099), sessionId: "OTHER" })))).toBeInstanceOf(Error);
-                        expect(SessionHandleStore.requestById(q.requestId)?.state).toBe("open");
+                        expect(kernel().requestById(q.requestId)?.state).toBe("open");
                         expect((yield* toEffect(port.answer(reply(q, "STALE:reply-1", 1099))))).toBe("resolved");
                         // The winning input id replayed by a different principal is a
                         // conflicting replay: refused without a record, the winner untouched.
-                        const settled = sessionTree(q.sessionId).length;
+                        const settled = sessionTree(kernel(), q.sessionId).length;
                         expect((yield* toEffect(port.answer({
                             ...reply(q, "STALE:reply-1", 1099),
                             principal: { kind: "session", principalId: "impostor", evidenceId: "other" },
                         })))).toBe("rejected");
-                        expect(sessionTree(q.sessionId)).toHaveLength(settled);
-                        expect(SessionHandleStore.requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["worker"]);
+                        expect(sessionTree(kernel(), q.sessionId)).toHaveLength(settled);
+                        expect(kernel().requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["worker"]);
                     }),
                 },
             ],
@@ -1239,46 +1109,6 @@ describe("session lifecycle conformance", () => {
         expect(misrouted).toEqual([]);
         expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["reply", "duplicate"]);
     })));
-    for (const order of [["A", "B"], ["B", "A"]] as const) {
-        test(`T02 concurrent same-session wakes ${order.join(" then ")} dispatch one committed runner`, () => traceTest(() => Effect.gen(function* () {
-            const runtime = runtimeFor();
-            const entered = signal<string>();
-            const release = signal<void>();
-            const bodies: string[] = [];
-            yield* SessionHandleStore.materialize({
-                id: "WAKE", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
-                policyGeneration: 1, actionId: "wake-cfg", at: now,
-            });
-            yield* SessionHandleStore.commitInbox({
-                id: "wake-input", sessionId: "WAKE", kind: "prompt", content: "wake", createdAt: now,
-                parentActionId: "wake-cfg", origin: { encodingVersion: 1, value: {} },
-            });
-            const contender = (name: string): SessionRunner => (input) => Effect.gen(function* () {
-                expect(SessionHandleStore.latestOpenTurn("WAKE")).toMatchObject({ turnId: input.turnId, resultId: input.resultId });
-                entered.resolve(name);
-                yield* Effect.promise(() => release.promise);
-                const executor = yield* waveExecutor(input, runtime);
-                const outcome = yield* executor.run({ kind: "tool", op: "wake", intent: {}, effect: {} }, () => Effect.sync(() => {
-                    bodies.push(name);
-                    return { name };
-                }));
-                expect(outcome.terminal).toBe("executed");
-                return { kind: "result", text: name };
-            });
-            yield* runLifecycleTrace({ sessions: ["WAKE"], dispatched: () => bodies.length, steps: [{
-                name: "BOTH_WAKES", run: () => Effect.gen(function* () {
-                    const racing = yield* Effect.forkScoped(Effect.all(order.map((name) =>
-                        withSessionServices(wakeSession("WAKE", contender(name), runtime), runtime)), { concurrency: "unbounded" }));
-                    expect(yield* waitFor(entered.promise, "winning runner entry")).toBe(order[0]);
-                    release.resolve();
-                    const results = yield* waitFor(racing, "both wakes settled");
-                    expect(results).toEqual([{ kind: "result", text: order[0] }, { kind: "result", text: order[0] }]);
-                    expect(bodies).toEqual([order[0]]);
-                    expect(sessionTree("WAKE").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toHaveLength(1);
-                }),
-            }] });
-        })));
-    }
     test("T11 refused stale executor CAS runs zero bodies and publishes zero observations", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
         const entered = signal<void>();
@@ -1296,9 +1126,10 @@ describe("session lifecycle conformance", () => {
         }) }, runtime), runtime);
         const running = yield* Effect.forkScoped(handle.prompt("start"));
         yield* waitFor(entered.promise, "stale executor entered");
-        const prior = SessionHandleStore.row(handle.id);
-        now = prior.leaseExpiresAt ?? now;
-        yield* SessionHandleStore.acquireLease({ sessionId: handle.id, owner: "successor", expectedFence: prior.leaseFence, now, expiresAt: now + 30_000 });
+        // A successor activation adopts a strictly newer fence mid-turn (W5.2 F5):
+        // the live runner's authority dies at that CAS, no timer involved.
+        const prior = kernel().row(handle.id);
+        yield* kernel().adoptFence({ sessionId: handle.id, owner: "successor", fence: prior.leaseFence + 1 });
         const before = snapshotOf(handle.id);
         const observations = sink.published;
         sink.resetToolTape();
@@ -1333,7 +1164,7 @@ describe("session lifecycle conformance", () => {
         now = 9000;
         yield* replayEffectFree(new Map([["REPLAY", snapshot]]), () => bodies);
         expect([clockReads, idReads, bodies]).toEqual(providers);
-        expect(SessionHandleStore.actionById("recorded-retry")).toMatchObject({ id: "recorded-retry", ts: 1025, intent: { value: facts } });
+        expect(kernel().actionById("recorded-retry")).toMatchObject({ id: "recorded-retry", ts: 1025, intent: { value: facts } });
     })));
 });
 /** 6.4 request races: one resolution per request, every losing input recorded once or refused. */
@@ -1436,37 +1267,20 @@ function requestOf(map: ReadonlyMap<string, SessionTransition.Request>, id: stri
     return request;
 }
 /**
- * An Owner cancel issued from outside a live handle: a fresh fenced lease around
- * the shared request commit, exactly like the gateway port's own transition.
+ * An Owner cancel issued from outside a live handle: a fresh fence adoption
+ * around the shared request commit, exactly like the gateway port's own
+ * transition. No release follows - the next writer adopts over this fence.
  */
 function cancelRequest(q: SessionTransition.Request, runtime: SessionRuntime) {
     return Effect.gen(function* () {
         const controller = `conformance:control:${++nextId}`;
-        const row = SessionHandleStore.row(q.sessionId);
-        const lease = (yield* SessionHandleStore.acquireLease({
+        const row = kernel().row(q.sessionId);
+        const adopted = (yield* kernel().adoptFence({
             sessionId: q.sessionId,
             owner: controller,
-            expectedFence: row.leaseFence,
-            now,
-            expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+            fence: row.leaseFence + 1,
         }));
-        try {
-            return (yield* commitSessionRequest(q.sessionId, { owner: controller, fence: lease.fence }, { kind: "request.cancel", requestId: q.requestId, principal: owner }, `cancel-1:${q.sessionId}`, 1099, runtime)).resolution;
-        }
-        finally {
-            const current = SessionHandleStore.row(q.sessionId);
-            (yield* SessionHandleStore.commit({
-                sessionId: q.sessionId,
-                owner: controller,
-                fence: lease.fence,
-                now,
-                expectedRevision: current.revision,
-                actions: [],
-                consumeInboxIds: [],
-                state: current.state,
-                releaseLease: true,
-            }));
-        }
+        return (yield* commitSessionRequest(kernel(), q.sessionId, { owner: controller, fence: adopted.fence }, { kind: "request.cancel", requestId: q.requestId, principal: owner }, `cancel-1:${q.sessionId}`, 1099, runtime)).resolution;
     });
 }
 function reply(q: SessionTransition.Request, inputId: string, receivedAt: number): SessionTransition.Answer {
@@ -1513,10 +1327,10 @@ function pendingTurn(sessionId: string, turnId: string, boundaryActionId: string
         irreversible: true,
     };
 }
-/** A fresh resident at G1 whose lease `owner` holds for `leaseMs`: the seed every request fixture starts from. */
-function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs: number) {
+/** A fresh resident at G1 whose fence `owner` adopted: the seed every request fixture starts from. */
+function seedLeasedResident(id: string, actionId: string, owner: string) {
     return Effect.gen(function* () {
-        const created = (yield* SessionHandleStore.materialize({
+        const created = (yield* kernel().materialize({
             id,
             parentId: null,
             role: "resident",
@@ -1526,33 +1340,27 @@ function seedLeasedResident(id: string, actionId: string, owner: string, leaseMs
             actionId,
             at: now,
         }));
-        const generation = SessionHandleStore.latestGeneration(sessionTree(id));
-        const lease = (yield* SessionHandleStore.acquireLease({
+        const generation = SessionHandleStore.latestGeneration(sessionTree(kernel(), id));
+        const lease = (yield* kernel().adoptFence({
             sessionId: id,
             owner,
-            expectedFence: created.row.leaseFence,
-            now,
-            expiresAt: now + leaseMs,
+            fence: created.row.leaseFence + 1,
         }));
-        if (!lease.ok)
-            throw new Error(`${owner} lease refused`);
         return { created, generation, lease };
     });
 }
 /** The immutable request prefix of 6.4: cfg, T, q-pre, q (a real tool intent with value {value:"B"}). */
 function seedRequestSession(id: string) {
     return Effect.gen(function* () {
-        const { created, generation, lease } = (yield* seedLeasedResident(id, `${id}:cfg`, "o", 30000));
+        const { created, generation, lease } = (yield* seedLeasedResident(id, `${id}:cfg`, "o"));
         const turn = `${id}:T`;
-        const _committed = (yield* SessionHandleStore.commit({
+        const _committed = (yield* kernel().commit({
             sessionId: id,
             owner: "o",
             fence: lease.fence,
             now,
             expectedRevision: created.row.revision,
-            consumeInboxIds: [],
             state: "running",
-            releaseLease: true,
             actions: [
                 pendingTurn(id, turn, `${id}:cfg`, `${id}:R`, generation),
                 {
@@ -1620,7 +1428,7 @@ function openRequest(port: Effect.Success<ReturnType<typeof createSessionRequest
 /** Crash-open seed of 6.2: dead owner, T pinned to G1 while the row already points at G2. */
 function seedCrashOpen(id: string) {
     return Effect.gen(function* () {
-        const { created, generation, lease } = (yield* seedLeasedResident(id, "cfg", "dead", 10));
+        const { created, generation, lease } = (yield* seedLeasedResident(id, "cfg", "dead"));
         const g2 = SessionHandleStore.generationSnapshot({
             generation: generation.generation + 1,
             revertTo: generation.generation,
@@ -1628,15 +1436,13 @@ function seedCrashOpen(id: string) {
             system: { preset: "", blocks: [{ id: "b", source: "fixture", content: "v2" }] },
             policyGeneration: 1,
         });
-        const _committed = (yield* SessionHandleStore.commit({
+        const _committed = (yield* kernel().commit({
             sessionId: id,
             owner: "dead",
             fence: lease.fence,
             now,
             expectedRevision: created.row.revision,
-            consumeInboxIds: [],
             state: "running",
-            releaseLease: false,
             generation: {
                 toolsGeneration: g2.generation,
                 systemHash: g2.systemHash,
@@ -1672,9 +1478,9 @@ function childParentFixture() {
                         throw new Error("process died before wake");
                     sent.push(JSON.stringify(message));
                     const received = (yield* receiveOutbound(message, now));
-                    yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(wakeSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
+                    yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(reactivateSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
                         Effect.provideService(Scope.Scope, scope),
-                        Effect.mapError((error: SessionError) => new ForeignFailure({ operation: "wakeSession", cause: error.message })),
+                        Effect.mapError((error: SessionError) => new ForeignFailure({ operation: "reactivateSession", cause: error.message })),
                     );
                     if (loseAck)
                         throw new Error("source ack lost");
@@ -1698,7 +1504,7 @@ function childParentFixture() {
                     runner: () => Effect.succeed({ kind: "result" as const, text: "done" }),
                 }, fixture), fixture); }));
                 // The parent's real source action: the reply observation resolves it.
-                const source = sessionTree("PARENT")[0]?.id;
+                const source = sessionTree(kernel(), "PARENT")[0]?.id;
                 if (source === undefined)
                     throw new Error("parent has no source action");
                 expect((yield* failure(child.prompt("hello", {
@@ -1719,7 +1525,7 @@ function childParentFixture() {
             return Effect.scoped(Effect.gen(function* () {
                 now = 2000;
                 const second = runtime(true, true, yield* Effect.scope);
-                expect((yield* failure(Effect.gen(function* () { const fixture: SessionFixture = second; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture), fixture); })))).toBeInstanceOf(Error);
+                expect((yield* failure(Effect.gen(function* () { const fixture: SessionFixture = second; return yield* reactivateAll((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture); })))).toBeInstanceOf(Error);
                 runtimes.splice(runtimes.indexOf(second), 1);
             }));
         },
@@ -1727,7 +1533,7 @@ function childParentFixture() {
             return Effect.gen(function* () {
                 now = 33000;
                 const third = runtime(false, true, yield* Effect.scope);
-                (yield* toEffect(Effect.gen(function* () { const fixture: SessionFixture = third; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture), fixture); })));
+                (yield* toEffect(Effect.gen(function* () { const fixture: SessionFixture = third; return yield* reactivateAll((row: LedgerSession.Row) => (row.id === "PARENT" ? parentRunner : rejectReplay), fixture); })));
                 (yield* toEffect(closeSessions(third)));
                 runtimes.splice(runtimes.indexOf(third), 1);
             });
@@ -1745,12 +1551,21 @@ function waitFor<A, E = never>(value: Promise<A> | Fiber.Fiber<A, E> | Effect.Ef
 }
 function traceTest(body: () => Effect.Effect<void, SessionError | Error, Scope.Scope>) {
  return isolated(Effect.scoped(Effect.gen(function* () {
- now = 1_000; nextId = 0; sink = new TraceSink();
- directory = mkdtempSync(join(tmpdir(), "lifecycle-conformance-")); dbPath = join(directory, "ledger.sqlite");
- Storage.reset(); Storage.initialize({dbPath, observationSink: sink}); seedPolicy();
+ now = 1_000; nextId = 0;
+ seedPolicy();
  try { yield* body(); } finally {
  for (const runtime of runtimes.splice(0)) yield* closeSessions(runtime);
- Storage.reset(); rmSync(directory, {recursive: true, force: true});
  }
- })));
+ })), (): IsolatedLedgerHandle => {
+ sink = new TraceSink();
+ directory = mkdtempSync(join(tmpdir(), "lifecycle-conformance-")); dbPath = join(directory, "ledger.sqlite");
+ const sessionStore = openSessionStore(dbPath, sink);
+ const catalogStore = openCatalogStore(`${dbPath}.catalog`, sink);
+ const traceKernel = SessionHandleStore.createSessionKernel(sessionStore, catalogStore);
+ return {
+  kernel: traceKernel, openKernel: () => traceKernel, listSessions: () => traceKernel.listRows(),
+  session: sessionStore, catalog: catalogStore, bus: createObservationBus(),
+  close: () => { sessionStore.close(); catalogStore.close(); rmSync(directory, {recursive: true, force: true}); },
+ };
+ });
 }

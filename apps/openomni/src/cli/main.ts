@@ -92,10 +92,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     applyEnvFile(envPath, process.env);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
-    const runtime = gatewayRuntime({
-      dbPath: config.dbPath,
-      cluster: resolveClusterStorage(config, home),
-    });
+    const runtime = gatewayRuntime(resolveClusterStorage(config, home));
     const app = await startOpenOmni({ config, runtime });
     installShutdownHandlers({
       stop: app.stop,

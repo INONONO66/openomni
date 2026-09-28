@@ -14,7 +14,6 @@ import {
   BundleDefinitions, Clock, Entropy, GenerationLayers, ObservationSink,
   createSessionEntityRunTurn,
   createSessionRequests,
-  resolveSessionRuntime,
   SessionEntity,
   type SessionRuntime,
   getSessionHandle,
@@ -482,7 +481,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   .Deadline({ requestId: request.requestId, deadlineAt: request.deadline })
                   .pipe(
                     Effect.asVoid,
-                    Effect.catchAll((error) =>
+                    Effect.catch((error) =>
                       Effect.sync(() => {
                         console.error(`deadline arm failed: ${request.requestId}`, error);
                       }),
@@ -549,12 +548,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Bind the entity's composition-owned ports: turns run the Resident's
     // runner over the activation's kernel + fence; process-runner sessions
     // delegate to the child transport without committing under this fence.
-    const resolvedRuntime = await runAppBoot(runtime, resolveSessionRuntime(sessionRuntime));
-    const entityRunTurn = createSessionEntityRunTurn(
-      resident.runnerFor,
-      resolvedRuntime,
-      services.scope,
-    );
+    const resolvedRuntime: Parameters<typeof createSessionEntityRunTurn>[1] = {
+      ...sessionRuntime,
+      clock: services.clock.now,
+      entropy: services.entropy.next,
+      observations: services.observations,
+      generations: services.generations,
+      services: services.context,
+    };
     entityPorts.bind({
       runTurn: (input) =>
         sessionRunner(input.authority.sessionId) === "process"
@@ -562,7 +563,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
               try: () => processSessions.wake(input.authority.sessionId),
               catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
             }).pipe(Effect.asVoid)
-          : entityRunTurn(input),
+          : createSessionEntityRunTurn(
+              resident.runnerFor(input.kernel.row(input.authority.sessionId)),
+              resolvedRuntime,
+              services.scope,
+            )(input),
       timers: sessionTimerPort({
         requestDomainRevisions: domainRevisions,
         watchFired: watchFiredHook({

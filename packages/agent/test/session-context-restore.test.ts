@@ -1,12 +1,12 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { describe, expect, spyOn, test } from "bun:test";
 import { Cause, Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
 import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/effect-g2";
-import { isolated } from "./helpers/isolated";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
 import { Bus, createTurnDispatcher, type SessionRunner } from "../src/index";
 import { session } from "../src/session-handle";
@@ -21,7 +21,7 @@ function runtime(): SessionRuntime {
     clock: () => 1_000,
     entropy: () => `restore-id-${++nextId}`,
     processId: "restore-test",
-    scheduleHeartbeat: () => () => undefined,
+    ...isolatedRuntime(),
   };
 }
 function intentRecord(action: LedgerAction.Node): PlainObject {
@@ -60,7 +60,7 @@ function program<E>(
       });
       const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture), fixture); });
       yield* handle.prompt("hello");
-      const before = sessionTree("ctx");
+      const before = sessionTree(isolatedLedger().kernel, "ctx");
       yield* body(handle, before);
     }),
   );
@@ -77,18 +77,24 @@ describe("restore_context_projection", () => {
       });
       const original = structuredClone([...before]);
       const expected = foldSessionHistory("ctx", before.slice(0, before.indexOf(selected)));
-      const storage = spyOn(Storage, "get").mockImplementation(() => { throw new Error("what-if storage access"); });
+      const kernel = isolatedLedger().kernel;
+      // The Storage singleton is gone; the what-if fold must touch neither the
+      // kernel's read plane nor its commit plane.
+      const reads = spyOn(kernel, "historyPage").mockImplementation(() => { throw new Error("what-if storage access"); });
+      const writes = spyOn(kernel, "commit").mockImplementation(() => { throw new Error("what-if storage access"); });
       const publication = spyOn(Bus, "publish").mockImplementation(() => { throw new Error("what-if publication"); });
       try {
         expect(foldSessionHistory("ctx", retained)).toEqual(expected);
-        expect(storage).not.toHaveBeenCalled();
+        expect(reads).not.toHaveBeenCalled();
+        expect(writes).not.toHaveBeenCalled();
         expect(publication).not.toHaveBeenCalled();
         expect(before).toEqual(original);
       } finally {
-        storage.mockRestore();
+        reads.mockRestore();
+        writes.mockRestore();
         publication.mockRestore();
       }
-      expect(sessionTree("ctx")).toEqual(original);
+      expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual(original);
     })),
   ));
 
@@ -102,7 +108,7 @@ describe("restore_context_projection", () => {
           ).toEqual(["assistant"]);
           const outcome = yield* handle.restoreContext(compaction.id);
           expect(outcome.terminal).toBe("executed");
-          const after = sessionTree("ctx");
+          const after = sessionTree(isolatedLedger().kernel, "ctx");
           expect(after.slice(0, before.length)).toEqual([...before]);
           const appended = after.slice(before.length);
           expect(
@@ -144,7 +150,8 @@ describe("restore_context_projection", () => {
               before.slice(0, before.indexOf(compaction)),
             ),
           );
-          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+          // No release plane: the adopted fence owner stays durable.
+          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
           expect(handle.inspect().compactions).toEqual([
             expect.objectContaining({
               compactionId: compaction.id,
@@ -167,7 +174,7 @@ describe("restore_context_projection", () => {
               terminal: "blocked_pre",
               reason: "pinned_projection",
             });
-            const after = sessionTree("ctx");
+            const after = sessionTree(isolatedLedger().kernel, "ctx");
             expect(
               after
                 .slice(before.length)
@@ -200,7 +207,8 @@ describe("restore_context_projection", () => {
               reason: "unknown_compaction",
             });
           }
-          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+          // No release plane: the adopted fence owner stays durable.
+          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
           const result = before.find(
             (action: LedgerAction.Node) =>
               action.kind === "compaction" && action.parentId === compaction.id,
@@ -214,8 +222,9 @@ describe("restore_context_projection", () => {
               name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
             });
           }
-          expect(sessionTree("ctx")).toEqual([...before]);
-          expect(SessionHandleStore.row("ctx").leaseOwner).toBeNull();
+          expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);
+          // No release plane: the adopted fence owner stays durable.
+          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
         }),
       ),
     ));

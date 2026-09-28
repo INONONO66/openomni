@@ -18,8 +18,8 @@ type MessageDenialCode = Gateway.MessageDenialCode;
 const SendInput = Gateway.SendInput;
 type SendInput = z.infer<typeof SendInput>;
 type SendReceipt = Gateway.SendReceipt;
-type SendAuthorityInput = Parameters<typeof authorizeSend>[0];
-type AuthorizedSend = Parameters<typeof admitSend>[0];
+type SendAuthorityInput = Parameters<typeof authorizeSend>[1];
+type AuthorizedSend = Parameters<typeof admitSend>[1];
 
 type OutboundMessage = Readonly<{
   messageId: string;
@@ -200,7 +200,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
   }
 
   return {
-    preflight(input) {
+    preflight(input: SendAuthorityInput) {
       const checked = authorizeSend(ports.stores, input, ports.grants());
       return checked.ok ? undefined : checked.code;
     },

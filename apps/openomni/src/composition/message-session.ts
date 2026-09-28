@@ -50,7 +50,7 @@ export function materializeInboxTarget(
       if (limits !== undefined && create.row.parentId !== null) {
         const children = plane
           .listSessions()
-          .filter((row) => row.parentId === create.row.parentId && row.state !== "closed");
+          .filter((row) => row.parentId === create.row.parentId);
         if (children.length >= limits.fanout)
           return yield* new ForeignFailure({
             operation: "message.commit",
@@ -66,8 +66,8 @@ export function materializeInboxTarget(
           parentId: create.row.parentId,
           role: create.row.role,
           tools: [...snapshot.tools],
-          ...(snapshot.bundles === undefined ? {} : { bundles: snapshot.bundles }),
-          system: snapshot.system,
+          bundles: snapshot.bundles,
+          system: { preset: snapshot.systemPreset, blocks: snapshot.systemBlocks },
           policyGeneration: snapshot.policyGeneration,
           actionId: create.initialAction.id,
           at: clock(),
@@ -330,9 +330,7 @@ export function prepareMessage(
       if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
         return yield* new SendAdmissionConflict({ message: "child admission bounds missing from pinned policy" });
       const depth = sessionDepth(source.parentId, rows);
-      const openChildren = rows.filter(
-        (row) => row.parentId === sender.id && row.state !== "closed",
-      ).length;
+      const openChildren = rows.filter((row) => row.parentId === sender.id).length;
       return {
         target,
         ...(outbound === undefined

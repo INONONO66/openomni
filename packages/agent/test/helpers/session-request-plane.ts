@@ -14,13 +14,18 @@ import { allowConfigure, isolatedRuntime, withSessionServices } from "./session-
 export function fileRequest<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>) {
   const directory = mkdtempSync(join(tmpdir(), "request-plane-"));
   const dbPath = join(directory, "ledger.sqlite");
-  return isolated(
-    Effect.scoped(Effect.gen(function* () {
-      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(directory, { recursive: true, force: true })));
-      return yield* program(dbPath);
-    })),
-    () => openCrashStores(dbPath),
-  );
+  // The directory outlives the isolation: the stores' close (WAL checkpoint)
+  // must land before the files are removed.
+  return isolated(Effect.scoped(program(dbPath)), () => {
+    const stores = openCrashStores(dbPath);
+    return {
+      ...stores,
+      close: () => {
+        stores.close();
+        rmSync(directory, { recursive: true, force: true });
+      },
+    };
+  });
 }
 
 export const requestPlane = (clock = () => 100) => Effect.gen(function* () {
