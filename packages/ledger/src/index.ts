@@ -2,6 +2,8 @@ import { computeActionHash, GENESIS_PREV_HASH } from "./storage/l0-hash";
 import { commitSession, insertSession, selectSession } from "./storage/sqlite-l0-write";
 
 export { initialize, replaceFileAtomically, SqliteStorageAdapter, Storage } from "./storage";
+// W5.2 handle-scoped stores (plan F1): opened per entity activation / composition root.
+export { openCatalogStore, openSessionStore } from "./storage";
 export { DecisionFacts } from "./storage/decision-fact-port";
 export * as SessionHandleStore from "./session/kernel.js";
 export { SurfaceKey } from "./surface-key";

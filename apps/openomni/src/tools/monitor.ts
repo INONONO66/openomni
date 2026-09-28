@@ -1,7 +1,6 @@
-import { armWatch, type MonitorPorts } from "./core/monitor-ports";
+import { armWatch, type MonitorPorts, WatchState } from "./core/monitor-ports";
 import { isAbsolute } from "node:path";
 import { defineTool, ToolRefused } from "@openomni/agent";
-import { Alarm } from "@openomni/protocol";
 import { z } from "zod";
 
 const lifetime = {
@@ -62,7 +61,7 @@ export function createMonitorTool(ports?: MonitorPorts) {
     description:
       "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
     input,
-    output: Alarm.Row,
+    output: WatchState,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     sequential: true,
     async execute(request, context) {

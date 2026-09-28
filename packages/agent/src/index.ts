@@ -36,5 +36,27 @@ export {
   toolInputSchema,
   toolSpec,
 } from "./tool-dispatcher";
+// W5.2 #1197 cluster surface (plan F6): the Session entity and its composition seams.
+export {
+  SessionEntity,
+  SessionEntityContext,
+  SessionEntityLive,
+  type SessionEntityEnv,
+} from "./cluster/session-entity";
+export { sessionKernels } from "./cluster/kernel-registry";
+export {
+  deadlineDelivery,
+  retryDelivery,
+  watchFiredDelivery,
+  watchTimeoutDelivery,
+  type TimerChainReads,
+} from "./cluster/timers";
+export type {
+  SessionEntityAuthority,
+  SessionEntityPorts,
+  SessionEntityTimerContext,
+  SessionEntityTurnInput,
+  SessionTimerOutcome,
+} from "./session-contract";
 export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

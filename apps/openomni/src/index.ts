@@ -54,6 +54,7 @@ import {
   assertWsExposure,
   loadConfig,
   modelTransport,
+  resolveClusterStorage,
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
@@ -182,6 +183,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     options.runtime ??
     gatewayRuntime({
       dbPath: config.dbPath,
+      // Cluster storage rides only on configs that resolved it (loadConfig
+      // always does); injected literal test configs stay on the in-memory
+      // host so no path outside their fixture directory is ever touched.
+      ...(config.catalogPath === undefined ? {} : { cluster: resolveClusterStorage(config) }),
     });
   try {
     const services = await runAppBoot(

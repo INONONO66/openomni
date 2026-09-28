@@ -13,6 +13,7 @@ import type {
   SessionTransition,
 } from "@openomni/protocol";
 import type { ChatAgentConfig } from "./core/types";
+import type { decideSessionAdmission } from "./session-admission";
 import type { ExecutionApprovals, ExecutionResult, ExecutorOptions } from "./executor";
 import { Clock, Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices } from "./services";
 
@@ -135,25 +136,22 @@ export interface SessionRuntime {
   ) => Readonly<Record<string, number>>;
   readonly onRequestReady?: (sessionId: string) => void;
   /**
-   * Lease contract. The durable lease is a fenced single-writer guarantee:
-   * every commit carries the fence of the executor that owns the lease, so a
-   * stale executor can never write after another one took over. Liveness is
-   * kept by the heartbeat; when renewal is refused (lease stolen after the TTL
-   * elapsed without a heartbeat) the running turn is aborted. A runner MUST
-   * honour that abort promptly - an abort-ignoring runner keeps computing
-   * without authority; its late result is discarded and it never touches the
-   * lease of a later owner. Takeover after an expired TTL is the intended
-   * recovery for a dead or stalled executor, not a hand-off. The default
-   * heartbeat timer is unref'd so a detached runner never pins the process.
+   * Fenced single-writer contract: every commit carries the fence of the
+   * writer that owns the session, so a stale writer can never commit after
+   * another one took over. On the entity plane (W5.2 #1197) the fence rotates
+   * once per activation through the catalog CAS and there is no liveness
+   * heartbeat; this hook is the wave-2 TTL bridge for the legacy executor
+   * plane and dies with it. A runner MUST still honour aborts promptly - an
+   * abort-ignoring runner keeps computing without authority and its late
+   * result is discarded.
    */
   readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
   readonly onHibernate?: (sessionId: string) => Effect.Effect<void, ExecutionError>;
   /**
    * How long `close()` waits for an abort-ignoring runner to settle before
-   * detaching the caller. Defaults to the lease TTL. Detaching only bounds the
-   * caller-facing wait: the heartbeat keeps renewing and the lease is released
-   * by the turn continuation once the runner actually settles, never handed
-   * off while it may still be alive. `0` detaches immediately.
+   * detaching the caller. Detaching only bounds the caller-facing wait: the
+   * turn continuation still settles durably before authority moves on. `0`
+   * detaches immediately.
    */
   readonly closeGraceMs?: number;
 }
@@ -246,4 +244,74 @@ export interface RegistryEntry {
 export interface SessionControllerLifecycle {
   reactivate(): Effect.Effect<SessionHandle, SessionError>;
   release(): void;
+}
+
+/**
+ * Ports the Session entity handler (W5.2 #1197) receives from composition.
+ * The entity owns receipt, dedupe, fence authority and backlog admission; the
+ * turn machinery and the chain-guarded timer folds stay behind these ports so
+ * the durable protocol and the execution engine evolve independently.
+ */
+
+export type SessionAdmissionSnapshot = Parameters<typeof decideSessionAdmission>[0];
+export type SessionAdmissionDecision = ReturnType<typeof decideSessionAdmission>;
+
+/** The fence identity one activation writes with; rotated once at activation. */
+export interface SessionEntityAuthority {
+  readonly sessionId: string;
+  readonly owner: string;
+  readonly fence: number;
+}
+
+/** An admitted unit of turn work: everything but `stop`/`refused`/`consume`. */
+export interface SessionEntityTurnInput {
+  readonly authority: SessionEntityAuthority;
+  readonly kernel: SessionHandleStore.SessionKernel;
+  readonly decision:
+    | { readonly kind: "start" }
+    | Extract<SessionAdmissionDecision, { kind: "recover" } | { kind: "resume" }>;
+  readonly snapshot: SessionAdmissionSnapshot;
+}
+
+export interface SessionEntityTimerContext {
+  readonly authority: SessionEntityAuthority;
+  readonly kernel: SessionHandleStore.SessionKernel;
+  readonly now: number;
+}
+
+export type SessionTimerOutcome = "applied" | "noop";
+
+/** Chain-guarded timer folds (plan C2/F2); superseded wakes resolve to `noop`. */
+export interface SessionEntityTimerPort {
+  readonly retryScheduled: (
+    context: SessionEntityTimerContext,
+    payload: { readonly alarmId: string; readonly attempt: number; readonly notBefore: number },
+  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
+  readonly deadline: (
+    context: SessionEntityTimerContext,
+    payload: { readonly requestId: string; readonly deadlineAt: number },
+  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
+  readonly watchFired: (
+    context: SessionEntityTimerContext,
+    payload: {
+      readonly watchId: string;
+      readonly epoch: number;
+      readonly sourceKey: string;
+      readonly batch: string;
+    },
+  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
+  readonly watchTimeout: (
+    context: SessionEntityTimerContext,
+    payload: { readonly watchId: string; readonly epoch: number; readonly fireAt: number },
+  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
+}
+
+export interface SessionEntityPorts {
+  /** Runs one admitted decision to a durable boundary; the ack follows its commits. */
+  readonly runTurn: (input: SessionEntityTurnInput) => Effect.Effect<void, SessionError>;
+  readonly timers: SessionEntityTimerPort;
+  /** Optional domain-revision capture for request bindings, as on `SessionRuntime`. */
+  readonly requestDomainRevisions?: (
+    request: SessionTransition.Request,
+  ) => Readonly<Record<string, number>>;
 }
