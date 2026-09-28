@@ -53,7 +53,7 @@ const SOCKET_PROBE_TIMEOUT_MS = 500;
  * (or any other connect error) means the socket file is a stale leftover.
  */
 function probeSocketLive(socketPath: string): Effect.Effect<boolean> {
-  return Effect.async<boolean>((resume) => {
+  return Effect.callback<boolean>((resume) => {
     const probe = new net.Socket();
     probe.once("error", () => { probe.destroy(); resume(Effect.succeed(false)); });
     probe.once("connect", () => { probe.destroy(); resume(Effect.succeed(true)); });
@@ -206,7 +206,7 @@ export function createIpcServer(
     const message = classifyIpcMessage(msg);
     if (message === undefined) return Effect.sync(() => sendFrame(state, Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg))));
     if (message.kind === "response") return peer.dispatchMessage(message, state);
-    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchAllCause((cause) => Effect.sync(() => {
+    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchCause((cause) => Effect.sync(() => {
       console.warn("IPC request handler defect:", cause);
       removeConnection(state.id, "request handler defect");
       state.socket.end();
@@ -242,7 +242,7 @@ export function createIpcServer(
           const { frames: messages, malformed } = yield* Effect.try({ try: () => state.decoder.push(raw), catch: decodeIpcFailure("frame.decode") });
           for (const msg of messages) yield* dispatchFrame(msg, state);
           for (const line of malformed) sendFrame(state, Ipc.createErrorResponse("unknown", 4001, `IPC frame is not valid JSON: ${line}`));
-        }).pipe(Effect.catchAll((error) => Effect.sync(() => {
+        }).pipe(Effect.catch((error) => Effect.sync(() => {
           sendFrame(state, Ipc.createErrorResponse("unknown", 4001, error.message || String(error)));
           closeAfterFlush(state);
         }))));

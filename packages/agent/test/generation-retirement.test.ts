@@ -19,7 +19,7 @@ function generation(number: number, close: () => void) {
         generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) }) }),
       Layer.succeed(ToolCatalog, { definitions: [] }), Layer.succeed(ObservationSink, createObservationBus()),
       Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
-      Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(close))),
+      Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(close))),
     ),
   };
 }
@@ -57,7 +57,7 @@ test("a retired generation cannot reacquire ownership after its last release not
   yield* owner.configure(generation(2, () => undefined), Effect.void);
   const attempted = yield* Effect.sync(() => {
     release();
-    return runAgentSync(Effect.either(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
+    return runAgentSync(Effect.result(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
   });
-  expect(attempted).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+  expect(attempted).toMatchObject({ _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 1 } });
 })).pipe(Effect.timeout("5 seconds"))));

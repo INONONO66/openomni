@@ -37,11 +37,11 @@ export interface AlarmWriteAdapter extends Pick<ProtocolStorage.AlarmSubAdapter,
   fire(input: Alarm.Fire): Effect.Effect<Alarm.Fired, LedgerError>;
 }
 
-export class LedgerWrites extends Context.Tag("@openomni/ledger/LedgerWrites")<
+export class LedgerWrites extends Context.Service<
   LedgerWrites,
   {
     readonly sessions: SessionWriteAdapter;
     readonly inbox: InboxWriteAdapter;
     readonly alarms: AlarmWriteAdapter;
   }
->() {}
+>()("@openomni/ledger/LedgerWrites") {}

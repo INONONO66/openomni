@@ -5,7 +5,7 @@ import type { MachineHost } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
 
 /** Bind product dispatch; interpreter state and cell provenance live in codemode. */
-export type ComposedCodemode = Effect.Effect.Success<ReturnType<typeof createCodemode>>;
+export type ComposedCodemode = Effect.Success<ReturnType<typeof createCodemode>>;
 
 function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
   return {

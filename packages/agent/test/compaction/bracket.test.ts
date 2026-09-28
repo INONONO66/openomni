@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option, Result } from "effect";
 import { providerFailure } from "../helpers/mock-llm";
 import { isolated } from "../helpers/isolated";
 import { afterEach, describe, expect, it } from "bun:test";
@@ -151,7 +151,7 @@ describe("Compaction bracket", () => {
     );
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isSuccess(exit)) throw new Error("expected completion publishing to fail");
-    expect(Option.getOrThrow(Cause.dieOption(exit.cause))).toBe(publishError);
+    expect(Option.getOrThrow(Result.getSuccess(Cause.findDefect(exit.cause)))).toBe(publishError);
 
     expect(events.named(RunEvents.CompactionCompleted.name)).toHaveLength(1);
     expect(events.named(RunEvents.CompactionCompleted.name)[0]).toMatchObject({

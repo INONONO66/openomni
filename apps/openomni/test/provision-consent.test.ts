@@ -185,8 +185,8 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
     const ninth = protectedDispatch(provision(), { operation: PROMOTE });
     pending.push(ninth);
     const ninthResult = await bounded(ninth.outcome);
-    expect(ninthResult._tag).toBe("Left");
-    expect(ninthResult._tag === "Left" && ninthResult.left).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
+    expect(ninthResult._tag).toBe("Failure");
+    expect(ninthResult._tag === "Failure" && ninthResult.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
     expect(
       SessionHandleStore.requestRows().filter((request) => request.state === "open"),
     ).toHaveLength(8);
@@ -198,7 +198,7 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
 
 function restartDispatcher(recording: RequestLedger, ready?: () => void) {
   return Effect.gen(function* () {
-    const dispatcher: Effect.Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher({
+    const dispatcher: Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher({
       ...recording.identity, actionId: recording.identity.parentActionId,
       ledger: {
         ...recording.ledger,
@@ -237,9 +237,9 @@ for (const operation of [PROMOTE, MERGE]) {
           const initial = yield* requestLedger({ domainRevisions: requestDomainRevisions });
           const crashed = yield* restartDispatcher(crashAfterRequestOpen(initial, "provision.crash"));
           const call = { id: "original", tool: "provision", input: { operation } };
-          expect(yield* Effect.either(crashed.executeWave([call], {
+          expect(yield* Effect.result(crashed.executeWave([call], {
             sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
-          }))).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "provision.crash" } });
+          }))).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "provision.crash" } });
           const original = SessionHandleStore.requestRows()[0];
           if (original === undefined) throw new Error("missing Owner request");
           expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,
@@ -263,8 +263,8 @@ for (const operation of [PROMOTE, MERGE]) {
           expect(pending.durable).toEqual(original);
           yield* approvals.answer({ request: pending, decision, credential: "owner" });
           yield* Fiber.join(running);
-          expect(yield* Effect.either(approvals.answer({ request: pending, decision, credential: "owner" })))
-            .toMatchObject({ _tag: "Left", left: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
+          expect(yield* Effect.result(approvals.answer({ request: pending, decision, credential: "owner" })))
+            .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
           expect(SessionHandleStore.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
           const settled = sessionTree(initial.identity.sessionId);
           expect(settled.filter((action: LedgerAction.Node) => action.id === `${original.requestId}:application`))

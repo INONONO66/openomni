@@ -47,7 +47,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   const dispatcher = yield* createDispatcher({ executor: recovered }).pipe(Effect.provide(catalogLayer([definition])));
   const recovering = yield* Effect.forkScoped(recovered.recover().pipe(
     Effect.andThen(() => dispatcher.recover(sessionTree(recorded.identity.sessionId), context)),
-    Effect.tapErrorCause((cause) => Effect.sync(() => ready.reject(Cause.squash(cause)))),
+    Effect.tapCause((cause) => Effect.sync(() => ready.reject(Cause.squash(cause)))),
   ));
   yield* Effect.promise(() => ready.promise).pipe(Effect.timeout("5 seconds"));
   const approvals = recovered.approvals;

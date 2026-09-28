@@ -31,7 +31,7 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
     const requests = yield* Queue.unbounded<{ resolve: (value: string) => void }>();
     const definitions = [eraseTool(defineTool({
       name: "loop", description: "loop", category: "mutation", input: z.object({}), output: z.string(), visibility: { model: ["resident"], cell: [] },
-      execute: () => new Promise<string>((resolve) => { requests.unsafeOffer({ resolve }); }), render: (_input, output) => output,
+      execute: () => new Promise<string>((resolve) => { Queue.offerUnsafe(requests, { resolve }); }), render: (_input, output) => output,
     }))];
     yield* Effect.forkScoped(Effect.forever(Effect.gen(function* () {
       const request = yield* Queue.take(requests);

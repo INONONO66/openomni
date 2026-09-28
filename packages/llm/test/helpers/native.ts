@@ -9,13 +9,13 @@ export { LlmRunFailure } from "../../src/errors";
 export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   const exit = await Effect.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
-  const failure = Cause.failureOption(exit.cause);
+  const failure = Cause.findErrorOption(exit.cause);
   if (Option.isSome(failure)) throw failure.value;
   throw Cause.squash(exit.cause);
 }
 export namespace Processor {
   type StreamInput = Parameters<NativeProcessor.ProcessorOptions["createStream"]>[0];
-  type Stream = Effect.Effect.Success<ReturnType<NativeProcessor.ProcessorOptions["createStream"]>>;
+  type Stream = Effect.Success<ReturnType<NativeProcessor.ProcessorOptions["createStream"]>>;
   export type ProcessorOptions = Omit<NativeProcessor.ProcessorOptions, "createStream"> & { createStream: (input: StreamInput) => Promise<Stream> };
   export function create(options: ProcessorOptions) {
     const value = NativeProcessor.create({ ...options, createStream: (input) => Effect.tryPromise({ try: () => options.createStream(input), catch: decodeLlmFailure("test.provider") }) });

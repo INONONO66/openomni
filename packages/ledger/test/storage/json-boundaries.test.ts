@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
@@ -58,9 +58,9 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
   const store = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
     publish: () => undefined,
   });
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         store.sessions.create(
           LedgerSession.Row.parse({
             id: "s",

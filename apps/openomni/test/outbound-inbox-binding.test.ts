@@ -1,6 +1,6 @@
 import { runEffect } from "./helpers/effect";
 import { decodeChannelFailure } from "@openomni/channels";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
@@ -22,9 +22,9 @@ afterEach(() => {
 });
 
 function materialize(id: string) {
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId: null,

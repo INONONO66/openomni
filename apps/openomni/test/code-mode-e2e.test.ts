@@ -405,7 +405,7 @@ const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
  */
 async function startCellHarness(ports: Partial<ToolPorts>) {
   const socketPath = testSocketPath();
-  let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
+  let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
   const host = await createMachineHost({
     socketPath,
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
@@ -505,15 +505,15 @@ test("a detached eval cell admits nested calls after run returns and refuses the
       nestedBodies += 1;
       return "after-detach";
     })))).toEqual({ terminal: "executed", value: "after-detach" });
-    const pending = runEffect(Effect.either(frame.executor.run(request, () =>
+    const pending = runEffect(Effect.result(frame.executor.run(request, () =>
       Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)))));
     await bounded(pendingEntered.promise);
     expect(await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } })).not.toHaveProperty("isError", true);
-    expect(await bounded(pending)).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed", reason: "interrupted" } });
-    expect(await runEffect(Effect.either(frame.executor.run(request, () => Effect.sync(() => {
+    expect(await bounded(pending)).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed", reason: "interrupted" } });
+    expect(await runEffect(Effect.result(frame.executor.run(request, () => Effect.sync(() => {
       nestedBodies += 1;
       return "forbidden";
-    }))))).toMatchObject({ _tag: "Left", left: { _tag: "InvocationClosed" } });
+    }))))).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed" } });
     expect(nestedBodies).toBe(1);
   } finally {
     firstReply.resolve("cleanup");

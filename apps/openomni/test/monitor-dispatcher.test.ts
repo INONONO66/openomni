@@ -81,7 +81,7 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ));
   expect(Exit.isFailure(missingContext)).toBe(true);
   if (Exit.isFailure(missingContext)) {
-    expect([...Cause.defects(missingContext.cause)]).toEqual([expect.any(ExecutorContextError)]);
+    expect(missingContext.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([expect.any(ExecutorContextError)]);
   }
   await expect(
     monitorTool.execute(
@@ -254,13 +254,13 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
     await appRuntime.runPromise(Effect.flatMap(GenerationLayers, (generations) => generations.initialize({ resident: definitions, worker: definitions })));
     const requests = await appRuntime.runPromise(createSessionRequests(runtime));
     const services = await appRuntime.runPromise(Effect.context<import("../src/runtime").AppServices>());
-    const handle = await appRuntime.runPromise(Scope.extend(session(
+    const handle = await appRuntime.runPromise(Scope.provide(session(
       { id: "live-wait", role: "resident", runner, tools: definitions.map(sessionTool) },
       runtime,
     ), scope));
     const woke = Promise.withResolvers<void>();
     const errors: Error[] = [];
-    const worker = await runEffect(Scope.extend(createAlarmWorker({
+    const worker = await runEffect(Scope.provide(createAlarmWorker({
       alarms: storage.alarms,
       requestTimeout: requests.timeout,
       observations: events,
@@ -269,7 +269,7 @@ test("monitor create seals live-wait with one model call; PTY inbox wakes a hibe
         errors.push(error);
         woke.reject(error);
       },
-      wake: (id: string) => Scope.extend(wakeSession(id, runner, runtime), scope).pipe(
+      wake: (id: string) => Scope.provide(wakeSession(id, runner, runtime), scope).pipe(
         Effect.tap(() => Effect.sync(() => woke.resolve())), Effect.asVoid, Effect.provide(services),
       ),
     }), scope));

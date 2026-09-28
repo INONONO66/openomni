@@ -58,11 +58,11 @@ async function fixture(
     cell: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["executeCell"]>>>;
+    ) => Promise<Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["executeCell"]>>>;
     model: (
       tool: string,
       input: Record<string, PlainValue>,
-    ) => Promise<Effect.Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["execute"]>>>;
+    ) => Promise<Effect.Success<ReturnType<ReturnType<typeof dispatcherFixture>["execute"]>>>;
   }) => Promise<void>,
   capabilities = ["fs.read", "fs.write", "shell.exec"],
 ) {

@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
@@ -51,9 +51,9 @@ function commitAs(fence: number, actionId: string): LedgerSession.Commit {
 test("a stale fence is rejected at commit time with no partial row, even under the same owner name", () => {
   const { sessions, actions } = stores();
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.create({
             id: sessionId,
             parentId: null,
@@ -73,9 +73,9 @@ test("a stale fence is rejected at commit time with no partial row, even under t
     ),
   ).toBe(true);
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.acquireLease({
             sessionId,
             owner: "kernel-owner",
@@ -90,9 +90,9 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   ).toEqual({ ok: true, fence: 1 });
   // Inclusive expiry: the successor reclaims at exactly expiresAt with the same owner name.
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.acquireLease({
             sessionId,
             owner: "kernel-owner",
@@ -111,8 +111,8 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   // Owner name matches, the live lease is unexpired, the revision is exact:
   // only the fence is stale, and the rejection is typed with the current fence.
   const rejected = () =>
-    Either.getOrThrowWith(
-      Effect.runSync(Effect.either(sessions.commit(commitAs(1, "stale-result")))),
+    Result.getOrThrowWith(
+      Effect.runSync(Effect.result(sessions.commit(commitAs(1, "stale-result")))),
       (error) => error,
     );
   expect(rejected).toThrow(
@@ -127,8 +127,8 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(sessions.get(sessionId)).toEqual(before);
 
   // The successor's fence commits the identical work exactly once.
-  const committed = Either.getOrThrowWith(
-    Effect.runSync(Effect.either(sessions.commit(commitAs(2, "successor-result")))),
+  const committed = Result.getOrThrowWith(
+    Effect.runSync(Effect.result(sessions.commit(commitAs(2, "successor-result")))),
     (error) => error,
   );
   expect(committed?.ok).toBe(true);

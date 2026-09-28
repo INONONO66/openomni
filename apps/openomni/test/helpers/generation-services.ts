@@ -12,8 +12,8 @@ export function generationServices(options: {
   readonly definitions?: Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>>;
   readonly clock?: () => number;
   readonly entropy?: () => string;
-  readonly observations?: Context.Tag.Service<typeof ObservationSink>;
-  readonly llm?: Context.Tag.Service<typeof Llm>;
+  readonly observations?: Context.Service.Shape<typeof ObservationSink>;
+  readonly llm?: Context.Service.Shape<typeof Llm>;
 } = {}) {
   return Effect.gen(function* () {
     const scope = yield* Scope.Scope;

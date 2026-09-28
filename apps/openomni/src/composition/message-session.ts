@@ -1,4 +1,4 @@
-import { Effect, FiberRef } from "effect";
+import { Effect } from "effect";
 import { ForeignFailure } from "@openomni/agent";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
@@ -11,7 +11,7 @@ export function commitMessageInbox(
   input: Inbox.Commit,
 ): Effect.Effect<Inbox.Row, LedgerError | ForeignFailure> {
   return Effect.gen(function* () {
-    const outbound = yield* FiberRef.get(outboundMessage);
+    const outbound = yield* outboundMessage;
     const message = outbound?.input.message;
     if (
       message !== undefined &&
@@ -118,7 +118,7 @@ function prepareExternal(
   send: Parameters<Ports["prepare"]>[1],
   target: string,
   messageId: string,
-): Effect.Effect.Success<ReturnType<Ports["prepare"]>> {
+): Effect.Success<ReturnType<Ports["prepare"]>> {
   const exists = SessionHandleStore.listRows().some((row) => row.id === target);
   const source =
     exists && send.replyTo !== undefined
@@ -208,7 +208,7 @@ export function prepareMessage(
         return parsed.success ? [parsed.data] : [];
       });
       const parentDeadline = origins.at(-1)?.deadline;
-      const outbound = yield* FiberRef.get(outboundMessage);
+      const outbound = yield* outboundMessage;
       const bounds = admissionBounds(source, send);
       const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
       const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));

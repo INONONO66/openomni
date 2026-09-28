@@ -29,7 +29,7 @@ function completionFixture(...args: Parameters<typeof completionPort>) {
 }
 
 /** The production executor with the llm/text operation's result scripted; tool operations stay real. */
-function scriptedLlmExecutor(result: Effect.Effect.Success<ReturnType<Executor["run"]>>): Executor {
+function scriptedLlmExecutor(result: Effect.Success<ReturnType<Executor["run"]>>): Executor {
   return {
     ...productionExecutor,
     run: (request, body) =>

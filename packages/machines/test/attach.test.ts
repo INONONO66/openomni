@@ -167,7 +167,7 @@ describe("machine attach handshake", () => {
           finish.resolve();
           expect((await running).status).toBe("cancelled");
           const preAborted = await Effect.runPromiseExit(handle.native.runCode(cell, AbortSignal.abort()));
-          expect(Exit.isFailure(preAborted) && Cause.isInterrupted(preAborted.cause)).toBe(true);
+          expect(Exit.isFailure(preAborted) && Cause.hasInterrupts(preAborted.cause)).toBe(true);
         } finally {
           finish.resolve();
           await daemon.close();

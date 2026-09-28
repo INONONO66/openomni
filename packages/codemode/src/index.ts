@@ -20,7 +20,7 @@ interface BackgroundCell {
   readonly tenant: string;
   readonly machineId: string;
   readonly controller: AbortController;
-  readonly execution: Fiber.RuntimeFiber<Machine.CellResult, Failure>;
+  readonly execution: Fiber.Fiber<Machine.CellResult, Failure>;
   readonly done: boolean;
   readonly quarantined: boolean;
 }
@@ -196,7 +196,7 @@ export function createCodemode(options: Options = {}) {
           if (!quarantined) { release?.(); live.delete(cellId); }
           else background.set(cellId, entry);
           running.delete(settled);
-          Deferred.unsafeDone(settled, Exit.void);
+          Deferred.doneUnsafe(settled, Exit.void);
           retainSettled();
         });
         return { cellId, entry };

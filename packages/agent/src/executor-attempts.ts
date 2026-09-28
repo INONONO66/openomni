@@ -12,7 +12,7 @@ import { attemptRouteChange } from "./model-selection";
 
 type RecordPort = ReturnType<typeof createExecutionRecord>;
 type Admission = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
-type Prepared<T extends PlainValue> = Effect.Effect.Success<ReturnType<LlmAttempts<T>["prepare"]>>;
+type Prepared<T extends PlainValue> = Effect.Success<ReturnType<LlmAttempts<T>["prepare"]>>;
 
 function terminalFailure(failure: ExecutionError, attempt: number) {
   if (failure._tag === "LlmRunFailure") attachFailureFacts(failure, {
@@ -21,8 +21,8 @@ function terminalFailure(failure: ExecutionError, attempt: number) {
   return Effect.fail(failure);
 }
 function retryableFailure(cause: Cause.Cause<ExecutionError>) {
-  const error = Cause.failureOption(cause);
-  return Cause.isInterrupted(cause) || Cause.isDie(cause) || Option.isNone(error)
+  const error = Cause.findErrorOption(cause);
+  return Cause.hasInterrupts(cause) || Cause.hasDies(cause) || Option.isNone(error)
     ? Effect.failCause(cause) : Effect.succeed(error.value);
 }
 
@@ -83,7 +83,7 @@ export function createAttemptRunner(
       Effect.exit(restore(prepared.body())).pipe(
         Effect.flatMap((exit) => record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
           phase: "result", effect: prepared.request.effect,
-          terminal: Exit.isFailure(exit) && Cause.isInterrupted(exit.cause) ? "interrupted" : "executed",
+          terminal: Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause) ? "interrupted" : "executed",
           evidence: Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause),
         }).pipe(Effect.as(exit))),
       ),

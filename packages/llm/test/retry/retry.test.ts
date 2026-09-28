@@ -1,4 +1,5 @@
-import { Effect, Cause, Exit, Fiber, TestClock, TestContext } from "effect";
+import { Effect, Cause, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, expect, test, vi } from "bun:test";
 import { Retry } from "../../src/retry";
 
@@ -9,7 +10,7 @@ async function sleepWithClock(ms: number, signal?: AbortSignal): Promise<void> {
     const fiber = yield* Effect.forkScoped(Retry.sleep(ms, signal));
     yield* TestClock.adjust(ms);
     yield* Fiber.join(fiber);
-  }).pipe(Effect.provide(TestContext.TestContext))));
+  }).pipe(Effect.provide(TestClock.layer()))));
 }
 
 function retryableError(headers?: Record<string, string>) {
@@ -72,15 +73,15 @@ describe("Retry", () => {
         const fiber = yield* Effect.forkScoped(Retry.sleep(5_000, controller.signal));
         controller.abort();
         return yield* Fiber.await(fiber);
-      }).pipe(Effect.provide(TestContext.TestContext))));
-      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+      }).pipe(Effect.provide(TestClock.layer()))));
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     });
 
     test("an already-aborted signal interrupts without scheduling work", async () => {
       const controller = new AbortController();
       controller.abort();
       const exit = await Effect.runPromiseExit(Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal));
-      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     });
 
 

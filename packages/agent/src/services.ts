@@ -24,7 +24,7 @@ export interface CapturedGeneration {
   retain(): () => void;
 }
 
-export class GenerationOwnership extends Context.Tag("@openomni/agent/GenerationOwnership")<GenerationOwnership, CapturedGeneration>() {}
+export class GenerationOwnership extends Context.Service<GenerationOwnership, CapturedGeneration>()("@openomni/agent/GenerationOwnership") {}
 
 export interface GenerationLayersService {
   initialize(definitions: Readonly<Record<import("@openomni/protocol").LedgerSession.Role, readonly AnyToolDefinition[]>>): Effect.Effect<void, SessionError>;
@@ -33,29 +33,29 @@ export interface GenerationLayersService {
   readonly drain: Effect.Effect<void, SessionError>;
 }
 
-export class GenerationLayers extends Context.Tag("@openomni/agent/GenerationLayers")<GenerationLayers, GenerationLayersService>() {}
+export class GenerationLayers extends Context.Service<GenerationLayers, GenerationLayersService>()("@openomni/agent/GenerationLayers") {}
 
-export class Clock extends Context.Tag("@openomni/agent/Clock")<
+export class Clock extends Context.Service<
   Clock,
   { readonly now: () => number }
->() {}
+>()("@openomni/agent/Clock") {}
 
-export class Entropy extends Context.Tag("@openomni/agent/Entropy")<
+export class Entropy extends Context.Service<
   Entropy,
   { readonly next: () => string }
->() {}
+>()("@openomni/agent/Entropy") {}
 
-export class ObservationSink extends Context.Tag("@openomni/agent/ObservationSink")<
+export class ObservationSink extends Context.Service<
   ObservationSink,
   ObservationPort & Required<Pick<ObservationPort, "subscribe" | "scope">>
->() {}
+>()("@openomni/agent/ObservationSink") {}
 
-export class SessionLayer extends Context.Tag("@openomni/agent/SessionLayer")<
+export class SessionLayer extends Context.Service<
   SessionLayer,
   { readonly snapshot: SessionGeneration.Snapshot; readonly policy: CompiledPolicySnapshot }
->() {}
+>()("@openomni/agent/SessionLayer") {}
 
-export class ToolCatalog extends Context.Tag("@openomni/agent/ToolCatalog")<
+export class ToolCatalog extends Context.Service<
   ToolCatalog,
   { readonly definitions: readonly ToolDispatchDefinition[] }
->() {}
+>()("@openomni/agent/ToolCatalog") {}

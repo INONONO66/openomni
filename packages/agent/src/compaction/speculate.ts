@@ -24,7 +24,7 @@ export class CompactionSession {
   #inFlight = false;
   #failureStreak = 0;
   #generation = 0;
-  #preparation: Fiber.RuntimeFiber<void, never> | undefined;
+  #preparation: Fiber.Fiber<void, never> | undefined;
   #entered = true;
   readonly #listeners = new Set<() => void>();
 
@@ -104,6 +104,19 @@ export class CompactionSession {
     });
   }
 
+  /**
+   * Run-settle abort. v3 flushed the scheduler queue at every async
+   * resumption, so a preparation forked before the run's last async boundary
+   * always entered (its summarizer call was issued, then aborted) before the
+   * run's finalizer ran. v4 resumes fibers directly, bypassing the dispatcher
+   * queue, so grant the one start tick v3 guaranteed before interrupting.
+   * Direct abort() stays tick-free: v3 never started a fork that was aborted
+   * in the same synchronous continuation.
+   */
+  settleAbort(): Effect.Effect<void> {
+    return Effect.yieldNow.pipe(Effect.andThen(this.abort()));
+  }
+
   abort(): Effect.Effect<void> {
     return Effect.suspend(() => {
       this.#generation += 1;
@@ -114,7 +127,7 @@ export class CompactionSession {
   }
 
   started(): Effect.Effect<void> {
-    return Effect.async((resume) => {
+    return Effect.callback((resume) => {
       const notify = () => resume(Effect.void);
       this.#listeners.add(notify);
       if (this.#entered) notify();

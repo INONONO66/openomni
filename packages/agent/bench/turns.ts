@@ -28,7 +28,7 @@ import { seedPolicy } from "../test/helpers/seed-policy";
 
 // Keep the reference benchmark's no-op observation port; fixture helpers otherwise
 // add a bus and event stamping to every dispatch, changing what this metric measures.
-const events: Context.Tag.Service<typeof ObservationSink> = {
+const events: Context.Service.Shape<typeof ObservationSink> = {
   publish: () => undefined,
   subscribe: () => () => undefined,
   scope: () => events,
@@ -172,7 +172,7 @@ export async function roundTrip() {
           runtime,
         ),
         runtime,
-      ).pipe(Scope.extend(scope)),
+      ).pipe(Scope.provide(scope)),
     );
     return { handle, run: () => runBenchEffect(handle.prompt("hello")), close };
   } catch (error) {

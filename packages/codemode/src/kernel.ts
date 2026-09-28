@@ -2,7 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
 import type { MachineError } from "@openomni/machines";
-import { Cause, Deferred, Effect, Exit, Queue, type Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
 import { z } from "zod";
@@ -285,7 +285,7 @@ export class PythonKernel {
   private process: ChildProcessWithoutNullStreams | undefined;
   private lines: Interface | undefined;
   private pending: PendingCell | undefined;
-  private readonly lock = Effect.unsafeMakeSemaphore(1);
+  private readonly lock = Semaphore.makeUnsafe(1);
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
@@ -296,7 +296,7 @@ export class PythonKernel {
       const output = { stdout: "", stderr: "" };
       const cancelled = (): Machine.CellResult => ({ status: "cancelled", cellId: request.cellId, output: { ...output } });
       if (cancellation.aborted) return Effect.succeed(cancelled());
-      const abort = Effect.async<Machine.CellResult>((resume) => {
+      const abort = Effect.callback<Machine.CellResult>((resume) => {
         const listener = () => resume(Effect.sync(cancelled));
         cancellation.addEventListener("abort", listener, { once: true });
         if (cancellation.aborted) listener();
@@ -315,7 +315,7 @@ export class PythonKernel {
   }
 
   close(): Effect.Effect<void, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.lifetime.abort();
       if (this.process) yield* this.discard(this.process);
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
@@ -323,12 +323,12 @@ export class PythonKernel {
   }
 
   private execute(request: Machine.CellRequest, callTool: CellToolCaller, output: PendingCell["output"]): Effect.Effect<Machine.CellResult, CodeError> {
-    return Effect.scoped(Effect.gen(this, function* () {
+    return Effect.scoped(Effect.gen({ self: this }, function* () {
       const process = this.process ?? (yield* this.start());
       const frames = yield* Queue.unbounded<string | DriverFailure>();
       const pending: PendingCell = { cellId: request.cellId, process, frames, output, inFlight: new Set() };
       this.pending = pending;
-      return yield* Effect.gen(this, function* () {
+      return yield* Effect.gen({ self: this }, function* () {
         yield* this.write(process, request);
         for (;;) {
           const line = yield* Queue.take(frames);
@@ -345,7 +345,7 @@ export class PythonKernel {
             return frame.result;
           }
         }
-      }).pipe(Effect.ensuring(Effect.gen(this, function* () {
+      }).pipe(Effect.ensuring(Effect.gen({ self: this }, function* () {
         if (this.pending === pending) {
           this.pending = undefined;
           yield* Effect.orDie(this.discard(process));
@@ -357,16 +357,16 @@ export class PythonKernel {
   }
 
   private answerToolCall(pending: PendingCell, frame: ToolCallFrame, callTool: CellToolCaller): Effect.Effect<void, CodeError, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (frame.cellId !== pending.cellId) {
         return yield* this.write(pending.process, { status: "failed", error: `tool call refused: cell ${frame.cellId} is not the running cell`, callId: frame.callId });
       }
       if (pending.inFlight.has(frame.callId)) return;
       pending.inFlight.add(frame.callId);
       yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
-        Effect.catchAllCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
+        Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
         Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catchAll((error) => Effect.sync(() => { pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.catch((error) => Effect.sync(() => { Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
         Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
       ));
     });
@@ -377,21 +377,21 @@ export class PythonKernel {
   }
 
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
       this.processExits.set(process, exited);
-      process.once("close", () => { this.exits.delete(exited); Deferred.unsafeDone(exited, Exit.void); });
+      process.once("close", () => { this.exits.delete(exited); Deferred.doneUnsafe(exited, Exit.void); });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
       this.lines = lines;
       lines.on("line", (line) => {
-        if (this.pending?.process === process) this.pending.frames.unsafeOffer(line);
+        if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });
       const fail = (message: string) => {
         if (this.process === process) { this.process = undefined; this.lines = undefined; }
-        if (this.pending?.process === process) this.pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.process", message, cause: message }));
+        if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, new DriverFailure({ operation: "driver.process", message, cause: message }));
       };
       process.once("error", (error) => fail(error.message));
       process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
@@ -400,7 +400,7 @@ export class PythonKernel {
   }
 
   private discard(process: ChildProcessWithoutNullStreams): Effect.Effect<void, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
     const exited = this.processExits.get(process);
     if (exited === undefined) return yield* Effect.die("missing process close witness");
     yield* Effect.try({ try: () => {

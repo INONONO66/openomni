@@ -55,7 +55,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
   const closed: number[] = [];
   const delivered: number[] = [];
   let fail = false;
-  const live = Layer.scopedDiscard(Effect.gen(function* () {
+  const live = Layer.effectDiscard(Effect.gen(function* () {
     const sink = yield* ObservationSink;
     const id = yield* Effect.acquireRelease(Effect.sync(() => {
       const id = acquired.length + 1;

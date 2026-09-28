@@ -93,14 +93,14 @@ export function runAgent(
   }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
     const error = Cause.squash(cause);
     const facts = failureFacts(error);
-    const interrupted = Cause.isInterrupted(cause) || error instanceof Interrupted ||
+    const interrupted = Cause.hasInterrupts(cause) || error instanceof Interrupted ||
       (error instanceof LlmRunFailure && error.aborted);
     emitRunFailed(config.events, base, String(error), {
       reason: interrupted ? "aborted" : facts?.reason ?? "transient_error",
       attempt: facts?.attempt ?? state.attempt,
       maxAttempts: facts?.maxAttempts ?? LlmRetry.MAX_ATTEMPTS,
     });
-  })), (effect) => compaction === undefined ? effect : Effect.ensuring(effect, compaction.abort()));
+  })), (effect) => compaction === undefined ? effect : Effect.ensuring(effect, compaction.settleAbort()));
 
   function finish(result: AgentResult): AgentResult {
     emitRunCompleted(config.events, state, base, result.finishReason);
@@ -118,7 +118,7 @@ function runModelStep(
   base: AgentRunBase,
   compaction: CompactionSession | undefined,
   durableExecutor: Executor,
-  llm: Context.Tag.Service<typeof Llm>,
+  llm: Context.Service.Shape<typeof Llm>,
 ): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope> {
   return Effect.gen(function* () {
   const executor = durableExecutor;

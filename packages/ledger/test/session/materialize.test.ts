@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -20,9 +20,9 @@ describe("L0 session materialization", () => {
   test("repeat declaration preserves the existing row and generation", () => {
     const first = materializeSession("gateway-minted");
     const tree = sessionTree(first.id);
-    const repeat = Either.getOrThrowWith(
+    const repeat = Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.materialize({
             id: first.id,
             parentId: null,

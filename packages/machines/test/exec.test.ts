@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Machine } from "@openomni/protocol";
-import { Effect, Fiber, Cause, Exit, TestClock, TestContext } from "effect";
+import { Effect, Fiber, Cause, Exit } from "effect";
+import { TestClock } from "effect/testing";
 import { execute as nativeExecute } from "../src/exec";
 
 const request = { cmd: "while :; do :; done", cwd: "/" };
@@ -10,9 +11,9 @@ test("aborting a shell interrupts and waits for its process group to close", asy
   const fiber = Effect.runFork(nativeExecute(request, controller.signal));
   controller.abort();
   const exit = await Effect.runPromise(Fiber.await(fiber));
-  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   const preAborted = await Effect.runPromiseExit(nativeExecute(request, controller.signal));
-  expect(Exit.isFailure(preAborted) && Cause.isInterrupted(preAborted.cause)).toBe(true);
+  expect(Exit.isFailure(preAborted) && Cause.hasInterrupts(preAborted.cause)).toBe(true);
 });
 
 test("the execution deadline kills the real shell and settles timed_out", async () => {
@@ -20,7 +21,7 @@ test("the execution deadline kills the real shell and settles timed_out", async 
     const fiber = yield* Effect.forkScoped(nativeExecute(request, new AbortController().signal));
     yield* TestClock.adjust(Machine.EXEC_TIMEOUT_MS);
     return yield* Fiber.join(fiber);
-  })).pipe(Effect.provide(TestContext.TestContext)));
+  })).pipe(Effect.provide(TestClock.layer())));
   expect(result).toEqual({ status: "timed_out" });
 });
 
@@ -54,11 +55,11 @@ test.each(["ESRCH", "EPERM", "EINVAL"])("aborted exec handles group kill failure
     expect(exit._tag).toBe("Failure");
     if (Exit.isSuccess(exit)) throw new Error("aborted exec succeeded");
     if (code === "EINVAL") {
-      expect(Array.from(Cause.defects(exit.cause))).toEqual([
+      expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([
         expect.objectContaining({ _tag: "SpawnFailure", operation: "exec.spawn", cause: String(error) }),
       ]);
     } else {
-      expect(Cause.isInterruptedOnly(exit.cause)).toBe(true);
+      expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
       expect(await within(closed.promise, "fallback child close")).toEqual({ code: null, signal: "SIGKILL" });
     }
   } finally {

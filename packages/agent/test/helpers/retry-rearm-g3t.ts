@@ -25,7 +25,7 @@ if (import.meta.main) {
       retryAlarm: {
         ...createRetryAlarmPort(rearmSessionId, recording.clock),
         wait: () => Effect.sync(() => writeSync(1, `${WAIT_SIGNAL}\n`)).pipe(
-          Effect.zipRight(Effect.never),
+          Effect.andThen(Effect.never),
         ),
       },
     });

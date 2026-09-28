@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { Storage } from "@openomni/ledger";
 import { alarmFixture } from "./helpers/alarm";
@@ -37,9 +37,9 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
       await runEffect(fixture.worker.tick());
       expect(fixture.rows()).toHaveLength(3);
       const resumed = fixture.next("budget", (row) => row.content === "one");
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         fixture.run(
-          Effect.either(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
+          Effect.result(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
         ),
         (error) => error,
       );

@@ -39,11 +39,12 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
   const options = yield* nativeExecutorOptions();
   const entered = yield* Deferred.make<void>();
   const executor = testExecutor(options);
-  const fiber = yield* Effect.fork(executor.run(request, () =>
-    Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never))));
+  const fiber = yield* Effect.forkChild(executor.run(request, () =>
+    Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))));
   yield* Deferred.await(entered);
-  const exit = yield* Fiber.interrupt(fiber);
-  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  yield* Fiber.interrupt(fiber);
+  const exit = yield* Fiber.await(fiber);
+  expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   expect(results()).toHaveLength(1);
   expect(results()).toMatchObject([{ terminal: "interrupted", evidence: { failures: [], defects: [], interrupted: true } }]);
 })));
@@ -100,8 +101,8 @@ test("terminal commit refusal publishes no success and leaves the intent open", 
         : options.ledger.commit(action),
     },
   });
-  const exit = yield* Effect.either(executor.run(request, () => Effect.succeed({ status: "success" })));
-  expect(exit).toMatchObject({ _tag: "Left", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
+  const exit = yield* Effect.result(executor.run(request, () => Effect.succeed({ status: "success" })));
+  expect(exit).toMatchObject({ _tag: "Failure", failure: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
   expect(results()).toEqual([]);
   expect(published).not.toContain("tool.execution.completed");
   expect(sessionTree(fiberSessionId).filter((action) => action.kind === "tool")).toHaveLength(1);
@@ -117,11 +118,11 @@ test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or
     name: "write", description: "write", category: "mutation" as const,
     input: z.object({}), output: z.string(), visibility: { model: [] as const, cell: [] as const },
     execute: async () => {
-      Deferred.unsafeDone(entered, Exit.void);
+      Deferred.doneUnsafe(entered, Exit.void);
       return released.promise;
     }, render: (_input: object, output: string) => output,
   };
-  const fiber = yield* Effect.fork(executor.run(request, () => executeToolBody(definition, {}, {
+  const fiber = yield* Effect.forkChild(executor.run(request, () => executeToolBody(definition, {}, {
     sessionId: fiberSessionId, turnId: `${fiberSessionId}:turn`, callId: "write-once", signal: new AbortController().signal,
   }, undefined)));
   yield* Deferred.await(entered);

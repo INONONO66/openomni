@@ -567,7 +567,7 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await runEffect(Effect.either(dispatcherFixture([eraseTool(createProvisionTool(port))], {
+    const result = await runEffect(Effect.result(dispatcherFixture([eraseTool(createProvisionTool(port))], {
       executor,
     }).execute(
       {
@@ -577,8 +577,8 @@ describe("refusal branches", () => {
       },
       { sessionId: "test", turnId: "turn" },
     )));
-    expect(result._tag).toBe("Left");
-    expect(result._tag === "Left" && result.left).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
+    expect(result._tag).toBe("Failure");
+    expect(result._tag === "Failure" && result.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 

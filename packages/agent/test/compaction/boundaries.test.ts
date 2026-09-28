@@ -25,7 +25,7 @@ describe("compaction boundary integrity", () => {
       return Effect.succeed("summary");
     }, 1000, controller.signal);
     const exit = await isolated(Effect.exit(summarize([], undefined, { maxInputTokens: 10, maxOutputTokens: 10, contextWindowTokens: 100 })));
-    expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     expect(called).toBe(false);
   });
 

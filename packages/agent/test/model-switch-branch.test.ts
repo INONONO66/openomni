@@ -31,7 +31,7 @@ test("route transitions are committed attempt metadata and switching back does n
   const options = { ...recording, policy: compiledPolicy(), observations: { publish: () => undefined } };
   const executor = testExecutor(options);
   const entered: string[] = [];
-  const result = yield* Effect.either(executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} },
+  const result = yield* Effect.result(executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} },
     (parent) => executor.runAttempts(parent, {
       prepare: (attempt) => {
         const model = attempt === 2 ? fallback : primary;
@@ -51,7 +51,7 @@ test("route transitions are committed attempt metadata and switching back does n
         });
       },
     })));
-  expect(result._tag).toBe("Left");
+  expect(result._tag).toBe("Failure");
   expect(entered).toEqual(["a", "b", "a"]);
   const children = attemptIntents(sessionTree(recording.identity.sessionId));
   expect(children.map((action) => PlainObjectSchema.parse(action.intent.value).attempt)).toEqual([1, 2, 3]);

@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Scope, Exit, Either } from "effect";
+import { Effect, Scope, Exit, Result } from "effect";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
@@ -50,7 +50,7 @@ for (const status of ["armed", "fired"] as const) {
         const scope = await runEffect(Scope.make());
         const services = acquireSyncEffect(generationServices({ clock: () => at }));
         const requests = runSyncEffect(createSessionRequests({ authorizeConfigure: allowConfigure }).pipe(Effect.provide(services)));
-        const makeWorker = () => runEffect(Scope.extend(
+        const makeWorker = () => runEffect(Scope.provide(
           createAlarmWorker({
             alarms: alarmStore(),
             requestTimeout: requests.timeout,
@@ -98,9 +98,9 @@ for (const status of ["armed", "fired"] as const) {
 
           // A refused control must preserve both the pending timeout and shared scan.
           expect(
-            Either.getOrThrowWith(
+            Result.getOrThrowWith(
               await runEffect(
-                Effect.either(
+                Effect.result(
                   alarmStore().arm({
                     id: "later-alarm",
                     sessionId: "sender",
@@ -124,9 +124,9 @@ for (const status of ["armed", "fired"] as const) {
           expect(SessionHandleStore.inboxRows("sender")).toHaveLength(2);
 
           expect(
-            Either.getOrThrowWith(
+            Result.getOrThrowWith(
               await runEffect(
-                Effect.either(
+                Effect.result(
                   alarmStore().arm({
                     id: "reopen-alarm",
                     sessionId: "sender",

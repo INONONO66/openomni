@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Alarm, LedgerSession, type L0Observation } from "@openomni/protocol";
@@ -24,9 +24,9 @@ type Status = Alarm.Status;
 /** One backend with an owner session and a capture of every committed action. */
 function openOwner(db: Database) {
   const { adapter, observations } = observedL0Adapters(db);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         adapter.sessions.create(
           LedgerSession.Row.parse({
             id: "owner",
@@ -72,9 +72,9 @@ const cases = Alarm.Kind.options.flatMap((kind) =>
 );
 
 function fireOnce(adapter: Adapter, id: string, sourceKey: string, terminal: boolean) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         adapter.alarms.fire({
           id,
           epoch: 1,
@@ -95,8 +95,8 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
   armed: () => undefined,
   cancelled: (adapter, id) => {
     expect(
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.alarms.cancel(id, "owner", 101))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.alarms.cancel(id, "owner", 101))),
         (error) => error,
       )?.status,
     ).toBe("cancelled");
@@ -113,9 +113,9 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
 
 function seedAlarm(adapter: Adapter, id: string, kind: Kind, status: Status): void {
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           adapter.alarms.arm({
             id,
             sessionId: "owner",
@@ -154,25 +154,25 @@ for (const op of ["cancel", "rearm"] as const) {
     initializeSqliteDatabase(db);
     const { adapter, observations } = openOwner(db);
     expect(() =>
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.alarms[op]("missing", "owner", 100))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.alarms[op]("missing", "owner", 100))),
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
     for (const { id, kind, status, sessionId } of cases) {
       seedAlarm(adapter, id, kind, status);
       const before = snapshot(adapter, observations, id);
-      const result = Effect.runSync(Effect.either(adapter.alarms[op](id, sessionId, 102)));
+      const result = Effect.runSync(Effect.result(adapter.alarms[op](id, sessionId, 102)));
       if (controlAdmitted(kind, status, sessionId, op)) {
         expectTransition(
           op,
           before.fence,
-          Either.getOrThrowWith(result, (error) => error),
+          Result.getOrThrowWith(result, (error) => error),
         );
       } else {
         expect(result).toMatchObject({
-          _tag: "Left",
-          left: { _tag: "AlarmRefused", alarmId: id, operation: op },
+          _tag: "Failure",
+          failure: { _tag: "AlarmRefused", alarmId: id, operation: op },
         });
         expect(snapshot(adapter, observations, id)).toEqual(before);
       }

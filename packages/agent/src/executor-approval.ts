@@ -33,7 +33,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
     if (suspended === undefined || persisted === undefined || persisted.state === "open") return;
     const value = persisted.state === "resolved" ? "approve"
       : persisted.state === "expired" ? "timeout" : "refuse";
-    Deferred.unsafeDone(suspended.decision, Exit.succeed(value));
+    Deferred.doneUnsafe(suspended.decision, Exit.succeed(value));
   }
   const approvals: ExecutionApprovals = {
     pending: () => [...pending.values()].map((value) => structuredClone(value.request)),
@@ -108,7 +108,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
             return yield* new ExecutionApprovalError({ code: "stale_approval" });
         }
         notify(durable);
-        return yield* Deferred.await(decision).pipe(Effect.raceFirst(aborted(signal).pipe(Effect.zipRight(cancel))));
+        return yield* Deferred.await(decision).pipe(Effect.raceFirst(aborted(signal).pipe(Effect.andThen(cancel))));
       });
       return yield* wait.pipe(
         Effect.onInterrupt(() => Effect.orDie(cancel)),
@@ -120,7 +120,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
 }
 
 function aborted(signal: AbortSignal): Effect.Effect<void> {
-  return Effect.async<void>((resume) => {
+  return Effect.callback<void>((resume) => {
     const abort = () => resume(Effect.void);
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();

@@ -218,7 +218,7 @@ it("holds completion observation until the reversible commit resolves", () =>
     const release = yield* Deferred.make<void>();
     const recording = recordingExecutor({
       beforeCommit: (action) => action.kind === "compaction" && "revert" in action
-        ? Deferred.succeed(reached, undefined).pipe(Effect.zipRight(Deferred.await(release)))
+        ? Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(release)))
         : Effect.void,
     });
     const observed: string[] = [];
@@ -288,10 +288,10 @@ it("forwards session cancellation into an in-flight compaction summarizer", () =
         ...base.options,
         onSummarize: (_messages, _anchor, _budget, signal) => Effect.gen(function* () {
           if (signal === undefined) return yield* Effect.die("missing summary signal");
-          return yield* Effect.async<string>((resume) => {
+          return yield* Effect.callback<string>((resume) => {
             const abort = () => resume(Effect.interrupt);
             signal.addEventListener("abort", abort, { once: true });
-            Deferred.unsafeDone(started, Effect.succeed(signal));
+            Deferred.doneUnsafe(started, Effect.succeed(signal));
             return Effect.sync(() => signal.removeEventListener("abort", abort));
           });
         }),

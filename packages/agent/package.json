@@ -17,7 +17,7 @@
     "@openomni/llm": "workspace:*",
     "@openomni/policy": "workspace:*",
     "@openomni/protocol": "workspace:*",
-    "effect": "3.22.2",
+    "effect": "4.0.0-rc.118",
     "zod": "^4.5.4"
   },
   "devDependencies": {

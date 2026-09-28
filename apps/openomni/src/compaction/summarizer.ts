@@ -1,6 +1,6 @@
 import { type ObservationSink, ForeignFailure, type CompactionOptions } from "@openomni/agent";
 import type { Llm, RunInput } from "@openomni/llm";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { runResolvedText } from "../composition/completion";
 
@@ -72,7 +72,7 @@ export function createCompactionSummarizer(
     const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
     let working = messages;
     for (let attempt = 0; ; attempt += 1) {
-      const answer = yield* Effect.either(runResolvedText(
+      const answer = yield* Effect.result(runResolvedText(
           {
             model: config.model,
             messages: messageWithText(working, prompt),
@@ -86,8 +86,8 @@ export function createCompactionSummarizer(
             providerOptions: reasoningOptions(config.model.provider),
           },
         ).pipe(Effect.provide(services)));
-      if (Either.isRight(answer)) return yield* nonemptySummary(answer.right);
-      const error = answer.left;
+      if (Result.isSuccess(answer)) return yield* nonemptySummary(answer.success);
+      const error = answer.failure;
       if (error._tag !== "LlmRunFailure" || !error.contextOverflow) return yield* Effect.fail(error);
       if (attempt >= 2)
         return yield* new SummarizerError("overflow", "compaction summarizer context overflow");

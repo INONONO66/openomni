@@ -1,5 +1,5 @@
 import { canonicalDigest, PlainValueSchema, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import { ForeignFailure, GenerationUnavailable, GenerationUnsettled, type SessionError } from "./errors";
 import { createRawSlots } from "./executor-raw";
 import { GenerationOwnership, type CapturedGeneration, type GenerationServices } from "./services";
@@ -12,14 +12,14 @@ export interface GenerationBundle {
   readonly activate: Effect.Effect<void>;
 }
 
-export class GenerationRawSlots extends Context.Tag("@openomni/agent/GenerationRawSlots")<
+export class GenerationRawSlots extends Context.Service<
   GenerationRawSlots, ReturnType<typeof createRawSlots>
->() {}
+>()("@openomni/agent/GenerationRawSlots") {}
 
 interface Entry {
   readonly bundle: GenerationBundle;
   readonly context: Context.Context<GenerationServices>;
-  readonly scope: Scope.CloseableScope;
+  readonly scope: Scope.Closeable;
   readonly owners: ReturnType<typeof createRawSlots>;
   readonly hash: string;
   retired: boolean;
@@ -30,7 +30,7 @@ interface Entry {
 export function makeSessionGenerations(initial: GenerationBundle) {
   return Effect.gen(function* () {
     const processScope = yield* Effect.scope;
-    const lock = yield* Effect.makeSemaphore(1);
+    const lock = yield* Semaphore.make(1);
     const first = yield* acquire(initial);
     yield* initial.activate;
     const entries = new Map([[initial.id.generation, first]]);

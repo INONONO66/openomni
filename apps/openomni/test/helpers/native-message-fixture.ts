@@ -36,7 +36,7 @@ export async function nativeMessageFixture(role: LedgerSession.Role, messaging: 
     prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({ id, parentId, role: childRole, runner, tools: [], preset: "", at: 100 })),
   }, messaging).pipe(Effect.provide(context)));
   let result: Tool.Result | undefined;
-  const handle = await runEffect(Scope.extend(session({
+  const handle = await runEffect(Scope.provide(session({
     id: sessionId,
     role,
     runner: (input) => Effect.gen(function* () {

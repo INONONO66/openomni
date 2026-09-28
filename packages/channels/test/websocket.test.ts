@@ -144,15 +144,15 @@ describe("WebSocketHandler ingress and receipts", () => {
   ])("rejects malformed frame %s before entering the handler", async (raw, reason) => {
     let entries = 0;
     const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish);
-    const result = await Effect.runPromise(Effect.either(handler.handleFrame({
+    const result = await Effect.runPromise(Effect.result(handler.handleFrame({
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, raw)));
     expect(result).toMatchObject({
-      _tag: "Left", left: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
+      _tag: "Failure", failure: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
     });
     expect(entries).toBe(0);
-    if (result._tag === "Left" && result.left._tag === "InvalidInbound" && reason === "invalid_json") {
-      expect(typeof result.left.cause).toBe("string");
+    if (result._tag === "Failure" && result.failure._tag === "InvalidInbound" && reason === "invalid_json") {
+      expect(typeof result.failure.cause).toBe("string");
     }
   });
 

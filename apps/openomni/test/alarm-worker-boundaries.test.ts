@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,7 +22,7 @@ test("a path source that cannot start settles the alarm with a source_error summ
         description: "unwatchable directory",
         persistent: true,
       });
-      await runEffect(Effect.either(fixture.worker.start()));
+      await runEffect(Effect.result(fixture.worker.start()));
       const row = await settled;
       expect(alarmSummary(row.content)).toMatchObject({
         alarmId: "missing",
@@ -173,9 +173,9 @@ test("a retry schedule consumed by another owner mid-scan wakes nothing: losing 
     // The first wake models the live waiter winning the fenced cancel CAS for the
     // second due schedule between the scan snapshot and its consumption.
     const fixture = alarmFixture(":memory:", undefined, () =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         fixture.run(
-          Effect.either(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
+          Effect.result(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
         ),
         (error) => error,
       ),

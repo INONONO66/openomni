@@ -7,7 +7,7 @@ import {
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Layer, Scope } from "effect";
+import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 
@@ -24,13 +24,13 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
 }
 
 /** The app owns construction; the package manager alone owns acquired contexts. */
-export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(function* () {
+export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(function* () {
   const scope = yield* Effect.scope;
   const installed = yield* BundleDefinitions;
   const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
-  const lock = yield* Effect.makeSemaphore(1);
-  const managers = new Map<string, Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
+  const lock = yield* Semaphore.make(1);
+  const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
   let definitions: GenerationDefinitions | undefined;
   let stopping = false;
 
@@ -51,10 +51,10 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
         ? Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze(select(source[role])) }))
         : source.catalogLayer(select));
       let active = false;
-      const observations = Layer.scoped(ObservationSink, Effect.acquireRelease(
+      const observations = Layer.effect(ObservationSink, Effect.acquireRelease(
         Effect.sync(() => {
           const bus = createObservationBus();
-          const sink: Context.Tag.Service<typeof ObservationSink> = {
+          const sink: Context.Service.Shape<typeof ObservationSink> = {
             publish: (event, data) => { if (active) { bus.publish(event, data); root.publish(event, data); } },
             subscribe: bus.subscribe,
             scope: (identity) => scopeObservation(sink, identity),
@@ -65,7 +65,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
       ));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
       const registry = selected.layer.pipe(Layer.provideMerge(seed));
-      const layer = Layer.unwrapEffect(Effect.gen(function* () {
+      const layer = Layer.unwrap(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
           try: () => compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
@@ -83,7 +83,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
       let owner = managers.get(sessionId);
       if (owner === undefined) {
         const initial = yield* bundle(sessionId, SessionHandleStore.latestGenerationFor(sessionId));
-        owner = yield* makeSessionGenerations(initial).pipe(Scope.extend(scope));
+        owner = yield* makeSessionGenerations(initial).pipe(Scope.provide(scope));
         managers.set(sessionId, owner);
       }
       return owner;
@@ -120,7 +120,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
  * closed; there is no callback fallback.
  */
 export function configureAuthority(
-  generations: Context.Tag.Service<typeof GenerationLayers>,
+  generations: Context.Service.Shape<typeof GenerationLayers>,
 ): SessionRuntime["authorizeConfigure"] {
   return (input) => Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture({

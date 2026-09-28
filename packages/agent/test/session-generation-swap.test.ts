@@ -9,7 +9,7 @@ import { CommitFailed, ForeignFailure, GenerationUnavailable } from "../src/erro
 import { createExecutor } from "../src/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
-import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { createObservationBus } from "../src/observation/bus";
@@ -35,7 +35,7 @@ function bundle(generation: number, name: string, finalized: () => void,
     Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
     Layer.succeed(SessionLayer, { snapshot, policy }),
     Layer.succeed(ToolCatalog, { definitions: [definition] }),
-    Layer.scopedDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
+    Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
   ) };
 }
 function selectAction(snapshot: SessionGeneration.Snapshot) {
@@ -64,8 +64,8 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   const finishedA = yield* Deferred.make<void>();
   const release = Promise.withResolvers<string>();
   let finalizersA = 0;
-  const a = bundle(1, "A", () => { finalizersA += 1; Deferred.unsafeDone(finishedA, Exit.void); }, async () => {
-    Deferred.unsafeDone(entered, Exit.void);
+  const a = bundle(1, "A", () => { finalizersA += 1; Deferred.doneUnsafe(finishedA, Exit.void); }, async () => {
+    Deferred.doneUnsafe(entered, Exit.void);
     return release.promise;
   });
   const b = bundle(2, "B", () => undefined);
@@ -79,7 +79,7 @@ test("committed configure swaps the next captured Layer; old body and terminal s
       kind: "tool", op: captured.snapshot.systemValue, intent: {}, effect: {},
     }, () => capturedBody));
   }));
-  const running = yield* Effect.fork(executeCaptured);
+  const running = yield* Effect.forkChild(executeCaptured);
   yield* Deferred.await(entered);
   yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
     Effect.mapError((error) => new CommitFailed({ error })),
@@ -106,8 +106,8 @@ test("dispatch table stays captured across configure even when the next generati
   const entered = yield* Deferred.make<void>();
   const retired = yield* Deferred.make<void>();
   const release = Promise.withResolvers<string>();
-  const a = bundle(1, "echo", () => { Deferred.unsafeDone(retired, Exit.void); }, async () => {
-    Deferred.unsafeDone(entered, Exit.void);
+  const a = bundle(1, "echo", () => { Deferred.doneUnsafe(retired, Exit.void); }, async () => {
+    Deferred.doneUnsafe(entered, Exit.void);
     return release.promise;
   });
   const b = bundle(2, "echo", () => undefined, async () => "B");
@@ -159,7 +159,7 @@ test("unavailable generations fail closed; revert appends a selection", () => is
     yield* generations.configure(selected, options.ledger.commit(selectAction(selected.snapshot)).pipe(
       Effect.mapError((error) => new CommitFailed({ error })),
     ));
-    expect(yield* Effect.either(generations.capture(a))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+    expect(yield* Effect.result(generations.capture(a))).toMatchObject({ _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 1 } });
   }
   const reverted = yield* generations.capture();
   expect(reverted.snapshot).toMatchObject({ generation: 3, revertTo: 2, systemValue: "A" });
@@ -180,7 +180,7 @@ test("configure denied by the captured pre-policy never acquires or selects the 
   const result = yield* captured.provide(Effect.gen(function* () {
     const executor = yield* createExecutor({ ledger: options.ledger, identity: options.identity });
     return yield* executor.runExisting({ kind: "session.configure", op: "system.blocks.set", intent: { generation: 2 }, effect: {} }, () =>
-      generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.scopedDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
+      generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.effectDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
         options.ledger.commit(selectAction(candidate.snapshot)).pipe(Effect.mapError((error) => new CommitFailed({ error }))),
       ).pipe(Effect.as({ generation: 2 }), Effect.mapError((error) => new ForeignFailure({ operation: "generation.configure", cause: String(error) }))),
     );
@@ -212,8 +212,8 @@ for (const corruption of ["system", "tools", "policy"] as const) {
         ...(corruption === "tools" ? { toolsHash: "corrupt" } : {}),
         ...(corruption === "policy" ? { policyGeneration: 2 } : {}),
       };
-      const result = yield* Effect.either(generations.capture({ ...original, snapshot }));
-      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
+      const result = yield* Effect.result(generations.capture({ ...original, snapshot }));
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
       expect(bodies).toBe(0);
       expect((yield* generations.capture()).snapshot.generation).toBe(2);
     }));
@@ -225,8 +225,8 @@ test("missing historical executable refuses capture instead of adopting the newe
   const current = bundle(2, "B", () => undefined, async () => { bodies += 1; return "B"; });
   const generations = yield* makeSessionGenerations(current);
   const historical = bundle(1, "A", () => undefined);
-  const missing = { ...historical, layer: Layer.fail(new GenerationUnavailable({ generation: 1 })) };
-  expect(yield* Effect.either(generations.capture(missing))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+  const missing = { ...historical, layer: Layer.effectContext<GenerationServices, GenerationUnavailable, never>(Effect.fail(new GenerationUnavailable({ generation: 1 }))) };
+  expect(yield* Effect.result(generations.capture(missing))).toMatchObject({ _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 1 } });
   expect(bodies).toBe(0);
   expect((yield* generations.capture()).snapshot).toEqual(current.snapshot);
 }))));
@@ -238,9 +238,9 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   const release = Promise.withResolvers<string>();
   let finalized = 0;
   const generations = yield* makeSessionGenerations(bundle(1, "A", () => {
-    finalized += 1; Deferred.unsafeDone(closed, Exit.void);
-  }, async () => { Deferred.unsafeDone(entered, Exit.void); return release.promise; }));
-  const running = yield* Effect.fork(Effect.scoped(Effect.gen(function* () {
+    finalized += 1; Deferred.doneUnsafe(closed, Exit.void);
+  }, async () => { Deferred.doneUnsafe(entered, Exit.void); return release.promise; }));
+  const running = yield* Effect.forkChild(Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
     return yield* captured.provide(testExecutor({ ...options, closeGraceMs: 0 }).run({
       kind: "tool", op: "A", intent: {}, effect: {},

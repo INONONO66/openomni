@@ -1,5 +1,5 @@
 import type { PlainObject } from "@openomni/protocol";
-import { Cause, Chunk } from "effect";
+import { Cause } from "effect";
 import type { ExecutionError } from "./errors";
 
 export function failureEvidence(error: ExecutionError): PlainObject {
@@ -43,13 +43,13 @@ export function failureEvidence(error: ExecutionError): PlainObject {
 
 export function causeEvidence(cause: Cause.Cause<ExecutionError>): PlainObject {
   return {
-    failures: Chunk.toReadonlyArray(Cause.failures(cause)).map(failureEvidence),
-    defects: Cause.isDie(cause)
-      ? Cause.prettyErrors(Cause.stripFailures(cause)).map((error) => ({
+    failures: cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).map(failureEvidence),
+    defects: Cause.hasDies(cause)
+      ? Cause.prettyErrors(Cause.fromReasons(cause.reasons.filter(Cause.isDieReason))).map((error) => ({
           name: error.name,
           cause: error.message,
         }))
       : [],
-    interrupted: Cause.isInterrupted(cause),
+    interrupted: Cause.hasInterrupts(cause),
   };
 }

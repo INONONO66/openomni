@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { SessionHandleStore, type LedgerError, type Storage } from "../../src/index";
 import type { LedgerSession } from "@openomni/protocol";
 import { runLedgerSync } from "./effect";
@@ -13,9 +13,9 @@ export function materializeSession<E = never>(
   parentId: string | null = null,
   afterMaterialize?: (row: LedgerSession.Row) => Effect.Effect<void, E>,
 ) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId,

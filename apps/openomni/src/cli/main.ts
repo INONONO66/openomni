@@ -1,4 +1,4 @@
-import { Layer, ManagedRuntime, } from "effect";
+import { Effect, Layer, ManagedRuntime, Scope } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -167,7 +167,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     envPath,
     startApp,
     async attachMachine(configPath) {
-      const runtime = ManagedRuntime.make(Layer.scope);
+      const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
       const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
       console.log(JSON.stringify(daemon.attachment));
@@ -179,7 +179,10 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
         exit: (code) => process.exit(code),
         on: (signal, handler) => process.once(signal, handler),
       });
-      await runtime.runPromise(daemon.closed);
+      // v4: dispose() interrupts every fiber the runtime runs, which would turn
+      // the SIGTERM path into a rejection here. daemon.closed needs no context,
+      // so await it outside the runtime; a MachineError still rejects as in v3.
+      await Effect.runPromise(daemon.closed);
       return 0;
       } finally {
         await runtime.dispose();

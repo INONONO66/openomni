@@ -394,7 +394,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           });
         } else {
           const scope = yield* AppScope;
-          yield* Scope.extend(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
+          yield* Scope.provide(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
         }
       });
     const wake = (id: string) =>
@@ -404,8 +404,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
           const scope = yield* AppScope;
           yield* Effect.forkIn(
             wakeEffect(id).pipe(
-              Effect.catchAllCause((cause) =>
-                Cause.isInterruptedOnly(cause)
+              Effect.catchCause((cause) =>
+                Cause.hasInterruptsOnly(cause)
                   ? Effect.void
                   : Effect.sync(() => {
                       console.error("session wake failed", Cause.pretty(cause));

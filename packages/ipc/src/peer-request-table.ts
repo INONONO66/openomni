@@ -51,13 +51,13 @@ export class PeerRequestTable<TPeer = undefined> {
     this.samePeer = options.samePeer ?? Object.is;
   }
   call(peer: TPeer, method: string, params: Ipc.Request["params"], timeoutMs: number): Effect.Effect<Ipc.Response["result"], IpcError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const request = Ipc.createRequest((this.options.idSource ?? (() => crypto.randomUUID()))(), method, params);
       const result = yield* Deferred.make<Ipc.Response["result"], IpcError>();
       this.pending.set(request.id, { peer, method, result });
       return yield* Effect.try({ try: () => this.options.send(peer, request), catch: decodeIpcFailure("request.send") }).pipe(
-        Effect.zipRight(Deferred.await(result)),
-        Effect.timeoutFail({ duration: timeoutMs, onTimeout: () => new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }) }),
+        Effect.andThen(Deferred.await(result)),
+        Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }))}),
         Effect.ensuring(Effect.sync(() => { this.pending.delete(request.id); })),
       );
     });
@@ -81,7 +81,7 @@ export class PeerRequestTable<TPeer = undefined> {
     const pending = this.pending.get(response.id);
     if (!pending || !this.samePeer(pending.peer, peer)) return;
     this.pending.delete(response.id);
-    Deferred.unsafeDone(pending.result, response.error
+    Deferred.doneUnsafe(pending.result, response.error
       ? Exit.fail(new IpcRemoteError({ code: response.error.code, message: `IPC error ${response.error.code}: ${response.error.message}`, requestId: response.id, method: pending.method }))
       : Exit.succeed(response.result));
   }
@@ -93,8 +93,8 @@ export class PeerRequestTable<TPeer = undefined> {
     return Effect.suspend(() => handler(peer, request.method, request.params,
       (result) => this.options.send(peer, Ipc.createResponse(request.id, result)),
       (method, params) => this.options.send(peer, Ipc.createNotification(method, params)),
-    )).pipe(Effect.catchAllCause((cause) => {
-      const failure = Cause.failureOption(cause);
+    )).pipe(Effect.catchCause((cause) => {
+      const failure = Cause.findErrorOption(cause);
       if (Option.isNone(failure)) return Effect.failCause(cause);
       const error = failure.value;
       const message = error._tag === "ForeignFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
@@ -103,14 +103,14 @@ export class PeerRequestTable<TPeer = undefined> {
   }
   private dispatchNotification(notification: Ipc.Notification, peer: TPeer): Effect.Effect<void> {
     return Effect.suspend(() => this.options.onNotification?.(peer, notification.method, notification.params) ?? Effect.void).pipe(
-      Effect.catchAllCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
+      Effect.catchCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
     );
   }
   private rejectPending(error: IpcError, matches: (peer: TPeer) => boolean): void {
     for (const [id, pending] of this.pending) {
       if (!matches(pending.peer)) continue;
       this.pending.delete(id);
-      Deferred.unsafeDone(pending.result, Exit.fail(error));
+      Deferred.doneUnsafe(pending.result, Exit.fail(error));
     }
   }
 }

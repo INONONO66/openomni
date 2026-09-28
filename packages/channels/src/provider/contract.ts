@@ -95,7 +95,7 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
   readonly capabilities: ProviderCapabilities;
   /**
    * THE schema for this provider's secret payload — the app's credential
-   * gates (boot declared rows, `channel_declare`/`secret_rotate`) validate
+   * gates (boot declared rows, `channel_add`/`secret_rotate`) validate
    * against this declaration instead of owning a parallel table. Shapes are
    * genuinely heterogeneous by platform (telegram: one token; slack: two).
    */
@@ -104,13 +104,13 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
    * Non-secret instance knobs. No shipped provider carries knobs yet, so
    * every schema is the empty record (`z.record(z.never())`) — the seam
    * exists so `ChannelInstance.settings` is validated where it enters
-   * (`channel_declare`) instead of accepted-and-ignored.
+   * (`channel_add`) instead of accepted-and-ignored.
    */
   readonly settings: z.ZodType<Record<string, never>, Record<string, never>>;
   /**
    * Operator checklist the credential cannot carry and the runner cannot
    * verify — portal-side switches (Discord gateway intents, Slack app
-   * scopes). `provision_status` reports these verbatim; nothing enforces
+   * scopes). `provision` op `status` reports these verbatim; nothing enforces
    * them (they fail loudly at the platform, not here).
    */
   readonly preconditions: readonly string[];
@@ -119,9 +119,9 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
    * `surface.start()`. `TCredentials` is this provider's typed secret
    * material, heterogeneous by design (telegram: one bot token; github: a
    * webhook secret plus optional API token). Validation stays where the
-   * credential enters the system (env config today, the provisioning store
-   * later) — one enforcement layer per invariant, so the contract takes the
-   * already-trusted typed value.
+   * credential enters the system (the provisioning store's `channel_add`/
+   * `secret_rotate` gate) — one enforcement layer per invariant, so the
+   * contract takes the already-trusted typed value.
    */
   create(credentials: TCredentials, config: Channel.Config, publish: PublishPort): ProviderRuntime;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { Cause, Effect, Exit, Fiber, TestClock, TestContext } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { Retry } from "@openomni/llm";
 import { abortError, isAbort } from "../../src/core/retry";
 import { isolated } from "../helpers/isolated";
@@ -14,7 +15,7 @@ describe("Retry.sleep", () => {
         const timeout = spyOn(globalThis, "setTimeout");
         try {
           const exit = yield* Effect.exit(Retry.sleep(5_000, controller.signal));
-          expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+          expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
           expect(timeout).not.toHaveBeenCalled();
         } finally {
           timeout.mockRestore();
@@ -36,11 +37,11 @@ describe("Retry.sleep", () => {
             },
           );
           try {
-            const sleeping = yield* Effect.fork(Retry.sleep(5_000, controller.signal));
+            const sleeping = yield* Effect.forkChild(Retry.sleep(5_000, controller.signal));
             yield* boundedSignal(registered.promise, "abort listener registered");
             controller.abort();
             const exit = yield* Fiber.await(sleeping);
-            expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+            expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
           } finally {
             listener.mockRestore();
           }
@@ -63,7 +64,7 @@ describe("Retry.sleep", () => {
           );
           const removed = spyOn(controller.signal, "removeEventListener");
           try {
-            const sleeping = yield* Effect.fork(Retry.sleep(1, controller.signal));
+            const sleeping = yield* Effect.forkChild(Retry.sleep(1, controller.signal));
             yield* boundedSignal(registered.promise, "abort listener registered");
             expect(added).toHaveBeenCalledTimes(1);
             yield* TestClock.adjust(1);
@@ -74,7 +75,7 @@ describe("Retry.sleep", () => {
             removed.mockRestore();
           }
         }),
-      ).pipe(Effect.provide(TestContext.TestContext)),
+      ).pipe(Effect.provide(TestClock.layer())),
     ));
 });
 

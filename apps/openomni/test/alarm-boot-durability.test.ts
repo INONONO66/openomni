@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -90,9 +90,9 @@ test("alarm restart: SQLite reopen fires at the exact boundary with atomic promp
     const database = join(directory, "ledger.db");
     let fixture = alarmFixture(database);
     try {
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         runSyncEffect(
-          Effect.either(
+          Effect.result(
             fixture.storage.alarms.arm({
               id: "at",
               sessionId: "monitor-session",

@@ -102,10 +102,10 @@ const DeliverSchema = z
   })
   .strict();
 
-// Outbound vocabulary — re-homed from the #215 messaging kernel verbatim
-// (openomni/messaging re-exports these until stage 2 moves the kernel).
-// Grant *evaluation* stays above protocol (grant evaluation is forbidden
-// here per the contract boundary); only the shapes live at the seam.
+// Outbound vocabulary. The consuming router lives in
+// `packages/channels/src/router/messaging`; grant *evaluation* stays above
+// protocol (forbidden here per the contract boundary) and only the shapes
+// live at the seam.
 
 const MessageOperationSchema = z.enum(["fire_and_forget", "awaited"]);
 
@@ -362,7 +362,7 @@ const SendInputSchema = SendInputBase.superRefine((input, ctx) => {
 });
 
 export namespace Gateway {
-  /** #946 stage 1: schemas only; consumers and legacy removal follow in stage 2. */
+  /** The `send_message` wire shape consumed by the channels router and the `send_message` tool. */
   export const SendMessage = MessageContract.Send;
   export type SendMessage = z.infer<typeof SendMessage>;
   /** The `to` variants a model may address by session; the actor variant stays gateway-only. */

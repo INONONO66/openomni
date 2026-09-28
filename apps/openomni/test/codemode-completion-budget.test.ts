@@ -20,7 +20,7 @@ const suite = residentSuite();
 
 test("two cells in one turn each own a full completion budget", async () => {
   const path = socketPath();
-  let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
+  let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
   const cellCalls = new Map<string, number>();
   const host = await acquireEffect(createMachineHost({
     socketPath: path,

@@ -1,14 +1,14 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id: "source",
           parentId: null,

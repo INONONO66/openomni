@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Fiber, Option, TestClock, TestContext } from "effect";
+import { Effect, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { createExecutionRecord } from "../src/executor-record";
 import { createRetryAlarmPort } from "../src/executor-retry-alarm";
@@ -107,11 +108,11 @@ describe("retry alarm port over the single alarm owner", () => {
       const fiber = yield* Effect.forkScoped(wait);
       yield* Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds"));
       yield* TestClock.adjust(29);
-      expect(Option.isNone(yield* Fiber.poll(fiber))).toBe(true);
+      expect(Option.isNone(Option.fromUndefinedOr(fiber.pollUnsafe()))).toBe(true);
       yield* TestClock.adjust(1);
       yield* Fiber.join(fiber);
       expect(Storage.get().alarms?.get(schedule.id)).toEqual(row);
-    }).pipe(Effect.provide(TestContext.TestContext)),
+    }).pipe(Effect.provide(TestClock.layer())),
   ));
 
   test("the port fails closed when alarm storage is absent", () =>

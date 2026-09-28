@@ -156,12 +156,12 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
             server.useConnection(peer.id);
             return typedCall(server, Machine.WireMethod.CancelCode, { cellId: request.cellId }).pipe(Effect.asVoid, Effect.mapError(transportFailure("cell.cancel")));
           });
-          const cancellation = signal ? yield* Effect.forkScoped(Effect.async<void>((resume) => {
+          const cancellation = signal ? yield* Effect.forkScoped(Effect.callback<void>((resume) => {
             const abort = () => resume(Effect.void);
             signal.addEventListener("abort", abort, { once: true });
             if (signal.aborted) abort();
             return Effect.sync(() => signal.removeEventListener("abort", abort));
-          }).pipe(Effect.zipRight(cancel))) : undefined;
+          }).pipe(Effect.andThen(cancel))) : undefined;
           server.useConnection(peer.id);
           return yield* typedCall(server, Machine.WireMethod.RunCode, request, request.timeoutMs + 1000).pipe(
             Effect.mapError(transportFailure("cell.call")),

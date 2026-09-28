@@ -358,7 +358,7 @@ test("permits a clean runtime module", (): void => {
 });
 
 test.each([
-  ["R4_TAG_PREFIX", 'import { Context as C } from "effect"; export class Bad extends C.Tag("wrong/Bad")<Bad, number>() {}'],
+  ["R4_TAG_PREFIX", 'import { Context as C } from "effect"; export class Bad extends C.Service<Bad, number>()("wrong/Bad") {}'],
   ["R5_RACE_ALL", 'import { Effect as E } from "effect"; E.raceAll([]);'],
   ["R5_RACE_ALL", 'import { raceAll as race } from "effect/Effect"; const again = race; again([]);'],
   ["R6_GEN_FINALLY", 'import { gen as program } from "effect/Effect"; program(function* () { try { yield 1; } finally {} });'],
@@ -367,7 +367,7 @@ test.each([
   ["R7_UNSCOPED_FORK", 'const { fork: launch } = await import("effect/Effect"); launch({});'],
   ["R8_GLOBAL_LET", 'export let active = 0;'],
   ["R8_GLOBAL_LET", '{ let active = 0; }'],
-  ["R9_UNUSED_TAG", 'import { Context as C } from "effect"; export class Unused extends C.Tag("@openomni/agent/Unused")<Unused, number>() {}'],
+  ["R9_UNUSED_TAG", 'import { Context as C } from "effect"; export class Unused extends C.Service<Unused, number>()("@openomni/agent/Unused") {}'],
 ])("ratchets %s with symbol provenance", (code: string, source: string): void => {
   const root = fixture([{ path: "packages/agent/src/violation.ts", source }]);
   expect(codes(root)).toContain(code);
@@ -377,11 +377,11 @@ test.each([
 test("does not mistake shadowed APIs, pure Layers, and local lets for debt", (): void => {
   const root = fixture([{ path: "packages/agent/src/clean.ts", source: [
     'import { Context, Effect, Layer } from "effect";',
-    'class Clock extends Context.Tag("@openomni/agent/Clock")<Clock, number>() {}',
+    'class Clock extends Context.Service<Clock, number>()("@openomni/agent/Clock") {}',
     'const Pure = Layer.succeed(Clock, 1);',
     'Effect.gen(function* () { let n = yield* Clock; yield* Effect.forkScoped(Effect.void); yield* Effect.forkIn(Effect.void, scope);',
     'const nested = () => { try {} finally {} }; return n; });',
-    'function shadow(Effect, Context, Layer) { let n = 1; Effect.raceAll([]); Effect.fork({}); Context.Tag("bad"); Layer.succeed(Clock, {}); }',
+    'function shadow(Effect, Context, Layer) { let n = 1; Effect.raceAll([]); Effect.fork({}); Context.Service<never, number>("bad"); Layer.succeed(Clock, {}); }',
   ].join("\n") }]);
   expect(findings(root)).toEqual([]);
   expect(run(root).code).toBe(0);
@@ -393,10 +393,10 @@ test.each([
   'Effect.serviceOptional(Alias);',
   'Context.get(Context.empty(), Alias);',
   'Context.getOption(Alias)(Context.empty());',
-  'Context.unsafeGet(Context.empty(), Alias);',
+  'Context.getUnsafe(Context.empty(), Alias);',
 ])("recognizes production Tag reads through barrels: %s", (read: string): void => {
   const root = fixture([
-    { path: "packages/agent/src/service.ts", source: 'import { Context } from "effect"; export class S extends Context.Tag("@openomni/agent/S")<S, number>() {}' },
+    { path: "packages/agent/src/service.ts", source: 'import { Context } from "effect"; export class S extends Context.Service<S, number>()("@openomni/agent/S") {}' },
     { path: "packages/agent/src/index.ts", source: 'export { S as Renamed } from "./service";' },
     { path: "apps/openomni/src/use.ts", source: `import { Renamed as Alias } from "@openomni/agent"; import { Effect, Context } from "effect"; ${read}` },
   ]);
@@ -405,7 +405,7 @@ test.each([
 
 test("test reads and disconnected providers do not consume production Tags", (): void => {
   const root = fixture([
-    { path: "packages/agent/src/service.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.GenericTag<number>("@openomni/agent/S"); export const UnusedLive = Layer.succeed(S, 1);' },
+    { path: "packages/agent/src/service.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.Service<never, number>("@openomni/agent/S"); export const UnusedLive = Layer.succeed(S, 1);' },
     { path: "packages/agent/test/service.test.ts", source: 'import { S } from "../src/service"; import { Effect } from "effect"; Effect.serviceOption(S);' },
   ]);
   expect(codes(root)).toEqual(["R9_UNUSED_TAG"]);
@@ -414,7 +414,7 @@ test("test reads and disconnected providers do not consume production Tags", ():
 
 test("reports unread Tags even when their providers reach AppLive's returned composition", (): void => {
   const root = fixture([
-    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.GenericTag<number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
+    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.Service<never, number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
     { path: "apps/openomni/src/runtime.ts", source: 'import { Live } from "@openomni/agent"; import { Layer } from "effect"; export const AppLive = () => Layer.mergeAll(Live);' },
   ]);
   expect(effectServiceInventory(root)).toEqual([{ file: "packages/agent/src/index.ts", line: 1, key: "@openomni/agent/S", reads: 0, appLive: true }]);
@@ -425,10 +425,10 @@ test("reports unread Tags even when their providers reach AppLive's returned com
 test("ratchets resource succeed but accepts pure definition-only service values", (): void => {
   const root = fixture([{ path: "packages/agent/src/layers.ts", source: [
     'import { Context as C, Layer as L, Effect as E } from "effect";',
-    'class ObservationSink extends C.Tag("@openomni/agent/ObservationSink")<ObservationSink, object>() {}',
+    'class ObservationSink extends C.Service<ObservationSink, object>()("@openomni/agent/ObservationSink") {}',
     'E.serviceOption(ObservationSink);',
     'const provide = L.succeed; export function AgentGenerationLive(bus) { return provide(ObservationSink, bus); }',
-    'class Pure extends C.Tag("@openomni/agent/Pure")<Pure, object>() {}',
+    'class Pure extends C.Service<Pure, object>()("@openomni/agent/Pure") {}',
     'E.serviceOption(Pure); L.succeed(Pure, { definitions: [] });',
   ].join("\n") }]);
   expect(codes(root)).toEqual(["R10_RESOURCE_SUCCEED"]);
@@ -470,7 +470,7 @@ test("boundary baseline rejects missing malformed duplicate and unsupported rows
 test("resource handles cannot hide behind an aliased succeed provider", (): void => {
   const root = fixture([{ path: "packages/agent/src/handles.ts", source: [
     'import { Context, Effect, Layer } from "effect";',
-    'const File = Context.GenericTag<{ close(): void }>("@openomni/agent/File");',
+    'const File = Context.Service<never, { close(): void }>("@openomni/agent/File");',
     'const handle = { close() {} }; const provide = Layer.succeed;',
     'Effect.serviceOption(File); provide(File)(handle);',
   ].join("\n") }]);
@@ -480,9 +480,9 @@ test("resource handles cannot hide behind an aliased succeed provider", (): void
 test("curried pure succeed and borrowed scoped resources remain valid", (): void => {
   const root = fixture([{ path: "packages/agent/src/value.ts", source: [
     'import { Context, Effect, Layer } from "effect";',
-    'const Pure = Context.GenericTag<number>("@openomni/agent/Pure");',
+    'const Pure = Context.Service<never, number>("@openomni/agent/Pure");',
     'Effect.serviceOption(Pure); Layer.succeed(Pure)(1);',
-    'const Resource = Context.GenericTag<{ close(): void }>("@openomni/agent/Resource");',
+    'const Resource = Context.Service<never, { close(): void }>("@openomni/agent/Resource");',
     'Effect.serviceOption(Resource); Layer.scoped(Resource, Effect.acquireRelease(open, close));',
   ].join("\n") }]);
   expect(findings(root)).toEqual([]);
@@ -491,7 +491,7 @@ test("curried pure succeed and borrowed scoped resources remain valid", (): void
 test("a borrowed process observation port is not a generation resource owner", (): void => {
   const root = fixture([{ path: "packages/agent/src/layers.ts", source: [
     'import { Context, Effect, Layer } from "effect";',
-    'class ObservationSink extends Context.Tag("@openomni/agent/ObservationSink")<ObservationSink, object>() {}',
+    'class ObservationSink extends Context.Service<ObservationSink, object>()("@openomni/agent/ObservationSink") {}',
     'Effect.serviceOption(ObservationSink);',
     'export function ProcessLive(borrowed) { return Layer.succeed(ObservationSink, borrowed); }',
   ].join("\n") }]);
@@ -501,8 +501,8 @@ test("a borrowed process observation port is not a generation resource owner", (
 test("bundle namespaces are aligned to their source band", (): void => {
   const root = fixture([{ path: "apps/openomni/src/bundles/audit/service.ts", source: [
     'import { Context as C, Effect as E } from "effect";',
-    'const Good = C.GenericTag<number>("@openomni/bundle/audit/Good"); E.serviceOption(Good);',
-    'const Bad = C.GenericTag<number>("@openomni/bundle/other/Bad"); E.serviceOption(Bad);',
+    'const Good = C.Service<never, number>("@openomni/bundle/audit/Good"); E.serviceOption(Good);',
+    'const Bad = C.Service<never, number>("@openomni/bundle/other/Bad"); E.serviceOption(Bad);',
   ].join("\n") }]);
   expect(findings(root)).toEqual([expect.objectContaining({ code: "R4_TAG_PREFIX", line: 3 })]);
 });
@@ -512,11 +512,11 @@ test("bundle policy factories preserve namespaced keys and genuine Context reads
     'import { Context } from "effect";',
     'export function bundlePolicyTag(name: string) {',
     `  const key = \`@openomni/bundle/\${name}/Policy\`;`,
-    '  return Object.assign(Context.GenericTag<number>(key), { key });',
+    '  return Object.assign(Context.Service<never, number>(key), { key });',
     '}',
     'const policy = bundlePolicyTag("audit"); Context.get(context, policy);',
-    'const literal = Context.GenericTag<number>("@openomni/bundle/audit/Store"); Context.getOption(context, literal);',
-    'function contains(key: string) { return Context.getOption(context, Context.GenericTag<never, never>(key)); }',
+    'const literal = Context.Service<never, number>("@openomni/bundle/audit/Store"); Context.getOption(context, literal);',
+    'function contains(key: string) { return Context.getOption(context, Context.Service<never, never>(key)); }',
   ].join("\n") }]);
   expect(findings(root)).toEqual([]);
   expect(effectServiceInventory(root).filter((service: { readonly reads: number }) => service.reads === 0)).toEqual([]);
@@ -532,7 +532,7 @@ test.each([
 ])("bundle keys reject malformed or arbitrary identities: %s", (key: string): void => {
   const root = fixture([{ path: "packages/agent/src/bundle.ts", source: [
     'import { Context } from "effect";',
-    `const tag = Context.GenericTag<number>(${key}); Context.getOption(context, tag);`,
+    `const tag = Context.Service<never, number>(${key}); Context.getOption(context, tag);`,
   ].join("\n") }]);
   expect(codes(root)).toEqual(["R4_TAG_PREFIX"]);
 });
@@ -540,9 +540,9 @@ test.each([
 test("unused policy factories and service-valued computed probes still fail", (): void => {
   const root = fixture([{ path: "packages/agent/src/bundle.ts", source: [
     'import { Context } from "effect";',
-    `export function bundlePolicyTag(name: string) { return Context.GenericTag<number>(\`@openomni/bundle/\${name}/Policy\`); }`,
-    'Context.getOption(context, Context.GenericTag<number>(key));',
-    'Context.getOption(context, Context.GenericTag<never, never>("@openomni/other/X"));',
+    `export function bundlePolicyTag(name: string) { return Context.Service<never, number>(\`@openomni/bundle/\${name}/Policy\`); }`,
+    'Context.getOption(context, Context.Service<never, number>(key));',
+    'Context.getOption(context, Context.Service<never, never>("@openomni/other/X"));',
   ].join("\n") }]);
   expect(codes(root)).toEqual(["R9_UNUSED_TAG", "R4_TAG_PREFIX", "R4_TAG_PREFIX"]);
 });
@@ -557,9 +557,9 @@ test("aliases through require and re-export chains retain boundary provenance", 
 
 test("unused AppLive locals and test-only Tags do not enter the service graph", (): void => {
   const root = fixture([
-    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.GenericTag<number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
+    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.Service<never, number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
     { path: "apps/openomni/src/runtime.ts", source: 'import { Live } from "@openomni/agent"; import { Layer } from "effect"; export function AppLive() { const unused = Live; return Layer.empty; }' },
-    { path: "packages/agent/src/service.test.ts", source: 'import { Context } from "effect"; const Test = Context.GenericTag<number>("test/Only");' },
+    { path: "packages/agent/src/service.test.ts", source: 'import { Context } from "effect"; const Test = Context.Service<never, number>("test/Only");' },
   ]);
   expect(codes(root)).toEqual(["R9_UNUSED_TAG"]);
   expect(effectServiceInventory(root)).toHaveLength(1);
@@ -595,7 +595,7 @@ test.each([
   ["function choose(value) { return value; }", true],
 ])("AppLive follows returned provider arguments, not ignored ones: %s", (choose: string, consumed: boolean): void => {
   const root = fixture([
-    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.GenericTag<number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
+    { path: "packages/agent/src/index.ts", source: 'import { Context, Layer } from "effect"; export const S = Context.Service<never, number>("@openomni/agent/S"); export const Live = Layer.succeed(S, 1);' },
     { path: "apps/openomni/src/runtime.ts", source: `import { Live } from "@openomni/agent"; import { Layer } from "effect"; ${choose} export const AppLive = () => choose(Live);` },
   ]);
   expect(effectServiceInventory(root)[0]?.appLive).toBe(consumed);

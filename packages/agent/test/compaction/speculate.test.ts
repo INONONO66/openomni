@@ -359,7 +359,7 @@ describe("run-scoped compaction speculation", () => {
               collector(),
               { trigger: "threshold", measuredTokens: 800 },
             );
-            const pendingFiber = yield* Effect.fork(pending);
+            const pendingFiber = yield* Effect.forkChild(pending);
             yield* Effect.promise(() => entered.promise);
             jest.advanceTimersByTime(100);
             const result = yield* Fiber.join(pendingFiber);
@@ -379,7 +379,7 @@ describe("run-scoped compaction speculation", () => {
           yield* session.prepare(history(), 70, 60, 1000);
           yield* session.abort();
           const settled = yield* Effect.exit(session.settled());
-          expect(Exit.isFailure(settled) && Cause.isInterruptedOnly(settled.cause)).toBe(true);
+          expect(Exit.isFailure(settled) && Cause.hasInterruptsOnly(settled.cause)).toBe(true);
           expect(calls.count).toBe(0);
           expect(session.candidate()).toBeUndefined();
         }),
@@ -408,7 +408,7 @@ describe("run-scoped compaction speculation", () => {
           yield* session.abort();
           yield* Effect.promise(() => aborted.promise);
           const settled = yield* Effect.exit(session.settled());
-          expect(Exit.isFailure(settled) && Cause.isInterruptedOnly(settled.cause)).toBe(true);
+          expect(Exit.isFailure(settled) && Cause.hasInterruptsOnly(settled.cause)).toBe(true);
           expect(session.candidate()).toBeUndefined();
         }),
       ),

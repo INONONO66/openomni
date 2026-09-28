@@ -8,28 +8,26 @@ import { BundleError } from "../src/errors";
 import { createObservationBus } from "../src/observation/bus";
 import { Clock, Entropy, ObservationSink, ToolCatalog } from "../src/services";
 
-class NumberService extends Context.Tag("@openomni/bundle/number/Value")<NumberService, number>() {}
-class TextService extends Context.Tag("@openomni/bundle/text/Value")<TextService, string>() {}
+class NumberService extends Context.Service<NumberService, number>()("@openomni/bundle/number/Value") {}
+class TextService extends Context.Service<TextService, string>()("@openomni/bundle/text/Value") {}
 const NumberLive = Layer.succeed(NumberService, 7);
 const numberBundle = () => bundle({ name: "number", requires: [], provides: [NumberService], layer: NumberLive });
 const seed = { provides: [], requires: [], layer: Layer.empty } as const;
 // Deliberately corrupt a genuine provider at the runtime boundary, without lying
 // to TypeScript about Layer.empty's output or casting an erased Context.
 function missingNumberContext() {
-  const context = Context.make(NumberService, 7);
-  context.unsafeMap.delete(NumberService.key);
-  return context;
+  return Context.makeUnsafe<NumberService>(new Map());
 }
 const row: Omit<PolicyRow.Row, "generation"> = { name: "number/allow", kind: "tool", phase: "pre", priority: 1, match: { encodingVersion: 1, value: {} }, verdict: { encodingVersion: 1, value: { type: "allow" } } };
 const tool = { name: "number__echo", description: "echo", category: "query", input: z.string(), output: z.string(), visibility: { model: ["resident"], cell: [] }, execute: async (value: string) => value, render: (value: string) => value } as const;
 
 test("ordered acquisition supplies earlier outputs and releases observers before providers", async () => {
   const events: string[] = [];
-  const FirstLive = Layer.scoped(NumberService, Effect.acquireRelease(Effect.sync(() => { events.push("number+"); return 7; }), () => Effect.sync(() => { events.push("number-"); })));
+  const FirstLive = Layer.effect(NumberService, Effect.acquireRelease(Effect.sync(() => { events.push("number+"); return 7; }), () => Effect.sync(() => { events.push("number-"); })));
   const first = bundle({ name: "number", provides: [NumberService], requires: [], layer: FirstLive });
-  const TextLive = Layer.scoped(TextService, Effect.gen(function* () { const value = yield* NumberService; return yield* Effect.acquireRelease(Effect.sync(() => { events.push("text+"); return `${value}x`; }), () => Effect.sync(() => { events.push("text-"); })); }));
+  const TextLive = Layer.effect(TextService, Effect.gen(function* () { const value = yield* NumberService; return yield* Effect.acquireRelease(Effect.sync(() => { events.push("text+"); return `${value}x`; }), () => Effect.sync(() => { events.push("text-"); })); }));
   const second = bundle({ name: "text", provides: [TextService], requires: [NumberService], layer: TextLive });
-  const ObserverLive = Layer.scopedDiscard(Effect.gen(function* () { const value = yield* TextService; yield* Effect.acquireRelease(Effect.sync(() => { events.push(value); }), () => Effect.sync(() => { events.push("observer-"); })); }));
+  const ObserverLive = Layer.effectDiscard(Effect.gen(function* () { const value = yield* TextService; yield* Effect.acquireRelease(Effect.sync(() => { events.push(value); }), () => Effect.sync(() => { events.push("observer-"); })); }));
   const observer = bundle({ name: "observer", provides: [], requires: [TextService], layer: ObserverLive });
   const result = await isolated(Effect.gen(function* () { return [yield* NumberService, yield* TextService]; }).pipe(Effect.provide(compose(seed, [first, second, observer]))));
   expect(result).toEqual([7, "7x"]);
@@ -41,7 +39,7 @@ test.each(["Bad", "a_b", "a/evil", "", "0name"])("rejects invalid namespace %s",
 });
 
 test("rejects duplicate Tag keys, wrong namespaces and kernel collisions", () => {
-  const alias = Context.GenericTag<NumberService, number>(NumberService.key);
+  const alias = Context.Service<NumberService, number>(NumberService.key);
   expect(() => bundle({ name: "number", requires: [], provides: [NumberService, alias], layer: NumberLive })).toThrow(BundleError);
   expect(() => bundle({ name: "wrong", requires: [], provides: [NumberService], layer: NumberLive })).toThrow(BundleError);
   const ClockLive = Layer.succeed(Clock, { now: () => 1 });
@@ -56,11 +54,11 @@ test("rejects repeated and self requirements", () => {
 });
 
 test("rejects nested service paths and requirements outside the four-service seed", () => {
-  const Nested = Context.GenericTag<{ readonly nested: true }, number>("@openomni/bundle/nested/extra/Value");
+  const Nested = Context.Service<{ readonly nested: true }, number>("@openomni/bundle/nested/extra/Value");
   const NestedLive = Layer.succeed(Nested, 1);
   expect(() => bundle({ name: "nested", requires: [], provides: [Nested], layer: NestedLive })).toThrow(BundleError);
-  const Control = Context.GenericTag<{ readonly control: true }, number>("@openomni/ledger/Control");
-  const ObserverLive = Layer.scopedDiscard(Effect.asVoid(Control));
+  const Control = Context.Service<{ readonly control: true }, number>("@openomni/ledger/Control");
+  const ObserverLive = Layer.effectDiscard(Effect.asVoid(Control));
   expect(() => bundle({ name: "observer", requires: [Control], provides: [], layer: ObserverLive })).toThrow(BundleError);
 });
 
@@ -71,7 +69,7 @@ test("runtime forged Tag identities fail definition validation", () => {
 test("seed missing output fails without starting a dependent observer", async () => {
   const observed: number[] = [];
   const MissingSeed = Layer.effectContext(Effect.sync(missingNumberContext));
-  const ObserverLive = Layer.scopedDiscard(Effect.flatMap(NumberService, (value) => Effect.sync(() => { observed.push(value); })));
+  const ObserverLive = Layer.effectDiscard(Effect.flatMap(NumberService, (value) => Effect.sync(() => { observed.push(value); })));
   const observer = bundle({ name: "observer", requires: [NumberService], provides: [], layer: ObserverLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose({ requires: [], provides: [NumberService], layer: MissingSeed }, [observer])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -80,8 +78,8 @@ test("seed missing output fails without starting a dependent observer", async ()
 });
 
 test("defects and interruption remain causes rather than acquisition failures", async () => {
-  const DefectLive = Layer.scopedDiscard(Effect.die("bundle-defect"));
-  const InterruptLive = Layer.scopedDiscard(Effect.interrupt);
+  const DefectLive = Layer.effectDiscard(Effect.die("bundle-defect"));
+  const InterruptLive = Layer.effectDiscard(Effect.interrupt);
   for (const layer of [DefectLive, InterruptLive]) {
     const definition = bundle({ name: "broken", requires: [], provides: [], layer });
     const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [definition])))));
@@ -153,7 +151,7 @@ test("compose rechecks forged metadata and mutable Tag keys", () => {
   const definition = numberBundle();
   expect(() => compose(seed, [{ ...definition, name: "other" }])).toThrow(BundleError);
   expect(() => compose(seed, [definition, definition])).toThrow(BundleError);
-  const tag = Context.GenericTag<{ readonly mutable: true }, number>("@openomni/bundle/mutable/Value");
+  const tag = Context.Service<{ readonly mutable: true }, number>("@openomni/bundle/mutable/Value");
   const live = Layer.succeed(tag, 1);
   const mutable = bundle({ name: "mutable", requires: [], provides: [tag], layer: live });
   Object.assign(tag, { key: "@openomni/bundle/mutable/Other" });
@@ -172,8 +170,8 @@ test("compose snapshots the seed before caller mutation", async () => {
 
 test("acquisition rejects Tag mutation after composition before any resources open", async () => {
   const events: string[] = [];
-  const tag = Context.GenericTag<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
-  const live = Layer.scoped(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
+  const tag = Context.Service<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
+  const live = Layer.effect(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
   const definition = bundle({ name: "changed", requires: [], provides: [tag], layer: live });
   const composed = compose(seed, [definition]);
   Object.assign(tag, { key: "@openomni/bundle/changed/Other" });
@@ -193,7 +191,7 @@ test("runtime compose refuses missing later-only and seed-colliding providers", 
 
 test("missing runtime outputs fail typed and release resources", async () => {
   const released: string[] = [];
-  const MissingLive = Layer.scopedContext(Effect.acquireRelease(Effect.sync(missingNumberContext), () => Effect.sync(() => { released.push("closed"); })));
+  const MissingLive = Layer.effectContext(Effect.acquireRelease(Effect.sync(missingNumberContext), () => Effect.sync(() => { released.push("closed"); })));
   const missing = bundle({ name: "number", provides: [NumberService], requires: [], layer: MissingLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [missing])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -203,9 +201,9 @@ test("missing runtime outputs fail typed and release resources", async () => {
 
 test("failed later acquisition unwinds once", async () => {
   const released: string[] = [];
-  const FirstLive = Layer.scoped(NumberService, Effect.acquireRelease(Effect.succeed(7), () => Effect.sync(() => { released.push("number"); })));
+  const FirstLive = Layer.effect(NumberService, Effect.acquireRelease(Effect.succeed(7), () => Effect.sync(() => { released.push("number"); })));
   const first = bundle({ name: "number", requires: [], provides: [NumberService], layer: FirstLive });
-  const FailureLive = Layer.scopedDiscard(Effect.zipRight(NumberService, Effect.fail("refused")));
+  const FailureLive = Layer.effectDiscard(Effect.andThen(NumberService, Effect.fail("refused")));
   const failed = bundle({ name: "failed", requires: [NumberService], provides: [], layer: FailureLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [first, failed])))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -216,9 +214,9 @@ test("failed later acquisition unwinds once", async () => {
 test("BundlesLive acquires only selected generation recipes and captures policy services", async () => {
   const events: string[] = [];
   const Policy = bundlePolicyTag("demo");
-  const PolicyLive = Layer.scoped(Policy, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return { transformers: [{ name: "demo/identity", apply: (value: PlainValue) => value }], obligations: [{ name: "demo/budget" }] }; }), () => Effect.sync(() => { events.push("close"); })));
+  const PolicyLive = Layer.effect(Policy, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return { transformers: [{ name: "demo/identity", apply: (value: PlainValue) => value }], obligations: [{ name: "demo/budget" }] }; }), () => Effect.sync(() => { events.push("close"); })));
   const demo = bundle({ name: "demo", provides: [Policy], requires: [], layer: PolicyLive });
-  const UnselectedLive = Layer.scopedDiscard(Effect.sync(() => { events.push("unselected"); }));
+  const UnselectedLive = Layer.effectDiscard(Effect.sync(() => { events.push("unselected"); }));
   const unselected = bundle({ name: "unselected", provides: [], requires: [], layer: UnselectedLive });
   const definitions = await isolated(BundleDefinitions.pipe(Effect.provide(BundlesLive([demo, unselected]))));
   expect(events).toEqual([]);

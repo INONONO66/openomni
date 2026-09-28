@@ -150,7 +150,7 @@ it("rechecks cancellation after asynchronous authentication", () => isolated(Eff
   const authenticated = yield* Deferred.make<typeof evidence>();
   const f = yield* fixture({
     authorizeApproval: () => Deferred.succeed(authorizing, undefined).pipe(
-      Effect.zipRight(Deferred.await(authenticated)),
+      Effect.andThen(Deferred.await(authenticated)),
     ),
   });
   yield* f.opened;
@@ -205,7 +205,7 @@ it("expires exactly once at the deadline, even with a delayed alarm", () => isol
     ),
   ).toHaveLength(1);
 }))));
-function expireApproval(f: Effect.Effect.Success<ReturnType<typeof fixture>>, requestId: string, at: number) {
+function expireApproval(f: Effect.Success<ReturnType<typeof fixture>>, requestId: string, at: number) {
   return Effect.gen(function* () {
     const transition = f.ledger.transition;
     if (transition === undefined) throw new Error("missing transition");

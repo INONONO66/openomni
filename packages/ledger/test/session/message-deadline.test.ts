@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type Inbox, type LedgerSession, L0Observation } from "@openomni/protocol";
@@ -28,9 +28,9 @@ function openRequest() {
     state: "resolved" | "expired",
     overrides: Partial<LedgerSession.Commit> = {},
   ) =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitRequestTransition({
             sessionId: fixture.request.sessionId,
             owner: "writer",
@@ -143,13 +143,13 @@ describe("SQLite canonical request deadline", () => {
 
   test("idempotent receive keeps the original receipt even after consumption", () => {
     const { commit } = openRequest();
-    const first = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+    const first = Result.getOrThrowWith(
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
-    const duplicate = Either.getOrThrowWith(
+    const duplicate = Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitReceivedMessage({
             ...reply(),
             createdAt: 100,
@@ -163,9 +163,9 @@ describe("SQLite canonical request deadline", () => {
     expect(duplicate).toEqual(first);
     expectCommitted(commit([]));
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               sessionId: "request-session",
               owner: "writer",
@@ -182,8 +182,8 @@ describe("SQLite canonical request deadline", () => {
         (error) => error,
       ),
     );
-    const consumed = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+    const consumed = Result.getOrThrowWith(
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     expect(consumed.row.status).toBe("consumed");
@@ -199,15 +199,15 @@ describe("SQLite canonical request deadline", () => {
     { origin: { encodingVersion: 1 as const, value: { requestId: "different" } } },
   ])("receive rejects changed durable identity fields: %j", (change) => {
     openRequest();
-    Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+    Result.getOrThrowWith(
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     const before = sessionTree("request-session");
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
-          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })),
+          Effect.result(SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })),
         ),
         (error) => error,
       ),
@@ -294,16 +294,16 @@ describe("durable request projection", () => {
 
   test("receive retry after restart returns the same durable action receipt", () => {
     openRequest();
-    const first = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+    const first = Result.getOrThrowWith(
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     Storage.reset();
     Storage.initialize({ dbPath });
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
-          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })),
+          Effect.result(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })),
         ),
         (error) => error,
       ),

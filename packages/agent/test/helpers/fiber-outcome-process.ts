@@ -18,7 +18,7 @@ if (import.meta.main) {
       ledger: { ...options.ledger, commit: (action) => {
         if (mode === "execute" && action.kind === "tool" && effectValue(action).phase === "result") {
           return Effect.sync(() => writeSync(1, `${JSON.stringify({ barrier: "fiber_exit_after_execute_before_action_commit" })}\n`)).pipe(
-            Effect.zipRight(Effect.never),
+            Effect.andThen(Effect.never),
           );
         }
         return options.ledger.commit(action);

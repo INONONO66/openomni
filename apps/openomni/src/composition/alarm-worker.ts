@@ -1,4 +1,4 @@
-import { Effect, Fiber, Queue } from "effect";
+import { Effect, Fiber, Queue, Semaphore } from "effect";
 import type { AlarmWriteAdapter, LedgerError } from "@openomni/ledger";
 import type { ExecutionError, SessionError } from "@openomni/agent";
 import { AppLifecycleFailure } from "../runtime";
@@ -39,9 +39,9 @@ export function createAlarmWorker(options: {
     let cancelTick: (() => void) | undefined;
     let unsubscribe: (() => void) | undefined;
     const report = (work: Effect.Effect<void, Failure>) =>
-      work.pipe(Effect.catchAll((error) => Effect.sync(() => options.failure(error))));
+      work.pipe(Effect.catch((error) => Effect.sync(() => options.failure(error))));
     const offer = (work: Effect.Effect<void, Failure>) => {
-      if (!stopped) queue.unsafeOffer(work);
+      if (!stopped) Queue.offerUnsafe(queue, work);
     };
     const consumer = yield* Effect.forkIn(
       Effect.forever(Queue.take(queue).pipe(Effect.flatMap(report))),
@@ -202,7 +202,7 @@ export function createAlarmWorker(options: {
         else entry.source.observe?.();
       });
     }
-    const serial = yield* Effect.makeSemaphore(1);
+    const serial = yield* Semaphore.make(1);
     const tick = () =>
       serial.withPermits(1)(
         Effect.gen(function* () {
@@ -240,7 +240,7 @@ export function createAlarmWorker(options: {
               if (payload.kind === "alarm.arm")
                 offer(
                   tick().pipe(
-                    Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("bus.scan"))),
+                    Effect.catchDefect(() => Effect.fail(new AlarmSourceError("bus.scan"))),
                   ),
                 );
             },
@@ -255,7 +255,7 @@ export function createAlarmWorker(options: {
           )(() =>
             offer(
               tick().pipe(
-                Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("timer.scan"))),
+                Effect.catchDefect(() => Effect.fail(new AlarmSourceError("timer.scan"))),
               ),
             ),
           );

@@ -91,7 +91,7 @@ export namespace Processor {
         catch: decodeLlmFailure("stream.close"),
       }).pipe(
         Effect.timeoutOption(STREAM_CLOSE_GRACE_MS),
-        Effect.catchAll((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: error.cause ?? String(error) }))),
+        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: error.cause ?? String(error) }))),
         Effect.asVoid,
         Effect.interruptible,
       );

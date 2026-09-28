@@ -1,4 +1,4 @@
-import { Effect, Either, Exit, Scope } from "effect";
+import { Effect, Result, Exit, Scope } from "effect";
 import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
@@ -6,7 +6,7 @@ import { createAlarmWorker } from "../../src/composition/alarm-worker";
 import { runEffect, acquireSyncEffect, runSyncEffect } from "./effect";
 import { allowConfigure, generationServices } from "./generation-services";
 
-type AlarmWorker = Effect.Effect.Success<ReturnType<typeof createAlarmWorker>>;
+type AlarmWorker = Effect.Success<ReturnType<typeof createAlarmWorker>>;
 
 export function alarmWorkerFixture(
   options: Parameters<typeof createAlarmWorker>[0],
@@ -32,9 +32,9 @@ export function alarmFixture(
   const events = createObservationBus();
   const storage = new SqliteStorageAdapter(path, events);
   Storage.configure(storage);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         storage.sessions.create({
           id: "monitor-session",
           parentId: null,
@@ -76,9 +76,9 @@ export function alarmFixture(
   const worker = workerFixture.worker;
   /** A committed one-shot retry.scheduled alarm, due at the fixture clock. */
   function armRetry(id: string) {
-    const row = Either.getOrThrowWith(
+    const row = Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.alarms.arm({
             id,
             sessionId: "monitor-session",
@@ -102,9 +102,9 @@ export function alarmFixture(
     return row;
   }
   function arm(id: string, watch: Alarm.Watch, limit = 8) {
-    const row = Either.getOrThrowWith(
+    const row = Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.alarms.arm({
             id,
             sessionId: "monitor-session",

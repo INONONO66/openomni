@@ -67,7 +67,7 @@ function dispatcher(
   ready?: () => void,
 ) {
   return Effect.gen(function* () {
-  const result: Effect.Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher(
+  const result: Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher(
     {
       ...recording.identity,
       ledger: {

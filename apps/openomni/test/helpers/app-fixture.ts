@@ -3,7 +3,7 @@ import { Layer, type Context } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
 import { startOpenOmni } from "../../src/index";
 
-export type FixtureLlm = Context.Tag.Service<typeof Llm>;
+export type FixtureLlm = Context.Service.Shape<typeof Llm>;
 type Start = NonNullable<Parameters<typeof startOpenOmni>[0]>;
 export type AppFixtureOptions = Omit<Start, "sessionRuntime"> & {
   readonly llm?: Partial<FixtureLlm>;

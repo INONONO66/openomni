@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -285,9 +285,9 @@ describe("SqliteStorageAdapter", () => {
         receipts: db.query("SELECT name FROM _migrations ORDER BY name").all(),
         sessions: db.query("SELECT * FROM session ORDER BY id").all(),
       });
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             adapter.sessions.create({
               id: "l0-digest",
               parentId: null,
@@ -385,8 +385,8 @@ describe("SqliteStorageAdapter", () => {
       // gateway-domain surface (docs/gateway-design.md §4) and a session-row
       // removal may not mutate it behind the gateway's back. The surviving
       // entry converges by brain-side re-materialization on the next Deliver.
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
       adapter.surfaceKey.claim("channel:123", "s1");
@@ -399,12 +399,12 @@ describe("SqliteStorageAdapter", () => {
 
   describe("surfaceKey", () => {
     beforeEach(() => {
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s2")))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s2")))),
         (error) => error,
       );
     });
@@ -445,8 +445,8 @@ describe("SqliteStorageAdapter", () => {
         messages: db.query("SELECT * FROM message").all(),
         parts: db.query("SELECT * FROM part").all(),
       };
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("live")))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("live")))),
         (error) => error,
       );
       adapter.close();
@@ -464,8 +464,8 @@ describe("SqliteStorageAdapter", () => {
 
     test("data survives close and reopen", () => {
       const session = canonicalRow("s1");
-      Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(session))),
+      Result.getOrThrowWith(
+        Effect.runSync(Effect.result(adapter.sessions.create(session))),
         (error) => error,
       );
       adapter.close();

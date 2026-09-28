@@ -2,7 +2,7 @@ import { runAgentSync } from "./executor";
 import { executionReads } from "./execution-reads";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
@@ -24,9 +24,9 @@ export function requestLedger(
 ) {
   const id = input.id ?? "request-session";
   const clock = input.clock ?? (() => 100);
-  const created = Either.getOrThrowWith(
+  const created = Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           role: "resident",
@@ -42,9 +42,9 @@ export function requestLedger(
     (error: LedgerError) => error,
   );
   const owner = `${id}:owner`;
-  const lease = Either.getOrThrowWith(
+  const lease = Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: id,
           owner,
@@ -62,9 +62,9 @@ export function requestLedger(
   const commit = input.legacy === true ? SessionHandleStore.commit : commitFoldBatch;
   if (!sessionTree(id).some((action: LedgerAction.Node) => action.id === turnId)) {
     const row = SessionHandleStore.row(id);
-    const opened = Either.getOrThrowWith(
+    const opened = Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           commit({
             sessionId: id,
             owner,

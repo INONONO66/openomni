@@ -58,7 +58,7 @@ export function createSessionTurn(
   },
 ) {
   function heartbeat(controller: AbortController) {
-    const tick = Effect.async<void>((resume) => {
+    const tick = Effect.callback<void>((resume) => {
       const cancel = scheduleHeartbeat(() => resume(Effect.void), SessionHandleStore.HEARTBEAT_INTERVAL_MS);
       return Effect.sync(cancel);
     });
@@ -92,7 +92,8 @@ export function createSessionTurn(
       const row = SessionHandleStore.row(sessionId);
       const controller = new AbortController();
       state.controller = controller;
-      state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope);
+      // v4 forkIn defers the child to the dispatcher; the lease heartbeat must be armed before the runner enters.
+      state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope, { startImmediately: true });
       let parentActionId = input.parentActionId;
       let boundaryActionId = input.boundaryActionId;
       const ledger = ports.createExecutionLedger(input.turnId);
@@ -231,7 +232,7 @@ export function createSessionTurn(
 }
 
 function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) {
-  const aborted = Effect.async<never>((resume) => {
+  const aborted = Effect.callback<never>((resume) => {
     const listener = () => resume(Effect.interrupt);
     signal.addEventListener("abort", listener, { once: true });
     if (signal.aborted) listener();
@@ -242,8 +243,8 @@ function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) 
 
 function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: SessionRunnerResult): SessionRunnerResult {
   if (Exit.isFailure(exit)) {
-    if (Cause.isInterrupted(exit.cause)) return { kind: "interrupted", text: "" };
-    const cause = Option.getOrElse(Cause.failureOption(exit.cause), () => new ForeignFailure({ operation: "session.turn", cause: Cause.pretty(exit.cause) }));
+    if (Cause.hasInterrupts(exit.cause)) return { kind: "interrupted", text: "" };
+    const cause = Option.getOrElse(Cause.findErrorOption(exit.cause), () => new ForeignFailure({ operation: "session.turn", cause: Cause.pretty(exit.cause) }));
     return { kind: "error", text: cause.message, cause };
   }
   const outcome = exit.value;

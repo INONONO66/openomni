@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Gateway, LedgerSession, PlainValueSchema } from "@openomni/protocol";
 import {
@@ -58,9 +58,9 @@ test("lease acquisition reports a refused SQL compare-and-set without advancing 
   const stores = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
     publish: () => undefined,
   });
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         stores.sessions.create(
           LedgerSession.Row.parse({
             id: "fenced",
@@ -81,9 +81,9 @@ test("lease acquisition reports a refused SQL compare-and-set without advancing 
     "CREATE TRIGGER refuse_fence BEFORE UPDATE OF lease_fence ON session BEGIN SELECT RAISE(IGNORE); END",
   );
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           stores.sessions.acquireLease({
             sessionId: "fenced",
             owner: "worker",
@@ -111,9 +111,9 @@ test("materialization refuses a mismatched initial action before creating any ro
     snapshot: SessionHandleStore.latestGeneration(sessionTree("source")),
   });
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           Storage.get().sessions?.materialize({
             row: { ...existing, id: "new", revision: 0 },
             initialAction: initial,
@@ -129,9 +129,9 @@ test("materialization refuses a mismatched initial action before creating any ro
 test("session commit savepoints roll back every refused write unit", () => {
   Storage.initialize({ dbPath: ":memory:" });
   const session = materializeSession("savepoint");
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: session.id,
           owner: "owner",
@@ -155,9 +155,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     releaseLease: true,
   };
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(SessionHandleStore.commit({ ...base, consumeInboxIds: ["missing"] })),
+        Effect.result(SessionHandleStore.commit({ ...base, consumeInboxIds: ["missing"] })),
       ),
       (error) => error,
     ),
@@ -185,16 +185,16 @@ test("session commit savepoints roll back every refused write unit", () => {
     ts: 2,
   };
   expect(() =>
-    Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commit({ ...base, actions: [action] }))),
+    Result.getOrThrowWith(
+      Effect.runSync(Effect.result(SessionHandleStore.commit({ ...base, actions: [action] }))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "revision" }));
   db.run("DROP TRIGGER refuse_revision");
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox({
             id: "pending",
             sessionId: session.id,
@@ -213,9 +213,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     "CREATE TRIGGER refuse_consume BEFORE UPDATE OF status ON inbox BEGIN SELECT RAISE(IGNORE); END",
   );
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({
             ...base,
             expectedRevision: 2,
@@ -238,9 +238,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     createdAt: 5,
   };
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({ ...base, expectedRevision: 2, receive: duplicate }),
         ),
       ),
@@ -248,9 +248,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     ),
   ).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "inbox" }));
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({ ...base, expectedRevision: 2, admit: duplicate }),
         ),
       ),
@@ -282,9 +282,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     },
   };
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({ ...base, expectedRevision: 2, admit: admission }),
         ),
       ),
@@ -292,9 +292,9 @@ test("session commit savepoints roll back every refused write unit", () => {
     ),
   ).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "inbox" }));
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({
             ...base,
             expectedRevision: 2,
@@ -315,9 +315,9 @@ test("corrupt session ancestry fails closed before child admission", () => {
     publish: () => undefined,
   });
   db.run("PRAGMA foreign_keys = OFF");
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         stores.sessions.create(
           LedgerSession.Row.parse({
             id: "orphan",
@@ -343,9 +343,9 @@ test("corrupt session ancestry fails closed before child admission", () => {
     policyGeneration: 1,
   });
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           stores.inbox.commit({
             id: "child-message",
             sessionId: "child",
@@ -417,9 +417,9 @@ test("external reply observations carry the persisted original message identity"
       1,
     ),
   ).toBeDefined();
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.commitInbox({
           id: "reply",
           sessionId: "reply-session",
@@ -451,9 +451,9 @@ test("watch deadline commits timeout even for a repeated batch with exhausted no
   materializeSession("watcher");
   const alarms = Storage.get().alarms;
   if (alarms === undefined) throw new Error("alarms missing");
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         alarms.arm({
           id: "watch",
           sessionId: "watcher",
@@ -483,11 +483,11 @@ test("watch deadline commits timeout even for a repeated batch with exhausted no
     batchHash: "same",
   };
   expect(
-    Either.getOrThrowWith(Effect.runSync(Effect.either(alarms.fire(input))), (error) => error)?.row
+    Result.getOrThrowWith(Effect.runSync(Effect.result(alarms.fire(input))), (error) => error)?.row
       .status,
   ).toBe("armed");
-  const expired = Either.getOrThrowWith(
-    Effect.runSync(Effect.either(alarms.fire({ ...input, sourceKey: "timeout", at: 110 }))),
+  const expired = Result.getOrThrowWith(
+    Effect.runSync(Effect.result(alarms.fire({ ...input, sourceKey: "timeout", at: 110 }))),
     (error) => error,
   );
   expect(expired?.row.status).toBe("fired");

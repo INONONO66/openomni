@@ -6,8 +6,8 @@ export const makeDispatcher = Effect.gen(function* () {
   const queue = yield* Queue.unbounded<Effect.Effect<void, IpcError>>();
   yield* Effect.forkScoped(Effect.forever(Effect.gen(function* () {
     const task = yield* Queue.take(queue);
-    yield* Effect.forkScoped(task.pipe(Effect.catchAllCause((cause) => Effect.logError(Cause.pretty(cause)))));
+    yield* Effect.forkScoped(task.pipe(Effect.catchCause((cause) => Effect.logError(Cause.pretty(cause)))));
   })));
   yield* Effect.addFinalizer(() => Queue.shutdown(queue));
-  return (task: Effect.Effect<void, IpcError>): void => { queue.unsafeOffer(task); };
+  return (task: Effect.Effect<void, IpcError>): void => { Queue.offerUnsafe(queue, task); };
 });

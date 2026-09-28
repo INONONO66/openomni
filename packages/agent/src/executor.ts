@@ -1,7 +1,7 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
-import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 import { createExecutionApprovals } from "./executor-approval";
@@ -49,7 +49,7 @@ function outcomeFields(outcome: ExecutionResult): PlainObject {
   return outcome.terminal === "blocked_post" ? { reason: outcome.reason, disposition: outcome.disposition } : { reason: outcome.reason };
 }
 function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionError): ExecutionResult {
-  if (Cause.isInterrupted(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
+  if (Cause.hasInterrupts(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
   return failure._tag === "OutcomeUnknown"
     ? { terminal: "outcome_unknown", reason: failure.reason }
     : { terminal: "executed", value: null, failure };
@@ -225,9 +225,9 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   }
 
   function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean, settled: (body: BodyExit) => void) {
-    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
+    return Effect.withFiber<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
       Effect.suspend(() => {
-        const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
+        const generation = Context.getOption(fiber.context, GenerationRawSlots);
         const slots = createRawSlots((settlement) => {
           if (Option.isSome(generation)) {
             const release = generation.value.open();
@@ -240,7 +240,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         const owned = Effect.scopedWith((scope) => Effect.provide(
           body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
         ));
-        const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
+        const abort = () => fiber.interruptUnsafe(fiber.id);
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
         const exitEffect = Effect.exit(Effect.interruptible(owned)).pipe(
@@ -300,14 +300,14 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         });
       }
       if (Exit.isFailure(exit)) {
-        const commitFailure = Chunk.toReadonlyArray(Cause.failures(exit.cause)).find((error) => error._tag === "CommitFailed");
+        const commitFailure = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).find((error) => error._tag === "CommitFailed");
         if (commitFailure !== undefined) return Effect.fail(commitFailure);
-        const failure = Option.getOrElse(Cause.failureOption(exit.cause), () =>
+        const failure = Option.getOrElse(Cause.findErrorOption(exit.cause), () =>
           new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
         return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
       }
       return complete(stage, exit.value).pipe(
-        Effect.catchAllCause((cause) => completionFailure(stage, exit.value, cause)),
+        Effect.catchCause((cause) => completionFailure(stage, exit.value, cause)),
       );
     }).pipe(Effect.map((outcome) => {
       record.publishToolTerminal(stage.request, body.startedAt, terminalStatus(outcome));
@@ -316,11 +316,11 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   }
 
   function completionFailure<R>(stage: Stage<R>, value: PlainValue, cause: Cause.Cause<ExecutionError>) {
-    const failures = Chunk.toReadonlyArray(Cause.failures(cause));
+    const failures = cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
     if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
     const terminalExists = stage.intent !== undefined && options.ledger.resultFor?.(stage.intent.action.id) !== undefined;
     if (terminalExists) return Effect.failCause(cause);
-    const failure = Option.getOrElse(Cause.failureOption(cause), () =>
+    const failure = Option.getOrElse(Cause.findErrorOption(cause), () =>
       new ForeignFailure({ operation: `${stage.request.op}.completion`, cause: Cause.pretty(cause) }));
     return appendOutcome(stage, { terminal: "executed", value, failure }, {
       disposition: "irreversible", evidence: causeEvidence(cause),
@@ -376,7 +376,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     return Effect.gen(function* () {
       const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
       const exits = new Map<number, BodyExit>();
-      const group: Fiber.RuntimeFiber<void, never>[] = [];
+      const group: Fiber.Fiber<void, never>[] = [];
       const join = Effect.suspend(() => Effect.gen(function* () {
         const waiting = Effect.forEach(group, Fiber.await, { discard: true });
         const exit = yield* Effect.exit(restore(waiting));

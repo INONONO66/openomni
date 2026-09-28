@@ -59,7 +59,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
         }
       }
       if (malformed.length > 0) return yield* new IpcProtocolError({ message: `received invalid IPC frame: ${malformed[0]}` });
-    }).pipe(Effect.catchAll((error) => Effect.sync(() => {
+    }).pipe(Effect.catch((error) => Effect.sync(() => {
       connected = false;
       peer.disconnectAll(error);
       socket.destroy();
@@ -74,7 +74,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
       peer.disconnectAll(new IpcConnectionError({ message: "socket closed by peer" }));
       socket.destroy();
     });
-    yield* Effect.async<void, IpcError>((resume) => {
+    yield* Effect.callback<void, IpcError>((resume) => {
       socket.on("error", (error) => {
         const failure = new IpcConnectionError({ message: `socket error: ${error.message}`, cause: String(error) });
         connected = false;
@@ -84,7 +84,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
       socket.once("connect", () => { connected = true; resume(Effect.void); });
       socket.connect(socketPath);
     }).pipe(
-      Effect.timeoutFail({ duration: opts.connectTimeoutMs ?? 5000, onTimeout: () => new IpcConnectionError({ message: `connect timeout: ${socketPath}` }) }),
+      Effect.timeoutOrElse({ duration: opts.connectTimeoutMs ?? 5000, orElse: () => Effect.fail(new IpcConnectionError({ message: `connect timeout: ${socketPath}` }))}),
       Effect.onError(() => close),
     );
     return client;

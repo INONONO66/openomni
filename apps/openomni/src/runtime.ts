@@ -12,7 +12,7 @@ export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")
 export const lifecycleFailure = (operation: string) =>
   flow(String, (cause) => new AppLifecycleFailure({ operation, cause }));
 
-export class AppScope extends Context.Tag("@openomni/openomni/AppScope")<AppScope, Scope.Scope>() {}
+export class AppScope extends Context.Service<AppScope, Scope.Scope>()("@openomni/openomni/AppScope") {}
 
 export interface AppRuntimeOptions {
   readonly dbPath: string;
@@ -29,7 +29,7 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
   const process = AgentProcessLive(observations, { clock: options.clock, entropy: options.entropy });
   const generations = GenerationLayersLive.pipe(Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)));
   return Layer.mergeAll(
-    Layer.scoped(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
+    Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
   );
 }

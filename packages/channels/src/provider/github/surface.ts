@@ -75,8 +75,8 @@ function extractContent(event: string, raw: object): GitHubEventContent | Unsupp
     const parsed = GitHubWebhookPayloadSchemas.issues.safeParse(raw);
     if (!parsed.success) return refusal(event, action, "invalid_payload");
     // `||`, not `??`: GitHub sends empty-STRING bodies too — an issue opened
-    // with no body must fall back to its title, or the empty normalization
-    // drop (#606) silently vanishes a label-triggered event.
+    // with no body must fall back to its title so the `issues.opened` event
+    // is not silently dropped as empty text.
     return issueContent(
       parsed.data.issue.body || parsed.data.issue.title,
       parsed.data.issue.user,
@@ -278,7 +278,7 @@ export class GitHubAdapter implements Channel.Surface {
     return { traceId, deliveryId, dedupeToken, content, inbound };
   }
 
-  /** The run-and-reply frame: a handler throw or comment failure releases the delivery claim and returns 500 so GitHub retries. */
+  /** Awaits the inbound handler; a handler throw releases the in-memory delivery claim and returns 500 so GitHub retries. */
   private async dispatchWebhook(prepared: PreparedWebhook): Promise<Response> {
     try {
       await (this.handler as Channel.MessageHandler)(prepared.inbound);

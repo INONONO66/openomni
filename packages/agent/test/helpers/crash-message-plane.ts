@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs";
-import { Clock, Effect, TestClock, TestContext } from "effect";
+import { Clock, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Alarm, Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
@@ -131,6 +132,6 @@ if (import.meta.main) {
     seedPolicy();
     if (stage === "crash") return yield* alarmCut();
     return yield* recover(point, dbPath);
-  }).pipe(Effect.provide(TestContext.TestContext)));
+  }).pipe(Effect.provide(TestClock.layer())));
   writeSync(1, `${JSON.stringify(proof)}\n`);
 }

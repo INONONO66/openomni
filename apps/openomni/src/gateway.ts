@@ -26,7 +26,7 @@ import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Cause, Effect, Either, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
+import { Cause, Effect, Result, Exit, ManagedRuntime, Option, Scope } from "effect";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
@@ -73,9 +73,9 @@ export function runAppEffect<A, E>(
   effect: Effect.Effect<A, E, AppServices>,
   signal?: AbortSignal,
 ): Promise<A> {
-  return runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
-    if (Either.isLeft(result)) throw result.left;
-    return result.right;
+  return runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
+    if (Result.isFailure(result)) throw result.failure;
+    return result.success;
   });
 }
 
@@ -85,7 +85,7 @@ export function acquireAppResource<A, E>(
 ): Promise<A> {
   return runAppEffect(
     runtime,
-    Effect.flatMap(AppScope, (scope) => Scope.extend(effect, scope)),
+    Effect.flatMap(AppScope, (scope) => Scope.provide(effect, scope)),
   );
 }
 
@@ -96,7 +96,7 @@ export async function runAppBoot<A, E>(
   const exit = await runtime.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
   const failure = Option.getOrElse(
-    Cause.failureOption(exit.cause),
+    Cause.findErrorOption(exit.cause),
     () => new AppLifecycleFailure({ operation: "app.boot", cause: Cause.pretty(exit.cause) }),
   );
   console.error("app boot incident", failure);
@@ -182,9 +182,9 @@ export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPo
     }),
   );
   const execute = <A>(effect: Effect.Effect<A, LedgerError>, signal: AbortSignal): Promise<A> =>
-    runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
-      if (Either.isLeft(result)) throw new MonitorRefused(result.left);
-      return result.right;
+    runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
+      if (Result.isFailure(result)) throw new MonitorRefused(result.failure);
+      return result.success;
     });
   return {
     arm: (input, signal) => execute(alarms.arm(input), signal),
@@ -282,14 +282,14 @@ export function channelTransaction<A>(
   return Effect.try({
     try: () =>
       DecisionFacts.transaction(() =>
-        Either.getOrThrowWith(Effect.runSync(Effect.either(operation)), (error) => error),
+        Result.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
       ),
     catch: decodeChannelFailure("message.transaction"),
   });
 }
 
 export function channelRequests(
-  requests: Effect.Effect.Success<ReturnType<typeof createSessionRequests>>,
+  requests: Effect.Success<ReturnType<typeof createSessionRequests>>,
 ): Parameters<typeof createGatewayRouter>[0]["requests"] {
   return {
     list: requests.list,
@@ -329,7 +329,7 @@ export function createResidentGateway(
               ),
             );
           if (sender.kind === "external") return yield* externalRun(sender, request, execute);
-          const outbound = yield* FiberRef.get(outboundMessage);
+          const outbound = yield* outboundMessage;
           const result = yield* (outbound?.executor ?? currentExecutor()).run(request, execute);
           return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
         }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),

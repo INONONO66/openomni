@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { L0Observation } from "@openomni/protocol";
@@ -37,9 +37,9 @@ test("request commit requires the live lease rather than borrowing another owner
   expectCommitted(commit([original, requestStateAction(request)]));
   const before = sessionTree(request.sessionId);
   const result = () =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitRequestTransition({
             sessionId: request.sessionId,
             owner: "foreign",

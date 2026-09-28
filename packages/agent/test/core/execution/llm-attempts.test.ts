@@ -222,7 +222,7 @@ test("interrupt cancels an exactly registered backoff without another provider a
       arm: () => Effect.void,
       settle: () => Effect.void,
       wait: (_fireAt: number, signal?: AbortSignal) =>
-        Effect.async<void>((resume: (effect: Effect.Effect<void>) => void) => {
+        Effect.callback<void>((resume: (effect: Effect.Effect<void>) => void) => {
           signal?.addEventListener(
             "abort",
             () => {
@@ -239,7 +239,7 @@ test("interrupt cancels an exactly registered backoff without another provider a
   yield* Effect.promise(() => registered.promise).pipe(Effect.timeout("5 seconds"));
   controller.abort();
   const terminal = yield* Fiber.join(running);
-  expect(Exit.isSuccess(terminal) ? terminal.value : Cause.isInterrupted(terminal.cause)).toMatchObject({ terminal: "interrupted" });
+  expect(Exit.isSuccess(terminal) ? terminal.value : Cause.hasInterrupts(terminal.cause)).toMatchObject({ terminal: "interrupted" });
   expect(cancelled).toBe(true);
   expect(intents(committed, "attempt")).toHaveLength(1);
 }))));
@@ -291,7 +291,7 @@ test.each([
       }),
     }),
   );
-  const terminal = yield* Effect.forkScoped(Effect.either(running));
+  const terminal = yield* Effect.forkScoped(Effect.result(running));
   yield* Effect.promise(() => waiting.promise).pipe(Effect.timeout("5 seconds"));
   expect(calls).toBe(1);
   const approvals = executor.approvals;
@@ -302,9 +302,9 @@ test.each([
   ).toContain(request.id);
   yield* approvals.answer({ request, credential: "proof", decision });
   const result = yield* Fiber.join(terminal);
-  if (decision === "approve") expect(result).toMatchObject({ _tag: "Right", right: { terminal: "executed" } });
+  if (decision === "approve") expect(result).toMatchObject({ _tag: "Success", success: { terminal: "executed" } });
   else {
-    expect(result).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied" } });
+    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "PolicyDenied" } });
     expect(
       (sessionTree(recording.identity.sessionId))
         .filter((action: LedgerAction.Node) => action.kind === "attempt")

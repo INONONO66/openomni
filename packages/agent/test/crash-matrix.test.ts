@@ -3,7 +3,7 @@ import { testExecutor } from "./helpers/executor";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated } from "./helpers/isolated";
 import type { ExecutionError } from "../src/errors";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -382,8 +382,8 @@ function recoverRetryAlarm(witness: Witness) {
   const consumed = (yield* alarms?.cancel(alarmId, sessionId, 100_000) ??
           Effect.die("missing test storage capability"));
   expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  const repeatedCancel = yield* Effect.either(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
-  expect(Either.isLeft(repeatedCancel) ? repeatedCancel.left : undefined).toMatchObject({ _tag: "AlarmRefused" });
+  const repeatedCancel = yield* Effect.result(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
+  expect(Result.isFailure(repeatedCancel) ? repeatedCancel.failure : undefined).toMatchObject({ _tag: "AlarmRefused" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
@@ -410,11 +410,11 @@ function recoverStaleOwner(witness: Witness) {
     expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
     expect(200_000).toBeGreaterThan(expiresAt);
     const before = actions();
-    const refused = yield* Effect.either(SessionHandleStore.commit({
+    const refused = yield* Effect.result(SessionHandleStore.commit({
       sessionId, owner, fence: witness.lease.fence, now: 200_000,
       expectedRevision: current.revision, actions: [staleAction], consumeInboxIds: [], state: current.state, releaseLease: false,
     }));
-    expect(Either.isLeft(refused) ? refused.left : undefined).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
+    expect(Result.isFailure(refused) ? refused.failure : undefined).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
     expect(actions()).toEqual(before);
     expect(SessionHandleStore.row(sessionId)).toEqual(current);
     refusals += 1;

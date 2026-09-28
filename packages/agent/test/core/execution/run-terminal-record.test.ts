@@ -125,7 +125,7 @@ describe("one terminal record per started run", () => {
       signal: controller.signal,
       retryAlarm: {
         arm: () => Effect.void,
-        wait: () => Effect.sync(() => waiting.resolve()).pipe(Effect.zipRight(Effect.never)),
+        wait: () => Effect.sync(() => waiting.resolve()).pipe(Effect.andThen(Effect.never)),
         settle: () => Effect.void,
       },
     });

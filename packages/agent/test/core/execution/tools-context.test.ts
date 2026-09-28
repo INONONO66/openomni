@@ -38,7 +38,7 @@ describe("tool execution context", () => {
     await isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const running = yield* Effect.fork(
+          const running = yield* Effect.forkChild(
             dispatcher.execute(
               { id: "call-1", tool: "capture", input: {} },
               { sessionId: "session-call", turnId: "turn-1", signal: controller.signal },

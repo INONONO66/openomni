@@ -20,7 +20,7 @@ export interface InvocationFrame {
   readonly generation: CapturedGeneration;
 }
 export const activeInvocation = new AsyncLocalStorage<{ readonly executor: Executor; readonly captured?: InvocationFrame }>();
-export class ExecutorContext extends Context.Tag("@openomni/agent/ExecutorContext")<ExecutorContext, Executor>() {}
+export class ExecutorContext extends Context.Service<ExecutorContext, Executor>()("@openomni/agent/ExecutorContext") {}
 
 export const executorContext = Effect.serviceOption(ExecutorContext).pipe(
   Effect.map((native) => Option.getOrElse(native, currentExecutor)),
@@ -75,7 +75,7 @@ export function openInvocation(frame: InvocationFrame, tool: string) {
       return new GenerationUnavailable({ generation: frame.generation.id.generation });
     return undefined;
   };
-  const awaitClose = Effect.async<never, InvocationClosed>((resume) => {
+  const awaitClose = Effect.callback<never, InvocationClosed>((resume) => {
     const notify = () => resume(Effect.fail(new InvocationClosed({ tool, reason: reason ?? "interrupted" })));
     closed.signal.addEventListener("abort", notify, { once: true });
     if (closed.signal.aborted) notify();

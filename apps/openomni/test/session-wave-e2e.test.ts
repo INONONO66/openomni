@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
-import { Cause, Effect, Either, Exit } from "effect";
+import { Cause, Effect, Result, Exit } from "effect";
 import { acquireAppResource } from "../src/gateway";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -487,7 +487,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
       );
       late.resolve(
         Exit.isFailure(outcome)
-          ? Cause.isInterrupted(outcome.cause)
+          ? Cause.hasInterrupts(outcome.cause)
             ? "interrupted"
             : "failed"
           : "committed",
@@ -626,11 +626,11 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       ]);
       const held = SessionHandleStore.row(row.id);
       const competitor = acquireContender(row.id, "nested-contender", held.leaseFence);
-      if (Either.isRight(competitor)) competitorFence = competitor.right.fence;
+      if (Result.isSuccess(competitor)) competitorFence = competitor.success.fence;
       // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
       expect(competitor).toMatchObject({
-        _tag: "Left",
-        left: { _tag: "LeaseRefused", reason: "held" },
+        _tag: "Failure",
+        failure: { _tag: "LeaseRefused", reason: "held" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
       // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
@@ -666,8 +666,8 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       const released = SessionHandleStore.row(row.id);
       expect(released.leaseOwner).toBeNull();
       const next = acquireContender(row.id, "nested-contender", released.leaseFence);
-      if (Either.isRight(next)) competitorFence = next.right.fence;
-      expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
+      if (Result.isSuccess(next)) competitorFence = next.success.fence;
+      expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
         _tag: "InvocationClosed", reason: "settled",
       });
@@ -784,11 +784,11 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         ]);
         const held = SessionHandleStore.row(sessionId);
         const contender = acquireContender(sessionId, "timed-contender", held.leaseFence);
-        if (Either.isRight(contender)) competitorFence = contender.right.fence;
+        if (Result.isSuccess(contender)) competitorFence = contender.success.fence;
         // Then: neither timeout nor SDK interruption transfers the live effect's lease.
         expect(contender).toMatchObject({
-          _tag: "Left",
-          left: { _tag: "LeaseRefused", reason: "held" },
+          _tag: "Failure",
+          failure: { _tag: "LeaseRefused", reason: "held" },
         });
         expect(held.leaseOwner).toBe(row.leaseOwner);
         const beforeActions = sessionTree(sessionId).length;
@@ -824,8 +824,8 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         const released = SessionHandleStore.row(sessionId);
         expect(released.leaseOwner).toBeNull();
         const next = acquireContender(sessionId, "timed-contender", released.leaseFence);
-        if (Either.isRight(next)) competitorFence = next.right.fence;
-        expect(next).toMatchObject({ _tag: "Right", right: { fence: row.leaseFence + 1 } });
+        if (Result.isSuccess(next)) competitorFence = next.success.fence;
+        expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
           _tag: "InvocationClosed", reason: "settled",
         });

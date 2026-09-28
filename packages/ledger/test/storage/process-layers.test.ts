@@ -3,7 +3,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Result } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { L0Observation } from "@openomni/protocol";
 import * as Ledger from "../../src";
@@ -33,7 +33,7 @@ test.each([
   Ledger.Storage.withIsolation(() => {
     const events: string[] = [];
     const close = spyOn(Ledger.SqliteStorageAdapter.prototype, "close");
-    const dependent = Layer.scopedDiscard(
+    const dependent = Layer.effectDiscard(
       Effect.gen(function* () {
         const writes = yield* Ledger.LedgerWrites;
         yield* Effect.addFinalizer(() =>
@@ -57,7 +57,7 @@ test.each([
       if (fail) {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit))
-          expect(Cause.failureOption(exit.cause)).toEqual(Option.some("boot.refused"));
+          expect(Cause.findErrorOption(exit.cause)).toEqual(Option.some("boot.refused"));
       } else {
         expect(exit).toEqual(Exit.succeed(undefined));
       }
@@ -177,7 +177,7 @@ test("a failed close is surfaced as a ledger lifecycle defect", () =>
       );
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit))
-        expect(Cause.dieOption(exit.cause)).toEqual(
+        expect(Result.getSuccess(Cause.findDefect(exit.cause))).toEqual(
           Option.some(
             new Ledger.ForeignFailure({ operation: "ledger.close", cause: "Error: close-refused" }),
           ),
