@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "@openomni/ledger";
 import { Effect } from "effect";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import {

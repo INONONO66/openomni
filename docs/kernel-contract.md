@@ -32,7 +32,7 @@ Subagent vs Worker are different species, not tiers of one thing:
 | Context | selectively inherits the parent's | none inherited — task scope only |
 | Identity | none — another angle on the parent's problem | own profile (prompt / tools / model / credentials) |
 | Lifecycle | dies with the parent | durable child session — survives runtime release and resumes |
-| Ledger | no ticket — part of the parent's work | normal session row with `parentId`, role, tree, revision, and lease |
+| Ledger | no ticket — part of the parent's work | normal session row with `parentId`, role, tree, revision, and activation fence |
 | Verification | exempt — intermediate reasoning the parent digests | gated — an independent deliverable |
 
 Target coordination contract: a subagent is a same-domain, context-sharing extension of a Worker, bounded to the parent grant. The Resident profile receives no subagent lane, and the Worker profile receives no Worker-allocation lane. When a Worker discovers work with independent footing — especially a different domain, permission profile, or verification regime — the target permits either an explicit policy-gated message to an already-existing agent or `resident.ask`; the Resident decides whether to commission a separate Worker. Neither coordination path creates another session, Worker, executor, or budget.
@@ -75,7 +75,7 @@ authority explicit. A bundle has exactly four extension points:
 | Tool catalog and system configuration | `ToolCatalog` supplies definitions; recorded `session.configure` operations `tools.add`, `tools.remove` and `system.blocks.set` select the next generation, never replace an in-flight catalog. | `packages/agent/src/services.ts`, `packages/agent/src/session-configuration.ts` |
 | Policy rows | Data-only pre/post verdicts are `allow`, `deny`, `require_approval`, `transform` or `obligation`. Named implementations come from the captured bundle Layer, not a callback-registration API. | `packages/policy/src/row-compiler.ts`, `packages/agent/src/bundle.ts` |
 | Observation subscriptions | `ObservationSink.subscribe` observes committed execution; it never decides admission or writes durable truth. Subscriptions belong to their Scope. | `packages/agent/src/observation/bus.ts`, `apps/openomni/src/composition/generation-layers.ts` |
-| Inbox messages | A bundle addresses a session through `send_message` / gateway ingestion and existing inbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/session-requests.ts` |
+| Entity mailbox messages | A bundle addresses a session through `send_message` / gateway ingestion and entity-owned mailbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/cluster/session-entity.ts` |
 
 Anything else requires a kernel change. No arbitrary code-callback registration,
 middleware registry, custom action writer, or raw ledger/control service is a
@@ -214,51 +214,59 @@ Ingress uses `gateway.ingest(sender, envelope)`. Physical reply matching supplie
 
 ### Durable session identity and runtime ownership
 
-Every native Resident or worker is a normal durable session row. The row carries `id`, nullable `parentId`, role (`resident | worker`), state, revision, generation pointers, and lease owner/fence/expiry. A worker row points to the session that commissioned it and owns an independent lease and revision; no separate task-ticket domain or synthetic `delegation-*` session identity is required.
+Every native Resident or worker is a normal durable session row. The row carries
+`id`, nullable `parentId`, role (`resident | worker`), state, revision,
+generation pointers, and the current activation fence. A worker row points to
+the session that commissioned it and owns an independent revision and entity
+activation; no separate task-ticket domain or synthetic `delegation-*` session
+identity is required.
 
-`session({id, role, runner, tools, system})` is the sole live consumer surface. Durable existence is independent of the in-memory handle: terminal idle with an empty inbox releases runtime immediately, while `get()` and `watch()` read without waking it. A committed prompt or alarm doorbell rehydrates the runner from the tree. Before runner entry the current fence commits a `turn` intent with a pre-minted result ID and pinned tool/system/policy generation; the same ID seals one terminal. Heartbeat loss aborts the runner and prevents a stale late commit. Startup resumes intent-without-terminal turns from their last completed boundary, with a persisted budget of ten. Authenticated control is available before waiting for recovered Owner consent; recovery stays owned by app shutdown.
+`Session` is the sole live consumer surface, keyed by `sessionId` and hosted by
+an `effect/cluster` `SingleRunner`. Durable existence is independent of an
+activation: each session owns one fresh-schema SQLite file, while one catalog
+SQLite file owns cross-session facts and cluster coordination. The old database
+layout is not read or migrated. Activation opens the session file, rotates its
+fence exactly once, and releases the handle on passivation. Mailbox delivery is
+strict FIFO composed with `decideSessionAdmission`; a newly activated entity
+drains the complete admitted backlog before becoming idle.
 
-### Alarm and monitor baseline
+Before runner entry the activation fence commits a `turn` intent with a
+pre-minted result ID and pinned tool/system/policy generation; the same ID seals
+one terminal. Interruption detaches a running turn only at the entity boundary,
+and the entity port's `settle` operation waits for quiescence. Startup resumes
+intent-without-terminal turns from their last completed boundary with a
+persisted budget of ten. Authenticated control is available before waiting for
+recovered Owner consent; recovery stays owned by app shutdown.
 
-One durable `alarm` owner stores both `at` and `watch`, and one writer inserts
-alarm rows: explicit arming and the request-deadline projection of a
-request/reply state action go through the same transaction-local insert,
-never a second SQL path (W2 #1110). The app worker band,
-not session residency, owns PTY command and filesystem source handles. A firing
-commits `alarm.fired`, a prompt action and its inbox row with alarm-id origin in
-one transaction. Observation and the session doorbell follow the commit; due
-scans are not action truth. Recurring matches leave the watch armed. Explicit
-rearm keeps its id while resetting the epoch budget/dedupe; cancellation is
-terminal. Captured policy rows bound notifications; excess pauses once until
-explicit rearm. PTY exit always has a summary unless control already fenced it.
-Persistent source recovery does not replay a live-stream gap.
+### DeliverAt timers and monitor baseline
 
-Three identities are kept apart (#971): the alarm id is the stable control
-identity and inbox origin; the persisted fence is the evaluator authority that
-every takeover, pause, cancel and rearm advances before physical cleanup; the
-committed occurrence identity is the `alarm.fired`/`alarm.paused` action id
-derived from `(alarmId, epoch, sourceKey)`, where `sourceKey` is what the source
-observed (timer slot, PTY line slot, path stat identity). The ledger alone
-admits a delivery: it rejects stale fences, consecutive equal poll batches and
-already-committed occurrences, and reads the deadline and notification budget
-from the persisted spec. Evaluators report; they do not judge. The worker
-mints no occurrence id and renders no timeout verdict: a watch timeout is
-reported as a clock observation and the ledger decides expiry.
+Retry schedules, request deadlines, watch occurrences, and watch timeouts are
+entity messages scheduled through `DeliverAt`, not rows in a second durable
+plane. The durable action chain is the guard: delivery re-reads current state
+and becomes a no-op when its schedule was cancelled, superseded, already
+committed, or fenced by a newer activation. Persist-before-send and residual
+delay on restart preserve the existing retry and deadline semantics.
 
-[Stage-1 decisions](alarm-monitor-stage-1.md) specify framing, source cleanup,
-restart and operator behavior. [Implementation Status](implementation-status.md)
-distinguishes branch evidence from merged delivery. The alarm/occurrence rows of
-[session-lifecycle-contract.md](session-lifecycle-contract.md) record the
-#971 landed shape; evaluator owner/expiry leasing, active-key reservation and
-cursor-capable backends were not added.
+The app worker band, not session residency, owns PTY command and filesystem
+source handles. Source observations retain stable occurrence identity and the
+captured notification budget, then schedule an entity delivery. The entity
+decides admission and commits the resulting prompt and occurrence evidence in
+its session transaction. Recurring matches remain armed; explicit rearm resets
+epoch budget and dedupe, cancellation is terminal, and persistent source
+recovery does not replay a live-stream gap.
+
+[Implementation Status](implementation-status.md) distinguishes branch evidence
+from merged delivery. The retained `Alarm.Watch*` and `Inbox.Commit` protocol
+names are wire vocabulary only; their live consumer is the entity and they do
+not imply separate persistence or worker planes.
 
 ### Unified message boundary
 
-`send_message({to, message, kind?, reply_to?, deadline_ms?})` folds onto the gateway send and enters `gateway.ingest(sender, envelope)`; `to.kind` is `session | new_session | contact`, and `kind` defaults to `prompt`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery calls the injected inbox commit; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
+`send_message({to, message, kind?, reply_to?, deadline_ms?})` folds onto the gateway send and enters `gateway.ingest(sender, envelope)`; `to.kind` is `session | new_session | contact`, and `kind` defaults to `prompt`. Session identity is authenticated separately from model input. A/B are compiled message pre-policy rows; post policy is obligation-only. The gateway consumes perimeter facts and L1-projected session facts, and never reads the session store. Session delivery enters the entity mailbox; new child configuration and first prompt share its transaction. Only executed actor delivery has an accepted/rejected/unknown receipt. A session commit succeeds or throws.
 
-The Resident never replies on its own initiative. No reply is sent to an external actor after a turn unless the model calls `send_message` explicitly or a policy row obliges it; the only implicit obligation is a child's terminal reaching its parent inbox. Physical adapters report facts, not hopes: a send is `sent` (platform receipt), `not_sent` (typed refusal, preflight failure, or proof the connection was never established) or `unknown` (lost ACK, reset, timeout, partial or malformed receipt). Only `not_sent` permits another physical attempt under the same idempotency key; `sent` and `unknown` keep custody. The kernel receipt vocabulary `accepted | rejected | unknown` is a translation of that evidence at one boundary. A surface that receives an event it does not open records a typed `unsupported_event` refusal rather than dropping it silently.
+The Resident never replies on its own initiative. No reply is sent to an external actor after a turn unless the model calls `send_message` explicitly or a policy row obliges it; the only implicit obligation is a child's terminal reaching its parent's mailbox. Physical adapters report facts, not hopes: a send is `sent` (platform receipt), `not_sent` (typed refusal, preflight failure, or proof the connection was never established) or `unknown` (lost ACK, reset, timeout, partial or malformed receipt). Only `not_sent` permits another physical attempt under the same idempotency key; `sent` and `unknown` keep custody. The kernel receipt vocabulary `accepted | rejected | unknown` is a translation of that evidence at one boundary. A surface that receives an event it does not open records a typed `unsupported_event` refusal rather than dropping it silently.
 
-A child seals its terminal and a source-owned outbound obligation atomically, without changing the parent. The recorded bytes traverse gateway admission, an idempotent receiving inbox, and the receiving executor. Only a verified destination receipt permits the source acknowledgement; retries never reseal the child or repeat the receiving invocation. Process response maps correlate physical replies only. Mandatory terminal mail answers the original request under its existing deadline/CAS, never a new request. Native child admission commits the original request, deadline projection, child configuration and first inbox together.
+A child seals its terminal and a source-owned outbound obligation atomically, without changing the parent. The recorded bytes traverse gateway admission, the idempotent entity mailbox, and the receiving executor. Only a verified destination receipt permits the source acknowledgement; retries never reseal the child or repeat the receiving invocation. Process response maps correlate physical replies only. Mandatory terminal mail answers the original request under its existing deadline/CAS, never a new request. Native child admission commits the original request, deadline schedule, child configuration and first mailbox item together.
 
 Table A's egress fact reads the authenticated peer's declared social budget and the destination session's current debit window without charging ingress. A missing peer entry is inapplicable to inbound traffic (unlike cold outbound outreach, which remains zero-default); a correlated request answer retains the reply exemption. Explicit do-not-contact, allowance, quiet-hour, cooldown and window/class restrictions select the existing compiled denial row. Correlation consumes the ordered immediate-to-root reply chain before broader thread/token/conversation evidence; multiple matches at the winning level remain ambiguous. Socket pre-admission refusal is an error frame, never an accepted receipt. Current implementation gaps are recorded in Implementation Status, not silently weakened here.
 
@@ -272,7 +280,10 @@ Existing-agent messaging requires an explicit grant and targets an allocated act
 - **Late-input policy:** an authenticated answer at or after the deadline records `late_unknown`, expiring a still-open request in the same batch. It never reopens that request or becomes new conversational input. This supersedes the former logical follow-up window.
 - **Physical correlation and partial replies:** immediate-to-root reply chains precede thread, token and conversation evidence; ambiguity is never guessed. First, quorum and all policies count distinct expected responders. Arrived replies remain durable when the deadline wins with fewer than the threshold. A supplied platform id can bind a physical receipt without converting `rejected` or `unknown` into `accepted`; transport acceptance is not completion.
 
-Migration 0038 retains inactive terminal legacy rows in immutable archives and refuses unresolved or unsupported old state before mutation. There are no compatibility stores or historical writers in the live path. The full transition ordering is in [Session lifecycle contract](session-lifecycle-contract.md#4-original-request-late-input-and-delivery).
+The entity plane boots only its fresh catalog and per-session schemas. It does
+not inspect, upgrade, or delete databases from the former layout; there are no
+compatibility stores or historical writers in the live path. The full
+transition ordering is in [Session lifecycle contract](session-lifecycle-contract.md#4-original-request-late-input-and-delivery).
 
 ### Jester evaluation and authorized egress
 
@@ -300,7 +311,7 @@ Cross-cutting proofs cover silence, one-question selection for multi-lens input,
 
 Every native `prompt`, `turn`, `llm`, and `tool` operation crosses the session-pinned executor, which evaluates the compiled pre bucket before the body runs and the post bucket over the result. Each evaluation commits its own `policy.decision` action, so the durable tree carries the verdict even when nothing else is appended.
 
-Who owns the action record differs by kind. `llm` and `tool` operations are executor-owned: the executor commits an intent before invoking the body and exactly one linked terminal result (`executed`, `blocked_post`, or typed `failed`); a retried model call adds a child `attempt` intent/result pair per attempt. `prompt` and `turn` are decided over records the session machine already owns, the durable inbox action and the turn envelope, so the executor adds policy decisions and a verdict, never a duplicate intent or result. A pre denial never invokes the body, and for the executor-owned kinds it commits no intent. Post denial records `reverted` when a reverter exists and `irreversible` otherwise. Tool lifecycle observations are projections emitted only after the corresponding intent/result commit; observations are never authority or truth.
+Who owns the action record differs by kind. `llm` and `tool` operations are executor-owned: the executor commits an intent before invoking the body and exactly one linked terminal result (`executed`, `blocked_post`, or typed `failed`); a retried model call adds a child `attempt` intent/result pair per attempt. `prompt` and `turn` are decided over records the session machine already owns, the durable mailbox action and the turn envelope, so the executor adds policy decisions and a verdict, never a duplicate intent or result. A pre denial never invokes the body, and for the executor-owned kinds it commits no intent. Post denial records `reverted` when a reverter exists and `irreversible` otherwise. Tool lifecycle observations are projections emitted only after the corresponding intent/result commit; observations are never authority or truth.
 
 Policy authority is the immutable compiled row snapshot pinned by the durable session generation. There is no caller-owned callback policy engine. The target forbids arbitrary callback registration; retained configure-authority and approval-binding seams are explicitly tracked by [SLOP B6](SLOP.md#w05-consumed-layer-floor-1184), not declared deleted here. The OpenOmni boot composition seeds the kernel's mandatory policy rows into durable storage before sessions are materialized; a generation without the mandatory row compiles to a fail-closed snapshot and refuses the turn.
 
@@ -411,11 +422,11 @@ overflow, never spills artifacts, and does not cap typed cell results.
 
 ## 4. Turn termination, not task satisfaction
 
-The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The gateway/session-inbox boundary and original-action request ownership are distinguished in [Implementation Status](implementation-status.md).
+The old task-ticket, executor-kind, completion-admission and evidence-gate contracts were withdrawn by #940. There is no replacement ticket/evidence store or completion authority. The kernel records that a turn terminated; the model reading the returned letter judges satisfaction. Generic provider attempts remain children of model actions, not a revived task domain. The gateway/entity-mailbox boundary and original-action request ownership are distinguished in [Implementation Status](implementation-status.md).
 
 ### Session L3 execution contract (#937)
 
-The session invokes stateless runAgent; every model step drains inbox before LLM, after LLM before tools, and after the tool wave, then compacts and evaluates stop policy. Tool waves retain whole-wave preflight/approval, positional results, sequential barriers, and immediate abort release without freeing live raw effects' controlling lease.
+The session invokes stateless runAgent; every model step drains the entity mailbox before LLM, after LLM before tools, and after the tool wave, then compacts and evaluates stop policy. Tool waves retain whole-wave preflight/approval, positional results, sequential barriers, and immediate abort release without invalidating the activation fence that controls live raw effects.
 
 One logical `llm` owns ordered attempt children. Only the executor retries and re-admits policy/context; the provider processor performs one attempt. Visible assistant text or a tool call makes a later provider failure terminal. Failed billing remains in attempt evidence and additive usage, while failed partial messages never enter active history. Model/auth resolution, provider classification, retry-after and backoff belong to `@openomni/llm`; cross-provider fallback resolves its own credentials.
 
@@ -512,7 +523,7 @@ Normative promotion of the 2026-07-09 determinism/verification round (machine-lo
 
 ### Observability surface
 
-The source of truth for a run is its session action tree and revisioned row; observations are at-most-once notifications, never replay truth. `s.get()` returns the authoritative lease/state/generation/open-turn snapshot and latest-turn tail without waking execution. `s.watch()` atomically opens a snapshot plus session-filtered subscription; a skipped revision emits a gap and the caller replaces state with `get()`. SQLite remains primary storage, and timelines or exports are derived views. Failure-step attribution by LLM judges is unreliable; durable action results are recorded at the boundary, not reconstructed afterward.
+The source of truth for a run is its session action tree and revisioned row; observations are at-most-once notifications, never replay truth. `s.get()` returns the authoritative fence/state/generation/open-turn snapshot and latest-turn tail without activating the entity. `s.watch()` atomically opens a snapshot plus session-filtered subscription; a skipped revision emits a gap and the caller replaces state with `get()`. SQLite remains primary storage, and timelines or exports are derived views. Failure-step attribution by LLM judges is unreliable; durable action results are recorded at the boundary, not reconstructed afterward.
 
 ## 7. History
 

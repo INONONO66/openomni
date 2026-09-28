@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure, SessionEntity } from "@openomni/agent";
+import { ForeignFailure, type SessionEntity } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";

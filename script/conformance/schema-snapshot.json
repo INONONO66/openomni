@@ -56,32 +56,6 @@
   ],
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
-  "Alarm.Arm": ["fireAt", "id", "kind", "sessionId", "spec"],
-  "Alarm.Fire": [
-    "at",
-    "batchHash",
-    "content",
-    "epoch",
-    "fence",
-    "id",
-    "sourceKey",
-    "terminal"
-  ],
-  "Alarm.RequestDeadline": ["kind", "requestId"],
-  "Alarm.Row": [
-    "createdAt",
-    "epoch",
-    "fence",
-    "fireAt",
-    "id",
-    "kind",
-    "lastBatch",
-    "notifications",
-    "sessionId",
-    "spec",
-    "status",
-    "updatedAt"
-  ],
   "Alarm.Watch#0": [
     "command",
     "description",
@@ -656,24 +630,13 @@
     "ts"
   ],
   "LedgerAction.Receipt": ["action", "revision"],
-  "LedgerSession.AcquireLease": [
-    "expectedFence",
-    "expiresAt",
-    "now",
-    "owner",
-    "sessionId"
-  ],
   "LedgerSession.Commit": [
     "actions",
-    "admit",
-    "consumeInboxIds",
     "expectedRevision",
     "fence",
     "generation",
     "now",
     "owner",
-    "receive",
-    "releaseLease",
     "requestCount",
     "sessionId",
     "state"
@@ -690,22 +653,11 @@
     "systemHash",
     "toolsGeneration"
   ],
-  "LedgerSession.LeaseResult#0": ["fence", "ok"],
-  "LedgerSession.LeaseResult#1": ["expiresAt", "holder", "ok", "reason"],
-  "LedgerSession.LeaseResult#2": ["currentFence", "ok", "reason"],
   "LedgerSession.Materialize": ["initialAction", "row"],
   "LedgerSession.MaterializeResult#0": ["created", "receipt", "row"],
   "LedgerSession.MaterializeResult#1": ["created", "row"],
-  "LedgerSession.RenewLease": [
-    "expiresAt",
-    "fence",
-    "now",
-    "owner",
-    "sessionId"
-  ],
   "LedgerSession.Row": [
     "id",
-    "leaseExpiresAt",
     "leaseFence",
     "leaseOwner",
     "parentId",

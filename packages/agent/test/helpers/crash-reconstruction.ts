@@ -179,6 +179,14 @@ function restartGenerations(captures: number[], missing: boolean) {
   }));
 }
 
+function refusalFromCause(cause: Cause.Cause<unknown>) {
+  const error = Cause.squash(cause);
+  if (FoldCheckpointIntegrityError.isInstance(error))
+    return "FoldCheckpointIntegrityError" as const;
+  if (error instanceof GenerationUnavailable) return "GenerationUnavailable" as const;
+  return null;
+}
+
 function recoverReconstruction(point: Point, dbPath: string) {
   return isolated((ledger) => Effect.scoped(Effect.gen(function* () {
     seedPolicy();
@@ -198,13 +206,14 @@ function recoverReconstruction(point: Point, dbPath: string) {
     let refusal: z.infer<typeof reconstructionRecovery>["refusal"] = null;
     let loaded: z.infer<typeof reconstructionRecovery>["loaded"] = null;
     try {
-      if (point === "fold_checkpoint_tampered_before_load" || point === "captured_generation_missing_after_restart") {
+      const expectsRefusal =
+        point === "fold_checkpoint_tampered_before_load" ||
+        point === "captured_generation_missing_after_restart";
+      if (expectsRefusal) {
         const exit = yield* Effect.exit(withSessionServices(work, fixture));
         if (Exit.isSuccess(exit)) throw new Error("faulted wake entered successfully");
-        const error = Cause.squash(exit.cause);
-        if (FoldCheckpointIntegrityError.isInstance(error)) refusal = "FoldCheckpointIntegrityError";
-        else if (error instanceof GenerationUnavailable) refusal = "GenerationUnavailable";
-        else return yield* Effect.failCause(exit.cause);
+        refusal = refusalFromCause(exit.cause);
+        if (refusal === null) return yield* Effect.failCause(exit.cause);
       } else {
         loaded = hydrateSessionHistory(ledger.kernel, sessionId);
         if (point !== "open_tool_checkpoint_before_terminal")

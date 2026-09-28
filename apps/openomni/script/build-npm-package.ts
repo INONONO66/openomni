@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
  *   are folded into the bundles and never exist on the npm registry.
  */
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-const repoRoot = join(appDir, "..", "..");
 const staging = process.argv[2] ?? join(appDir, "dist-npm");
 
 rmSync(staging, { recursive: true, force: true });

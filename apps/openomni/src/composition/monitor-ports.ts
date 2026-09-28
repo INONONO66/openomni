@@ -65,6 +65,36 @@ interface WatchFold {
   readonly terminal: boolean;
 }
 
+function firedActions(
+  kernel: SessionKernel,
+  sessionId: string,
+  armId: string,
+): LedgerAction.Node[] {
+  const fired: LedgerAction.Node[] = [];
+  let cursor = 0;
+  for (;;) {
+    const page = kernel.operationChildrenPage(sessionId, armId, cursor);
+    for (const child of page) if (child.kind === "alarm.fired") fired.push(child);
+    if (page.length < 256) return fired;
+    cursor = page.at(-1)?.ordinal ?? cursor;
+  }
+}
+
+function firedTerminal(action: LedgerAction.Node): boolean {
+  const value = action.effect.value;
+  return (
+    value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === true
+  );
+}
+
+function firedContent(action: LedgerAction.Node | undefined): string | null {
+  const value = action?.effect.value;
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    typeof value?.content === "string"
+    ? value.content
+    : null;
+}
+
 /** Pure chain fold: the latest arm epoch overridden by cancel/paused/fired facts. */
 export function watchState(
   kernel: SessionKernel,
@@ -87,29 +117,10 @@ export function watchState(
   const cancelled = kernel.actionById(watchCancelId(watchId, epoch));
   const paused = kernel.actionById(watchPausedId(watchId, epoch));
   const timeout = kernel.actionById(watchTimeoutId(watchId, epoch));
-  const fired: LedgerAction.Node[] = [];
-  let cursor = 0;
-  for (;;) {
-    const page = kernel.operationChildrenPage(sessionId, arm.id, cursor);
-    for (const child of page) if (child.kind === "alarm.fired") fired.push(child);
-    if (page.length < 256) break;
-    cursor = page.at(-1)?.ordinal ?? cursor;
-  }
-  const terminal =
-    timeout !== undefined ||
-    fired.some((action) => {
-      const value = action.effect.value;
-      return (
-        value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === true
-      );
-    });
+  const fired = firedActions(kernel, sessionId, arm.id);
+  const terminal = timeout !== undefined || fired.some(firedTerminal);
   const last = fired.at(-1);
-  const lastValue = last?.effect.value;
-  const lastBatch =
-    lastValue !== null && typeof lastValue === "object" && !Array.isArray(lastValue) &&
-    typeof lastValue?.content === "string"
-      ? lastValue.content
-      : null;
+  const lastBatch = firedContent(last);
   const status =
     cancelled !== undefined
       ? ("cancelled" as const)

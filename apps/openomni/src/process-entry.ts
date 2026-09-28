@@ -22,7 +22,7 @@ import {
   toolPorts,
 } from "./gateway";
 import { AppScope, type AppRuntime } from "./runtime";
-import { Inbox, Model, type LedgerAction, type SessionTransition } from "@openomni/protocol";
+import { type Inbox, Model, type LedgerAction, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { AppLedger, type AppLedgerPlane, type SessionKernel } from "./composition/cluster-runtime";
 import { createCompletionPort } from "./composition/completion";

@@ -1,5 +1,10 @@
 # Unified session lifecycle and transition ownership
 
+> **Historical context:** W5.2 #1197 superseded the lease/alarm/inbox and
+> migration-plane mechanics retained in this versioned contract. Current
+> persistence and runtime ownership live in
+> [Kernel Contract](kernel-contract.md#durable-session-identity-and-runtime-ownership).
+
 **Version 1, target contract for #968, reconciled with main `f9c02a66` (includes `ede6a7f0` and `5b3ff997`).** Canonical authority is [Durable session identity and runtime ownership](kernel-contract.md#durable-session-identity-and-runtime-ownership), [L2 action executor](kernel-contract.md#l2-action-executor), [Session L3 execution contract (#937)](kernel-contract.md#session-l3-execution-contract-937), [State and the ledger fold](kernel-contract.md#state-and-the-ledger-fold), and [Waiting on the world](core-model.md#waiting-on-the-world). This document supplies the cross-region transition delta and child handoff, not a replacement for those definitions. Retention follows [SLOP's data receipt](SLOP.md#967-semantic-and-data-retention-receipt).
 
 ## 1. Evidence and construction map

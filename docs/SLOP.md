@@ -52,11 +52,11 @@ This is the tracked successor for the #948 rows formerly recorded in `.omo/repor
 
 The Owner-approved #945/#948 amendment overrides stale campaign labels and E4 parking. Deletion evidence, remaining quality acceptance, and the parked #950 successor are separate. This is not a zero-failure/final-convergence receipt and does not close #945 or the full #948 acceptance.
 
-## #947 stage-1 alarm contribution (unmerged)
+## Historical #947 stage-1 alarm contribution (unmerged)
 
 | Row | Receipt |
 | --- | --- |
-| B4 | Not closed here. Delegation source is untouched; #946 owns deletion and stage 2 wires its deadline consumer to the existing `at` alarm owner. |
+| B4 | ✅ Historical closure receipt updated by W5.2 #1197: the separate lease/alarm/inbox planes, `alarm-worker.ts`, and `executor-retry-alarm.ts` are deleted; request deadlines and monitor occurrences now use chain-guarded `DeliverAt` messages consumed by the session entity. Plan §5(a) deletion grep is zero, and the parent-measured crash matrix retains all 27 faults. |
 | E8 | Additive `monitor` registration and strict create/rearm/cancel schema implemented; no claim about unrelated vocabulary. |
 | Alarm quality | Focused 30 tests pass, including real PTY exit/dedupe, exact timeout, budget pause/rearm, path create/modify/cancel, atomic rollback, SQLite reopen, and hibernation/live-wait. |
 | Path readiness correction | The same path source reconciles stat identity on the app scan; unchanged scans append nothing. The test subscribes before mutation and drives reconciliation before native callbacks can run. The previous create timeout is retained in local history, not hidden by sleeps or retries. |

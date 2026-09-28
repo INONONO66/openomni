@@ -3,9 +3,8 @@ import {
   PlainValueSchema,
   SessionTransition,
   type Inbox,
-  type LedgerAction,
 } from "@openomni/protocol";
-import { Cause, Context, Effect, Scope, Semaphore } from "effect";
+import { Cause, Context, Effect, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
 import type { SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";

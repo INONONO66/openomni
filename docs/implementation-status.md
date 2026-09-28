@@ -1,5 +1,56 @@
 # Implementation Status
 
+## W5.2 session entity receipt (#1197, 2026-09-28)
+
+W5.2 on `kernel/1197-session-entity-20260928` (PR #1239, ⏳ pending merge)
+ships one `Session` entity per `sessionId` on the `effect/cluster`
+`SingleRunner` exposed by Effect `4.0.0-rc.118`. Each activation opens one
+fresh-schema SQLite file under the configured sessions directory and shares a
+catalog SQLite file for cross-session facts and cluster coordination. There is
+no legacy migration path: the former `catalog.db` and other old database files
+are neither read, migrated, nor deleted.
+
+The entity owns mailbox FIFO followed by `decideSessionAdmission`, rotates the
+session fence once per activation, drains the complete admitted backlog, and
+uses `DeliverAt` messages for retry, request-deadline, and monitor timing. The
+entity port now exposes `settle`; interruption detaches a running turn at the
+entity boundary, and shutdown awaits quiescence before closing stores.
+`localInboxCommit` borrows the active entity authority only while that entity
+is running, preserving live-turn fence ownership while unrelated callers still
+fail closed.
+
+Historical deletion receipt: the former lease/alarm/inbox/migration planes are
+deleted to the plan §5(a) grep-zero contract. Deleted symbols are `LEASE_TTL_MS`,
+`HEARTBEAT_INTERVAL_MS`, `renewLease`, `acquireLease`, `sweepSessions`,
+`wakeSession`, `createAlarms`, `Storage.get`, and `Storage.initialize`.
+Deleted source surfaces include `packages/ledger/migration/`,
+`packages/ledger/src/storage/migration-runner.ts`, the `u967-*`, `u969-*`,
+`historical-projections`, and `historical-request-format` migration readers,
+`packages/agent/src/executor-retry-alarm.ts`, and
+`apps/openomni/src/composition/alarm-worker.ts`. The obsolete script gates
+`check-ledger-schema-drift`, `verify-ledger-rename`,
+`generate-ledger-archive-manifest`, `ledger-archive-snapshot`, and
+`ledger-producer-manifest` are also deleted.
+
+The crash matrix remains exactly 27 faults on the entity plane. Parent-measured
+gates at this branch state are: `apps/openomni` 529/0, packages 1443/0,
+channels 576/0, script 717/0, `check-types` exit 0, dead exports 0 known/0 new,
+`check-effect-boundaries` exit 0 with its runner-site allowlist reduced 54 → 48,
+and the §5(a) deletion grep at zero.
+
+This receipt does **not** claim full CI, the pending L4.2 patch-coverage 100%
+gate, or a mutation campaign. The 16 pre-existing protocol `unknown` sites
+remain carried to #1113. Known findings are explicit: cluster entity reaper
+resolution is at least five seconds; `ConfigProvider.fromEnv()` snapshots the
+environment at module load; and protocol still retains the `Inbox.Commit` and
+`Alarm.Watch*` wire schemas even though their consumer moved into the entity.
+
+## Historical receipts retained below
+
+The remaining sections preserve the evidence and scope claimed by earlier
+campaign increments. Their source names are historical context, not live W5.2
+ownership.
+
 W5.0 (#1195) Effect pin `3.22.2` → `4.0.0-rc.118` (exact, published 2026-09-28) on `kernel/1195-effect-v4-pin-20260928` (PR #1198, ⏳ pending merge): zero behavior change — mechanical v4 renames across nine workspaces, `FiberRef` → `Context.Reference`, `Effect.withFiberRuntime` → `Effect.withFiber`, `Cause` reason filters, `Effect.all` failure semantics of `shutdownSessions` preserved under v4 `mode: "result"`, `effect/testing` `TestClock`; protocol/ui/desktop/tool bodies stay Effect-free (`check-effect-boundaries` 233 allowlisted ratchet sites, allowlist 224 entries, both unchanged from main); no `effect/unstable` cluster or workflow import. Receipts under `.omo/reports/kernel-campaign-w50/`. W3 (#1111) merged as `75d28562` (PR #1193, 2026-09-26): single ledger policy-generation writer (compiler `append: () => false` deleted), executor dispatch table with captured toolsGeneration, ToolCatalog Layer built once per generation with tools/** effect-free and sealed 12-tool catalog (read, write, edit, ls, find, grep, bash, eval, monitor, send_message, provision, completion), and typed evidence-only authority (`SessionRunnerInput.authority` from inbox `origin.inboundTreatment`) with OBSERVATION prose prefix deleted. W0.5 (#1184) source wiring inspected on `kernel/1184-consumed-layers-20260924`, 2026-09-24. This stamp covers the Layer/bundle slice below, not a re-verification of historical receipts or a merge/CI claim.
 
 | Slice | Status | Scope |
