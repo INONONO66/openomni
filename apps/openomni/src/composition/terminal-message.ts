@@ -1,8 +1,8 @@
 import { Context, Effect } from "effect";
 import { createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
 import type { LedgerAction } from "@openomni/protocol";
+import type { SessionKernel } from "./cluster-runtime";
 
 type OutboundInput = Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0];
 interface OutboundContext {
@@ -17,21 +17,23 @@ export const outboundMessage = Context.Reference<OutboundContext | undefined>("@
 export function dispatchOutboundMessage(
   ingest: GatewayRouter["ingest"],
   clock: () => number,
+  openKernel: (sessionId: string) => SessionKernel,
 ): NonNullable<SessionRuntime["dispatchOutbound"]> {
   return (input) => Effect.gen(function* () {
     const { message, authority } = input;
+    const source = openKernel(message.sourceSessionId);
     const executor = yield* createExecutor({
       identity: {
         sessionId: message.sourceSessionId,
-        role: SessionHandleStore.row(message.sourceSessionId).role,
+        role: source.row(message.sourceSessionId).role,
         parentActionId: `${message.sourceActionId}:outbound`,
       },
       ledger: {
         commit: (action) => Effect.gen(function* () {
-          const row = SessionHandleStore.row(message.sourceSessionId);
-          const result = yield* SessionHandleStore.commit({
+          const row = source.row(message.sourceSessionId);
+          const result = yield* source.commit({
             sessionId: message.sourceSessionId, ...authority, now: clock(),
-            expectedRevision: row.revision, actions: [action], consumeInboxIds: [], state: row.state, releaseLease: false,
+            expectedRevision: row.revision, actions: [action], state: row.state,
           });
           const receipt = result.receipts[0];
           if (receipt === undefined) throw new Error("outbound policy receipt missing");
@@ -53,7 +55,10 @@ export function dispatchOutboundMessage(
       if (admitted.status === "blocked_pre") throw new Error("outbound gateway admission refused");
       const receipt =
         context.receipt ??
-        SessionHandleStore.outboundReceipt(message.destinationSessionId, message.messageId);
+        openKernel(message.destinationSessionId).outboundReceipt(
+          message.destinationSessionId,
+          message.messageId,
+        );
       if (receipt === undefined)
         throw new Error("outbound receiving consumer did not commit a receipt");
       return receipt;

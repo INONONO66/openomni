@@ -1,11 +1,11 @@
 import { Retry } from "@openomni/llm";
-import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, LedgerAction, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
 import { Cause, Effect, Exit, Option } from "effect";
-import type { AttemptRequest, ResolvedExecutorOptions, LlmAttempts } from "./executor-contract";
-import { createRetryAlarmPort } from "./executor-retry-alarm";
+import type { AttemptRequest, ExecutionLedger, ResolvedExecutorOptions, LlmAttempts } from "./executor-contract";
+import { createRetryTimerPort, type RetryTimerPort, type TimerSenders } from "./cluster/timers";
 import type { createExecutionRecord } from "./executor-record";
-import { PolicyDenied, type ExecutionError } from "./errors";
+import { CommitFailed, PolicyDenied, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { attachFailureFacts } from "./core/retry";
 import { attemptRouteChange } from "./model-selection";
@@ -35,13 +35,61 @@ function retryDelay(recover: boolean, decision: ReturnType<typeof Retry.decide>)
   return !recover && decision.retry ? decision.delayMs : 0;
 }
 
+
+/**
+ * Default durable retry port over the timer plane (W5.2 plan D8): `arm`
+ * commits the `retry.scheduled` fact as an `alarm.arm` chain action through
+ * the session ledger. Without a cluster client there is no DeliverAt sender:
+ * the chain action is the durable evidence activation resume consumes, and
+ * the live residual sleep carries the in-process wait. Composition injects
+ * the full port (with the entity-client sender) via `ExecutorOptions.retryAlarm`.
+ */
+export function createLedgerRetryTimerPort(
+  ledger: Pick<ExecutionLedger, "commit">,
+  sessionId: string,
+  clock: () => number,
+  send: TimerSenders["retryScheduled"] = () => Effect.void,
+): RetryTimerPort {
+  return createRetryTimerPort({
+    commitScheduled: (input) =>
+      ledger
+        .commit(LedgerAction.Append.parse({
+          id: input.id,
+          parentId: null,
+          sessionId,
+          kind: "alarm.arm",
+          intent: { encodingVersion: 1, value: { kind: "at", fireAt: input.notBefore } },
+          effect: {
+            encodingVersion: 1,
+            value: {
+              status: "armed",
+              spec: {
+                kind: "retry.scheduled",
+                attempt: input.attempt,
+                reason: input.reason,
+                notBefore: input.notBefore,
+              },
+            },
+          },
+          revert: { encodingVersion: 1, value: { op: "cancel", id: input.id } },
+          ts: input.notBefore,
+        }))
+        .pipe(
+          Effect.mapError((error) => new CommitFailed({ error })),
+          Effect.asVoid,
+        ),
+    send,
+    clock,
+  });
+}
+
 export function createAttemptRunner(
   options: ResolvedExecutorOptions,
   record: Pick<RecordPort, "appendIntent" | "appendResult" | "appendFailure">,
   admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
   approve: (request: AttemptRequest, intent: LedgerAction.Receipt, admission: Admission) => Effect.Effect<"approve" | "refuse" | "timeout", ExecutionError>,
 ) {
-  const retryAlarm = options.retryAlarm ?? createRetryAlarmPort(options.identity.sessionId, options.clock);
+  const retryAlarm = options.retryAlarm ?? createLedgerRetryTimerPort(options.ledger, options.identity.sessionId, options.clock);
   function approveAttempt(request: AttemptRequest, intent: LedgerAction.Receipt, policy: Admission | undefined) {
     if (policy?.verdict !== "require_approval") return Effect.void;
     return Effect.gen(function* () {

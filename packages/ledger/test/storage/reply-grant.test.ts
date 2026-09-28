@@ -5,9 +5,11 @@ import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import { createReplyGrantStore } from "../../src/reply-grant/index";
+import { openCatalogStore } from "../../src/storage/catalog-store";
 import { createSqliteReplyGrantAdapter } from "../../src/storage/sqlite-reply-grant-adapter";
-import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import { bootstrapStoreDatabase } from "../../src/storage/session-store";
+import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
 import { z } from "zod";
 
 const ClosedMessage = z.tuple([
@@ -29,7 +31,7 @@ describe("durable reply-grant current projection", () => {
   test("independent connections racing for one slot admit exactly one grant", async () => {
     const directory = mkdtempSync(join(tmpdir(), "reply-grant-race-"));
     const path = join(directory, "ledger.sqlite");
-    const adapter = new SqliteStorageAdapter(path);
+    const adapter = openCatalogStore(path);
     const contenders: ChildProcess[] = [];
     const exits: Promise<[number | null, NodeJS.Signals | null]>[] = [];
     const signal = AbortSignal.timeout(10_000);
@@ -65,7 +67,7 @@ describe("durable reply-grant current projection", () => {
         ]),
       );
       expect(await Promise.all(exits)).toEqual(contenders.map(() => [0, null]));
-      const reopened = new SqliteStorageAdapter(path);
+      const reopened = openCatalogStore(path);
       try {
         expect(reopened.replyGrant.listLive(1)).toHaveLength(1);
       } finally {
@@ -92,7 +94,7 @@ describe("durable reply-grant current projection", () => {
     // rejects those internal statements on Bun 1.3.6 even after COMMIT.
     const db = new Database(":memory:");
     try {
-      initializeSqliteDatabase(db);
+      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
       const store = createSqliteReplyGrantAdapter(db);
       store.claim(grant, { at: 1, maxLiveInstances: 1 });
       db.run(
@@ -119,7 +121,7 @@ describe("durable reply-grant current projection", () => {
   test("live queries use the expiry index and exclude expired or malformed historical payloads", () => {
     const db = new Database(":memory:");
     try {
-      initializeSqliteDatabase(db);
+      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
       const store = createSqliteReplyGrantAdapter(db);
       store.claim(grant, { at: 1, maxLiveInstances: 1 });
       db.run(
@@ -149,7 +151,7 @@ describe("durable reply-grant current projection", () => {
 
   test("malformed live rows fail closed at the persisted-data boundary", () => {
     using db = new Database(":memory:");
-    initializeSqliteDatabase(db);
+    bootstrapStoreDatabase(db, CATALOG_SCHEMA);
     const store = createSqliteReplyGrantAdapter(db);
     db.run(
       "INSERT INTO reply_grant VALUES ('bad', '{', 'rule-1', 'guest', 'telegram:chat-1', 100)",
@@ -165,7 +167,7 @@ describe("durable reply-grant current projection", () => {
   ])("incoherent indexed authority fails closed: %s", (sql) => {
     const db = new Database(":memory:");
     try {
-      initializeSqliteDatabase(db);
+      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
       const store = createSqliteReplyGrantAdapter(db);
       store.claim(grant, { at: 1, maxLiveInstances: 1 });
       db.run(sql);
@@ -184,7 +186,7 @@ describe("durable reply-grant current projection", () => {
   test("repeat contact preserves expiry while a later first contact reuses expired capacity", () => {
     const db = new Database(":memory:");
     try {
-      initializeSqliteDatabase(db);
+      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
       const store = createSqliteReplyGrantAdapter(db);
       expect(store.claim(grant, { at: 1, maxLiveInstances: 1 })).toBe("claimed");
       expect(
@@ -212,5 +214,24 @@ describe("durable reply-grant current projection", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe("reply-grant store factory", () => {
+  test("delegates claim and listLive to the catalog sub-adapter", () => {
+    const catalog = openCatalogStore(":memory:");
+    try {
+      const store = createReplyGrantStore(catalog);
+      expect(store.claim(grant, { at: 1, maxLiveInstances: 1 })).toBe("claimed");
+      expect(store.listLive(50)).toEqual([grant]);
+    } finally {
+      catalog.close();
+    }
+  });
+
+  test("fails closed when the reply-grant sub-adapter is absent", () => {
+    const store = createReplyGrantStore({});
+    expect(() => store.claim(grant, { at: 1, maxLiveInstances: 1 })).toThrow(/reply grants/);
+    expect(() => store.listLive(50)).toThrow(/reply grants/);
   });
 });

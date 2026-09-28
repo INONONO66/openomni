@@ -6,13 +6,8 @@ export { decideSessionAdmission } from "./session-admission";
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export {
-  closeSessions,
-  getSessionHandle,
-  session,
-  sweepSessions,
-  wakeSession,
-} from "./session-handle";
+export { closeSessions, getSessionHandle, session } from "./session-handle";
+export { createSessionEntityRunTurn } from "./session-controller";
 export { createExecutor, ExecutionApprovalError } from "./executor";
 export * from "./errors";
 export * from "./services";
@@ -52,11 +47,9 @@ export {
   type TimerChainReads,
 } from "./cluster/timers";
 export type {
-  SessionEntityAuthority,
   SessionEntityPorts,
   SessionEntityTimerContext,
   SessionEntityTurnInput,
-  SessionTimerOutcome,
 } from "./session-contract";
 export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

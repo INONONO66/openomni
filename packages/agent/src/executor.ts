@@ -472,7 +472,7 @@ function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["ver
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }
-function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof SessionHandleStore.requestById>): void {
+function assertFresh(request: ExecutionRequest, captured: ReturnType<SessionHandleStore.SessionKernel["requestById"]>): void {
   if (captured !== undefined && request.domainRevisions !== undefined &&
       canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions))
     throw new ExecutionApprovalError({ code: "stale_approval" });

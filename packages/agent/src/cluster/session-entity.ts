@@ -1,13 +1,12 @@
 import { LeaseRefused, SessionHandleStore, SessionNotFound, type LedgerError } from "@openomni/ledger";
 import {
-  Inbox,
   PlainValueSchema,
   SessionTransition,
+  type Inbox,
   type LedgerAction,
 } from "@openomni/protocol";
 import { Context, Effect } from "effect";
 import { Entity } from "effect/cluster";
-import { z } from "zod";
 import type { SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";
 import type {
@@ -17,7 +16,7 @@ import type {
   SessionEntityTimerContext,
   SessionTimerOutcome,
 } from "../session-contract";
-import { deliveryActions } from "../session-record";
+import { deliveryActions, pendingBacklog, receivedMessageAction } from "../session-record";
 import { decideRequestTransition } from "../session-request";
 import { sessionKernels, type SessionKernel } from "./kernel-registry";
 import {
@@ -34,17 +33,8 @@ import {
 } from "./messages";
 
 /** Store-handle types by position on the public kernel factory (the ledger index re-export lands with wave 3). */
-export type SessionStoreHandle = Parameters<typeof SessionHandleStore.createSessionKernel>[0];
-export type CatalogStoreHandle = Parameters<typeof SessionHandleStore.createSessionKernel>[1];
-
-/**
- * 2100-01-01T00:00:00Z. Entity activations have no liveness heartbeat - the
- * catalog fence CAS is the takeover authority (F5) - so the adopted file lease
- * carries a far-future expiry to neutralize the legacy TTL predicate until
- * wave 3 deletes it. Each takeover advances at least 1ms past the previous
- * expiry so the takeover instant satisfies the inclusive expiry rule.
- */
-const ROTATION_LEASE_EXPIRES_AT = 4_102_444_800_000;
+type SessionStoreHandle = Parameters<typeof SessionHandleStore.createSessionKernel>[0];
+type CatalogStoreHandle = Parameters<typeof SessionHandleStore.createSessionKernel>[1];
 
 /** What one runner process provides to every Session activation. */
 export interface SessionEntityEnv {
@@ -72,10 +62,6 @@ export const SessionEntity = Entity.make("Session", [
   WatchTimeoutRpc,
 ]);
 
-/** The chain effect one received message commits; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
-const DeliverIntent = z.object({ inboxId: z.string() });
-
 interface ActivationHandle {
   readonly env: SessionEntityEnv;
   readonly kernel: SessionKernel;
@@ -99,62 +85,25 @@ function rotateActivationFence(env: SessionEntityEnv, kernel: SessionKernel, ses
 }
 
 /**
- * Adopts the rotated catalog fence into the session file's lease CAS, walking
- * the single-increment CAS up to `fence`. The catalog CAS already decided
- * this activation wins, so a still-unexpired lease held by the previous
- * activation is taken over by advancing `now` to its expiry. A file fence at
- * or beyond the target means a later activation won: this one is stale.
+ * Adopts the rotated catalog fence into the session file (F5): the file CAS
+ * accepts only a strictly newer fence. A file fence at or beyond the target
+ * means a later activation won: this one is stale.
  */
-function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority, now: number): Effect.Effect<void, LedgerError> {
+function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority): Effect.Effect<void, LedgerError> {
   const { sessionId, owner, fence } = authority;
-  return Effect.gen(function* () {
-    for (;;) {
-      const current = kernel.row(sessionId);
-      if (current.leaseFence === fence && current.leaseOwner === owner) return;
-      if (current.leaseFence >= fence) {
-        return yield* new LeaseRefused({
-          sessionId,
-          reason: "stale",
-          holder: current.leaseOwner,
-          fence: current.leaseFence,
-          expiresAt: current.leaseExpiresAt,
-        });
-      }
-      const takeoverNow = Math.max(now, current.leaseExpiresAt ?? now);
-      yield* kernel
-        .acquireLease({
-          sessionId,
-          owner,
-          expectedFence: current.leaseFence,
-          now: takeoverNow,
-          expiresAt: Math.max(ROTATION_LEASE_EXPIRES_AT, takeoverNow + 1),
-        })
-        // A lost single-increment race: re-read and re-decide from the fresh row.
-        .pipe(Effect.catchTag("LeaseRefused", () => Effect.void));
-    }
+  return Effect.suspend(() => {
+    const current = kernel.row(sessionId);
+    if (current.leaseFence === fence && current.leaseOwner === owner) return Effect.void;
+    if (current.leaseFence >= fence)
+      return Effect.fail(new LeaseRefused({
+        sessionId,
+        reason: "stale",
+        holder: current.leaseOwner,
+        fence: current.leaseFence,
+        expiresAt: null,
+      }));
+    return kernel.adoptFence({ sessionId, owner, fence }).pipe(Effect.asVoid);
   });
-}
-
-/** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
-function receivedMessageAction(input: {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly kind: Inbox.Kind;
-  readonly content: string;
-  readonly origin: Inbox.Origin;
-  readonly parentActionId: string | null;
-  readonly at: number;
-}): LedgerAction.Append {
-  return {
-    id: input.id,
-    parentId: input.parentActionId,
-    sessionId: input.sessionId,
-    kind: "prompt",
-    intent: input.origin,
-    effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
-    irreversible: true,
-    ts: input.at,
-  };
 }
 
 /** Idempotent receive (F4): a redelivered envelope resolves to its existing chain action. */
@@ -186,55 +135,13 @@ function appendReceived(
       now,
       expectedRevision: row.revision,
       actions: [action],
-      consumeInboxIds: [],
       state: row.state,
-      releaseLease: false,
     })
     .pipe(
       Effect.map((committed) => {
         const receipt = committed.receipts[0];
         if (receipt === undefined) throw new Error(`commit returned no receipt: ${message.messageId}`);
         return { ordinal: receipt.action.ordinal, actionHash: receipt.action.actionHash, deduped: false };
-      }),
-    );
-}
-
-/**
- * Pending admission over a per-session file is a chain fold (plan F1): every
- * received-message action without its `<id>:delivery` record is pending.
- */
-function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
-  const received: { readonly action: LedgerAction.Node; readonly kind: Inbox.Kind; readonly content: string }[] = [];
-  const delivered = new Set<string>();
-  let afterRevision = 0;
-  for (;;) {
-    const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
-    for (const action of page.actions) {
-      if (action.kind === "prompt") {
-        const effect = ReceivedEffect.safeParse(action.effect.value);
-        if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
-      } else if (action.kind === "inbox.deliver") {
-        const intent = DeliverIntent.safeParse(action.intent.value);
-        if (intent.success) delivered.add(intent.data.inboxId);
-      }
-    }
-    if (page.nextRevision === null) break;
-    afterRevision = page.nextRevision;
-  }
-  return received
-    .filter((entry) => !delivered.has(entry.action.id))
-    .map((entry, index) =>
-      Inbox.Row.parse({
-        id: entry.action.id,
-        sessionId,
-        kind: entry.kind,
-        content: entry.content,
-        origin: entry.action.intent,
-        status: "pending",
-        consumedBy: null,
-        consumedAt: null,
-        createdAt: entry.action.ts,
-        ordinal: index + 1,
       }),
     );
 }
@@ -261,9 +168,7 @@ function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): 
       now: env.clock(),
       expectedRevision: row.revision,
       actions: deliveryActions(items, "noop", "before_llm", parentId),
-      consumeInboxIds: [],
       state: row.state,
-      releaseLease: false,
     })
     .pipe(Effect.asVoid);
 }
@@ -357,9 +262,7 @@ function requestCommand(
         now: env.clock(),
         expectedRevision: row.revision,
         actions: [...decision.actions, ...intake],
-        consumeInboxIds: [],
         state: row.state,
-        releaseLease: false,
         ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
       });
       yield* drain(handle);
@@ -399,7 +302,7 @@ export const SessionEntityLive = SessionEntity.toLayer(
       owner: env.owner,
       fence: rotateActivationFence(env, kernel, sessionId),
     };
-    yield* adoptFence(kernel, authority, env.clock()).pipe(Effect.orDie);
+    yield* adoptFence(kernel, authority).pipe(Effect.orDie);
     const unregister = sessionKernels.register(sessionId, kernel);
     yield* Effect.addFinalizer(() => Effect.sync(unregister));
     const handle: ActivationHandle = { env, kernel, authority };

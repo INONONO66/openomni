@@ -1,7 +1,7 @@
 import {
   canonicalDigest,
+  Inbox,
   PlainObjectSchema,
-  type Inbox,
   type LedgerAction,
   type LedgerSession,
   L0Observation,
@@ -14,20 +14,13 @@ import {
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
 import { Effect } from "effect";
+import { z } from "zod";
 import { StorageUnavailable, type LedgerError } from "../errors";
-import type {
-  CommitReceipt,
-  InboxWriteAdapter,
-  LeaseReceipt,
-  SessionWriteAdapter,
-} from "../services";
+import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "../services";
 import type { CatalogStore } from "../storage/catalog-store.js";
 import type { SessionStore } from "../storage/session-store.js";
 import { writeEffect } from "../storage/write-effect";
-import { defaultKernelContext } from "./default-kernel.js";
 
-export const LEASE_TTL_MS = 30_000;
-export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const RESUME_BUDGET = 10;
 
 /** The storage capabilities one kernel handle reads and writes. */
@@ -35,7 +28,6 @@ export interface SessionKernelStores {
   transaction<T>(operation: () => T): T;
   readonly sessions?: SessionWriteAdapter;
   readonly actions?: ProtocolStorage.ActionSubAdapter;
-  readonly inbox?: InboxWriteAdapter;
   readonly policies?: ProtocolStorage.PolicyRowSubAdapter;
 }
 
@@ -50,7 +42,7 @@ export interface SessionKernelContext {
   writable(): boolean;
 }
 
-interface MaterializeInput {
+export interface MaterializeInput {
   readonly id: string;
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;
@@ -96,7 +88,6 @@ function materializeIn(
               role: input.role,
               leaseOwner: null,
               leaseFence: 0,
-              leaseExpiresAt: null,
               revision: 0,
               state: "idle",
               toolsGeneration: snapshot.generation,
@@ -282,6 +273,34 @@ function outboundRowsIn(
     if (page.length < 256) return outbound;
     cursor = page.at(-1)?.message.messageId ?? cursor;
   }
+}
+
+/** The chain effect one received message committed; the pending fold reads it back. */
+const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
+
+/**
+ * Pending-message projection (W5.2): `prompt` actions carrying an inbox
+ * payload whose id no `inbox.deliver` action references yet, folded from the
+ * chain — there is no inbox table.
+ */
+function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+  return requiredActionsIn(context)
+    .pendingMessages(sessionId)
+    .map((action, index) => {
+      const effect = ReceivedEffect.parse(action.effect.value);
+      return Inbox.Row.parse({
+        id: action.id,
+        sessionId: action.sessionId,
+        kind: effect.inboxKind,
+        content: effect.content,
+        origin: action.intent,
+        status: "pending",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: action.ts,
+        ordinal: index + 1,
+      });
+    });
 }
 
 function rowIn(context: SessionKernelContext, sessionId: string): LedgerSession.Row {
@@ -512,7 +531,6 @@ function snapshotFor(
     lease: {
       owner: current.leaseOwner,
       fence: current.leaseFence,
-      expiresAt: current.leaseExpiresAt,
     },
     toolsGeneration: current.toolsGeneration,
     systemHash: current.systemHash,
@@ -709,15 +727,6 @@ function sessionWritesIn(context: SessionKernelContext) {
   });
 }
 
-function inboxWritesIn(context: SessionKernelContext) {
-  return writeEffect("storage.inbox", (refuse) => {
-    if (!context.writable()) return refuse(new StorageUnavailable({ capability: "storage" }));
-    const inbox = context.stores().inbox;
-    if (inbox === undefined) return refuse(new StorageUnavailable({ capability: "inbox" }));
-    return inbox;
-  });
-}
-
 function requiredSessionsIn(context: SessionKernelContext) {
   const adapter = context.stores().sessions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: sessions");
@@ -730,30 +739,14 @@ function requiredActionsIn(context: SessionKernelContext) {
   return adapter;
 }
 
-function requiredInboxIn(context: SessionKernelContext) {
-  const adapter = context.stores().inbox;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: inbox");
-  return adapter;
-}
-
 function makeSessionKernel(context: SessionKernelContext) {
   return {
     materialize: (input: MaterializeInput) => materializeIn(context, input),
-    acquireLease: (input: LedgerSession.AcquireLease): Effect.Effect<LeaseReceipt, LedgerError> =>
-      sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.acquireLease(input))),
-    renewLease: (input: LedgerSession.RenewLease): Effect.Effect<true, LedgerError> =>
-      sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.renewLease(input))),
+    adoptFence: (input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError> =>
+      sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
     commitRequestTransition: (input: LedgerSession.Commit) => commitIn(context, input),
-    commitInbox: (input: Inbox.Commit): Effect.Effect<Inbox.Row, LedgerError> =>
-      inboxWritesIn(context).pipe(Effect.flatMap((inbox) => inbox.commit(input))),
-    commitReceivedMessage: (
-      input: Inbox.Commit,
-    ): Effect.Effect<{ row: Inbox.Row; receipt: LedgerAction.Receipt }, LedgerError> =>
-      inboxWritesIn(context).pipe(Effect.flatMap((inbox) => inbox.receive(input))),
-    pendingInbox: (sessionId: string): Inbox.Row[] =>
-      requiredInboxIn(context).list(sessionId, "pending"),
-    inboxRows: (sessionId: string): Inbox.Row[] => requiredInboxIn(context).list(sessionId),
+    pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,
       throughRevision = Number.MAX_SAFE_INTEGER,
@@ -827,8 +820,6 @@ function makeSessionKernel(context: SessionKernelContext) {
     },
     row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
     listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
-    openChildCount: (parentId: string): number =>
-      requiredSessionsIn(context).openChildCount(parentId),
     policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
     currentPolicyGeneration: (): number =>
       policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
@@ -848,9 +839,8 @@ export type SessionKernel = ReturnType<typeof makeSessionKernel>;
 /**
  * Handle-scoped kernel factory (W5.2 review F1): session facts (row, chain,
  * snapshots) come from one per-session store; policy rows come from the
- * catalog. The inbox-table plane is intentionally absent — pending admission
- * over per-session files is a chain fold, so inbox operations fail closed on
- * factory-built kernels.
+ * catalog. There is no inbox table — `pendingMessages` folds the pending
+ * projection straight from the action chain.
  */
 export function createSessionKernel(session: SessionStore, catalog: CatalogStore): SessionKernel {
   return makeSessionKernel({
@@ -863,53 +853,3 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
     writable: () => true,
   });
 }
-
-const defaultKernel = makeSessionKernel(defaultKernelContext);
-
-// TEMP wave-1 module surface (deleted with the process-global storage plane):
-// existing `SessionHandleStore.*` consumers keep working against the
-// `Storage`-backed default kernel while new code takes handle-scoped kernels.
-export const {
-  materialize,
-  acquireLease,
-  renewLease,
-  commit,
-  commitRequestTransition,
-  commitInbox,
-  commitReceivedMessage,
-  pendingInbox,
-  inboxRows,
-  latestAction,
-  latestFoldCheckpoint,
-  priorModelAttempt,
-  generationFor,
-  turnTerminalFor,
-  latestTurnTerminal,
-  turnIntentsPage,
-  openTurnsPage,
-  latestOpenTurn,
-  resultFor,
-  requestInputById,
-  guardedOperationsPage,
-  openOperationsPage,
-  operationChildrenPage,
-  actionById,
-  latestGenerationFor,
-  policyDecisionRuleIds,
-  messageActionByPlatformId,
-  outboundReceipt,
-  verifyChain,
-  historyPage,
-  requestStatesPage,
-  requestRows,
-  outboundStatesPage,
-  outboundRows,
-  requestById,
-  row,
-  listRows,
-  openChildCount,
-  policyRows,
-  currentPolicyGeneration,
-  getSnapshot,
-  watchSnapshot,
-} = defaultKernel;

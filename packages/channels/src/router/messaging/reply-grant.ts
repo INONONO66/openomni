@@ -1,5 +1,5 @@
 import { Gateway, Operational, type BusEvent } from "@openomni/protocol";
-import { ReplyGrantStore } from "@openomni/ledger";
+import type { ChannelStores } from "../stores.js";
 import { deliverySurfaceKey } from "./grant.js";
 
 /**
@@ -79,6 +79,7 @@ function ruleCovers(rule: Gateway.ReplyGrantRule, admission: ReplyGrantAdmission
 }
 
 export function createReplyGrantInstances(ports: {
+  stores: ChannelStores;
   readonly rules: () => readonly Gateway.ReplyGrantRule[];
   /** Injected observation sink — materialization and capacity refusals are audited, never silent. */
   readonly publish: BusEvent.Sink["publish"];
@@ -102,7 +103,7 @@ export function createReplyGrantInstances(ports: {
       } satisfies Gateway.SenderTargetGrant;
       Gateway.SenderTargetGrant.parse(instance);
       // First contact, expiry and the cap are atomic across router instances.
-      const result = ReplyGrantStore.claim(instance, {
+      const result = ports.stores.replyGrants.claim(instance, {
         at: admission.at,
         maxLiveInstances: rule.maxLiveInstances,
       });
@@ -145,7 +146,7 @@ export function createReplyGrantInstances(ports: {
 
   return {
     list(at = Date.now()) {
-      return ReplyGrantStore.listLive(at);
+      return ports.stores.replyGrants.listLive(at);
     },
     admit,
   };

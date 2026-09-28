@@ -11,7 +11,6 @@ export interface SessionControllerState {
   terminalFrozen: boolean;
   released: boolean;
   successor: SessionHandle | undefined;
-  heartbeat: Fiber.Fiber<void, SessionError> | undefined;
   retainedRunner: Fiber.Fiber<void, SessionError> | undefined;
   retainedFailure: SessionError | undefined;
   rawSlots: ReturnType<typeof createRawSlots>;

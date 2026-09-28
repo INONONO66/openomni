@@ -27,16 +27,16 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
     const executor = prepared.config.executor;
     if (executor.recover === undefined || executor.runAttempts === undefined || executor.judgeStop === undefined)
       return yield* Effect.die(new Error("durable chat runner requires session authority"));
-    const captured = hydrateSessionHistory(input.sessionId);
+    const captured = hydrateSessionHistory(input.kernel, input.sessionId);
     yield* executor.recover();
-    const refreshed = refreshSessionHistory(input.sessionId, captured);
+    const refreshed = refreshSessionHistory(input.kernel, input.sessionId, captured);
     const operation = runAgent({
       messages,
       history: refreshed.history,
       traceContext: prepared.traceContext,
     }, {
       ...prepared.config,
-      pinnedModel: pinnedModelSelection(input.sessionId, input.turnId),
+      pinnedModel: pinnedModelSelection(input.kernel, input.sessionId, input.turnId),
       execution: { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop },
       signal: input.signal,
       boundary: input.boundary,

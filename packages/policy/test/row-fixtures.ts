@@ -1,12 +1,12 @@
-import { SqliteStorageAdapter } from "../../ledger/src/storage/sqlite-storage";
+import { openCatalogStore } from "../../ledger/src/storage/catalog-store";
 import type { PlainValue, PolicyRow, Storage } from "@openomni/protocol";
 
 export function withPolicyRows<A>(run: (source: Storage.PolicyRowSubAdapter) => A): A {
-  const storage = new SqliteStorageAdapter(":memory:");
+  const catalog = openCatalogStore(":memory:");
   try {
-    return run(storage.policies);
+    return run(catalog.policies);
   } finally {
-    storage.close();
+    catalog.close();
   }
 }
 

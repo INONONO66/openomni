@@ -1,5 +1,5 @@
 import type { Actor } from "@openomni/protocol";
-import { BlacklistStore } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 
 interface BlacklistMatchInput {
   readonly actorId?: string;
@@ -42,8 +42,9 @@ function entryMatches(entry: Actor.BlacklistEntry, input: BlacklistMatchInput): 
 
 /** Matches raw blacklist facts at the perimeter, where deny authority lives. */
 export function matchBlacklist(
+  stores: ChannelStores,
   input: BlacklistMatchInput,
   now = Date.now(),
 ): Actor.BlacklistEntry | undefined {
-  return BlacklistStore.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
+  return stores.blacklist.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
 }

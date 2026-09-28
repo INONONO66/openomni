@@ -2,8 +2,6 @@ import { expect, test } from "bun:test";
 import { Context } from "effect";
 import {
   type CommitReceipt,
-  type InboxWriteAdapter,
-  type LeaseReceipt,
   LedgerWrites,
   type SessionWriteAdapter,
 } from "../packages/ledger/src/index";
@@ -22,27 +20,19 @@ test("the ledger write Tag is keyed by its package path", () => {
 });
 
 test("ledger write receipts are the ok arms of the protocol results", () => {
-  // Type-level contract: the receipt aliases are the `ok: true` arms, and the
-  // adapter member sets are exactly these keys. A drift fails to compile.
-  const okArms: [CommitReceipt["ok"], LeaseReceipt["ok"]] = [true, true];
-  const members: Record<keyof Context.Service.Shape<typeof LedgerWrites>, string> = {
-    sessions: "SessionWriteAdapter",
-    inbox: "InboxWriteAdapter",
-    alarms: "AlarmWriteAdapter",
-  };
+  // Type-level contract: the commit receipt is the `ok: true` arm and the
+  // session adapter keeps the fenced chain-write surface (W5.2: the lease and
+  // alarm/inbox planes are deleted; the session port is the write authority).
+  // A drift fails to compile.
+  const okArm: CommitReceipt["ok"] = true;
   const sessionKeys: ReadonlyArray<keyof SessionWriteAdapter> = [
     "create",
     "materialize",
-    "acquireLease",
-    "renewLease",
     "commit",
   ];
-  const inboxKeys: ReadonlyArray<keyof InboxWriteAdapter> = ["commit", "receive", "list"];
   const serverKeys: ReadonlyArray<keyof IpcServer> = ["socketPath", "call", "notify", "useConnection", "close"];
-  void okArms;
-  void members;
+  void okArm;
   void sessionKeys;
-  void inboxKeys;
   void serverKeys;
 });
 

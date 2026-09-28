@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
-import type { Storage } from "./storage";
+import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
-type SurfaceKeyAdapter = NonNullable<Storage.Adapter["surfaceKey"]>;
+type SurfaceKeyAdapter = ProtocolStorage.SurfaceKeySubAdapter;
 
 export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
   return {

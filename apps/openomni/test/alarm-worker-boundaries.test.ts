@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Storage } from "@openomni/ledger";
 import { canonicalDigest } from "@openomni/protocol";
-import { AlarmSourceError } from "../src/composition/alarm-sources";
+import { AlarmSourceError } from "../src/composition/watch-sources";
 import { alarmFixture } from "./helpers/alarm";
 import { alarmSummary } from "./helpers/alarm-payload";
 import { runEffect } from "./helpers/effect";

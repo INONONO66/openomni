@@ -6,7 +6,7 @@ import {
   type Gateway,
   type RouteNotDelivered,
 } from "@openomni/protocol";
-import { DecisionFacts } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import { targetsOfRequest, responderCandidates, ingressEvidence } from "./request/matcher.js";
 import type { GatewayRouterPorts } from "./message-ports.js";
 import type { resolveAndRecordRoute } from "./routing-resolution.js";
@@ -15,12 +15,20 @@ import { IngressRoutingError } from "../errors";
 // A rejected request-correlated delivery records a correction without changing
 // the original route decision. Redelivery preserves the first correction fact.
 function recordRouteNotDelivered(
+  stores: ChannelStores,
   event: Gateway.DeliveredEvent,
   decision: Ingress.RoutingDecisionPayload,
   reason: string,
 ): void {
   // The route was just recorded through this synchronous adapter.
-  const decisionFacts = DecisionFacts.port() as DecisionFacts.Port;
+  const decisionFacts = stores.decisionFacts.port();
+  if (decisionFacts === undefined) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      "Storage adapter does not implement decision facts — routing corrections fail closed",
+      decision,
+    );
+  }
   const streamId = Ingress.routeCorrectionStreamId(event);
   const correction: RouteNotDelivered = { inboundId: event.id, reason };
   let outcome: ReturnType<typeof decisionFacts.record>;
@@ -70,6 +78,7 @@ export function requireRoutedDecision(decision: Ingress.RoutingDecisionPayload):
 }
 
 export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
+  stores: ChannelStores,
   resolution: ReturnType<typeof resolveAndRecordRoute<Event>>,
   decision: RoutedDecision,
   requests: GatewayRouterPorts["requests"],
@@ -82,7 +91,7 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   const record = matched.record;
   const actor = resolution.event.meta?.actor;
   const candidates = responderCandidates(
-    targetsOfRequest(record),
+    targetsOfRequest(stores, record),
     ingressEvidence(resolution.event, matched.correlation),
   );
   let outcome: SessionTransition.Resolution = "rejected";
@@ -117,7 +126,7 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   }
   if (outcome === "attached" || outcome === "resolved") return;
   const reason = `request reply rejected: ${outcome}`;
-  recordRouteNotDelivered(resolution.event, decision, reason);
+  recordRouteNotDelivered(stores, resolution.event, decision, reason);
   return yield* new IngressRoutingError("request_reply_rejected", reason, decision);
   });
 }

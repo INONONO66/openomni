@@ -1,13 +1,18 @@
 import { Effect, Result } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
+import { commitReceivedMessage } from "./ingress";
 
-/** Lands an outbound message in the destination's inbox exactly as a live dispatcher would. */
-export function receiveOutbound(message: SessionTransition.OutboundMessage, createdAt: number) {
+/** Lands an outbound message in the destination's chain exactly as a live dispatcher would. */
+export function receiveOutbound(
+  kernel: SessionKernel,
+  message: SessionTransition.OutboundMessage,
+  createdAt: number,
+) {
   return Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
-        SessionHandleStore.commitReceivedMessage({
+        commitReceivedMessage(kernel, {
           id: message.messageId,
           sessionId: message.destinationSessionId,
           kind: "prompt",

@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type LedgerAction, type SessionGeneration, SessionTurn } from "@openomni/protocol";
-import { Effect } from "effect";
 import { createSessionKernel } from "../../src/session/kernel";
 import {
   bootstrapStoreDatabase,
@@ -135,32 +134,23 @@ test("createSessionKernel serves session facts from the session file and policy 
     );
     expect(created.row).toMatchObject({ id: "s1", state: "idle" });
 
-    const lease = runLedgerSync(
-      kernel.acquireLease({
-        sessionId: "s1",
-        owner: "owner",
-        expectedFence: created.row.leaseFence,
-        now: 2,
-        expiresAt: 10_000,
-      }),
+    const adopted = runLedgerSync(
+      kernel.adoptFence({ sessionId: "s1", owner: "owner", fence: created.row.leaseFence + 1 }),
     );
-    expect(lease.ok).toBe(true);
-    if (!lease.ok) throw new Error("lease acquisition failed");
+    expect(adopted).toEqual({ ok: true, fence: 1 });
 
     const generation = kernel.latestGenerationFor("s1");
     const committed = runLedgerSync(
       kernel.commit({
         sessionId: "s1",
         owner: "owner",
-        fence: lease.fence,
+        fence: adopted.fence,
         now: 3,
         expectedRevision: kernel.row("s1").revision,
         actions: [
           turnIntentAction({ id: "turn-1", sessionId: "s1", parentId: "s1:configure", generation }),
         ],
-        consumeInboxIds: [],
         state: "running",
-        releaseLease: false,
       }),
     );
     expect(committed.ok).toBe(true);
@@ -205,23 +195,9 @@ test("createSessionKernel serves session facts from the session file and policy 
     expect(kernel.policyRows()).toHaveLength(1);
     expect(kernel.currentPolicyGeneration()).toBe(1);
 
-    // The inbox-table plane is intentionally absent from fresh session files:
-    // reads fail closed, writes refuse with a typed StorageUnavailable.
-    expect(() => kernel.pendingInbox("s1")).toThrow("L0 storage capability is unavailable: inbox");
-    const refusal = runLedgerSync(
-      Effect.flip(
-        kernel.commitInbox({
-          id: "inbox-1",
-          sessionId: "s1",
-          kind: "prompt",
-          content: "hello",
-          origin: { encodingVersion: 1, value: { source: "test" } },
-          createdAt: 5,
-          parentActionId: "turn-1",
-        }),
-      ),
-    );
-    expect(refusal).toMatchObject({ _tag: "StorageUnavailable", capability: "inbox" });
+    // The inbox-table plane is gone (W5.2 #1197): pending work is a pure
+    // projection over undelivered prompt actions, and a fresh file has none.
+    expect(kernel.pendingMessages("s1")).toEqual([]);
   } finally {
     session.close();
     catalog.close();

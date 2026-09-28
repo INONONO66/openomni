@@ -1,9 +1,11 @@
 import { runAgentSync } from "./executor";
 import { executionReads } from "./execution-reads";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
+import { fencedTurnFixture } from "./fenced-writer";
+import { isolatedLedger } from "./isolated";
+import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime } from "./session-services";
 import { Effect, Result } from "effect";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "@openomni/ledger";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";
 import { commitFoldBatch } from "../../src/session-fold-commit";
@@ -20,113 +22,51 @@ export function requestLedger(
     clock?: () => number;
     onRequest?: (request: SessionTransition.Request) => void;
     domainRevisions?: SessionRuntime["requestDomainRevisions"];
+    kernel?: SessionKernel;
   } = {},
 ) {
+  const kernel = input.kernel ?? isolatedLedger().kernel;
   const id = input.id ?? "request-session";
   const clock = input.clock ?? (() => 100);
-  const created = Result.getOrThrowWith(
+  const commit =
+    input.legacy === true
+      ? kernel.commit
+      : (batch: LedgerSession.Commit) => commitFoldBatch(kernel, batch);
+  const opened = Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
-        SessionHandleStore.materialize({
+        fencedTurnFixture(kernel, {
           id,
-          role: "resident",
-          parentId: null,
-          policyGeneration: 1,
-          tools: [],
-          system: { preset: "", blocks: [] },
-          actionId: `${id}:configure`,
-          at: clock(),
+          clock,
+          turnId: input.turnId,
+          resultId: input.resultId,
+          commit,
         }),
       ),
     ),
     (error: LedgerError) => error,
   );
-  const owner = `${id}:owner`;
-  const lease = Result.getOrThrowWith(
-    Effect.runSync(
-      Effect.result(
-        SessionHandleStore.acquireLease({
-          sessionId: id,
-          owner,
-          expectedFence: created.row.leaseFence,
-          now: clock(),
-          expiresAt: clock() + 30_000,
-        }),
-      ),
-    ),
-    (error: LedgerError) => error,
-  );
-  if (!lease.ok) throw new Error("test lease refused");
-  const generation = SessionHandleStore.latestGeneration(sessionTree(id));
-  const turnId = input.turnId ?? `${id}:turn`;
-  const commit = input.legacy === true ? SessionHandleStore.commit : commitFoldBatch;
-  if (!sessionTree(id).some((action: LedgerAction.Node) => action.id === turnId)) {
-    const row = SessionHandleStore.row(id);
-    const opened = Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          commit({
-            sessionId: id,
-            owner,
-            fence: lease.fence,
-            now: clock(),
-            expectedRevision: row.revision,
-            consumeInboxIds: [],
-            state: "running",
-            releaseLease: false,
-            actions: [
-              {
-                id: turnId,
-                sessionId: id,
-                parentId: `${id}:configure`,
-                kind: "turn",
-                intent: {
-                  encodingVersion: 1,
-                  value: {
-                    phase: "intent",
-                    resultId: input.resultId ?? `${id}:result`,
-                    inboxIds: [],
-                    resumeCount: 0,
-                    boundaryActionId: null,
-                    toolsGeneration: generation.generation,
-                    toolsHash: generation.toolsHash,
-                    systemHash: generation.systemHash,
-                    policyGeneration: 1,
-                  },
-                },
-                effect: { encodingVersion: 1, value: { phase: "pending" } },
-                ts: clock(),
-                irreversible: true,
-              },
-            ],
-          }),
-        ),
-      ),
-      (error: LedgerError) => error,
-    );
-    if (!opened.ok) throw new Error("test turn refused");
-  }
+  const { owner, fence, generation, turnId } = opened;
   const runtime: SessionRuntime = {
     authorizeConfigure: allowConfigure,
     clock,
     observations: collector(),
     requestDomainRevisions: input.domainRevisions,
+    ...kernelRuntime(() => kernel),
   };
   const ledger: ExecutionLedger = {
-    ...executionReads(id),
+    ...executionReads(kernel, id),
     commit(action: LedgerAction.Append) {
       return Effect.gen(function* () {
-        const row = SessionHandleStore.row(id);
-        const committed = yield* commitFoldBatch({
+        const row = kernel.row(id);
+        const committed = yield* commitFoldBatch(kernel, {
           sessionId: id,
           owner,
-          fence: lease.fence,
+          fence,
           now: clock(),
           expectedRevision: row.revision,
           actions: [action],
-          consumeInboxIds: [],
           state: row.state,
-          releaseLease: false,
         });
         const receipt = committed.receipts[0];
         if (receipt === undefined) throw new Error("test receipt missing");
@@ -136,8 +76,9 @@ export function requestLedger(
     transition(payload: SessionTransition.Payload, inputId: string, at: number) {
       return Effect.gen(function* () {
         const decision = yield* commitSessionRequest(
+          kernel,
           id,
-          { owner, fence: lease.fence },
+          { owner, fence },
           payload,
           inputId,
           at,
@@ -150,10 +91,10 @@ export function requestLedger(
   };
   return {
     commitBatch(actions: readonly LedgerAction.Append[], overrides: Partial<LedgerSession.Commit> = {}) {
-      const row = SessionHandleStore.row(id);
-      return runAgentSync(commitFoldBatch({
-        sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: row.revision,
-        actions: [...actions], consumeInboxIds: [], state: row.state, releaseLease: false,
+      const row = kernel.row(id);
+      return runAgentSync(commitFoldBatch(kernel, {
+        sessionId: id, owner, fence, now: clock(), expectedRevision: row.revision,
+        actions: [...actions], state: row.state,
         ...overrides,
       }));
     },

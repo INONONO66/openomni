@@ -6,7 +6,7 @@ import { Bench } from "tinybench";
 import { L0Observation, type LedgerSession, type Message } from "@openomni/protocol";
 import { Bus } from "../test/helpers/observation";
 import { materializeSession } from "../test/helpers/session";
-import { SessionHandleStore, Storage } from "../src/index";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "../src/index";
 import { prepareTurnCommit, seedTurnHistory } from "./seed-turn-history";
 
 type BenchmarkResult = {
@@ -40,29 +40,46 @@ function recordResults(suite: string, bench: Bench): void {
   }
 }
 
+interface BenchStores {
+  readonly kernel: SessionHandleStore.SessionKernel;
+  close(): void;
+}
+
+function openBenchStores(): BenchStores {
+  const session = openSessionStore(":memory:");
+  const catalog = openCatalogStore(":memory:");
+  return {
+    kernel: SessionHandleStore.createSessionKernel(session, catalog),
+    close() {
+      session.close();
+      catalog.close();
+    },
+  };
+}
+
 async function runSessionHydration(): Promise<void> {
-  Storage.initialize({ dbPath: ":memory:" });
+  const stores = openBenchStores();
   try {
     const sessions = Array.from({ length: 100 }, (_, index) => {
       const id = `bench-session-${index}`;
-      seedTurnHistory(id);
+      seedTurnHistory(stores.kernel, id);
       return id;
     });
     const bench = new Bench(measurement);
     let cursor = 0;
     bench.add("get-session", () => {
-      SessionHandleStore.row(sessions[cursor++ % sessions.length] ?? "");
+      stores.kernel.row(sessions[cursor++ % sessions.length] ?? "");
     });
     // Keep the historical metric key; the live reader now folds canonical turns.
     bench.add("get-messages", () => {
-      SessionHandleStore.getSnapshot(sessions[cursor++ % sessions.length] ?? "", 10).turns.flatMap(
-        (turn) => turn.messages,
-      );
+      stores.kernel
+        .getSnapshot(sessions[cursor++ % sessions.length] ?? "", 10)
+        .turns.flatMap((turn) => turn.messages);
     });
     await bench.run();
     recordResults("session-hydration", bench);
   } finally {
-    Storage.reset();
+    stores.close();
   }
 }
 
@@ -124,66 +141,75 @@ async function runMessageSerialization(): Promise<void> {
 }
 
 async function runStorageSessionList(): Promise<void> {
-  // Each measured task completes before its owned adapter is closed.
+  // Each measured task completes before its owned stores are closed.
   for (const count of [10, 100, 500]) {
-    Storage.initialize({ dbPath: ":memory:" });
+    const stores = openBenchStores();
     try {
-      for (let index = 0; index < count; index += 1) materializeSession(`list-${count}-${index}`);
+      for (let index = 0; index < count; index += 1)
+        materializeSession(stores.kernel, `list-${count}-${index}`);
       const bench = new Bench(measurement);
       bench.add(`${count}-sessions`, () => {
-        SessionHandleStore.listRows();
+        stores.kernel.listRows();
       });
       await bench.run();
       recordResults("storage-session-list", bench);
     } finally {
-      Storage.reset();
+      stores.close();
     }
   }
 }
 
 async function runSessionTree(): Promise<void> {
-  Storage.initialize({ dbPath: ":memory:" });
+  const stores = openBenchStores();
   try {
-    const bench = new Bench({ iterations: 5, warmupTime: 100, warmupIterations: 2, ...measurement });
+    const bench = new Bench({
+      iterations: 5,
+      warmupTime: 100,
+      warmupIterations: 2,
+      ...measurement,
+    });
     for (const count of [1_000, 10_000]) {
       const id = `tree-${count}`;
-      seedTurnHistory(id, count / 2);
+      seedTurnHistory(stores.kernel, id, count / 2);
       bench.add(`${count / 1_000}k-actions`, () => {
-        SessionHandleStore.getSnapshot(id, 10);
+        stores.kernel.getSnapshot(id, 10);
       });
     }
     await bench.run();
     recordResults("session-tree", bench);
     const history = new Bench(measurement);
     history.add("page", () => {
-      SessionHandleStore.historyPage("tree-10000", { limit: 50 });
+      stores.kernel.historyPage("tree-10000", { limit: 50 });
     });
     await history.run();
     recordResults("session-history", history);
   } finally {
-    Storage.reset();
+    stores.close();
   }
 }
 
 async function runSessionCommit(): Promise<void> {
-  Storage.initialize({ dbPath: ":memory:" });
+  const stores = openBenchStores();
   try {
     const id = "commit-session";
-    seedTurnHistory(id);
-    const generation = SessionHandleStore.latestGenerationFor(id);
-    let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
+    seedTurnHistory(stores.kernel, id);
+    const generation = stores.kernel.latestGenerationFor(id);
+    let parentId = stores.kernel.latestAction(id)?.id ?? null;
     let index = 10;
     let request: LedgerSession.Commit;
-    let result: Effect.Success<ReturnType<typeof SessionHandleStore.commit>>;
+    let result: Effect.Success<ReturnType<typeof stores.kernel.commit>>;
     const bench = new Bench(measurement);
     bench.add(
       "action",
       () => {
-        result = Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
+        result = Result.getOrThrowWith(
+          Effect.runSync(Effect.result(stores.kernel.commit(request))),
+          (error) => error,
+        );
       },
       {
         beforeEach() {
-          request = prepareTurnCommit(id, index++, parentId, generation);
+          request = prepareTurnCommit(stores.kernel, id, index++, parentId, generation);
           request.actions = request.actions.slice(0, 1);
         },
         afterEach() {
@@ -195,7 +221,7 @@ async function runSessionCommit(): Promise<void> {
     await bench.run();
     recordResults("session-commit", bench);
   } finally {
-    Storage.reset();
+    stores.close();
   }
 }
 
@@ -209,6 +235,5 @@ try {
   mkdirSync("bench-results", { recursive: true });
   await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);
 } finally {
-  Storage.reset();
   Bus.reset();
 }

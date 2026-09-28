@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "../cluster/kernel-registry";
 import {
   canonicalDigest,
   Message,
@@ -69,13 +69,12 @@ function pinIntent(
   return { ...action, intent: { encodingVersion: 1, value: { ...intent, context: current } } };
 }
 
-function capturedSource(action: LedgerAction.Append): Source {
-  const parent =
-    action.parentId === null ? undefined : SessionHandleStore.actionById(action.parentId);
+function capturedSource(kernel: SessionKernel, action: LedgerAction.Append): Source {
+  const parent = action.parentId === null ? undefined : kernel.actionById(action.parentId);
   if (parent?.sessionId !== action.sessionId) return refuse(action);
   const intent = PlainObjectSchema.parse(parent.intent.value);
   if (intent.context === undefined) {
-    const prior = hydrateSessionHistory(action.sessionId, parent.ordinal - 1);
+    const prior = hydrateSessionHistory(kernel, action.sessionId, parent.ordinal - 1);
     return identity(action.sessionId, prior.state, prior.revision);
   }
   const captured = Source.safeParse(intent.context);
@@ -83,12 +82,13 @@ function capturedSource(action: LedgerAction.Append): Source {
 }
 
 function pinResult(
+  kernel: SessionKernel,
   action: LedgerAction.Append,
   effect: PlainObject,
   value: PlainObject,
   current: Source,
 ): LedgerAction.Append {
-  const captured = capturedSource(action);
+  const captured = capturedSource(kernel, action);
   if (
     captured.predecessorProjectionHash !== current.predecessorProjectionHash ||
     captured.predecessorActionId !== current.predecessorActionId ||
@@ -118,6 +118,7 @@ function pinResult(
 
 /** The admission watermark and successor proof share the caller's fenced commit. */
 export function pinCompactionAction(
+  kernel: SessionKernel,
   action: LedgerAction.Append,
   state: FoldCheckpoint.State,
   sourceRevision: number,
@@ -131,5 +132,5 @@ export function pinCompactionAction(
     return action;
   const value = PlainObjectSchema.safeParse(effect.result);
   if (!value.success || !Array.isArray(value.data.projection)) return action;
-  return pinResult(action, effect, value.data, current);
+  return pinResult(kernel, action, effect, value.data, current);
 }

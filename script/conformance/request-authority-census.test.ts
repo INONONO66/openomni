@@ -32,15 +32,19 @@ describe("original-action authority census", () => {
     ).toContainEqual(expect.objectContaining({ rule: "legacy-api", path }));
   });
 
-  test("archival exceptions permit old SQL, never resurrected APIs", () => {
-    const path = "packages/ledger/test/storage/request-migration.test.ts";
+  test("former archival exception paths retain no SQL or API allowance", () => {
+    // W5.2 deleted the migration/archive plane; the operation-scoped
+    // exceptions left with it, so old writers are refused on any path.
+    const path = "packages/ledger/test/storage/projection.test.ts";
     const source = `db.exec("UPDATE ${waitTable} SET status = 'open'");`;
-    expect(authorityViolations(path, source)).toEqual([]);
+    expect(authorityViolations(path, source)).toContainEqual(
+      expect.objectContaining({ rule: "legacy-sql", path }),
+    );
     expect(authorityViolations(path, `export interface ${retiredApproval} {}`)).toContainEqual(
       expect.objectContaining({ rule: "legacy-api" }),
     );
     expect(
-      authorityViolations("packages/ledger/src/storage/u969-preflight.ts", source),
+      authorityViolations("packages/ledger/src/storage/preflight.ts", `db.exec("DELETE FROM ${waitTable}")`),
     ).toContainEqual(expect.objectContaining({ rule: "legacy-sql" }));
   });
 
@@ -49,7 +53,7 @@ describe("original-action authority census", () => {
     `db.exec("INSERT INTO [${approvalTable}] (id) VALUES (?)")`,
     `db.exec("DELETE FROM \`${waitTable}\`")`,
     `db.exec("SELECT * FROM ${approvalTable}")`,
-  ])("rejects legacy SQL outside the exact archive operation allowance: %s", (source) => {
+  ])("rejects legacy SQL without any archive allowance: %s", (source) => {
     expect(authorityViolations("packages/probe/test/fixture.ts", source)).toContainEqual(
       expect.objectContaining({ rule: "legacy-sql" }),
     );
@@ -73,18 +77,17 @@ describe("original-action authority census", () => {
     expect(Object.keys(protocol.SessionTransition.Request.shape)).toContain("requestId");
   });
 
-  test("a read-only migration exception cannot delete old live rows", () => {
-    const source = `db.exec("DELETE FROM ${waitTable}")`;
-    expect(
-      authorityViolations("packages/ledger/src/storage/u969-preflight.ts", source),
-    ).toContainEqual(expect.objectContaining({ rule: "legacy-sql" }));
-  });
-
-  test("frozen archive formats cannot become a public compatibility alias", () => {
-    const source = 'export * from "../../ledger/src/storage/historical-request-format";';
-    expect(authorityViolations("packages/protocol/src/index.ts", source)).toContainEqual(
-      expect.objectContaining({ rule: "archive-boundary" }),
-    );
+  test("frozen archive identifiers cannot be reintroduced anywhere", () => {
+    const frozen = ["Historical", "Wait"].join("");
+    const source = `export type Alias = ${frozen};`;
+    for (const path of [
+      "packages/protocol/src/index.ts",
+      "packages/ledger/src/storage/request-format.ts",
+    ]) {
+      expect(authorityViolations(path, source)).toContainEqual(
+        expect.objectContaining({ rule: "archive-boundary", path, match: frozen }),
+      );
+    }
   });
 
   test("the real git census sees untracked fixtures and rejects a reintroduced writer", async () => {

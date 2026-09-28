@@ -4,7 +4,7 @@ import type { Actor } from "../actor/index.js";
 import type { DecisionFact } from "../ledger/index.js";
 import type { Gateway } from "../gateway/index.js";
 import type { Provisioning } from "../provisioning/index.js";
-import type { Alarm, Inbox, LedgerAction, LedgerSession, PolicyRow } from "../ledger/l0.js";
+import type { LedgerAction, LedgerSession, PolicyRow } from "../ledger/l0.js";
 
 export namespace Storage {
   export interface ActionSubAdapter {
@@ -60,6 +60,11 @@ export namespace Storage {
     verifyChain(sessionId: string): LedgerAction.ChainVerdict;
     /** Revision-ordered actions with `ordinal > afterRevision`, at most `limit` of them. */
     range(sessionId: string, afterRevision: number, limit: number): LedgerAction.Node[];
+    /**
+     * Chain-fold pending projection (W5.2): `prompt` actions with an inbox
+     * payload that no later `inbox.deliver` action references, in chain order.
+     */
+    pendingMessages(sessionId: string): LedgerAction.Node[];
   }
 
   export interface SessionSubAdapter {
@@ -67,27 +72,9 @@ export namespace Storage {
     materialize(input: LedgerSession.Materialize): LedgerSession.MaterializeResult | undefined;
     get(id: string): LedgerSession.Row | undefined;
     list(): LedgerSession.Row[];
-    openChildCount(parentId: string): number;
-    acquireLease(input: LedgerSession.AcquireLease): LedgerSession.LeaseResult | undefined;
-    renewLease(input: LedgerSession.RenewLease): boolean;
+    /** True when the fence advanced (or already sits at exactly this owner+fence). */
+    adoptFence(input: LedgerSession.AdoptFence): boolean;
     commit(input: LedgerSession.Commit): LedgerSession.CommitResult | undefined;
-  }
-
-  export interface InboxSubAdapter {
-    commit(row: Inbox.Commit): Inbox.Row | undefined;
-    receive(row: Inbox.Commit): { row: Inbox.Row; receipt: LedgerAction.Receipt } | undefined;
-    list(sessionId: string, status?: Inbox.Status): Inbox.Row[];
-  }
-
-  export interface AlarmSubAdapter {
-    arm(row: Alarm.Arm): Alarm.Row | undefined;
-    /** Controls admit only this session's armed/paused watches; undefined means refusal. */
-    cancel(id: string, sessionId: string, updatedAt: number): Alarm.Row | undefined;
-    get(id: string): Alarm.Row | undefined;
-    rearm(id: string, sessionId: string, at: number): Alarm.Row | undefined;
-    acquire(id: string, expectedFence: number): Alarm.Row | undefined;
-    fire(input: Alarm.Fire): Alarm.Fired | undefined;
-    due(at: number): Alarm.Row[];
   }
 
   export interface PolicyRowSubAdapter {

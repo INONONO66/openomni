@@ -1,14 +1,15 @@
 import { Ingress } from "@openomni/protocol";
-import { DecisionFacts } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import { replyGrantEndpointFromFacts } from "./messaging/reply-grant";
 import { IngressRoutingError } from "../errors";
 
 /** Record before projection; a competing fact must preserve routing and reply authority. */
 export function recordRouteDecided(
+  stores: ChannelStores,
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
 ): Ingress.RoutingDecisionPayload {
-  const decisionFacts = DecisionFacts.port();
+  const decisionFacts = stores.decisionFacts.port();
   if (!decisionFacts) {
     throw new IngressRoutingError(
       "route_record_failed",

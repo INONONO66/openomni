@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { CommitFailed, } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import {
   canonicalDigest,
   PlainValueSchema,
@@ -35,14 +36,12 @@ export function outboundOpen(
   };
 }
 
-function toolsGeneration(message: SessionTransition.OutboundMessage): number {
-  const terminal = SessionHandleStore.turnTerminal(
-    SessionHandleStore.actionById(message.sourceActionId),
-  );
+function toolsGeneration(kernel: SessionKernel, message: SessionTransition.OutboundMessage): number {
+  const terminal = SessionHandleStore.turnTerminal(kernel.actionById(message.sourceActionId));
   const intent =
     terminal === undefined
       ? undefined
-      : SessionHandleStore.turnIntent(SessionHandleStore.actionById(terminal.turnId));
+      : SessionHandleStore.turnIntent(kernel.actionById(terminal.turnId));
   if (intent === undefined) throw new Error("outbound original turn is missing");
   return intent.toolsGeneration;
 }
@@ -90,41 +89,40 @@ function acknowledge(
 
 /** Drains recorded source obligations. It never seals again or writes a destination session. */
 export function dispatchSessionOutbound(
+  kernel: SessionKernel,
   sessionId: string,
   runtime: ResolvedSessionRuntime,
   owner: string,
   fence: number,
   clock: () => number,
-  releaseLease: boolean,
 ): Effect.Effect<void, SessionError> {
   return Effect.suspend(() => {
-    const commit = (actions: LedgerAction.Append[], release: boolean) => Effect.suspend(() => {
-      const row = SessionHandleStore.row(sessionId);
-      return SessionHandleStore.commit({
+    const commit = (actions: LedgerAction.Append[]) => Effect.suspend(() => {
+      const row = kernel.row(sessionId);
+      return kernel.commit({
         sessionId, owner, fence, now: clock(), expectedRevision: row.revision,
-        actions, consumeInboxIds: [], state: row.state, releaseLease: release,
+        actions, state: row.state,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
     });
-    const dispatch = Effect.forEach(SessionHandleStore.outboundRows(sessionId), (item) => Effect.scoped(Effect.gen(function* () {
+    return Effect.forEach(kernel.outboundRows(sessionId), (item) => Effect.scoped(Effect.gen(function* () {
       if (item.state === "delivered") return;
       // The receiver's durable commit is the proof, not a second dispatch. This
       // also works after it consumed the prompt and the sender lost the ACK.
-      const received = SessionHandleStore.outboundReceipt(
+      const received = kernel.outboundReceipt(
         item.message.destinationSessionId, item.message.messageId,
       );
       if (received !== undefined) {
-        yield* commit([acknowledge(item.message, received, clock())], false);
+        yield* commit([acknowledge(item.message, received, clock())]);
         return;
       }
       if (runtime.dispatchOutbound === undefined)
         return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
-      const captured = yield* runtime.generations.capture({ sessionId, generation: toolsGeneration(item.message) });
+      const captured = yield* runtime.generations.capture({ sessionId, generation: toolsGeneration(kernel, item.message) });
       const receipt = yield* captured.provide(runtime.dispatchOutbound({
         message: item.message,
         authority: { owner, fence },
       })).pipe(Effect.provide(runtime.services));
-      yield* commit([acknowledge(item.message, receipt, clock())], false);
+      yield* commit([acknowledge(item.message, receipt, clock())]);
     })), { discard: true });
-    return releaseLease ? dispatch.pipe(Effect.onExit(() => commit([], true).pipe(Effect.orDie))) : dispatch;
   });
 }

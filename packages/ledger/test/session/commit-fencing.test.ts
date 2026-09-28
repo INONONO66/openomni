@@ -2,20 +2,12 @@ import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
-import { Storage } from "../../src/storage/storage";
-import { useMemoryStorage } from "../helpers/storage";
+import { runLedgerSync } from "../helpers/effect";
+import { useMemoryStores } from "../helpers/storage";
 
-useMemoryStorage();
+const stores = useMemoryStores();
 
 const sessionId = "commit-fencing";
-
-function stores() {
-  const sessions = Storage.get().sessions;
-  const actions = Storage.get().actions;
-  if (sessions === undefined || actions === undefined)
-    throw new Error("SQLite kernel adapters are missing");
-  return { sessions, actions };
-}
 
 function resultAction(id: string): LedgerAction.Append {
   return {
@@ -38,21 +30,20 @@ function commitAs(fence: number, actionId: string): LedgerSession.Commit {
     now: 10_001,
     expectedRevision: 0,
     actions: [resultAction(actionId)],
-    consumeInboxIds: [],
     state: "idle",
-    releaseLease: false,
   };
 }
 
-// C003: commit-time writer fencing. Owner A's lease expires mid-flight and a
-// successor re-acquires under the SAME owner name, so the fence is the only
+// C003: commit-time writer fencing. Activation A's fence is rotated away by a
+// successor activation under the SAME owner name, so the fence is the only
 // discriminator left. A's result commit must be REJECTED as a typed stale
-// outcome atomically: no action row, no revision movement, lease untouched.
+// outcome atomically: no action row, no revision movement, fence untouched.
 test("a stale fence is rejected at commit time with no partial row, even under the same owner name", () => {
-  const { sessions, actions } = stores();
+  const { sessions } = stores.session;
+  const actions = stores.session.actions;
   expect(
     Result.getOrThrowWith(
-      Effect.runSync(
+      runLedgerSync(
         Effect.result(
           sessions.create({
             id: sessionId,
@@ -60,7 +51,6 @@ test("a stale fence is rejected at commit time with no partial row, even under t
             role: "resident",
             leaseOwner: null,
             leaseFence: 0,
-            leaseExpiresAt: null,
             revision: 0,
             state: "idle",
             toolsGeneration: 0,
@@ -74,33 +64,17 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   ).toBe(true);
   expect(
     Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          sessions.acquireLease({
-            sessionId,
-            owner: "kernel-owner",
-            expectedFence: 0,
-            now: 0,
-            expiresAt: 10_000,
-          }),
-        ),
+      runLedgerSync(
+        Effect.result(sessions.adoptFence({ sessionId, owner: "kernel-owner", fence: 1 })),
       ),
       (error) => error,
     ),
   ).toEqual({ ok: true, fence: 1 });
-  // Inclusive expiry: the successor reclaims at exactly expiresAt with the same owner name.
+  // The successor activation adopts the next catalog fence under the same owner name.
   expect(
     Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          sessions.acquireLease({
-            sessionId,
-            owner: "kernel-owner",
-            expectedFence: 1,
-            now: 10_000,
-            expiresAt: 40_000,
-          }),
-        ),
+      runLedgerSync(
+        Effect.result(sessions.adoptFence({ sessionId, owner: "kernel-owner", fence: 2 })),
       ),
       (error) => error,
     ),
@@ -108,11 +82,11 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   const before = sessions.get(sessionId);
   expect(before).toMatchObject({ leaseOwner: "kernel-owner", leaseFence: 2, revision: 0 });
 
-  // Owner name matches, the live lease is unexpired, the revision is exact:
-  // only the fence is stale, and the rejection is typed with the current fence.
+  // Owner name matches and the revision is exact: only the fence is stale,
+  // and the rejection is typed with the current fence.
   const rejected = () =>
     Result.getOrThrowWith(
-      Effect.runSync(Effect.result(sessions.commit(commitAs(1, "stale-result")))),
+      runLedgerSync(Effect.result(sessions.commit(commitAs(1, "stale-result")))),
       (error) => error,
     );
   expect(rejected).toThrow(
@@ -126,13 +100,24 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(sessionTree(sessionId, actions)).toEqual([]);
   expect(sessions.get(sessionId)).toEqual(before);
 
+  // A re-adoption of an already-passed fence is refused as stale.
+  const readopt = () =>
+    Result.getOrThrowWith(
+      runLedgerSync(
+        Effect.result(sessions.adoptFence({ sessionId, owner: "other-owner", fence: 2 })),
+      ),
+      (error) => error,
+    );
+  expect(readopt).toThrow(
+    expect.objectContaining({ _tag: "LeaseRefused", reason: "stale", fence: 2 }),
+  );
+
   // The successor's fence commits the identical work exactly once.
   const committed = Result.getOrThrowWith(
-    Effect.runSync(Effect.result(sessions.commit(commitAs(2, "successor-result")))),
+    runLedgerSync(Effect.result(sessions.commit(commitAs(2, "successor-result")))),
     (error) => error,
   );
-  expect(committed?.ok).toBe(true);
-  if (committed?.ok !== true) throw new Error("successor commit was refused");
+  expect(committed.ok).toBe(true);
   expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2 });
   expect(sessionTree(sessionId, actions).map((action) => action.id)).toEqual(["successor-result"]);
 });

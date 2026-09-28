@@ -182,8 +182,6 @@ bun run script/check-deps.ts
 bun run script/check-import-cycles.ts
 bun run script/check-dead-exports.ts
 bun run script/verify-tsconfig-inheritance.ts
-bun run script/verify-ledger-rename.ts
-bun run script/check-ledger-schema-drift.ts
 bun test --timeout 15000
 
 # PR patch-coverage gate (#1116): changed executable lines must be covered by

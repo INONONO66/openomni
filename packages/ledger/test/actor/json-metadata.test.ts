@@ -1,42 +1,43 @@
 import { expect, test } from "bun:test";
-import { ActorRegistry } from "../../src";
-import { useSqliteStorage } from "../helpers/storage";
+import { createActorRegistry } from "../../src";
+import { useSqliteStores } from "../helpers/storage";
 
-const fixture = useSqliteStorage("actor-metadata");
+const stores = useSqliteStores("actor-metadata");
+const registry = () => createActorRegistry(stores.catalog);
 
 test("identity and endpoint JSON metadata survive reopening without shape loss", () => {
-  const identity = ActorRegistry.registerIdentity({
+  const identity = registry().registerIdentity({
     id: "actor",
     kind: "human",
     trustTier: "observer",
     metadata: { nested: [1, null, { enabled: true }] },
   });
-  const endpoint = ActorRegistry.registerEndpoint({
+  const endpoint = registry().registerEndpoint({
     id: "endpoint",
     actorId: identity.id,
     channel: "discord",
     externalId: "user",
     metadata: { tags: ["one", "two"] },
   });
-  fixture.reopen();
-  expect(ActorRegistry.getIdentity(identity.id)).toEqual(identity);
-  expect(ActorRegistry.getEndpoint(endpoint.id)).toEqual(endpoint);
-  expect(ActorRegistry.resolveEndpoint("discord", "user")).toEqual({ identity, endpoint });
+  stores.reopen();
+  expect(registry().getIdentity(identity.id)).toEqual(identity);
+  expect(registry().getEndpoint(endpoint.id)).toEqual(endpoint);
+  expect(registry().resolveEndpoint("discord", "user")).toEqual({ identity, endpoint });
 });
 
 test("non-JSON metadata fails before identity or endpoint persistence", () => {
   expect(() =>
-    ActorRegistry.registerIdentity({
+    registry().registerIdentity({
       id: "invalid",
       kind: "human",
       trustTier: "observer",
       metadata: { callback: () => "not JSON" },
     }),
   ).toThrow();
-  expect(ActorRegistry.getIdentity("invalid")).toBeUndefined();
-  ActorRegistry.registerIdentity({ id: "valid", kind: "human", trustTier: "observer" });
+  expect(registry().getIdentity("invalid")).toBeUndefined();
+  registry().registerIdentity({ id: "valid", kind: "human", trustTier: "observer" });
   expect(() =>
-    ActorRegistry.registerEndpoint({
+    registry().registerEndpoint({
       id: "invalid",
       actorId: "valid",
       channel: "discord",
@@ -44,5 +45,5 @@ test("non-JSON metadata fails before identity or endpoint persistence", () => {
       metadata: { count: 1n },
     }),
   ).toThrow();
-  expect(ActorRegistry.getEndpoint("invalid")).toBeUndefined();
+  expect(registry().getEndpoint("invalid")).toBeUndefined();
 });

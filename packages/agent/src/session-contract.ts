@@ -2,6 +2,7 @@ import { Effect, type Context } from "effect";
 import type { SessionError, ExecutionError } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
 import type { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import type {
   Inbox,
   LedgerAction,
@@ -50,6 +51,7 @@ export interface SessionRunnerInput {
   /** Authenticated inbox treatment, independent of model-visible message text. */
   readonly authority?: "act" | "evidence_only";
   readonly sessionId: string;
+  readonly kernel: SessionKernel;
   readonly role: LedgerSession.Role;
   readonly turnId: string;
   readonly actionId: string;
@@ -136,16 +138,17 @@ export interface SessionRuntime {
   ) => Readonly<Record<string, number>>;
   readonly onRequestReady?: (sessionId: string) => void;
   /**
-   * Fenced single-writer contract: every commit carries the fence of the
-   * writer that owns the session, so a stale writer can never commit after
-   * another one took over. On the entity plane (W5.2 #1197) the fence rotates
-   * once per activation through the catalog CAS and there is no liveness
-   * heartbeat; this hook is the wave-2 TTL bridge for the legacy executor
-   * plane and dies with it. A runner MUST still honour aborts promptly - an
-   * abort-ignoring runner keeps computing without authority and its late
-   * result is discarded.
+   * Handle-scoped kernel opener (W5.2 F1): every controller reads and commits
+   * through the kernel this returns for its session. Fenced single-writer
+   * contract: every commit carries the fence adopted at activation, so a
+   * stale writer can never commit after another one took over. There is no
+   * liveness heartbeat - the fence CAS is the takeover authority. A runner
+   * MUST still honour aborts promptly - an abort-ignoring runner keeps
+   * computing without authority and its late result is discarded.
    */
-  readonly scheduleHeartbeat?: (callback: () => void, intervalMs: number) => () => void;
+  readonly openKernel: (sessionId: string) => SessionKernel;
+  /** Catalog-backed enumeration of durable sessions this process can open. */
+  readonly listSessions: () => LedgerSession.Row[];
   readonly onHibernate?: (sessionId: string) => Effect.Effect<void, ExecutionError>;
   /**
    * How long `close()` waits for an abort-ignoring runner to settle before
@@ -254,7 +257,7 @@ export interface SessionControllerLifecycle {
  */
 
 export type SessionAdmissionSnapshot = Parameters<typeof decideSessionAdmission>[0];
-export type SessionAdmissionDecision = ReturnType<typeof decideSessionAdmission>;
+type SessionAdmissionDecision = ReturnType<typeof decideSessionAdmission>;
 
 /** The fence identity one activation writes with; rotated once at activation. */
 export interface SessionEntityAuthority {
@@ -266,7 +269,7 @@ export interface SessionEntityAuthority {
 /** An admitted unit of turn work: everything but `stop`/`refused`/`consume`. */
 export interface SessionEntityTurnInput {
   readonly authority: SessionEntityAuthority;
-  readonly kernel: SessionHandleStore.SessionKernel;
+  readonly kernel: SessionKernel;
   readonly decision:
     | { readonly kind: "start" }
     | Extract<SessionAdmissionDecision, { kind: "recover" } | { kind: "resume" }>;
@@ -275,14 +278,14 @@ export interface SessionEntityTurnInput {
 
 export interface SessionEntityTimerContext {
   readonly authority: SessionEntityAuthority;
-  readonly kernel: SessionHandleStore.SessionKernel;
+  readonly kernel: SessionKernel;
   readonly now: number;
 }
 
 export type SessionTimerOutcome = "applied" | "noop";
 
 /** Chain-guarded timer folds (plan C2/F2); superseded wakes resolve to `noop`. */
-export interface SessionEntityTimerPort {
+interface SessionEntityTimerPort {
   readonly retryScheduled: (
     context: SessionEntityTimerContext,
     payload: { readonly alarmId: string; readonly attempt: number; readonly notBefore: number },

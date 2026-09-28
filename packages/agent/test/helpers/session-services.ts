@@ -1,15 +1,15 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import { SessionHandleStore } from "@openomni/ledger";
 import { LlmLive } from "@openomni/llm";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { type Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { NamedPolicyRegistry } from "../../src/bundle";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import { GenerationUnavailable, type SessionError } from "../../src/errors";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations, type GenerationBundle } from "../../src/session-generations";
 import type { SessionRuntime } from "../../src/session-contract";
 import { Clock, Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";
+import { isolatedLedger } from "./isolated";
 import { observationService } from "./service-layers";
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
@@ -19,6 +19,16 @@ export interface SessionFixture extends SessionRuntime {
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly observations: ObservationPort;
+}
+
+/** The kernel plane every fixture rides inside `isolated()`: the isolation's shared kernel, resolved lazily. */
+export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions"> {
+  return kernelRuntime(() => isolatedLedger().kernel);
+}
+
+/** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions"> {
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows() };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();
@@ -35,7 +45,7 @@ function sessionServices(fixture: SessionFixture) {
     const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
     const observations = observationService(fixture.observations);
     const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, kinds: LedgerAction.Kind.options,
-      source: { rows: (generation?: number) => SessionHandleStore.policyRows(generation) } });
+      source: { rows: (generation?: number) => fixture.openKernel("policy").policyRows(generation) } });
     function bundle(sessionId: string, snapshot: SessionGeneration.Snapshot): GenerationBundle {
       return {
         id: { sessionId, generation: snapshot.generation }, snapshot, activate: Effect.void,
@@ -49,7 +59,7 @@ function sessionServices(fixture: SessionFixture) {
       return lock.withPermits(1)(Effect.gen(function* () {
         let value = managers.get(sessionId);
         if (value === undefined) {
-          value = yield* makeSessionGenerations(bundle(sessionId, SessionHandleStore.latestGenerationFor(sessionId))).pipe(Effect.provideService(Scope.Scope, scope));
+          value = yield* makeSessionGenerations(bundle(sessionId, fixture.openKernel(sessionId).latestGenerationFor(sessionId))).pipe(Effect.provideService(Scope.Scope, scope));
           managers.set(sessionId, value);
         }
         return value;
@@ -58,7 +68,7 @@ function sessionServices(fixture: SessionFixture) {
     const generations: Context.Service.Shape<typeof GenerationLayers> = {
       initialize: () => Effect.void,
       capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
-        const snapshot = SessionHandleStore.generationByNumber(sessionTree(id.sessionId), id.generation);
+        const snapshot = fixture.openKernel(id.sessionId).generationFor(id.sessionId, id.generation);
         if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
         const owner = yield* manager(id.sessionId);
         return yield* owner.capture(bundle(id.sessionId, snapshot));

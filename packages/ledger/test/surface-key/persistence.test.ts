@@ -1,32 +1,32 @@
 import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { SurfaceKey } from "../../src/surface-key";
+import { createSurfaceKeyStore } from "../../src/surface-key";
 import { createSqliteSurfaceKeyAdapter } from "../../src/storage/sqlite-surface-key-adapter";
-import "../../src/storage/initialize";
 import { materializeSession } from "../helpers/session";
-import { useSqliteStorage } from "../helpers/storage";
+import { useSqliteStores } from "../helpers/storage";
 
 describe("SurfaceKey SQLite persistence", () => {
-  const fixture = useSqliteStorage("surface-key");
+  const stores = useSqliteStores("surface-key");
+  const surfaceKeys = () => createSurfaceKeyStore(stores.catalog);
 
   test("persists across Storage re-init", () => {
-    const session = materializeSession("persist-test");
-    SurfaceKey.claim("telegram:bot:chat:123", session.id);
+    const session = materializeSession(stores.kernel, "persist-test");
+    surfaceKeys().claim("telegram:bot:chat:123", session.id);
 
-    fixture.reopen();
+    stores.reopen();
 
-    expect(SurfaceKey.lookup("telegram:bot:chat:123")).toBe(session.id);
+    expect(surfaceKeys().lookup("telegram:bot:chat:123")).toBe(session.id);
   });
 
   test("re-claim with expected owner updates session in SQLite", () => {
-    const session1 = materializeSession("old-session");
-    const session2 = materializeSession("new-session");
-    SurfaceKey.claim("slack:ws:channel:C1", session1.id);
-    SurfaceKey.claim("slack:ws:channel:C1", session2.id, session1.id);
+    const session1 = materializeSession(stores.kernel, "old-session");
+    const session2 = materializeSession(stores.kernel, "new-session");
+    surfaceKeys().claim("slack:ws:channel:C1", session1.id);
+    surfaceKeys().claim("slack:ws:channel:C1", session2.id, session1.id);
 
-    fixture.reopen();
+    stores.reopen();
 
-    expect(SurfaceKey.lookup("slack:ws:channel:C1")).toBe(session2.id);
+    expect(surfaceKeys().lookup("slack:ws:channel:C1")).toBe(session2.id);
   });
 
   test("claim throws loudly when the row is missing after INSERT OR IGNORE", () => {

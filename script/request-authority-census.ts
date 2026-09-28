@@ -8,7 +8,10 @@ interface Violation {
   readonly match: string;
 }
 
-// No file is exempt from the API check, including migration tests and archives.
+// No file is exempt from the API check. The archival exception sets left with
+// the migration/archive plane (W5.2 #1197): frozen formats, u967/u969
+// preflights, and the operator archive scripts are deleted, so legacy SQL and
+// resurrected identifiers are refused everywhere.
 const domains = ["Wait", "Approval"];
 const retiredIdentifiers = new Set([
   ...domains,
@@ -38,35 +41,6 @@ const retiredPath =
 const legacySql =
   /\b(?:from|join|into|update(?:\s+or\s+\w+)?|table(?:\s+if\s+(?:not\s+)?exists)?)\s+(?:(?:"main"|main)\s*\.\s*)?(?:"(?:wait|approval)"|`(?:wait|approval)`|\[(?:wait|approval)\]|'(?:wait|approval)'|(?:wait|approval)\b)/gi;
 
-// Operation-scoped archival exceptions, not test-tree or whole-file exclusions.
-// The preflight can read old rows but cannot become a live lifecycle writer.
-const readOnlySql = new Set([
-  "packages/ledger/src/storage/u967-projection.ts",
-  "packages/ledger/src/storage/u969-preflight.ts",
-]);
-const archiveFixtureSql = new Set([
-  "packages/ledger/test/helpers/disposition-967.ts",
-  "packages/ledger/test/helpers/disposition-967-fault.ts",
-  "packages/ledger/test/storage/u967-disposition-cases.ts",
-  "packages/ledger/test/storage/storage-boundaries.test.ts",
-  "packages/ledger/test/storage/request-migration.test.ts",
-  "script/generate-ledger-archive-manifest.test.ts",
-  "script/ledger-archive-review-r2.test.ts",
-]);
-const historicalSql = new Set([
-  "packages/ledger/migration/0012_wait/migration.sql",
-  "packages/ledger/migration/0028_approval/migration.sql",
-  "packages/ledger/migration/0034_u967_archive_disposition/migration.sql",
-  "packages/ledger/migration/0038_session_requests/migration.sql",
-]);
-const historicalFormats = new Set([
-  "packages/ledger/src/storage/historical-request-format.ts",
-  "packages/ledger/src/storage/u967-projection.ts",
-  "packages/ledger/src/storage/u969-preflight.ts",
-  "packages/ledger/test/helpers/disposition-967.ts",
-  "script/ledger-archive-review-r2.test.ts",
-]);
-
 export function authorityViolations(path: string, source: string): Violation[] {
   const violations: Violation[] = [];
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
@@ -84,20 +58,7 @@ export function authorityViolations(path: string, source: string): Violation[] {
       record("legacy-api", match[0], offset);
     }
     for (const match of text.matchAll(legacySql)) {
-      const allowed =
-        historicalSql.has(path) ||
-        archiveFixtureSql.has(path) ||
-        (readOnlySql.has(path) &&
-          /^(?:from|join)\b/i.test(match[0]) &&
-          !/\b(?:insert|replace|update|delete|drop|alter|create)\b/i.test(text)) ||
-        (path === "script/generate-ledger-archive-manifest.ts" &&
-          text ===
-            [
-              "DELETE FROM",
-              "wait",
-              "WHERE id = ? AND revision = ? AND owner_kind = 'workItem'",
-            ].join(" "));
-      if (!allowed) record("legacy-sql", match[0], offset);
+      record("legacy-sql", match[0], offset);
     }
   };
   const visit = (node: ts.Node): void => {
@@ -107,18 +68,8 @@ export function authorityViolations(path: string, source: string): Violation[] {
     if (ts.isStringLiteral(node) || ts.isTemplateLiteralToken(node)) {
       checkText(node.text, node.getStart(file));
     }
-    if (!historicalFormats.has(path)) {
-      if (ts.isIdentifier(node) && domains.some((domain) => node.text === `Historical${domain}`)) {
-        record("archive-boundary", node.text, node.getStart(file));
-      }
-      if (
-        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-        node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier) &&
-        node.moduleSpecifier.text.includes("historical-request-format")
-      ) {
-        record("archive-boundary", node.moduleSpecifier.text, node.getStart(file));
-      }
+    if (ts.isIdentifier(node) && domains.some((domain) => node.text === `Historical${domain}`)) {
+      record("archive-boundary", node.text, node.getStart(file));
     }
     ts.forEachChild(node, visit);
   };
@@ -150,7 +101,6 @@ export async function scanRequestAuthority(root: string) {
         "MessageAnswer",
         "messageAnswer",
         "messageTimeout",
-        "historical-request-format",
       ].join("|"),
       "--",
       "apps",

@@ -32,6 +32,7 @@ type OutboundMessage = Readonly<{
 }>;
 
 type MessagingPorts = Readonly<{
+  stores: import("../stores.js").ChannelStores;
   requests: GatewayRouterPorts["requests"];
   transaction: GatewayRouterPorts["transaction"];
   /** Delivery owners reconcile retries using the stable idempotency key. */
@@ -182,13 +183,13 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
   function send(rawInput: SendInput): Effect.Effect<SendReceipt, ChannelError> {
     return Effect.gen(function* () {
     const input = SendInput.parse(rawInput);
-    const checked = authorizeSend(input, ports.grants());
+    const checked = authorizeSend(ports.stores, input, ports.grants());
     if (!checked.ok) return deny(input, checked.code, checked.reason);
     const authorization = { input, target: checked.target, grant: checked.grant };
     const { target } = authorization;
     // No promise may escape the admission/debit/request write unit.
     const opened = yield* ports.transaction(Effect.gen(function* () {
-      const admission = admitSend(authorization, ports, deny);
+      const admission = admitSend(ports.stores, authorization, ports, deny);
       if ("kind" in admission) return { denied: admission };
       return { request: yield* openSendRequest(input, target, ports) };
     }));
@@ -200,7 +201,7 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   return {
     preflight(input) {
-      const checked = authorizeSend(input, ports.grants());
+      const checked = authorizeSend(ports.stores, input, ports.grants());
       return checked.ok ? undefined : checked.code;
     },
     send,

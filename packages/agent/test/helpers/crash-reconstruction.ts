@@ -5,24 +5,27 @@ import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { NamedPolicyRegistry } from "../../src/bundle";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/session-generations";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, FoldCheckpoint, Message, PlainObjectSchema, PlainValueSchema, type LedgerAction } from "@openomni/protocol";
 import { z } from "zod";
-import { backfillActionHashes } from "../../../ledger/src/storage/l0-hash";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../../ledger/src/storage/l0-hash";
+import { ActionSqlRow } from "../../../ledger/src/storage/sqlite-l0-rows";
 import { recordedCompaction, restoreContextRequest, restoredContextProjection } from "../../src/compaction/restore";
 import { executeCompaction } from "../../src/compaction/execute-cut";
 import { GenerationUnavailable } from "../../src/errors";
 import { GenerationLayers, ObservationSink } from "../../src/services";
-import { closeSessions, wakeSession } from "../../src/session-handle";
+import { closeSessions } from "../../src/session-handle";
+import { reactivateSession } from "./wake-session";
 import { FoldCheckpointIntegrityError, hydrateSessionHistory } from "../../src/session-lifecycle/history";
 import { compiledPolicy } from "./compiled-policy";
 import { testExecutor } from "./executor";
-import { isolated } from "./isolated";
+import { isolated, isolatedLedger } from "./isolated";
+import { openCrashStores } from "./crash-stores";
 import { textMessage } from "./messages";
 import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionSession as sessionId } from "./reconstruction-fixture";
 import { seedPolicy } from "./seed-policy";
-import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
 import type { foldCrashProof } from "./fold-crash";
 
 // R1 and R3 retain their imported draft IDs; no duplicate campaign rows.
@@ -38,17 +41,18 @@ type Point = z.infer<typeof reconstructionPoint>;
 type Stop = (bodies: string[], pending: LedgerAction.Append | undefined, proof: z.infer<typeof foldCrashProof>) => void;
 
 function proof() {
-  const loaded = hydrateSessionHistory(sessionId);
+  const kernel = isolatedLedger().kernel;
+  const loaded = hydrateSessionHistory(kernel, sessionId);
   return {
     revision: loaded.revision, digest: canonicalDigest(loaded.history),
     stateDigest: canonicalDigest({ foldVersion: 1, state: PlainValueSchema.parse(loaded.state) }),
     messageIds: loaded.history.map((message) => message.info.id),
-    checkpointId: SessionHandleStore.latestFoldCheckpoint(sessionId).checkpoint?.id ?? null,
+    checkpointId: kernel.latestFoldCheckpoint(sessionId).checkpoint?.id ?? null,
   };
 }
 
 function threshold(recording: ReturnType<typeof requestLedger>) {
-  const remaining = 256 - hydrateSessionHistory(sessionId).nonCheckpointActions;
+  const remaining = 256 - hydrateSessionHistory(isolatedLedger().kernel, sessionId).nonCheckpointActions;
   recording.commitBatch(paddingActions(sessionId, recording.identity.turnId, remaining));
 }
 
@@ -76,16 +80,17 @@ function restoreCut(recording: ReturnType<typeof requestLedger>, stop: Stop) {
     yield* snapshot(executor, "earlier evidence ".repeat(200));
     yield* executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
       Effect.succeed(PlainValueSchema.parse(textMessage("assistant", "answer", sessionId, "answer"))));
-    yield* executeCompaction({ history: hydrateSessionHistory(sessionId).history, executor,
+    yield* executeCompaction({ history: hydrateSessionHistory(isolatedLedger().kernel, sessionId).history, executor,
       events: { publish: () => undefined }, options: { contextWindowTokens: 10_000, protectRecentMessages: 1,
         onSummarize: () => Effect.sync(() => { bodies.push("summary"); return "checkpoint"; }) },
       identity: { traceId: "restore-crash", sessionId }, dispatch: { trigger: "yield" },
     });
-    const source = SessionHandleStore.latestFoldCheckpoint(sessionId).checkpoint;
-    const result = source?.parentId === null ? undefined : SessionHandleStore.actionById(source?.parentId ?? "");
+    const kernel = isolatedLedger().kernel;
+    const source = kernel.latestFoldCheckpoint(sessionId).checkpoint;
+    const result = source?.parentId === null ? undefined : kernel.actionById(source?.parentId ?? "");
     if (result?.parentId === null || result === undefined) throw new Error("missing compacted source");
     const record = recordedCompaction(result.parentId, result);
-    const history = hydrateSessionHistory(sessionId).history;
+    const history = hydrateSessionHistory(kernel, sessionId).history;
     yield* executor.run(restoreContextRequest(result.parentId, canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(history) })),
       () => Effect.succeed(restoredContextProjection(history, result.parentId ?? "", record)));
   });
@@ -130,7 +135,19 @@ export function corruptCheckpoint(dbPath: string): void {
   const db = new Database(dbPath);
   try {
     db.run("UPDATE action SET effect = json_set(effect, '$.result.stateHash', 'sha256:corrupt') WHERE kind = 'fold.checkpoint'");
-    backfillActionHashes(db);
+    // Rehash the whole chain so only the checkpoint payload is faulted, never the linkage.
+    db.transaction(() => {
+      const rows = z.array(ActionSqlRow).parse(db.query("SELECT * FROM action ORDER BY session_id, ordinal").all());
+      const previous = new Map<string, string>();
+      for (const row of rows) {
+        const prev = previous.get(row.session_id) ?? GENESIS_PREV_HASH;
+        const { action_hash: _stale, ...rest } = row;
+        const rehashed = { ...rest, prev_hash: prev };
+        const hash = computeActionHash(rehashed);
+        db.query("UPDATE action SET prev_hash = ?, action_hash = ? WHERE id = ?").run(prev, hash, row.id);
+        previous.set(row.session_id, hash);
+      }
+    }).immediate();
   } finally { db.close(); }
 }
 
@@ -143,7 +160,7 @@ export const reconstructionRecovery = z.object({
 
 function restartGenerations(captures: number[], missing: boolean) {
   return Layer.effect(GenerationLayers, Effect.gen(function* () {
-    const snapshot = SessionHandleStore.generationFor(sessionId, missing ? 2 : 1);
+    const snapshot = isolatedLedger().kernel.generationFor(sessionId, missing ? 2 : 1);
     if (snapshot === undefined) throw new Error("restart fixture generation missing");
     const observations = yield* ObservationSink;
     const owner = yield* makeSessionGenerations({ id: { sessionId, generation: snapshot.generation }, snapshot, activate: Effect.void,
@@ -163,18 +180,17 @@ function restartGenerations(captures: number[], missing: boolean) {
 }
 
 function recoverReconstruction(point: Point, dbPath: string) {
-  return isolated(Effect.scoped(Effect.gen(function* () {
-    Storage.reset(); Storage.initialize({ dbPath }); seedPolicy();
+  return isolated((ledger) => Effect.scoped(Effect.gen(function* () {
+    seedPolicy();
     const rangeReads: { cursor: number; limit: number }[] = [];
-    const adapter = Storage.get().actions;
-    if (adapter === undefined) throw new Error("SQLite action capability missing");
+    const adapter = ledger.session.actions;
     const range = adapter.range.bind(adapter);
     adapter.range = (id, cursor, limit) => { rangeReads.push({ cursor, limit }); return range(id, cursor, limit); };
     let runnerCount = 0;
     const captures: number[] = [];
-    const fixture: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100_000, authorizeConfigure: allowConfigure };
+    const fixture: SessionFixture = { ...isolatedRuntime(), observations: { publish: () => undefined }, clock: () => 100_000, authorizeConfigure: allowConfigure };
     let runnerHistory: Message.WithParts[] = [];
-    const wake = wakeSession(sessionId, (input) => Effect.sync(() => {
+    const wake = reactivateSession(sessionId, (input) => Effect.sync(() => {
       runnerCount += 1; runnerHistory = Array.from(input.history ?? []);
       return { kind: "result" as const, text: "" };
     }), fixture);
@@ -190,7 +206,7 @@ function recoverReconstruction(point: Point, dbPath: string) {
         else if (error instanceof GenerationUnavailable) refusal = "GenerationUnavailable";
         else return yield* Effect.failCause(exit.cause);
       } else {
-        loaded = hydrateSessionHistory(sessionId);
+        loaded = hydrateSessionHistory(ledger.kernel, sessionId);
         if (point !== "open_tool_checkpoint_before_terminal")
           yield* withSessionServices(work, fixture);
       }
@@ -199,7 +215,7 @@ function recoverReconstruction(point: Point, dbPath: string) {
       adapter.range = range;
       yield* closeSessions(fixture);
     }
-  })));
+  })), () => openCrashStores(dbPath));
 }
 
 if (import.meta.main) {

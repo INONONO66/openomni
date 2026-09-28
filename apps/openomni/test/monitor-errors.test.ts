@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commandSource, pathSource } from "../src/composition/alarm-sources";
+import { commandSource, pathSource } from "../src/composition/watch-sources";
 import { alarmPathEvent, alarmSummary } from "./helpers/alarm-payload";
 import { eventSignal } from "./helpers/event-signal";
 

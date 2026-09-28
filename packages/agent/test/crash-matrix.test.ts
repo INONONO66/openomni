@@ -12,6 +12,7 @@ import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
+import { retryDelivery, type TimerChainReads } from "../src/cluster/timers";
 import { closeSessions, wakeSession } from "../src/session-handle";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/session-lifecycle/history";
 import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "./helpers/crash-configure";
@@ -353,9 +354,10 @@ function recoverContinuation(witness: Witness) {
 }
 
 /**
- * The committed retry.scheduled alarm survives the crash; the boot alarm owner
- * consumes it exactly once (fenced cancel CAS) and wakes the session, whose open
- * turn re-runs the model attempt exactly once.
+ * The committed retry.scheduled chain action survives the crash (W5.2 timer
+ * plane): the redelivered RetryScheduled delivery consults the chain and
+ * no-ops against the settled attempt, while the entity wake (activation
+ * resume) re-runs the open turn's model attempt exactly once.
  */
 function recoverRetryAlarm(witness: Witness) {
   return Effect.gen(function* () {
@@ -377,13 +379,17 @@ function recoverRetryAlarm(witness: Witness) {
     "transient_error",
   );
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
-  // Boot alarm owner: fenced consume-once, then wake. A second consume finds nothing.
-  const alarms = Storage.get().alarms;
-  const consumed = (yield* alarms?.cancel(alarmId, sessionId, 100_000) ??
-          Effect.die("missing test storage capability"));
-  expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  const repeatedCancel = yield* Effect.result(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
-  expect(Result.isFailure(repeatedCancel) ? repeatedCancel.failure : undefined).toMatchObject({ _tag: "AlarmRefused" });
+  // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
+  // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
+  const reads: TimerChainReads = {
+    actionById: SessionHandleStore.actionById,
+    requestById: SessionHandleStore.requestById,
+    resultFor: (id) => SessionHandleStore.resultFor(sessionId, id),
+    operationChildrenPage: (id, cursor) =>
+      SessionHandleStore.operationChildrenPage(sessionId, id, cursor),
+  };
+  expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
+  expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);

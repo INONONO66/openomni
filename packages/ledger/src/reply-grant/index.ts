@@ -1,19 +1,21 @@
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
-import { Storage } from "../storage/storage";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
-function requireAdapter(): ProtocolStorage.ReplyGrantSubAdapter {
-  return requireSubAdapter(
-    Storage.get().replyGrant,
-    "Storage adapter does not implement reply grants",
-  );
-}
+export type ReplyGrantStore = ReturnType<typeof createReplyGrantStore>;
 
 /** Channels owns normalization; this store persists only the current projection. */
-export namespace ReplyGrantStore {
-  export const claim: ProtocolStorage.ReplyGrantSubAdapter["claim"] = (grant, bound) =>
-    requireAdapter().claim(grant, bound);
+export function createReplyGrantStore(source: {
+  readonly replyGrant?: ProtocolStorage.ReplyGrantSubAdapter;
+}) {
+  function requireAdapter(): ProtocolStorage.ReplyGrantSubAdapter {
+    return requireSubAdapter(source.replyGrant, "Storage adapter does not implement reply grants");
+  }
 
-  export const listLive: ProtocolStorage.ReplyGrantSubAdapter["listLive"] = (at) =>
-    requireAdapter().listLive(at);
+  return {
+    claim: ((grant, bound) =>
+      requireAdapter().claim(grant, bound)) satisfies ProtocolStorage.ReplyGrantSubAdapter["claim"],
+
+    listLive: ((at) =>
+      requireAdapter().listLive(at)) satisfies ProtocolStorage.ReplyGrantSubAdapter["listLive"],
+  };
 }

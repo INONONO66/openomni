@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { createObservationBus } from "../src/observation/bus";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { AgentStopError, ContextAdmissionError } from "../src/errors";
 import { failureEvidence } from "../src/executor-outcome";
-import { createRetryAlarmPort } from "../src/executor-retry-alarm";
 import { AgentGenerationLive } from "./helpers/generation-layer";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { allowAllPolicy } from "./helpers/compiled-policy";
@@ -44,20 +43,4 @@ test("the generation layer supplies the captured policy, tools, observations, cl
   expect(services.session.snapshot).toBe(snapshot);
   expect(services.session.policy).toBe(allowAllPolicy);
   expect(services.tools.definitions).toBe(options.definitions);
-})));
-
-test("retry settlement is idempotent but never consumes another session's alarm", () => isolated(Effect.gen(function* () {
-  yield* SessionHandleStore.materialize({
-    id: "retry-owner", role: "resident", parentId: null, tools: [],
-    system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "configure", at: 1,
-  });
-  const owner = createRetryAlarmPort("retry-owner", (): number => 2);
-  yield* owner.settle("missing");
-  yield* owner.arm({ id: "retry", attempt: 1, reason: "transient_error", fireAt: 10 });
-  expect(yield* Effect.flip(createRetryAlarmPort("other", (): number => 2).settle("retry")))
-    .toMatchObject({ _tag: "CommitFailed", error: { _tag: "AlarmRefused", reason: "session", operation: "cancel" } });
-  expect(Storage.get().alarms?.get("retry")?.status).toBe("armed");
-  yield* owner.settle("retry");
-  yield* owner.settle("retry");
-  expect(Storage.get().alarms?.get("retry")?.status).toBe("cancelled");
 })));

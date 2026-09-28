@@ -25,6 +25,7 @@ type Reads = Pick<
   | "outboundStatesPage"
   | "openOperationsPage"
   | "operationChildrenPage"
+  | "pendingMessages"
 >;
 
 function decodeOne(value: ActionSqlRow | null) {
@@ -247,6 +248,18 @@ export function createActionReads(db: Database): Reads {
         SELECT * FROM action WHERE session_id = ? AND parent_id = ? AND ordinal > ?
         ORDER BY ordinal LIMIT ?`)
           .all(sessionId, parentId, cursor, pageSize.parse(limit)),
+      );
+    },
+    pendingMessages(sessionId) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'prompt'
+          AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
+            AND d.kind = 'inbox.deliver' AND json_extract(d.intent, '$.inboxId') = a.id)
+        ORDER BY a.ordinal`)
+          .all(sessionId),
       );
     },
   };

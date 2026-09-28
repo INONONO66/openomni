@@ -19,11 +19,9 @@ export const ConfigurationError = NamedError.create(
 export type ConfigurationError = InstanceType<typeof ConfigurationError>;
 
 export interface OpenOmniConfig {
-  readonly dbPath: string;
   /**
    * Cluster catalog SQLite file: the session index, actor/grant/policy rows,
-   * and the cluster_* mailbox tables. Distinct from the legacy `dbPath`
-   * store, which the cluster plane never reads.
+   * and the cluster_* mailbox tables.
    */
   readonly catalogPath?: string;
   /** Directory of per-session ledger files (`<sessionsDir>/<sessionId>.sqlite`). */
@@ -360,7 +358,6 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
   const socialBudgets = socialBudgetsFromEnv();
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
-    dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
     ...resolveClusterStorage(
       {
         catalogPath: process.env.OPENOMNI_CATALOG_PATH?.trim() || undefined,

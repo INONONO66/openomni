@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AlarmRuntimeError, commandSource } from "../src/composition/alarm-sources";
+import { AlarmRuntimeError, commandSource } from "../src/composition/watch-sources";
 import { residentSuite } from "./helpers/resident-suite";
 
 const suite = residentSuite();

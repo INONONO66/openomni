@@ -1,6 +1,6 @@
 import { SendAdmissionConflict } from "../../errors";
 import { Gateway, type DecisionFact } from "@openomni/protocol";
-import { EgressBudgetStore, DecisionFacts } from "@openomni/ledger";
+import type { ChannelStores } from "../stores.js";
 import { z } from "zod";
 import type { GatewayRouterPorts } from "../message-ports";
 import { evaluateSocialBudget } from "./social-budget";
@@ -42,10 +42,11 @@ function sendStreamId(messageId: string): string {
 }
 
 function existingAdmission(
+  stores: ChannelStores,
   input: Gateway.SendInput,
   target: Gateway.DeliveryTarget,
 ): SendAdmission | SendAdmissionConflict | undefined {
-  const decisionFacts = DecisionFacts.port();
+  const decisionFacts = stores.decisionFacts.port();
   if (decisionFacts === undefined)
     throw new Error(
       "Storage adapter does not implement decision facts — gateway sends fail closed",
@@ -74,12 +75,13 @@ function recordedAdmission(
 }
 
 function recordAdmission(
+  stores: ChannelStores,
   input: Gateway.SendInput,
   target: Gateway.DeliveryTarget,
   budgeted: boolean,
   sendClass: Gateway.MessageClass,
 ): SendAdmission {
-  const decisionFacts = DecisionFacts.port();
+  const decisionFacts = stores.decisionFacts.port();
   if (decisionFacts === undefined)
     throw new Error(
       "Storage adapter does not implement decision facts — gateway sends fail closed",
@@ -111,26 +113,31 @@ function debitRow(
   };
 }
 
-function repairBudgetDebit(input: Gateway.SendInput, admission: SendAdmission): void {
+function repairBudgetDebit(
+  stores: ChannelStores,
+  input: Gateway.SendInput,
+  admission: SendAdmission,
+): void {
   if (!admission.budgeted) return;
-  EgressBudgetStore.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
+  stores.egressBudgets.claim(debitRow(input, admission.sendClass), input.at, () => "allow");
 }
 
 /** Runs synchronously inside the caller's ledger transaction, before any physical delivery. */
 export function admitSend(
+  stores: ChannelStores,
   authorization: AuthorizedSend,
   ports: Pick<NonNullable<GatewayRouterPorts["messaging"]>, "budgets">,
   deny: DenySend,
 ): SendAdmission | Gateway.SendReceipt {
   const { input, target, grant } = authorization;
   const sendClass = input.class ?? (input.operation === "awaited" ? "converse" : "notify");
-  let admission = existingAdmission(input, target);
+  let admission = existingAdmission(stores, input, target);
   if (admission instanceof SendAdmissionConflict) {
     if (input.operation === "awaited") return deny(input, "request_duplicate", admission.message);
     throw admission;
   }
   if (admission !== undefined) {
-    repairBudgetDebit(input, admission);
+    repairBudgetDebit(stores, input, admission);
     return admission;
   }
   const budgeted = ports.budgets !== undefined && grant.replyScope === undefined;
@@ -138,7 +145,7 @@ export function admitSend(
     const budget = ports
       .budgets?.()
       .find((candidate) => candidate.targetActorId === input.target.actorId);
-    const budgetClaim = EgressBudgetStore.claim(
+    const budgetClaim = stores.egressBudgets.claim(
       debitRow(input, sendClass),
       input.at - (budget?.windowMs ?? 0),
       (state) => evaluateSocialBudget(budget, state, { class: sendClass, at: input.at }),
@@ -151,7 +158,7 @@ export function admitSend(
       );
     }
   }
-  admission = recordAdmission(input, target, budgeted, sendClass);
-  repairBudgetDebit(input, admission);
+  admission = recordAdmission(stores, input, target, budgeted, sendClass);
+  repairBudgetDebit(stores, input, admission);
   return admission;
 }

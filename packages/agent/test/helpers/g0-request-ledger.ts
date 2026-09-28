@@ -1,90 +1,40 @@
 import { executionReads } from "./execution-reads";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { fencedTurnFixture } from "./fenced-writer";
+import { isolatedLedger } from "./isolated";
 import { Effect } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutionLedger } from "../../src/executor";
 
-export function requestLedger(input: { readonly id: string; readonly clock?: () => number }) {
+export function requestLedger(input: {
+  readonly id: string;
+  readonly clock?: () => number;
+  readonly kernel?: SessionKernel;
+}) {
   return Effect.gen(function* () {
+    const kernel = input.kernel ?? isolatedLedger().kernel;
     const { id } = input;
     const clock = input.clock ?? (() => 100);
-    const created = yield* SessionHandleStore.materialize({
-      id,
-      role: "resident",
-      parentId: null,
-      policyGeneration: 1,
-      tools: [],
-      system: { preset: "", blocks: [] },
-      actionId: `${id}:configure`,
-      at: clock(),
-    });
-    const owner = `${id}:owner`;
-    const lease = yield* SessionHandleStore.acquireLease({
-      sessionId: id,
-      owner,
-      expectedFence: created.row.leaseFence,
-      now: clock(),
-      expiresAt: clock() + 30_000,
-    });
-    const generation = SessionHandleStore.latestGeneration(sessionTree(id));
-    const turnId = `${id}:turn`;
+    const { owner, fence, generation, turnId } = yield* fencedTurnFixture(kernel, { id, clock });
     const ledger: ExecutionLedger = {
-      ...executionReads(id),
+      ...executionReads(kernel, id),
       commit: (action: LedgerAction.Append) =>
         Effect.gen(function* () {
-          const row = SessionHandleStore.row(id);
-          const committed = yield* SessionHandleStore.commit({
+          const row = kernel.row(id);
+          const committed = yield* kernel.commit({
             sessionId: id,
             owner,
-            fence: lease.fence,
+            fence,
             now: clock(),
             expectedRevision: row.revision,
             actions: [action],
-            consumeInboxIds: [],
             state: row.state,
-            releaseLease: false,
           });
           const receipt = committed.receipts[0];
           if (receipt === undefined) throw new Error("test receipt missing");
           return receipt;
         }),
     };
-    yield* SessionHandleStore.commit({
-      sessionId: id,
-      owner,
-      fence: lease.fence,
-      now: clock(),
-      expectedRevision: created.row.revision,
-      consumeInboxIds: [],
-      state: "running",
-      releaseLease: false,
-      actions: [
-        {
-          id: turnId,
-          sessionId: id,
-          parentId: `${id}:configure`,
-          kind: "turn",
-          intent: {
-            encodingVersion: 1,
-            value: {
-              phase: "intent",
-              resultId: `${id}:result`,
-              inboxIds: [],
-              resumeCount: 0,
-              boundaryActionId: null,
-              toolsGeneration: generation.generation,
-              toolsHash: generation.toolsHash,
-              systemHash: generation.systemHash,
-              policyGeneration: 1,
-            },
-          },
-          effect: { encodingVersion: 1, value: { phase: "pending" } },
-          ts: clock(),
-          irreversible: true,
-        },
-      ],
-    });
     return {
       ledger,
       identity: {

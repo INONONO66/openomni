@@ -1,29 +1,34 @@
-import { Actor } from "@openomni/protocol";
-import { Storage } from "../storage/storage";
+import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
-function requireAdapter(): NonNullable<Storage.Adapter["blacklist"]> {
-  return requireSubAdapter(Storage.get().blacklist, "Storage adapter does not implement blacklist");
-}
+export type BlacklistStore = ReturnType<typeof createBlacklistStore>;
 
-/** Raw blacklist fact storage. Active-pattern matching belongs to channels. */
-export namespace BlacklistStore {
-  export function put(input: Actor.BlacklistEntry): Actor.BlacklistEntry {
-    const store = requireAdapter();
-    const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id)));
-    store.set(entry);
-    return entry;
+/** Raw blacklist fact storage over one catalog handle. Active-pattern matching belongs to channels. */
+export function createBlacklistStore(source: {
+  readonly blacklist?: ProtocolStorage.BlacklistSubAdapter;
+}) {
+  function requireAdapter(): ProtocolStorage.BlacklistSubAdapter {
+    return requireSubAdapter(source.blacklist, "Storage adapter does not implement blacklist");
   }
 
-  export function get(id: string): Actor.BlacklistEntry | undefined {
-    return requireAdapter().get(id);
-  }
+  return {
+    put(input: Actor.BlacklistEntry): Actor.BlacklistEntry {
+      const store = requireAdapter();
+      const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id)));
+      store.set(entry);
+      return entry;
+    },
 
-  export function list(): Actor.BlacklistEntry[] {
-    return requireAdapter().list();
-  }
+    get(id: string): Actor.BlacklistEntry | undefined {
+      return requireAdapter().get(id);
+    },
 
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
-  }
+    list(): Actor.BlacklistEntry[] {
+      return requireAdapter().list();
+    },
+
+    remove(id: string): boolean {
+      return requireAdapter().remove(id);
+    },
+  };
 }

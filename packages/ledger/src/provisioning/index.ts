@@ -1,11 +1,20 @@
 import { Provisioning } from "@openomni/protocol";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
-import { Storage } from "../storage/storage";
 
 export { Vault } from "./vault";
 
-function requireAdapter(): ProtocolStorage.ProvisioningSubAdapter {
-  const sub = Storage.get().provisioning;
+/** The catalog-handle slice provisioning stores write through (W5.2 F1). */
+export interface ProvisioningSource {
+  readonly provisioning?: ProtocolStorage.ProvisioningSubAdapter;
+  transaction<T>(operation: () => T): T;
+}
+
+export type PersonStore = ReturnType<typeof createPersonStore>;
+export type ChannelInstanceStore = ReturnType<typeof createChannelInstanceStore>;
+export type SecretStore = ReturnType<typeof createSecretStore>;
+
+function requireAdapter(source: ProvisioningSource): ProtocolStorage.ProvisioningSubAdapter {
+  const sub = source.provisioning;
   if (sub === undefined || sub === null) {
     throw new Provisioning.StoreError({
       message: "Storage adapter does not implement provisioning",
@@ -22,77 +31,83 @@ function requireAdapter(): ProtocolStorage.ProvisioningSubAdapter {
  * checked inside the adapter's transaction so two concurrent declares
  * cannot both pass the read.
  */
-export namespace PersonStore {
-  export function put(input: Provisioning.Person): Provisioning.Person {
-    const person = Provisioning.Person.parse(input);
-    const adapter = requireAdapter();
-    return Storage.get().transaction(() => {
-      if (person.trustTier === "owner") {
-        const owner = adapter.listPersons().find((row) => row.trustTier === "owner");
-        if (owner !== undefined && owner.id !== person.id) {
-          throw new Provisioning.StoreError({
-            message: `Sole-owner invariant: ${owner.id} already holds trustTier "owner"`,
-            code: "owner_exists",
-            id: owner.id,
-          });
+export function createPersonStore(source: ProvisioningSource) {
+  return {
+    put(input: Provisioning.Person): Provisioning.Person {
+      const person = Provisioning.Person.parse(input);
+      const adapter = requireAdapter(source);
+      return source.transaction(() => {
+        if (person.trustTier === "owner") {
+          const owner = adapter.listPersons().find((row) => row.trustTier === "owner");
+          if (owner !== undefined && owner.id !== person.id) {
+            throw new Provisioning.StoreError({
+              message: `Sole-owner invariant: ${owner.id} already holds trustTier "owner"`,
+              code: "owner_exists",
+              id: owner.id,
+            });
+          }
         }
-      }
-      adapter.setPerson(person);
-      return person;
-    });
-  }
+        adapter.setPerson(person);
+        return person;
+      });
+    },
 
-  export function get(id: string): Provisioning.Person | undefined {
-    return requireAdapter().getPerson(id);
-  }
+    get(id: string): Provisioning.Person | undefined {
+      return requireAdapter(source).getPerson(id);
+    },
 
-  export function list(): Provisioning.Person[] {
-    return requireAdapter().listPersons();
-  }
+    list(): Provisioning.Person[] {
+      return requireAdapter(source).listPersons();
+    },
 
-  export function remove(id: string): boolean {
-    return requireAdapter().removePerson(id);
-  }
+    remove(id: string): boolean {
+      return requireAdapter(source).removePerson(id);
+    },
+  };
 }
 
 /** Durable ChannelInstance declarations (§3.2). Reconciliation meaning belongs to the app. */
-export namespace ChannelInstanceStore {
-  export function put(input: Provisioning.ChannelInstance): Provisioning.ChannelInstance {
-    const instance = Provisioning.ChannelInstance.parse(input);
-    requireAdapter().setChannelInstance(instance);
-    return instance;
-  }
+export function createChannelInstanceStore(source: ProvisioningSource) {
+  return {
+    put(input: Provisioning.ChannelInstance): Provisioning.ChannelInstance {
+      const instance = Provisioning.ChannelInstance.parse(input);
+      requireAdapter(source).setChannelInstance(instance);
+      return instance;
+    },
 
-  export function get(id: string): Provisioning.ChannelInstance | undefined {
-    return requireAdapter().getChannelInstance(id);
-  }
+    get(id: string): Provisioning.ChannelInstance | undefined {
+      return requireAdapter(source).getChannelInstance(id);
+    },
 
-  export function list(): Provisioning.ChannelInstance[] {
-    return requireAdapter().listChannelInstances();
-  }
+    list(): Provisioning.ChannelInstance[] {
+      return requireAdapter(source).listChannelInstances();
+    },
 
-  export function remove(id: string): boolean {
-    return requireAdapter().removeChannelInstance(id);
-  }
+    remove(id: string): boolean {
+      return requireAdapter(source).removeChannelInstance(id);
+    },
+  };
 }
 
 /** Durable vault rows (§3.3): ciphertext in, ciphertext out. Crypto lives in `Vault`. */
-export namespace SecretStore {
-  export function put(input: Provisioning.Secret): Provisioning.Secret {
-    const secret = Provisioning.Secret.parse(input);
-    requireAdapter().setSecret(secret);
-    return secret;
-  }
+export function createSecretStore(source: ProvisioningSource) {
+  return {
+    put(input: Provisioning.Secret): Provisioning.Secret {
+      const secret = Provisioning.Secret.parse(input);
+      requireAdapter(source).setSecret(secret);
+      return secret;
+    },
 
-  export function get(id: string): Provisioning.Secret | undefined {
-    return requireAdapter().getSecret(id);
-  }
+    get(id: string): Provisioning.Secret | undefined {
+      return requireAdapter(source).getSecret(id);
+    },
 
-  export function list(): Provisioning.Secret[] {
-    return requireAdapter().listSecrets();
-  }
+    list(): Provisioning.Secret[] {
+      return requireAdapter(source).listSecrets();
+    },
 
-  export function remove(id: string): boolean {
-    return requireAdapter().removeSecret(id);
-  }
+    remove(id: string): boolean {
+      return requireAdapter(source).removeSecret(id);
+    },
+  };
 }

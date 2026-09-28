@@ -1,20 +1,17 @@
-import { SessionHandleStore } from "@openomni/ledger";
 import { PlainObjectSchema, SessionTransition, type LedgerAction } from "@openomni/protocol";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutionLedger } from "../../src/executor-contract";
 
 type Reads = Omit<ExecutionLedger, "commit" | "transition" | "validateRequest">;
 
-export function executionReads(sessionId: string): Reads {
+export function executionReads(kernel: SessionKernel, sessionId: string): Reads {
   return {
-    actionById: SessionHandleStore.actionById,
-    requestById: SessionHandleStore.requestById,
-    resultFor: (id) => SessionHandleStore.resultFor(sessionId, id),
-    openOperationsPage: (id, cursor) =>
-      SessionHandleStore.openOperationsPage(sessionId, id, cursor),
-    operationChildrenPage: (id, cursor) =>
-      SessionHandleStore.operationChildrenPage(sessionId, id, cursor),
-    guardedOperationsPage: (id, cursor) =>
-      SessionHandleStore.guardedOperationsPage(sessionId, id, cursor),
+    actionById: kernel.actionById,
+    requestById: kernel.requestById,
+    resultFor: (id) => kernel.resultFor(sessionId, id),
+    openOperationsPage: (id, cursor) => kernel.openOperationsPage(sessionId, id, cursor),
+    operationChildrenPage: (id, cursor) => kernel.operationChildrenPage(sessionId, id, cursor),
+    guardedOperationsPage: (id, cursor) => kernel.guardedOperationsPage(sessionId, id, cursor),
   };
 }
 

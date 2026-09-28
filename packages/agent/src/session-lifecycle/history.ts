@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "../cluster/kernel-registry";
 import {
   canonicalDigest,
   FoldCheckpoint,
@@ -175,16 +176,18 @@ function checkpointSeed(sessionId: string, checkpoint: LedgerAction.Node) {
 }
 
 /** Validate the durable seed even when a commit does not need to materialize its suffix. */
-export function readHistoryCheckpoint(sessionId: string, throughRevision?: number) {
-  const { revision, checkpoint } = SessionHandleStore.latestFoldCheckpoint(
-    sessionId,
-    throughRevision,
-  );
+export function readHistoryCheckpoint(
+  kernel: SessionKernel,
+  sessionId: string,
+  throughRevision?: number,
+) {
+  const { revision, checkpoint } = kernel.latestFoldCheckpoint(sessionId, throughRevision);
   const seed = checkpoint === undefined ? undefined : checkpointSeed(sessionId, checkpoint);
   return {
     nonCheckpointActions: revision - (checkpoint?.ordinal ?? 0),
     hydrate: () =>
       readHistorySuffix(
+        kernel,
         sessionId,
         revision,
         foldHistoryState(sessionId, [], seed?.state),
@@ -195,18 +198,24 @@ export function readHistoryCheckpoint(sessionId: string, throughRevision?: numbe
 }
 
 /** Read one fixed committed prefix; a missing checkpoint alone permits genesis replay. */
-export function hydrateSessionHistory(sessionId: string, throughRevision?: number) {
-  return readHistoryCheckpoint(sessionId, throughRevision).hydrate();
+export function hydrateSessionHistory(
+  kernel: SessionKernel,
+  sessionId: string,
+  throughRevision?: number,
+) {
+  return readHistoryCheckpoint(kernel, sessionId, throughRevision).hydrate();
 }
 
 /** Recovery refresh consumes only commits newer than the runner's captured prefix. */
 export function refreshSessionHistory(
+  kernel: SessionKernel,
   sessionId: string,
   previous: ReturnType<typeof hydrateSessionHistory>,
 ) {
   return readHistorySuffix(
+    kernel,
     sessionId,
-    SessionHandleStore.row(sessionId).revision,
+    kernel.row(sessionId).revision,
     previous.state,
     previous.revision,
     previous.nonCheckpointActions,
@@ -214,6 +223,7 @@ export function refreshSessionHistory(
 }
 
 function readHistorySuffix(
+  kernel: SessionKernel,
   sessionId: string,
   revision: number,
   initial: FoldCheckpoint.State,
@@ -224,7 +234,7 @@ function readHistorySuffix(
   let cursor = afterRevision;
   let nonCheckpointActions = count;
   while (cursor < revision) {
-    const page = SessionHandleStore.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
+    const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
     const suffix = page.actions.filter((action) => action.ordinal <= revision);
     if (suffix.length === 0) throw new Error("history prefix has a revision gap");
     state = foldHistoryState(sessionId, suffix, state);

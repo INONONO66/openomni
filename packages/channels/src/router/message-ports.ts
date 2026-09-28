@@ -61,6 +61,11 @@ interface MessagingGrantSources {
 }
 
 export interface GatewayRouterPorts {
+  /**
+   * The composition-bound store plane (W5.2 F1). Absent, the router keeps
+   * every store's fail-closed unconfigured posture.
+   */
+  readonly stores?: import("./stores.js").ChannelStores;
   /** The app edge executes this synchronous ledger unit without an asynchronous escape. */
   readonly transaction: <A>(operation: Effect.Effect<A, ChannelError>) => Effect.Effect<A, ChannelError>;
   /** Authenticate explicit Owner evidence; never infer it from driver trust fields. */

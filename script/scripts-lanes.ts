@@ -3,25 +3,19 @@ import { join } from "node:path";
 /** Explicit, recursive inventory. New tests require an ownership decision. */
 export const scriptsLanes = {
   "scripts-contracts": [
-    "alarm-type-contract.test.ts",
     "benchmark-workflow.test.ts",
     "check-benchmark-regression.test.ts",
     "check-patch-coverage.test.ts",
     "check-topology.test.ts",
     "ci-plan.test.ts",
     "ci.test.ts",
-    "conformance/ledger-producer-drift.test.ts",
     "conformance/lint-side-effects.test.ts",
     "conformance/protocol-event-pairing.test.ts",
     "conformance/request-authority-census.test.ts",
     "gate-discovery.test.ts",
-    "generate-ledger-archive-manifest.test.ts",
-    "ledger-archive-fault.test.ts",
-    "ledger-archive-review-r2.test.ts",
     "lint-tools.test.ts",
     "scripts-lanes.test.ts",
     "tool-target-deletion.test.ts",
-    "verify-ledger-rename.test.ts",
     "verify-tsconfig-inheritance.test.ts",
     "check-effect-boundaries.test.ts",
     "effect-error-contract.test.ts",
@@ -91,8 +85,6 @@ export const scriptContracts = [
   ["check-dead-exports.ts", "--self-test"],
   ["check-deps.ts", "--self-test"],
   ["check-import-cycles.ts", "--self-test"],
-  ["verify-ledger-rename.ts"],
-  ["check-ledger-schema-drift.ts"],
   ["check-effect-boundaries.ts"],
 ] as const;
 /** Python analyzer self-tests: explicit inventory, run by the first tooling shard. */

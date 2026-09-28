@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { CommitFailed, type ExecutionError } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import {
   canonicalDigest,
   type Inbox,
@@ -14,6 +15,7 @@ import { Clock, Entropy } from "./services";
 import { getSessionHandle } from "./session-handle";
 import { requestBindingDigest } from "./session-request";
 import { commitSessionRequest } from "./session-admission";
+import { adoptSessionAuthority } from "./session-configuration";
 
 export interface SessionRequestPort {
   list(): readonly SessionTransition.Request[];
@@ -42,15 +44,16 @@ export interface SessionRequestPort {
 }
 
 function requestGeneration(
+  kernel: SessionKernel,
   sessionId: string,
   turnId: string | null,
 ): SessionGeneration.Snapshot {
-  if (turnId === null) return SessionHandleStore.latestGenerationFor(sessionId);
-  const turn = SessionHandleStore.turnIntent(SessionHandleStore.actionById(turnId));
+  if (turnId === null) return kernel.latestGenerationFor(sessionId);
+  const turn = SessionHandleStore.turnIntent(kernel.actionById(turnId));
   const generation =
     turn === undefined
       ? undefined
-      : SessionHandleStore.generationFor(sessionId, turn.toolsGeneration);
+      : kernel.generationFor(sessionId, turn.toolsGeneration);
   if (
     turn === undefined ||
     generation === undefined ||
@@ -65,8 +68,8 @@ function requestGeneration(
 
 /** The gateway gets this injected kernel port, never a lifecycle store. */
 /** The recorded invocation a request reopens; anything else is an invariant break, not a session failure. */
-function originalInvocation(requestId: string): PlainObject & { readonly value: PlainValue } {
-  const intent = SessionHandleStore.actionById(requestId)?.intent.value;
+function originalInvocation(kernel: SessionKernel, requestId: string): PlainObject & { readonly value: PlainValue } {
+  const intent = kernel.actionById(requestId)?.intent.value;
   if (intent === null || intent === undefined || typeof intent !== "object" || Array.isArray(intent) || intent.value === undefined)
     throw new Error(`original invocation missing: ${requestId}`);
   return { ...intent, value: intent.value };
@@ -86,26 +89,24 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
     return Effect.gen(function* () {
     const live = getSessionHandle(sessionId, runtime);
     if (live !== undefined) return yield* live.requests.transition(payload, inputId, at, admission);
+    // Out-of-turn authority is a fence adoption (W5.2 F5): this writer becomes
+    // the session's current activation for exactly this commit. A concurrently
+    // live activation elsewhere observes the higher fence and goes stale; on
+    // the entity plane these transitions route through the entity instead.
     const owner = `${runtime.processId ?? process.pid}:request:${entropy()}`;
-    const row = SessionHandleStore.row(sessionId);
+    const kernel = runtime.openKernel(sessionId);
     const now = clock();
-    const lease = yield* SessionHandleStore.acquireLease({
-      sessionId, owner, expectedFence: row.leaseFence, now, expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-    }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+    const fence = yield* adoptSessionAuthority(kernel, sessionId, owner).pipe(
+      Effect.mapError((error) => new CommitFailed({ error })),
+    );
     return yield* commitSessionRequest(
-      sessionId, { owner, fence: lease.fence }, payload, inputId, Math.max(at, now), runtime, admission,
-    ).pipe(Effect.onExit(() => Effect.suspend(() => {
-      const current = SessionHandleStore.row(sessionId);
-      return SessionHandleStore.commit({
-        sessionId, owner, fence: lease.fence, now: clock(), expectedRevision: current.revision,
-        actions: [], consumeInboxIds: [], state: current.state, releaseLease: true,
-      }).pipe(Effect.orDie, Effect.asVoid);
-    })));
+      kernel, sessionId, { owner, fence }, payload, inputId, Math.max(at, now), runtime, admission,
+    );
     });
   }
   function timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError> {
     return Effect.gen(function* () {
-    const request = SessionHandleStore.requestById(requestId);
+    const request = findRequest(requestId);
     if (request === undefined) throw new Error(`deadline request missing: ${requestId}`);
     const result = yield* transition(
       request.sessionId,
@@ -121,8 +122,15 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
       runtime.onRequestReady?.(request.sessionId);
     });
   }
+  function findRequest(requestId: string): SessionTransition.Request | undefined {
+    for (const row of runtime.listSessions()) {
+      const request = runtime.openKernel(row.id).requestById(requestId);
+      if (request !== undefined) return request;
+    }
+    return undefined;
+  }
   return {
-    list: () => SessionHandleStore.requestRows(),
+    list: () => runtime.listSessions().flatMap((row) => runtime.openKernel(row.id).requestRows(row.id)),
     timeout,
     cancel(input) {
       return Effect.gen(function* () {
@@ -139,9 +147,10 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
     },
     open(input) {
       return Effect.gen(function* () {
-      const intent = originalInvocation(input.requestId);
+      const kernel = runtime.openKernel(input.sessionId);
+      const intent = originalInvocation(kernel, input.requestId);
       const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
-      const generation = requestGeneration(input.sessionId, turnId);
+      const generation = requestGeneration(kernel, input.sessionId, turnId);
       const value: PlainValue = intent.originalArgs ?? intent.value;
       const request: SessionTransition.Request = {
         requestId: input.requestId,

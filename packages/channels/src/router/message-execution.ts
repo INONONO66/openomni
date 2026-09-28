@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { ChannelError } from "../errors";
-import { SurfaceKey } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import {
   Inbox,
   canonicalDigest,
@@ -15,6 +15,7 @@ import { answerNativeRequest, openNativeRequest } from "./request/native";
 import { executeRequestRoute, requireRoutedDecision } from "./routing-execution";
 
 interface MessageContext {
+  stores: ChannelStores;
   sender: Gateway.IngestSender;
   send: Gateway.SendMessage;
   prepared: Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>;
@@ -130,8 +131,8 @@ export function executeMessage(
   const content = transformedContent(intent, sender, send, messageId);
   if (external !== undefined) {
     const decision = requireRoutedDecision(external.route.decision);
-    yield* executeRequestRoute(external.route, decision, ports.requests, content, clock());
-    SurfaceKey.claim(external.surfaceKey, prepared.target);
+    yield* executeRequestRoute(context.stores, external.route, decision, ports.requests, content, clock());
+    context.stores.surfaceKeys.claim(external.surfaceKey, prepared.target);
     if (external.route.requestExecution.kind === "request") return sessionResult;
   }
   if (send.to.kind === "actor") {

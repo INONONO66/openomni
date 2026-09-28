@@ -1,5 +1,5 @@
 import type { Actor, Gateway } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/ledger";
+import type { ChannelStores } from "../stores.js";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -24,8 +24,11 @@ function deliveryTarget(actorId: string, endpoint: Actor.Endpoint): Gateway.Deli
   };
 }
 
-function resolveExistingTarget(target: Gateway.MessageTarget): TargetResolution {
-  const identity = ActorRegistry.getIdentity(target.actorId);
+function resolveExistingTarget(
+  stores: ChannelStores,
+  target: Gateway.MessageTarget,
+): TargetResolution {
+  const identity = stores.actors.getIdentity(target.actorId);
   if (identity === undefined) {
     return {
       ok: false,
@@ -34,7 +37,7 @@ function resolveExistingTarget(target: Gateway.MessageTarget): TargetResolution 
     };
   }
   if (target.endpointId !== undefined) {
-    const endpoint = ActorRegistry.getEndpoint(target.endpointId);
+    const endpoint = stores.actors.getEndpoint(target.endpointId);
     if (endpoint === undefined) {
       return {
         ok: false,
@@ -51,7 +54,7 @@ function resolveExistingTarget(target: Gateway.MessageTarget): TargetResolution 
     }
     return { ok: true, target: deliveryTarget(target.actorId, endpoint) };
   }
-  const endpoints = ActorRegistry.listEndpoints(target.actorId);
+  const endpoints = stores.actors.listEndpoints(target.actorId);
   const [endpoint, ...rest] = endpoints;
   if (endpoint === undefined) {
     return {
@@ -72,6 +75,7 @@ function resolveExistingTarget(target: Gateway.MessageTarget): TargetResolution 
 
 /** Grant admission precedes registry access, so ungranted senders learn no target facts. */
 export function authorizeSend(
+  stores: ChannelStores,
   input: Pick<Gateway.SendInput, "senderId" | "target" | "operation" | "at">,
   grants: readonly Gateway.SenderTargetGrant[],
 ):
@@ -95,7 +99,7 @@ export function authorizeSend(
       reason: `no active sender-target grant covers ${input.senderId} -> ${input.target.actorId} (${input.operation})`,
     };
   }
-  const resolution = resolveExistingTarget(input.target);
+  const resolution = resolveExistingTarget(stores, input.target);
   if (!resolution.ok) return resolution;
   if (grant === undefined) {
     const surfaceKey = deliverySurfaceKey(resolution.target);

@@ -1,5 +1,5 @@
 // W5.2 #1197 L2.1 (plan §4 "fence-rotation"): every entity activation rotates
-// the catalog fence (F5 CAS) and adopts it into the session file's lease CAS;
+// the catalog fence (F5 CAS) and adopts it into the session file's fence CAS;
 // commits are authorized by owner+fence, so the previous activation's writer
 // is refused "stale" the moment a newer activation adopts - across OS
 // processes and across restarts. Folds in review R8: SIGKILL between BEGIN
@@ -18,14 +18,6 @@ import { openCatalogStore, openSessionStore } from "../../src/storage/index";
 import { runLedgerSync } from "../helpers/effect";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
-
-/**
- * 2100-01-01T00:00:00Z - the same far-future lease expiry the entity plane
- * writes: activations have no heartbeat, the catalog CAS is the takeover
- * authority, so adoption advances `now` to the held expiry and re-arms at
- * least 1ms further (inclusive expiry: expired exactly at `expiresAt`).
- */
-const FAR_FUTURE = 4_102_444_800_000;
 
 const refuse: (error: LedgerError) => never = (error) => {
   throw error;
@@ -59,32 +51,25 @@ function commitRequest(
     now: Date.now(),
     expectedRevision: row.revision,
     actions: [action],
-    consumeInboxIds: [],
     state: row.state,
-    releaseLease: false,
   };
 }
 
-/** The activation protocol twin: rotate the catalog fence, then adopt it into the file lease CAS. */
+/** The activation protocol twin: rotate the catalog fence, then adopt it into the file fence CAS. */
 function adoptFence(kernel: SessionKernel, sessionId: string, owner: string, fence: number): void {
-  for (;;) {
-    const current = kernel.row(sessionId);
-    if (current.leaseFence === fence && current.leaseOwner === owner) return;
-    if (current.leaseFence >= fence) throw new Error(`stale activation: ${current.leaseFence} >= ${fence}`);
-    const takeoverNow = Math.max(Date.now(), current.leaseExpiresAt ?? Date.now());
-    runLedgerSync(
-      kernel.acquireLease({
-        sessionId,
-        owner,
-        expectedFence: current.leaseFence,
-        now: takeoverNow,
-        expiresAt: Math.max(FAR_FUTURE, takeoverNow + 1),
-      }),
-    );
-  }
+  const current = kernel.row(sessionId);
+  if (current.leaseFence === fence && current.leaseOwner === owner) return;
+  if (current.leaseFence >= fence)
+    throw new Error(`stale activation: ${current.leaseFence} >= ${fence}`);
+  runLedgerSync(kernel.adoptFence({ sessionId, owner, fence }));
 }
 
-function activate(catalog: CatalogStore, kernel: SessionKernel, sessionId: string, owner: string): number {
+function activate(
+  catalog: CatalogStore,
+  kernel: SessionKernel,
+  sessionId: string,
+  owner: string,
+): number {
   const fence = catalog.rotateFence(sessionId);
   adoptFence(kernel, sessionId, owner, fence);
   return fence;
@@ -157,32 +142,52 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
     const { catalog, kernel, sessionPath } = world;
     // First activation: fence 0 -> 1 on a never-leased file.
     expect(activate(catalog, kernel, "s1", "runner:a")).toBe(1);
-    const first = runLedgerSync(kernel.commit(commitRequest(kernel, "s1", "runner:a", 1, promptAction("a1", "s1", "from a"))));
+    const first = runLedgerSync(
+      kernel.commit(commitRequest(kernel, "s1", "runner:a", 1, promptAction("a1", "s1", "from a"))),
+    );
     expect(first.ok).toBe(true);
 
-    // Second activation takes over although a's lease never expires (far-future
-    // expiry): the catalog CAS win IS the takeover authority.
+    // Second activation takes over without any expiry clock: the catalog CAS
+    // win IS the takeover authority.
     expect(activate(catalog, kernel, "s1", "runner:b")).toBe(2);
     expect(kernel.row("s1")).toMatchObject({ leaseOwner: "runner:b", leaseFence: 2 });
-    expect(kernel.row("s1").leaseExpiresAt ?? 0).toBeGreaterThanOrEqual(FAR_FUTURE);
-    expect(runLedgerSync(kernel.commit(commitRequest(kernel, "s1", "runner:b", 2, promptAction("b1", "s1", "from b")))).ok).toBe(true);
+    expect(
+      runLedgerSync(
+        kernel.commit(
+          commitRequest(kernel, "s1", "runner:b", 2, promptAction("b1", "s1", "from b")),
+        ),
+      ).ok,
+    ).toBe(true);
 
     // The superseded writer is refused with the raw l0 "stale" token and
     // leaves nothing behind - not the action, not a revision bump.
     const revisionBefore = kernel.row("s1").revision;
-    const stale = rawCommit(sessionPath, commitRequest(kernel, "s1", "runner:a", 1, promptAction("a-stale", "s1", "late")));
+    const stale = rawCommit(
+      sessionPath,
+      commitRequest(kernel, "s1", "runner:a", 1, promptAction("a-stale", "s1", "late")),
+    );
     expect(stale).toMatchObject({ ok: false, reason: "stale", currentFence: 2 });
     expect(kernel.actionById("a-stale")).toBeUndefined();
     expect(kernel.row("s1").revision).toBe(revisionBefore);
 
     // The adapter surfaces the same refusal as a typed CommitRefused.
-    const refused = runLedgerSync(Effect.flip(kernel.commit(commitRequest(kernel, "s1", "runner:a", 1, promptAction("a-stale-2", "s1", "late")))));
+    const refused = runLedgerSync(
+      Effect.flip(
+        kernel.commit(
+          commitRequest(kernel, "s1", "runner:a", 1, promptAction("a-stale-2", "s1", "late")),
+        ),
+      ),
+    );
     expect(refused).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: 2 });
 
     // Restart rotates again and the previous holder is refused in turn.
     expect(activate(catalog, kernel, "s1", "runner:c")).toBe(3);
-    expect(rawCommit(sessionPath, commitRequest(kernel, "s1", "runner:b", 2, promptAction("b-stale", "s1", "late"))))
-      .toMatchObject({ ok: false, reason: "stale", currentFence: 3 });
+    expect(
+      rawCommit(
+        sessionPath,
+        commitRequest(kernel, "s1", "runner:b", 2, promptAction("b-stale", "s1", "late")),
+      ),
+    ).toMatchObject({ ok: false, reason: "stale", currentFence: 3 });
 
     // A rotation that lost the adoption race refuses: the file fence already
     // reached a later activation's fence (multi-step adoption walks 3 -> 5).
@@ -214,18 +219,8 @@ test("concurrent activations from two processes: one winner, stale loser refused
       const session = openSessionStore(String(process.env.FENCE_SESSION_PATH));
       const kernel = createSessionKernel(session, catalog);
       const fence = catalog.rotateFence(sessionId);
-      let adopted = true;
-      for (;;) {
-        const current = kernel.row(sessionId);
-        if (current.leaseFence === fence && current.leaseOwner === owner) break;
-        if (current.leaseFence >= fence) { adopted = false; break; }
-        const takeoverNow = Math.max(Date.now(), current.leaseExpiresAt ?? Date.now());
-        const acquired = runLedgerSync(Effect.result(kernel.acquireLease({
-          sessionId, owner, expectedFence: current.leaseFence,
-          now: takeoverNow, expiresAt: Math.max(${FAR_FUTURE}, takeoverNow + 1),
-        })));
-        void acquired; // a lost single-increment race re-reads and re-decides
-      }
+      const adoption = runLedgerSync(Effect.result(kernel.adoptFence({ sessionId, owner, fence })));
+      const adopted = adoption._tag === "Success";
       let committed = false;
       let reason = "";
       if (adopted) {
@@ -238,7 +233,7 @@ test("concurrent activations from two processes: one winner, stale loser refused
             effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: owner } },
             irreversible: true, ts: Date.now(),
           }],
-          consumeInboxIds: [], state: row.state, releaseLease: false,
+          state: row.state,
         })));
         committed = outcome._tag === "Success";
         if (!committed) reason = outcome.failure.reason ?? outcome.failure._tag;
@@ -270,7 +265,15 @@ test("concurrent activations from two processes: one winner, stale loser refused
       expect(result.exitCode).toBe(0);
     }
     const reports = results
-      .map((result) => JSON.parse(result.stdout.trim()) as { owner: string; fence: number; committed: boolean; reason: string })
+      .map(
+        (result) =>
+          JSON.parse(result.stdout.trim()) as {
+            owner: string;
+            fence: number;
+            committed: boolean;
+            reason: string;
+          },
+      )
       .sort((left, right) => left.fence - right.fence);
     expect(reports.map((report) => report.fence)).toEqual([1, 2]);
     const [loser, winner] = reports;
@@ -287,9 +290,30 @@ test("concurrent activations from two processes: one winner, stale loser refused
     expect(kernel.verifyChain("s2")).toMatchObject({ kind: "intact" });
 
     // Exactly one writer now: the loser's identity is refused stale, the winner's still commits.
-    expect(rawCommit(world.sessionPath, commitRequest(kernel, "s2", loser.owner, loser.fence, promptAction("loser-late", "s2", "late"))))
-      .toMatchObject({ ok: false, reason: "stale", currentFence: 2 });
-    expect(rawCommit(world.sessionPath, commitRequest(kernel, "s2", winner.owner, winner.fence, promptAction("winner-more", "s2", "more"))).ok).toBe(true);
+    expect(
+      rawCommit(
+        world.sessionPath,
+        commitRequest(
+          kernel,
+          "s2",
+          loser.owner,
+          loser.fence,
+          promptAction("loser-late", "s2", "late"),
+        ),
+      ),
+    ).toMatchObject({ ok: false, reason: "stale", currentFence: 2 });
+    expect(
+      rawCommit(
+        world.sessionPath,
+        commitRequest(
+          kernel,
+          "s2",
+          winner.owner,
+          winner.fence,
+          promptAction("winner-more", "s2", "more"),
+        ),
+      ).ok,
+    ).toBe(true);
   } finally {
     world.close();
   }
@@ -320,7 +344,7 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
           effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: "r8" } },
           irreversible: true, ts: Date.now(),
         }],
-        consumeInboxIds: [], state: "idle", releaseLease: false,
+        state: "idle",
       }, (error) => { throw error; });
       console.log(JSON.stringify({ ok: result?.ok === true }));
       Bun.sleepSync(15_000); // park inside the open transaction until SIGKILL
@@ -328,11 +352,18 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
     `;
     const child = Bun.spawn([process.execPath, "-e", childSource], {
       cwd: PACKAGE_ROOT,
-      env: { ...process.env, FENCE_SESSION_PATH: sessionPath, FENCE_FENCE: String(fence), FENCE_REVISION: String(row.revision) },
+      env: {
+        ...process.env,
+        FENCE_SESSION_PATH: sessionPath,
+        FENCE_FENCE: String(fence),
+        FENCE_REVISION: String(row.revision),
+      },
       stdout: "pipe",
       stderr: "pipe",
     });
-    const marker = JSON.parse(await readLine(child.stdout as ReadableStream<Uint8Array>)) as { ok: boolean };
+    const marker = JSON.parse(await readLine(child.stdout as ReadableStream<Uint8Array>)) as {
+      ok: boolean;
+    };
     expect(marker.ok).toBe(true);
     child.kill("SIGKILL");
     await child.exited;
@@ -344,7 +375,11 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
     expect(kernel.verifyChain("s3")).toMatchObject({ kind: "intact" });
 
     // The write lock died with the process: the holder commits the same action id cleanly.
-    const retried = runLedgerSync(kernel.commit(commitRequest(kernel, "s3", "runner:r8", fence, promptAction("r8-a1", "s3", "retried"))));
+    const retried = runLedgerSync(
+      kernel.commit(
+        commitRequest(kernel, "s3", "runner:r8", fence, promptAction("r8-a1", "s3", "retried")),
+      ),
+    );
     expect(retried.ok).toBe(true);
     expect(kernel.actionById("r8-a1")).toBeDefined();
   } finally {

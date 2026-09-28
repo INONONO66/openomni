@@ -1,28 +1,21 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Result } from "effect";
-import { runLedgerSync } from "../helpers/effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { LedgerSession } from "@openomni/protocol";
-import { SessionHandleStore, Storage } from "../../src/index";
 import { SessionSqlRow } from "../../src/storage/sqlite-l0-rows";
 import { materializeSession } from "../helpers/session";
-import { removeSqliteFiles, tempDbPath } from "../helpers/sqlite";
+import { useSqliteStores } from "../helpers/storage";
 
-let dbPath: string;
+const stores = useSqliteStores("read-validation");
 let raw: Database;
 beforeEach(() => {
-  dbPath = tempDbPath("read-validation");
-  Storage.initialize({ dbPath });
-  raw = new Database(dbPath);
+  raw = new Database(stores.sessionPath);
   // Model damaged persisted bytes, bypassing write-time CHECKs on this fault connection only.
   raw.exec("PRAGMA ignore_check_constraints = ON");
-  materializeSession("corrupt");
+  materializeSession(stores.kernel, "corrupt");
 });
 afterEach(() => {
   raw.close();
-  Storage.reset();
-  removeSqliteFiles(dbPath);
 });
 
 describe("canonical SQLite reads fail closed", () => {
@@ -32,8 +25,8 @@ describe("canonical SQLite reads fail closed", () => {
     "",
   ])("corrupt action payload %s rejects tree and snapshot reads", (payload) => {
     raw.query("UPDATE action SET effect = ? WHERE id = ?").run(payload, "corrupt:configure");
-    expect(() => sessionTree("corrupt")).toThrow();
-    expect(() => SessionHandleStore.getSnapshot("corrupt")).toThrow();
+    expect(() => sessionTree("corrupt", stores.session.actions)).toThrow();
+    expect(() => stores.kernel.getSnapshot("corrupt")).toThrow();
   });
 
   test.each([
@@ -41,47 +34,23 @@ describe("canonical SQLite reads fail closed", () => {
     "not-a-number",
   ])("invalid canonical session counter %s rejects get and list reads", (value) => {
     raw.query("UPDATE session SET tools_generation = ? WHERE id = ?").run(value, "corrupt");
-    expect(() => SessionHandleStore.row("corrupt")).toThrow();
-    expect(() => SessionHandleStore.listRows()).toThrow();
+    expect(() => stores.kernel.row("corrupt")).toThrow();
+    expect(() => stores.kernel.listRows()).toThrow();
   });
 
   test("session reads validate the canonical row exactly once per returned record", () => {
     const parse = spyOn(LedgerSession.Row, "parse");
     const sqlParse = spyOn(SessionSqlRow._zod, "run");
     try {
-      expect(SessionHandleStore.row("corrupt").id).toBe("corrupt");
+      expect(stores.kernel.row("corrupt").id).toBe("corrupt");
       expect(parse).toHaveBeenCalledTimes(1);
       parse.mockClear();
-      expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["corrupt"]);
+      expect(stores.kernel.listRows().map((row) => row.id)).toEqual(["corrupt"]);
       expect(parse).toHaveBeenCalledTimes(1);
       expect(sqlParse).not.toHaveBeenCalled();
     } finally {
       parse.mockRestore();
       sqlParse.mockRestore();
     }
-  });
-
-  test("corrupt inbox origin rejects reads without consuming the row", () => {
-    Result.getOrThrowWith(
-      runLedgerSync(
-        Effect.result(
-          SessionHandleStore.commitInbox({
-            id: "pending",
-            sessionId: "corrupt",
-            kind: "prompt",
-            content: "input",
-            origin: { encodingVersion: 1, value: {} },
-            createdAt: 2,
-            parentActionId: null,
-          }),
-        ),
-      ),
-      (error) => error,
-    );
-    raw.query("UPDATE inbox SET origin = ? WHERE id = ?").run("{", "pending");
-    expect(() => SessionHandleStore.pendingInbox("corrupt")).toThrow();
-    expect(raw.query("SELECT status FROM inbox WHERE id = ?").get("pending")).toEqual({
-      status: "pending",
-    });
   });
 });

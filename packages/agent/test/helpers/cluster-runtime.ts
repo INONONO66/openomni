@@ -129,9 +129,7 @@ function makeTurnPort(runner: TestTurnRunner): SessionEntityPorts["runTurn"] {
           now: Date.now(),
           expectedRevision: kernel.row(sessionId).revision,
           actions,
-          consumeInboxIds: [],
           state,
-          releaseLease: false,
         });
       const seal = (
         turnId: string,

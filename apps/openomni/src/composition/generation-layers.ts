@@ -4,12 +4,12 @@ import {
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
   type GenerationBundle, type SessionError, type SessionRuntime,
 } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
+import { AppLedger, type SessionKernel } from "./cluster-runtime";
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
 
@@ -26,6 +26,7 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
 /** The app owns construction; the package manager alone owns acquired contexts. */
 export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(function* () {
   const scope = yield* Effect.scope;
+  const plane = yield* AppLedger;
   const installed = yield* BundleDefinitions;
   const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
@@ -41,7 +42,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         try: () => installed.select(snapshot.bundles),
         catch: (error) => error instanceof BundleError ? error : new ForeignFailure({ operation: "generation.select", cause: String(error) }),
       });
-      const role = SessionHandleStore.row(sessionId).role;
+      const role = plane.openKernel(sessionId).row(sessionId).role;
       const offered = new Set(snapshot.tools.map((tool) => tool.name));
       const select = (tools: readonly AnyToolDefinition[]) => [...tools, ...selected.tools].filter(
         (tool) => offered.has(tool.name) && (tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
@@ -68,7 +69,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const layer = Layer.unwrap(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
-          try: () => compilePolicySnapshot({ rows: SessionHandleStore.policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
+          try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
           catch: (error) => new ForeignFailure({ operation: "generation.policy", cause: String(error) }),
         });
         return Layer.succeed(SessionLayer, { snapshot, policy });
@@ -82,7 +83,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       if (stopping) return yield* new ForeignFailure({ operation: "generation.capture", cause: "draining" });
       let owner = managers.get(sessionId);
       if (owner === undefined) {
-        const initial = yield* bundle(sessionId, SessionHandleStore.latestGenerationFor(sessionId));
+        const initial = yield* bundle(sessionId, plane.openKernel(sessionId).latestGenerationFor(sessionId));
         owner = yield* makeSessionGenerations(initial).pipe(Scope.provide(scope));
         managers.set(sessionId, owner);
       }
@@ -98,7 +99,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
       const owner = yield* manager(id.sessionId);
-      const snapshot = SessionHandleStore.generationFor(id.sessionId, id.generation);
+      const snapshot = plane.openKernel(id.sessionId).generationFor(id.sessionId, id.generation);
       if (snapshot === undefined) return yield* new GenerationUnavailable({ generation: id.generation });
       return yield* owner.capture(yield* bundle(id.sessionId, snapshot));
     }),
@@ -121,11 +122,12 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
  */
 export function configureAuthority(
   generations: Context.Service.Shape<typeof GenerationLayers>,
+  openKernel: (sessionId: string) => SessionKernel,
 ): SessionRuntime["authorizeConfigure"] {
   return (input) => Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture({
       sessionId: input.sessionId,
-      generation: SessionHandleStore.latestGenerationFor(input.sessionId).generation,
+      generation: openKernel(input.sessionId).latestGenerationFor(input.sessionId).generation,
     });
     const { policy } = yield* captured.provide(SessionLayer);
     return policy.evaluate({

@@ -1,5 +1,5 @@
 import type { Actor, Gateway } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import { matchBlacklist } from "./blacklist.js";
 import { resolveChannelGrant } from "./channel-grant.js";
 
@@ -27,13 +27,14 @@ function mintScopeKey(event: Gateway.DeliveredEvent, externalId: string): string
  * SAME contact and the route replay stays equivalent.
  */
 function mintProvisionalContact(
+  stores: ChannelStores,
   event: Gateway.DeliveredEvent,
   externalId: string,
   now: number,
 ): Actor.ResolvedEndpoint | undefined {
   // The allowlist gates minting too: a stranger gets no grant, so no contact
   // is minted for them either.
-  const resolution = resolveChannelGrant({
+  const resolution = resolveChannelGrant(stores, {
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
@@ -43,7 +44,7 @@ function mintProvisionalContact(
   const policy = resolution.grant.provisionalMint;
   const tier = resolution.grant.defaultTier;
   if (policy === undefined || tier === undefined) return undefined;
-  const blacklisted = matchBlacklist({
+  const blacklisted = matchBlacklist(stores, {
     channel: event.surface,
     candidates: [
       event.surface,
@@ -52,14 +53,14 @@ function mintProvisionalContact(
     ],
   });
   if (blacklisted !== undefined) return undefined;
-  const minted = ActorRegistry.countProvisionalMints(
+  const minted = stores.actors.countProvisionalMints(
     event.surface,
     event.workspace,
     now - policy.windowMs,
   );
   if (minted >= policy.max) return undefined;
   const scope = mintScopeKey(event, externalId);
-  return ActorRegistry.mintProvisional(
+  return stores.actors.mintProvisional(
     {
       id: `contact:${scope}`,
       // Honest provenance: the perimeter knows the address, not who is behind it.
@@ -109,18 +110,21 @@ function resolvedActorEvent(
   };
 }
 
-export function resolveIngressActor(event: Gateway.DeliveredEvent): Gateway.DeliveredEvent {
+export function resolveIngressActor(
+  stores: ChannelStores,
+  event: Gateway.DeliveredEvent,
+): Gateway.DeliveredEvent {
   const externalId = externalActorId(event);
   // Identity provenance is the authenticated sender, never inbound meta.actor.
   const projected: Gateway.DeliveredEvent = {
     ...event,
     meta: { ...event.meta, actor: { ...(externalId ? { id: externalId } : {}), role: "user" } },
   };
-  if (!externalId || !ActorRegistry.isConfigured()) return projected;
+  if (!externalId || !stores.actors.isConfigured()) return projected;
 
   const resolved =
-    ActorRegistry.resolveEndpoint(event.surface, externalId, event.workspace) ??
-    mintProvisionalContact(event, externalId, Date.now());
+    stores.actors.resolveEndpoint(event.surface, externalId, event.workspace) ??
+    mintProvisionalContact(stores, event, externalId, Date.now());
   if (!resolved) return projected;
 
   return resolvedActorEvent(event, resolved);

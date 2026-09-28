@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { ChannelGrantStore, Storage } from "../../src/index.js";
-import { useSqliteStorage } from "../helpers/storage";
+import { createChannelGrantStore } from "../../src/index.js";
+import { useSqliteStores } from "../helpers/storage";
 import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {
-  const fixture = useSqliteStorage("channel-grant");
+  const stores = useSqliteStores("channel-grant");
+  const grants = () => createChannelGrantStore(stores.catalog);
 
   test("persists grant fields without resolution-derived normalization", () => {
-    const stored = ChannelGrantStore.put({
+    const stored = grants().put({
       id: "grant-byte-fixture",
       surface: "discord",
       workspace: "guild",
@@ -21,7 +22,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    using reader = new Database(fixture.path, { readonly: true });
+    using reader = new Database(stores.catalogPath, { readonly: true });
     const row = reader
       .query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
       .get("grant-byte-fixture");
@@ -33,7 +34,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
   });
 
   test("round-trips raw grant facts across adapter reconfiguration", () => {
-    const stored = ChannelGrantStore.put({
+    const stored = grants().put({
       id: "grant-channel",
       surface: "discord",
       workspace: "guild",
@@ -45,32 +46,26 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    fixture.reopen();
+    stores.reopen();
 
-    expect(ChannelGrantStore.get(stored.id)).toEqual(stored);
-    expect(ChannelGrantStore.list()).toEqual([stored]);
+    expect(grants().get(stored.id)).toEqual(stored);
+    expect(grants().list()).toEqual([stored]);
   });
 
   test("removes exactly one stored fact", () => {
-    ChannelGrantStore.put({
+    grants().put({
       id: "grant-discord",
       surface: "discord",
       kind: "trusted_channel",
       createdBy: "act_owner",
     });
 
-    expect(ChannelGrantStore.remove("grant-discord")).toBe(true);
-    expect(ChannelGrantStore.get("grant-discord")).toBeUndefined();
-    expect(ChannelGrantStore.remove("grant-discord")).toBe(false);
+    expect(grants().remove("grant-discord")).toBe(true);
+    expect(grants().get("grant-discord")).toBeUndefined();
+    expect(grants().remove("grant-discord")).toBe(false);
   });
 
   test("raw reads fail closed when the channelGrant sub-adapter is absent", () => {
-    const bare = Storage.get();
-    Storage.configure({
-      transaction: bare.transaction.bind(bare),
-      close: () => bare.close?.(),
-    });
-
-    expect(() => ChannelGrantStore.list()).toThrow("does not implement channel grants");
+    expect(() => createChannelGrantStore({}).list()).toThrow("does not implement channel grants");
   });
 });

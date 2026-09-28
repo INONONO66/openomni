@@ -1,22 +1,24 @@
-import type { Actor } from "@openomni/protocol";
-import { Storage } from "../storage/storage";
+import type { Actor, Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 import { StoredIdentity, StoredEndpoint } from "./schema";
 
-function requireAdapter(): NonNullable<Storage.Adapter["actorRegistry"]> {
-  return requireSubAdapter(
-    Storage.get().actorRegistry,
-    "Storage adapter does not implement actorRegistry",
-  );
+/** The catalog-handle slice the actor registry writes through (W5.2 F1). */
+export interface ActorRegistrySource {
+  readonly actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
+  transaction<T>(operation: () => T): T;
 }
 
-export namespace ActorRegistry {
-  /** Whether the configured storage adapter provides the actor registry. */
-  export function isConfigured(): boolean {
-    return Storage.get().actorRegistry !== undefined;
+export type ActorRegistry = ReturnType<typeof createActorRegistry>;
+
+export function createActorRegistry(source: ActorRegistrySource) {
+  function requireAdapter(): ProtocolStorage.ActorRegistrySubAdapter {
+    return requireSubAdapter(
+      source.actorRegistry,
+      "Storage adapter does not implement actorRegistry",
+    );
   }
 
-  export function registerIdentity(input: Actor.Identity) {
+  function registerIdentity(input: Actor.Identity) {
     const adapter = requireAdapter();
     const identity = StoredIdentity.parse(
       withStoreTimestamps(input, adapter.getIdentity(input.id)),
@@ -25,15 +27,11 @@ export namespace ActorRegistry {
     return identity;
   }
 
-  export function getIdentity(id: string) {
+  function getIdentity(id: string) {
     return StoredIdentity.optional().parse(requireAdapter().getIdentity(id));
   }
 
-  export function removeIdentity(id: string): boolean {
-    return requireAdapter().removeIdentity(id);
-  }
-
-  export function registerEndpoint(input: Actor.Endpoint) {
+  function registerEndpoint(input: Actor.Endpoint) {
     const adapter = requireAdapter();
     const endpoint = StoredEndpoint.parse(
       withStoreTimestamps(input, adapter.getEndpoint(input.id)),
@@ -55,79 +53,91 @@ export namespace ActorRegistry {
     return endpoint;
   }
 
-  export function getEndpoint(id: string) {
-    return StoredEndpoint.optional().parse(requireAdapter().getEndpoint(id));
-  }
+  return {
+    /** Whether the injected store handle provides the actor registry. */
+    isConfigured(): boolean {
+      return source.actorRegistry !== undefined;
+    },
 
-  export function listEndpoints(actorId?: string, workspace?: string) {
-    return StoredEndpoint.array().parse(requireAdapter().listEndpoints(actorId, workspace));
-  }
+    registerIdentity,
+    getIdentity,
 
-  /**
-   * #P3 provisional mint (conversation-and-message-io.md §3.1): identity +
-   * endpoint land in ONE transaction — a half-minted contact never exists.
-   * The row carries `standing: "provisional"` and nothing else: no grants,
-   * no tier escalation — the perimeter demotes its inbound to evidence_only.
-   */
-  export function mintProvisional(
-    identity: Actor.Identity,
-    endpoint: Omit<Actor.Endpoint, "actorId">,
-  ) {
-    if (identity.standing !== "provisional") {
-      throw new Error(`Provisional mint requires standing "provisional": ${identity.id}`);
-    }
-    return Storage.get().transaction(() => ({
-      identity: registerIdentity(identity),
-      endpoint: registerEndpoint({ ...endpoint, actorId: identity.id }),
-    }));
-  }
+    removeIdentity(id: string): boolean {
+      return requireAdapter().removeIdentity(id);
+    },
 
-  /** The §8.12 mint-volume read: provisional identities minted on this channel since `since`. */
-  export function countProvisionalMints(
-    channel: string,
-    workspace: string | undefined,
-    since: number,
-  ): number {
-    return requireAdapter().countProvisionalSince(channel, workspace, since);
-  }
+    registerEndpoint,
 
-  /**
-   * #P3 promotion act (§3.1/§6): provisional → registered. Idempotent —
-   * promoting a registered contact returns it unchanged. The Owner-approval
-   * gate lives with the tool that calls this (product authority), not here.
-   */
-  export function promote(actorId: string) {
-    const identity = getIdentity(actorId);
-    if (!identity) {
-      throw new Error(`Actor identity not found: ${actorId}`);
-    }
-    if (identity.standing !== "provisional") return identity;
-    return registerIdentity({ ...identity, standing: "registered" });
-  }
+    getEndpoint(id: string) {
+      return StoredEndpoint.optional().parse(requireAdapter().getEndpoint(id));
+    },
 
-  /**
-   * #P3 endpoint merge act (§8.4): moves one endpoint onto another identity
-   * — the ONLY way two channels ever fold into one contact. The
-   * Owner-approval gate lives with the tool that calls this.
-   */
-  export function mergeEndpoint(endpointId: string, toActorId: string) {
-    const adapter = requireAdapter();
-    const endpoint = adapter.getEndpoint(endpointId);
-    if (!endpoint) {
-      throw new Error(`Actor endpoint not found: ${endpointId}`);
-    }
-    if (!adapter.getIdentity(toActorId)) {
-      throw new Error(`Actor identity not found: ${toActorId}`);
-    }
-    return registerEndpoint({ ...endpoint, actorId: toActorId });
-  }
+    listEndpoints(actorId?: string, workspace?: string) {
+      return StoredEndpoint.array().parse(requireAdapter().listEndpoints(actorId, workspace));
+    },
 
-  export function resolveEndpoint(channel: string, externalId: string, workspace?: string) {
-    const adapter = requireAdapter();
-    const endpoint = adapter.findEndpoint(channel, externalId, workspace);
-    if (!endpoint) return undefined;
-    const identity = adapter.getIdentity(endpoint.actorId);
-    if (!identity) return undefined;
-    return { identity: StoredIdentity.parse(identity), endpoint: StoredEndpoint.parse(endpoint) };
-  }
+    /**
+     * #P3 provisional mint (conversation-and-message-io.md §3.1): identity +
+     * endpoint land in ONE transaction — a half-minted contact never exists.
+     * The row carries `standing: "provisional"` and nothing else: no grants,
+     * no tier escalation — the perimeter demotes its inbound to evidence_only.
+     */
+    mintProvisional(identity: Actor.Identity, endpoint: Omit<Actor.Endpoint, "actorId">) {
+      if (identity.standing !== "provisional") {
+        throw new Error(`Provisional mint requires standing "provisional": ${identity.id}`);
+      }
+      return source.transaction(() => ({
+        identity: registerIdentity(identity),
+        endpoint: registerEndpoint({ ...endpoint, actorId: identity.id }),
+      }));
+    },
+
+    /** The §8.12 mint-volume read: provisional identities minted on this channel since `since`. */
+    countProvisionalMints(channel: string, workspace: string | undefined, since: number): number {
+      return requireAdapter().countProvisionalSince(channel, workspace, since);
+    },
+
+    /**
+     * #P3 promotion act (§3.1/§6): provisional → registered. Idempotent —
+     * promoting a registered contact returns it unchanged. The Owner-approval
+     * gate lives with the tool that calls this (product authority), not here.
+     */
+    promote(actorId: string) {
+      const identity = getIdentity(actorId);
+      if (!identity) {
+        throw new Error(`Actor identity not found: ${actorId}`);
+      }
+      if (identity.standing !== "provisional") return identity;
+      return registerIdentity({ ...identity, standing: "registered" });
+    },
+
+    /**
+     * #P3 endpoint merge act (§8.4): moves one endpoint onto another identity
+     * — the ONLY way two channels ever fold into one contact. The
+     * Owner-approval gate lives with the tool that calls this.
+     */
+    mergeEndpoint(endpointId: string, toActorId: string) {
+      const adapter = requireAdapter();
+      const endpoint = adapter.getEndpoint(endpointId);
+      if (!endpoint) {
+        throw new Error(`Actor endpoint not found: ${endpointId}`);
+      }
+      if (!adapter.getIdentity(toActorId)) {
+        throw new Error(`Actor identity not found: ${toActorId}`);
+      }
+      return registerEndpoint({ ...endpoint, actorId: toActorId });
+    },
+
+    resolveEndpoint(channel: string, externalId: string, workspace?: string) {
+      const adapter = requireAdapter();
+      const endpoint = adapter.findEndpoint(channel, externalId, workspace);
+      if (!endpoint) return undefined;
+      const identity = adapter.getIdentity(endpoint.actorId);
+      if (!identity) return undefined;
+      return {
+        identity: StoredIdentity.parse(identity),
+        endpoint: StoredEndpoint.parse(endpoint),
+      };
+    },
+  };
 }

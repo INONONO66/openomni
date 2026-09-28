@@ -4,23 +4,14 @@
  * session row, the append-only action hash chain (0041 shape), and
  * first-writer-wins decision facts (0040 shape). There is no migration plane:
  * a session file is either fresh or already on this schema.
- *
- * The `data`/`time_created`/`time_updated` and `lease_expires_at` columns are
- * kept because the current write plane (`sqlite-l0-write.ts` insertSession /
- * commitSession) still reads and writes them; the lease-expiry predicate and
- * these legacy columns leave together with that write-plane rework (wave 3).
  */
 export const SESSION_FILE_SCHEMA: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS session (
     id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    time_created INTEGER NOT NULL,
-    time_updated INTEGER NOT NULL,
     parent_id TEXT,
     role TEXT CHECK (role IN ('resident', 'worker')),
     lease_owner TEXT,
     lease_fence INTEGER NOT NULL DEFAULT 0 CHECK (lease_fence >= 0),
-    lease_expires_at INTEGER,
     revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
     state TEXT NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'running', 'interrupted')),
     tools_generation INTEGER NOT NULL DEFAULT 0 CHECK (tools_generation >= 0),

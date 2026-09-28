@@ -1,31 +1,13 @@
 import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
-import { afterEach, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
 import { LedgerAction, LedgerSession } from "@openomni/protocol";
-import { SessionHandleStore, SqliteStorageAdapter, Storage } from "../../src/index";
-import {
-  ACTION_HASH_MIGRATION,
-  ActionChainMigrationError,
-  computeActionHash,
-  GENESIS_PREV_HASH,
-} from "../../src/storage/l0-hash";
-import { Migration } from "../../src/storage/migration-runner";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../src/storage/l0-hash";
 import { ActionSqlRow } from "../../src/storage/sqlite-l0-rows";
-import {
-  ORDERED_MIGRATIONS,
-  initializeSqliteDatabase,
-  preflightSqliteDatabase,
-} from "../../src/storage/sqlite-schema-lifecycle";
-import { assertArchiveEquality } from "../../../../script/ledger-archive-snapshot";
-import { createActions } from "../../src/storage/sqlite-l0-actions";
-
-const migrationDir = join(import.meta.dir, "../../migration");
-const migrationName = ACTION_HASH_MIGRATION;
-
-afterEach(() => Storage.reset());
+import { runLedgerSync } from "../helpers/effect";
+import { openLedgerDatabase, observedL0Adapters, type L0Adapters } from "../helpers/ledger";
 
 function append(id: string, sessionId = "chain"): LedgerAction.Append {
   return {
@@ -40,11 +22,10 @@ function append(id: string, sessionId = "chain"): LedgerAction.Append {
   };
 }
 
-function fresh() {
-  const adapter = new SqliteStorageAdapter(":memory:");
-  Storage.configure(adapter);
+function fresh(db: Database): L0Adapters {
+  const { adapter } = observedL0Adapters(db);
   Result.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.result(
         adapter.sessions.create(
           LedgerSession.Row.parse({
@@ -53,7 +34,6 @@ function fresh() {
             role: "resident",
             leaseOwner: null,
             leaseFence: 0,
-            leaseExpiresAt: null,
             revision: 0,
             state: "idle",
           }),
@@ -74,8 +54,8 @@ function stored(db: Database, ordinal: number, sessionId = "chain") {
   );
 }
 
-function broken(ordinal: number) {
-  const verdict = LedgerAction.ChainVerdict.parse(SessionHandleStore.verifyChain("chain"));
+function broken(adapter: L0Adapters, ordinal: number) {
+  const verdict = LedgerAction.ChainVerdict.parse(adapter.actions.verifyChain("chain"));
   expect(verdict.kind).toBe("broken");
   if (verdict.kind !== "broken") throw new Error("expected broken chain");
   expect(verdict.ordinal).toBe(ordinal);
@@ -84,8 +64,9 @@ function broken(ordinal: number) {
 }
 
 test("empty action chain has no head", () => {
-  Storage.initialize({ dbPath: ":memory:" });
-  expect(SessionHandleStore.verifyChain("empty")).toEqual({
+  using db = openLedgerDatabase();
+  const { adapter } = observedL0Adapters(db);
+  expect(adapter.actions.verifyChain("empty")).toEqual({
     kind: "intact",
     head: null,
     length: 0,
@@ -93,8 +74,8 @@ test("empty action chain has no head", () => {
 });
 
 test("three committed actions bind every stored field and expose their hashes", () => {
-  const adapter = fresh();
-  const db = adapter.testDatabase();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   const first = stored(db, 1);
   const head = stored(db, 3);
   const framed = JSON.stringify([
@@ -113,7 +94,7 @@ test("three committed actions bind every stored field and expose their hashes", 
   ]);
   expect(first.action_hash).toBe(createHash("sha256").update(framed).digest("hex"));
   expect(first.prev_hash).toBe(GENESIS_PREV_HASH);
-  expect(SessionHandleStore.verifyChain("chain")).toEqual({
+  expect(adapter.actions.verifyChain("chain")).toEqual({
     kind: "intact",
     length: 3,
     head: computeActionHash(head),
@@ -129,26 +110,29 @@ test("three committed actions bind every stored field and expose their hashes", 
 });
 
 test("effect tampering breaks at ordinal two", () => {
-  const db = fresh().testDatabase();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   db.run("UPDATE action SET effect = ? WHERE ordinal = 2", ['{ "tampered": true }']);
-  const verdict = broken(2);
+  const verdict = broken(adapter, 2);
   expect(verdict.expected).toBe(computeActionHash(stored(db, 2)));
   expect(verdict.actual).toBe(stored(db, 2).action_hash);
 });
 
 test("swapping ordinals two and three breaks the chain", () => {
-  const db = fresh().testDatabase();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   db.run("UPDATE action SET ordinal = 4 WHERE ordinal = 2");
   db.run("UPDATE action SET ordinal = 2 WHERE ordinal = 3");
   db.run("UPDATE action SET ordinal = 3 WHERE ordinal = 4");
-  broken(2);
+  broken(adapter, 2);
 });
 
 test("rewriting a row hash cannot conceal a broken link to its successor", () => {
-  const db = fresh().testDatabase();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   db.run("UPDATE action SET effect = '{}' WHERE ordinal = 2");
   db.run("UPDATE action SET action_hash = ? WHERE ordinal = 2", [computeActionHash(stored(db, 2))]);
-  expect(broken(3)).toEqual({
+  expect(broken(adapter, 3)).toEqual({
     kind: "broken",
     ordinal: 3,
     expected: stored(db, 2).action_hash,
@@ -157,53 +141,43 @@ test("rewriting a row hash cannot conceal a broken link to its successor", () =>
 });
 
 for (const column of ["prev_hash", "action_hash"] as const) {
-  test(`null ${column} fails verification`, () => {
-    const db = fresh().testDatabase();
-    db.run(`UPDATE action SET ${column} = NULL WHERE ordinal = 2`);
-    expect(broken(2).actual).toBe("null");
+  test(`the fresh schema refuses a null ${column} outright`, () => {
+    using db = openLedgerDatabase();
+    fresh(db);
+    expect(() => db.run(`UPDATE action SET ${column} = NULL WHERE ordinal = 2`)).toThrow(
+      "NOT NULL constraint failed",
+    );
   });
 
   test(`blob-typed ${column} fails verification without throwing`, () => {
-    const db = fresh().testDatabase();
+    using db = openLedgerDatabase();
+    const adapter = fresh(db);
     db.run(`UPDATE action SET ${column} = X'303132' WHERE ordinal = 2`);
-    expect(broken(2).actual).toBe("blob:303132");
+    expect(broken(adapter, 2).actual).toBe("blob:303132");
     expect(db.query(`SELECT typeof(${column}) AS t FROM action WHERE ordinal = 2`).get()).toEqual({
       t: "blob",
     });
   });
 }
 
-for (const ts of [10.5, 9007199254740992]) {
+for (const ts of [10.5, 9_007_199_254_740_992]) {
   test(`epoch instant ${ts} round-trips through append, tree and verification`, () => {
-    const adapter = fresh();
+    using db = openLedgerDatabase();
+    const adapter = fresh(db);
     const receipt = adapter.actions.append({ ...append("t"), ts }, 3);
     expect(receipt?.action.ts).toBe(ts);
     expect(sessionTree("chain", adapter.actions).at(-1)?.ts).toBe(ts);
-    expect(SessionHandleStore.verifyChain("chain")).toEqual({
+    expect(adapter.actions.verifyChain("chain")).toEqual({
       kind: "intact",
       length: 4,
-      head: computeActionHash(stored(adapter.testDatabase(), 4)),
+      head: computeActionHash(stored(db, 4)),
     });
   });
 }
 
-test("0039 backfills a historical row with a fractional epoch instant", () => {
-  using db = historical();
-  legacyAction(db, "one", 1);
-  db.run("UPDATE action SET ts = 10.5 WHERE id = 'one:1'");
-  Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
-  const actions = createActions(db, (operation) => operation(), { publish: () => undefined });
-  expect(sessionTree("one", actions)[0]?.ts).toBe(10.5);
-  expect(actions.verifyChain("one")).toEqual({
-    kind: "intact",
-    length: 1,
-    head: computeActionHash(stored(db, 1, "one")),
-  });
-});
-
 test("append uses the actual head hash rather than revision minus one", () => {
-  const adapter = fresh();
-  const db = adapter.testDatabase();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   const head = stored(db, 3).action_hash;
   db.run("UPDATE session SET revision = 8 WHERE id = 'chain'");
   const receipt = adapter.actions.append(append("after-gap"), 8);
@@ -212,7 +186,8 @@ test("append uses the actual head hash rather than revision minus one", () => {
 });
 
 test("revertible rows hash the stored revert bytes", () => {
-  const adapter = fresh();
+  using db = openLedgerDatabase();
+  const adapter = fresh(db);
   const action = append("revert");
   const receipt = adapter.actions.append(
     {
@@ -227,145 +202,6 @@ test("revertible rows hash the stored revert bytes", () => {
     },
     3,
   );
-  expect(receipt?.action.actionHash).toBe(computeActionHash(stored(adapter.testDatabase(), 4)));
-  expect(SessionHandleStore.verifyChain("chain").kind).toBe("intact");
+  expect(receipt?.action.actionHash).toBe(computeActionHash(stored(db, 4)));
+  expect(adapter.actions.verifyChain("chain").kind).toBe("intact");
 });
-
-function historical() {
-  const db = new Database(":memory:");
-  const before = ORDERED_MIGRATIONS.slice(
-    0,
-    ORDERED_MIGRATIONS.findIndex(({ name }) => name === migrationName),
-  );
-  Migration.applyOrdered(db, migrationDir, before);
-  for (const id of ["one", "two"]) {
-    db.run(
-      "INSERT INTO session (id, data, time_created, time_updated, role) VALUES (?, '{}', 0, 0, 'resident')",
-      [id],
-    );
-  }
-  return db;
-}
-
-function legacyAction(db: Database, sessionId: string, ordinal: number) {
-  db.run(
-    `INSERT INTO action (id, parent_id, session_id, kind, intent, effect, revert, irreversible, encoding_version, ts, ordinal)
-    VALUES (?, NULL, ?, 'tool', ?, ?, NULL, 1, 1, 10, ?)`,
-    [`${sessionId}:${ordinal}`, sessionId, '{ "b": 2, "a": 1 }', '{ "ok": true }', ordinal],
-  );
-}
-
-test("0039 backfills both sessions without re-encoding JSON and creates the unique index", () => {
-  using db = historical();
-  for (const sessionId of ["one", "two"]) {
-    legacyAction(db, sessionId, 1);
-    legacyAction(db, sessionId, 2);
-  }
-  const before = db.query("SELECT id, intent, effect FROM action ORDER BY id").all();
-  Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
-  const actions = createActions(db, (operation) => db.transaction(operation)(), {
-    publish: () => undefined,
-  });
-  for (const sessionId of ["one", "two"]) {
-    const rows = ActionSqlRow.array().parse(
-      db.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(sessionId),
-    );
-    const head = ActionSqlRow.parse(rows[1]);
-    expect(actions.verifyChain(sessionId)).toEqual({
-      kind: "intact",
-      length: 2,
-      head: computeActionHash(head),
-    });
-    expect(rows[0]?.prev_hash).toBe(GENESIS_PREV_HASH);
-    expect(rows[1]?.prev_hash).toBe(rows[0]?.action_hash);
-  }
-  expect(db.query("SELECT id, intent, effect FROM action ORDER BY id").all()).toEqual(before);
-  expect(db.query("PRAGMA index_list(action)").all()).toContainEqual(
-    expect.objectContaining({ name: "action_hash_unique", unique: 1 }),
-  );
-  expect(() =>
-    db.run(
-      "UPDATE action SET action_hash = (SELECT action_hash FROM action WHERE id = 'one:1') WHERE id = 'two:1'",
-    ),
-  ).toThrow();
-  const hashes = db.query("SELECT prev_hash, action_hash FROM action ORDER BY id").all();
-  Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
-  expect(db.query("SELECT prev_hash, action_hash FROM action ORDER BY id").all()).toEqual(hashes);
-});
-
-test("0038 reopens pending and upgrades to an intact, applied 0039 chain", () => {
-  using historicalDb = historical();
-  legacyAction(historicalDb, "one", 1);
-  legacyAction(historicalDb, "one", 2);
-  using db = Database.deserialize(historicalDb.serialize());
-  expect(preflightSqliteDatabase(db)).toBe("pending");
-  initializeSqliteDatabase(db);
-  using reopened = Database.deserialize(db.serialize());
-  expect(preflightSqliteDatabase(reopened)).toBe("applied");
-  initializeSqliteDatabase(reopened);
-  const actions = createActions(reopened, (operation) => operation(), { publish: () => undefined });
-  const head = ActionSqlRow.parse(reopened.query("SELECT * FROM action WHERE ordinal = 2").get());
-  expect(actions.verifyChain("one")).toEqual({
-    kind: "intact",
-    length: 2,
-    head: computeActionHash(head),
-  });
-});
-
-for (const mutation of [
-  "UPDATE action SET intent = '{\"changed\":1}'",
-  "UPDATE action SET effect = '{\"changed\":1}'",
-  "UPDATE action SET prev_hash = 'changed'",
-  "UPDATE action SET action_hash = 'changed'",
-  "DROP INDEX action_hash_unique",
-]) {
-  test(`0039 archive compatibility preserves old bytes and validates hashes: ${mutation}`, () => {
-    using db = historical();
-    legacyAction(db, "one", 1);
-    using archived = Database.deserialize(db.serialize());
-    initializeSqliteDatabase(db);
-    expect(() => assertArchiveEquality(db, archived, true)).not.toThrow();
-    db.run(mutation);
-    expect(() => assertArchiveEquality(db, archived, true)).toThrow();
-  });
-}
-
-for (const column of ["intent", "effect"] as const) {
-  test(`0039 archive comparison rejects changed ${column} even with a recomputed intact chain`, () => {
-    using db = historical();
-    legacyAction(db, "one", 1);
-    using archived = Database.deserialize(db.serialize());
-    initializeSqliteDatabase(db);
-    db.run(`UPDATE action SET ${column} = '{"changed":1}'`);
-    const row = ActionSqlRow.parse(db.query("SELECT * FROM action").get());
-    db.run("UPDATE action SET action_hash = ?", [computeActionHash(row)]);
-    const actions = createActions(db, (operation) => operation(), { publish: () => undefined });
-    expect(actions.verifyChain("one").kind).toBe("intact");
-    expect(() => assertArchiveEquality(db, archived, true)).toThrow("stale_archive:action");
-  });
-}
-
-for (const ordinals of [[1, 3], [2]]) {
-  test(`0039 refuses non-contiguous ordinals ${ordinals.join(",")} and rolls back`, () => {
-    using db = historical();
-    legacyAction(db, "one", 1);
-    for (const ordinal of ordinals) legacyAction(db, "two", ordinal);
-    db.run(`CREATE TRIGGER refuse_action_update BEFORE UPDATE ON action
-      BEGIN SELECT RAISE(ABORT, 'unexpected_action_update'); END`);
-    const before = db.serialize();
-    expect(() => Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS)).toThrow(
-      ActionChainMigrationError,
-    );
-    try {
-      Migration.applyOrdered(db, migrationDir, ORDERED_MIGRATIONS);
-      throw new Error("expected migration refusal");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ActionChainMigrationError);
-      if (!(error instanceof ActionChainMigrationError)) throw error;
-      expect(error.reason).toBe("non_contiguous_ordinal");
-      expect(error.sessionId).toBe("two");
-    }
-    expect(db.serialize()).toEqual(before);
-    expect(db.query("SELECT name FROM _migrations WHERE name = ?").get(migrationName)).toBeNull();
-  });
-}

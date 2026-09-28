@@ -1,7 +1,8 @@
 import { Effect, Scope } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
-import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, SessionRunnerResult, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";
+import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";
 import { ForeignFailure, type SessionError } from "./errors";
 import { resolveSessionRuntime, type ResolvedSessionRuntime } from "./session-contract";
 import type { SessionEntryServices } from "./services";
@@ -30,14 +31,6 @@ export function getSessionHandle(id: string, runtime: SessionRuntime): SessionHa
   return registries.get(runtime)?.get(id);
 }
 
-export function wakeSession(id: string, runner: SessionRunner, runtime: SessionRuntime) {
-  return registryFor(runtime).pipe(Effect.flatMap((registry) => registry.wake(id, runner)));
-}
-
-export function sweepSessions(resolveRunner: (row: LedgerSession.Row) => SessionRunner, runtime: SessionRuntime) {
-  return registryFor(runtime).pipe(Effect.flatMap((registry) => registry.sweep(resolveRunner)));
-}
-
 export function closeSessions(runtime: SessionRuntime): Effect.Effect<void, SessionError> {
   return Effect.suspend(() => {
     const registry = registries.get(runtime);
@@ -49,14 +42,10 @@ export function closeSessions(runtime: SessionRuntime): Effect.Effect<void, Sess
 class SessionRegistry {
   private readonly entries = new Map<string, RegistryEntry>();
   private readonly installing = new Map<string, Effect.Effect<RegistryEntry, SessionError>>();
-  private swept = false;
   private closed = false;
 
   constructor(private readonly runtime: ResolvedSessionRuntime, private readonly scope: Scope.Scope) {}
   get(id: string): SessionHandle | undefined { return this.entries.get(id)?.controller.handle; }
-  wake(id: string, runner: SessionRunner) {
-    return this.install(id, runner).pipe(Effect.flatMap((entry) => entry.controller.reconcile()));
-  }
 
   declare(options: SessionCreateOptions): Effect.Effect<SessionHandle, SessionError> {
     const self = this;
@@ -70,33 +59,16 @@ class SessionRegistry {
         return existing.controller.handle;
       }
       const tools = (options.tools ?? []).map(toolSnapshot);
-      const materialized = yield* SessionHandleStore.materialize({
+      const kernel = self.runtime.openKernel(id);
+      const materialized = yield* kernel.materialize({
         id, parentId: options.parentId ?? null, role: options.role, tools,
         system: { preset: options.system?.preset ?? "", blocks: options.system?.blocks ?? [] },
-        policyGeneration: options.policyGeneration ?? SessionHandleStore.currentPolicyGeneration(),
+        policyGeneration: options.policyGeneration ?? kernel.currentPolicyGeneration(),
         bundles: options.bundles,
         actionId: entropy(), at: self.runtime.clock(),
       });
-      if (!materialized.created) assertDeclaration(materialized.row, options, tools, options.system);
+      if (!materialized.created) assertDeclaration(kernel, materialized.row, options, tools, options.system);
       return (yield* self.install(id, options.runner)).controller.handle;
-    });
-  }
-
-  sweep(resolveRunner: (row: LedgerSession.Row) => SessionRunner): Effect.Effect<void, SessionError> {
-    const self = this;
-    return Effect.gen(function* () {
-      if (self.swept) return;
-      self.swept = true;
-      const recoveries: Effect.Effect<SessionRunnerResult | undefined, SessionError>[] = [];
-      for (const row of SessionHandleStore.listRows()) {
-        const hasOpenTurn = SessionHandleStore.latestOpenTurn(row.id) !== undefined;
-        const hasInbox = SessionHandleStore.pendingInbox(row.id).length > 0;
-        const hasOutbound = SessionHandleStore.outboundRows(row.id).some((item) => item.state === "pending");
-        if (!hasOpenTurn && !hasInbox && !hasOutbound) continue;
-        const entry = self.entries.get(row.id) ?? (yield* self.install(row.id, resolveRunner(row)));
-        recoveries.push(entry.controller.reconcile());
-      }
-      yield* Effect.all(recoveries, { concurrency: "unbounded", discard: true });
     });
   }
 
@@ -126,7 +98,7 @@ class SessionRegistry {
             },
           };
           const scope = yield* Scope.fork(self.scope, "sequential");
-          controller = yield* createController(id, runner, self.runtime, lifecycle, scope);
+          controller = yield* createController(self.runtime.openKernel(id), id, runner, self.runtime, lifecycle, scope);
           const entry = { runner, controller };
           self.entries.set(id, entry);
           self.installing.delete(id);
@@ -139,9 +111,9 @@ class SessionRegistry {
   }
 }
 
-function assertDeclaration(row: LedgerSession.Row, options: SessionCreateOptions, tools: readonly SessionGeneration.Tool[], system: Partial<SessionSystem> | undefined): void {
+function assertDeclaration(kernel: SessionKernel, row: LedgerSession.Row, options: SessionCreateOptions, tools: readonly SessionGeneration.Tool[], system: Partial<SessionSystem> | undefined): void {
   if (row.role !== options.role || row.parentId !== (options.parentId ?? null)) throw new Error(`session declaration conflicts with durable identity: ${row.id}`);
-  const snapshot = SessionHandleStore.latestGenerationFor(row.id);
+  const snapshot = kernel.latestGenerationFor(row.id);
   const expected = SessionHandleStore.generationSnapshot({
     generation: snapshot.generation, revertTo: snapshot.revertTo, tools,
     system: { preset: system?.preset ?? "", blocks: system?.blocks ?? [] },

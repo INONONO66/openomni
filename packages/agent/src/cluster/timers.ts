@@ -9,7 +9,7 @@ import type { CommitFailed } from "../errors";
  * dispositions below are those chain guards; the entity handler acks a "skip"
  * without committing anything.
  */
-export type TimerSkipReason =
+type TimerSkipReason =
   | "malformed_alarm_id"
   | "unknown_attempt"
   | "attempt_settled"
@@ -35,14 +35,14 @@ export interface TimerChainReads {
 }
 
 /** `RetryScheduled` DeliverAt payload; `alarmId` = `<attemptActionId>:retry:<n>`. */
-export interface RetryRearm {
+interface RetryRearm {
   readonly alarmId: string;
   readonly attempt: number;
   readonly notBefore: number;
 }
 
 /** `Deadline` DeliverAt payload; chain key = `<requestId>:deadline`. */
-export interface DeadlineArm {
+interface DeadlineArm {
   readonly requestId: string;
   readonly deadlineAt: number;
 }

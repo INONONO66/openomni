@@ -1,24 +1,25 @@
 import { Effect } from "effect";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import type { SessionRuntime } from "./session-contract";
 import type { ChatAgentConfig } from "./core/types";
 import type { ExecutionApprovals } from "./executor-contract";
 
 export function sessionStopEvidence(
+  kernel: SessionKernel,
   sessionId: string,
   turnId: string,
   approvals: () => ExecutionApprovals | undefined,
   openIntent?: SessionRuntime["openIntent"],
 ): NonNullable<ChatAgentConfig["stopEvidence"]> {
-  let ordinal = SessionHandleStore.row(sessionId).revision;
-  const start = SessionHandleStore.actionById(turnId)?.ordinal ?? ordinal;
+  let ordinal = kernel.row(sessionId).revision;
+  const start = kernel.actionById(turnId)?.ordinal ?? ordinal;
   return () => Effect.gen(function* () {
-    const revision = SessionHandleStore.row(sessionId).revision;
+    const revision = kernel.row(sessionId).revision;
     let progress = false;
     let blocked = false;
     while (ordinal < revision) {
-      const page = SessionHandleStore.historyPage(sessionId, { afterRevision: ordinal, limit: 256 });
+      const page = kernel.historyPage(sessionId, { afterRevision: ordinal, limit: 256 });
       for (const action of page.actions) {
         if (action.ordinal > revision) break;
         progress ||= effectChanged(action);
@@ -28,17 +29,39 @@ export function sessionStopEvidence(
     }
     const obligations = yield* (openIntent?.({ sessionId, turnId, revision }) ?? Effect.succeed([]));
     const pending = approvals()?.pending() ?? [];
-    const alarms = Storage.get().alarms?.due(Number.MAX_SAFE_INTEGER) ?? [];
-    const alarmIds = alarms.flatMap((alarm) => {
-      const action = SessionHandleStore.actionById(alarm.id);
-      return action?.sessionId === sessionId && action.ordinal > start ? [alarm.id] : [];
-    });
     return {
       progress, blocked,
       openIntent: [...obligations.map((intent) => intent.actionId), ...pending.map((approval) => approval.id)],
-      alarmIds,
+      alarmIds: openAlarmIds(kernel, sessionId, start, revision),
     };
   });
+}
+
+/**
+ * Live wait evidence is a chain fold (the alarm table is gone): every
+ * `alarm.arm` action committed after this turn opened whose alarm no later
+ * `alarm.fired`/`alarm.paused` child settled is still armed.
+ */
+function openAlarmIds(
+  kernel: SessionKernel,
+  sessionId: string,
+  start: number,
+  revision: number,
+): string[] {
+  const armed = new Map<string, string>();
+  let cursor = start;
+  while (cursor < revision) {
+    const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
+    for (const action of page.actions) {
+      if (action.ordinal > revision) break;
+      if (action.kind === "alarm.arm") armed.set(action.id, action.id);
+      if ((action.kind === "alarm.fired" || action.kind === "alarm.paused") && action.parentId !== null)
+        armed.delete(action.parentId);
+      cursor = action.ordinal;
+    }
+    if (page.nextRevision === null) break;
+  }
+  return [...armed.keys()];
 }
 
 function effectBlocked(action: LedgerAction.Node): boolean {

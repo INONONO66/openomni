@@ -1,16 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Channel } from "@openomni/protocol";
 import { Context } from "effect";
 import { LedgerWrites } from "../src/services";
 import { SessionNotFound, StorageUnavailable } from "../src/errors";
-
-import { SurfaceKey } from "../src/surface-key";
-import { Storage } from "../src/storage/storage";
-import "../src/storage/initialize";
+import { createSurfaceKeyStore } from "../src/surface-key";
 import { materializeSession } from "./helpers/session";
-
-afterEach(() => Storage.reset());
-
+import { useMemoryStores } from "./helpers/storage";
 
 test("ledger service and error contracts are runtime values", () => {
   expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
@@ -20,20 +15,16 @@ test("ledger service and error contracts are runtime values", () => {
   expect(new StorageUnavailable({ capability: "storage" })._tag).toBe("StorageUnavailable");
 });
 
-
 // The pure string codec (create/fromChannel/parse) lives in the protocol
 // adapter domain — see packages/protocol/test/adapter-surface-key.test.ts.
 // This suite covers the storage semantics: claim/lookup/listBySession.
 
-function seedSession(id: string): void {
-  materializeSession(id);
-}
-
 describe("SurfaceKey", () => {
-  beforeEach(() => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-  });
+  const stores = useMemoryStores();
+  const surfaceKeys = () => createSurfaceKeyStore(stores.catalog);
+  const seedSession = (id: string): void => {
+    materializeSession(stores.kernel, id);
+  };
 
   describe("claim and lookup", () => {
     test("claims and looks up a surfaceKey", () => {
@@ -41,16 +32,18 @@ describe("SurfaceKey", () => {
       const sessionId = "session-123";
 
       seedSession(sessionId);
-      SurfaceKey.claim(key, sessionId);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId);
+      surfaceKeys().claim(key, sessionId);
+      expect(surfaceKeys().lookup(key)).toBe(sessionId);
     });
 
     test("returns undefined for unregistered key", () => {
-      expect(SurfaceKey.lookup("slack:unknown")).toBeUndefined();
+      expect(surfaceKeys().lookup("slack:unknown")).toBeUndefined();
     });
 
     test("throws error on invalid format during claim", () => {
-      expect(() => SurfaceKey.claim("invalid", "session-123")).toThrow(/Invalid surfaceKey format/);
+      expect(() => surfaceKeys().claim("invalid", "session-123")).toThrow(
+        /Invalid surfaceKey format/,
+      );
     });
   });
 
@@ -61,11 +54,11 @@ describe("SurfaceKey", () => {
       const key2 = "slack:workspaceA:channel:C456";
 
       seedSession(sessionId);
-      SurfaceKey.claim(key1, sessionId);
-      SurfaceKey.claim(key2, sessionId);
+      surfaceKeys().claim(key1, sessionId);
+      surfaceKeys().claim(key2, sessionId);
 
-      expect(SurfaceKey.lookup(key1)).toBe(sessionId);
-      expect(SurfaceKey.lookup(key2)).toBe(sessionId);
+      expect(surfaceKeys().lookup(key1)).toBe(sessionId);
+      expect(surfaceKeys().lookup(key2)).toBe(sessionId);
     });
 
     test("lists all keys for a session", () => {
@@ -75,11 +68,11 @@ describe("SurfaceKey", () => {
       const key3 = "telegram:botId:chat:chatId";
 
       seedSession(sessionId);
-      SurfaceKey.claim(key1, sessionId);
-      SurfaceKey.claim(key2, sessionId);
-      SurfaceKey.claim(key3, sessionId);
+      surfaceKeys().claim(key1, sessionId);
+      surfaceKeys().claim(key2, sessionId);
+      surfaceKeys().claim(key3, sessionId);
 
-      const keys = SurfaceKey.listBySession(sessionId);
+      const keys = surfaceKeys().listBySession(sessionId);
       expect(keys).toHaveLength(3);
       expect(keys).toContain(key1);
       expect(keys).toContain(key2);
@@ -87,7 +80,7 @@ describe("SurfaceKey", () => {
     });
 
     test("returns empty array for session with no keys", () => {
-      expect(SurfaceKey.listBySession("unknown-session")).toEqual([]);
+      expect(surfaceKeys().listBySession("unknown-session")).toEqual([]);
     });
   });
 
@@ -99,38 +92,38 @@ describe("SurfaceKey", () => {
 
       seedSession(sessionId1);
       seedSession(sessionId2);
-      SurfaceKey.claim(key, sessionId1);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId1);
-      expect(SurfaceKey.listBySession(sessionId1)).toContain(key);
+      surfaceKeys().claim(key, sessionId1);
+      expect(surfaceKeys().lookup(key)).toBe(sessionId1);
+      expect(surfaceKeys().listBySession(sessionId1)).toContain(key);
 
-      SurfaceKey.claim(key, sessionId2, sessionId1);
-      expect(SurfaceKey.lookup(key)).toBe(sessionId2);
-      expect(SurfaceKey.listBySession(sessionId1)).not.toContain(key);
-      expect(SurfaceKey.listBySession(sessionId2)).toContain(key);
+      surfaceKeys().claim(key, sessionId2, sessionId1);
+      expect(surfaceKeys().lookup(key)).toBe(sessionId2);
+      expect(surfaceKeys().listBySession(sessionId1)).not.toContain(key);
+      expect(surfaceKeys().listBySession(sessionId2)).toContain(key);
     });
 
     test("claim returns existing owner without overwriting it", () => {
       const key = "slack:workspaceA:channel:C123";
       seedSession("session-1");
       seedSession("session-2");
-      SurfaceKey.claim(key, "session-1");
+      surfaceKeys().claim(key, "session-1");
 
-      const owner = SurfaceKey.claim(key, "session-2");
+      const owner = surfaceKeys().claim(key, "session-2");
 
       expect(owner).toBe("session-1");
-      expect(SurfaceKey.lookup(key)).toBe("session-1");
+      expect(surfaceKeys().lookup(key)).toBe("session-1");
     });
 
     test("claim can replace an expected owner", () => {
       const key = "slack:workspaceA:channel:C123";
       seedSession("session-1");
       seedSession("session-2");
-      SurfaceKey.claim(key, "session-1");
+      surfaceKeys().claim(key, "session-1");
 
-      const owner = SurfaceKey.claim(key, "session-2", "session-1");
+      const owner = surfaceKeys().claim(key, "session-2", "session-1");
 
       expect(owner).toBe("session-2");
-      expect(SurfaceKey.lookup(key)).toBe("session-2");
+      expect(surfaceKeys().lookup(key)).toBe("session-2");
     });
   });
 
@@ -151,11 +144,11 @@ describe("SurfaceKey", () => {
 
       seedSession("session-dm");
       seedSession("session-group");
-      SurfaceKey.claim(dmKey, "session-dm");
-      SurfaceKey.claim(groupKey, "session-group");
+      surfaceKeys().claim(dmKey, "session-dm");
+      surfaceKeys().claim(groupKey, "session-group");
 
-      expect(SurfaceKey.lookup(dmKey)).toBe("session-dm");
-      expect(SurfaceKey.lookup(groupKey)).toBe("session-group");
+      expect(surfaceKeys().lookup(dmKey)).toBe("session-dm");
+      expect(surfaceKeys().lookup(groupKey)).toBe("session-group");
     });
 
     test("routes thread separately from parent channel", () => {
@@ -175,37 +168,18 @@ describe("SurfaceKey", () => {
 
       seedSession("session-channel");
       seedSession("session-thread");
-      SurfaceKey.claim(channelKey, "session-channel");
-      SurfaceKey.claim(threadKey, "session-thread");
+      surfaceKeys().claim(channelKey, "session-channel");
+      surfaceKeys().claim(threadKey, "session-thread");
 
-      expect(SurfaceKey.lookup(channelKey)).toBe("session-channel");
-      expect(SurfaceKey.lookup(threadKey)).toBe("session-thread");
+      expect(surfaceKeys().lookup(channelKey)).toBe("session-channel");
+      expect(surfaceKeys().lookup(threadKey)).toBe("session-thread");
     });
 
     test("existing keys without explicit kind still claim/lookup", () => {
       const legacyKey = "tui:/Users/ino/Develop/OpenOmni";
       seedSession("session-tui");
-      SurfaceKey.claim(legacyKey, "session-tui");
-      expect(SurfaceKey.lookup(legacyKey)).toBe("session-tui");
-    });
-  });
-
-  describe("Storage.reset", () => {
-    test("adapter swap leaves no stale mappings", () => {
-      const sessionId = "session-123";
-      const key1 = "slack:workspaceA:channel:C123";
-      const key2 = "slack:workspaceA:channel:C456";
-
-      seedSession(sessionId);
-      SurfaceKey.claim(key1, sessionId);
-      SurfaceKey.claim(key2, sessionId);
-
-      Storage.reset();
-      Storage.initialize({ dbPath: ":memory:" });
-
-      expect(SurfaceKey.lookup(key1)).toBeUndefined();
-      expect(SurfaceKey.lookup(key2)).toBeUndefined();
-      expect(SurfaceKey.listBySession(sessionId)).toHaveLength(0);
+      surfaceKeys().claim(legacyKey, "session-tui");
+      expect(surfaceKeys().lookup(legacyKey)).toBe("session-tui");
     });
   });
 
@@ -214,27 +188,18 @@ describe("SurfaceKey", () => {
     const absentMessage = "does not implement surfaceKey";
 
     test("every operation throws when the surfaceKey sub-adapter is absent", () => {
-      const bare = Storage.get();
-      Storage.configure({
-        transaction: bare.transaction.bind(bare),
-        close: () => bare.close?.(),
-      });
-
-      expect(() => SurfaceKey.claim(key, "session-1")).toThrow(absentMessage);
-      expect(() => SurfaceKey.lookup(key)).toThrow(absentMessage);
-      expect(() => SurfaceKey.listBySession("session-1")).toThrow(absentMessage);
+      const bare = createSurfaceKeyStore({});
+      expect(() => bare.claim(key, "session-1")).toThrow(absentMessage);
+      expect(() => bare.lookup(key)).toThrow(absentMessage);
+      expect(() => bare.listBySession("session-1")).toThrow(absentMessage);
     });
 
     test("claim never fabricates a successful claim without persistence", () => {
-      const bare = Storage.get();
-      Storage.configure({
-        transaction: bare.transaction.bind(bare),
-        close: () => bare.close?.(),
-      });
-
       // The pre-#522 fail-open returned the candidate sessionId as if the
       // claim had been persisted; ownership answers must never be fabricated.
-      expect(() => SurfaceKey.claim(key, "candidate-session")).toThrow(absentMessage);
+      expect(() => createSurfaceKeyStore({}).claim(key, "candidate-session")).toThrow(
+        absentMessage,
+      );
     });
   });
 });

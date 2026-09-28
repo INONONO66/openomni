@@ -95,15 +95,17 @@ for (const visible of ["none", "text", "tool"] as const) {
         })),
       );
       expect(requests).toBe(visible === "none" ? 3 : 1);
-      // Durable retry schedule: each backoff committed an `at` alarm carrying
-      // retry.scheduled, and the live waiter consumed (cancelled) it exactly once.
+      // Durable retry schedule (timer plane): each backoff committed an
+      // `alarm.arm` chain action carrying retry.scheduled. The chain fact is
+      // never cancelled — the live waiter carries the wait and a redelivered
+      // timer no-ops via the chain guard (supersede at delivery, not cancel).
       const retryAlarms = db
         .query(
-          "SELECT status FROM alarm WHERE kind='at' AND json_extract(spec,'$.kind')='retry.scheduled' ORDER BY id",
+          "SELECT json_extract(effect,'$.status') AS status FROM action WHERE session_id=? AND kind='alarm.arm' AND json_extract(effect,'$.spec.kind')='retry.scheduled' ORDER BY ordinal",
         )
-        .all();
+        .all(sessionId);
       expect(retryAlarms).toEqual(
-        visible === "none" ? [{ status: "cancelled" }, { status: "cancelled" }] : [],
+        visible === "none" ? [{ status: "armed" }, { status: "armed" }] : [],
       );
       expect(
         db

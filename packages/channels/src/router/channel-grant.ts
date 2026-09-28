@@ -1,5 +1,5 @@
 import type { Actor } from "@openomni/protocol";
-import { ChannelGrantStore } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 
 interface ChannelGrantMatchInput {
   readonly surface: string;
@@ -95,9 +95,10 @@ function compareResolutionOrder(a: Actor.ChannelGrant, b: Actor.ChannelGrant): n
 }
 
 export function resolveChannelGrant(
+  stores: ChannelStores,
   input: ChannelGrantMatchInput,
 ): ChannelGrantResolution | undefined {
-  const grants = ChannelGrantStore.list().filter((grant) => matches(grant, input));
+  const grants = stores.channelGrants.list().filter((grant) => matches(grant, input));
   grants.sort(compareResolutionOrder);
   const grant = grants[0];
   if (grant === undefined) return undefined;

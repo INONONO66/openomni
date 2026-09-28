@@ -1,50 +1,44 @@
+import { join } from "node:path";
 import type { ObservationSink } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
-import { ForeignFailure, StorageUnavailable } from "./errors";
-import { LedgerWrites } from "./services";
-import { initialize } from "./storage/initialize";
-import { Storage } from "./storage/storage";
+import { ForeignFailure } from "./errors";
+import { LedgerWrites, type LedgerHandles } from "./services";
+import { openCatalogStore } from "./storage/catalog-store.js";
+import { openSessionStore } from "./storage/session-store.js";
 
-export function LedgerStorageLive(options: {
-  readonly dbPath: string;
+/**
+ * Composition-root ledger plane (W5.2 F1): opens the shared catalog file and
+ * hands out per-session store openers under `<sessionsDir>/<id>.sqlite`. The
+ * catalog closes with the layer scope; session stores close with whoever
+ * opened them (entity activation finalizers).
+ */
+export function LedgerCatalogLive(options: {
+  readonly catalogPath: string;
+  readonly sessionsDir: string;
   readonly observationSink?: ObservationSink;
-}): Layer.Layer<LedgerWrites, ForeignFailure | StorageUnavailable> {
-  return Layer.unwrap(
-    Effect.gen(function* () {
-      const storage = yield* Effect.acquireRelease(
-        Effect.try({
-          try: () => {
-            initialize(options);
-            return Storage.get();
-          },
-          catch: (cause) => new ForeignFailure({ operation: "ledger.open", cause: String(cause) }),
-        }),
-        () =>
-          Effect.try({
-            try: () => Storage.reset(),
-            catch: (cause) =>
-              new ForeignFailure({ operation: "ledger.close", cause: String(cause) }),
-          }).pipe(Effect.orDie),
-      );
-      return LedgerLive(storage);
-    }),
+}): Layer.Layer<LedgerWrites, ForeignFailure> {
+  return Layer.effect(
+    LedgerWrites,
+    Effect.acquireRelease(
+      Effect.try({
+        try: () => openCatalogStore(options.catalogPath, options.observationSink),
+        catch: (cause) => new ForeignFailure({ operation: "ledger.open", cause: String(cause) }),
+      }),
+      (catalog) => Effect.sync(() => catalog.close()),
+    ).pipe(
+      Effect.map((catalog) => ({
+        catalog,
+        openSession: (sessionId: string) =>
+          openSessionStore(
+            join(options.sessionsDir, `${sessionId}.sqlite`),
+            options.observationSink,
+          ),
+      })),
+    ),
   );
 }
 
-export function LedgerLive(
-  storage: Storage.Adapter,
-): Layer.Layer<LedgerWrites, StorageUnavailable> {
-  return Layer.effect(
-    LedgerWrites,
-    Effect.gen(function* () {
-      const { sessions, inbox, alarms } = storage;
-      if (sessions === undefined)
-        return yield* Effect.fail(new StorageUnavailable({ capability: "sessions" }));
-      if (inbox === undefined)
-        return yield* Effect.fail(new StorageUnavailable({ capability: "inbox" }));
-      if (alarms === undefined)
-        return yield* Effect.fail(new StorageUnavailable({ capability: "alarms" }));
-      return { sessions, inbox, alarms };
-    }),
-  );
+/** Test/embedded composition over already-open handles; closing stays with the caller. */
+export function LedgerLive(handles: LedgerHandles): Layer.Layer<LedgerWrites> {
+  return Layer.succeed(LedgerWrites, handles);
 }

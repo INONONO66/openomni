@@ -113,7 +113,6 @@ describe("L0 ledger protocol", () => {
         role: "resident",
         leaseOwner: null,
         leaseFence: 0,
-        leaseExpiresAt: null,
         revision: 0,
         state: "idle",
       },
@@ -182,7 +181,7 @@ describe("L0 ledger protocol", () => {
     expect(Alarm.occurrenceId("alarm-1", 1, "source-2")).not.toBe(id);
   });
 
-  test("parses session, inbox, alarm, and global policy rows", () => {
+  test("parses session, inbox, fence-adoption, and global policy rows", () => {
     expect(
       LedgerSession.Row.parse({
         id: "session-1",
@@ -190,7 +189,6 @@ describe("L0 ledger protocol", () => {
         role: "resident",
         leaseOwner: null,
         leaseFence: 0,
-        leaseExpiresAt: null,
         revision: 0,
         state: "idle",
       }),
@@ -212,17 +210,12 @@ describe("L0 ledger protocol", () => {
     ).toMatchObject({ kind: "prompt", status: "pending" });
 
     expect(
-      Alarm.Row.parse({
-        id: "alarm-1",
-        sessionId: "session-1",
-        kind: "watch",
-        fireAt: 200,
-        spec: payload,
-        status: "armed",
-        createdAt: 100,
-        updatedAt: 100,
-      }),
-    ).toMatchObject({ kind: "watch", status: "armed" });
+      LedgerSession.AdoptFence.parse({ sessionId: "session-1", owner: "runner-1", fence: 3 }),
+    ).toMatchObject({ owner: "runner-1", fence: 3 });
+    expect(
+      LedgerSession.AdoptFence.safeParse({ sessionId: "session-1", owner: "runner-1", fence: 0 })
+        .success,
+    ).toBe(false);
 
     expect(
       PolicyRow.Row.parse({
