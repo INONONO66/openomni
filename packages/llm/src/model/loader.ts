@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Effect } from "effect";
+import { Effect, Semaphore } from "effect";
 import { decodeLlmFailure } from "../error";
 import type { LlmError } from "../errors";
 import { Catalog, RemoteCatalog } from "./schema";
@@ -39,7 +39,7 @@ function loadCatalog(loadSnapshot: () => Promise<Catalog>): Effect.Effect<Catalo
 /** Each owner lazily loads one catalog, including concurrent requests. */
 export function createCatalogLoader(loadSnapshot: () => Promise<Catalog> = snapshot): () => Effect.Effect<Catalog, LlmError> {
   let loaded: Catalog | undefined;
-  const lock = Effect.unsafeMakeSemaphore(1);
+  const lock = Semaphore.makeUnsafe(1);
   return () => lock.withPermits(1)(Effect.suspend(() => loaded === undefined
     ? loadCatalog(loadSnapshot).pipe(Effect.tap((catalog) => Effect.sync(() => { loaded = catalog; })))
     : Effect.succeed(loaded)));

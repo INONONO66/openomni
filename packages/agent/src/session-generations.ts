@@ -1,5 +1,5 @@
 import { canonicalDigest, PlainValueSchema, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import { ForeignFailure, GenerationUnavailable, GenerationUnsettled, type SessionError } from "./errors";
 import { createRawSlots } from "./executor-raw";
 import { GenerationOwnership, type CapturedGeneration, type GenerationServices } from "./services";
@@ -30,7 +30,7 @@ interface Entry {
 export function makeSessionGenerations(initial: GenerationBundle) {
   return Effect.gen(function* () {
     const processScope = yield* Effect.scope;
-    const lock = yield* Effect.makeSemaphore(1);
+    const lock = yield* Semaphore.make(1);
     const first = yield* acquire(initial);
     yield* initial.activate;
     const entries = new Map([[initial.id.generation, first]]);

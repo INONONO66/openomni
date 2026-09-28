@@ -7,7 +7,7 @@ import {
 import { SessionHandleStore } from "@openomni/ledger";
 import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Layer, Scope } from "effect";
+import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 
@@ -29,7 +29,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
   const installed = yield* BundleDefinitions;
   const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
-  const lock = yield* Effect.makeSemaphore(1);
+  const lock = yield* Semaphore.make(1);
   const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
   let definitions: GenerationDefinitions | undefined;
   let stopping = false;

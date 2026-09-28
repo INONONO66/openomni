@@ -1,4 +1,4 @@
-import { Effect, Fiber, Queue } from "effect";
+import { Effect, Fiber, Queue, Semaphore } from "effect";
 import type { AlarmWriteAdapter, LedgerError } from "@openomni/ledger";
 import type { ExecutionError, SessionError } from "@openomni/agent";
 import { AppLifecycleFailure } from "../runtime";
@@ -202,7 +202,7 @@ export function createAlarmWorker(options: {
         else entry.source.observe?.();
       });
     }
-    const serial = yield* Effect.makeSemaphore(1);
+    const serial = yield* Semaphore.make(1);
     const tick = () =>
       serial.withPermits(1)(
         Effect.gen(function* () {

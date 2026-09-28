@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
 import { createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, ForeignFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
 import { CorruptRecord, SessionHandleStore } from "@openomni/ledger";
@@ -22,7 +22,7 @@ export function createIngressExecutor(): Effect.Effect<NativeRun, ExecutionError
       id, parentId: null, role: "resident", tools: [], bundles: installed.names, system: { preset: "", blocks: [] },
       policyGeneration: SessionHandleStore.currentPolicyGeneration(), actionId: crypto.randomUUID(), at: clock(),
     }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-    const serial = yield* Effect.makeSemaphore(1);
+    const serial = yield* Semaphore.make(1);
     return (_sender, request, body) => serial.withPermits(1)(Effect.scoped(Effect.gen(function* () {
       const row = SessionHandleStore.row(id);
       const owner = next();

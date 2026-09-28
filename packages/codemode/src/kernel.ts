@@ -2,7 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
 import type { MachineError } from "@openomni/machines";
-import { Cause, Deferred, Effect, Exit, Queue, type Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
 import { z } from "zod";
@@ -285,7 +285,7 @@ export class PythonKernel {
   private process: ChildProcessWithoutNullStreams | undefined;
   private lines: Interface | undefined;
   private pending: PendingCell | undefined;
-  private readonly lock = Effect.unsafeMakeSemaphore(1);
+  private readonly lock = Semaphore.makeUnsafe(1);
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
