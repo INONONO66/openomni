@@ -6,7 +6,7 @@ import { ObservationSink } from "../../src/services";
 import { observationService } from "./service-layers";
 
 export interface ChatFixture extends ObservedChatAgentConfig {
-  readonly llm?: Partial<Context.Tag.Service<typeof Llm>>;
+  readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
 }
 
 export function chatServices(fixture: ChatFixture) {

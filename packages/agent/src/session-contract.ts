@@ -163,7 +163,7 @@ export interface ResolvedSessionRuntime extends SessionRuntime {
   readonly clock: () => number;
   readonly entropy: () => string;
   readonly observations: ObservationSink;
-  readonly generations: Context.Tag.Service<typeof GenerationLayers>;
+  readonly generations: Context.Service.Shape<typeof GenerationLayers>;
   readonly services: Context.Context<SessionEntryServices>;
 }
 

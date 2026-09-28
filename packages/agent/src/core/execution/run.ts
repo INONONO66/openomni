@@ -118,7 +118,7 @@ function runModelStep(
   base: AgentRunBase,
   compaction: CompactionSession | undefined,
   durableExecutor: Executor,
-  llm: Context.Tag.Service<typeof Llm>,
+  llm: Context.Service.Shape<typeof Llm>,
 ): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope> {
   return Effect.gen(function* () {
   const executor = durableExecutor;

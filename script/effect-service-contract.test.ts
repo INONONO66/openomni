@@ -18,14 +18,14 @@ import { checkEffectBoundaryFindings, effectServiceInventory, type BoundaryFindi
  */
 test("the ledger write Tag is keyed by its package path", () => {
   expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
-  expect(Context.isTag(LedgerWrites)).toBe(true);
+  expect(Context.isKey(LedgerWrites)).toBe(true);
 });
 
 test("ledger write receipts are the ok arms of the protocol results", () => {
   // Type-level contract: the receipt aliases are the `ok: true` arms, and the
   // adapter member sets are exactly these keys. A drift fails to compile.
   const okArms: [CommitReceipt["ok"], LeaseReceipt["ok"]] = [true, true];
-  const members: Record<keyof Context.Tag.Service<typeof LedgerWrites>, string> = {
+  const members: Record<keyof Context.Service.Shape<typeof LedgerWrites>, string> = {
     sessions: "SessionWriteAdapter",
     inbox: "InboxWriteAdapter",
     alarms: "AlarmWriteAdapter",

@@ -8,8 +8,8 @@ import { BundleError } from "../src/errors";
 import { createObservationBus } from "../src/observation/bus";
 import { Clock, Entropy, ObservationSink, ToolCatalog } from "../src/services";
 
-class NumberService extends Context.Tag("@openomni/bundle/number/Value")<NumberService, number>() {}
-class TextService extends Context.Tag("@openomni/bundle/text/Value")<TextService, string>() {}
+class NumberService extends Context.Service<NumberService, number>()("@openomni/bundle/number/Value") {}
+class TextService extends Context.Service<TextService, string>()("@openomni/bundle/text/Value") {}
 const NumberLive = Layer.succeed(NumberService, 7);
 const numberBundle = () => bundle({ name: "number", requires: [], provides: [NumberService], layer: NumberLive });
 const seed = { provides: [], requires: [], layer: Layer.empty } as const;
@@ -41,7 +41,7 @@ test.each(["Bad", "a_b", "a/evil", "", "0name"])("rejects invalid namespace %s",
 });
 
 test("rejects duplicate Tag keys, wrong namespaces and kernel collisions", () => {
-  const alias = Context.GenericTag<NumberService, number>(NumberService.key);
+  const alias = Context.Service<NumberService, number>(NumberService.key);
   expect(() => bundle({ name: "number", requires: [], provides: [NumberService, alias], layer: NumberLive })).toThrow(BundleError);
   expect(() => bundle({ name: "wrong", requires: [], provides: [NumberService], layer: NumberLive })).toThrow(BundleError);
   const ClockLive = Layer.succeed(Clock, { now: () => 1 });
@@ -56,10 +56,10 @@ test("rejects repeated and self requirements", () => {
 });
 
 test("rejects nested service paths and requirements outside the four-service seed", () => {
-  const Nested = Context.GenericTag<{ readonly nested: true }, number>("@openomni/bundle/nested/extra/Value");
+  const Nested = Context.Service<{ readonly nested: true }, number>("@openomni/bundle/nested/extra/Value");
   const NestedLive = Layer.succeed(Nested, 1);
   expect(() => bundle({ name: "nested", requires: [], provides: [Nested], layer: NestedLive })).toThrow(BundleError);
-  const Control = Context.GenericTag<{ readonly control: true }, number>("@openomni/ledger/Control");
+  const Control = Context.Service<{ readonly control: true }, number>("@openomni/ledger/Control");
   const ObserverLive = Layer.scopedDiscard(Effect.asVoid(Control));
   expect(() => bundle({ name: "observer", requires: [Control], provides: [], layer: ObserverLive })).toThrow(BundleError);
 });
@@ -153,7 +153,7 @@ test("compose rechecks forged metadata and mutable Tag keys", () => {
   const definition = numberBundle();
   expect(() => compose(seed, [{ ...definition, name: "other" }])).toThrow(BundleError);
   expect(() => compose(seed, [definition, definition])).toThrow(BundleError);
-  const tag = Context.GenericTag<{ readonly mutable: true }, number>("@openomni/bundle/mutable/Value");
+  const tag = Context.Service<{ readonly mutable: true }, number>("@openomni/bundle/mutable/Value");
   const live = Layer.succeed(tag, 1);
   const mutable = bundle({ name: "mutable", requires: [], provides: [tag], layer: live });
   Object.assign(tag, { key: "@openomni/bundle/mutable/Other" });
@@ -172,7 +172,7 @@ test("compose snapshots the seed before caller mutation", async () => {
 
 test("acquisition rejects Tag mutation after composition before any resources open", async () => {
   const events: string[] = [];
-  const tag = Context.GenericTag<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
+  const tag = Context.Service<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
   const live = Layer.scoped(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
   const definition = bundle({ name: "changed", requires: [], provides: [tag], layer: live });
   const composed = compose(seed, [definition]);

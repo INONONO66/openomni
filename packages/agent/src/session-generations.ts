@@ -12,9 +12,9 @@ export interface GenerationBundle {
   readonly activate: Effect.Effect<void>;
 }
 
-export class GenerationRawSlots extends Context.Tag("@openomni/agent/GenerationRawSlots")<
+export class GenerationRawSlots extends Context.Service<
   GenerationRawSlots, ReturnType<typeof createRawSlots>
->() {}
+>()("@openomni/agent/GenerationRawSlots") {}
 
 interface Entry {
   readonly bundle: GenerationBundle;

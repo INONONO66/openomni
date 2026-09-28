@@ -55,7 +55,7 @@ function sessionServices(fixture: SessionFixture) {
         return value;
       }));
     }
-    const generations: Context.Tag.Service<typeof GenerationLayers> = {
+    const generations: Context.Service.Shape<typeof GenerationLayers> = {
       initialize: () => Effect.void,
       capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
         const snapshot = SessionHandleStore.generationByNumber(sessionTree(id.sessionId), id.generation);

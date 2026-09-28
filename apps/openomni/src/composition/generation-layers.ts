@@ -54,7 +54,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
       const observations = Layer.scoped(ObservationSink, Effect.acquireRelease(
         Effect.sync(() => {
           const bus = createObservationBus();
-          const sink: Context.Tag.Service<typeof ObservationSink> = {
+          const sink: Context.Service.Shape<typeof ObservationSink> = {
             publish: (event, data) => { if (active) { bus.publish(event, data); root.publish(event, data); } },
             subscribe: bus.subscribe,
             scope: (identity) => scopeObservation(sink, identity),
@@ -120,7 +120,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
  * closed; there is no callback fallback.
  */
 export function configureAuthority(
-  generations: Context.Tag.Service<typeof GenerationLayers>,
+  generations: Context.Service.Shape<typeof GenerationLayers>,
 ): SessionRuntime["authorizeConfigure"] {
   return (input) => Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture({

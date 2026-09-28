@@ -12,7 +12,7 @@ export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")
 export const lifecycleFailure = (operation: string) =>
   flow(String, (cause) => new AppLifecycleFailure({ operation, cause }));
 
-export class AppScope extends Context.Tag("@openomni/openomni/AppScope")<AppScope, Scope.Scope>() {}
+export class AppScope extends Context.Service<AppScope, Scope.Scope>()("@openomni/openomni/AppScope") {}
 
 export interface AppRuntimeOptions {
   readonly dbPath: string;

@@ -4,10 +4,10 @@ import { Context, Effect, Layer, Option, type Scope } from "effect";
 import { BundleError } from "./errors";
 import { Clock, Entropy, ObservationSink, ToolCatalog } from "./services";
 
-type TagIdentity = Pick<Context.Tag<never, never>, "key" | "_op">;
+type TagIdentity = Pick<Context.Service<never, never>, "key" | "_op">;
 type Identifier<T> = T extends { readonly Identifier: infer I } ? I : never;
 type Identifiers<T extends readonly TagIdentity[]> = Identifier<T[number]>;
-type Genuine<T> = T extends Context.Tag<infer I, infer S> ? T extends Context.Tag<I, S> ? T extends { readonly key: PolicyId<string> } ? S extends PolicyRegistry ? true : false : true : false : false;
+type Genuine<T> = T extends Context.Service<infer I, infer S> ? T extends Context.Service<I, S> ? T extends { readonly key: PolicyId<string> } ? S extends PolicyRegistry ? true : false : true : false : false;
 type GenuineTuple<T extends readonly TagIdentity[]> = { [K in keyof T]: Genuine<T[K]> };
 type Equal<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false;
 type Exact<P extends readonly TagIdentity[], R extends readonly TagIdentity[], O, I> =
@@ -16,13 +16,13 @@ type Exact<P extends readonly TagIdentity[], R extends readonly TagIdentity[], O
 type Check<T> = T extends true ? [] : [invalidContract: never];
 type SeedServices = Clock | Entropy | ObservationSink | ToolCatalog;
 
-export class NamedPolicyRegistry extends Context.Tag("@openomni/agent/NamedPolicyRegistry")<NamedPolicyRegistry, PolicyRegistry>() {}
+export class NamedPolicyRegistry extends Context.Service<NamedPolicyRegistry, PolicyRegistry>()("@openomni/agent/NamedPolicyRegistry") {}
 
 type PolicyId<N extends string> = `@openomni/bundle/${N}/Policy`;
 export function bundlePolicyTag<const N extends string>(name: N) {
   namespace(name);
   const key: PolicyId<N> = `@openomni/bundle/${name}/Policy`;
-  return Object.assign(Context.GenericTag<PolicyId<N>, PolicyRegistry>(key), { key });
+  return Object.assign(Context.Service<PolicyId<N>, PolicyRegistry>(key), { key });
 }
 
 export interface BundleEvent { readonly ns: string; readonly version: number }
@@ -68,7 +68,7 @@ function unique(values: readonly string[], name: string): void {
 }
 function tags(tags: readonly TagIdentity[], name: string): void {
   unique(tags.map((tag) => tag.key), name);
-  for (const tag of tags) if (!Context.isTag(tag)) refuse("metadata", name, tag.key);
+  for (const tag of tags) if (!Context.isKey(tag)) refuse("metadata", name, tag.key);
 }
 function validate(metadata: Metadata): void {
   namespace(metadata.name);
@@ -118,7 +118,7 @@ function copyTools(tools: readonly AnyToolDefinition[]): readonly AnyToolDefinit
 // Private membership proof: callers bind R only to their statically exact Tag tuple.
 // Key probes never read a service through an erased Tag or cast its value.
 function contains<R>(context: Context.Context<never>, tags: readonly TagIdentity[]): context is Context.Context<R> {
-  return tags.every((tag) => Option.isSome(Context.getOption(context, Context.GenericTag<never, never>(tag.key))));
+  return tags.every((tag) => Option.isSome(Context.getOption(context, Context.Service<never, never>(tag.key))));
 }
 const emptyPolicy: PolicyRegistry = Object.freeze({ transformers: Object.freeze([]), obligations: Object.freeze([]) });
 function policyFrom(name: string, provided: readonly TagIdentity[], context: Context.Context<never>): PolicyRegistry {
@@ -229,10 +229,10 @@ export interface SelectedBundles {
   readonly events: readonly BundleEvent[];
   readonly layer: Layer.Layer<NamedPolicyRegistry, BundleError, SeedServices>;
 }
-export class BundleDefinitions extends Context.Tag("@openomni/agent/BundleDefinitions")<BundleDefinitions, {
+export class BundleDefinitions extends Context.Service<BundleDefinitions, {
   readonly names: readonly string[];
   readonly select: (names: readonly string[]) => SelectedBundles;
-}>() {}
+}>()("@openomni/agent/BundleDefinitions") {}
 const kernelTags = [Clock, Entropy, ObservationSink, ToolCatalog] as const;
 export function BundlesLive<const B extends readonly BundleDefinition[]>(definitions: B, ..._check: Check<Ordered<B, SeedServices>>): Layer.Layer<BundleDefinitions> {
   validateOrder(kernelTags, definitions);

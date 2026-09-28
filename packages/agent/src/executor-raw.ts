@@ -1,9 +1,9 @@
 import { Context, Effect } from "effect";
 
-export class RawToolSlots extends Context.Tag("@openomni/agent/RawToolSlots")<
+export class RawToolSlots extends Context.Service<
   RawToolSlots,
   ReturnType<typeof createRawSlots>
->() {}
+>()("@openomni/agent/RawToolSlots") {}
 
 /** Slots outlive interrupted fibers; raw callbacks only settle ownership, never ledger results. */
 export function createRawSlots(retain?: (settlement: Promise<void>) => void) {

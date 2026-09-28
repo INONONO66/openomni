@@ -5,9 +5,9 @@ import ts from "typescript";
 const root = resolve(import.meta.dir, "..");
 const header = `import { Context, Effect, Layer } from "effect";
 import { bundle, compose, bundlePolicyTag } from "../packages/agent/src/bundle";
-class A extends Context.Tag("@openomni/bundle/a/Value")<A, number>() {}
-class B extends Context.Tag("@openomni/bundle/b/Value")<B, string>() {}
-class External extends Context.Tag("@openomni/test/External")<External, boolean>() {}
+class A extends Context.Service<A, number>()("@openomni/bundle/a/Value") {}
+class B extends Context.Service<B, string>()("@openomni/bundle/b/Value") {}
+class External extends Context.Service<External, boolean>()("@openomni/test/External") {}
 const ALive = Layer.succeed(A, 7);
 const BLive = Layer.effect(B, Effect.map(A, String));
 const a = bundle({name:"a", requires:[], provides:[A], layer:ALive});
@@ -37,7 +37,7 @@ const negatives = [
   ["wrong service value", `Layer.succeed(A,"wrong");`, 2345],
   ["unprovided Effect", `Effect.runPromise(A);`, 2345],
   ["dropped seed environment", `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/errors").BundleError> = live;`, 2322],
-  ["reserved policy shape", `class InvalidPolicy extends Context.Tag("@openomni/bundle/b/Policy")<InvalidPolicy, number>() {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`, 2554],
+  ["reserved policy shape", `class InvalidPolicy extends Context.Service<InvalidPolicy, number>()("@openomni/bundle/b/Policy") {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`, 2554],
   ["seed output mismatch", `compose({requires:[],provides:[B],layer:ALive},[]);`, 2554],
   ["seed input mismatch", `compose({requires:[],provides:[B],layer:BLive},[]);`, 2554],
 ] as const;

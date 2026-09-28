@@ -14,7 +14,7 @@ afterEach(() => Storage.reset());
 
 test("ledger service and error contracts are runtime values", () => {
   expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
-  const service = {} as Context.Tag.Service<typeof LedgerWrites>;
+  const service = {} as Context.Service.Shape<typeof LedgerWrites>;
   expect(Context.get(Context.make(LedgerWrites, service), LedgerWrites)).toBe(service);
   expect(new SessionNotFound({ sessionId: "missing" })._tag).toBe("SessionNotFound");
   expect(new StorageUnavailable({ capability: "storage" })._tag).toBe("StorageUnavailable");
