@@ -1,12 +1,13 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Result } from "effect";
-import { expect } from "bun:test";
+import { Effect } from "effect";
 import { Bus, defineTool, eraseTool, type SessionHandle } from "@openomni/agent";
 import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
 import { runEffect } from "./effect";
+import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
+import { localInbox } from "./ledger";
 import type { ResidentSuite } from "./resident-suite";
 
 export function waveTool(
@@ -78,67 +79,29 @@ export function interruptSecondModel(
   return interrupted.promise;
 }
 
-export function acquireContender(sessionId: string, owner: string, expectedFence: number) {
-  const now = Date.now();
-  return Effect.runSync(
-    Effect.result(
-      SessionHandleStore.acquireLease({
-        sessionId,
-        owner,
-        expectedFence,
-        now,
-        expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-      }),
-    ),
-  );
+/**
+ * A contender's fence-adoption attempt at an explicit fence value (W5.2):
+ * adopting at or below the current fence refuses as stale, adopting above
+ * it steals authority. The lease plane's held/expiry states are gone.
+ */
+export function adoptAtFence(plane: AppLedgerPlane, sessionId: string, owner: string, fence: number) {
+  return Effect.runSync(Effect.result(plane.openKernel(sessionId).adoptFence({ sessionId, owner, fence })));
 }
 
-export function releaseContender(sessionId: string, owner: string, fence: number | undefined) {
-  if (fence === undefined) return;
-  const row = SessionHandleStore.row(sessionId);
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commit({
-            sessionId,
-            owner,
-            fence,
-            now: Date.now(),
-            expectedRevision: row.revision,
-            actions: [],
-            consumeInboxIds: [],
-            state: row.state,
-            releaseLease: true,
-          }),
-        ),
-      ),
-      (error) => error,
-    ).ok,
-  ).toBe(true);
+export async function commitInterrupt(plane: AppLedgerPlane, sessionId: string, id: string) {
+  await runEffect(localInbox(plane, "wave-fixture", Date.now)({
+    id,
+    sessionId,
+    kind: "interrupt",
+    content: "",
+    createdAt: Date.now(),
+    origin: { encodingVersion: 1, value: { kind: "sdk" } },
+    parentActionId: sessionTree(sessionId, plane.sessionStore(sessionId).actions).at(-1)?.id ?? null,
+  }));
 }
 
-export function commitInterrupt(sessionId: string, id: string) {
-  Result.getOrThrowWith(
-    Effect.runSync(
-      Effect.result(
-        SessionHandleStore.commitInbox({
-          id,
-          sessionId,
-          kind: "interrupt",
-          content: "",
-          createdAt: Date.now(),
-          origin: { encodingVersion: 1, value: { kind: "sdk" } },
-          parentActionId: sessionTree(sessionId).at(-1)?.id ?? null,
-        }),
-      ),
-    ),
-    (error) => error,
-  );
-}
-
-export function interruptDeliveries(sessionId: string) {
-  return sessionTree(sessionId).flatMap((action) => {
+export function interruptDeliveries(plane: AppLedgerPlane, sessionId: string) {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions).flatMap((action) => {
     const delivery = SessionHandleStore.delivery(action);
     return delivery?.kind === "interrupt" ? [delivery] : [];
   });
