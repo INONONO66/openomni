@@ -469,6 +469,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
     // Deadline-carrying requests arm one persisted DeliverAt wake on the
     // owning session; the chain fold decides applied-versus-noop at delivery.
+    // The arm is forked, never awaited: requests open inside the owning
+    // entity's own turn RPC, and awaiting a second RPC on that same entity
+    // from within its handler would deadlock the mailbox. Fail-open by
+    // design — a lost arm is a logged incident, not a refused request.
     const requestPorts = channelRequests(requests);
     const requestsWithDeadlines: typeof requestPorts = {
       ...requestPorts,
@@ -486,6 +490,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
                         console.error(`deadline arm failed: ${request.requestId}`, error);
                       }),
                     ),
+                    Effect.forkDetach,
+                    Effect.asVoid,
                   ),
           ),
         ),
