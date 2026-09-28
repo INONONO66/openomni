@@ -4,6 +4,7 @@ import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
 import {
   AppScope,
+  SessionEntityBinding,
   type AppRuntime, type AppServices,
   lifecycleFailure,
 } from "./runtime";
@@ -56,7 +57,6 @@ import { createMessageInboxCommit, prepareMessage } from "./composition/message-
 import { dispatchOutboundMessage } from "./composition/terminal-message";
 import {
   AppLedger,
-  createSessionEntityPortsSlot,
   sessionTimerPort,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -182,9 +182,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
-  // Late-bound entity ports: the entity layer exists from runtime creation,
-  // but its turn/timer ports resolve only once composition finishes below.
-  const entityPorts = createSessionEntityPortsSlot();
   const runtime =
     options.runtime ??
     gatewayRuntime({
@@ -192,7 +189,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // always does); injected literal test configs stay on the in-memory
       // host so no path outside their fixture directory is ever touched.
       ...(config.catalogPath === undefined ? {} : resolveClusterStorage(config)),
-      entity: { owner: `openomni:${process.pid}`, ports: entityPorts.ports },
     });
   try {
     const services = await runAppBoot(
@@ -207,6 +203,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
           observations: yield* ObservationSink,
           bundles: yield* BundleDefinitions,
           generations: yield* GenerationLayers,
+          // Late-bound entity ports: the runtime mounts the entity layer over
+          // this seam; the real turn/timer ports resolve below.
+          entityPorts: yield* SessionEntityBinding,
         };
       }),
     );
@@ -562,7 +561,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       generations: services.generations,
       services: services.context,
     };
-    entityPorts.bind({
+    services.entityPorts.bind({
       runTurn: (input) =>
         sessionRunner(input.authority.sessionId) === "process"
           ? Effect.tryPromise({

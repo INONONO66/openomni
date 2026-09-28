@@ -12,11 +12,13 @@ import {
 } from "@openomni/agent";
 import { LedgerWrites, type LedgerError } from "@openomni/ledger";
 import { LlmLive, type Llm } from "@openomni/llm";
+import { pid } from "node:process";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
 import {
   AppLedger,
   appLedgerLayer,
   clusterHostLayer,
+  createSessionEntityPortsSlot,
   sessionEntityLayer,
   type ClusterServices,
 } from "./composition/cluster-runtime";
@@ -33,6 +35,18 @@ export const lifecycleFailure = (operation: string) =>
 export class AppScope extends Context.Service<AppScope, Scope.Scope>()(
   "@openomni/openomni/AppScope",
 ) {}
+
+/**
+ * The runtime-owned late-binding seam for the session entity's ports: the
+ * entity layer always mounts (a runtime without it silently swallows every
+ * delivery), and the composition root binds the real turn/timer ports here
+ * once boot resolves them. Construction-time `entity` options pin the ports
+ * instead; binding then is a wiring defect and dies loud.
+ */
+export class SessionEntityBinding extends Context.Service<
+  SessionEntityBinding,
+  { bind(ports: SessionEntityPorts): void }
+>()("@openomni/openomni/SessionEntityBinding") {}
 
 export interface AppRuntimeOptions {
   /** Catalog SQLite file (session index + cluster mailbox); absent = in-memory. */
@@ -83,17 +97,29 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
     catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
     entityIdleMs: options.entityIdleMs ?? 60_000,
   }).pipe(Layer.orDie);
-  const entity: Layer.Layer<never, never, ClusterServices | AppLedger> =
+  const seam =
     options.entity === undefined
-      ? Layer.empty
-      : sessionEntityLayer({
+      ? (() => {
+          const slot = createSessionEntityPortsSlot();
+          return { owner: `openomni:${pid}`, ports: slot.ports, bind: slot.bind };
+        })()
+      : {
           owner: options.entity.owner,
-          ...(options.clock === undefined ? {} : { clock: options.clock }),
           ports: options.entity.ports,
-        });
+          bind: (): void => {
+            throw new Error("session entity ports were fixed at runtime construction");
+          },
+        };
+  const entity: Layer.Layer<never, never, ClusterServices | AppLedger> = sessionEntityLayer({
+    owner: seam.owner,
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ports: seam.ports,
+  });
+  const binding = Layer.succeed(SessionEntityBinding, { bind: seam.bind });
   return Layer.mergeAll(
     Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
+    binding,
     entity.pipe(Layer.provide(plane)),
   ).pipe(Layer.provideMerge(host));
 }
@@ -108,6 +134,7 @@ export type AppServices =
   | Llm
   | BundleDefinitions
   | GenerationLayers
+  | SessionEntityBinding
   | ClusterServices;
 type AppRuntimeError = AppLifecycleFailure | LedgerError | SessionError;
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, AppRuntimeError>;
