@@ -809,13 +809,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await supervisor.stopAll();
       await runAppEffect(runtime, shutdownSessions(sessionRuntime, recovery));
       if (cells !== undefined) await runAppEffect(runtime, cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))));
-      // Shutdown join contract (W5.2 S4): a ws frame's ingest runs the full
-      // turn inside the delivering entity RPC, so a turn suspended in a
-      // protected tool wave (open request, no answer) would hold its frame —
-      // and its captured generations — forever. Interrupt every live turn
-      // through the facade: the interrupt row, the wave's request.cancel and
-      // the interrupted turn terminal are all durable chain commits (fail-
-      // closed — a refused commit fails stop loud), after which each frame
+      // Shutdown join contract (W5.2 S4): the delivering entity RPC acks at
+      // the durable turn boundary and the turn's remainder runs detached
+      // under the activation, so a turn suspended in a protected tool wave
+      // (open request, no answer) holds its captured generations — not its
+      // frame — until interrupted. Interrupt every live turn through the
+      // facade: the interrupt row, the wave's request.cancel and the
+      // interrupted turn terminal are all durable chain commits (fail-closed
+      // — a refused commit fails stop loud), after which each detached turn
       // unwinds and releases its generation before the drain below.
       await Promise.all(
         liveTurns.ids().map((id) => {
@@ -826,6 +827,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // Every accepted ws frame's ingest holds a captured ingress generation
       // until it unwinds; join them before the generation drain.
       await wsCallbacks.settled();
+      // Join the interrupted detached turns: await every live generation
+      // owner so dispose's fail-fast drain observes zero owners.
+      await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.settle));
       await runtime.dispose();
     };
     return {

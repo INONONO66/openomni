@@ -172,10 +172,11 @@ export function drainSession(deps: {
           // wiring defect, not backlog to silently drop.
           return yield* new ForeignFailure({ operation: "session.admission", cause: "consume_in_fixture" });
         case "start":
-          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot });
+          // Inline detach: this drain owns the whole turn's lifetime itself.
+          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach: (body) => body });
           continue;
         default:
-          yield* runTurn({ authority, kernel, decision, snapshot });
+          yield* runTurn({ authority, kernel, decision, snapshot, detach: (body) => body });
           continue;
       }
     }

@@ -108,6 +108,9 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const owner = yield* manager(id.sessionId);
       return yield* owner.configure(yield* bundle(id.sessionId, snapshot), commit);
     }),
+    settle: Effect.suspend(() =>
+      Effect.forEach([...managers.values()], (owner) => owner.settle, { discard: true }),
+    ),
     drain: lock.withPermits(1)(Effect.gen(function* () {
       stopping = true;
       yield* Effect.forEach(managers.values(), (owner) => owner.drain, { discard: true });

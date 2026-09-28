@@ -75,6 +75,7 @@ function sessionServices(fixture: SessionFixture) {
       }),
       configure: <A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>) =>
         Effect.flatMap(manager(id.sessionId), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.configure(bundle(id.sessionId, snapshot), commit)),
+      settle: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.settle, { discard: true })),
       drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.drain, { discard: true })),
     };
     const context = yield* Layer.buildWithScope(Layer.mergeAll(

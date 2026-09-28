@@ -54,8 +54,6 @@ export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<Nati
     return (_sender, request, body) => serial.withPermits(1)(Effect.scoped(Effect.gen(function* () {
       const row = kernel.row(id);
       const owner = next();
-      console.error("PROBE ingress frame start", JSON.stringify({ kind: request.kind, op: request.op, owner }));
-      yield* Effect.addFinalizer(() => Effect.sync(() => console.error("PROBE ingress frame end", owner)));
       const captured = yield* generations.capture({ sessionId: id, generation: row.toolsGeneration }).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "ingress.capture", cause: String(error) })));
       const fence = yield* adoptIngressAuthority(kernel, id, owner).pipe(
         Effect.mapError((error) => new CommitFailed({ error })),

@@ -346,7 +346,11 @@ function unresolvedOperations(kernel: SessionKernel, sessionId: string, turnId: 
  * runs through the same admission/turn machinery the in-process controller
  * uses, against the activation's kernel and pinned fence. The entity already
  * owns receipt, dedupe and authority; this port only reaches the durable turn
- * boundary and never re-adopts the fence.
+ * boundary and never re-adopts the fence. The admission paths commit that
+ * boundary (deliveries + turn envelope, state `running`) before invoking the
+ * turn runner, so the runner handed to the admission detaches its body via
+ * `input.detach` (W5.2 S4): the delivering RPC acks at the boundary and the
+ * model/tool remainder runs under the activation scope instead.
  */
 export function createSessionEntityRunTurn(
   runner: SessionRunner,
@@ -367,7 +371,13 @@ export function createSessionEntityRunTurn(
       consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
       hibernate: () => Effect.void,
     });
-    const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn, seal });
+    // The synthetic result never persists: seals ride the detached body, and
+    // every entity admission path returns the runner result to a void sink.
+    const detachedRunTurn: typeof runTurn = (turnInput) =>
+      input.detach(runTurn(turnInput).pipe(Effect.asVoid)).pipe(
+        Effect.as<SessionRunnerResult>({ kind: "waiting", reason: "live_wait", alarmIds: [], text: "" }),
+      );
+    const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal });
     switch (decision.kind) {
       case "start": return void (yield* admission.startTurn());
       case "recover": return void (yield* admission.resumeTurn(decision.open));
