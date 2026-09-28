@@ -9,7 +9,7 @@ import { CommitFailed, ForeignFailure, GenerationUnavailable } from "../src/erro
 import { createExecutor } from "../src/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
-import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { createObservationBus } from "../src/observation/bus";
@@ -225,7 +225,7 @@ test("missing historical executable refuses capture instead of adopting the newe
   const current = bundle(2, "B", () => undefined, async () => { bodies += 1; return "B"; });
   const generations = yield* makeSessionGenerations(current);
   const historical = bundle(1, "A", () => undefined);
-  const missing = { ...historical, layer: Layer.effect(NamedPolicyRegistry, Effect.fail(new GenerationUnavailable({ generation: 1 }))) };
+  const missing = { ...historical, layer: Layer.effectContext<GenerationServices, GenerationUnavailable, never>(Effect.fail(new GenerationUnavailable({ generation: 1 }))) };
   expect(yield* Effect.result(generations.capture(missing))).toMatchObject({ _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 1 } });
   expect(bodies).toBe(0);
   expect((yield* generations.capture()).snapshot).toEqual(current.snapshot);
