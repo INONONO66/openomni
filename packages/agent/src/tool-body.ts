@@ -33,7 +33,7 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
 ): Effect.Effect<ToolBodyOutcome, ToolBodyFailed, RawToolSlots> {
   return Effect.gen(function* () {
     const slots = yield* RawToolSlots;
-    const execution = Effect.async<ToolBodyOutcome, ToolBodyFailed>((resume) => {
+    const execution = Effect.callback<ToolBodyOutcome, ToolBodyFailed>((resume) => {
       const release = slots.open();
       const controller = new AbortController();
       const scopedContext = {

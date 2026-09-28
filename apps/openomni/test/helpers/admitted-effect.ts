@@ -9,7 +9,7 @@ export async function admittedEffect<T>(
   executor: Executor = productionExecutor,
 ): Promise<T> {
   return Either.getOrThrowWith(
-    await runEffect(Effect.either(Effect.provideService(operation, ExecutorContext, executor))),
+    await runEffect(Effect.result(Effect.provideService(operation, ExecutorContext, executor))),
     (error) => error,
   );
 }

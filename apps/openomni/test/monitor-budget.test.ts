@@ -39,7 +39,7 @@ test("monitor budget: N+1 pauses once and only explicit rearm resets the epoch",
       const resumed = fixture.next("budget", (row) => row.content === "one");
       Either.getOrThrowWith(
         fixture.run(
-          Effect.either(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
+          Effect.result(fixture.storage.alarms.rearm("budget", "monitor-session", 1000)),
         ),
         (error) => error,
       );

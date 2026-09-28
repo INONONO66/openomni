@@ -8,7 +8,7 @@ beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id: "source",
           parentId: null,

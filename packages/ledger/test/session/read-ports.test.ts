@@ -6,7 +6,7 @@ import { SessionHandleStore, Storage } from "../../src/index";
 function materialize(id: string) {
   return Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId: null,

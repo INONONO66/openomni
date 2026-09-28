@@ -148,7 +148,7 @@ export function attemptAnchoredCut(
   let anchorText = precomputed ?? previousAnchor;
   let summarizerError: Error | undefined;
   if (precomputed === undefined && boundedInput.length > 0) {
-    const merged = yield* Effect.either(onSummarize(boundedInput, previousAnchor, budget));
+    const merged = yield* Effect.result(onSummarize(boundedInput, previousAnchor, budget));
     if (Either.isRight(merged)) {
       anchorText = merged.right.trim().length > 0 ? merged.right : previousAnchor;
     } else {

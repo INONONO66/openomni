@@ -51,7 +51,7 @@ describe("session benchmark fixtures", () => {
     );
     request.actions = request.actions.slice(0, 1);
     expect(sessionTree("warm")).toEqual(tree);
-    const result = Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
+    const result = Either.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
     expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: null } });
     expect(sessionTree("warm").at(-1)).toMatchObject({
       id: "warm:turn:10",

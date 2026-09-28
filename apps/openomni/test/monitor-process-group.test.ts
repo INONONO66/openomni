@@ -87,7 +87,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
           Either.getOrThrowWith(
             fixture.run(
-              Effect.either(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
+              Effect.result(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
             ),
             (error) => error,
           );
@@ -109,7 +109,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           if (mode === "cancel")
             Either.getOrThrowWith(
               fixture.run(
-                Effect.either(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
+                Effect.result(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
               ),
               (error) => error,
             );

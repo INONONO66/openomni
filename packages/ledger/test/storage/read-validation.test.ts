@@ -64,7 +64,7 @@ describe("canonical SQLite reads fail closed", () => {
   test("corrupt inbox origin rejects reads without consuming the row", () => {
     Either.getOrThrowWith(
       runLedgerSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox({
             id: "pending",
             sessionId: "corrupt",

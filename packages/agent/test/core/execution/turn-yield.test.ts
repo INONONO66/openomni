@@ -127,7 +127,7 @@ describe("window and steering yield", () => {
           contextWindowTokens: 100_000,
           protectRecentMessages: 2,
           onSummarize: () => Effect.sync(() => { calls += 1; }).pipe(
-            Effect.zipRight(Effect.never),
+            Effect.andThen(Effect.never),
             Effect.onInterrupt(() => Effect.sync(() => { aborted = true; })),
           ),
         },

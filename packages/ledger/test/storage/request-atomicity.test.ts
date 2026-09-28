@@ -39,7 +39,7 @@ test("request commit requires the live lease rather than borrowing another owner
   const result = () =>
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitRequestTransition({
             sessionId: request.sessionId,
             owner: "foreign",

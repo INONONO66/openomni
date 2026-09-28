@@ -4,7 +4,7 @@ import type { TraceContext } from "@openomni/protocol";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { completeModel, type MockLlmFn } from "./mock-llm";
 
-type Prepared = Effect.Effect.Success<ReturnType<Parameters<typeof createSessionChatRunner>[0]["prepare"]>>;
+type Prepared = Effect.Success<ReturnType<Parameters<typeof createSessionChatRunner>[0]["prepare"]>>;
 
 export function recordingChatRunner(config: (run: MockLlmFn) => ChatFixture & Pick<Prepared["config"], "executor">, traceContext: TraceContext.Type) {
   const modelInputs: string[] = [];

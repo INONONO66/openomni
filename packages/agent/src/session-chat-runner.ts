@@ -45,7 +45,7 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
     const result = yield* (prepared.around?.(operation) ?? operation);
     if (result.waiting !== undefined) return { kind: "waiting", text: result.text, ...result.waiting } satisfies SessionRunnerResult;
     return { kind: "result", text: result.text, finishReason: result.finishReason, usage: result.usage } satisfies SessionRunnerResult;
-  }).pipe(Effect.catchAll((error): Effect.Effect<SessionRunnerResult, ExecutionError> => {
+  }).pipe(Effect.catch((error): Effect.Effect<SessionRunnerResult, ExecutionError> => {
     if (error._tag === "Interrupted" || (error._tag === "LlmRunFailure" && error.aborted))
       return Effect.succeed({ kind: "interrupted" } satisfies SessionRunnerResult);
     const reported = options.reportError?.(error, input);

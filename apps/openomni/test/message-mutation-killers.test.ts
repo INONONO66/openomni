@@ -241,7 +241,7 @@ function materialize(
 ) {
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId,
@@ -322,7 +322,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
       );
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commitInbox({
               id: "bound-request",
               sessionId: f.sessionId,

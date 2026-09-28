@@ -184,7 +184,7 @@ test("a destination receipt for different bytes is refused and the obligation st
           }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
             receiveOutbound({ ...message, content: "tampered answer" }, 100).pipe(
               Effect.map(
-                (received: Effect.Effect.Success<ReturnType<typeof receiveOutbound>>) =>
+                (received: Effect.Success<ReturnType<typeof receiveOutbound>>) =>
                   received.receipt,
               ),
             ),

@@ -24,7 +24,7 @@ afterEach(() => {
 function materialize(id: string) {
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId: null,

@@ -174,12 +174,12 @@ async function runSessionCommit(): Promise<void> {
     let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
     let index = 10;
     let request: LedgerSession.Commit;
-    let result: Effect.Effect.Success<ReturnType<typeof SessionHandleStore.commit>>;
+    let result: Effect.Success<ReturnType<typeof SessionHandleStore.commit>>;
     const bench = new Bench(measurement);
     bench.add(
       "action",
       () => {
-        result = Either.getOrThrowWith(Effect.runSync(Effect.either(SessionHandleStore.commit(request))), (error) => error);
+        result = Either.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
       },
       {
         beforeEach() {

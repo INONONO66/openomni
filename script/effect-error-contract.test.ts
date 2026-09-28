@@ -126,7 +126,7 @@ for (const entry of packages) {
     for (const ctor of owned) expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
-      const caught = Effect.runSync(Effect.either(Effect.fail(failure)));
+      const caught = Effect.runSync(Effect.result(Effect.fail(failure)));
       expect(Either.isLeft(caught) && caught.left === failure).toBe(true);
       expect("data" in failure).toBe(false);
     }

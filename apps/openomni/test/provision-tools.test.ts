@@ -567,7 +567,7 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await runEffect(Effect.either(dispatcherFixture([eraseTool(createProvisionTool(port))], {
+    const result = await runEffect(Effect.result(dispatcherFixture([eraseTool(createProvisionTool(port))], {
       executor,
     }).execute(
       {

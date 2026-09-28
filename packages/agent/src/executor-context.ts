@@ -75,7 +75,7 @@ export function openInvocation(frame: InvocationFrame, tool: string) {
       return new GenerationUnavailable({ generation: frame.generation.id.generation });
     return undefined;
   };
-  const awaitClose = Effect.async<never, InvocationClosed>((resume) => {
+  const awaitClose = Effect.callback<never, InvocationClosed>((resume) => {
     const notify = () => resume(Effect.fail(new InvocationClosed({ tool, reason: reason ?? "interrupted" })));
     closed.signal.addEventListener("abort", notify, { once: true });
     if (closed.signal.aborted) notify();

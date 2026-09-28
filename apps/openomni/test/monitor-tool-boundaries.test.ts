@@ -82,7 +82,7 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       if (old === undefined) throw new Error("missing alarm");
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(fixture.storage.alarms.cancel("modify", "monitor-session", 1001)),
+          Effect.result(fixture.storage.alarms.cancel("modify", "monitor-session", 1001)),
         ),
         (error) => error,
       );

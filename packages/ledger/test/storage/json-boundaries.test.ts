@@ -60,7 +60,7 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
   });
   Either.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         store.sessions.create(
           LedgerSession.Row.parse({
             id: "s",

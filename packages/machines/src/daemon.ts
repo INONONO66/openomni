@@ -146,7 +146,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     return yield* Effect.gen(function* () {
       client = yield* connectIpcClient(options.socketPath, {
         onDisconnect: () => close.pipe(Effect.mapError((error) => new IpcForeignFailure({ operation: "daemon.disconnect", cause: String(error) }))),
-        onRequest: (method, params, respond) => Deferred.await(attached).pipe(Effect.zipRight(Effect.gen(function* () {
+        onRequest: (method, params, respond) => Deferred.await(attached).pipe(Effect.andThen(Effect.gen(function* () {
           const serve = wire[method];
           if (serve === undefined) return yield* new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
           const body = yield* Effect.try({ try: () => serve(<T>(schema: z.ZodType<T>): T => schema.parse(params)), catch: decodeMachineFailure("daemon.request") });

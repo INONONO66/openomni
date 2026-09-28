@@ -58,7 +58,7 @@ export function createSessionTurn(
   },
 ) {
   function heartbeat(controller: AbortController) {
-    const tick = Effect.async<void>((resume) => {
+    const tick = Effect.callback<void>((resume) => {
       const cancel = scheduleHeartbeat(() => resume(Effect.void), SessionHandleStore.HEARTBEAT_INTERVAL_MS);
       return Effect.sync(cancel);
     });
@@ -231,7 +231,7 @@ export function createSessionTurn(
 }
 
 function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) {
-  const aborted = Effect.async<never>((resume) => {
+  const aborted = Effect.callback<never>((resume) => {
     const listener = () => resume(Effect.interrupt);
     signal.addEventListener("abort", listener, { once: true });
     if (signal.aborted) listener();

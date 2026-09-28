@@ -22,7 +22,7 @@ test("a path source that cannot start settles the alarm with a source_error summ
         description: "unwatchable directory",
         persistent: true,
       });
-      await runEffect(Effect.either(fixture.worker.start()));
+      await runEffect(Effect.result(fixture.worker.start()));
       const row = await settled;
       expect(alarmSummary(row.content)).toMatchObject({
         alarmId: "missing",
@@ -175,7 +175,7 @@ test("a retry schedule consumed by another owner mid-scan wakes nothing: losing 
     const fixture = alarmFixture(":memory:", undefined, () =>
       Either.getOrThrowWith(
         fixture.run(
-          Effect.either(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
+          Effect.result(fixture.storage.alarms.cancel("retry-late", "monitor-session", 1000)),
         ),
         (error) => error,
       ),

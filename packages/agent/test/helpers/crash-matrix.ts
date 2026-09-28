@@ -379,7 +379,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
         },
       })
       .pipe(
-        Effect.catchAll((error: SessionError) => {
+        Effect.catch((error: SessionError) => {
           if (point !== "outbound_flood_deadline_before_timer_rearm") return Effect.fail(error);
           if (error._tag !== "ForeignFailure" || error.operation !== "outbound.flood")
             return Effect.fail(error);

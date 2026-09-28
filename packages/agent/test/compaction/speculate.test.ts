@@ -359,7 +359,7 @@ describe("run-scoped compaction speculation", () => {
               collector(),
               { trigger: "threshold", measuredTokens: 800 },
             );
-            const pendingFiber = yield* Effect.fork(pending);
+            const pendingFiber = yield* Effect.forkChild(pending);
             yield* Effect.promise(() => entered.promise);
             jest.advanceTimersByTime(100);
             const result = yield* Fiber.join(pendingFiber);

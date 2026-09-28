@@ -71,7 +71,7 @@ function childRequest() {
   };
   const commit = () =>
     Either.getOrThrowWith(
-      runLedgerSync(Effect.either(SessionHandleStore.commitRequestTransition(input))),
+      runLedgerSync(Effect.result(SessionHandleStore.commitRequestTransition(input))),
       (error) => error,
     );
   return { input, commit };
@@ -114,7 +114,7 @@ test.each([
   const alarms = Storage.get().alarms;
   if (alarms === undefined) throw new Error("missing alarm adapter");
   const owned = Either.getOrThrowWith(
-    runLedgerSync(Effect.either(alarms.acquire("original:deadline", 0))),
+    runLedgerSync(Effect.result(alarms.acquire("original:deadline", 0))),
     (error) => error,
   );
   const action = {

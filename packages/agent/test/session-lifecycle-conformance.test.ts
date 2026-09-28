@@ -1600,7 +1600,7 @@ function seedRequestSession(id: string) {
         }));
     });
 }
-function openRequest(port: Effect.Effect.Success<ReturnType<typeof createSessionRequests>>, id: string) {
+function openRequest(port: Effect.Success<ReturnType<typeof createSessionRequests>>, id: string) {
     return Effect.gen(function* () {
         const request = yield* port.open({
             requestId: `${id}:q`,

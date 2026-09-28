@@ -118,7 +118,7 @@ function prepareExternal(
   send: Parameters<Ports["prepare"]>[1],
   target: string,
   messageId: string,
-): Effect.Effect.Success<ReturnType<Ports["prepare"]>> {
+): Effect.Success<ReturnType<Ports["prepare"]>> {
   const exists = SessionHandleStore.listRows().some((row) => row.id === target);
   const source =
     exists && send.replyTo !== undefined

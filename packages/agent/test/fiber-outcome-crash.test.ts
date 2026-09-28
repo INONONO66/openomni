@@ -39,8 +39,8 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
   const options = yield* nativeExecutorOptions();
   const entered = yield* Deferred.make<void>();
   const executor = testExecutor(options);
-  const fiber = yield* Effect.fork(executor.run(request, () =>
-    Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never))));
+  const fiber = yield* Effect.forkChild(executor.run(request, () =>
+    Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))));
   yield* Deferred.await(entered);
   const exit = yield* Fiber.interrupt(fiber);
   expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
@@ -100,7 +100,7 @@ test("terminal commit refusal publishes no success and leaves the intent open", 
         : options.ledger.commit(action),
     },
   });
-  const exit = yield* Effect.either(executor.run(request, () => Effect.succeed({ status: "success" })));
+  const exit = yield* Effect.result(executor.run(request, () => Effect.succeed({ status: "success" })));
   expect(exit).toMatchObject({ _tag: "Left", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
   expect(results()).toEqual([]);
   expect(published).not.toContain("tool.execution.completed");
@@ -121,7 +121,7 @@ test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or
       return released.promise;
     }, render: (_input: object, output: string) => output,
   };
-  const fiber = yield* Effect.fork(executor.run(request, () => executeToolBody(definition, {}, {
+  const fiber = yield* Effect.forkChild(executor.run(request, () => executeToolBody(definition, {}, {
     sessionId: fiberSessionId, turnId: `${fiberSessionId}:turn`, callId: "write-once", signal: new AbortController().signal,
   }, undefined)));
   yield* Deferred.await(entered);

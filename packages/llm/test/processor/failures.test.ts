@@ -22,9 +22,9 @@ describe("Processor failures", () => {
       trace: { traceId: "interrupt", sessionId: "session-456" },
       createStream: () => Effect.sync(() => {
         entered.resolve();
-      }).pipe(Effect.zipRight(Effect.never)),
+      }).pipe(Effect.andThen(Effect.never)),
     });
-    const fiber = await runEffect(Effect.forkDaemon(processor.process({ system: "", promptText: "" })));
+    const fiber = await runEffect(Effect.forkDetach(processor.process({ system: "", promptText: "" })));
     await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
     await runEffect(Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds")));
     expect(processor.message.finish).toBe("aborted");

@@ -287,7 +287,7 @@ describe("SqliteStorageAdapter", () => {
       });
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             adapter.sessions.create({
               id: "l0-digest",
               parentId: null,
@@ -386,7 +386,7 @@ describe("SqliteStorageAdapter", () => {
       // removal may not mutate it behind the gateway's back. The surviving
       // entry converges by brain-side re-materialization on the next Deliver.
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
       adapter.surfaceKey.claim("channel:123", "s1");
@@ -400,11 +400,11 @@ describe("SqliteStorageAdapter", () => {
   describe("surfaceKey", () => {
     beforeEach(() => {
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s1")))),
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("s2")))),
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s2")))),
         (error) => error,
       );
     });
@@ -446,7 +446,7 @@ describe("SqliteStorageAdapter", () => {
         parts: db.query("SELECT * FROM part").all(),
       };
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(canonicalRow("live")))),
+        Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("live")))),
         (error) => error,
       );
       adapter.close();
@@ -465,7 +465,7 @@ describe("SqliteStorageAdapter", () => {
     test("data survives close and reopen", () => {
       const session = canonicalRow("s1");
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(session))),
+        Effect.runSync(Effect.result(adapter.sessions.create(session))),
         (error) => error,
       );
       adapter.close();

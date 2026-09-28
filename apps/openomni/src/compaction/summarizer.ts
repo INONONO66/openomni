@@ -72,7 +72,7 @@ export function createCompactionSummarizer(
     const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
     let working = messages;
     for (let attempt = 0; ; attempt += 1) {
-      const answer = yield* Effect.either(runResolvedText(
+      const answer = yield* Effect.result(runResolvedText(
           {
             model: config.model,
             messages: messageWithText(working, prompt),

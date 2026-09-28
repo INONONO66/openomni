@@ -114,7 +114,7 @@ export class CompactionSession {
   }
 
   started(): Effect.Effect<void> {
-    return Effect.async((resume) => {
+    return Effect.callback((resume) => {
       const notify = () => resume(Effect.void);
       this.#listeners.add(notify);
       if (this.#entered) notify();

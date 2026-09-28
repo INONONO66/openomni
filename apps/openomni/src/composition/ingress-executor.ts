@@ -5,7 +5,7 @@ import { CorruptRecord, SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
 
-type ExecutionResult = Effect.Effect.Success<ReturnType<Effect.Effect.Success<ReturnType<typeof createExecutor>>["run"]>>;
+type ExecutionResult = Effect.Success<ReturnType<Effect.Success<ReturnType<typeof createExecutor>>["run"]>>;
 type Run = Parameters<typeof createGatewayRouter>[0]["run"];
 type NativeRun = (sender: Parameters<Run>[0], request: Parameters<Run>[1], body: (intent: LedgerAction.Receipt) => Effect.Effect<PlainValue, ExecutionError>) => Effect.Effect<ExecutionResult & { readonly matchedRuleIds: readonly string[] }, ExecutionError>;
 

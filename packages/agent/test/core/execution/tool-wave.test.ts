@@ -263,7 +263,7 @@ it("preserves input-order results and ledger terminals after reverse body comple
   const wave = yield* Effect.forkScoped(record.executor.runBatch(slots.map((slot) => ({
     request: { ...request, op: slot.id, toolObservation: { turnId: context.turnId, callId: slot.id } },
     body: () => Deferred.succeed(slot.entered, undefined).pipe(
-      Effect.zipRight(Deferred.await(slot.release)),
+      Effect.andThen(Deferred.await(slot.release)),
       Effect.tap(() => Effect.sync(() => completed.push(slot.id))),
       Effect.as(slot.id),
       Effect.ensuring(Deferred.succeed(slot.settled, undefined)),
@@ -287,11 +287,11 @@ for (const failureKind of ["typed", "defect"] as const) {
     const failure = new ForeignFailure({ operation: "A", cause: "body_failed" });
     const results = yield* record.executor.runBatch([
       { request: { ...request, op: "A" }, body: () => Deferred.await(siblingEntered).pipe(
-        Effect.zipRight(failureKind === "typed" ? Effect.fail(failure) : Effect.die(new Error("body_defect"))),
+        Effect.andThen(failureKind === "typed" ? Effect.fail(failure) : Effect.die(new Error("body_defect"))),
         Effect.ensuring(Deferred.succeed(failed, undefined)),
       ) },
       { request: { ...request, op: "B" }, body: () => Deferred.succeed(siblingEntered, undefined).pipe(
-        Effect.zipRight(Deferred.await(failed)), Effect.as({ sibling: "survived" }),
+        Effect.andThen(Deferred.await(failed)), Effect.as({ sibling: "survived" }),
       ) },
     ], { signal: new AbortController().signal }).pipe(Effect.timeout("5 seconds"));
     expect(results).toMatchObject([
@@ -372,7 +372,7 @@ it("dispatches zero tools when the canonical assistant call-block write fails", 
     }
     return ledger.ledger.commit(action);
   } } });
-  const result = yield* Effect.either(createTestAgent({
+  const result = yield* Effect.result(createTestAgent({
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
     executor: record.executor, execution: record.executor,
     toolWave: () => Effect.sync(() => { bodies += 1; return []; }),
@@ -396,8 +396,8 @@ it("settles a defective fallback slot without interrupting its sibling or losing
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
     toolExecutor: (call) => call.id === "A"
-      ? Deferred.await(siblingEntered).pipe(Effect.zipRight(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
-      : Deferred.succeed(siblingEntered, undefined).pipe(Effect.zipRight(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
+      ? Deferred.await(siblingEntered).pipe(Effect.andThen(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
+      : Deferred.succeed(siblingEntered, undefined).pipe(Effect.andThen(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
   };
   const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
     onMessage: () => undefined, onToolCall: () => undefined, onToolResult: (result) => { published.push(result.toolCallId); },
@@ -450,7 +450,7 @@ it("keeps a sequential barrier after preceding rejection and runs later work", (
   const entered: string[] = [];
   const failure = new ForeignFailure({ operation: "parallel", cause: "parallel failed" });
   const results = yield* recording().executor.runBatch([
-    { request, body: () => Effect.sync(() => { entered.push("parallel"); }).pipe(Effect.zipRight(Effect.fail(failure))) },
+    { request, body: () => Effect.sync(() => { entered.push("parallel"); }).pipe(Effect.andThen(Effect.fail(failure))) },
     { request, sequential: true, body: () => Effect.sync(() => { entered.push("barrier"); return null; }) },
     { request, body: () => Effect.sync(() => { entered.push("following"); return null; }) },
   ], { signal: new AbortController().signal });

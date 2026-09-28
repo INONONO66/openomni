@@ -49,13 +49,13 @@ function exerciseL0Contracts(storage: L0Adapter) {
   const session = sessionRow("session-l0");
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(storage.sessions.create(session))),
+      Effect.runSync(Effect.result(storage.sessions.create(session))),
       (error) => error,
     ),
   ).toBe(true);
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(storage.sessions.create(session))),
+      Effect.runSync(Effect.result(storage.sessions.create(session))),
       (error) => error,
     ),
   ).toBe(false);
@@ -77,7 +77,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
 
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(storage.sessions.create(sessionRow("session-other")))),
+      Effect.runSync(Effect.result(storage.sessions.create(sessionRow("session-other")))),
       (error) => error,
     ),
   ).toBe(true);
@@ -131,7 +131,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.inbox.commit(
             Inbox.Commit.parse({
               id: "inbox-2",
@@ -150,7 +150,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.inbox.commit(
             Inbox.Commit.parse({
               id: "inbox-1",
@@ -174,7 +174,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.alarms.arm(
             Alarm.Arm.parse({
               id: "alarm-later",
@@ -191,7 +191,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           storage.alarms.arm(
             Alarm.Arm.parse({
               id: "alarm-now",
@@ -208,7 +208,7 @@ function exerciseL0Contracts(storage: L0Adapter) {
   ).toMatchObject({ status: "armed" });
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(storage.alarms.cancel("alarm-later", session.id, 450))),
+      Effect.runSync(Effect.result(storage.alarms.cancel("alarm-later", session.id, 450))),
       (error) => error,
     ),
   ).toMatchObject({
@@ -288,14 +288,14 @@ describe("L0 adapter contracts", () => {
     const row = sessionRow("session-boundary");
     expect(
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(storage.sessions.create(row))),
+        Effect.runSync(Effect.result(storage.sessions.create(row))),
         (error) => error,
       ),
     ).toBe(true);
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             storage.alarms.arm(
               Alarm.Arm.parse({ id: "orphan", sessionId: "missing", kind: "at", fireAt: 10 }),
             ),
@@ -322,7 +322,7 @@ describe("L0 adapter contracts", () => {
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             storage.inbox.commit(
               Inbox.Commit.parse({
                 id: "collision",
@@ -359,7 +359,7 @@ describe("SQLite adapter contract guards", () => {
     const row = sessionRow("session-action-rollback");
     expect(
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(row))),
+        Effect.runSync(Effect.result(adapter.sessions.create(row))),
         (error) => error,
       ),
     ).toBe(true);
@@ -391,7 +391,7 @@ describe("SQLite adapter contract guards", () => {
     const row = sessionRow("session-rollback");
     expect(
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.sessions.create(row))),
+        Effect.runSync(Effect.result(adapter.sessions.create(row))),
         (error) => error,
       ),
     ).toBe(true);
@@ -403,7 +403,7 @@ describe("SQLite adapter contract guards", () => {
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             adapter.inbox.commit(
               Inbox.Commit.parse({
                 id: "inbox-rollback",
@@ -425,7 +425,7 @@ describe("SQLite adapter contract guards", () => {
 
   test("request action compare-and-set rejects foreign parent and stale revision", () => {
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(adapter.sessions.create(sessionRow("request-owner")))),
+      Effect.runSync(Effect.result(adapter.sessions.create(sessionRow("request-owner")))),
       (error) => error,
     );
     const action = LedgerAction.Append.parse({
@@ -446,7 +446,7 @@ describe("SQLite adapter contract guards", () => {
 
   test("canonical session reads cannot mutate a later snapshot", () => {
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(adapter.sessions.create(sessionRow("session-isolated")))),
+      Effect.runSync(Effect.result(adapter.sessions.create(sessionRow("session-isolated")))),
       (error) => error,
     );
     const first = adapter.sessions.get("session-isolated");

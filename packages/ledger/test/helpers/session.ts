@@ -15,7 +15,7 @@ export function materializeSession<E = never>(
 ) {
   return Either.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId,

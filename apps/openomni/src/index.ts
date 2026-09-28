@@ -404,7 +404,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           const scope = yield* AppScope;
           yield* Effect.forkIn(
             wakeEffect(id).pipe(
-              Effect.catchAllCause((cause) =>
+              Effect.catchCause((cause) =>
                 Cause.isInterruptedOnly(cause)
                   ? Effect.void
                   : Effect.sync(() => {

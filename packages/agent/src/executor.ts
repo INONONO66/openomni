@@ -307,7 +307,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
       }
       return complete(stage, exit.value).pipe(
-        Effect.catchAllCause((cause) => completionFailure(stage, exit.value, cause)),
+        Effect.catchCause((cause) => completionFailure(stage, exit.value, cause)),
       );
     }).pipe(Effect.map((outcome) => {
       record.publishToolTerminal(stage.request, body.startedAt, terminalStatus(outcome));

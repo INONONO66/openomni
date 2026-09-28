@@ -17,7 +17,7 @@ import { executeRequestRoute, requireRoutedDecision } from "./routing-execution"
 interface MessageContext {
   sender: Gateway.IngestSender;
   send: Gateway.SendMessage;
-  prepared: Effect.Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>;
+  prepared: Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>;
   external: ReturnType<typeof externalMessage> | undefined;
   ports: GatewayRouterPorts;
   messaging: ReturnType<typeof createExistingAgentMessaging> | undefined;

@@ -205,7 +205,7 @@ test("failed later acquisition unwinds once", async () => {
   const released: string[] = [];
   const FirstLive = Layer.scoped(NumberService, Effect.acquireRelease(Effect.succeed(7), () => Effect.sync(() => { released.push("number"); })));
   const first = bundle({ name: "number", requires: [], provides: [NumberService], layer: FirstLive });
-  const FailureLive = Layer.scopedDiscard(Effect.zipRight(NumberService, Effect.fail("refused")));
+  const FailureLive = Layer.scopedDiscard(Effect.andThen(NumberService, Effect.fail("refused")));
   const failed = bundle({ name: "failed", requires: [NumberService], provides: [], layer: FailureLive });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [first, failed])))));
   expect(Exit.isFailure(exit)).toBe(true);

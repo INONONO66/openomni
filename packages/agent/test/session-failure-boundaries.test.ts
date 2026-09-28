@@ -49,7 +49,7 @@ test("request transitions cannot renew an expired lease beneath a live runner", 
       return { kind: "result", text: "done" };
     }),
   }, fixture), fixture); });
-  const running = yield* Effect.fork(handle.prompt("start"));
+  const running = yield* Effect.forkChild(handle.prompt("start"));
   const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
   const before = SessionHandleStore.row(handle.id);
   now += SessionHandleStore.LEASE_TTL_MS;
@@ -111,7 +111,7 @@ for (const count of [1, 257]) {
         return yield* Effect.never;
       }),
     }, fixture), fixture);
-    const running = yield* Effect.fork(handle.prompt("start"));
+    const running = yield* Effect.forkChild(handle.prompt("start"));
     const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
     yield* handle.close();
     yield* Fiber.join(running);
@@ -144,7 +144,7 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
       return yield* Effect.never;
     }),
   }, fixture), fixture);
-  const running = yield* Effect.fork(handle.prompt("start"));
+  const running = yield* Effect.forkChild(handle.prompt("start"));
   const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
   const sessions = Storage.get().sessions;
   if (sessions === undefined) throw new Error("missing session adapter");

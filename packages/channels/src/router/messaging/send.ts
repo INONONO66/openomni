@@ -115,7 +115,7 @@ function deliverSend(
 
 function recordSent(
   authorization: AuthorizedSend,
-  delivered: Effect.Effect.Success<ReturnType<typeof deliverSend>>,
+  delivered: Effect.Success<ReturnType<typeof deliverSend>>,
   ports: MessagingPorts,
 ): SendReceipt {
   const { input, target, grant } = authorization;

@@ -100,7 +100,7 @@ for (const status of ["armed", "fired"] as const) {
           expect(
             Either.getOrThrowWith(
               await runEffect(
-                Effect.either(
+                Effect.result(
                   alarmStore().arm({
                     id: "later-alarm",
                     sessionId: "sender",
@@ -126,7 +126,7 @@ for (const status of ["armed", "fired"] as const) {
           expect(
             Either.getOrThrowWith(
               await runEffect(
-                Effect.either(
+                Effect.result(
                   alarmStore().arm({
                     id: "reopen-alarm",
                     sessionId: "sender",

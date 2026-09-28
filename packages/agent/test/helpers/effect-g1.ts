@@ -79,7 +79,7 @@ export function requestLedger(input: { id?: string; clock?: () => number; onRequ
     return { ledger, identity: { sessionId: id, role: "resident" as const, parentActionId: turnId, turnId, toolsGeneration: generation.generation, toolsHash: generation.toolsHash, systemHash: generation.systemHash }, entropy: () => crypto.randomUUID(), clock };
   });
 }
-export type RequestLedger = Effect.Effect.Success<ReturnType<typeof requestLedger>>;
+export type RequestLedger = Effect.Success<ReturnType<typeof requestLedger>>;
 export function crashAfterRequestOpen(initial: RequestLedger, operation: string): RequestLedger {
   const transition = initial.ledger.transition;
   if (transition === undefined) throw new Error("missing transition");

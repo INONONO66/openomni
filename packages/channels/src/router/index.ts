@@ -10,7 +10,7 @@ import type { GatewayRouter, GatewayRouterPorts } from "./message-ports";
 export type { ChannelDeliveryRoute, GatewayRouter, GatewayRouterPorts } from "./message-ports";
 
 function ingestResult(
-  result: Effect.Effect.Success<ReturnType<GatewayRouterPorts["run"]>>,
+  result: Effect.Success<ReturnType<GatewayRouterPorts["run"]>>,
   handle: Gateway.SendMessageHandle,
 ): Gateway.IngestResult {
   switch (result.terminal) {
@@ -56,7 +56,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   function projectMessage(
     sender: Gateway.IngestSender,
     send: Gateway.SendMessage,
-    prepared: Effect.Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>,
+    prepared: Effect.Success<ReturnType<GatewayRouterPorts["prepare"]>>,
     external: ReturnType<typeof externalMessage> | undefined,
     startedAt: number,
   ) {

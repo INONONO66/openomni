@@ -73,7 +73,7 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
       },
     };
     const { events: _events, llm: _llm, ...config } = fixture;
-    const result = yield* Effect.either(runAgent(runInput([{ role: "user", content: "go" }]), config)
+    const result = yield* Effect.result(runAgent(runInput([{ role: "user", content: "go" }]), config)
       .pipe(Effect.provide(chatServices(fixture))));
     return { result, committed, providers, resolved, arms };
   });

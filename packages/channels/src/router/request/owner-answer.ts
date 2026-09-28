@@ -27,7 +27,7 @@ export function answerOwnerRequest(
   if (canonicalDigest(request.parsedInput) !== request.inputHash) {
     return { status: "blocked_pre", reasonCode: "request_answer.rejected" };
   }
-  const authenticated = yield* Effect.either(ports.authenticateAnswer(sender, credential, request.requestId).pipe(
+  const authenticated = yield* Effect.result(ports.authenticateAnswer(sender, credential, request.requestId).pipe(
     Effect.flatMap((value) => Effect.try({ try: () => SessionTransition.Principal.parse(value), catch: decodeChannelFailure("answer.principal") })),
   ));
   if (Either.isLeft(authenticated) || authenticated.right.kind !== "owner")

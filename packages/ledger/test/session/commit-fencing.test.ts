@@ -53,7 +53,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.create({
             id: sessionId,
             parentId: null,
@@ -75,7 +75,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.acquireLease({
             sessionId,
             owner: "kernel-owner",
@@ -92,7 +92,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           sessions.acquireLease({
             sessionId,
             owner: "kernel-owner",
@@ -112,7 +112,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
   // only the fence is stale, and the rejection is typed with the current fence.
   const rejected = () =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(sessions.commit(commitAs(1, "stale-result")))),
+      Effect.runSync(Effect.result(sessions.commit(commitAs(1, "stale-result")))),
       (error) => error,
     );
   expect(rejected).toThrow(
@@ -128,7 +128,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
 
   // The successor's fence commits the identical work exactly once.
   const committed = Either.getOrThrowWith(
-    Effect.runSync(Effect.either(sessions.commit(commitAs(2, "successor-result")))),
+    Effect.runSync(Effect.result(sessions.commit(commitAs(2, "successor-result")))),
     (error) => error,
   );
   expect(committed?.ok).toBe(true);

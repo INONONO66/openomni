@@ -92,7 +92,7 @@ test("alarm restart: SQLite reopen fires at the exact boundary with atomic promp
     try {
       Either.getOrThrowWith(
         runSyncEffect(
-          Effect.either(
+          Effect.result(
             fixture.storage.alarms.arm({
               id: "at",
               sessionId: "monitor-session",

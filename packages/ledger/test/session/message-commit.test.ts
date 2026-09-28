@@ -16,7 +16,7 @@ beforeEach(() => {
   materializeSession("parent");
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: "parent",
           owner: "sender",
@@ -94,7 +94,7 @@ test("child identity and first inbox are visible together at the commit signal",
   });
   try {
     const committed = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     );
     await observed.promise;
@@ -117,7 +117,7 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
   // When insertion fails after preparing the child.
   expect(() =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
@@ -131,7 +131,7 @@ test("stale sender fence refuses child allocation before any write", () => {
   // Given a sender whose fence was superseded.
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: "parent",
           owner: "replacement",
@@ -146,7 +146,7 @@ test("stale sender fence refuses child allocation before any write", () => {
   // When the stale sender tries to create a child.
   expect(() =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
@@ -158,7 +158,7 @@ test("stale sender fence refuses child allocation before any write", () => {
 test("message id reuse cannot allocate a second child", () => {
   // Given a committed letter.
   Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+    Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
     (error) => error,
   );
   const next = childMessage();
@@ -177,7 +177,7 @@ test("message id reuse cannot allocate a second child", () => {
   // When the source id is reused against a new target.
   expect(() =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(reused))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(reused))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
@@ -190,7 +190,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   const first = childMessage();
   first.limits.fanout = 1;
   Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(first))),
+    Effect.runSync(Effect.result(SessionHandleStore.commitInbox(first))),
     (error) => error,
   );
   const second = {
@@ -209,14 +209,14 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   expect(SessionHandleStore.openChildCount("parent")).toBe(1);
   expect(() =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(second))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(second))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["child", "parent"]);
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: "child",
           owner: "worker",
@@ -231,7 +231,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({
             sessionId: "child",
             owner: "worker",
@@ -272,7 +272,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   expect(SessionHandleStore.openChildCount("parent")).toBe(0);
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(second))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(second))),
       (error) => error,
     ).id,
   ).toBe("second-letter");
@@ -284,7 +284,7 @@ test("root configuration and first inbox use the same atomic inbox port", () => 
   root.createSession.row.role = "resident";
   expect(
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitInbox(root))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitInbox(root))),
       (error) => error,
     ).id,
   ).toBe("letter");
@@ -295,12 +295,12 @@ test("root configuration and first inbox use the same atomic inbox port", () => 
 test("a source terminal and its outbound obligation roll back on the same fault", () => {
   // Given an existing child holding its own fence.
   Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitInbox(childMessage()))),
+    Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
     (error) => error,
   );
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: "child",
           owner: "worker",
@@ -352,7 +352,7 @@ test("a source terminal and its outbound obligation roll back on the same fault"
   // When the last write in the terminal unit fails.
   expect(() =>
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commit(request))),
+      Effect.runSync(Effect.result(SessionHandleStore.commit(request))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));

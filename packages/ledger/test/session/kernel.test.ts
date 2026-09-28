@@ -84,7 +84,7 @@ afterEach(() => {
 function materialize(id: string) {
   return Either.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           parentId: null,
@@ -418,7 +418,7 @@ describe("session kernel folds", () => {
     const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
     const first = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(
             prompt("prompt-1", sessionId, "first", "snapshot-session:configure"),
           ),
@@ -428,7 +428,7 @@ describe("session kernel folds", () => {
     );
     const second = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("prompt-2", sessionId, "second", first.id)),
         ),
       ),
@@ -439,7 +439,7 @@ describe("session kernel folds", () => {
 
     const lease = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.acquireLease({
             sessionId,
             owner: "owner",
@@ -456,7 +456,7 @@ describe("session kernel folds", () => {
     expect(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.renewLease({
               sessionId,
               owner: "owner",
@@ -495,7 +495,7 @@ describe("session kernel folds", () => {
     });
     const running = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({
             sessionId,
             owner: "owner",
@@ -522,7 +522,7 @@ describe("session kernel folds", () => {
 
     const continuation = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("prompt-3", sessionId, "third", "turn-1")),
         ),
       ),
@@ -546,7 +546,7 @@ describe("session kernel folds", () => {
     expect(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               sessionId,
               owner: "owner",
@@ -574,7 +574,7 @@ describe("session kernel folds", () => {
     expect(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               sessionId,
               owner: "owner",
@@ -630,7 +630,7 @@ describe("session kernel folds", () => {
 
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-1", "watched", "one", "watched:configure")),
         ),
       ),
@@ -639,7 +639,7 @@ describe("session kernel folds", () => {
     sink.dropNextCommit = true;
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-2", "watched", "two", "watch-1")),
         ),
       ),
@@ -647,7 +647,7 @@ describe("session kernel folds", () => {
     );
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-3", "watched", "three", "watch-2")),
         ),
       ),
@@ -678,7 +678,7 @@ describe("session kernel folds", () => {
 
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-1", "resync", "one", "resync:configure")),
         ),
       ),
@@ -687,7 +687,7 @@ describe("session kernel folds", () => {
     sink.dropNextCommit = true;
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-2", "resync", "two", "resync-1")),
         ),
       ),
@@ -695,7 +695,7 @@ describe("session kernel folds", () => {
     );
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-3", "resync", "three", "resync-2")),
         ),
       ),
@@ -703,7 +703,7 @@ describe("session kernel folds", () => {
     );
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-4", "resync", "four", "resync-3")),
         ),
       ),
@@ -763,7 +763,7 @@ describe("session kernel folds", () => {
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.acquireLease({
               sessionId: "missing",
               owner: "owner",
@@ -779,7 +779,7 @@ describe("session kernel folds", () => {
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               sessionId: "missing",
               owner: "owner",
@@ -799,7 +799,7 @@ describe("session kernel folds", () => {
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commitInbox(
               prompt("missing-prompt", "missing", "missing", "missing-parent"),
             ),

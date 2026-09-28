@@ -26,7 +26,7 @@ export function requestLedger(
   const clock = input.clock ?? (() => 100);
   const created = Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id,
           role: "resident",
@@ -44,7 +44,7 @@ export function requestLedger(
   const owner = `${id}:owner`;
   const lease = Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: id,
           owner,
@@ -64,7 +64,7 @@ export function requestLedger(
     const row = SessionHandleStore.row(id);
     const opened = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           commit({
             sessionId: id,
             owner,

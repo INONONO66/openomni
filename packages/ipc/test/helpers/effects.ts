@@ -2,12 +2,12 @@ import { Effect, Either, Exit, Scope } from "effect";
 
 /** Test edge only: preserve the typed failure rather than FiberFailure wrapping it. */
 export async function run<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-  const result = await Effect.runPromise(Effect.either(effect));
+  const result = await Effect.runPromise(Effect.result(effect));
   if (Either.isLeft(result)) throw result.left;
   return result.right;
 }
 export function sync<A, E>(effect: Effect.Effect<A, E>): A {
-  const result = Effect.runSync(Effect.either(effect));
+  const result = Effect.runSync(Effect.result(effect));
   if (Either.isLeft(result)) throw result.left;
   return result.right;
 }

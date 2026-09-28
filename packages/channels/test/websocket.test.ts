@@ -144,7 +144,7 @@ describe("WebSocketHandler ingress and receipts", () => {
   ])("rejects malformed frame %s before entering the handler", async (raw, reason) => {
     let entries = 0;
     const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish);
-    const result = await Effect.runPromise(Effect.either(handler.handleFrame({
+    const result = await Effect.runPromise(Effect.result(handler.handleFrame({
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, raw)));
     expect(result).toMatchObject({

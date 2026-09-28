@@ -162,7 +162,7 @@ describe("tool body outcomes", () => {
       ]))));
 
     const result = await isolated(Effect.gen(function* () {
-      const fiber = yield* Effect.fork(dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }));
+      const fiber = yield* Effect.forkChild(dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }));
       yield* Effect.promise(() => bodyEntered.promise);
       const reason = new Error("caller aborted");
       caller.abort(reason);
@@ -210,7 +210,7 @@ describe("tool body outcomes", () => {
     };
     const dispatcher = runAgentSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
-    const result = await isolated(Effect.either(dispatcher.execute(call("echo"), context)));
+    const result = await isolated(Effect.result(dispatcher.execute(call("echo"), context)));
     expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "test" } });
   });
 });

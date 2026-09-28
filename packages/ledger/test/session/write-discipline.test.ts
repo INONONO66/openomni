@@ -58,7 +58,7 @@ describe("fenced session write discipline", () => {
       const sessionId = `session-same-owner-fence-${name}`;
       expect(
         Either.getOrThrowWith(
-          Effect.runSync(Effect.either(sessions.create(l0Session(sessionId)))),
+          Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
       ).toBe(true);
@@ -66,7 +66,7 @@ describe("fenced session write discipline", () => {
       expect(
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "same-owner",
@@ -82,7 +82,7 @@ describe("fenced session write discipline", () => {
       expect(
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "same-owner",
@@ -99,7 +99,7 @@ describe("fenced session write discipline", () => {
       expect(() =>
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.commit({
                 sessionId,
                 owner: "same-owner",
@@ -133,7 +133,7 @@ describe("fenced session write discipline", () => {
       const sessionId = `session-fence-${name}`;
       expect(
         Either.getOrThrowWith(
-          Effect.runSync(Effect.either(sessions.create(l0Session(sessionId)))),
+          Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
       ).toBe(true);
@@ -141,7 +141,7 @@ describe("fenced session write discipline", () => {
       expect(
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "owner-a",
@@ -157,7 +157,7 @@ describe("fenced session write discipline", () => {
       expect(() =>
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "owner-b",
@@ -181,7 +181,7 @@ describe("fenced session write discipline", () => {
       expect(() =>
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "owner-b",
@@ -197,7 +197,7 @@ describe("fenced session write discipline", () => {
       expect(
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.acquireLease({
                 sessionId,
                 owner: "owner-b",
@@ -213,7 +213,7 @@ describe("fenced session write discipline", () => {
 
       const committed = Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             sessions.commit({
               sessionId,
               owner: "owner-b",
@@ -236,7 +236,7 @@ describe("fenced session write discipline", () => {
       expect(() =>
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.commit({
                 sessionId,
                 owner: "owner-a",
@@ -275,7 +275,7 @@ describe("fenced session write discipline", () => {
       const sessionId = `session-boundary-${name}`;
       expect(
         Either.getOrThrowWith(
-          Effect.runSync(Effect.either(sessions.create(l0Session(sessionId)))),
+          Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
       ).toBe(true);
@@ -302,12 +302,12 @@ describe("fenced session write discipline", () => {
       ];
       for (const row of rows)
         expect(
-          Either.getOrThrowWith(Effect.runSync(Effect.either(inbox.commit(row))), (error) => error),
+          Either.getOrThrowWith(Effect.runSync(Effect.result(inbox.commit(row))), (error) => error),
         ).toBeDefined();
 
       const acquired = Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             sessions.acquireLease({
               sessionId,
               owner: "owner",
@@ -345,7 +345,7 @@ describe("fenced session write discipline", () => {
 
       const committed = Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             sessions.commit({
               sessionId,
               owner: "owner",
@@ -377,12 +377,12 @@ describe("canonical batch rollback", () => {
     for (const [name, { sessions, inbox }] of kernelStores()) {
       const sessionId = `rollback-${name}`;
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(sessions.create(l0Session(sessionId)))),
+        Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
         (error) => error,
       );
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             inbox.commit({
               id: `${sessionId}:input`,
               sessionId,
@@ -398,7 +398,7 @@ describe("canonical batch rollback", () => {
       );
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             sessions.acquireLease({
               sessionId,
               owner: "owner",
@@ -417,7 +417,7 @@ describe("canonical batch rollback", () => {
       expect(() =>
         Either.getOrThrowWith(
           Effect.runSync(
-            Effect.either(
+            Effect.result(
               sessions.commit({
                 sessionId,
                 owner: "owner",

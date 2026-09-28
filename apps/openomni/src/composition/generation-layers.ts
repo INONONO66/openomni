@@ -30,7 +30,7 @@ export const GenerationLayersLive = Layer.scoped(GenerationLayers, Effect.gen(fu
   const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
   const lock = yield* Effect.makeSemaphore(1);
-  const managers = new Map<string, Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
+  const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
   let definitions: GenerationDefinitions | undefined;
   let stopping = false;
 

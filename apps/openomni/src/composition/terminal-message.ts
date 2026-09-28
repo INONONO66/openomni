@@ -7,7 +7,7 @@ import type { LedgerAction } from "@openomni/protocol";
 type OutboundInput = Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0];
 interface OutboundContext {
   readonly input: OutboundInput;
-  readonly executor: Effect.Effect.Success<ReturnType<typeof createExecutor>>;
+  readonly executor: Effect.Success<ReturnType<typeof createExecutor>>;
   receipt?: LedgerAction.Receipt;
 }
 

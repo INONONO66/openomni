@@ -89,7 +89,7 @@ test("a physical source close rejection is tracked and reported during shutdown"
       }
     });
     try {
-      const result = await runEffect(Effect.either(fixture.worker.close()));
+      const result = await runEffect(Effect.result(fixture.worker.close()));
       expect(result).toMatchObject({ _tag: "Left", left: fault });
     } finally {
       close.mockRestore();

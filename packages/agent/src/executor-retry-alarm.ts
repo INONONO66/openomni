@@ -33,7 +33,7 @@ export function createRetryAlarmPort(sessionId: string, clock: () => number): Re
     wait: (fireAt, signal) => Effect.suspend(() => {
       const sleep = Effect.sleep(Math.max(0, fireAt - clock()));
       if (signal === undefined) return sleep;
-      const aborted = Effect.async<never>((resume) => {
+      const aborted = Effect.callback<never>((resume) => {
         const abort = () => resume(Effect.interrupt);
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();

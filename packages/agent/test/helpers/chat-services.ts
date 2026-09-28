@@ -16,7 +16,7 @@ export function chatServices(fixture: ChatFixture) {
   );
 }
 
-type Prepared = Effect.Effect.Success<ReturnType<Parameters<typeof createSessionChatRunner>[0]["prepare"]>>;
+type Prepared = Effect.Success<ReturnType<Parameters<typeof createSessionChatRunner>[0]["prepare"]>>;
 export function prepareChatFixture(prepared: Omit<Prepared, "config"> & { readonly config: ChatFixture & Pick<Prepared["config"], "executor"> }): Prepared {
   const { events: _events, llm: _llm, ...config } = prepared.config;
   return { ...prepared, config: config satisfies ChatAgentConfig & Pick<Prepared["config"], "executor">,

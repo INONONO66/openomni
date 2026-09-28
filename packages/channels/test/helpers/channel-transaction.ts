@@ -7,7 +7,7 @@ import { runEffect } from "./effect";
 export function channelTransaction<A>(operation: Effect.Effect<A, ChannelError>): Effect.Effect<A, ChannelError> {
   return Effect.try({
     try: () => DecisionFacts.transaction(() => Either.getOrThrowWith(
-      runEffect(Effect.either(operation), "sync"),
+      runEffect(Effect.result(operation), "sync"),
       (error: ChannelError) => error,
     )),
     catch: decodeChannelFailure("message.transaction"),

@@ -22,7 +22,7 @@ describe("L0 session materialization", () => {
     const tree = sessionTree(first.id);
     const repeat = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.materialize({
             id: first.id,
             parentId: null,

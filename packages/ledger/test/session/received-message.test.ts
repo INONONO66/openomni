@@ -8,7 +8,7 @@ beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.materialize({
           id: "receiver",
           parentId: null,
@@ -38,13 +38,13 @@ const message: Inbox.Commit = {
 
 test("equivalent received message returns the original durable receipt without another input", () => {
   const first = Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(message))),
+    Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(message))),
     (error) => error,
   );
   const revision = SessionHandleStore.row("receiver").revision;
   const duplicate = Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(SessionHandleStore.commitReceivedMessage({ ...message, createdAt: 3 })),
+      Effect.result(SessionHandleStore.commitReceivedMessage({ ...message, createdAt: 3 })),
     ),
     (error) => error,
   );
@@ -55,14 +55,14 @@ test("equivalent received message returns the original durable receipt without a
 
 test("divergent received message refuses without changing canonical history", () => {
   Either.getOrThrowWith(
-    Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(message))),
+    Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(message))),
     (error) => error,
   );
   const before = sessionTree("receiver");
   expect(() =>
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(SessionHandleStore.commitReceivedMessage({ ...message, content: "altered" })),
+        Effect.result(SessionHandleStore.commitReceivedMessage({ ...message, content: "altered" })),
       ),
       (error) => error,
     ),

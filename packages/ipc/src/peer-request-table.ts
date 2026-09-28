@@ -56,7 +56,7 @@ export class PeerRequestTable<TPeer = undefined> {
       const result = yield* Deferred.make<Ipc.Response["result"], IpcError>();
       this.pending.set(request.id, { peer, method, result });
       return yield* Effect.try({ try: () => this.options.send(peer, request), catch: decodeIpcFailure("request.send") }).pipe(
-        Effect.zipRight(Deferred.await(result)),
+        Effect.andThen(Deferred.await(result)),
         Effect.timeoutFail({ duration: timeoutMs, onTimeout: () => new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }) }),
         Effect.ensuring(Effect.sync(() => { this.pending.delete(request.id); })),
       );
@@ -93,7 +93,7 @@ export class PeerRequestTable<TPeer = undefined> {
     return Effect.suspend(() => handler(peer, request.method, request.params,
       (result) => this.options.send(peer, Ipc.createResponse(request.id, result)),
       (method, params) => this.options.send(peer, Ipc.createNotification(method, params)),
-    )).pipe(Effect.catchAllCause((cause) => {
+    )).pipe(Effect.catchCause((cause) => {
       const failure = Cause.failureOption(cause);
       if (Option.isNone(failure)) return Effect.failCause(cause);
       const error = failure.value;
@@ -103,7 +103,7 @@ export class PeerRequestTable<TPeer = undefined> {
   }
   private dispatchNotification(notification: Ipc.Notification, peer: TPeer): Effect.Effect<void> {
     return Effect.suspend(() => this.options.onNotification?.(peer, notification.method, notification.params) ?? Effect.void).pipe(
-      Effect.catchAllCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
+      Effect.catchCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
     );
   }
   private rejectPending(error: IpcError, matches: (peer: TPeer) => boolean): void {

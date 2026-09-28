@@ -76,9 +76,9 @@ type StubbornRun = ReturnType<typeof stubbornRunner>;
 /** Prompts, waits for the stubborn runner to enter, interrupts, and waits for the abort to reach it. */
 function interruptStubborn(handle: SessionHandle, run: StubbornRun) {
   return Effect.gen(function* () {
-    const running = yield* Effect.fork(handle.prompt("start"));
+    const running = yield* Effect.forkChild(handle.prompt("start"));
     yield* awaitSignal(bounded(run.entered.promise, "runner entry"));
-    const interrupted = yield* Effect.fork(handle.interrupt());
+    const interrupted = yield* Effect.forkChild(handle.interrupt());
     yield* awaitSignal(bounded(run.abortSeen.promise, "runner abort signal"));
     return { running, interrupted };
   });
@@ -91,7 +91,7 @@ function interruptStubborn(handle: SessionHandle, run: StubbornRun) {
 function settleStubborn(
   handle: SessionHandle,
   run: StubbornRun,
-  pending: Effect.Effect.Success<ReturnType<typeof interruptStubborn>>,
+  pending: Effect.Success<ReturnType<typeof interruptStubborn>>,
   hibernated: Signal<void>,
 ) {
   return Effect.gen(function* () {
@@ -124,7 +124,7 @@ function recordingRunner(text: string): { runner: SessionRunner; inputs: Session
 function expectLeaseHeldUntilSettled(
   handle: SessionHandle,
   run: StubbornRun,
-  pending: Effect.Effect.Success<ReturnType<typeof interruptStubborn>>,
+  pending: Effect.Success<ReturnType<typeof interruptStubborn>>,
   hibernated: Signal<void>,
   fence: number = handle.get().lease.fence,
 ) {
@@ -876,7 +876,7 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("single-flight", runner), fixture), fixture); });
 
-        const first = yield* Effect.fork(handle.prompt("first prompt"));
+        const first = yield* Effect.forkChild(handle.prompt("first prompt"));
         const firstInput = yield* awaitSignal(bounded(entered.promise, "runner entry"));
         const secondCommitted = signal<void>();
         const thirdCommitted = signal<void>();
@@ -887,9 +887,9 @@ describe("durable session handle", () => {
           if (rows.some((row: Inbox.Row) => row.content === "third prompt"))
             thirdCommitted.resolve();
         };
-        const second = yield* Effect.fork(handle.prompt("second prompt"));
+        const second = yield* Effect.forkChild(handle.prompt("second prompt"));
         yield* bounded(secondCommitted.promise, "second prompt committed");
-        const third = yield* Effect.fork(handle.prompt("third prompt"));
+        const third = yield* Effect.forkChild(handle.prompt("third prompt"));
         yield* bounded(thirdCommitted.promise, "third prompt committed");
         releaseBoundary.resolve();
         yield* awaitSignal(
@@ -1025,11 +1025,11 @@ describe("durable session handle", () => {
               return receipt;
             }),
         );
-        let result: Effect.Effect.Success<ReturnType<SessionHandle["prompt"]>>;
+        let result: Effect.Success<ReturnType<SessionHandle["prompt"]>>;
         try {
-          const prompt = yield* Effect.fork(handle.prompt("never reaches the runner"));
+          const prompt = yield* Effect.forkChild(handle.prompt("never reaches the runner"));
           yield* bounded(admitted.promise, "turn.pre committed");
-          const interrupt = yield* Effect.fork(handle.interrupt());
+          const interrupt = yield* Effect.forkChild(handle.interrupt());
           result = yield* bounded(prompt, "prompt completion");
           yield* bounded(interrupt, "interrupt receipt");
         } finally {
@@ -1218,11 +1218,11 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupt", runner), fixture), fixture); });
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         const runnerSignal = yield* awaitSignal(
           bounded(ready.promise, "interrupt listener installation"),
         );
-        const interrupted = yield* Effect.fork(handle.interrupt());
+        const interrupted = yield* Effect.forkChild(handle.interrupt());
         yield* awaitSignal(bounded(aborted.promise, "runner abort"));
         yield* awaitSignal(
           bounded(
@@ -1290,9 +1290,9 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("non-cooperative-interrupt", runner), fixture), fixture); });
 
-        const first = yield* Effect.fork(handle.prompt("start"));
+        const first = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(firstEntered.promise, "first runner entry"));
-        const interrupted = yield* Effect.fork(handle.interrupt());
+        const interrupted = yield* Effect.forkChild(handle.interrupt());
         yield* awaitSignal(bounded(firstAborted.promise, "first runner abort signal"));
         const resumeCommitted = signal<void>();
         sink.onCommit = () => {
@@ -1303,7 +1303,7 @@ describe("durable session handle", () => {
           )
             resumeCommitted.resolve();
         };
-        const resumed = yield* Effect.fork(handle.resume());
+        const resumed = yield* Effect.forkChild(handle.resume());
         yield* bounded(resumeCommitted.promise, "resume committed while raw runner retained");
         expect(entries).toBe(1);
         expect(maximumActive).toBe(1);
@@ -1381,9 +1381,9 @@ describe("durable session handle", () => {
         });
         const { handle, hibernated } = yield* hibernatingSession("retained-lease-lapsed", runner);
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
-        const interrupted = yield* Effect.fork(handle.interrupt());
+        const interrupted = yield* Effect.forkChild(handle.interrupt());
         yield* awaitSignal(bounded(abortSeen.promise, "runner abort signal"));
         yield* awaitSignal(bounded(interrupted, "interrupt receipt"));
 
@@ -1417,7 +1417,7 @@ describe("durable session handle", () => {
           resumeAfterFirst: true,
         });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("retained-release-refused", runner), fixture), fixture); });
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         yield* awaitSignal(bounded(handle.interrupt(), "interrupt receipt"));
         yield* awaitSignal(bounded(abortSeen.promise, "runner abort signal"));
@@ -1530,9 +1530,9 @@ describe("durable session handle", () => {
           reentered.resolve(() => configured);
         };
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
-        const interrupted = yield* Effect.fork(handle.interrupt());
+        const interrupted = yield* Effect.forkChild(handle.interrupt());
         const reentrant = yield* awaitSignal(bounded(reentered.promise, "seal observation"));
         yield* awaitSignal(bounded(reentrant(), "re-entrant configure"));
 
@@ -1562,7 +1562,7 @@ describe("durable session handle", () => {
           },
         );
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         // The interrupt seals the turn while the abort-ignoring runner stays retained,
         // so close() can only return once the grace timer lapses.
@@ -1595,7 +1595,7 @@ describe("durable session handle", () => {
           },
         );
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         yield* awaitSignal(bounded(handle.close(), "close with zero grace"));
 
@@ -1648,7 +1648,7 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("heartbeat-loss", runner), fixture), fixture); });
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "heartbeat runner entry"));
         now += SessionHandleStore.LEASE_TTL_MS;
         const stolen = yield* SessionHandleStore.acquireLease({
@@ -1696,12 +1696,12 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("configure-pinning", runner), fixture), fixture); });
 
-        const firstTurn = yield* Effect.fork(handle.prompt("turn one"));
+        const firstTurn = yield* Effect.forkChild(handle.prompt("turn one"));
         const pinned = yield* awaitSignal(bounded(firstEntered.promise, "generation N runner"));
         const receipt = yield* awaitSignal(handle.tools.add([tool("search")]));
         releaseFirst.resolve();
         yield* awaitSignal(bounded(firstTurn, "generation N terminal"));
-        const secondTurn = yield* Effect.fork(handle.prompt("turn two"));
+        const secondTurn = yield* Effect.forkChild(handle.prompt("turn two"));
         const next = yield* awaitSignal(bounded(secondEntered.promise, "generation N+1 runner"));
         yield* awaitSignal(bounded(secondTurn, "generation N+1 terminal"));
 
@@ -1730,7 +1730,7 @@ describe("durable session handle", () => {
         return { kind: "result", text: "resumed" };
       });
       const handle = yield* withSessionServices(session(residentOptions("immediate-configure", runner), runtime), runtime);
-      const running = yield* Effect.fork(handle.prompt("start"));
+      const running = yield* Effect.forkChild(handle.prompt("start"));
       yield* awaitSignal(bounded(entered.promise, "old generation entry"));
       yield* handle.interrupt();
       expect(yield* awaitSignal(bounded(running, "interrupted old turn"))).toMatchObject({ kind: "interrupted" });
@@ -1865,7 +1865,7 @@ describe("durable session handle", () => {
           processId: runtime.processId,
         }; return yield* withSessionServices(session(residentOptions("default-heartbeat", runner), fixture), fixture); });
 
-        const running = yield* Effect.fork(handle.prompt("start"));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
         try {
           yield* awaitSignal(bounded(entered.promise, "default-heartbeat runner entry"));
           expect(setIntervalSpy).toHaveBeenCalledTimes(1);
@@ -2001,7 +2001,7 @@ describe("durable session handle", () => {
         expect(yield* failure(awaitSignal(handle.approvals.answer(answer)))).toMatchObject({
           code: "stale_approval",
         });
-        const prompted = yield* Effect.fork(handle.prompt("needs approval"));
+        const prompted = yield* Effect.forkChild(handle.prompt("needs approval"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         expect(handle.approvals.pending()).toBe(livePending);
         yield* awaitSignal(bounded(handle.approvals.answer(answer), "routed answer"));
@@ -2032,13 +2032,13 @@ describe("durable session handle", () => {
           });
         const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("content-free-resume", runner), fixture), fixture); });
 
-        const first = yield* Effect.fork(handle.prompt("original prompt"));
+        const first = yield* Effect.forkChild(handle.prompt("original prompt"));
         const firstInput = yield* awaitSignal(
           bounded(firstEntered.promise, "initial runner entry"),
         );
         yield* awaitSignal(handle.interrupt());
         yield* awaitSignal(bounded(first, "interrupted turn"));
-        const resume = yield* Effect.fork(handle.resume());
+        const resume = yield* Effect.forkChild(handle.resume());
         const resumedInput = yield* awaitSignal(bounded(resumed.promise, "resumed runner entry"));
         yield* awaitSignal(bounded(resume, "resumed turn"));
 
@@ -2237,7 +2237,7 @@ describe("session crash recovery and observation", () => {
             return { kind: "result", text: "recovered" };
           });
 
-        const sweeping = yield* Effect.fork(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
+        const sweeping = yield* Effect.forkChild(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
         const input = yield* awaitSignal(bounded(entered.promise, "recovered runner entry"));
         yield* awaitSignal(bounded(sweeping, "boot sweep terminal"));
 
@@ -2261,7 +2261,7 @@ describe("session crash recovery and observation", () => {
           toolsHash: "not-the-recorded-tools",
         });
         let runs = 0;
-        const sweeping = yield* Effect.fork(
+        const sweeping = yield* Effect.forkChild(
           Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => () =>
               Effect.sync(() => {
                 runs += 1;
@@ -2321,7 +2321,7 @@ describe("session crash recovery and observation", () => {
                     (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
                   ),
                 );
-                const boundary = yield* Effect.either(input.boundary("after_llm"));
+                const boundary = yield* Effect.result(input.boundary("after_llm"));
                 if (boundary._tag === "Left") {
                   drained.resolve(boundary.left);
                   return yield* Effect.fail(boundary.left);

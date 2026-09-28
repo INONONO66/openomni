@@ -36,7 +36,7 @@ describe("Retry.sleep", () => {
             },
           );
           try {
-            const sleeping = yield* Effect.fork(Retry.sleep(5_000, controller.signal));
+            const sleeping = yield* Effect.forkChild(Retry.sleep(5_000, controller.signal));
             yield* boundedSignal(registered.promise, "abort listener registered");
             controller.abort();
             const exit = yield* Fiber.await(sleeping);
@@ -63,7 +63,7 @@ describe("Retry.sleep", () => {
           );
           const removed = spyOn(controller.signal, "removeEventListener");
           try {
-            const sleeping = yield* Effect.fork(Retry.sleep(1, controller.signal));
+            const sleeping = yield* Effect.forkChild(Retry.sleep(1, controller.signal));
             yield* boundedSignal(registered.promise, "abort listener registered");
             expect(added).toHaveBeenCalledTimes(1);
             yield* TestClock.adjust(1);

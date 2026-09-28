@@ -32,7 +32,7 @@ function sessionServices(fixture: SessionFixture) {
     const cached = cache.get(fixture);
     if (cached !== undefined) return cached;
     const lock = yield* Effect.makeSemaphore(1);
-    const managers = new Map<string, Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
+    const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
     const observations = observationService(fixture.observations);
     const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, kinds: LedgerAction.Kind.options,
       source: { rows: (generation?: number) => SessionHandleStore.policyRows(generation) } });
@@ -64,8 +64,8 @@ function sessionServices(fixture: SessionFixture) {
         return yield* owner.capture(bundle(id.sessionId, snapshot));
       }),
       configure: <A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>) =>
-        Effect.flatMap(manager(id.sessionId), (owner: Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.configure(bundle(id.sessionId, snapshot), commit)),
-      drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.drain, { discard: true })),
+        Effect.flatMap(manager(id.sessionId), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.configure(bundle(id.sessionId, snapshot), commit)),
+      drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.drain, { discard: true })),
     };
     const context = yield* Layer.buildWithScope(Layer.mergeAll(
       LlmLive, Layer.succeed(Clock, { now: fixture.clock ?? Date.now }),

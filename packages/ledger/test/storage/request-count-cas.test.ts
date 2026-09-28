@@ -39,7 +39,7 @@ describe("SQLite global request count CAS", () => {
     expect(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.acquireLease({
               sessionId: "other",
               owner: "writer",
@@ -56,7 +56,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               ...proposal(other, 0),
               actions: [
@@ -82,7 +82,7 @@ describe("SQLite global request count CAS", () => {
     };
     expectCommitted(
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(SessionHandleStore.commit(proposal(other, 0)))),
+        Effect.runSync(Effect.result(SessionHandleStore.commit(proposal(other, 0)))),
         (error) => error,
       ),
     );
@@ -90,7 +90,7 @@ describe("SQLite global request count CAS", () => {
     const alarms = Storage.get().alarms?.due(100);
     expect(() =>
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(SessionHandleStore.commit(pending))),
+        Effect.runSync(Effect.result(SessionHandleStore.commit(pending))),
         (error) => error,
       ),
     ).toThrow(
@@ -110,7 +110,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({ ...pending, requestCount: { since: 0, count: 1 } }),
           ),
         ),
@@ -126,7 +126,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               ...proposal(request, 1),
               actions: [],
@@ -152,7 +152,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               ...proposal(request, 0),
               actions: [],
@@ -166,7 +166,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               ...proposal(request, 0),
               actions: [],
@@ -192,7 +192,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               ...proposal(request, 0),
               actions: [],

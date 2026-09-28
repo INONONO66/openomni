@@ -79,7 +79,7 @@ test("committed configure swaps the next captured Layer; old body and terminal s
       kind: "tool", op: captured.snapshot.systemValue, intent: {}, effect: {},
     }, () => capturedBody));
   }));
-  const running = yield* Effect.fork(executeCaptured);
+  const running = yield* Effect.forkChild(executeCaptured);
   yield* Deferred.await(entered);
   yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
     Effect.mapError((error) => new CommitFailed({ error })),
@@ -159,7 +159,7 @@ test("unavailable generations fail closed; revert appends a selection", () => is
     yield* generations.configure(selected, options.ledger.commit(selectAction(selected.snapshot)).pipe(
       Effect.mapError((error) => new CommitFailed({ error })),
     ));
-    expect(yield* Effect.either(generations.capture(a))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+    expect(yield* Effect.result(generations.capture(a))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
   }
   const reverted = yield* generations.capture();
   expect(reverted.snapshot).toMatchObject({ generation: 3, revertTo: 2, systemValue: "A" });
@@ -212,7 +212,7 @@ for (const corruption of ["system", "tools", "policy"] as const) {
         ...(corruption === "tools" ? { toolsHash: "corrupt" } : {}),
         ...(corruption === "policy" ? { policyGeneration: 2 } : {}),
       };
-      const result = yield* Effect.either(generations.capture({ ...original, snapshot }));
+      const result = yield* Effect.result(generations.capture({ ...original, snapshot }));
       expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
       expect(bodies).toBe(0);
       expect((yield* generations.capture()).snapshot.generation).toBe(2);
@@ -226,7 +226,7 @@ test("missing historical executable refuses capture instead of adopting the newe
   const generations = yield* makeSessionGenerations(current);
   const historical = bundle(1, "A", () => undefined);
   const missing = { ...historical, layer: Layer.fail(new GenerationUnavailable({ generation: 1 })) };
-  expect(yield* Effect.either(generations.capture(missing))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+  expect(yield* Effect.result(generations.capture(missing))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
   expect(bodies).toBe(0);
   expect((yield* generations.capture()).snapshot).toEqual(current.snapshot);
 }))));
@@ -240,7 +240,7 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   const generations = yield* makeSessionGenerations(bundle(1, "A", () => {
     finalized += 1; Deferred.unsafeDone(closed, Exit.void);
   }, async () => { Deferred.unsafeDone(entered, Exit.void); return release.promise; }));
-  const running = yield* Effect.fork(Effect.scoped(Effect.gen(function* () {
+  const running = yield* Effect.forkChild(Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
     return yield* captured.provide(testExecutor({ ...options, closeGraceMs: 0 }).run({
       kind: "tool", op: "A", intent: {}, effect: {},

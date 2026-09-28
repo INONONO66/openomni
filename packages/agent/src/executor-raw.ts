@@ -20,7 +20,7 @@ export function createRawSlots(retain?: (settlement: Promise<void>) => void) {
       if (pending.size === 0) for (const notify of [...listeners]) notify();
     };
   }
-  const awaitSettled = Effect.async<void>((resume) => {
+  const awaitSettled = Effect.callback<void>((resume) => {
     const notify = () => resume(Effect.void);
     listeners.add(notify);
     if (pending.size === 0) notify();

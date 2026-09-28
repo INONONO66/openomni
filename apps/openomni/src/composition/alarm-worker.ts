@@ -39,7 +39,7 @@ export function createAlarmWorker(options: {
     let cancelTick: (() => void) | undefined;
     let unsubscribe: (() => void) | undefined;
     const report = (work: Effect.Effect<void, Failure>) =>
-      work.pipe(Effect.catchAll((error) => Effect.sync(() => options.failure(error))));
+      work.pipe(Effect.catch((error) => Effect.sync(() => options.failure(error))));
     const offer = (work: Effect.Effect<void, Failure>) => {
       if (!stopped) queue.unsafeOffer(work);
     };
@@ -240,7 +240,7 @@ export function createAlarmWorker(options: {
               if (payload.kind === "alarm.arm")
                 offer(
                   tick().pipe(
-                    Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("bus.scan"))),
+                    Effect.catchDefect(() => Effect.fail(new AlarmSourceError("bus.scan"))),
                   ),
                 );
             },
@@ -255,7 +255,7 @@ export function createAlarmWorker(options: {
           )(() =>
             offer(
               tick().pipe(
-                Effect.catchAllDefect(() => Effect.fail(new AlarmSourceError("timer.scan"))),
+                Effect.catchDefect(() => Effect.fail(new AlarmSourceError("timer.scan"))),
               ),
             ),
           );

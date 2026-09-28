@@ -44,7 +44,7 @@ export function protectedDispatch(
     { id: "original-call", tool: definition.name, input },
     { sessionId: recording.identity.sessionId, turnId: "turn", signal: controller.signal },
   );
-  const outcome = runEffect(Effect.either(execution));
+  const outcome = runEffect(Effect.result(execution));
   const running = outcome.then((result) => {
     if (result._tag === "Left") throw result.left;
     return result.right;
@@ -60,7 +60,7 @@ export function protectedDispatch(
       const pending = executor.approvals?.pending()[0];
       if (pending === undefined) throw new Error("missing protected invocation");
       if (executor.approvals === undefined) throw new Error("missing approval port");
-      const answer = await runEffect(Effect.either(executor.approvals.answer({ request: pending, decision, credential: "owner-token" })));
+      const answer = await runEffect(Effect.result(executor.approvals.answer({ request: pending, decision, credential: "owner-token" })));
       if (answer._tag === "Left") throw answer.left;
       return bounded(running);
     },

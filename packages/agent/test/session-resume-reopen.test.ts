@@ -75,7 +75,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             let originalResult = "crashed-result";
             if (mode === "interrupted") {
               const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "resume", role: "resident", runner }, fixture), fixture); });
-              const first = yield* Effect.fork(handle.prompt("original"));
+              const first = yield* Effect.forkChild(handle.prompt("original"));
               yield* boundedSignal(entered.promise, "provider entered");
               yield* awaitSignal(handle.interrupt());
               expect((yield* awaitSignal(first))?.kind).toBe("interrupted");

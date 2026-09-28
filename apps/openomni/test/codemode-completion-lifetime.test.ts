@@ -41,7 +41,7 @@ for (const stop of [false, true]) {
         },
       };
     const path = socketPath();
-    let cells: Effect.Effect.Success<ReturnType<typeof composeCodemode>>;
+    let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
       socketPath: path,
       enrollment: (machineId: string) => ({

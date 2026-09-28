@@ -6,7 +6,7 @@ import type { SessionTransition } from "@openomni/protocol";
 export function receiveOutbound(message: SessionTransition.OutboundMessage, createdAt: number) {
   return Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.commitReceivedMessage({
           id: message.messageId,
           sessionId: message.destinationSessionId,

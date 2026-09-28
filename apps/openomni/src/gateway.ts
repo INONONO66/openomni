@@ -73,7 +73,7 @@ export function runAppEffect<A, E>(
   effect: Effect.Effect<A, E, AppServices>,
   signal?: AbortSignal,
 ): Promise<A> {
-  return runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
+  return runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
     if (Either.isLeft(result)) throw result.left;
     return result.right;
   });
@@ -182,7 +182,7 @@ export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPo
     }),
   );
   const execute = <A>(effect: Effect.Effect<A, LedgerError>, signal: AbortSignal): Promise<A> =>
-    runtime.runPromise(Effect.either(effect), { signal }).then((result) => {
+    runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
       if (Either.isLeft(result)) throw new MonitorRefused(result.left);
       return result.right;
     });
@@ -282,14 +282,14 @@ export function channelTransaction<A>(
   return Effect.try({
     try: () =>
       DecisionFacts.transaction(() =>
-        Either.getOrThrowWith(Effect.runSync(Effect.either(operation)), (error) => error),
+        Either.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
       ),
     catch: decodeChannelFailure("message.transaction"),
   });
 }
 
 export function channelRequests(
-  requests: Effect.Effect.Success<ReturnType<typeof createSessionRequests>>,
+  requests: Effect.Success<ReturnType<typeof createSessionRequests>>,
 ): Parameters<typeof createGatewayRouter>[0]["requests"] {
   return {
     list: requests.list,

@@ -296,7 +296,7 @@ export class PythonKernel {
       const output = { stdout: "", stderr: "" };
       const cancelled = (): Machine.CellResult => ({ status: "cancelled", cellId: request.cellId, output: { ...output } });
       if (cancellation.aborted) return Effect.succeed(cancelled());
-      const abort = Effect.async<Machine.CellResult>((resume) => {
+      const abort = Effect.callback<Machine.CellResult>((resume) => {
         const listener = () => resume(Effect.sync(cancelled));
         cancellation.addEventListener("abort", listener, { once: true });
         if (cancellation.aborted) listener();
@@ -364,9 +364,9 @@ export class PythonKernel {
       if (pending.inFlight.has(frame.callId)) return;
       pending.inFlight.add(frame.callId);
       yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
-        Effect.catchAllCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
+        Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
         Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catchAll((error) => Effect.sync(() => { pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.catch((error) => Effect.sync(() => { pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
         Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
       ));
     });

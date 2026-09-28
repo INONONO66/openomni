@@ -45,7 +45,7 @@ function fresh() {
   Storage.configure(adapter);
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         adapter.sessions.create(
           LedgerSession.Row.parse({
             id: "chain",

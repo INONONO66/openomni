@@ -9,7 +9,7 @@ describe("provider failure decoder", () => {
   test("passes through a tagged provider failure", () => {
     const error = new APIError({ message: "boom", isRetryable: true });
     expect(coerceApiError(error)).toBe(error);
-    expect(Effect.runSync(Effect.either(error))).toEqual(Either.left(error));
+    expect(Effect.runSync(Effect.result(error))).toEqual(Either.left(error));
   });
   test("decodes SDK fields and lowercases response headers", () => {
     const failure = sdkError({ message: "sdk fixture", isRetryable: true, statusCode: 529, responseHeaders: { "Retry-After-Ms": "1200" }, responseBody: '{"type":"error"}' });

@@ -463,7 +463,7 @@ describe("code-mode tool bridge", () => {
       socketPath: path,
       offer,
     }));
-    let second: Effect.Effect.Success<ReturnType<typeof attachMachineDaemon>> | undefined;
+    let second: Effect.Success<ReturnType<typeof attachMachineDaemon>> | undefined;
     try {
       const cell = runEffect(host.get("m-1").runCode({
         cellId: "live",

@@ -12,7 +12,7 @@ import { attemptRouteChange } from "./model-selection";
 
 type RecordPort = ReturnType<typeof createExecutionRecord>;
 type Admission = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
-type Prepared<T extends PlainValue> = Effect.Effect.Success<ReturnType<LlmAttempts<T>["prepare"]>>;
+type Prepared<T extends PlainValue> = Effect.Success<ReturnType<LlmAttempts<T>["prepare"]>>;
 
 function terminalFailure(failure: ExecutionError, attempt: number) {
   if (failure._tag === "LlmRunFailure") attachFailureFacts(failure, {

@@ -222,7 +222,7 @@ test("interrupt cancels an exactly registered backoff without another provider a
       arm: () => Effect.void,
       settle: () => Effect.void,
       wait: (_fireAt: number, signal?: AbortSignal) =>
-        Effect.async<void>((resume: (effect: Effect.Effect<void>) => void) => {
+        Effect.callback<void>((resume: (effect: Effect.Effect<void>) => void) => {
           signal?.addEventListener(
             "abort",
             () => {
@@ -291,7 +291,7 @@ test.each([
       }),
     }),
   );
-  const terminal = yield* Effect.forkScoped(Effect.either(running));
+  const terminal = yield* Effect.forkScoped(Effect.result(running));
   yield* Effect.promise(() => waiting.promise).pipe(Effect.timeout("5 seconds"));
   expect(calls).toBe(1);
   const approvals = executor.approvals;

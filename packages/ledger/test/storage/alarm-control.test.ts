@@ -26,7 +26,7 @@ function openOwner(db: Database) {
   const { adapter, observations } = observedL0Adapters(db);
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         adapter.sessions.create(
           LedgerSession.Row.parse({
             id: "owner",
@@ -74,7 +74,7 @@ const cases = Alarm.Kind.options.flatMap((kind) =>
 function fireOnce(adapter: Adapter, id: string, sourceKey: string, terminal: boolean) {
   return Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         adapter.alarms.fire({
           id,
           epoch: 1,
@@ -96,7 +96,7 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
   cancelled: (adapter, id) => {
     expect(
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.alarms.cancel(id, "owner", 101))),
+        Effect.runSync(Effect.result(adapter.alarms.cancel(id, "owner", 101))),
         (error) => error,
       )?.status,
     ).toBe("cancelled");
@@ -115,7 +115,7 @@ function seedAlarm(adapter: Adapter, id: string, kind: Kind, status: Status): vo
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           adapter.alarms.arm({
             id,
             sessionId: "owner",
@@ -155,14 +155,14 @@ for (const op of ["cancel", "rearm"] as const) {
     const { adapter, observations } = openOwner(db);
     expect(() =>
       Either.getOrThrowWith(
-        Effect.runSync(Effect.either(adapter.alarms[op]("missing", "owner", 100))),
+        Effect.runSync(Effect.result(adapter.alarms[op]("missing", "owner", 100))),
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
     for (const { id, kind, status, sessionId } of cases) {
       seedAlarm(adapter, id, kind, status);
       const before = snapshot(adapter, observations, id);
-      const result = Effect.runSync(Effect.either(adapter.alarms[op](id, sessionId, 102)));
+      const result = Effect.runSync(Effect.result(adapter.alarms[op](id, sessionId, 102)));
       if (controlAdmitted(kind, status, sessionId, op)) {
         expectTransition(
           op,

@@ -8,7 +8,7 @@ export function requestFixture(mode: SessionTransition.Request["mode"] = "reply"
   materializeSession("request-session");
   const lease = Either.getOrThrowWith(
     runLedgerSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.acquireLease({
           sessionId: "request-session",
           owner: "writer",
@@ -64,7 +64,7 @@ export function requestFixture(mode: SessionTransition.Request["mode"] = "reply"
   ) =>
     Either.getOrThrowWith(
       runLedgerSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitRequestTransition({
             sessionId: request.sessionId,
             owner: "writer",

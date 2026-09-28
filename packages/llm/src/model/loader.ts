@@ -14,7 +14,7 @@ function loadCatalog(loadSnapshot: () => Promise<Catalog>): Effect.Effect<Catalo
   return Effect.gen(function* () {
     const path = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
     const cached = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: decodeLlmFailure("catalog.cache.read") }).pipe(
-      Effect.map(RemoteCatalog.parse), Effect.catchAll(() => Effect.succeed({})),
+      Effect.map(RemoteCatalog.parse), Effect.catch(() => Effect.succeed({})),
     );
     if (Object.keys(cached).length > 0) return cached;
     if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
@@ -24,11 +24,11 @@ function loadCatalog(loadSnapshot: () => Promise<Catalog>): Effect.Effect<Catalo
       }).pipe(Effect.timeoutOption(10_000), Effect.flatMap((response) => {
         if (response._tag === "None" || !response.value.ok) return Effect.succeed(undefined);
         return Effect.tryPromise({ try: () => response.value.json(), catch: decodeLlmFailure("catalog.json") }).pipe(Effect.map(RemoteCatalog.parse));
-      }), Effect.catchAll(() => Effect.succeed(undefined)));
+      }), Effect.catch(() => Effect.succeed(undefined)));
       if (remote !== undefined) {
         yield* Effect.tryPromise({ try: () => mkdir(dirname(path), { recursive: true }), catch: decodeLlmFailure("catalog.cache.mkdir") }).pipe(
-          Effect.zipRight(Effect.tryPromise({ try: () => Bun.write(path, JSON.stringify(remote)), catch: decodeLlmFailure("catalog.cache.write") })),
-          Effect.catchAll(() => Effect.void),
+          Effect.andThen(Effect.tryPromise({ try: () => Bun.write(path, JSON.stringify(remote)), catch: decodeLlmFailure("catalog.cache.write") })),
+          Effect.catch(() => Effect.void),
         );
         return remote;
       }

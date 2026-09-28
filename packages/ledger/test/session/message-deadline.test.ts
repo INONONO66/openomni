@@ -30,7 +30,7 @@ function openRequest() {
   ) =>
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitRequestTransition({
             sessionId: fixture.request.sessionId,
             owner: "writer",
@@ -144,12 +144,12 @@ describe("SQLite canonical request deadline", () => {
   test("idempotent receive keeps the original receipt even after consumption", () => {
     const { commit } = openRequest();
     const first = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     const duplicate = Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commitReceivedMessage({
             ...reply(),
             createdAt: 100,
@@ -165,7 +165,7 @@ describe("SQLite canonical request deadline", () => {
     expectCommitted(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(
+          Effect.result(
             SessionHandleStore.commit({
               sessionId: "request-session",
               owner: "writer",
@@ -183,7 +183,7 @@ describe("SQLite canonical request deadline", () => {
       ),
     );
     const consumed = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     expect(consumed.row.status).toBe("consumed");
@@ -200,14 +200,14 @@ describe("SQLite canonical request deadline", () => {
   ])("receive rejects changed durable identity fields: %j", (change) => {
     openRequest();
     Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     const before = sessionTree("request-session");
     expect(() =>
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })),
+          Effect.result(SessionHandleStore.commitReceivedMessage({ ...reply(), ...change })),
         ),
         (error) => error,
       ),
@@ -295,7 +295,7 @@ describe("durable request projection", () => {
   test("receive retry after restart returns the same durable action receipt", () => {
     openRequest();
     const first = Either.getOrThrowWith(
-      Effect.runSync(Effect.either(SessionHandleStore.commitReceivedMessage(reply()))),
+      Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(reply()))),
       (error) => error,
     );
     Storage.reset();
@@ -303,7 +303,7 @@ describe("durable request projection", () => {
     expect(
       Either.getOrThrowWith(
         Effect.runSync(
-          Effect.either(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })),
+          Effect.result(SessionHandleStore.commitReceivedMessage({ ...reply(), createdAt: 102 })),
         ),
         (error) => error,
       ),

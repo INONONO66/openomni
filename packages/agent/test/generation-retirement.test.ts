@@ -57,7 +57,7 @@ test("a retired generation cannot reacquire ownership after its last release not
   yield* owner.configure(generation(2, () => undefined), Effect.void);
   const attempted = yield* Effect.sync(() => {
     release();
-    return runAgentSync(Effect.either(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
+    return runAgentSync(Effect.result(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
   });
   expect(attempted).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
 })).pipe(Effect.timeout("5 seconds"))));

@@ -18,9 +18,9 @@ const positive = `${header}
 const ExternalSeed = Layer.effect(A, Effect.flatMap(External, value => value ? Effect.succeed(7) : Effect.fail("seed-error" as const)));
 const composed = compose({requires:[External], provides:[A], layer:ExternalSeed}, [b]);
 type Equal<A,B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-const output: Equal<Layer.Layer.Success<typeof composed>, A | B> = true;
-const input: Equal<Layer.Layer.Context<typeof composed>, External> = true;
-const error: Equal<Layer.Layer.Error<typeof composed>, "seed-error" | import("../packages/agent/src/errors").BundleError> = true;
+const output: Equal<Layer.Success<typeof composed>, A | B> = true;
+const input: Equal<Layer.Services<typeof composed>, External> = true;
+const error: Equal<Layer.Error<typeof composed>, "seed-error" | import("../packages/agent/src/errors").BundleError> = true;
 const tuple: Equal<typeof a.provides, readonly [typeof A]> = true;
 const original: Equal<typeof a.layer, typeof ALive> = true;
 const ObserverLive = Layer.scopedDiscard(Effect.asVoid(B));

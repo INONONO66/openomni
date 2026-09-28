@@ -81,7 +81,7 @@ export function interruptSecondModel(
 export function acquireContender(sessionId: string, owner: string, expectedFence: number) {
   const now = Date.now();
   return Effect.runSync(
-    Effect.either(
+    Effect.result(
       SessionHandleStore.acquireLease({
         sessionId,
         owner,
@@ -99,7 +99,7 @@ export function releaseContender(sessionId: string, owner: string, fence: number
   expect(
     Either.getOrThrowWith(
       Effect.runSync(
-        Effect.either(
+        Effect.result(
           SessionHandleStore.commit({
             sessionId,
             owner,
@@ -121,7 +121,7 @@ export function releaseContender(sessionId: string, owner: string, fence: number
 export function commitInterrupt(sessionId: string, id: string) {
   Either.getOrThrowWith(
     Effect.runSync(
-      Effect.either(
+      Effect.result(
         SessionHandleStore.commitInbox({
           id,
           sessionId,

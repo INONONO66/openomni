@@ -382,7 +382,7 @@ function recoverRetryAlarm(witness: Witness) {
   const consumed = (yield* alarms?.cancel(alarmId, sessionId, 100_000) ??
           Effect.die("missing test storage capability"));
   expect(consumed).toMatchObject({ id: alarmId, kind: "at", status: "cancelled" });
-  const repeatedCancel = yield* Effect.either(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
+  const repeatedCancel = yield* Effect.result(alarms?.cancel(alarmId, sessionId, 100_000) ?? Effect.die("missing alarms"));
   expect(Either.isLeft(repeatedCancel) ? repeatedCancel.left : undefined).toMatchObject({ _tag: "AlarmRefused" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
@@ -410,7 +410,7 @@ function recoverStaleOwner(witness: Witness) {
     expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
     expect(200_000).toBeGreaterThan(expiresAt);
     const before = actions();
-    const refused = yield* Effect.either(SessionHandleStore.commit({
+    const refused = yield* Effect.result(SessionHandleStore.commit({
       sessionId, owner, fence: witness.lease.fence, now: 200_000,
       expectedRevision: current.revision, actions: [staleAction], consumeInboxIds: [], state: current.state, releaseLease: false,
     }));
