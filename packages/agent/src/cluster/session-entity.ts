@@ -5,7 +5,7 @@ import {
   type Inbox,
   type LedgerAction,
 } from "@openomni/protocol";
-import { Context, Effect, Scope, Semaphore } from "effect";
+import { Cause, Context, Effect, Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
 import type { SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";
@@ -189,13 +189,19 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
   return Effect.gen(function* () {
     const token = {};
     handle.live.current = token;
-    require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE detach fork ${handle.authority.sessionId} pid=${process.pid} t=${Date.now()}\n`);
     yield* Effect.forkIn(
       body.pipe(
-        Effect.onExit((exit) => Effect.sync(() => require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE detach exit ${handle.authority.sessionId} ${exit._tag} ${exit._tag === "Failure" ? JSON.stringify(exit.cause, (_k, v) => v instanceof Error ? { name: v.name, message: v.message, ...v } : v) : ""} t=${Date.now()}\n`))),
         Effect.ensuring(Effect.sync(() => {
           if (handle.live.current === token) handle.live.current = undefined;
         })),
+        // A detached turn's failure has no awaiting RPC to surface through;
+        // log it loud (a stale fence here means another authority took the
+        // session over — the chain recovers on the next activation).
+        Effect.onError((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logError(`detached session turn failed: ${handle.authority.sessionId}`, cause),
+        ),
         Effect.andThen(Effect.suspend(() => drain(handle))),
         Effect.orDie,
       ),
@@ -220,7 +226,6 @@ function drain(handle: ActivationHandle): Effect.Effect<void, LedgerError | Sess
       if (handle.live.current !== undefined) return;
       const snapshot = admissionSnapshot(handle);
       const decision = decideSessionAdmission(snapshot);
-      require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE drain ${handle.authority.sessionId} decision=${decision.kind} state=${snapshot.row.state} pending=${snapshot.pending.length} pid=${process.pid} t=${Date.now()}\n`);
       switch (decision.kind) {
         case "stop":
         case "refused":

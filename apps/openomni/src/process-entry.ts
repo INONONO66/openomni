@@ -76,10 +76,15 @@ function adoptChildAuthority(
 
 /**
  * Direct chain commit of one received message (child-side delivery). The
- * child has no cluster client; it adopts the destination's fence itself and
- * relies on the parent's `committed` doorbell (stdout) for any further wake.
- * The parent's entity re-adopts on its next activation — the same takeover
- * the fence CAS exists for.
+ * child has no cluster client; an idle destination gets a fence takeover and
+ * relies on the parent's `committed` doorbell (stdout) for any further wake
+ * (the parent's entity re-adopts on its next activation — the same takeover
+ * the fence CAS exists for). A RUNNING destination's live authority is
+ * borrowed instead (W5.2 S4, same rule as `requestAuthorityKernel`):
+ * stealing a live turn's fence would refuse that turn's own commits
+ * mid-flight, and with the delivering RPC acking at the durable boundary
+ * there is no redelivery to absorb that refusal — the row lands between the
+ * turn's awaits and the turn's continuation drain consumes it.
  */
 function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
   return (input: Inbox.Commit): Effect.Effect<Inbox.Row, ForeignFailure> =>
@@ -102,9 +107,16 @@ function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => num
       if (existing !== undefined) return asRow(existing.ordinal);
       const refuse = (error: { readonly _tag: string }) =>
         new ForeignFailure({ operation: "message.commit", cause: error._tag });
-      const fence = yield* adoptChildAuthority(kernel, input.sessionId, owner).pipe(
-        Effect.mapError(refuse),
-      );
+      const live = kernel.row(input.sessionId);
+      const authority =
+        live.state === "running" && live.leaseOwner !== null
+          ? { owner: live.leaseOwner, fence: live.leaseFence }
+          : {
+              owner,
+              fence: yield* adoptChildAuthority(kernel, input.sessionId, owner).pipe(
+                Effect.mapError(refuse),
+              ),
+            };
       const row = kernel.row(input.sessionId);
       const action: LedgerAction.Append = {
         id: input.id,
@@ -119,8 +131,8 @@ function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => num
       const committed = yield* kernel
         .commit({
           sessionId: input.sessionId,
-          owner,
-          fence,
+          owner: authority.owner,
+          fence: authority.fence,
           now: clock(),
           expectedRevision: row.revision,
           actions: [action],
