@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { effectFailure } from "../helpers/effect-failure";
 import type { GatewayRouterPorts } from "../../src/router";
 import { replaceDecisionFacts } from "../helpers/ledger";
@@ -176,7 +176,7 @@ test("a post-commit reply-grant failure retains commit progress for the executor
     },
     run: (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
       const exit = yield* Effect.exit(body(messageExecutionReceipt("source", "ingress", request.intent)));
-      expect(exit).toMatchObject({ _tag: "Failure", cause: { _tag: "Die", defect: failure } });
+      expect(Exit.isFailure(exit) ? exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect) : []).toEqual([failure]);
       return { terminal: "blocked_post" as const, reason: "grant_projection_failed", matchedRuleIds: [] };
     }),
   });
