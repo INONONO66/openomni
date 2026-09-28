@@ -8,26 +8,10 @@ import {
   type PlainValue,
   type SessionTransition,
 } from "@openomni/protocol";
-import { ledger } from "./ledger";
+import { adoptLedgerFence, ledger } from "./ledger";
 
 /** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */
 const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
-
-/** Strictly-newer fence adoption: the takeover CAS that replaced leases (W5.2 F5). */
-function adoptFixtureFence(sessionId: string, owner: string): number {
-  const kernel = ledger().kernel;
-  for (;;) {
-    const row = kernel.row(sessionId);
-    if (row.leaseOwner === owner) return row.leaseFence;
-    const adopted = Effect.runSync(
-      kernel.adoptFence({ sessionId, owner, fence: row.leaseFence + 1 }).pipe(
-        Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => Effect.succeed(undefined)),
-      ),
-    );
-    if (adopted !== undefined) return adopted;
-  }
-}
 
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
@@ -73,7 +57,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
     (action) => action.id === requestId,
   );
   if (existing) return;
-  const fence = adoptFixtureFence(sessionId, "fixture");
+  const fence = adoptLedgerFence(sessionId, "fixture");
   const row = kernel.row(sessionId);
   Effect.runSync(kernel.commit({
     sessionId,
@@ -139,7 +123,7 @@ export async function command(
   const request = kernel.requestById(requestId);
   if (!request) throw new Error("missing request");
   const sessionId = request.sessionId;
-  const fence = adoptFixtureFence(sessionId, "command");
+  const fence = adoptLedgerFence(sessionId, "command");
   const current = kernel.row(sessionId);
   const decision = decideRequestTransition(
     {
