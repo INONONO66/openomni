@@ -1,8 +1,9 @@
 {
   "extends": "../../packages/ledger/tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
-    "noEmit": true
+    "rootDir": "../..",
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
