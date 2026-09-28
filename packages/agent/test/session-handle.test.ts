@@ -1940,7 +1940,7 @@ describe("session crash recovery and observation", () => {
           resultId: "boundary-result",
           resumeCount: 0,
         });
-        const drained = signal<unknown>();
+        const drained = signal<Effect.Error<ReturnType<SessionRunnerInput["boundary"]>>>();
         const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
             yield* commitInbox({
