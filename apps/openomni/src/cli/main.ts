@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -179,7 +179,12 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
         exit: (code) => process.exit(code),
         on: (signal, handler) => process.once(signal, handler),
       });
-      await runtime.runPromise(daemon.closed);
+      // v4: dispose() interrupts every fiber the runtime is running, including
+      // this wait on daemon.closed. Interruption is the SIGTERM path, not an error.
+      const closed = await runtime.runPromiseExit(daemon.closed);
+      if (Exit.isFailure(closed) && !Cause.hasInterruptsOnly(closed.cause)) {
+        throw Cause.squash(closed.cause);
+      }
       return 0;
       } finally {
         await runtime.dispose();
