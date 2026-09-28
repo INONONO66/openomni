@@ -1,0 +1,14 @@
+bun test v1.4.1 (4661e494f)
+
+test/check3-fence.test.ts:
+(pass) a: holder A (fence 1, rev 0) commits -> revision 1 [134.55ms]
+(pass) b: second writer B (fence 2, rev 1) is refused with reason 'stale' [128.92ms]
+(pass) c: holder A commits again (rev 1) -> revision 2 [132.12ms]
+(pass) d: CONCURRENT A and B from revision 2 -> exactly one succeeds (A), B 'stale'; chain has 3 linked rows [177.96ms]
+check3(e): observed second-writer error after 5130ms: "SQLITE_BUSY: database is locked"
+(pass) e: SQLite-level: held BEGIN IMMEDIATE makes the second writer fail SQLITE_BUSY after busy_timeout [5285.91ms]
+
+ 5 pass
+ 0 fail
+ 20 expect() calls
+Ran 5 tests across 1 file. [6.03s]

@@ -1,0 +1,20 @@
+bun test v1.4.1 (4661e494f)
+
+test/check2-crash.test.ts:
+[check2] crash pid=79061 exit=137
+APPENDED 1 turn=turn-1 deduped=false action_hash=ea604e7ad45c3df8775dd59132144846beeaa3c9cf22add8e498121a354e188e at=1790599096787
+[check2] cluster_messages after crash: [{"id":"230307121848635392","entity_type":"CrashSession","entity_id":"s-crash","tag":"Turn","processed":0,"deliver_at":null}]
+[check2] restart pid=79062 exit=0
+REDELIVERED 1 deduped=true action_hash=ea604e7ad45c3df8775dd59132144846beeaa3c9cf22add8e498121a354e188e at=1790599096978
+CHAIN_OK 1
+CHECKPOINT_HYDRATED revision=2 nonCheckpointActions=0 history=0
+DELIVER_AT residual_ms=1510 t_send=1790599096986 deliver_at=1790599098486 t_handled=1790599098496
+CHAIN_OK 3
+HYDRATED_FINAL revision=3 nonCheckpointActions=1 history=0
+[check2] cluster_messages after restart: [{"id":"230307121848635392","entity_type":"CrashSession","entity_id":"s-crash","tag":"Turn","processed":1,"deliver_at":null},{"id":"230307122850566144","entity_type":"CrashSession","entity_id":"s-crash","tag":"Scheduled","processed":1,"deliver_at":1790599098486}]
+(pass) check2: SIGKILL mid-turn loses nothing; redelivery dedupes; DeliverAt honors residual [1934.78ms]
+
+ 1 pass
+ 0 fail
+ 21 expect() calls
+Ran 1 test across 1 file. [2.05s]

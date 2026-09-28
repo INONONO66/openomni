@@ -1,0 +1,12 @@
+{
+  "//": "Runtime tsconfig for crash-child.ts (bun --tsconfig-override). The worktree has no built packages/protocol/dist, and packages/agent has no tsconfig paths, so deep-importing agent sources needs these workspace source mappings.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@openomni/protocol": ["../../packages/protocol/src/index.ts"],
+      "@openomni/ledger": ["../../packages/ledger/src/index.ts"],
+      "@openomni/llm": ["../../packages/llm/src/index.ts"],
+      "@openomni/policy": ["../../packages/policy/src/index.ts"]
+    }
+  }
+}
