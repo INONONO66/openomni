@@ -137,10 +137,6 @@ describe("cluster storage config", () => {
     expect(config.entityIdleMs).toBe(60_000);
   });
 
-  it("leaves the legacy dbPath default untouched — the old store is inert, not renamed", () => {
-    expect(loadConfig(home).dbPath).toBe(join(home, ".openomni", "storage.db"));
-  });
-
   it.each(["0", "-5", "1.5", "not-ms"])(
     "refuses OPENOMNI_ENTITY_IDLE_MS=%p with a typed configuration code",
     (raw) => {
@@ -230,7 +226,7 @@ describe("ws exposure enforcement", () => {
     await expect(
       startOpenOmni({
         config: {
-          dbPath: "/dev/null/never-created.db",
+          catalogPath: "/dev/null/never-created.sqlite",
           host: "0.0.0.0",
           wsPort: 0,
           model: { provider: "fake", id: "resident-test", apiKey: "test-key" },

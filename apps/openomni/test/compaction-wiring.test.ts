@@ -9,6 +9,7 @@ import { configuredCompaction } from "../src/compaction/strategy";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
+import { planeOf } from "./helpers/ledger";
 
 const KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
@@ -78,17 +79,18 @@ describe("compaction composition configuration", () => {
         }),
       },
     });
+    const plane = await planeOf(app.runtime);
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [
       "auth",
       "root-compaction-token",
     ]);
     for (let index = 0; index < 6; index += 1) {
-      const reply = nextResidentTurn();
+      const reply = nextResidentTurn(plane);
       ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
       await reply;
     }
     constrained = true;
-    const reply = nextResidentTurn();
+    const reply = nextResidentTurn(plane);
     ws.send(JSON.stringify({ type: "message", text: "compact now" }));
     await reply;
 

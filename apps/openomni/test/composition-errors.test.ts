@@ -7,6 +7,7 @@ import { Component } from "@openomni/protocol";
 import { observeComponent } from "../src/observation/component";
 import { createResident } from "../src/resident";
 import { allowConfigure } from "./helpers/generation-services";
+import { testPlane } from "./helpers/ledger";
 
 test("component failure observation preserves an unprintable rejection", async () => {
   const failure = {
@@ -43,11 +44,17 @@ test("component failure observation preserves an unprintable rejection", async (
 });
 
 test("resident materialization refuses unregistered runners before storage", () => {
+  const plane = testPlane();
   const resident = createResident({
     model: { provider: "fixture", id: "fixture" },
     apiKey: "fixture",
     tools: { ...testToolPorts,},
-    sessionRuntime: { authorizeConfigure: allowConfigure },
+    sessionRuntime: {
+      authorizeConfigure: allowConfigure,
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
+    },
+    policyGeneration: () => 1,
   });
   expect(() => resident.materialize("invalid", null, "resident", "missing")).toThrow();
 });

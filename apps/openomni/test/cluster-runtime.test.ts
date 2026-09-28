@@ -96,13 +96,10 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
     timers: sessionTimerPort(),
   };
   const runtime = gatewayRuntime({
-    dbPath: ":memory:",
-    cluster: {
-      catalogPath,
-      sessionsDir,
-      entityIdleMs: 60_000,
-      entity: { owner: "app-test-runner", ports },
-    },
+    catalogPath,
+    sessionsDir,
+    entityIdleMs: 60_000,
+    entity: { owner: "app-test-runner", ports },
   });
   try {
     await provisionSession(catalogPath, sessionsDir, sessionId);
