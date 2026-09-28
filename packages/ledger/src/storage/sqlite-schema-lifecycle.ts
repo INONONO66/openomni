@@ -61,7 +61,23 @@ export const ORDERED_MIGRATIONS: Migration.Definition[] = [
   { name: FOLD_CHECKPOINT_MIGRATION },
 ];
 
+const BUSY_TIMEOUT_PRAGMA = "PRAGMA busy_timeout = 5000";
+
+// Concurrent multi-process opens must wait for a busy writer instead of
+// failing the very first schema read with SQLITE_BUSY (W5.2 review F9): the
+// pragma is connection-local, so it is applied before any preflight query
+// touches the database file.
+function applyBusyTimeout(db: Database): void {
+  const statement = db.prepare(BUSY_TIMEOUT_PRAGMA);
+  try {
+    statement.all();
+  } finally {
+    statement.finalize();
+  }
+}
+
 export function preflightSqliteDatabase(db: Database) {
+  applyBusyTimeout(db);
   const state = preflight967(db, ORDERED_MIGRATIONS);
   if (state !== "applied") return state;
   const latest = db
@@ -79,6 +95,7 @@ export function initializeSqliteDatabase(
   prepare967?: Migration.Preparation967,
   target: "current" | "archive967" = "current",
 ): void {
+  applyBusyTimeout(db);
   // Archive approval depends on 0034, not a pending additive 0039 upgrade.
   const state = preflight967(db, ORDERED_MIGRATIONS);
   if (state === "pending" && prepare967 === undefined) {
@@ -111,7 +128,7 @@ function applyConnectionPragmas(db: Database, synchronous: "FULL" | "NORMAL"): v
   for (const sql of [
     "PRAGMA journal_mode = WAL",
     `PRAGMA synchronous = ${synchronous}`,
-    "PRAGMA busy_timeout = 5000",
+    BUSY_TIMEOUT_PRAGMA,
     "PRAGMA cache_size = -64000",
     "PRAGMA mmap_size = 268435456",
     "PRAGMA temp_store = MEMORY",

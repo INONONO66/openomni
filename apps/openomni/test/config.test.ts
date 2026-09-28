@@ -1,12 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { assertWsExposure, ConfigurationError, loadConfig, parseWsPort } from "../src/config";
+import { join } from "node:path";
+import { Crypto, Effect } from "effect";
+import { BunCrypto } from "../src/composition/cluster-crypto";
+import {
+  assertWsExposure,
+  ConfigurationError,
+  loadConfig,
+  parseWsPort,
+  resolveClusterStorage,
+} from "../src/config";
 import { startOpenOmni } from "../src/index";
+import { runEffect } from "./helpers/effect";
 
 const ENV_KEYS = [
   "DISCORD_BOT_TOKEN",
   "TELEGRAM_BOT_TOKEN",
   "GITHUB_WEBHOOK_SECRET",
   "OPENOMNI_DB_PATH",
+  "OPENOMNI_CATALOG_PATH",
+  "OPENOMNI_SESSIONS_DIR",
+  "OPENOMNI_ENTITY_IDLE_MS",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",
@@ -68,6 +81,93 @@ describe("declared channel cutover", () => {
     process.env.DISCORD_BOT_TOKEN = " ";
     process.env.TELEGRAM_BOT_TOKEN = "";
     expect(loadConfig().model.provider).toBe("fake");
+  });
+});
+
+describe("cluster storage config", () => {
+  const home = "/tmp/openomni-config-test-home";
+
+  it("defaults the catalog file, sessions dir, and idle budget under the home", () => {
+    const config = loadConfig(home);
+    expect(config.catalogPath).toBe(join(home, ".openomni", "catalog.sqlite"));
+    expect(config.sessionsDir).toBe(join(home, ".openomni", "sessions"));
+    expect(config.entityIdleMs).toBe(60_000);
+  });
+
+  it("resolves injected partial configs through the same default owner", () => {
+    const config = loadConfig(home);
+    expect({
+      catalogPath: config.catalogPath,
+      sessionsDir: config.sessionsDir,
+      entityIdleMs: config.entityIdleMs,
+    }).toEqual(resolveClusterStorage({}, home));
+    expect(
+      resolveClusterStorage(
+        { catalogPath: "/elsewhere/cat.sqlite", sessionsDir: "/elsewhere/sessions", entityIdleMs: 250 },
+        home,
+      ),
+    ).toEqual({
+      catalogPath: "/elsewhere/cat.sqlite",
+      sessionsDir: "/elsewhere/sessions",
+      entityIdleMs: 250,
+    });
+  });
+
+  it("reads operator overrides from the environment", () => {
+    process.env.OPENOMNI_CATALOG_PATH = "/var/omni/catalog.sqlite";
+    process.env.OPENOMNI_SESSIONS_DIR = "/var/omni/sessions";
+    process.env.OPENOMNI_ENTITY_IDLE_MS = "250";
+
+    const config = loadConfig(home);
+
+    expect(config.catalogPath).toBe("/var/omni/catalog.sqlite");
+    expect(config.sessionsDir).toBe("/var/omni/sessions");
+    expect(config.entityIdleMs).toBe(250);
+  });
+
+  it("treats whitespace-only overrides as unset", () => {
+    process.env.OPENOMNI_CATALOG_PATH = "  ";
+    process.env.OPENOMNI_SESSIONS_DIR = "";
+    process.env.OPENOMNI_ENTITY_IDLE_MS = " ";
+
+    const config = loadConfig(home);
+
+    expect(config.catalogPath).toBe(join(home, ".openomni", "catalog.sqlite"));
+    expect(config.sessionsDir).toBe(join(home, ".openomni", "sessions"));
+    expect(config.entityIdleMs).toBe(60_000);
+  });
+
+  it("leaves the legacy dbPath default untouched — the old store is inert, not renamed", () => {
+    expect(loadConfig(home).dbPath).toBe(join(home, ".openomni", "storage.db"));
+  });
+
+  it.each(["0", "-5", "1.5", "not-ms"])(
+    "refuses OPENOMNI_ENTITY_IDLE_MS=%p with a typed configuration code",
+    (raw) => {
+      process.env.OPENOMNI_ENTITY_IDLE_MS = raw;
+      const error = thrownBy(() => loadConfig(home));
+      expect(ConfigurationError.isInstance(error)).toBe(true);
+      if (!ConfigurationError.isInstance(error)) throw error;
+      expect(error.data.code).toBe("invalid_entity_idle_ms");
+    },
+  );
+});
+
+describe("cluster crypto layer", () => {
+  it("serves webcrypto random bytes and SHA-256 digests", async () => {
+    const { bytes, digest } = await runEffect(
+      Effect.gen(function* () {
+        const service = yield* Crypto.Crypto;
+        const randomBytes = yield* service.randomBytes(16);
+        const hashed = yield* service.digest("SHA-256", new Uint8Array([1, 2, 3]));
+        return { bytes: randomBytes, digest: hashed };
+      }).pipe(Effect.provide(BunCrypto)),
+    );
+
+    expect(bytes).toHaveLength(16);
+    expect(Buffer.from(digest).toString("hex")).toBe(
+      "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+    );
   });
 });
 

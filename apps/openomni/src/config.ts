@@ -6,7 +6,12 @@ import { z } from "zod";
 export const ConfigurationError = NamedError.create(
   "OpenOmniConfigurationError",
   z.object({
-    code: z.enum(["invalid_compaction_summarizer", "invalid_ws_port", "legacy_channel_credentials"]),
+    code: z.enum([
+      "invalid_compaction_summarizer",
+      "invalid_entity_idle_ms",
+      "invalid_ws_port",
+      "legacy_channel_credentials",
+    ]),
     message: z.string(),
     replacement: z.object({ tool: z.literal("provision"), op: z.literal("channel_add") }).optional(),
   }),
@@ -15,6 +20,16 @@ export type ConfigurationError = InstanceType<typeof ConfigurationError>;
 
 export interface OpenOmniConfig {
   readonly dbPath: string;
+  /**
+   * Cluster catalog SQLite file: the session index, actor/grant/policy rows,
+   * and the cluster_* mailbox tables. Distinct from the legacy `dbPath`
+   * store, which the cluster plane never reads.
+   */
+  readonly catalogPath?: string;
+  /** Directory of per-session ledger files (`<sessionsDir>/<sessionId>.sqlite`). */
+  readonly sessionsDir?: string;
+  /** Milliseconds of mailbox silence before a session entity passivates. */
+  readonly entityIdleMs?: number;
   readonly host: string;
   readonly wsPort: number;
   /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
@@ -122,6 +137,45 @@ export function parseWsPort(raw: string | undefined): number {
     });
   }
   return port;
+}
+
+/** Entity passivation default: 60 s of mailbox silence before the session sleeps. */
+const DEFAULT_ENTITY_IDLE_MS = 60_000;
+
+/** The cluster plane's storage roots and idle budget, fully resolved. */
+export interface ClusterStorageConfig {
+  readonly catalogPath: string;
+  readonly sessionsDir: string;
+  readonly entityIdleMs: number;
+}
+
+/**
+ * The one owner of the cluster storage defaults: `loadConfig` resolves env
+ * input through this, and injected configs resolve their partial values
+ * through the same function, so the defaults have no second home.
+ */
+export function resolveClusterStorage(
+  config: Pick<OpenOmniConfig, "catalogPath" | "sessionsDir" | "entityIdleMs">,
+  home: string = homedir(),
+): ClusterStorageConfig {
+  return {
+    catalogPath: config.catalogPath ?? join(home, ".openomni", "catalog.sqlite"),
+    sessionsDir: config.sessionsDir ?? join(home, ".openomni", "sessions"),
+    entityIdleMs: config.entityIdleMs ?? DEFAULT_ENTITY_IDLE_MS,
+  };
+}
+
+function entityIdleMsFromEnv(): number | undefined {
+  const raw = process.env.OPENOMNI_ENTITY_IDLE_MS?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new ConfigurationError({
+      code: "invalid_entity_idle_ms",
+      message: "OPENOMNI_ENTITY_IDLE_MS must be a positive integer of milliseconds",
+    });
+  }
+  return ms;
 }
 
 function compactionSummarizerFromEnv(): boolean {
@@ -307,6 +361,14 @@ export function loadConfig(home: string = homedir()): OpenOmniConfig {
   const channelAllowedSenders = channelAllowedSendersFromEnv();
   return {
     dbPath: process.env.OPENOMNI_DB_PATH?.trim() || join(home, ".openomni", "storage.db"),
+    ...resolveClusterStorage(
+      {
+        catalogPath: process.env.OPENOMNI_CATALOG_PATH?.trim() || undefined,
+        sessionsDir: process.env.OPENOMNI_SESSIONS_DIR?.trim() || undefined,
+        entityIdleMs: entityIdleMsFromEnv(),
+      },
+      home,
+    ),
     host,
     wsPort: parseWsPort(process.env.OPENOMNI_WS_PORT),
     compactionSummarizer: compactionSummarizerFromEnv(),
