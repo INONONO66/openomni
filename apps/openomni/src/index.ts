@@ -276,18 +276,20 @@ export async function startOpenOmni(options: StartOptions = {}) {
         openKernel: (id) => requestAuthorityKernel(plane.openKernel(id), id),
       }),
     );
-    // An out-of-turn answer on an idle entity session must land through the
+    // An out-of-turn answer on an entity session must land through the
     // entity's own RequestResolve RPC: the RPC handler commits AND drains, so
-    // the woken turn runs before the ack (the app-side doorbell is process-
-    // only). Running sessions keep the borrowed-authority direct commit — a
-    // second RPC on a busy mailbox would queue behind the very turn that may
-    // be awaiting this answer. Process runners keep direct commit + doorbell.
+    // a suspended chain (including a crashed-"running" session whose acked
+    // Prompt will never redeliver) recovers its open turn before the ack.
+    // Only a turn LIVE IN THIS PROCESS keeps the borrowed-authority direct
+    // commit — its approval gate needs the app-side notify, and the entity
+    // drain defers to the detached turn anyway (W5.2 S4: `row.state` no
+    // longer implies a live runner, since the delivering RPC acks at the
+    // durable boundary). Process runners keep direct commit + doorbell.
     const requests: typeof bootRequests = {
       ...bootRequests,
       answer: (answer) =>
         Effect.suspend(() => {
-          const row = plane.openKernel(answer.sessionId).row(answer.sessionId);
-          if (row.state === "running" || sessionRunner(answer.sessionId) === "process")
+          if (liveTurns.get(answer.sessionId) !== undefined || sessionRunner(answer.sessionId) === "process")
             return bootRequests.answer(answer);
           return entityClient(answer.sessionId)
             .RequestResolve({
