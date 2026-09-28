@@ -4,7 +4,7 @@
   "apps/openomni/test/helpers/effect.ts:runSyncEffect",
   "apps/openomni/test/helpers/session-wave.ts:adoptAtFence",
   "apps/openomni/test/message-mutation-killers.test.ts:272",
-  "apps/openomni/test/outbound-inbox-binding.test.ts:22",
+  "apps/openomni/test/outbound-inbox-binding.test.ts:21",
   "packages/agent/bench/turns.ts:runBenchEffect",
   "packages/agent/test/helpers/executor.ts:runAgent",
   "packages/agent/test/helpers/executor.ts:runAgentSync",
