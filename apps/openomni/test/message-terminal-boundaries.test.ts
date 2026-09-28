@@ -55,7 +55,6 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     const delivered = Promise.withResolvers<void>();
     const timer = setTimeout(() => delivered.reject(new Error("missing child terminal")), 5000);
     const unsubscribe = Bus.subscribe(Gateway.MessageObserved, (event) => {
-      console.log("PROBE observed", JSON.stringify(event).slice(0, 300));
       if (event.kind === "message.replied") delivered.resolve();
       if (
         event.kind === "message.rejected" &&
@@ -83,7 +82,6 @@ for (const kind of ["result", "error", "interrupted"] as const) {
         run: (input, sink) => Effect.gen(function* () {
           const runPlane = planeRef.current;
           if (runPlane === undefined) throw new Error("plane not resolved before model run");
-          console.log("PROBE model run", input.trace.sessionId, runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role);
           if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
             entered.resolve(input.trace.sessionId);
             if (kind === "interrupted") yield* Effect.promise(() => release.promise);
@@ -98,7 +96,6 @@ for (const kind of ["result", "error", "interrupted"] as const) {
               input: commissionInput({ message: "work", deadline_ms: 900, reply_to: "ORIGINAL" }),
             });
             if (output === undefined) return { type: "stop" };
-            console.log("PROBE commission output", JSON.stringify(output).slice(0, 400));
             expect(output.isError).not.toBe(true);
             commissioned = true;
           }
