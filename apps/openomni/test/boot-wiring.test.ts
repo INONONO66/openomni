@@ -80,8 +80,8 @@ test("stopping the daemon preserves the durable WebSocket bootstrap grant", asyn
 // W5.2 L3.3b: the legacy single-DB promotion test ("967 boot preserves
 // promoted expired session") is deleted with the storage plane it exercised:
 // legacy `session.data` JSON rows, the inbox/alarm tables, `alarms.arm`,
-// `SqliteStorageAdapter` reopen and `Storage.get()` have no kernel/fence
-// equivalent, and boot no longer promotes legacy rows.
+// `SqliteStorageAdapter` reopen and the module-level storage accessor have
+// no kernel/fence equivalent, and boot no longer promotes legacy rows.
 
 describe("channel supervisor", () => {
   const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };

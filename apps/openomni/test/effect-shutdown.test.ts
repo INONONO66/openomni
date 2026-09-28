@@ -160,7 +160,9 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     await turn;
     await released.promise;
     expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
-    expect(kernel.row(handle.id).leaseOwner).toBeNull();
+    // W5.2: hibernation commits nothing and the durable owner survives —
+    // release is the onHibernate signal above, not a lease-null write.
+    expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
   } finally {
     raw.resolve("late raw settlement");
     await turn;

@@ -2,13 +2,12 @@ import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tr
 import { Effect } from "effect";
 import { Bus, defineTool, eraseTool } from "@openomni/agent";
 import type { AppSessionHandle } from "../../src/index";
-import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
+import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/protocol";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
 import { runEffect } from "./effect";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
-import { localInbox } from "./ledger";
 import type { ResidentSuite } from "./resident-suite";
 
 export function waveTool(
@@ -89,16 +88,57 @@ export function adoptAtFence(plane: AppLedgerPlane, sessionId: string, owner: st
   return Effect.runSync(Effect.result(plane.openKernel(sessionId).adoptFence({ sessionId, owner, fence })));
 }
 
-export async function commitInterrupt(plane: AppLedgerPlane, sessionId: string, id: string) {
-  await runEffect(localInbox(plane, "wave-fixture", Date.now)({
-    id,
-    sessionId,
-    kind: "interrupt",
-    content: "",
-    createdAt: Date.now(),
-    origin: { encodingVersion: 1, value: { kind: "sdk" } },
-    parentActionId: sessionTree(sessionId, plane.sessionStore(sessionId).actions).at(-1)?.id ?? null,
-  }));
+/**
+ * One received-message chain action under the live activation's borrowed
+ * owner+fence (W5.2): the durable cross-process arrival, minus the entity
+ * mailbox — a second RPC would serialize behind the running turn's own
+ * delivery, while the running turn's boundary drain reads the chain directly.
+ */
+function commitReceived(
+  plane: AppLedgerPlane,
+  sessionId: string,
+  kind: "prompt" | "interrupt",
+  id: string,
+  content: string,
+): Effect.Effect<void, Error> {
+  return Effect.suspend(() => {
+    const kernel = plane.openKernel(sessionId);
+    const row = kernel.row(sessionId);
+    if (row.leaseOwner === null)
+      return Effect.fail(new Error(`session has no activation authority: ${sessionId}`));
+    const action: LedgerAction.Append = {
+      id,
+      parentId: kernel.latestAction(sessionId)?.id ?? null,
+      sessionId,
+      kind: "prompt",
+      intent: { encodingVersion: 1, value: { kind: "sdk" } },
+      effect: { encodingVersion: 1, value: { inboxKind: kind, content } },
+      irreversible: true,
+      ts: Date.now(),
+    };
+    return kernel
+      .commit({
+        sessionId,
+        owner: row.leaseOwner,
+        fence: row.leaseFence,
+        now: Date.now(),
+        expectedRevision: row.revision,
+        actions: [action],
+        state: row.state,
+      })
+      .pipe(
+        Effect.asVoid,
+        Effect.mapError((error) => new Error(`inbox commit refused: ${error._tag}`)),
+      );
+  });
+}
+
+export function commitInterrupt(plane: AppLedgerPlane, sessionId: string, id: string) {
+  return runEffect(commitReceived(plane, sessionId, "interrupt", id, ""));
+}
+
+export function commitPrompt(plane: AppLedgerPlane, sessionId: string, id: string, content: string) {
+  return runEffect(commitReceived(plane, sessionId, "prompt", id, content));
 }
 
 export function interruptDeliveries(plane: AppLedgerPlane, sessionId: string) {

@@ -113,7 +113,8 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
           const first = yield* entity.Prompt(message);
           const replay = yield* entity.Prompt(message);
           // Chain-guarded timer folds (F2): unknown alarm/request keys ack
-          // durable no-ops; first-time watch deliveries are applied work.
+          // durable no-ops; watch wakes without a composed watch plane
+          // (sessionTimerPort() has no hooks here) ack no-ops — fail-closed.
           const timer = yield* entity.RetryScheduled({
             alarmId: "missing-alarm",
             attempt: 1,
@@ -142,11 +143,11 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
     expect(replay).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: true });
     expect(timer).toEqual({ outcome: "noop" });
     expect(deadline).toEqual({ outcome: "noop" });
-    expect(fired).toEqual({ outcome: "applied" });
-    expect(timeout).toEqual({ outcome: "applied" });
-    // The unconsumed prompt stays pending: both receives and both applied
-    // timer wakes each drain into one start decision.
-    expect(decisions).toEqual(["start", "start", "start", "start"]);
+    expect(fired).toEqual({ outcome: "noop" });
+    expect(timeout).toEqual({ outcome: "noop" });
+    // The unconsumed prompt stays pending: both receives each drain into one
+    // start decision; noop timer wakes never drain.
+    expect(decisions).toEqual(["start", "start"]);
     // One activation rotated the catalog fence exactly once (F5).
     expect(readFence(catalogPath, sessionId)).toBe(1);
   } finally {

@@ -10,7 +10,7 @@ import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { messageMaterialization, prepareMessage } from "../src/composition/message-session";
-import { localInbox } from "./helpers/ledger";
+import { commitReceivedMessage } from "../../../packages/agent/test/helpers/ingress";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
@@ -129,6 +129,9 @@ test("conversation correlation cannot select the physical default session", asyn
   expect(result.handle.target).not.toBe(fixture.sessionId);
 });
 
+// W5.2: the tool surface renders typed failures by tag only, so the two
+// corruption cases are distinguished at the kernel evidence seam the gateway
+// consults (`policyDecisionRuleIds`), not by refusal text.
 test.each([
   {
     mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))",
@@ -139,8 +142,11 @@ test.each([
   const fixture = messageFixture();
   directories.push(fixture.directory);
   using db = new Database(sessionDb(fixture, fixture.sessionId));
+  // Stash each decision's pre-corruption intent so the original inputHash
+  // stays addressable after the mutation removes or breaks it.
+  db.exec("CREATE TABLE corrupt_keep (id TEXT PRIMARY KEY, intent TEXT NOT NULL)");
   db.exec(
-    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
+    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN INSERT INTO corrupt_keep VALUES (NEW.id, NEW.intent); UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
   );
   const result = await fixture.send({
     to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
@@ -148,7 +154,23 @@ test.each([
     content: "corrupt-evidence",
   });
   expect(result.isError).toBe(true);
-  expect(result.output).toContain(error);
+  expect(result.output).toContain("ForeignFailure");
+  const stashed = db
+    .query("SELECT json_extract(intent, '$.inputHash') AS hash FROM corrupt_keep")
+    .all() as { hash: string }[];
+  expect(stashed.length).toBeGreaterThan(0);
+  const kernel = fixture.plane.openKernel(fixture.sessionId);
+  if (error === "invalid message decision rule identity") {
+    // The corrupted evidence is still addressable and refuses on read-back.
+    expect(() => kernel.policyDecisionRuleIds(fixture.sessionId, stashed[0]?.hash ?? "")).toThrow(
+      "invalid message decision rule identity",
+    );
+  } else {
+    // The evidence key is gone: every recorded decision is unaddressable,
+    // which is exactly the "message pre decision is missing" refusal.
+    for (const row of stashed)
+      expect(kernel.policyDecisionRuleIds(fixture.sessionId, row.hash)).toBeUndefined();
+  }
 });
 
 test("message observations carry the committed compiled policy rule identity", async () => {
@@ -324,8 +346,11 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
           at: 100,
         }),
       );
+      // W5.2: the fixture handle is a live writer; an out-of-band fence
+      // adoption here would revoke its authority and fail the send below.
+      // Ingress rides the live owner+fence instead (entity requestCommand).
       await runEffect(
-        localInbox(f.plane, "mutation-fixture", () => 100)({
+        commitReceivedMessage(f.plane.openKernel(f.sessionId), {
           id: "bound-request",
           sessionId: f.sessionId,
           kind: "prompt",

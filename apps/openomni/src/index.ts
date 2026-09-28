@@ -686,6 +686,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 : approvals.answer(answer);
             }),
         },
+        // The mid-turn deadline seam (W5.2): a durable DeliverAt Deadline
+        // serializes behind the running turn's own entity RPC, so a live
+        // turn's request timeout rides the composition's borrowed-authority
+        // request port, which notifies the turn's live approval gate.
+        requests: {
+          timeout: (requestId, at) => requests.timeout(requestId, at),
+        },
         interrupt: () =>
           Effect.gen(function* () {
             const entry = liveTurns.get(id);
@@ -816,6 +823,12 @@ export function installShutdownHandlers(deps: {
 export interface AppSessionHandle {
   readonly id: string;
   readonly approvals: SessionHandle["approvals"];
+  readonly requests: {
+    timeout(
+      requestId: string,
+      at: number,
+    ): Effect.Effect<void, import("@openomni/agent").ExecutionError>;
+  };
   interrupt(): Effect.Effect<void, import("@openomni/agent").SessionError>;
   readonly tools: {
     add: SessionHandle["tools"]["add"];
