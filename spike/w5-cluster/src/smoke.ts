@@ -14,4 +14,6 @@ const program = Effect.gen(function* () {
   const storage = yield* MessageStorage.MessageStorage;
   return { ok: true, sharding: typeof sharding, storage: typeof storage, file };
 });
-console.log(JSON.stringify(await Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(ClusterLive))))));
+console.log(
+  JSON.stringify(await Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(ClusterLive))))),
+);

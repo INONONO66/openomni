@@ -70,7 +70,7 @@ function attempt(): ChildOutput {
     // appendTurnAction surfaces fence refusals as "commitSession refused (<reason>): ...".
     const match = /^commitSession refused \((\w+)\)/.exec(message);
     const parsed = match === null ? undefined : RefusalReason.safeParse(match[1]);
-    if (parsed !== undefined && parsed.success) return { ok: false, reason: parsed.data };
+    if (parsed?.success) return { ok: false, reason: parsed.data };
     // Storage-level failure (e.g. SQLITE_BUSY): report code + raw message.
     const busy = SqliteBusyLike.safeParse(error);
     const reason = busy.success ? `${busy.data.code}: ${message}` : message;

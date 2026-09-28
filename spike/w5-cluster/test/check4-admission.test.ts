@@ -50,36 +50,71 @@ import {
 
 function sessionRow(state: LedgerSession.State): LedgerSession.Row {
   return {
-    id: "S", parentId: null, role: "resident", leaseOwner: "kernel", leaseFence: 1,
-    leaseExpiresAt: 1000, revision: 1, state, toolsGeneration: 1,
-    systemHash: "system", policyGeneration: 1,
+    id: "S",
+    parentId: null,
+    role: "resident",
+    leaseOwner: "kernel",
+    leaseFence: 1,
+    leaseExpiresAt: 1000,
+    revision: 1,
+    state,
+    toolsGeneration: 1,
+    systemHash: "system",
+    policyGeneration: 1,
   };
 }
 
 const generation = SessionHandleStore.generationSnapshot({
-  generation: 1, revertTo: 0, tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1,
+  generation: 1,
+  revertTo: 0,
+  tools: [],
+  system: { preset: "", blocks: [] },
+  policyGeneration: 1,
 });
 
 function node(action: LedgerAction.Append): LedgerAction.Node {
   return { ...action, ordinal: 1, prevHash: "prev", actionHash: "hash" };
 }
 
-const turn = node(turnIntentAction({
-  id: "T", parentId: null, sessionId: "S", resultId: "R", inboxIds: [], generation,
-  resumeCount: 0, boundaryActionId: null, at: 1,
-}));
+const turn = node(
+  turnIntentAction({
+    id: "T",
+    parentId: null,
+    sessionId: "S",
+    resultId: "R",
+    inboxIds: [],
+    generation,
+    resumeCount: 0,
+    boundaryActionId: null,
+    at: 1,
+  }),
+);
 
 const open: OpenTurn = {
-  turnId: "T", resultId: "R", resumeCount: 0, boundaryActionId: null, action: turn,
-  toolsGeneration: 1, toolsHash: generation.toolsHash,
-  systemHash: generation.systemHash, policyGeneration: 1,
+  turnId: "T",
+  resultId: "R",
+  resumeCount: 0,
+  boundaryActionId: null,
+  action: turn,
+  toolsGeneration: 1,
+  toolsHash: generation.toolsHash,
+  systemHash: generation.systemHash,
+  policyGeneration: 1,
 };
 
 function terminal(kind: "result" | "interrupted"): TurnTerminal {
-  const action = node(turnTerminalAction({
-    id: "R", parentId: "T", sessionId: "S", turnId: "T", result: { kind, text: "" },
-    resumeCount: 0, boundaryActionId: null, at: 2,
-  }));
+  const action = node(
+    turnTerminalAction({
+      id: "R",
+      parentId: "T",
+      sessionId: "S",
+      turnId: "T",
+      result: { kind, text: "" },
+      resumeCount: 0,
+      boundaryActionId: null,
+      at: 2,
+    }),
+  );
   const effect = SessionHandleStore.turnTerminal(action);
   if (effect === undefined) throw new Error("invalid terminal fixture");
   return { action, effect };
@@ -98,20 +133,30 @@ function item(kind: Inbox.Kind, sessionId = "S"): MailboxItem {
  */
 function inboxRows(items: readonly MailboxItem[]): readonly Inbox.Row[] {
   return items.map((entry, index) => ({
-    id: entry.id, sessionId: entry.sessionId, kind: entry.kind, content: entry.content,
+    id: entry.id,
+    sessionId: entry.sessionId,
+    kind: entry.kind,
+    content: entry.content,
     origin: { encodingVersion: 1, value: { kind: "session", id: entry.sessionId } },
-    status: "pending", consumedBy: null, consumedAt: null,
-    createdAt: entry.receivedAt, ordinal: index + 1,
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    createdAt: entry.receivedAt,
+    ordinal: index + 1,
   }));
 }
 
 /** The W1 contract surface: the decision kind plus WHICH items/turn it selects. */
 function normalize(decision: AdmissionDecision): { kind: string; ids: readonly string[] } {
   switch (decision.kind) {
-    case "recover": return { kind: decision.kind, ids: [decision.open.turnId] };
-    case "resume": return { kind: decision.kind, ids: [decision.item.id] };
-    case "consume": return { kind: decision.kind, ids: decision.items.map((entry) => entry.id) };
-    default: return { kind: decision.kind, ids: [] };
+    case "recover":
+      return { kind: decision.kind, ids: [decision.open.turnId] };
+    case "resume":
+      return { kind: decision.kind, ids: [decision.item.id] };
+    case "consume":
+      return { kind: decision.kind, ids: decision.items.map((entry) => entry.id) };
+    default:
+      return { kind: decision.kind, ids: [] };
   }
 }
 
@@ -136,20 +181,100 @@ const resume = () => item("resume");
 // (recover selects the open turn "T" instead and is asserted explicitly).
 const admissionCases: readonly AdmissionCase[] = [
   { name: "A01 idle + [] -> stop", state: "idle", items: [], expected: { kind: "stop" } },
-  { name: "A02 idle + [prompt] -> start", state: "idle", items: [prompt()], expected: { kind: "start" } },
-  { name: "A03 idle + [interrupt, prompt] -> consume [interrupt]", state: "idle", items: [interrupt(), prompt()], expected: { kind: "consume", at: [0] } },
-  { name: "A04 idle + [prompt, prompt] -> start (second stays queued)", state: "idle", items: [prompt(), prompt()], expected: { kind: "start" } },
-  { name: "A05 idle + [resume] -> consume [resume]", state: "idle", items: [resume()], expected: { kind: "consume", at: [0] } },
-  { name: "A06 idle + [resume, resume, prompt] -> consume control prefix", state: "idle", items: [resume(), resume(), prompt()], expected: { kind: "consume", at: [0, 1] } },
-  { name: "A07 running + open -> recover", state: "running", items: [prompt()], open, expected: { kind: "recover" } },
-  { name: "A08 running without open -> refused", state: "running", items: [prompt()], expected: { kind: "refused" } },
-  { name: "A09 interrupted + [resume] + terminal interrupted -> resume", state: "interrupted", items: [resume()], terminal: terminal("interrupted"), expected: { kind: "resume", at: [0] } },
-  { name: "A10 interrupted + [resume] without interrupted terminal -> consume", state: "interrupted", items: [resume()], terminal: terminal("result"), expected: { kind: "consume", at: [0] } },
-  { name: "A11 interrupted + [prompt] -> stop", state: "interrupted", items: [prompt()], terminal: terminal("interrupted"), expected: { kind: "stop" } },
-  { name: "A12 foreign-session item -> refused", state: "idle", items: [item("prompt", "other-session")], expected: { kind: "refused" } },
-  { name: "A13 foreign open -> refused", state: "running", items: [], open: { ...open, action: { ...turn, sessionId: "other-session" } }, expected: { kind: "refused" } },
-  { name: "A14 foreign terminal -> refused", state: "interrupted", items: [resume()], terminal: (() => { const t = terminal("interrupted"); return { ...t, action: { ...t.action, sessionId: "other-session" } }; })(), expected: { kind: "refused" } },
-  { name: "A15 idle + own open -> refused", state: "idle", items: [prompt()], open, expected: { kind: "refused" } },
+  {
+    name: "A02 idle + [prompt] -> start",
+    state: "idle",
+    items: [prompt()],
+    expected: { kind: "start" },
+  },
+  {
+    name: "A03 idle + [interrupt, prompt] -> consume [interrupt]",
+    state: "idle",
+    items: [interrupt(), prompt()],
+    expected: { kind: "consume", at: [0] },
+  },
+  {
+    name: "A04 idle + [prompt, prompt] -> start (second stays queued)",
+    state: "idle",
+    items: [prompt(), prompt()],
+    expected: { kind: "start" },
+  },
+  {
+    name: "A05 idle + [resume] -> consume [resume]",
+    state: "idle",
+    items: [resume()],
+    expected: { kind: "consume", at: [0] },
+  },
+  {
+    name: "A06 idle + [resume, resume, prompt] -> consume control prefix",
+    state: "idle",
+    items: [resume(), resume(), prompt()],
+    expected: { kind: "consume", at: [0, 1] },
+  },
+  {
+    name: "A07 running + open -> recover",
+    state: "running",
+    items: [prompt()],
+    open,
+    expected: { kind: "recover" },
+  },
+  {
+    name: "A08 running without open -> refused",
+    state: "running",
+    items: [prompt()],
+    expected: { kind: "refused" },
+  },
+  {
+    name: "A09 interrupted + [resume] + terminal interrupted -> resume",
+    state: "interrupted",
+    items: [resume()],
+    terminal: terminal("interrupted"),
+    expected: { kind: "resume", at: [0] },
+  },
+  {
+    name: "A10 interrupted + [resume] without interrupted terminal -> consume",
+    state: "interrupted",
+    items: [resume()],
+    terminal: terminal("result"),
+    expected: { kind: "consume", at: [0] },
+  },
+  {
+    name: "A11 interrupted + [prompt] -> stop",
+    state: "interrupted",
+    items: [prompt()],
+    terminal: terminal("interrupted"),
+    expected: { kind: "stop" },
+  },
+  {
+    name: "A12 foreign-session item -> refused",
+    state: "idle",
+    items: [item("prompt", "other-session")],
+    expected: { kind: "refused" },
+  },
+  {
+    name: "A13 foreign open -> refused",
+    state: "running",
+    items: [],
+    open: { ...open, action: { ...turn, sessionId: "other-session" } },
+    expected: { kind: "refused" },
+  },
+  {
+    name: "A14 foreign terminal -> refused",
+    state: "interrupted",
+    items: [resume()],
+    terminal: (() => {
+      const t = terminal("interrupted");
+      return { ...t, action: { ...t.action, sessionId: "other-session" } };
+    })(),
+    expected: { kind: "refused" },
+  },
+  {
+    name: "A15 idle + own open -> refused",
+    state: "idle",
+    items: [prompt()],
+    open,
+    expected: { kind: "refused" },
+  },
 ];
 
 describe("Table A: mailbox admission equals the inbox-table admission", () => {
@@ -181,11 +306,18 @@ describe("Table A: mailbox admission equals the inbox-table admission", () => {
 
   test("A16 FIFO invariance (idle): items after the first prompt never change the decision", () => {
     const prefixes: readonly (readonly Inbox.Kind[])[] = [
-      ["prompt"], ["interrupt", "prompt"], ["resume", "prompt"],
-      ["interrupt", "resume", "prompt"], ["resume", "resume", "prompt"],
+      ["prompt"],
+      ["interrupt", "prompt"],
+      ["resume", "prompt"],
+      ["interrupt", "resume", "prompt"],
+      ["resume", "resume", "prompt"],
     ];
     const suffixes: readonly (readonly Inbox.Kind[])[] = [
-      [], ["prompt"], ["interrupt"], ["resume", "prompt"], ["interrupt", "interrupt", "prompt"],
+      [],
+      ["prompt"],
+      ["interrupt"],
+      ["resume", "prompt"],
+      ["interrupt", "interrupt", "prompt"],
     ];
     const row = sessionRow("idle");
     for (const prefix of prefixes) {
@@ -205,7 +337,9 @@ describe("Table A: mailbox admission equals the inbox-table admission", () => {
     const items = [prompt(), resume()];
     const mailboxDecision = decideFromMailbox(row, items, undefined, terminal("interrupted"));
     const inboxDecision = decideSessionAdmission({
-      row, pending: inboxRows(items), terminal: terminal("interrupted"),
+      row,
+      pending: inboxRows(items),
+      terminal: terminal("interrupted"),
     });
     expect(normalize(mailboxDecision)).toEqual(normalize(inboxDecision));
     expect(mailboxDecision.kind).toBe("resume");
@@ -225,13 +359,30 @@ const requestRow = sessionRow("running");
 function makeRequest(): SessionTransition.Request {
   const parsedInput = { path: "original" };
   const request: SessionTransition.Request = {
-    requestId: "invocation", sessionId: requestRow.id, turnId: "T", callId: "call",
-    mode: "approval", parsedInput, inputHash: canonicalDigest(parsedInput),
+    requestId: "invocation",
+    sessionId: requestRow.id,
+    turnId: "T",
+    callId: "call",
+    mode: "approval",
+    parsedInput,
+    inputHash: canonicalDigest(parsedInput),
     effectHash: canonicalDigest({ category: "mutation" }),
-    generation: 1, toolsGeneration: 1, toolsHash: "tools", systemHash: "system",
-    domainRevisions: {}, deadline: 100, expectedResponders: ["owner"], correlation: {},
-    allowedActions: ["report_result"], resolution: "first", threshold: 1,
-    seenReplyIds: [], replies: [], state: "open", outcome: null, createdAt: 1,
+    generation: 1,
+    toolsGeneration: 1,
+    toolsHash: "tools",
+    systemHash: "system",
+    domainRevisions: {},
+    deadline: 100,
+    expectedResponders: ["owner"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    resolution: "first",
+    threshold: 1,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt: 1,
     bindingDigest: "",
   };
   request.bindingDigest = requestBindingDigest(request);
@@ -239,12 +390,20 @@ function makeRequest(): SessionTransition.Request {
 }
 
 const invocation: LedgerAction.Node = {
-  id: "invocation", sessionId: requestRow.id, parentId: "T", kind: "tool", ts: 1,
-  ordinal: 1, prevHash: "fixture-prev", actionHash: "fixture-hash",
+  id: "invocation",
+  sessionId: requestRow.id,
+  parentId: "T",
+  kind: "tool",
+  ts: 1,
+  ordinal: 1,
+  prevHash: "fixture-prev",
+  actionHash: "fixture-hash",
   intent: {
     encodingVersion: 1,
     value: {
-      phase: "intent", op: "write", value: { path: "original" },
+      phase: "intent",
+      op: "write",
+      value: { path: "original" },
       effectHash: canonicalDigest({ category: "mutation" }),
     },
   },
@@ -258,12 +417,20 @@ function approvalAnswer(
   receivedAt: number,
 ): SessionTransition.Answer {
   return {
-    inputId, requestId: pending.requestId, sessionId: pending.sessionId, receivedAt,
+    inputId,
+    requestId: pending.requestId,
+    sessionId: pending.sessionId,
+    receivedAt,
     principal: { kind: "owner", principalId: "owner", evidenceId: "authenticated" },
-    bindingDigest: pending.bindingDigest, inputHash: pending.inputHash,
-    effectHash: pending.effectHash, generation: pending.generation,
-    toolsHash: pending.toolsHash, domainRevisions: pending.domainRevisions,
-    decision: "approve", allowedAction: "report_result", content: "yes",
+    bindingDigest: pending.bindingDigest,
+    inputHash: pending.inputHash,
+    effectHash: pending.effectHash,
+    generation: pending.generation,
+    toolsHash: pending.toolsHash,
+    domainRevisions: pending.domainRevisions,
+    decision: "approve",
+    allowedAction: "report_result",
+    content: "yes",
   };
 }
 
@@ -281,9 +448,11 @@ function resolveItem(id: string, at = 20): RequestItem {
 }
 function cancelItem(id: string, at = 20): RequestItem {
   return {
-    id, at,
+    id,
+    at,
     payload: {
-      kind: "request.cancel", requestId: sealed.requestId,
+      kind: "request.cancel",
+      requestId: sealed.requestId,
       principal: { kind: "owner", principalId: "owner", evidenceId: "authenticated" },
     },
   };
@@ -305,8 +474,12 @@ function foldRequestItems(
   for (const entry of items) {
     const decision = decideRequestTransition(
       {
-        version: 1, inputId: entry.id, sessionId: requestRow.id, at: entry.at,
-        expectedRevision: requestRow.revision, authority: { owner: "kernel", fence: 1 },
+        version: 1,
+        inputId: entry.id,
+        sessionId: requestRow.id,
+        at: entry.at,
+        expectedRevision: requestRow.revision,
+        authority: { owner: "kernel", fence: 1 },
         payload: entry.payload,
       },
       { row: requestRow, invocation, ...(current === undefined ? {} : { request: current }) },
@@ -325,7 +498,10 @@ function foldInboxOrder(
   const rows = items.map((entry, index) => ({ ordinal: index + 1, entry }));
   // Present them shuffled: the table sort by ordinal must restore arrival order.
   const shuffled = [...rows].reverse().sort((a, b) => a.ordinal - b.ordinal);
-  return foldRequestItems(shuffled.map((row) => row.entry), initial).resolutions;
+  return foldRequestItems(
+    shuffled.map((row) => row.entry),
+    initial,
+  ).resolutions;
 }
 
 interface RequestCase {
@@ -337,13 +513,54 @@ interface RequestCase {
 }
 
 const requestCases: readonly RequestCase[] = [
-  { name: "B1 [resolve] -> resolved", items: [resolveItem("b1-a")], initial: makeRequest(), expected: ["resolved"], finalState: "resolved" },
-  { name: "B2 [resolve, cancel] -> resolved then duplicate (terminal already won)", items: [resolveItem("b2-a"), cancelItem("b2-b")], initial: makeRequest(), expected: ["resolved", "duplicate"], finalState: "resolved" },
-  { name: "B3 [cancel, resolve] -> cancelled; later resolve is refused-as-duplicate, never applied", items: [cancelItem("b3-a"), resolveItem("b3-b")], initial: makeRequest(), expected: ["cancelled", "duplicate"], finalState: "cancelled" },
-  { name: "B4 [cancel, timeout] -> cancelled then duplicate", items: [cancelItem("b4-a"), timeoutItem("b4-b", 150)], initial: makeRequest(), expected: ["cancelled", "duplicate"], finalState: "cancelled" },
-  { name: "B5 [timeout, resolve] -> expired then late_unknown", items: [timeoutItem("b5-a", 150), resolveItem("b5-b", 150)], initial: makeRequest(), expected: ["expired", "late_unknown"], finalState: "expired" },
-  { name: "B6 duplicate resolve -> resolved then duplicate", items: [resolveItem("b6-a"), resolveItem("b6-b")], initial: makeRequest(), expected: ["resolved", "duplicate"], finalState: "resolved" },
-  { name: "B7 [open, resolve] -> opened then resolved", items: [openItem("b7-a"), resolveItem("b7-b")], expected: ["opened", "resolved"], finalState: "resolved" },
+  {
+    name: "B1 [resolve] -> resolved",
+    items: [resolveItem("b1-a")],
+    initial: makeRequest(),
+    expected: ["resolved"],
+    finalState: "resolved",
+  },
+  {
+    name: "B2 [resolve, cancel] -> resolved then duplicate (terminal already won)",
+    items: [resolveItem("b2-a"), cancelItem("b2-b")],
+    initial: makeRequest(),
+    expected: ["resolved", "duplicate"],
+    finalState: "resolved",
+  },
+  {
+    name: "B3 [cancel, resolve] -> cancelled; later resolve is refused-as-duplicate, never applied",
+    items: [cancelItem("b3-a"), resolveItem("b3-b")],
+    initial: makeRequest(),
+    expected: ["cancelled", "duplicate"],
+    finalState: "cancelled",
+  },
+  {
+    name: "B4 [cancel, timeout] -> cancelled then duplicate",
+    items: [cancelItem("b4-a"), timeoutItem("b4-b", 150)],
+    initial: makeRequest(),
+    expected: ["cancelled", "duplicate"],
+    finalState: "cancelled",
+  },
+  {
+    name: "B5 [timeout, resolve] -> expired then late_unknown",
+    items: [timeoutItem("b5-a", 150), resolveItem("b5-b", 150)],
+    initial: makeRequest(),
+    expected: ["expired", "late_unknown"],
+    finalState: "expired",
+  },
+  {
+    name: "B6 duplicate resolve -> resolved then duplicate",
+    items: [resolveItem("b6-a"), resolveItem("b6-b")],
+    initial: makeRequest(),
+    expected: ["resolved", "duplicate"],
+    finalState: "resolved",
+  },
+  {
+    name: "B7 [open, resolve] -> opened then resolved",
+    items: [openItem("b7-a"), resolveItem("b7-b")],
+    expected: ["opened", "resolved"],
+    finalState: "resolved",
+  },
 ];
 
 describe("Table B: request commands in mailbox FIFO order equal the inbox order", () => {
@@ -361,7 +578,11 @@ describe("Table B: request commands in mailbox FIFO order equal the inbox order"
     if (first.request === undefined) throw new Error("cancel must return a request");
     const decision = decideRequestTransition(
       {
-        version: 1, inputId: "b8-b", sessionId: requestRow.id, at: 20, expectedRevision: 1,
+        version: 1,
+        inputId: "b8-b",
+        sessionId: requestRow.id,
+        at: 20,
+        expectedRevision: 1,
         authority: { owner: "kernel", fence: 1 },
         payload: { kind: "request.answer", answer: approvalAnswer(sealed, "b8-b", 20) },
       },
@@ -411,8 +632,11 @@ const ProbeLayer = ProbeEntity.toLayer(
           const start = performance.now();
           const row = ensureSessionRow(db, sessionId, SPIKE_OWNER, SPIKE_FENCE);
           const result = appendTurnAction(db, {
-            sessionId, owner: SPIKE_OWNER, fence: SPIKE_FENCE,
-            expectedRevision: row.revision, payload: { text: envelope.payload.text },
+            sessionId,
+            owner: SPIKE_OWNER,
+            fence: SPIKE_FENCE,
+            expectedRevision: row.revision,
+            payload: { text: envelope.payload.text },
           });
           // Measured workload (not synchronization): it widens the window the
           // no-overlap assertion inspects, so interleaving could not hide.
@@ -442,10 +666,9 @@ const sendProbe = (sessionId: string, text: string) =>
 describe("Integration: entity mailbox is FIFO with one writer per session", () => {
   test("C1 three concurrent prompts serialize: ordinals 1,2,3 and no handler overlap", async () => {
     const replies = await runtime.runPromise(
-      Effect.all(
-        [sendProbe("c4", "one"), sendProbe("c4", "two"), sendProbe("c4", "three")],
-        { concurrency: 3 },
-      ),
+      Effect.all([sendProbe("c4", "one"), sendProbe("c4", "two"), sendProbe("c4", "three")], {
+        concurrency: 3,
+      }),
     );
     expect([...replies.map((reply) => reply.ordinal)].sort((a, b) => a - b)).toEqual([1, 2, 3]);
 
@@ -459,11 +682,15 @@ describe("Integration: entity mailbox is FIFO with one writer per session", () =
       if (previous === undefined || current === undefined) throw new Error("span fixture");
       expect(current.start).toBeGreaterThanOrEqual(previous.end);
     }
-    console.log(`check4 FIFO spans: ${JSON.stringify(ordered.map((span) => ({
-      ordinal: span.ordinal,
-      start: Number(span.start.toFixed(3)),
-      end: Number(span.end.toFixed(3)),
-    })))}`);
+    console.log(
+      `check4 FIFO spans: ${JSON.stringify(
+        ordered.map((span) => ({
+          ordinal: span.ordinal,
+          start: Number(span.start.toFixed(3)),
+          end: Number(span.end.toFixed(3)),
+        })),
+      )}`,
+    );
 
     // OUR hash chain stayed linear under concurrency (prev_hash linkage).
     const db = new Database(fileFor(root, "c4"), { readonly: true });
@@ -480,7 +707,11 @@ describe("Integration: entity mailbox is FIFO with one writer per session", () =
   test("C2 the unmodified Session entity also serializes three concurrent prompts", async () => {
     const replies = await runtime.runPromise(
       Effect.all(
-        [sendPrompt("c4-plain", "one"), sendPrompt("c4-plain", "two"), sendPrompt("c4-plain", "three")],
+        [
+          sendPrompt("c4-plain", "one"),
+          sendPrompt("c4-plain", "two"),
+          sendPrompt("c4-plain", "three"),
+        ],
         { concurrency: 3 },
       ),
     );

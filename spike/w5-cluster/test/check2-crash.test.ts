@@ -61,7 +61,10 @@ async function readUntil(
   const reader = stream.getReader();
   let text = "";
   const timer = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`timed out waiting for ${pattern}; got:\n${text}`)), timeoutMs);
+    setTimeout(
+      () => reject(new Error(`timed out waiting for ${pattern}; got:\n${text}`)),
+      timeoutMs,
+    );
   });
   try {
     while (!pattern.test(text)) {

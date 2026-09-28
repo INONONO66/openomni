@@ -16,10 +16,7 @@ import { Effect, ManagedRuntime } from "effect";
 import { initialize, SessionHandleStore } from "@openomni/ledger";
 import { LedgerSession } from "@openomni/protocol";
 // SPIKE-ONLY deep imports (same precedent as session-file.ts / check1 test).
-import {
-  computeActionHash,
-  GENESIS_PREV_HASH,
-} from "../../../packages/ledger/src/storage/l0-hash";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../../packages/ledger/src/storage/l0-hash";
 import { hydrateSessionHistory } from "../../../packages/agent/src/session-lifecycle/history";
 import { foldCheckpointAction } from "../../../packages/agent/src/session-record";
 import { SPIKE_FENCE, SPIKE_OWNER } from "./session-entity.ts";
