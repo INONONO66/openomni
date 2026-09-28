@@ -24,61 +24,70 @@ export interface MessageInboxDeps {
  * Materialization and child admission limits are composition-side facts the
  * gateway prepared; both are applied before the persisted send.
  */
-export function createMessageInboxCommit(deps: MessageInboxDeps) {
-  function materialize(input: Inbox.Commit): Effect.Effect<void, ForeignFailure> {
-    return Effect.gen(function* () {
-      const create = input.createSession;
-      if (create === undefined) return;
-      const kernel = deps.plane.openKernel(input.sessionId);
-      const exists = (() => {
-        try {
-          kernel.row(input.sessionId);
-          return true;
-        } catch {
-          return false;
-        }
-      })();
-      if (!exists) {
-        const limits = input.limits;
-        if (limits !== undefined && create.row.parentId !== null) {
-          const children = deps.plane
-            .listSessions()
-            .filter((row) => row.parentId === create.row.parentId && row.state !== "closed");
-          if (children.length >= limits.fanout)
-            return yield* new ForeignFailure({
-              operation: "message.commit",
-              cause: "child fanout limit exhausted",
-            });
-        }
-        const snapshot = SessionGeneration.ConfigureEffect.parse(
-          create.initialAction.effect.value,
-        ).snapshot;
-        yield* kernel
-          .materialize({
-            id: create.row.id,
-            parentId: create.row.parentId,
-            role: create.row.role,
-            tools: [...snapshot.tools],
-            ...(snapshot.bundles === undefined ? {} : { bundles: snapshot.bundles }),
-            system: snapshot.system,
-            policyGeneration: snapshot.policyGeneration,
-            actionId: create.initialAction.id,
-            at: deps.clock(),
-          })
-          .pipe(
-            Effect.mapError(
-              (error) => new ForeignFailure({ operation: "message.materialize", cause: error._tag }),
-            ),
-          );
+/**
+ * Materializes the destination a prepared send declared (fanout-guarded),
+ * idempotently: an existing row is left untouched and only re-indexed.
+ */
+export function materializeInboxTarget(
+  plane: AppLedgerPlane,
+  input: Inbox.Commit,
+  clock: () => number,
+): Effect.Effect<void, ForeignFailure> {
+  return Effect.gen(function* () {
+    const create = input.createSession;
+    if (create === undefined) return;
+    const kernel = plane.openKernel(input.sessionId);
+    const exists = (() => {
+      try {
+        kernel.row(input.sessionId);
+        return true;
+      } catch {
+        return false;
       }
-      deps.plane.catalog.indexSession({
-        id: create.row.id,
-        parentId: create.row.parentId,
-        role: create.row.role,
-        createdAt: deps.clock(),
-      });
+    })();
+    if (!exists) {
+      const limits = input.limits;
+      if (limits !== undefined && create.row.parentId !== null) {
+        const children = plane
+          .listSessions()
+          .filter((row) => row.parentId === create.row.parentId && row.state !== "closed");
+        if (children.length >= limits.fanout)
+          return yield* new ForeignFailure({
+            operation: "message.commit",
+            cause: "child fanout limit exhausted",
+          });
+      }
+      const snapshot = SessionGeneration.ConfigureEffect.parse(
+        create.initialAction.effect.value,
+      ).snapshot;
+      yield* kernel
+        .materialize({
+          id: create.row.id,
+          parentId: create.row.parentId,
+          role: create.row.role,
+          tools: [...snapshot.tools],
+          ...(snapshot.bundles === undefined ? {} : { bundles: snapshot.bundles }),
+          system: snapshot.system,
+          policyGeneration: snapshot.policyGeneration,
+          actionId: create.initialAction.id,
+          at: clock(),
+        })
+        .pipe(
+          Effect.mapError(
+            (error) => new ForeignFailure({ operation: "message.materialize", cause: error._tag }),
+          ),
+        );
+    }
+    plane.catalog.indexSession({
+      id: create.row.id,
+      parentId: create.row.parentId,
+      role: create.row.role,
+      createdAt: clock(),
     });
-  }
+  });
+}
+
+export function createMessageInboxCommit(deps: MessageInboxDeps) {
   return function commitMessageInbox(
     input: Inbox.Commit,
   ): Effect.Effect<Inbox.Row, ForeignFailure> {
@@ -96,7 +105,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
           cause: "outbound inbox binding mismatch",
         });
       }
-      yield* materialize(input);
+      yield* materializeInboxTarget(deps.plane, input, deps.clock);
       const entity = deps.client(input.sessionId);
       const payload = {
         messageId: input.id,

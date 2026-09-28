@@ -1,31 +1,37 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { expect, spyOn, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { PlainObjectSchema, type LedgerAction, type LedgerSession } from "@openomni/protocol";
 import { session, type SessionRunnerInput } from "../src/session-handle";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
 
-const runtime: SessionRuntime = {
-  authorizeConfigure: allowConfigure,
-  observations: { publish: (): void => undefined },
-  clock: (): number => 100,
-  scheduleHeartbeat: (): (() => void) => (): void => undefined,
-};
+// W5.2: lease TTL/expiry is gone; writer authority is the adopted fence. The old
+// "expired lease" boundaries reshape onto foreign fence adoption (takeover), and a
+// waiting/idle terminal keeps `lease.owner` durable (there is no release plane).
+function runtime(): SessionFixture {
+  return {
+    authorizeConfigure: allowConfigure,
+    observations: { publish: (): void => undefined },
+    clock: (): number => 100,
+    ...isolatedRuntime(),
+  };
+}
 
 test("a completed turn's captured ledger rejects late writes without appending", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
   const entered = yield* Deferred.make<SessionRunnerInput>();
-  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
+  const fixture = runtime();
+  const handle = yield* withSessionServices(session({
     id: "late-write", role: "resident",
     runner: (input: SessionRunnerInput) => Deferred.succeed(entered, input).pipe(Effect.as({ kind: "result" as const, text: "done" })),
-  }, fixture), fixture); });
+  }, fixture), fixture);
   yield* handle.prompt("start");
   const input = yield* Deferred.await(entered);
-  const before = sessionTree(handle.id);
+  const kernel = isolatedLedger().kernel;
+  const before = sessionTree(kernel, handle.id);
   const action: LedgerAction.Append = {
     id: "late", sessionId: handle.id, parentId: input.turnId, kind: "tool",
     intent: { encodingVersion: 1, value: {} }, effect: { encodingVersion: 1, value: {} }, ts: 100, irreversible: true,
@@ -33,63 +39,66 @@ test("a completed turn's captured ledger rejects late writes without appending",
   expect(yield* Effect.flip(input.ledger.commit(action))).toMatchObject({
     _tag: "CommitRefused", sessionId: handle.id, reason: "fence",
   });
-  expect(sessionTree(handle.id)).toEqual(before);
+  expect(sessionTree(kernel, handle.id)).toEqual(before);
 }))));
 
-test("request transitions cannot renew an expired lease beneath a live runner", () => isolated(Effect.scoped(Effect.gen(function* () {
+test("request transitions refuse a usurped fence beneath a live runner without appending rows", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
-  let now = 100;
   const entered = yield* Deferred.make<SessionRunnerInput>();
   const release = yield* Deferred.make<void>();
-  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = { ...runtime, clock: (): number => now }; return yield* withSessionServices(session({
-    id: "expired-transition", role: "resident",
+  const fixture = runtime();
+  const handle = yield* withSessionServices(session({
+    id: "usurped-transition", role: "resident",
     runner: (input: SessionRunnerInput) => Effect.gen(function* () {
       yield* Deferred.succeed(entered, input);
       yield* Deferred.await(release);
       return { kind: "result", text: "done" };
     }),
-  }, fixture), fixture); });
+  }, fixture), fixture);
   const running = yield* Effect.forkChild(handle.prompt("start"));
   const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
-  const before = SessionHandleStore.row(handle.id);
-  now += SessionHandleStore.LEASE_TTL_MS;
+  const kernel = isolatedLedger().kernel;
+  // Foreign takeover: a strictly newer fence adoption makes the live writer stale.
+  yield* kernel.adoptFence({ sessionId: handle.id, owner: "other", fence: kernel.row(handle.id).leaseFence + 1 });
+  const before = kernel.row(handle.id);
   const request = openRequest({ requestId: "request", sessionId: handle.id, turnId: input.turnId, callId: "call" });
-  expect(yield* Effect.flip(handle.requests.transition({ kind: "request.open", request }, "open", now))).toMatchObject({
-    _tag: "CommitFailed", error: { _tag: "LeaseRefused", reason: "stale", fence: before.leaseFence },
+  expect(yield* Effect.flip(handle.requests.transition({ kind: "request.open", request }, "open", 100))).toMatchObject({
+    _tag: "CommitFailed", error: { _tag: "LeaseRefused", reason: "stale", holder: "other", fence: before.leaseFence },
   });
-  expect(SessionHandleStore.row(handle.id)).toEqual(before);
-  expect(SessionHandleStore.requestRows(handle.id)).toEqual([]);
-  now = 100;
+  expect(kernel.row(handle.id)).toEqual(before);
+  expect(kernel.requestRows(handle.id)).toEqual([]);
   yield* Deferred.succeed(release, undefined);
-  expect(yield* Fiber.join(running)).toMatchObject({ kind: "result", text: "done" });
+  // The usurped writer can never seal its turn: the fenced commit refuses durably.
+  expect(yield* Effect.flip(Fiber.join(running))).toMatchObject({ _tag: "CommitFailed" });
+  expect(kernel.row(handle.id)).toEqual(before);
 }))));
 
-test("an idle request transition preserves a competing owner's lease and typed refusal", () => isolated(Effect.scoped(Effect.gen(function* () {
+test("an idle request transition preserves a competing owner's fence and typed refusal", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
-  const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
+  const fixture = runtime();
+  const handle = yield* withSessionServices(session({
     id: "held-transition", role: "resident", runner: () => Effect.succeed({ kind: "result", text: "unused" }),
-  }, fixture), fixture); });
-  yield* SessionHandleStore.acquireLease({
-    sessionId: handle.id, owner: "other", expectedFence: 0, now: 100, expiresAt: 1000,
-  });
-  const before = SessionHandleStore.row(handle.id);
+  }, fixture), fixture);
+  const kernel = isolatedLedger().kernel;
+  yield* kernel.adoptFence({ sessionId: handle.id, owner: "other", fence: kernel.row(handle.id).leaseFence + 1 });
+  const before = kernel.row(handle.id);
   const request = openRequest({ requestId: "request", sessionId: handle.id, turnId: "turn", callId: "call" });
   expect(yield* Effect.flip(handle.requests.transition({ kind: "request.open", request }, "open", 100))).toMatchObject({
-    _tag: "CommitFailed", error: { _tag: "LeaseRefused", reason: "held", holder: "other", fence: 1 },
+    _tag: "CommitFailed", error: { _tag: "LeaseRefused", reason: "stale", holder: "other", fence: before.leaseFence },
   });
-  expect(SessionHandleStore.row(handle.id)).toEqual(before);
-  expect(SessionHandleStore.requestRows(handle.id)).toEqual([]);
+  expect(kernel.row(handle.id)).toEqual(before);
+  expect(kernel.requestRows(handle.id)).toEqual([]);
 }))));
 
 for (const count of [1, 257]) {
-  test(`zero-grace shutdown seals ${count} open turns and pending tools before releasing the lease`, () => isolated(Effect.scoped(Effect.gen(function* () {
+  test(`zero-grace shutdown seals ${count} open turns and pending tools under the retained fence`, () => isolated(Effect.scoped(Effect.gen(function* () {
     seedPolicy();
     const entered = yield* Deferred.make<SessionRunnerInput>();
-    const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 };
+    const fixture: SessionFixture = { ...runtime(), closeGraceMs: 0 };
     const handle = yield* withSessionServices(session({
       id: "shutdown-pending", role: "resident",
       runner: (input: SessionRunnerInput) => Effect.gen(function* () {
-        const turn = SessionHandleStore.actionById(input.turnId);
+        const turn = input.kernel.actionById(input.turnId);
         if (turn === undefined) throw new Error("missing active turn");
         const intent = PlainObjectSchema.parse(turn.intent.value);
         for (let index = 1; index < count; index += 1) {
@@ -115,23 +124,25 @@ for (const count of [1, 257]) {
     const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
     yield* handle.close();
     yield* Fiber.join(running);
+    const kernel = isolatedLedger().kernel;
     for (let index = 0; index < count; index += 1) {
-      expect(SessionHandleStore.resultFor(handle.id, `pending-tool:${index}`)?.effect.value).toEqual({
+      expect(kernel.resultFor(handle.id, `pending-tool:${index}`)?.effect.value).toEqual({
         phase: "result", terminal: "outcome_unknown", reason: "shutdown_grace_exhausted",
       });
       const turnId = index === 0 ? input.turnId : `open-turn:${index}`;
-      expect(SessionHandleStore.turnTerminalFor(handle.id, turnId)?.kind).toBe("interrupted");
+      expect(kernel.turnTerminalFor(handle.id, turnId)?.kind).toBe("interrupted");
     }
-    expect(SessionHandleStore.openTurnsPage(handle.id)).toEqual([]);
-    expect(SessionHandleStore.openOperationsPage(handle.id, input.turnId)).toEqual([]);
-    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    expect(kernel.openTurnsPage(handle.id)).toEqual([]);
+    expect(kernel.openOperationsPage(handle.id, input.turnId)).toEqual([]);
+    // No release plane: the adopted fence owner stays durable after shutdown.
+    expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
   }))));
 }
 
 test("zero-grace shutdown rescans when an executor terminal lands after its seal scan", () => isolated(Effect.scoped(Effect.gen(function* () {
   seedPolicy();
   const entered = yield* Deferred.make<SessionRunnerInput>();
-  const fixture: SessionFixture = { ...runtime, closeGraceMs: 0 };
+  const fixture: SessionFixture = { ...runtime(), closeGraceMs: 0 };
   const handle = yield* withSessionServices(session({
     id: "shutdown-race", role: "resident",
     runner: (input: SessionRunnerInput) => Effect.gen(function* () {
@@ -146,8 +157,8 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
   }, fixture), fixture);
   const running = yield* Effect.forkChild(handle.prompt("start"));
   const input = yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"));
-  const sessions = Storage.get().sessions;
-  if (sessions === undefined) throw new Error("missing session adapter");
+  const kernel = isolatedLedger().kernel;
+  const sessions = isolatedLedger().session.sessions;
   const commit = sessions.commit;
   const terminalReason = (action: LedgerAction.Append) =>
     action.parentId === "racing-tool" && action.kind === "tool" ? PlainObjectSchema.parse(action.effect.value).reason : undefined;
@@ -162,10 +173,10 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
   const race = spyOn(sessions, "commit").mockImplementation((batch: LedgerSession.Commit) => {
     if (!batch.actions.map(terminalReason).includes("shutdown_grace_exhausted")) return commit(batch);
     sealAttempts += 1;
-    const current = SessionHandleStore.row(handle.id);
+    const current = kernel.row(handle.id);
     return commit({
       sessionId: handle.id, owner: batch.owner, fence: batch.fence, now: batch.now, expectedRevision: current.revision,
-      actions: [executorTerminal], consumeInboxIds: [], state: current.state, releaseLease: false,
+      actions: [executorTerminal], state: current.state,
     }).pipe(Effect.andThen(commit(batch)));
   });
   try {
@@ -175,11 +186,12 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
   }
   yield* Fiber.join(running);
   expect(sealAttempts).toBe(1);
-  const toolRows = sessionTree(handle.id).filter((action) => action.kind === "tool" && action.parentId === "racing-tool");
+  const toolRows = sessionTree(kernel, handle.id).filter((action) => action.kind === "tool" && action.parentId === "racing-tool");
   expect(toolRows.map(terminalReason)).toEqual(["raw_body_unsettled_after_grace"]);
-  expect(SessionHandleStore.turnTerminalFor(handle.id, input.turnId)?.kind).toBe("interrupted");
-  expect(SessionHandleStore.openTurnsPage(handle.id)).toEqual([]);
-  expect(SessionHandleStore.openOperationsPage(handle.id, input.turnId)).toEqual([]);
-  expect(sessionTree(handle.id).filter((action) => action.kind === "prompt").map((action) => PlainObjectSchema.parse(action.effect.value).inboxKind)).toEqual(["prompt", "interrupt"]);
-  expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+  expect(kernel.turnTerminalFor(handle.id, input.turnId)?.kind).toBe("interrupted");
+  expect(kernel.openTurnsPage(handle.id)).toEqual([]);
+  expect(kernel.openOperationsPage(handle.id, input.turnId)).toEqual([]);
+  expect(sessionTree(kernel, handle.id).filter((action) => action.kind === "prompt").map((action) => PlainObjectSchema.parse(action.effect.value).inboxKind)).toEqual(["prompt", "interrupt"]);
+  // No release plane: the adopted fence owner stays durable after shutdown.
+  expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
 }))));

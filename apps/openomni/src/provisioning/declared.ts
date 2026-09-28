@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
 import {
-  ActorRegistry,
-  ChannelInstanceStore,
-  PersonStore,
-  SecretStore,
   Vault,
+  type ActorRegistry,
+  type ChannelInstanceStore,
+  type PersonStore,
+  type SecretStore,
 } from "@openomni/ledger";
 import { type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
@@ -20,7 +20,7 @@ import { type KekResolution, resolveKek } from "./vault-key";
 /** Binds the vault seam for `declaredChannelProfile`: store row + KEK → plaintext or a locked reason. */
 export function vaultCredentialReader(
   resolution: KekResolution,
-  readSecret: typeof SecretStore.get = SecretStore.get,
+  readSecret: SecretStore["get"],
 ): CredentialReader {
   if (resolution.kind === "locked") {
     return () => ({ kind: "locked", reason: resolution.reason });
@@ -46,13 +46,17 @@ export function vaultCredentialReader(
  * stages they touch (§8.7) while everything else keeps running.
  */
 export function desiredChannels(
+  stores: {
+    readonly instances: Pick<ChannelInstanceStore, "list">;
+    readonly secrets: Pick<SecretStore, "get">;
+  },
   env: Record<string, string | undefined> = process.env,
   home: string = homedir(),
 ): DesiredChannels {
-  const instances = ChannelInstanceStore.list();
-  const secrets = new Map<string, ReturnType<typeof SecretStore.get>>();
-  const readSecret: typeof SecretStore.get = (ref) => {
-    if (!secrets.has(ref)) secrets.set(ref, SecretStore.get(ref));
+  const instances = stores.instances.list();
+  const secrets = new Map<string, ReturnType<SecretStore["get"]>>();
+  const readSecret: SecretStore["get"] = (ref) => {
+    if (!secrets.has(ref)) secrets.set(ref, stores.secrets.get(ref));
     return secrets.get(ref);
   };
   const reader = vaultCredentialReader(resolveKek(env, home), readSecret);
@@ -84,16 +88,19 @@ export function desiredChannels(
  * per platform binding. The sole-owner invariant was already enforced at
  * write time (PersonStore.put) — materialization just replays the manifest.
  */
-export function materializePersons(): void {
-  for (const person of PersonStore.list()) {
-    ActorRegistry.registerIdentity({
+export function materializePersons(stores: {
+  readonly persons: Pick<PersonStore, "list">;
+  readonly actors: ActorRegistry;
+}): void {
+  for (const person of stores.persons.list()) {
+    stores.actors.registerIdentity({
       id: person.id,
       kind: person.kind,
       trustTier: person.trustTier,
       ...(person.displayName === undefined ? {} : { displayName: person.displayName }),
     });
     for (const endpoint of person.endpoints) {
-      ActorRegistry.registerEndpoint({
+      stores.actors.registerEndpoint({
         id: `${endpoint.channel}:${endpoint.externalId}`,
         actorId: person.id,
         channel: endpoint.channel,

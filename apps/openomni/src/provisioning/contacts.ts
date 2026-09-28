@@ -1,4 +1,4 @@
-import { ActorRegistry, Storage } from "@openomni/ledger";
+import type { ActorRegistry } from "@openomni/ledger";
 import { type Actor, canonicalDigest, type Provisioning } from "@openomni/protocol";
 import { ToolRefused } from "@openomni/agent";
 import {
@@ -138,7 +138,7 @@ export function executePersonDeclare(port: ProvisionPort, now: () => number = Da
     domainRevisions?: Readonly<Record<string, number>>,
   ) =>
     Promise.resolve()
-      .then(() => Storage.get().transaction(() => declarePerson(port, input, domainRevisions, now)))
+      .then(() => port.transaction(() => declarePerson(port, input, domainRevisions, now)))
       .catch((error: Error) => storeRefusal("contact_add", error));
 }
 
@@ -160,26 +160,30 @@ export function executePersonRemove(port: ProvisionPort) {
 type ContactMutation = z.output<typeof ContactOperation>;
 type ContactOutcome = z.output<typeof ContactResult>;
 
-function promoteContact(operation: ContactMutation & { op: "contact_promote" }): ContactOutcome {
-  const identity = ActorRegistry.getIdentity(operation.args.actorId);
+function promoteContact(
+  actors: ActorRegistry,
+  operation: ContactMutation & { op: "contact_promote" },
+): ContactOutcome {
+  const identity = actors.getIdentity(operation.args.actorId);
   if (identity?.standing !== "provisional")
     throw new ToolRefused(operation.op, "contact is missing or already registered");
-  const promoted = ActorRegistry.promote(operation.args.actorId);
+  const promoted = actors.promote(operation.args.actorId);
   return { op: operation.op, id: promoted.id, trustTier: promoted.trustTier };
 }
 
 function mergeContactEndpoint(
+  actors: ActorRegistry,
   operation: ContactMutation & { op: "contact_merge" },
 ): ContactOutcome {
   const { endpointId, toActorId } = operation.args;
-  const endpoint = ActorRegistry.getEndpoint(endpointId);
+  const endpoint = actors.getEndpoint(endpointId);
   const bindable =
     endpoint !== undefined &&
     endpoint.actorId !== toActorId &&
-    ActorRegistry.getIdentity(toActorId) !== undefined;
+    actors.getIdentity(toActorId) !== undefined;
   if (!bindable)
     throw new ToolRefused(operation.op, "endpoint or target is missing, or already bound");
-  const merged = ActorRegistry.mergeEndpoint(endpointId, toActorId);
+  const merged = actors.mergeEndpoint(endpointId, toActorId);
   return { op: operation.op, id: merged.id, actorId: merged.actorId };
 }
 
@@ -189,15 +193,16 @@ function mergeContactEndpoint(
  * spend it on rows that changed since the Owner saw them.
  */
 export function mutateContact(
+  port: Pick<ProvisionPort, "actors" | "transaction">,
   operation: ContactMutation,
   revisions: Readonly<Record<string, number>> | undefined,
 ): ContactOutcome {
-  return Storage.get().transaction(() => {
+  return port.transaction(() => {
     const seen = revisions === undefined ? undefined : canonicalDigest({ ...revisions });
-    if (seen !== canonicalDigest(contactDomainRevisions(operation)))
+    if (seen !== canonicalDigest(contactDomainRevisions(port.actors, operation)))
       throw new ToolRefused(operation.op, "domain revision changed");
     return operation.op === "contact_promote"
-      ? promoteContact(operation)
-      : mergeContactEndpoint(operation);
+      ? promoteContact(port.actors, operation)
+      : mergeContactEndpoint(port.actors, operation);
   });
 }

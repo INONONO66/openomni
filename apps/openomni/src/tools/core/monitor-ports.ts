@@ -312,7 +312,7 @@ function requireFold(kernel: SessionKernel, sessionId: string, id: string): Watc
 /** The monitor tool's ports over the watch plane (chain facts + native sources). */
 export function createWatchMonitorPorts(deps: WatchPlaneDeps): MonitorPorts {
   async function install(sessionId: string, id: string, epoch: number, spec: WatchSpec) {
-    await deps.sources.install({ id, epoch, watch: spec.watch });
+    await deps.sources.install({ sessionId, id, epoch, watch: spec.watch });
     return requireFold(deps.openKernel(sessionId), sessionId, id).state;
   }
   async function armEpoch(

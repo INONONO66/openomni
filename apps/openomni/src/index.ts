@@ -7,20 +7,19 @@ import {
   type AppRuntime, type AppServices,
   lifecycleFailure,
 } from "./runtime";
-import { AsyncResource } from "node:async_hooks";
 import { timingSafeEqual } from "node:crypto";
-import { createAlarmWorker } from "./composition/alarm-worker";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
   BundleDefinitions, Clock, Entropy, GenerationLayers, ObservationSink,
+  createSessionEntityRunTurn,
   createSessionRequests,
+  resolveSessionRuntime,
+  SessionEntity,
   type SessionRuntime,
   getSessionHandle,
   ForeignFailure as AgentFailure,
   ExecutionApprovalError,
-  sweepSessions,
-  wakeSession,
 } from "@openomni/agent";
 import {
   type ChannelDeliveryRoute,
@@ -30,14 +29,7 @@ import {
   WebSocketHandler,
 } from "@openomni/channels";
 import { homedir } from "node:os";
-import {
-  ActorRegistry,
-  ChannelInstanceStore,
-  LedgerWrites,
-  PersonStore,
-  SecretStore,
-  SessionHandleStore,
-} from "@openomni/ledger";
+import type { ActorRegistry } from "@openomni/ledger";
 
 import {
   createMachineHost,
@@ -61,8 +53,20 @@ import {
 import { createCompletionPort } from "./composition/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
-import { commitMessageInbox, prepareMessage } from "./composition/message-session";
+import { createMessageInboxCommit, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
+import {
+  AppLedger,
+  createSessionEntityPortsSlot,
+  sessionTimerPort,
+} from "./composition/cluster-runtime";
+import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
+import { createWatchSources } from "./composition/watch-sources";
+import {
+  watchFiredHook,
+  watchOccurrenceKey,
+  watchTimeoutHook,
+} from "./tools/core/monitor-ports";
 import {
   acquireAppResource,
   channelRequests,
@@ -78,7 +82,7 @@ import {
 import { configureAuthority } from "./composition/generation-layers";
 import { createResident } from "./resident";
 import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
-import { requestDomainRevisions } from "./tools/core/request-domain-revisions";
+import { createRequestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 interface StartOptions {
   readonly runtime?: AppRuntime;
@@ -100,16 +104,16 @@ interface StartOptions {
  * no-op — which is also why this is not a scoped resource: durable facts are
  * history, not runtime handles.
  */
-function registerActors(actors: readonly RegisteredActor[]): void {
+function registerActors(registry: ActorRegistry, actors: readonly RegisteredActor[]): void {
   for (const actor of actors) {
-    ActorRegistry.registerIdentity({
+    registry.registerIdentity({
       id: actor.actorId,
       kind: actor.kind,
       trustTier: actor.trustTier,
       ...(actor.displayName === undefined ? {} : { displayName: actor.displayName }),
     });
     const channel = actor.channel ?? "ws";
-    ActorRegistry.registerEndpoint({
+    registry.registerEndpoint({
       id: `${channel}:${actor.externalId}`,
       actorId: actor.actorId,
       channel,
@@ -179,14 +183,17 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
+  // Late-bound entity ports: the entity layer exists from runtime creation,
+  // but its turn/timer ports resolve only once composition finishes below.
+  const entityPorts = createSessionEntityPortsSlot();
   const runtime =
     options.runtime ??
     gatewayRuntime({
-      dbPath: config.dbPath,
       // Cluster storage rides only on configs that resolved it (loadConfig
       // always does); injected literal test configs stay on the in-memory
       // host so no path outside their fixture directory is ever touched.
-      ...(config.catalogPath === undefined ? {} : { cluster: resolveClusterStorage(config) }),
+      ...(config.catalogPath === undefined ? {} : resolveClusterStorage(config)),
+      entity: { owner: `openomni:${process.pid}`, ports: entityPorts.ports },
     });
   try {
     const services = await runAppBoot(
@@ -194,7 +201,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       Effect.gen(function* () {
         return {
           context: yield* Effect.context<AppServices>(),
-          ledger: yield* LedgerWrites,
+          plane: yield* AppLedger,
           scope: yield* AppScope,
           clock: yield* Clock,
           entropy: yield* Entropy,
@@ -208,44 +215,54 @@ export async function startOpenOmni(options: StartOptions = {}) {
       resource: Effect.Effect<A, E>,
       release: (value: A) => Effect.Effect<void, E2>,
     ) => runAppBoot(runtime, bootResource(resource, release));
-    const doorbell = await acquire(
-      Effect.sync(() => new AsyncResource("session-inbox")),
-      (resource) =>
-        Effect.sync(() => {
-          resource.emitDestroy();
-        }),
+    const plane = services.plane;
+    seedKernelPolicyRows(
+      plane.catalog.policies,
+      services.bundles.select(services.bundles.names).rows,
     );
-    seedKernelPolicyRows(services.bundles.select(services.bundles.names).rows);
+    // The Session entity client: THE delivery path for message and timer
+    // traffic (W5.2 plan §1) — the RPC ack means the receiver committed.
+    const entityClient = await runAppBoot(runtime, SessionEntity.client);
 
+    const domainRevisions = createRequestDomainRevisions({
+      actors: plane.stores.actors,
+      persons: plane.stores.persons,
+    });
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
       dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
         services.clock.now,
+        plane.openKernel,
       ),
-      requestDomainRevisions,
+      requestDomainRevisions: domainRevisions,
       onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
+      // Entity sessions drain inside the delivering RPC before it acks; only
+      // process-runner sessions still need this doorbell.
       onInboxCommitted: (ids) => {
-        for (const id of ids)
-          doorbell.runInAsyncScope(() => {
-            void wake(id);
-          });
+        for (const id of ids) void wake(id);
       },
       authorizeApproval: (credential, request) =>
         Effect.try({
           try: () => authenticateOwner(credential, request.id),
           catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
         }),
-      authorizeConfigure: configureAuthority(services.generations),
+      authorizeConfigure: configureAuthority(services.generations, plane.openKernel),
     };
     const requests = await runAppBoot(runtime, createSessionRequests(sessionRuntime));
-    let recovery: Promise<void> = Promise.resolve();
+    // Recovery is the cluster's: persisted undelivered entity messages redeliver
+    // on activation; there is no boot sweep to await.
+    const recovery: Promise<void> = Promise.resolve();
     await acquire(Effect.void, () => shutdownSessions(sessionRuntime, recovery));
     const actors: readonly RegisteredActor[] = config.actors ?? [];
-    registerActors(actors);
+    registerActors(plane.stores.actors, actors);
     // Declared Person manifests materialize alongside env actors — both are
     // idempotent identity upserts; the provisioning store is the durable one.
-    materializePersons();
+    const materializeDeclaredPersons = () =>
+      materializePersons({ persons: plane.stores.persons, actors: plane.stores.actors });
+    materializeDeclaredPersons();
 
     let gateway: GatewayRouter | undefined;
     const messages = {
@@ -264,9 +281,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       return channelSupervisor;
     };
     const provisioningPort: ProvisionPort = {
-      persons: PersonStore,
-      instances: ChannelInstanceStore,
-      secrets: SecretStore,
+      persons: plane.stores.persons,
+      instances: plane.stores.instances,
+      secrets: plane.stores.secrets,
+      actors: plane.stores.actors,
+      transaction: plane.catalog.transaction,
       kek: resolveKek(process.env, homedir()),
       supervisor: {
         reconcile: () => liveSupervisor().reconcile(),
@@ -274,8 +293,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         status: () => liveSupervisor().status(),
         source: () => liveSupervisor().source(),
       },
-      materialize: materializePersons,
-      removeIdentity: ActorRegistry.removeIdentity,
+      materialize: materializeDeclaredPersons,
+      removeIdentity: plane.stores.actors.removeIdentity,
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
@@ -314,6 +333,41 @@ export async function startOpenOmni(options: StartOptions = {}) {
       cells = await acquireAppResource(runtime, composeCodemode(host));
     }
 
+    // Watch plane: native sources deliver occurrences as WatchFired entity
+    // messages; the occurrence chain id is the durable dedupe (plan F2).
+    const watchSources = createWatchSources(
+      {
+        watchFired: (fire) =>
+          runAppEffect(
+            runtime,
+            entityClient(fire.sessionId)
+              .WatchFired({
+                watchId: fire.watchId,
+                epoch: fire.epoch,
+                sourceKey: watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey),
+                batch: JSON.stringify({ content: fire.content, terminal: fire.terminal }),
+              })
+              .pipe(Effect.asVoid),
+          ),
+        watchTimeout: (arm) =>
+          runAppEffect(
+            runtime,
+            entityClient(arm.sessionId)
+              .WatchTimeout({ watchId: arm.watchId, epoch: arm.epoch, fireAt: arm.fireAt })
+              .pipe(Effect.asVoid),
+          ),
+      },
+      {
+        clock: services.clock.now,
+        failure: (watchId, error) => console.error(`watch ${watchId} send failed`, error),
+      },
+    );
+    await acquire(Effect.succeed(watchSources), (resource) =>
+      Effect.tryPromise({
+        try: () => resource.closeAll(),
+        catch: lifecycleFailure("watches.close"),
+      }),
+    );
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
@@ -322,10 +376,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
       tools: {
         ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
         clock: services.clock.now,
-        alarms: await createMonitorPorts(runtime),
+        alarms: await createMonitorPorts(runtime, watchSources),
         provisioning: provisioningPort,
       },
       sessionRuntime,
+      policyGeneration: () =>
+        plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
     });
 
     await runAppBoot(runtime, services.generations.initialize(resident.definitions));
@@ -350,11 +406,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // declared ChannelInstances, the only source of external channel config.
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
-      desired: () => desiredChannels(),
+      desired: () =>
+        desiredChannels({ instances: plane.stores.instances, secrets: plane.stores.secrets }),
       build: (component) => component.build(routingHandler),
       // The tier is the row's, never this call site's: mounting a named
       // surface materializes no owner authority (#931).
-      grant: createMountedChannelGrantRegistrar(config.channelAllowedSenders),
+      grant: createMountedChannelGrantRegistrar(
+        plane.stores.channelGrants,
+        config.channelAllowedSenders,
+      ),
       deliveryRoutes,
       webhookHandlers,
       traceId: newTraceId,
@@ -368,16 +428,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
-        dbPath: config.dbPath,
+        ...resolveClusterStorage(config),
         model: config.model,
         apiKey: config.model.apiKey,
         ...(transport === undefined ? {} : { transport }),
       },
       committed: (ids) => {
-        for (const id of ids)
-          doorbell.runInAsyncScope(() => {
-            void wake(id);
-          });
+        for (const id of ids) void wake(id);
       },
     });
     await acquire(Effect.succeed(processSessions), (resource) =>
@@ -386,69 +443,81 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("processes.close"),
       }),
     );
-    const wakeEffect = (id: string) =>
-      Effect.gen(function* () {
-        const row = SessionHandleStore.row(id);
-        const runner = SessionHandleStore.latestGenerationFor(id).systemBlocks.find(
-          (block) => block.id === "runner" && block.source === "app:runner",
-        )?.content;
-        if (runner === "process") {
-          yield* Effect.tryPromise({
-            try: () => processSessions.wake(id),
-            catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
-          });
-        } else {
-          const scope = yield* AppScope;
-          yield* Scope.provide(wakeSession(id, resident.runnerFor(row), sessionRuntime), scope);
-        }
+    /** The runner block a session's current generation pins ("process" | "resident" | ...). */
+    const sessionRunner = (id: string): string | undefined => {
+      try {
+        return plane
+          .openKernel(id)
+          .latestGenerationFor(id)
+          .systemBlocks.find((block) => block.id === "runner" && block.source === "app:runner")
+          ?.content;
+      } catch {
+        return undefined;
+      }
+    };
+    // Entity sessions drain inside the delivering RPC; only process-runner
+    // sessions (external child transport) still take an app-side wake.
+    const wake = (id: string): Promise<void> => {
+      if (sessionRunner(id) !== "process") return Promise.resolve();
+      return processSessions.wake(id).catch((error: Error) => {
+        console.error("process session wake failed", error);
       });
-    const wake = (id: string) =>
-      runAppEffect(
-        runtime,
-        Effect.gen(function* () {
-          const scope = yield* AppScope;
-          yield* Effect.forkIn(
-            wakeEffect(id).pipe(
-              Effect.catchCause((cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.void
-                  : Effect.sync(() => {
-                      console.error("session wake failed", Cause.pretty(cause));
-                    }),
-              ),
-            ),
-            scope,
-          );
-        }),
-      );
+    };
+    const commitInbox = createMessageInboxCommit({
+      plane,
+      client: entityClient,
+      clock: services.clock.now,
+    });
+    // Deadline-carrying requests arm one persisted DeliverAt wake on the
+    // owning session; the chain fold decides applied-versus-noop at delivery.
+    const requestPorts = channelRequests(requests);
+    const requestsWithDeadlines: typeof requestPorts = {
+      ...requestPorts,
+      open: (input) =>
+        requestPorts.open(input).pipe(
+          Effect.tap((request) =>
+            request.deadline === undefined
+              ? Effect.void
+              : entityClient(request.sessionId)
+                  .Deadline({ requestId: request.requestId, deadlineAt: request.deadline })
+                  .pipe(
+                    Effect.asVoid,
+                    Effect.catchAll((error) =>
+                      Effect.sync(() => {
+                        console.error(`deadline arm failed: ${request.requestId}`, error);
+                      }),
+                    ),
+                  ),
+          ),
+        ),
+    };
     gateway = await runAppBoot(
       runtime,
       createResidentGateway(
         {
           inbox: {
             commit: (input) =>
-              commitMessageInbox(input).pipe(
+              commitInbox(input).pipe(
                 Effect.mapError(decodeChannelFailure("message.commit")),
               ),
           },
-          prepare: prepareMessage(resident.materialize),
-          requests: channelRequests(requests),
+          prepare: prepareMessage(plane, resident.materialize),
+          requests: requestsWithDeadlines,
           authenticateAnswer: (_sender, credential, requestId) =>
             Effect.try({
               try: () => authenticateOwner(credential, requestId),
               catch: decodeChannelFailure("answer.authenticate"),
             }),
           committed: (row) => {
-            doorbell.runInAsyncScope(() => {
-              void wake(row.sessionId);
-            });
+            void wake(row.sessionId);
           },
           clock: services.clock.now,
         },
         {
           deliveryRoutes,
           grants: () =>
-            SessionHandleStore.listRows()
+            plane
+              .listSessions()
               .filter((row) => row.role === "resident")
               .flatMap((row) =>
                 actors.map((actor) => ({
@@ -460,7 +529,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
               ),
           budgets: () => config.socialBudgets ?? [],
           replyGrantRules: () =>
-            SessionHandleStore.listRows()
+            plane
+              .listSessions()
               .filter((row) => row.role === "resident")
               .flatMap((row) =>
                 [...deliveryRoutes.keys()].map((surface) => ({
@@ -476,21 +546,34 @@ export async function startOpenOmni(options: StartOptions = {}) {
         },
       ),
     );
-    const alarms = await acquireAppResource(
-      runtime,
-      createAlarmWorker({
-        alarms: services.ledger.alarms,
-        requestTimeout: requests.timeout,
-        observations: Bus,
-        clock: services.clock.now,
-        wake: (id) =>
-          Effect.flatMap(AppScope, () => wakeEffect(id)).pipe(
-            Effect.provide(services.context),
-          ),
-        failure: (error) => console.error("alarm worker failure", error),
-      }),
+    // Bind the entity's composition-owned ports: turns run the Resident's
+    // runner over the activation's kernel + fence; process-runner sessions
+    // delegate to the child transport without committing under this fence.
+    const resolvedRuntime = await runAppBoot(runtime, resolveSessionRuntime(sessionRuntime));
+    const entityRunTurn = createSessionEntityRunTurn(
+      resident.runnerFor,
+      resolvedRuntime,
+      services.scope,
     );
-    await runAppBoot(runtime, alarms.start());
+    entityPorts.bind({
+      runTurn: (input) =>
+        sessionRunner(input.authority.sessionId) === "process"
+          ? Effect.tryPromise({
+              try: () => processSessions.wake(input.authority.sessionId),
+              catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
+            }).pipe(Effect.asVoid)
+          : entityRunTurn(input),
+      timers: sessionTimerPort({
+        requestDomainRevisions: domainRevisions,
+        watchFired: watchFiredHook({
+          closeSource: (watchId) => void watchSources.close(watchId),
+        }),
+        watchTimeout: watchTimeoutHook({
+          closeSource: (watchId) => void watchSources.close(watchId),
+        }),
+      }),
+      requestDomainRevisions: domainRevisions,
+    });
 
     await acquire(Effect.succeed(supervisor), (resource) =>
       Effect.tryPromise({
@@ -537,16 +620,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("websocket.close"),
       }),
     );
-    const awaitingOwner = requests
-      .list()
-      .some((request) => request.mode === "approval" && request.state === "open");
-    // Alarm fire commits its prompt and inbox atomically. A crash before the
-    // worker's wake is repaired by this same inbox sweep, even for fired alarms
-    // that no longer appear in alarms.due(). Never refire to recover a wake.
-    recovery = acquireAppResource(runtime, sweepSessions(resident.runnerFor, sessionRuntime));
-    if (awaitingOwner) {
-      void recovery.catch((error: Error) => console.error("session recovery failed", error));
-    } else await recovery;
     let stopping: Promise<void> | undefined;
     const stop = async () => {
       await boundServer.stop(true);

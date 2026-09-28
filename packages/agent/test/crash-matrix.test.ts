@@ -1,20 +1,23 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { isolated } from "./helpers/isolated";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { isolated, isolatedLedger, isolatedRun } from "./helpers/isolated";
+import { openCrashStores } from "./helpers/crash-stores";
 import type { ExecutionError } from "../src/errors";
 import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Alarm, LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
+import { SessionHandleStore } from "@openomni/ledger";
+import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
 import { retryDelivery, type TimerChainReads } from "../src/cluster/timers";
-import { closeSessions, wakeSession } from "../src/session-handle";
+import { closeSessions } from "../src/session-handle";
+import { reactivateSession } from "./helpers/wake-session";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/session-lifecycle/history";
+import { receivedMessages } from "../src/session-record";
 import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "./helpers/crash-configure";
 import { killAtCrashBarrier } from "./helpers/crash-channel";
 import { messagePlanePoint, messagePlaneProof } from "./helpers/crash-message-plane";
@@ -49,7 +52,10 @@ const planeWorker = new URL("./helpers/crash-message-plane.ts", import.meta.url)
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
-  return sessionTree(sessionId);
+  return sessionTree(isolatedLedger().kernel, sessionId);
+}
+function pendingInbox(id = sessionId) {
+  return isolatedLedger().kernel.pendingMessages(id);
 }
 function results(kind: LedgerAction.Kind) {
   return actions().filter((action) => action.kind === kind && effectOf(action).phase === "result");
@@ -164,7 +170,7 @@ function wakeAfterCrash(
   before: LedgerAction.Node[],
 ) {
   return Effect.gen(function* () {
-  yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
+  yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(reactivateSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
   expect(actions().slice(0, before.length)).toEqual(before);
   return actions().filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
   });
@@ -174,11 +180,12 @@ function recoverAdmission(witness: Witness) {
   return Effect.gen(function* () {
   const before = actions();
   const originalTurns = SessionHandleStore.openTurns(before);
-  const originalInbox = SessionHandleStore.pendingInbox(sessionId);
-  const originalOutbound = SessionHandleStore.outboundRows(sessionId);
+  const originalInbox = pendingInbox();
+  const originalOutbound = isolatedLedger().kernel.outboundRows(sessionId);
   const calls = { model: 0 };
   let deliveries = 0;
   const runtime: SessionRuntime = {
+    ...isolatedRuntime(),
     authorizeConfigure: allowConfigure,
     observations,
     clock: () => 100_000,
@@ -199,10 +206,10 @@ function recoverAdmission(witness: Witness) {
       ]);
       expect(calls.model).toBe(0);
       expect(deliveries).toBe(1);
-      expect(SessionHandleStore.outboundRows(sessionId)).toMatchObject([{ state: "delivered" }]);
-      const revision = SessionHandleStore.row(sessionId).revision;
-      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); });
-      expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
+      expect(isolatedLedger().kernel.outboundRows(sessionId)).toMatchObject([{ state: "delivered" }]);
+      const revision = isolatedLedger().kernel.row(sessionId).revision;
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(reactivateSession(sessionId, runner, fixture), fixture); });
+      expect(isolatedLedger().kernel.row(sessionId).revision).toBe(revision);
       expect(deliveries).toBe(1);
       return "rearmed";
     }
@@ -219,8 +226,8 @@ function recoverAdmission(witness: Witness) {
     }
     expect(originalTurns).toEqual([]);
     expect(originalInbox).toMatchObject([{ id: "admitted", content: "original prompt" }]);
-    expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
-    expect(SessionHandleStore.inboxRows(sessionId)).toHaveLength(1);
+    expect(pendingInbox()).toEqual([]);
+    expect(receivedMessages(isolatedLedger().kernel, sessionId).rows).toHaveLength(1);
     return "rearmed";
   } finally {
     yield* closeSessions(runtime);
@@ -231,7 +238,7 @@ function recoverAdmission(witness: Witness) {
 function recoverCommittedCompaction(witness: Witness) {
   return Effect.gen(function* () {
   const before = actions();
-  const inbox = SessionHandleStore.pendingInbox(sessionId);
+  const inbox = pendingInbox();
   expect(witness.bodies).toEqual(["summary"]);
   expect(results("compaction")).toHaveLength(1);
   const result = nth(results("compaction"), 0);
@@ -245,7 +252,7 @@ function recoverCommittedCompaction(witness: Witness) {
   expectCompactedProjection(history, originalAnswer);
   if (witness.crashPoint === "compaction_concurrent_tail_committed_before_owner_crash") {
     expect(inbox.map((item) => item.id)).toEqual(["tail"]);
-    expect(SessionHandleStore.inboxRows(sessionId).map((item) => item.id)).toEqual(["tail"]);
+    expect(receivedMessages(isolatedLedger().kernel, sessionId).rows.map((item) => item.id)).toContain("tail");
   } else expect(inbox).toEqual([]);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
   const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
@@ -254,10 +261,10 @@ function recoverCommittedCompaction(witness: Witness) {
   const recovered = foldSessionHistory(sessionId, actions());
   expect(recovered).toEqual(history);
   expectCompactedProjection(recovered, originalAnswer);
-  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
+  expect(pendingInbox()).toEqual(inbox);
   yield* executor.recover();
   expect(actions()).toEqual(before);
-  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual(inbox);
+  expect(pendingInbox()).toEqual(inbox);
   return terminalClass(result);
   });
 }
@@ -311,7 +318,7 @@ function recoverTurn(witness: Witness, resumeCount: number, onModel: () => Effec
   const original = crashWitness.shape.openTurns.element.parse(witness.openTurns[0]);
   expect(witness.openTurns).toHaveLength(1);
   const calls = { model: 0 };
-  const runtime: SessionRuntime = { observations, clock: () => 200_000, authorizeConfigure: allowConfigure };
+  const runtime: SessionRuntime = { ...isolatedRuntime(), observations, clock: () => 200_000, authorizeConfigure: allowConfigure };
   const runner = countingRunner(runtime, calls, onModel);
   try {
     const terminals = yield* wakeAfterCrash(witness, runner, runtime, before);
@@ -324,10 +331,10 @@ function recoverTurn(witness: Witness, resumeCount: number, onModel: () => Effec
     expect(SessionHandleStore.openTurns(actions())).toEqual([]);
     expect(calls.model).toBe(1);
     const recovered = actions();
-    const revision = SessionHandleStore.row(sessionId).revision;
-    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
+    const revision = isolatedLedger().kernel.row(sessionId).revision;
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(reactivateSession(sessionId, runner, fixture), fixture); }).pipe(Effect.timeout("5 seconds"));
     expect(actions()).toEqual(recovered);
-    expect(SessionHandleStore.row(sessionId).revision).toBe(revision);
+    expect(isolatedLedger().kernel.row(sessionId).revision).toBe(revision);
     expect(calls.model).toBe(1);
     return "resumed_without_reexecution";
   } finally {
@@ -375,24 +382,24 @@ function recoverRetryAlarm(witness: Witness) {
       value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
     },
   });
-  expect(Alarm.RetrySchedule.parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason).toBe(
+  expect(z.object({ reason: z.string() }).parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason).toBe(
     "transient_error",
   );
-  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
+  expect(pendingInbox()).toEqual([]);
   // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
   // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
+  const kernel = isolatedLedger().kernel;
   const reads: TimerChainReads = {
-    actionById: SessionHandleStore.actionById,
-    requestById: SessionHandleStore.requestById,
-    resultFor: (id) => SessionHandleStore.resultFor(sessionId, id),
-    operationChildrenPage: (id, cursor) =>
-      SessionHandleStore.operationChildrenPage(sessionId, id, cursor),
+    actionById: kernel.actionById,
+    requestById: kernel.requestById,
+    resultFor: (id) => kernel.resultFor(sessionId, id),
+    operationChildrenPage: (id, cursor) => kernel.operationChildrenPage(sessionId, id, cursor),
   };
   expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
   expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
-  expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
+  expect(pendingInbox()).toEqual([]);
   expect(
     actions().filter((action) => action.kind === "alarm.arm" && action.id.includes(":retry:")),
   ).toHaveLength(1);
@@ -407,22 +414,22 @@ function recoverStaleOwner(witness: Witness) {
   expect(staleAction.kind).toBe("attempt");
   expect(effectOf(staleAction)).toMatchObject({ phase: "result", terminal: "executed" });
   const owner = z.string().parse(witness.lease.owner);
-  const expiresAt = z.number().parse(witness.lease.expiresAt);
-  expect(expiresAt).toBe(100 + SessionHandleStore.LEASE_TTL_MS);
   let refusals = 0;
   yield* recoverTurn(witness, 1, () => Effect.gen(function* () {
-    const current = SessionHandleStore.row(sessionId);
+    const kernel = isolatedLedger().kernel;
+    const current = kernel.row(sessionId);
+    // The entity wake pinned a strictly newer fence; the crashed activation's
+    // authority is dead the moment the successor adopts, with no timer involved.
     expect(current.leaseOwner).not.toBe(owner);
     expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
-    expect(200_000).toBeGreaterThan(expiresAt);
     const before = actions();
-    const refused = yield* Effect.result(SessionHandleStore.commit({
+    const refused = yield* Effect.result(kernel.commit({
       sessionId, owner, fence: witness.lease.fence, now: 200_000,
-      expectedRevision: current.revision, actions: [staleAction], consumeInboxIds: [], state: current.state, releaseLease: false,
+      expectedRevision: current.revision, actions: [staleAction], state: current.state,
     }));
     expect(Result.isFailure(refused) ? refused.failure : undefined).toMatchObject({ _tag: "CommitRefused", reason: "fence" });
     expect(actions()).toEqual(before);
-    expect(SessionHandleStore.row(sessionId)).toEqual(current);
+    expect(kernel.row(sessionId)).toEqual(current);
     refusals += 1;
     return undefined;
   }));
@@ -438,7 +445,8 @@ function recoverStaleOwner(witness: Witness) {
 }
 
 function assertOutboundCut(witness: Witness) {
-  const outbound = SessionHandleStore.outboundRows(sessionId);
+  const kernel = isolatedLedger().kernel;
+  const outbound = kernel.outboundRows(sessionId);
   expect(outbound).toHaveLength(1);
   const item = SessionTransition.Outbound.parse(outbound[0]);
   const acked = witness.crashPoint === "delivery_ack_committed_before_owner_cleanup";
@@ -450,7 +458,7 @@ function assertOutboundCut(witness: Witness) {
   expect(witness.bodies).toEqual(["reply", ...(accepted ? ["accepted"] : extra)]);
   expect(item.state).toBe(acked ? "delivered" : "pending");
   expect(item.message.content).toBe("durable reply");
-  const destination = SessionHandleStore.inboxRows(item.message.destinationSessionId).filter(
+  const destination = receivedMessages(kernel, item.message.destinationSessionId).rows.filter(
     (row) => row.id === item.message.messageId,
   );
   expect(destination).toHaveLength(sent ? 1 : 0);
@@ -490,7 +498,6 @@ function recoverOutbound(witness: Witness, dbPath: string) {
     const point = messagePlanePoint.parse(witness.crashPoint);
     const ambiguous = point === "platform_send_ambiguous_without_reconciliation";
     const sent = point === "platform_send_committed_before_local_ack_reconciled_sent";
-    Storage.reset();
     const proof = yield* Effect.promise(() => recoverMessagePlane(point, dbPath));
     expect(proof.before).toEqual(before);
     expect(proof.after.slice(0, before.length)).toEqual(before);
@@ -504,7 +511,6 @@ function recoverOutbound(witness: Witness, dbPath: string) {
     expect(received[0]?.status).toBe("consumed");
     if (destination.length === 1) expect(received[0]?.content).toBe(destination[0]?.content);
     expect(proof.after.filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toHaveLength(1);
-    expect(proof.leaseReleased).toBe(true);
     if (sent || ambiguous) {
       expect(proof.externalBefore).toEqual([item.message.messageId]);
       expect(proof.externalAfter).toEqual(Array.from({ length: sent ? 1 : 2 }, () => item.message.messageId));
@@ -514,24 +520,28 @@ function recoverOutbound(witness: Witness, dbPath: string) {
   });
 }
 
-function alarmDoorbellCell(dbPath: string) {
-  return Effect.gen(function* () {
-    const point = "alarm_fire_committed_before_hibernated_doorbell";
-    const witness = crashWitness.parse(JSON.parse(yield* Effect.promise(() => killAtCrashBarrier(planeWorker, ["crash", point, dbPath]))));
-    expect(witness).toMatchObject({ crashPoint: point, bodies: [], openTurns: [], lease: { owner: null } });
-    const proof = yield* Effect.promise(() => recoverMessagePlane(point, dbPath));
-    expect(proof.alarm).toMatchObject({ kind: "at", status: "fired", notifications: 0 });
-    expect(proof.before.filter(({ kind }) => kind === "alarm.fired")).toHaveLength(1);
-    const pending = proof.inboxBefore.filter(({ status }) => status === "pending");
-    expect(pending).toHaveLength(1);
-    expect(proof.inboxAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);
-    expect(proof.after.slice(0, proof.before.length)).toEqual(proof.before);
-    expect(proof.repeated).toEqual(proof.after);
-    expect(proof.sourceRuns).toBe(1);
-    expect(proof.dispatches).toBe(0);
-    expect(proof.leaseReleased).toBe(true);
-    return "rearmed";
-  });
+/**
+ * Entity-plane doorbell (W5.2 F2): a WatchFired delivery commits its occurrence
+ * chain action and the pending wake prompt in one fenced batch; the cut lands
+ * before any entity wake. Recovery wakes once, consumes the prompt exactly
+ * once, and every redelivery of the occurrence is a chain-guarded no-op.
+ */
+async function watchWakeCell(dbPath: string) {
+  const point = "watch_fired_committed_before_entity_wake";
+  const witness = crashWitness.parse(JSON.parse(await killAtCrashBarrier(planeWorker, ["crash", point, dbPath])));
+  expect(witness).toMatchObject({ crashPoint: point, bodies: [], openTurns: [] });
+  expect(typeof witness.lease.owner).toBe("string");
+  const proof = await recoverMessagePlane(point, dbPath);
+  expect(proof.watch).toEqual({ occurrenceId: "doorbell:fired:1", redelivery: "duplicate_occurrence", fired: 1 });
+  expect(proof.before.filter(({ kind }) => kind === "alarm.fired")).toHaveLength(1);
+  const pending = proof.inboxBefore.filter(({ status }) => status === "pending");
+  expect(pending).toHaveLength(1);
+  expect(proof.inboxAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);
+  expect(proof.after.slice(0, proof.before.length)).toEqual(proof.before);
+  expect(proof.repeated).toEqual(proof.after);
+  expect(proof.sourceRuns).toBe(1);
+  expect(proof.dispatches).toBe(0);
+  return "rearmed";
 }
 
 function recoverCell(witness: Witness, dbPath: string) {
@@ -568,30 +578,35 @@ async function crashCell(point: CrashPoint, dbPath: string) {
   return resumed;
 }
 
-function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, witness: Witness, dbPath: string) {
-  return Effect.gen(function* () {
-    Storage.reset(); Storage.initialize({ dbPath });
+async function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, witness: Witness, dbPath: string) {
+  // Phase 1: reopen the crashed stores, capture the durable prefix, close them
+  // again so the fresh reconstruction child owns the file alone.
+  const durable = await isolatedRun(() => {
     const before = actions();
     const full = foldHistoryState(sessionId, before);
     const projection = foldSessionHistory(sessionId, before);
     if (point !== "captured_generation_missing_after_restart") {
       expect(witness.fold?.checkpointId).not.toBeNull();
-      expect(hydrateSessionHistory(sessionId).state).toEqual(full);
+      expect(hydrateSessionHistory(isolatedLedger().kernel, sessionId).state).toEqual(full);
     }
-    Storage.reset();
-    if (point === "fold_checkpoint_tampered_before_load") corruptCheckpoint(dbPath);
-    const reopened = Bun.spawn([process.execPath, new URL("./helpers/crash-reconstruction.ts", import.meta.url).pathname, point, dbPath], {
-      stdin: "ignore", stdout: "pipe", stderr: "pipe",
-    });
-    const [code, stdout, stderr] = yield* Effect.promise(() => bounded(Promise.all([
-      reopened.exited, new Response(reopened.stdout).text(), new Response(reopened.stderr).text(),
-    ]), "fresh reconstruction process", SPAWNED_CHILD_MS));
-    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-    const recovered = reconstructionRecovery.parse(JSON.parse(stdout));
+    return Promise.resolve({ before, full, projection });
+  }, () => openCrashStores(dbPath));
+  if (point === "fold_checkpoint_tampered_before_load") corruptCheckpoint(dbPath);
+  const reopened = Bun.spawn([process.execPath, new URL("./helpers/crash-reconstruction.ts", import.meta.url).pathname, point, dbPath], {
+    stdin: "ignore", stdout: "pipe", stderr: "pipe",
+  });
+  const [code, stdout, stderr] = await bounded(Promise.all([
+    reopened.exited, new Response(reopened.stdout).text(), new Response(reopened.stderr).text(),
+  ]), "fresh reconstruction process", SPAWNED_CHILD_MS);
+  expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+  const recovered = reconstructionRecovery.parse(JSON.parse(stdout));
+  // Phase 2: this parent reopens the settled stores for the durable-state checks.
+  return isolated(Effect.gen(function* () {
+    const ledger = isolatedLedger();
+    const { before, full, projection } = durable;
     if (point === "fold_checkpoint_tampered_before_load") {
       expect(recovered).toMatchObject({ refusal: "FoldCheckpointIntegrityError", runnerCount: 0, loaded: null, rangeReads: [] });
-      Storage.initialize({ dbPath });
-      expect(Storage.get().actions?.verifyChain(sessionId).kind).toBe("intact");
+      expect(ledger.kernel.verifyChain(sessionId).kind).toBe("intact");
       return "rejected";
     }
     if (point === "captured_generation_missing_after_restart") {
@@ -602,7 +617,6 @@ function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, w
     expect(recovered.loaded?.state).toEqual(full);
     expect(recovered.loaded?.history).toEqual(projection);
     expect(recovered.rangeReads.every((read) => read.limit <= 256 && read.cursor > 0)).toBe(true);
-    Storage.initialize({ dbPath });
     if (point === "fold_checkpoint_committed_before_wake") {
       expect(before.at(-1)?.ordinal).toBe(257);
       expect(before.at(-1)?.kind).toBe("fold.checkpoint");
@@ -630,14 +644,14 @@ function recoverReconstructionCell(point: z.infer<typeof reconstructionPoint>, w
       yield* executor.recover();
       expect(actions()).toEqual(settled);
       expect(readFileSync(`${dbPath}.effect`, "utf8")).toBe("write-once\n");
-      expect(hydrateSessionHistory(sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
+      expect(hydrateSessionHistory(ledger.kernel, sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
       return "lost";
     }
     expect(recovered.runnerCount).toBe(1);
     expect(recovered.runnerHistory).toEqual(projection);
-    expect(hydrateSessionHistory(sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
+    expect(hydrateSessionHistory(ledger.kernel, sessionId).state).toEqual(foldHistoryState(sessionId, actions()));
     return "resumed_without_reexecution";
-  });
+  }), () => openCrashStores(dbPath));
 }
 
 async function configureCrashCell(dbPath: string) {
@@ -683,32 +697,35 @@ for (const row of matrix.rows) {
   test(`SQLite crash recovery matches the authoritative matrix cell ${row.crashPoint}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "crash-matrix-"));
     try {
+      const dbPath = join(directory, "kernel.sqlite");
+      if (row.crashPoint === configureCrashPoint) {
+        expect(recovery.parse(await configureCrashCell(dbPath))).toBe(row.recovery);
+        return;
+      }
+      if (row.crashPoint === "watch_fired_committed_before_entity_wake") {
+        expect(recovery.parse(await watchWakeCell(dbPath))).toBe(row.recovery);
+        return;
+      }
+      if (row.crashPoint === "fiber_exit_after_execute_before_action_commit") {
+        expect(await fiberCrashCell(`${dbPath}.receipt`, "present")).toBe("resumed_without_reexecution");
+        expect(recovery.parse(await fiberCrashCell(dbPath))).toBe(row.recovery);
+        return;
+      }
+      const witness = await crashCell(row.crashPoint, dbPath);
+      const reconstruction = reconstructionPoint.safeParse(row.crashPoint);
+      if (reconstruction.success) {
+        expect(recovery.parse(await recoverReconstructionCell(reconstruction.data, witness, dbPath))).toBe(row.recovery);
+        return;
+      }
+      // Durability check: an independent handle over the crashed file reads the
+      // identical tree the recovery isolation is about to see.
+      const persistedHandle = openCrashStores(dbPath);
+      const persisted = sessionTree(persistedHandle.kernel, sessionId);
+      persistedHandle.close();
       const result = await isolated(Effect.scoped(Effect.gen(function* () {
-        const dbPath = join(directory, "kernel.sqlite");
-        if (row.crashPoint === configureCrashPoint)
-          return yield* Effect.promise(() => configureCrashCell(dbPath));
-        if (row.crashPoint === "alarm_fire_committed_before_hibernated_doorbell")
-          return yield* alarmDoorbellCell(dbPath);
-        if (row.crashPoint === "fiber_exit_after_execute_before_action_commit") {
-          expect(yield* Effect.promise(() => fiberCrashCell(`${dbPath}.receipt`, "present"))).toBe("resumed_without_reexecution");
-          return yield* Effect.promise(() => fiberCrashCell(dbPath));
-        }
-        const witness = yield* Effect.promise(() => crashCell(row.crashPoint, dbPath));
-        const reconstruction = reconstructionPoint.safeParse(row.crashPoint);
-        if (reconstruction.success)
-          return yield* recoverReconstructionCell(reconstruction.data, witness, dbPath);
-        Storage.reset();
-        Storage.initialize({ dbPath });
-        const persisted = actions();
-        Storage.reset();
-        Storage.initialize({ dbPath });
-        try {
-          expect(actions()).toEqual(persisted);
-          return yield* recoverCell(witness, dbPath);
-        } finally {
-          Storage.reset();
-        }
-      })));
+        expect(actions()).toEqual(persisted);
+        return yield* recoverCell(witness, dbPath);
+      })), () => openCrashStores(dbPath));
       expect(recovery.parse(result)).toBe(row.recovery);
     } finally {
       rmSync(directory, { recursive: true, force: true });

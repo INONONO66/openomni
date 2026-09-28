@@ -41,6 +41,12 @@ export interface AppRuntimeOptions {
   readonly sessionsDir?: string;
   /** Milliseconds of mailbox silence before a session entity passivates. */
   readonly entityIdleMs?: number;
+  /**
+   * Where the SingleRunner keeps its cluster_* tables; defaults to the
+   * catalog. A process child MUST pin ":memory:" — two runners on one
+   * catalog file would fight over the same runner tables.
+   */
+  readonly clusterStoragePath?: string;
   /** Session entity activation; present once composition supplies the turn port. */
   readonly entity?: {
     readonly owner: string;
@@ -74,7 +80,7 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
     Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)),
   );
   const host = clusterHostLayer({
-    catalogPath: options.catalogPath ?? ":memory:",
+    catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
     entityIdleMs: options.entityIdleMs ?? 60_000,
   }).pipe(Layer.orDie);
   const entity: Layer.Layer<never, never, ClusterServices | AppLedger> =

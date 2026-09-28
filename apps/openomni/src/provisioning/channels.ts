@@ -1,4 +1,4 @@
-import type { ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
+import type { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
 import { Vault } from "@openomni/ledger";
 import type { Provisioning } from "@openomni/protocol";
 import { z } from "zod";
@@ -70,9 +70,13 @@ export const ChannelResult = z.discriminatedUnion("op", [
 ]);
 
 export interface ProvisionPort {
-  readonly persons: Pick<typeof PersonStore, "put" | "get" | "list" | "remove">;
-  readonly instances: Pick<typeof ChannelInstanceStore, "put" | "get" | "list">;
-  readonly secrets: Pick<typeof SecretStore, "put" | "get">;
+  readonly persons: Pick<PersonStore, "put" | "get" | "list" | "remove">;
+  readonly instances: Pick<ChannelInstanceStore, "put" | "get" | "list">;
+  readonly secrets: Pick<SecretStore, "put" | "get">;
+  /** The catalog's actor plane; contact mutations and digests read/write here. */
+  readonly actors: ActorRegistry;
+  /** The catalog's synchronous transaction: body-entry CAS units run inside it. */
+  readonly transaction: <T>(operation: () => T) => T;
   /** Boot's KEK resolution: sealing refuses while the vault is locked. */
   readonly kek: KekResolution;
   readonly supervisor: Pick<ChannelSupervisor, "reconcile" | "resume" | "status" | "source">;

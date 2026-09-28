@@ -200,6 +200,8 @@ export function pathSource(
 }
 
 export interface WatchFire {
+  /** The session whose chain owns this watch (entity address). */
+  readonly sessionId: string;
   readonly watchId: string;
   readonly epoch: number;
   /** Transport occurrence captured at the source (line slot, path stat identity, exit). */
@@ -209,6 +211,7 @@ export interface WatchFire {
 }
 
 export interface WatchTimeoutArm {
+  readonly sessionId: string;
   readonly watchId: string;
   readonly epoch: number;
   readonly fireAt: number;
@@ -221,6 +224,7 @@ export interface WatchSenders {
 }
 
 export interface WatchSourceSpec {
+  readonly sessionId: string;
   readonly id: string;
   readonly epoch: number;
   readonly watch: Alarm.Watch;
@@ -264,6 +268,7 @@ export function createWatchSources(
     exitCode: number | null,
   ) {
     return {
+      sessionId: spec.sessionId,
       watchId: spec.id,
       epoch: spec.epoch,
       sourceKey: `${reason}:${spec.epoch}`,
@@ -290,6 +295,7 @@ export function createWatchSources(
         lines += 1;
         if (filter === undefined || filter.test(content))
           enqueue(holder, {
+            sessionId: spec.sessionId,
             watchId: spec.id,
             epoch: spec.epoch,
             sourceKey: `line:${spec.epoch}:${lines}`,
@@ -311,6 +317,7 @@ export function createWatchSources(
       watchSpec,
       (content, identity) =>
         enqueue(holder, {
+          sessionId: spec.sessionId,
           watchId: spec.id,
           epoch: spec.epoch,
           sourceKey: `path:${identity}`,
@@ -335,6 +342,7 @@ export function createWatchSources(
       await close(spec.id);
       if (spec.watch.timeout_ms !== undefined)
         await senders.watchTimeout({
+          sessionId: spec.sessionId,
           watchId: spec.id,
           epoch: spec.epoch,
           fireAt: options.clock() + spec.watch.timeout_ms,
