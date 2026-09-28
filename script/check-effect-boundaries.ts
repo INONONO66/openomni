@@ -154,7 +154,7 @@ class Provenance {
     const required = ts.isIdentifier(node.expression) && node.expression.text === "require" && !this.checker.getSymbolAtLocation(node.expression)?.valueDeclaration;
     if (node.expression.kind === ts.SyntaxKind.ImportKeyword || required) return this.fromSpecifier(node.arguments[0], source);
     const callee = this.expression(node.expression, seen);
-    if (effectApi(callee, "Context", ["Tag", "GenericTag"])) return { module: source.fileName, members: [], tag: node };
+    if (effectApi(callee, "Context", ["Service"])) return { module: source.fileName, members: [], tag: node };
     if (callee?.tag) return callee;
     if (ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)
       && node.expression.expression.text === "Object" && node.expression.name.text === "assign"
@@ -309,8 +309,14 @@ function promiseTwins(file: string, functions: readonly DeclaredFunction[], prov
 function productionSource(file: string): boolean {
   return /^(packages\/[^/]+|apps\/openomni)\/src\//.test(file) && !/\.(test|spec)\.[cm]?tsx?$/.test(file) && !/(^|\/)(__tests__|test|tests)\//.test(file);
 }
+/** v4 keys sit on the call itself (`Context.Service<I, S>(key)`, `Context.Reference(key, ...)`) or on the outer call of the class form (`Context.Service<I, S>()(key)`). */
+function keyArgument(tag: ts.CallExpression): ts.Expression | undefined {
+  if (tag.arguments[0]) return tag.arguments[0];
+  const outer = tag.parent;
+  return ts.isCallExpression(outer) && outer.expression === tag ? outer.arguments[0] : undefined;
+}
 function tagKey(tag: ts.CallExpression, provenance?: Provenance): string {
-  const argument = tag.arguments[0];
+  const argument = keyArgument(tag);
   const key = argument && (provenance?.expression(argument)?.node ?? argument);
   if (key && ts.isStringLiteralLike(key)) return key.text;
   if (key && ts.isTemplateExpression(key) && key.head.text === "@openomni/bundle/"
@@ -377,7 +383,7 @@ function genFinalizers(node: ts.Node, provenance: Provenance): ts.TryStatement[]
 }
 function callBoundaryRules(node: ts.CallExpression, file: string, provenance: Provenance, sites: BoundarySites): void {
   const origin = provenance.expression(node.expression);
-  if (effectApi(origin, "Context", ["Tag", "GenericTag"])) {
+  if (effectApi(origin, "Context", ["Service", "Reference"])) {
     const key = tagKey(node, provenance);
     if (!validTagKey(key, file) && !(key === "<computed>" && tagPresenceProbe(node, provenance))) sites.add("R4_TAG_PREFIX", file, node);
   }
@@ -421,7 +427,7 @@ function serviceRead(node: ts.Node, provenance: Provenance): ts.CallExpression |
   if (!ts.isCallExpression(node)) return undefined;
   const origin = provenance.expression(node.expression);
   if (effectApi(origin, "Effect", ["service", "serviceOption", "serviceOptional"])) return node.arguments[0] && provenance.expression(node.arguments[0])?.tag;
-  if (!effectApi(origin, "Context", ["get", "getOption", "unsafeGet"])) return undefined;
+  if (!effectApi(origin, "Context", ["get", "getOption", "getUnsafe"])) return undefined;
   const argument = node.arguments[node.arguments.length - 1];
   return argument && provenance.expression(argument)?.tag;
 }
@@ -488,7 +494,7 @@ function serviceInventory(sources: readonly ts.SourceFile[], worktree: string, p
     if (!productionSource(file)) continue;
     const visit = (node: ts.Node): void => {
       if (nonExecutable(node)) return;
-      if (ts.isCallExpression(node) && effectApi(provenance.expression(node.expression), "Context", ["Tag", "GenericTag"])) tags.set(node, { tag: node, file, reads: 0, appLive: false });
+      if (ts.isCallExpression(node) && effectApi(provenance.expression(node.expression), "Context", ["Service"])) tags.set(node, { tag: node, file, reads: 0, appLive: false });
       const read = serviceRead(node, provenance);
       if (read) reads.push(read);
       ts.forEachChild(node, visit);
