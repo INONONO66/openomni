@@ -9,7 +9,8 @@ import type {
 import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { bounded } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestLedger } from "../../../../packages/agent/test/helpers/effect-g1";
-import { requestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import { createRequestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import { testPlane } from "./ledger";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
 import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { runEffect, runSyncEffect } from "./effect";
@@ -25,7 +26,7 @@ export function protectedDispatch(
   const recording = runSyncEffect(requestLedger({
     id: crypto.randomUUID(),
     clock: () => now,
-    domainRevisions: requestDomainRevisions,
+    domainRevisions: createRequestDomainRevisions(testPlane().stores),
     onRequest(request) {
       if (request.state === "open") opened.resolve(request);
     },

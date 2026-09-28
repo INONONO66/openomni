@@ -2,10 +2,11 @@ import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tr
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
-import { PersonStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation, type PlainValue, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";
+import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
+import { planeOf } from "./ledger";
 import { assistantMessage, requestToolStep } from "./assistant-message";
 
 export const OWNER_TOKEN = "request-owner-e2e-token";
@@ -27,25 +28,24 @@ export const ORIGINAL_CALL = {
   },
 } satisfies Tool.Call;
 
-function snapshot(dbPath: string, modelCalls: number) {
-  const db = new Database(dbPath, { readonly: true });
+function snapshot(plane: AppLedgerPlane, catalogPath: string, modelCalls: number) {
+  const db = new Database(catalogPath, { readonly: true });
   try {
     return {
       pid: process.pid,
       modelCalls,
-      person: PersonStore.get(PERSON.id) ?? null,
-      requests: SessionHandleStore.requestRows(),
-      sessions: SessionHandleStore.listRows().map((row) => ({
+      person: plane.stores.persons.get(PERSON.id) ?? null,
+      requests: plane.listSessions().flatMap((row) => plane.openKernel(row.id).requestRows(row.id)),
+      sessions: plane.listSessions().map((row) => ({
         row,
-        actions: sessionTree(row.id),
-        generation: SessionHandleStore.latestGeneration(sessionTree(row.id)),
-        inbox: SessionHandleStore.inboxRows(row.id),
+        actions: sessionTree(row.id, plane.sessionStore(row.id).actions),
+        generation: plane.openKernel(row.id).latestGenerationFor(row.id),
+        inbox: plane.openKernel(row.id).pendingMessages(row.id),
       })),
       tables: z
         .array(z.object({ name: z.string() }))
         .parse(db.query("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name").all())
         .map((row) => row.name),
-      adapterKeys: Object.keys(Storage.get()),
     };
   } finally {
     db.close();
@@ -69,13 +69,18 @@ const Command = z.discriminatedUnion("type", [
 ]);
 
 async function serve() {
-  const dbPath = z.string().min(1).parse(process.argv[2]);
-  const at = z.coerce.number().int().positive().parse(process.argv[3]);
-  const recovering = process.argv[4] === "recover";
+  const catalogPath = z.string().min(1).parse(process.argv[2]);
+  const sessionsDir = z.string().min(1).parse(process.argv[3]);
+  const at = z.coerce.number().int().positive().parse(process.argv[4]);
+  const recovering = process.argv[5] === "recover";
   let modelCalls = 0;
   let app: Awaited<ReturnType<typeof appFixture>> | undefined;
+  let plane: AppLedgerPlane | undefined;
   const emit = (event: OwnerProcessEvent) => process.send?.(event);
-  const state = () => snapshot(dbPath, modelCalls);
+  const state = () => {
+    if (plane === undefined) throw new Error("app plane not resolved yet");
+    return snapshot(plane, catalogPath, modelCalls);
+  };
   const failure = (error: Error | string) =>
     emit({
       type: "error",
@@ -83,8 +88,9 @@ async function serve() {
     });
   let opened = false;
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    const action = sessionTree(event.sessionId).find((item) => item.id === event.id);
-    const request = SessionHandleStore.requestRows(event.sessionId).find(
+    if (plane === undefined) return;
+    const action = sessionTree(event.sessionId, plane.sessionStore(event.sessionId).actions).find((item) => item.id === event.id);
+    const request = plane.openKernel(event.sessionId).requestRows(event.sessionId).find(
       (item) => item.callId === ORIGINAL_CALL.id && item.state === "open",
     );
     if (
@@ -114,13 +120,13 @@ async function serve() {
       void (async () => {
         unsubscribe();
         await app?.stop();
-        Storage.reset();
         process.disconnect?.();
       })().catch(failure);
       return;
     }
     if (command.type === "drift") {
-      PersonStore.put({
+      if (plane === undefined) throw new Error("app plane not resolved yet");
+      plane.stores.persons.put({
         ...PERSON,
         endpoints: [...PERSON.endpoints],
         trustTier: "observer",
@@ -136,7 +142,8 @@ async function serve() {
   // every process builds the same real catalog through the production app root.
   app = await appFixture({
     config: {
-      dbPath,
+      catalogPath,
+      sessionsDir,
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: OWNER_TOKEN,
@@ -156,7 +163,7 @@ async function serve() {
         modelCalls += 1;
         emit({ type: "model", snapshot: state() });
         if (recovering) {
-          const person = PersonStore.get(PERSON.id);
+          const person = plane?.stores.persons.get(PERSON.id);
           if (person?.trustTier !== "manager" || person.revision !== 0) {
             throw new Error("LLM entered before original protected Person mutation");
           }
@@ -170,6 +177,7 @@ async function serve() {
       }),
     },
   });
+  plane = await planeOf(app.runtime);
   emit({ type: "ready", port: app.port, snapshot: state() });
 }
 

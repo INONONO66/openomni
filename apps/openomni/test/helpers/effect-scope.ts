@@ -5,6 +5,7 @@ import { runEffect, runSyncEffect } from "./effect";
 export function effectScope() {
   const scope = Effect.runSync(Scope.make());
   return {
+    scope,
     runSync<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): A {
       return runSyncEffect(Scope.provide(effect, scope));
     },

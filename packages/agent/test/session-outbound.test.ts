@@ -263,7 +263,9 @@ test("a destination receipt for different bytes is refused and the obligation st
     ),
   ));
 
-test("a lease stolen during dispatch preserves both the ack failure and the release defect", () =>
+// W5.2: the lease-release plane is gone, so a steal surfaces exactly one
+// stale-fence refusal (the ack commit); there is no release defect anymore.
+test("a fence stolen during dispatch surfaces the ack refusal and never marks delivery", () =>
   isolated(
     Effect.scoped(
       Effect.gen(function* () {
@@ -294,10 +296,6 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
           ...exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
           ...exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect),
         ]).toMatchObject([
-          {
-            _tag: "CommitFailed",
-            error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
-          },
           {
             _tag: "CommitFailed",
             error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },

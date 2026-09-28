@@ -1,15 +1,17 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import type { Inbox, PlainValue } from "@openomni/protocol";
-import { Effect, Fiber } from "effect";
-import { isolated } from "./helpers/isolated";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import type { Inbox, PolicyRow } from "@openomni/protocol";
+import { Effect, Fiber, type Scope } from "effect";
+import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { awaitSignal, failure, boundedSignal as bounded } from "./helpers/g0-signals";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { openRequest } from "./helpers/open-request";
+import { commitReceivedMessage } from "./helpers/ingress";
+import { reactivateSession } from "./helpers/wake-session";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
-import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput, sweepSessions } from "../src/session-handle";
-import { ForeignFailure, SessionHandleStore, Storage } from "@openomni/ledger";
+import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
+import { ForeignFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import {
   type BusEvent,
   type LedgerAction,
@@ -23,7 +25,44 @@ import {
 import { CommitFailed } from "../src/errors";
 import { GenerationOwnership } from "../src/services";
 import { GenerationRawSlots } from "../src/session-generations";
+import { receivedMessages } from "../src/session-record";
+import { createObservationBus } from "../src/observation/bus";
+import type { SessionKernel } from "../src/cluster/kernel-registry";
 import { Bus } from "../src/index";
+
+// ---------------------------------------------------------------------------
+// Ported to the entity plane (W5.2 #1197): handle-scoped kernels via
+// `isolated()`, eager fence adoption at controller creation instead of TTL
+// leases, the chain-fold inbox (`commitReceivedMessage`/`receivedMessages`)
+// instead of inbox rows, and per-session `reactivateSession` instead of the
+// boot sweep.
+//
+// Deleted with their planes, not ported:
+// - "keeps the durable lease held through an ignored abort so no other
+//   runtime can resume" and "reports typed lease contention from the
+//   SQLite-backed session API": TTL lease-acquisition contention is
+//   deleted - a successor activation adopts the next fence instead of being
+//   refused, and the stale writer's commit dies at the fence CAS. Proven by
+//   conformance T11, the owner_reclaimed_before_stale_transcript_flush crash
+//   cell, and "does not overlap a resumed runner..." below.
+// - "a retained runner whose lease lapsed does not wedge the handle": lease
+//   TTL/expiry is deleted; there is no lapse. The surviving behavior (a
+//   stubborn runner cannot wedge later turns) is covered by the resume and
+//   close-grace tests below.
+// - "a refused retained release surfaces once to the next turn start and then
+//   clears": the empty lease-release commit is deleted; hibernation releases
+//   no durable authority, so there is no release commit to refuse.
+// - "heartbeat loss aborts the runner and the stale fence cannot seal its
+//   result" and "default heartbeat uses an unreferenced timer and clears it
+//   after the runner settles": the heartbeat scheduling plane is
+//   deleted; fence adoption at activation is the takeover authority.
+//   Stale-fence-cannot-seal is proven by conformance T11 and the
+//   owner_reclaimed crash cell.
+// - "watch installs its subscription before reading the initial snapshot":
+//   the injectable storage-adapter seam it hooked is deleted,
+//   and the ordering is structural now - `watchSnapshot` subscribes and takes
+//   its initial snapshot inside one store transaction.
+// ---------------------------------------------------------------------------
 
 interface Signal<T> {
   readonly promise: Promise<T>;
@@ -86,7 +125,8 @@ function interruptStubborn(handle: SessionHandle, run: StubbornRun) {
 
 /**
  * The caller-facing interrupt completes at the sealed terminal, not when the
- * abort-ignoring runner finally settles; the lease stays held until then.
+ * abort-ignoring runner finally settles; the activation keeps its fence
+ * pinned until then.
  */
 function settleStubborn(
   handle: SessionHandle,
@@ -96,14 +136,14 @@ function settleStubborn(
 ) {
   return Effect.gen(function* () {
     yield* awaitSignal(bounded(pending.interrupted, "interrupt receipt before runner settlement"));
-    expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+    expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
     run.releaseRunner.resolve();
     yield* awaitSignal(
       bounded(
         Effect.all([awaitSignal(pending.running), awaitSignal(hibernated.promise)], {
           concurrency: "unbounded",
         }),
-        "runner settlement + lease release",
+        "runner settlement + hibernation",
       ),
     );
   });
@@ -120,8 +160,13 @@ function recordingRunner(text: string): { runner: SessionRunner; inputs: Session
   return { runner, inputs };
 }
 
-/** No second runtime may take the lease while the stubborn runner lives; once it settles the lease is free. */
-function expectLeaseHeldUntilSettled(
+/**
+ * While the stubborn runner lives exactly one writer runs and this
+ * activation's fence stays pinned; once it settles no overlap ever happened.
+ * (The old lease-contention probe is gone with the TTL plane; a successor
+ * would adopt fence+1, so an unchanged fence IS the no-takeover witness.)
+ */
+function expectSingleWriterUntilSettled(
   handle: SessionHandle,
   run: StubbornRun,
   pending: Effect.Success<ReturnType<typeof interruptStubborn>>,
@@ -129,13 +174,10 @@ function expectLeaseHeldUntilSettled(
   fence: number = handle.get().lease.fence,
 ) {
   return Effect.gen(function* () {
-    expect(yield* failure(contendLease(handle, fence))).toMatchObject({
-      _tag: "LeaseRefused",
-      reason: "held",
-    });
+    expect(handle.get().lease.fence).toBe(fence);
     expect(run.maximumActive()).toBe(1);
     yield* awaitSignal(settleStubborn(handle, run, pending, hibernated));
-    expect((yield* contendLease(handle)).ok).toBe(true);
+    expect(kernel().row(handle.id).leaseFence).toBe(fence);
     expect(run.maximumActive()).toBe(1);
   });
 }
@@ -144,29 +186,17 @@ function expectLeaseHeldUntilSettled(
 function hibernatingSession(
   id: string,
   runner: SessionRunner,
-  extra: Partial<SessionRuntime> = {},
+  extra: Partial<SessionFixture> = {},
 ) {
   return Effect.gen(function* () {
     const hibernated = signal<void>();
-    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = {
+    const fixture = track({
       ...runtime,
       ...extra,
       onHibernate: () => Effect.sync(() => hibernated.resolve()),
-    }; return yield* withSessionServices(session(residentOptions(id, runner), fixture), fixture); });
-    return { handle, hibernated };
-  });
-}
-
-/** A second runtime trying to take the lease right now, without waiting for the TTL. */
-function contendLease(handle: SessionHandle, expectedFence: number = handle.get().lease.fence) {
-  return Effect.gen(function* () {
-    return yield* SessionHandleStore.acquireLease({
-      sessionId: handle.id,
-      owner: "second-runtime",
-      expectedFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
     });
+    const handle = yield* declare(residentOptions(id, runner), fixture);
+    return { handle, hibernated };
   });
 }
 
@@ -208,40 +238,116 @@ const system = {
 let now = 1_000;
 let nextId = 0;
 let sink: TestObservationSink;
-let runtime: SessionRuntime;
+let runtime: SessionFixture;
+const fixtures: SessionFixture[] = [];
+
+/** Every fixture object that owned a registry gets closed by the test's teardown. */
+function track<T extends SessionFixture>(fixture: T): T {
+  fixtures.push(fixture);
+  return fixture;
+}
+
+function kernel(): SessionKernel {
+  return isolatedLedger().kernel;
+}
+
+function tree(sessionId: string): LedgerAction.Node[] {
+  return sessionTree(kernel(), sessionId);
+}
+
+/** The chain-fold inbox projection: the old inbox table is the chain now. */
+function inboxRows(sessionId: string): Inbox.Row[] {
+  return receivedMessages(kernel(), sessionId).rows;
+}
+
+function pendingInbox(sessionId: string): Inbox.Row[] {
+  return kernel().pendingMessages(sessionId);
+}
+
+/** Out-of-band ingress onto the received-message chain, error-mapped like the handle plane. */
+function commitInbox(input: {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly kind: Inbox.Kind;
+  readonly content: string;
+  readonly origin: Inbox.Origin;
+  readonly createdAt: number;
+  readonly parentActionId: string | null;
+}) {
+  return commitReceivedMessage(kernel(), input).pipe(
+    Effect.mapError((error: LedgerError) => new CommitFailed({ error })),
+  );
+}
+
+function declare(options: SessionCreateOptions, fixture: SessionFixture = runtime) {
+  return withSessionServices(session(options, fixture), fixture);
+}
+
+function reactivate(id: string, runner: SessionRunner, fixture: SessionFixture = runtime) {
+  return withSessionServices(reactivateSession(id, runner, fixture), fixture);
+}
 
 beforeEach(() => {
   Bus.reset();
-  Storage.reset();
   now = 1_000;
   nextId = 0;
   sink = new TestObservationSink();
-  runtime = {
+  fixtures.length = 0;
+  runtime = track({
+    ...isolatedRuntime(),
     authorizeConfigure: allowConfigure,
     observations: sink,
     clock: () => now,
     entropy: () => `session-test-id-${++nextId}`,
     processId: "session-test-process",
-    scheduleHeartbeat: () => () => undefined,
-  };
-  Bus.reset();
+    // Teardown must not burn the shutdown grace waiting on retained runners.
+    closeGraceMs: 0,
+  });
 });
 
-function testProgram<A, E>(program: Effect.Effect<A, E, import("effect").Scope.Scope>) {
+afterEach(() => Bus.reset());
+
+interface TestProgramOptions {
+  readonly policies?: readonly Omit<PolicyRow.Row, "generation">[];
+  readonly seedPolicies?: boolean;
+}
+
+function testProgram<A, E>(
+  program: Effect.Effect<A, E, Scope.Scope>,
+  options: TestProgramOptions = {},
+) {
   return isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        Storage.reset();
-        Storage.reset();
-        Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-        seedPolicy();
-        return yield* program.pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
+        if (options.seedPolicies !== false) seedPolicy(options.policies ?? []);
+        return yield* program.pipe(
+          Effect.ensuring(
+            Effect.forEach(fixtures.splice(0), (fixture) => closeSessions(fixture), {
+              discard: true,
+            }).pipe(Effect.orDie),
+          ),
+        );
       }),
     ),
+    (): IsolatedLedgerHandle => {
+      const sessionStore = openSessionStore(":memory:", sink);
+      const catalogStore = openCatalogStore(":memory:", sink);
+      const testKernel = SessionHandleStore.createSessionKernel(sessionStore, catalogStore);
+      return {
+        kernel: testKernel,
+        openKernel: () => testKernel,
+        listSessions: () => testKernel.listRows(),
+        session: sessionStore,
+        catalog: catalogStore,
+        bus: createObservationBus(),
+        close: () => {
+          sessionStore.close();
+          catalogStore.close();
+        },
+      };
+    },
   );
 }
-
-afterEach(() => Bus.reset());
 
 function residentOptions(id: string, runner: SessionRunner): SessionCreateOptions {
   return { id, role: "resident", runner, tools: [tool("read")], system };
@@ -261,6 +367,22 @@ function policyGeneration(action: LedgerAction.Node): number | undefined {
   return typeof value.generation === "number" ? value.generation : undefined;
 }
 
+function deliveries(sessionId: string): SessionTurn.Delivery[] {
+  return tree(sessionId)
+    .map(SessionHandleStore.delivery)
+    .filter((delivery): delivery is SessionTurn.Delivery => delivery !== undefined);
+}
+
+function terminals(sessionId: string): SessionTurn.Terminal[] {
+  return tree(sessionId)
+    .map(SessionHandleStore.turnTerminal)
+    .filter((terminal): terminal is SessionTurn.Terminal => terminal !== undefined);
+}
+
+/**
+ * A crashed activation's durable trace: materialized session, the dead
+ * owner's adopted fence, and one open turn pinned to the recorded generation.
+ */
 function commitOpenTurn(input: {
   readonly sessionId: string;
   readonly resultId: string;
@@ -268,37 +390,32 @@ function commitOpenTurn(input: {
   readonly toolsHash?: string;
 }) {
   return Effect.gen(function* () {
-    const created = yield* SessionHandleStore.materialize({
+    const created = yield* kernel().materialize({
       id: input.sessionId,
       parentId: null,
       role: "resident",
       tools: [tool("read")],
       system,
-      policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+      policyGeneration: kernel().currentPolicyGeneration(),
       actionId: `${input.sessionId}:configure`,
       at: now,
     });
-    const generation = SessionHandleStore.latestGeneration(
-      sessionTree(input.sessionId),
-    );
-    const acquired = yield* SessionHandleStore.acquireLease({
+    const generation = SessionHandleStore.latestGeneration(tree(input.sessionId));
+    const adopted = yield* kernel().adoptFence({
       sessionId: input.sessionId,
       owner: "crashed-owner",
-      expectedFence: created.row.leaseFence,
-      now,
-      expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
+      fence: created.row.leaseFence + 1,
     });
-    if (!acquired.ok) throw new Error("crash fixture could not acquire its lease");
-    const committed = yield* SessionHandleStore.commit({
+    yield* kernel().commit({
       sessionId: input.sessionId,
       owner: "crashed-owner",
-      fence: acquired.fence,
+      fence: adopted.fence,
       now,
       expectedRevision: created.row.revision,
       actions: [
         {
           id: `${input.sessionId}:turn`,
-          parentId: sessionTree(input.sessionId).at(-1)?.id ?? null,
+          parentId: tree(input.sessionId).at(-1)?.id ?? null,
           sessionId: input.sessionId,
           kind: "turn",
           intent: {
@@ -320,17 +437,13 @@ function commitOpenTurn(input: {
           ts: now,
         },
       ],
-      consumeInboxIds: [],
       state: "running",
-      releaseLease: false,
     });
-    if (!committed.ok) throw new Error("crash fixture could not commit its open turn");
-    now += SessionHandleStore.LEASE_TTL_MS;
   });
 }
 
 function durableRequest(sessionId: string, turnId: string): SessionTransition.Request {
-  const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
+  const generation = SessionHandleStore.latestGeneration(tree(sessionId));
   return openRequest({
     requestId: `${sessionId}:request`,
     sessionId,
@@ -366,41 +479,14 @@ describe("durable session handle", () => {
       Effect.gen(function* () {
         const observedBeforeCommit: string[] = [];
         const observedDecisionIds = new Set<string>();
-        sink.onCommit = (committed: {
-          id: string;
-          sessionId: string;
-          revision: number;
-          kind:
-            | "message"
-            | "prompt"
-            | "tool"
-            | "attempt"
-            | "reply"
-            | "outbound"
-            | "request"
-            | "turn"
-            | "llm"
-            | "fold.checkpoint"
-            | "inbox.deliver"
-            | "compaction"
-            | "alarm.arm"
-            | "alarm.fired"
-            | "alarm.paused"
-            | "session.configure"
-            | "policy.decision";
-        }) => {
+        sink.onCommit = (committed: L0Observation.ActionCommitted) => {
           if (committed.kind !== "policy.decision") return;
           observedDecisionIds.add(committed.id);
-          if (
-            !sessionTree("policy-topology").some(
-              (action: LedgerAction.Node) => action.id === committed.id,
-            )
-          ) {
+          if (!tree("policy-topology").some((action) => action.id === committed.id)) {
             observedBeforeCommit.push(committed.id);
           }
         };
-        const policies = Storage.get().policies;
-        if (policies === undefined) throw new Error("missing policy adapter");
+        const policies = isolatedLedger().catalog.policies;
         const runner: SessionRunner = () =>
           Effect.sync(() => {
             for (const row of policies.rows(1)) policies.append({ ...row, generation: 2 });
@@ -415,23 +501,17 @@ describe("durable session handle", () => {
             });
             return { kind: "result", text: "complete" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("policy-topology", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("policy-topology", runner));
 
         const result = yield* awaitSignal(handle.prompt("run once"));
 
-        const tree = sessionTree(handle.id);
-        const prompt = tree.find((action: LedgerAction.Node) => action.kind === "prompt");
-        const turn = tree.find(
-          (action: LedgerAction.Node) => SessionHandleStore.turnIntent(action) !== undefined,
-        );
-        const decisions = tree.filter(
-          (action: LedgerAction.Node) => action.kind === "policy.decision",
-        );
+        const actions = tree(handle.id);
+        const prompt = actions.find((action) => action.kind === "prompt");
+        const turn = actions.find((action) => SessionHandleStore.turnIntent(action) !== undefined);
+        const decisions = actions.filter((action) => action.kind === "policy.decision");
         expect(result).toEqual({ kind: "result", text: "complete" });
-        expect(tree.filter((action: LedgerAction.Node) => action.kind === "prompt")).toHaveLength(
-          1,
-        );
-        expect(tree.filter((action: LedgerAction.Node) => action.kind === "turn")).toHaveLength(2);
+        expect(actions.filter((action) => action.kind === "prompt")).toHaveLength(1);
+        expect(actions.filter((action) => action.kind === "turn")).toHaveLength(2);
         expect(decisions.map(policyHook).sort()).toEqual([
           "prompt.post",
           "prompt.pre",
@@ -440,184 +520,166 @@ describe("durable session handle", () => {
         ]);
         expect(
           decisions
-            .filter((action: LedgerAction.Node) => policyHook(action)?.startsWith("prompt."))
-            .every((action: LedgerAction.Node) => action.parentId === prompt?.id),
+            .filter((action) => policyHook(action)?.startsWith("prompt."))
+            .every((action) => action.parentId === prompt?.id),
         ).toBe(true);
         expect(
           decisions
-            .filter((action: LedgerAction.Node) => policyHook(action)?.startsWith("turn."))
-            .every((action: LedgerAction.Node) => action.parentId === turn?.id),
+            .filter((action) => policyHook(action)?.startsWith("turn."))
+            .every((action) => action.parentId === turn?.id),
         ).toBe(true);
         expect(decisions.map(policyGeneration)).toEqual([1, 1, 1, 1]);
-        expect(observedDecisionIds).toEqual(
-          new Set(decisions.map((action: LedgerAction.Node) => action.id)),
-        );
+        expect(observedDecisionIds).toEqual(new Set(decisions.map((action) => action.id)));
         expect(observedBeforeCommit).toEqual([]);
       }),
     ));
 
-  /** Runs one prompt against an isolated store whose only extra policy row denies prompts at `phase`. */
-  function promptDeniedAt(phase: "pre" | "post", reason: string) {
-    return Effect.gen(function* () {
-      return yield* awaitSignal(
-        Effect.gen(function* () {
-          Storage.reset();
-          Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-          seedPolicy([
-            {
-              name: `deny-prompt-${phase}`,
-              kind: "prompt",
-              phase,
-              match: { encodingVersion: 1, value: { op: "inbox" } },
-              verdict: { encodingVersion: 1, value: { type: "deny", reason } },
-              priority: 2_000,
-            },
-          ]);
-          const isolatedRuntime = { ...runtime };
-          let calls = 0;
-          const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`prompt-${phase}-deny`, () =>
-              Effect.sync(() => {
-                calls += 1;
-                return { kind: "result", text: "must not run" };
-              }),
-            ), fixture), fixture); });
-          const result = yield* awaitSignal(handle.prompt("blocked prompt"));
-          const tree = sessionTree(handle.id);
-          expect(result).toMatchObject({
-            kind: "error",
-            cause: { name: "SessionPolicyRefusal", reason },
-          });
-          expect(calls).toBe(0);
-          expect(tree.filter((action: LedgerAction.Node) => action.kind === "turn")).toEqual([]);
-          const hooks = tree
-            .filter((action: LedgerAction.Node) => action.kind === "policy.decision")
-            .map(policyHook);
-          const inbox = SessionHandleStore.inboxRows(handle.id).map((row: Inbox.Row) => row.status);
-          yield* awaitSignal(closeSessions(isolatedRuntime));
-          Storage.reset();
-          return { hooks, inbox };
-        }),
-      );
-    });
+  /** Runs one prompt against an isolation whose only extra policy row denies prompts at `phase`. */
+  function promptDeniedAt(
+    phase: "pre" | "post",
+    reason: string,
+    assertOutcome: (outcome: {
+      readonly hooks: (string | undefined)[];
+      readonly inbox: Inbox.Row["status"][];
+    }) => void,
+  ) {
+    return testProgram(
+      Effect.gen(function* () {
+        let calls = 0;
+        const handle = yield* declare(
+          residentOptions(`prompt-${phase}-deny`, () =>
+            Effect.sync(() => {
+              calls += 1;
+              return { kind: "result", text: "must not run" };
+            }),
+          ),
+        );
+        const result = yield* awaitSignal(handle.prompt("blocked prompt"));
+        expect(result).toMatchObject({
+          kind: "error",
+          cause: { name: "SessionPolicyRefusal", reason },
+        });
+        expect(calls).toBe(0);
+        expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
+        assertOutcome({
+          hooks: tree(handle.id)
+            .filter((action) => action.kind === "policy.decision")
+            .map(policyHook),
+          inbox: inboxRows(handle.id).map((row) => row.status),
+        });
+      }),
+      {
+        policies: [
+          {
+            name: `deny-prompt-${phase}`,
+            kind: "prompt",
+            phase,
+            match: { encodingVersion: 1, value: { op: "inbox" } },
+            verdict: { encodingVersion: 1, value: { type: "deny", reason } },
+            priority: 2_000,
+          },
+        ],
+      },
+    );
   }
 
   test("a prompt pre denial consumes the inbox row without constructing or running a turn", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const { hooks, inbox } = yield* awaitSignal(promptDeniedAt("pre", "prompt refused"));
-        expect(hooks).toEqual(["prompt.pre"]);
-        expect(inbox).toEqual(["consumed"]);
-      }),
-    ));
+    promptDeniedAt("pre", "prompt refused", ({ hooks, inbox }) => {
+      expect(hooks).toEqual(["prompt.pre"]);
+      expect(inbox).toEqual(["consumed"]);
+    }));
 
   test("a prompt post denial records both prompt decisions but never starts a turn", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const { hooks } = yield* awaitSignal(promptDeniedAt("post", "prompt post refused"));
-        expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
-      }),
-    ));
+    promptDeniedAt("post", "prompt post refused", ({ hooks }) => {
+      expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
+    }));
 
   test("fails closed when prompt post policy transforms its immutable receipt", () =>
     testProgram(
       Effect.gen(function* () {
-        yield* awaitSignal(
-          Effect.gen(function* () {
-            Storage.reset();
-            Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-            seedPolicy([
-              {
-                name: "transform-prompt-receipt",
-                kind: "prompt",
-                phase: "post",
-                match: { encodingVersion: 1, value: { op: "inbox" } },
-                verdict: {
-                  encodingVersion: 1,
-                  value: { type: "transform", name: "redact", paths: ["result.status"] },
-                },
-                priority: 2_000,
-              },
-            ]);
-            const isolatedRuntime = { ...runtime };
-            let calls = 0;
-            const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("prompt-transform", () =>
-                Effect.sync(() => {
-                  calls += 1;
-                  return { kind: "result", text: "must not run" };
-                }),
-              ), fixture), fixture); });
+        let calls = 0;
+        const handle = yield* declare(
+          residentOptions("prompt-transform", () =>
+            Effect.sync(() => {
+              calls += 1;
+              return { kind: "result", text: "must not run" };
+            }),
+          ),
+        );
 
-            const result = yield* awaitSignal(handle.prompt("immutable prompt"));
+        const result = yield* awaitSignal(handle.prompt("immutable prompt"));
 
+        expect(result).toMatchObject({
+          kind: "error",
+          cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+        });
+        expect(calls).toBe(0);
+        expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
+      }),
+      {
+        policies: [
+          {
+            name: "transform-prompt-receipt",
+            kind: "prompt",
+            phase: "post",
+            match: { encodingVersion: 1, value: { op: "inbox" } },
+            verdict: {
+              encodingVersion: 1,
+              value: { type: "transform", name: "redact", paths: ["result.status"] },
+            },
+            priority: 2_000,
+          },
+        ],
+      },
+    ));
+
+  for (const path of ["result.usage", "result.text"] as const) {
+    test(`accepts a turn post transform of ${path} only when the result still satisfies its contract`, () =>
+      testProgram(
+        Effect.gen(function* () {
+          let calls = 0;
+          const handle = yield* declare(
+            residentOptions(`turn-transform-${path}`, () =>
+              Effect.sync(() => {
+                calls += 1;
+                return {
+                  kind: "result",
+                  text: "typed result",
+                  usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                };
+              }),
+            ),
+          );
+
+          const result = yield* awaitSignal(handle.prompt("transform turn result"));
+
+          expect(calls).toBe(1);
+          if (path === "result.usage") {
+            expect(result).toEqual({ kind: "result", text: "typed result" });
+          } else {
             expect(result).toMatchObject({
               kind: "error",
               cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
             });
-            expect(calls).toBe(0);
-            expect(
-              sessionTree(handle.id).filter(
-                (action: LedgerAction.Node) => action.kind === "turn",
-              ),
-            ).toEqual([]);
-            yield* awaitSignal(closeSessions(isolatedRuntime));
-            Storage.reset();
-          }),
-        );
-      }),
-    ));
-
-  test("accepts a turn post transform only when the result still satisfies its contract", () =>
-    testProgram(
-      Effect.gen(function* () {
-        for (const path of ["result.usage", "result.text"] as const) {
-          yield* awaitSignal(
-            Effect.gen(function* () {
-              Storage.reset();
-              Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-              seedPolicy([
-                {
-                  name: `transform-turn-${path}`,
-                  kind: "turn",
-                  phase: "post",
-                  match: { encodingVersion: 1, value: { op: "session" } },
-                  verdict: {
-                    encodingVersion: 1,
-                    value: { type: "transform", name: "redact", paths: [path] },
-                  },
-                  priority: 2_000,
-                },
-              ]);
-              const isolatedRuntime = { ...runtime };
-              let calls = 0;
-              const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`turn-transform-${path}`, () =>
-                  Effect.sync(() => {
-                    calls += 1;
-                    return {
-                      kind: "result",
-                      text: "typed result",
-                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-                    };
-                  }),
-                ), fixture), fixture); });
-
-              const result = yield* awaitSignal(handle.prompt("transform turn result"));
-
-              expect(calls).toBe(1);
-              if (path === "result.usage") {
-                expect(result).toEqual({ kind: "result", text: "typed result" });
-              } else {
-                expect(result).toMatchObject({
-                  kind: "error",
-                  cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
-                });
-              }
-              yield* awaitSignal(closeSessions(isolatedRuntime));
-              Storage.reset();
-            }),
-          );
-        }
-      }),
-    ));
+          }
+        }),
+        {
+          policies: [
+            {
+              name: `transform-turn-${path}`,
+              kind: "turn",
+              phase: "post",
+              match: { encodingVersion: 1, value: { op: "session" } },
+              verdict: {
+                encodingVersion: 1,
+                value: { type: "transform", name: "redact", paths: [path] },
+              },
+              priority: 2_000,
+            },
+          ],
+        },
+      ));
+  }
 
   for (const sample of [
     {
@@ -662,188 +724,130 @@ describe("durable session handle", () => {
     test(`validates transformed session usage with ${sample.name}`, () =>
       testProgram(
         Effect.gen(function* () {
-          yield* awaitSignal(
-            Effect.gen(function* () {
-              Storage.reset();
-              Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-              seedPolicy([
-                {
-                  name: "transform-usage",
-                  kind: "turn",
-                  phase: "post",
-                  match: { encodingVersion: 1, value: { op: "session" } },
-                  verdict: {
-                    encodingVersion: 1,
-                    value: {
-                      type: "transform",
-                      name: "redact",
-                      paths: ["result.usage"],
-                      replacement: PlainValueSchema.parse(sample.usage),
-                    },
-                  },
-                  priority: 2_000,
-                },
-              ]);
-              const isolatedRuntime = { ...runtime };
-              try {
-                const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("usage-transform", () =>
-                    Effect.sync(() => {
-                      return {
-                        kind: "result",
-                        text: "result",
-                        finishReason: "stop",
-                        usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
-                      };
-                    }),
-                  ), fixture), fixture); });
-                const result = yield* awaitSignal(
-                  bounded(handle.prompt("measure"), "transformed usage terminal"),
-                );
-                if (sample.valid) {
-                  expect(result).toEqual({
-                    kind: "result",
-                    text: "result",
-                    finishReason: "stop",
-                    usage: sample.usage,
-                  });
-                } else {
-                  expect(result).toMatchObject({
-                    kind: "error",
-                    cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
-                  });
-                }
-                expect(
-                  sessionTree(handle.id)
-                    .map(SessionHandleStore.turnTerminal)
-                    .filter(
-                      (
-                        value:
-                          | {
-                              phase: "terminal";
-                              turnId: string;
-                              kind: "interrupted" | "error" | "result" | "waiting";
-                              text: string;
-                              boundaryActionId: string | null;
-                              resumeCount: number;
-                              reason?: "live_wait" | undefined;
-                              alarmIds?: string[] | undefined;
-                            }
-                          | undefined,
-                      ) => value !== undefined,
-                    ),
-                ).toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
-              } finally {
-                yield* awaitSignal(closeSessions(isolatedRuntime));
-                Storage.reset();
-              }
-            }),
+          const handle = yield* declare(
+            residentOptions("usage-transform", () =>
+              Effect.sync(() => {
+                return {
+                  kind: "result",
+                  text: "result",
+                  finishReason: "stop",
+                  usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                };
+              }),
+            ),
           );
+          const result = yield* awaitSignal(
+            bounded(handle.prompt("measure"), "transformed usage terminal"),
+          );
+          if (sample.valid) {
+            expect(result).toEqual({
+              kind: "result",
+              text: "result",
+              finishReason: "stop",
+              usage: sample.usage,
+            });
+          } else {
+            expect(result).toMatchObject({
+              kind: "error",
+              cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+            });
+          }
+          expect(terminals(handle.id)).toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
         }),
+        {
+          policies: [
+            {
+              name: "transform-usage",
+              kind: "turn",
+              phase: "post",
+              match: { encodingVersion: 1, value: { op: "session" } },
+              verdict: {
+                encodingVersion: 1,
+                value: {
+                  type: "transform",
+                  name: "redact",
+                  paths: ["result.usage"],
+                  replacement: PlainValueSchema.parse(sample.usage),
+                },
+              },
+              priority: 2_000,
+            },
+          ],
+        },
       ));
   }
 
-  test("turn policy denial distinguishes body-zero pre from irreversible post", () =>
-    testProgram(
-      Effect.gen(function* () {
-        for (const phase of ["pre", "post"] as const) {
-          yield* awaitSignal(
-            Effect.gen(function* () {
-              Storage.reset();
-              Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-              seedPolicy([
-                {
-                  name: `deny-turn-${phase}`,
-                  kind: "turn",
-                  phase,
-                  match: { encodingVersion: 1, value: { op: "session" } },
-                  verdict: {
-                    encodingVersion: 1,
-                    value: { type: "deny", reason: `turn ${phase} refused` },
-                  },
-                  priority: 2_000,
-                },
-              ]);
-              const isolatedRuntime = { ...runtime };
-              let calls = 0;
-              const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions(`turn-${phase}-deny`, () =>
-                  Effect.sync(() => {
-                    calls += 1;
-                    return { kind: "result", text: "body result" };
-                  }),
-                ), fixture), fixture); });
-
-              const result = yield* awaitSignal(handle.prompt("start the turn"));
-
-              const tree = sessionTree(handle.id);
-              const hooks = tree
-                .filter((action: LedgerAction.Node) => action.kind === "policy.decision")
-                .map(policyHook);
-              expect(result).toMatchObject({
-                kind: "error",
-                cause: { name: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
-              });
-              expect(calls).toBe(phase === "pre" ? 0 : 1);
-              expect(hooks).toEqual(
-                phase === "pre"
-                  ? ["prompt.pre", "prompt.post", "turn.pre"]
-                  : ["prompt.pre", "prompt.post", "turn.pre", "turn.post"],
-              );
-              expect(
-                tree
-                  .map(SessionHandleStore.turnTerminal)
-                  .find(
-                    (
-                      terminal:
-                        | {
-                            phase: "terminal";
-                            turnId: string;
-                            kind: "interrupted" | "error" | "result" | "waiting";
-                            text: string;
-                            boundaryActionId: string | null;
-                            resumeCount: number;
-                            reason?: "live_wait" | undefined;
-                            alarmIds?: string[] | undefined;
-                          }
-                        | undefined,
-                    ) => terminal !== undefined,
-                  ),
-              ).toMatchObject({ kind: "error" });
-              yield* awaitSignal(closeSessions(isolatedRuntime));
-              Storage.reset();
-            }),
+  for (const phase of ["pre", "post"] as const) {
+    test(`turn ${phase} policy denial distinguishes body-zero pre from irreversible post`, () =>
+      testProgram(
+        Effect.gen(function* () {
+          let calls = 0;
+          const handle = yield* declare(
+            residentOptions(`turn-${phase}-deny`, () =>
+              Effect.sync(() => {
+                calls += 1;
+                return { kind: "result", text: "body result" };
+              }),
+            ),
           );
-        }
-      }),
-    ));
+
+          const result = yield* awaitSignal(handle.prompt("start the turn"));
+
+          const hooks = tree(handle.id)
+            .filter((action) => action.kind === "policy.decision")
+            .map(policyHook);
+          expect(result).toMatchObject({
+            kind: "error",
+            cause: { name: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
+          });
+          expect(calls).toBe(phase === "pre" ? 0 : 1);
+          expect(hooks).toEqual(
+            phase === "pre"
+              ? ["prompt.pre", "prompt.post", "turn.pre"]
+              : ["prompt.pre", "prompt.post", "turn.pre", "turn.post"],
+          );
+          expect(terminals(handle.id).at(0)).toMatchObject({ kind: "error" });
+        }),
+        {
+          policies: [
+            {
+              name: `deny-turn-${phase}`,
+              kind: "turn",
+              phase,
+              match: { encodingVersion: 1, value: { op: "session" } },
+              verdict: {
+                encodingVersion: 1,
+                value: { type: "deny", reason: `turn ${phase} refused` },
+              },
+              priority: 2_000,
+            },
+          ],
+        },
+      ));
+  }
 
   test("refuses a turn when its pinned generation has no mandatory policy row", () =>
     testProgram(
       Effect.gen(function* () {
-        yield* awaitSignal(
-          Effect.gen(function* () {
-            Storage.reset();
-            Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-            const isolatedRuntime = { ...runtime };
-            let calls = 0;
-            const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(session(residentOptions("missing-policy", () =>
-                Effect.sync(() => {
-                  calls += 1;
-                  return { kind: "result", text: "ran" };
-                }),
-              ), fixture), fixture); });
-
-            const result = yield* awaitSignal(handle.prompt("must be refused"));
-
-            expect(calls).toBe(0);
-            expect(result).toMatchObject({
-              kind: "error",
-              cause: { name: "SessionPolicyRefusal", code: "session_policy_refused" },
-            });
-            yield* awaitSignal(closeSessions(isolatedRuntime));
-            Storage.reset();
-          }),
+        let calls = 0;
+        const handle = yield* declare(
+          residentOptions("missing-policy", () =>
+            Effect.sync(() => {
+              calls += 1;
+              return { kind: "result", text: "ran" };
+            }),
+          ),
         );
+
+        const result = yield* awaitSignal(handle.prompt("must be refused"));
+
+        expect(calls).toBe(0);
+        expect(result).toMatchObject({
+          kind: "error",
+          cause: { name: "SessionPolicyRefusal", code: "session_policy_refused" },
+        });
       }),
+      { seedPolicies: false },
     ));
 
   test("serializes one runner and drains concurrent prompts as distinct ordered messages", () =>
@@ -857,14 +861,10 @@ describe("durable session handle", () => {
         const drained: SessionRunnerInput["messages"][] = [];
         const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
-            const treeAtEntry = sessionTree(input.sessionId);
-            const intent = treeAtEntry.find(
-              (action: LedgerAction.Node) => action.id === input.turnId,
-            );
+            const treeAtEntry = tree(input.sessionId);
+            const intent = treeAtEntry.find((action) => action.id === input.turnId);
             expect(SessionHandleStore.turnIntent(intent)?.resultId).toBe(input.resultId);
-            expect(
-              treeAtEntry.some((action: LedgerAction.Node) => action.id === input.resultId),
-            ).toBe(false);
+            expect(treeAtEntry.some((action) => action.id === input.resultId)).toBe(false);
             runs += 1;
             active += 1;
             maximumActive = Math.max(maximumActive, active);
@@ -874,18 +874,16 @@ describe("durable session handle", () => {
             active -= 1;
             return { kind: "result", text: "done" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("single-flight", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("single-flight", runner));
 
         const first = yield* Effect.forkChild(handle.prompt("first prompt"));
         const firstInput = yield* awaitSignal(bounded(entered.promise, "runner entry"));
         const secondCommitted = signal<void>();
         const thirdCommitted = signal<void>();
         sink.onCommit = () => {
-          const rows = SessionHandleStore.inboxRows(handle.id);
-          if (rows.some((row: Inbox.Row) => row.content === "second prompt"))
-            secondCommitted.resolve();
-          if (rows.some((row: Inbox.Row) => row.content === "third prompt"))
-            thirdCommitted.resolve();
+          const rows = inboxRows(handle.id);
+          if (rows.some((row) => row.content === "second prompt")) secondCommitted.resolve();
+          if (rows.some((row) => row.content === "third prompt")) thirdCommitted.resolve();
         };
         const second = yield* Effect.forkChild(handle.prompt("second prompt"));
         yield* bounded(secondCommitted.promise, "second prompt committed");
@@ -904,66 +902,22 @@ describe("durable session handle", () => {
         expect(runs).toBe(1);
         expect(maximumActive).toBe(1);
         expect(firstInput.messages).toEqual([
-          {
-            id: SessionHandleStore.inboxRows(handle.id)[0]?.id,
-            role: "user",
-            text: "first prompt",
-          },
+          { id: inboxRows(handle.id)[0]?.id, role: "user", text: "first prompt" },
         ]);
         expect(drained).toEqual([
           [
-            {
-              id: SessionHandleStore.inboxRows(handle.id)[1]?.id,
-              role: "user",
-              text: "second prompt",
-            },
-            {
-              id: SessionHandleStore.inboxRows(handle.id)[2]?.id,
-              role: "user",
-              text: "third prompt",
-            },
+            { id: inboxRows(handle.id)[1]?.id, role: "user", text: "second prompt" },
+            { id: inboxRows(handle.id)[2]?.id, role: "user", text: "third prompt" },
           ],
         ]);
-        expect(
-          SessionHandleStore.inboxRows(handle.id).map((row: Inbox.Row) => [
-            row.content,
-            row.status,
-          ]),
-        ).toEqual([
+        expect(inboxRows(handle.id).map((row) => [row.content, row.status])).toEqual([
           ["first prompt", "consumed"],
           ["second prompt", "consumed"],
           ["third prompt", "consumed"],
         ]);
-        expect(
-          sessionTree(handle.id)
-            .map(SessionHandleStore.delivery)
-            .filter(
-              (
-                delivery:
-                  | {
-                      phase: "delivery";
-                      turnId: string;
-                      inboxId: string;
-                      kind: "prompt" | "interrupt" | "resume";
-                      content: string;
-                      origin: { encodingVersion: 1; value: PlainValue };
-                      boundary: "before_llm" | "after_llm" | "after_tools";
-                    }
-                  | undefined,
-              ): delivery is SessionTurn.Delivery => delivery !== undefined,
-            )
-            .map(
-              (delivery: {
-                phase: "delivery";
-                turnId: string;
-                inboxId: string;
-                kind: "prompt" | "interrupt" | "resume";
-                content: string;
-                origin: { encodingVersion: 1; value: PlainValue };
-                boundary: "before_llm" | "after_llm" | "after_tools";
-              }) => delivery.inboxId,
-            ),
-        ).toEqual(SessionHandleStore.inboxRows(handle.id).map((row: Inbox.Row) => row.id));
+        expect(deliveries(handle.id).map((delivery) => delivery.inboxId)).toEqual(
+          inboxRows(handle.id).map((row) => row.id),
+        );
       }),
     ));
 
@@ -976,11 +930,11 @@ describe("durable session handle", () => {
             entered.resolve(input);
             return { kind: "result", text: "done" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("late-transition", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("late-transition", runner));
         yield* awaitSignal(bounded(handle.prompt("first prompt"), "prompt completion"));
         const input = yield* awaitSignal(bounded(entered.promise, "runner entry"));
         const request = durableRequest(handle.id, input.turnId);
-        const tree = sessionTree(handle.id);
+        const before = tree(handle.id);
         if (input.ledger.transition === undefined) throw new Error("missing transition port");
         const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
         const refused = yield* failure(late);
@@ -989,8 +943,8 @@ describe("durable session handle", () => {
           operation: "session.request.transition",
           cause: "stale",
         });
-        expect(sessionTree(handle.id)).toEqual(tree);
-        expect(SessionHandleStore.requestRows()).toEqual([]);
+        expect(tree(handle.id)).toEqual(before);
+        expect(kernel().requestRows()).toEqual([]);
       }),
     ));
 
@@ -998,18 +952,19 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         let runs = 0;
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupt-before-body", () =>
+        const handle = yield* declare(
+          residentOptions("interrupt-before-body", () =>
             Effect.sync(() => {
               runs += 1;
               return { kind: "result", text: "ran" };
             }),
-          ), fixture), fixture); });
+          ),
+        );
         const admitted = signal<void>();
         const interrupted = signal<void>();
-        const sessions = Storage.get().sessions;
-        if (sessions === undefined) throw new Error("missing session adapter");
-        const commit = sessions.commit;
-        const gate = spyOn(sessions, "commit").mockImplementation(
+        const target = kernel();
+        const commit = target.commit.bind(target);
+        const gate = spyOn(target, "commit").mockImplementation(
           (input: Parameters<typeof commit>[0]) =>
             Effect.gen(function* () {
               const receipt = yield* commit(input);
@@ -1038,7 +993,7 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "interrupted", text: "" });
         expect(runs).toBe(0);
         expect(handle.get().state).toBe("interrupted");
-        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(tree(handle.id))).toEqual([]);
       }),
     ));
 
@@ -1046,16 +1001,17 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         let runs = 0;
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("admission-storage-failure", () =>
+        const handle = yield* declare(
+          residentOptions("admission-storage-failure", () =>
             Effect.sync(() => {
               runs += 1;
               return { kind: "result", text: "ran" };
             }),
-          ), fixture), fixture); });
-        const sessions = Storage.get().sessions;
-        if (sessions === undefined) throw new Error("missing session adapter");
-        const commit = sessions.commit;
-        const explode = spyOn(sessions, "commit").mockImplementation(
+          ),
+        );
+        const target = kernel();
+        const commit = target.commit.bind(target);
+        const explode = spyOn(target, "commit").mockImplementation(
           (input: Parameters<typeof commit>[0]) => {
             const decision = input.actions.find(
               (action: LedgerAction.Append) => action.kind === "policy.decision",
@@ -1083,7 +1039,7 @@ describe("durable session handle", () => {
         });
         expect(runs).toBe(0);
         expect(handle.get().state).toBe("idle");
-        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(tree(handle.id))).toEqual([]);
       }),
     ));
 
@@ -1091,15 +1047,15 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("idle-interrupt", runner), fixture), fixture); });
-        yield* SessionHandleStore.commitInbox({
+        const handle = yield* declare(residentOptions("idle-interrupt", runner));
+        yield* commitInbox({
           id: "idle-interrupt:interrupt",
           sessionId: handle.id,
           kind: "interrupt",
           content: "",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now,
-          parentActionId: sessionTree(handle.id).at(-1)?.id ?? null,
+          parentActionId: tree(handle.id).at(-1)?.id ?? null,
         });
 
         const result = yield* awaitSignal(handle.prompt("run after the no-op"));
@@ -1107,11 +1063,9 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "result", text: "ran once" });
         expect(inputs).toHaveLength(1);
         expect(inputs[0]?.resumeCount).toBe(0);
-        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
+        expect(SessionHandleStore.openTurns(tree(handle.id))).toEqual([]);
         expect(
-          sessionTree(handle.id).filter(
-            (action: LedgerAction.Node) => SessionHandleStore.turnResume(action) !== undefined,
-          ),
+          tree(handle.id).filter((action) => SessionHandleStore.turnResume(action) !== undefined),
         ).toEqual([]);
       }),
     ));
@@ -1125,32 +1079,40 @@ describe("durable session handle", () => {
             entries += 1;
             return { kind: "result", text: "must not run" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("queued-interrupt", runner), fixture), fixture); });
-        const parentActionId = sessionTree(handle.id).at(-1)?.id ?? null;
-        yield* SessionHandleStore.commitInbox({
+        yield* kernel().materialize({
+          id: "queued-interrupt",
+          parentId: null,
+          role: "resident",
+          tools: [tool("read")],
+          system,
+          policyGeneration: kernel().currentPolicyGeneration(),
+          actionId: "queued-interrupt:configure",
+          at: now,
+        });
+        yield* commitInbox({
           id: "queued-interrupt:prompt",
-          sessionId: handle.id,
+          sessionId: "queued-interrupt",
           kind: "prompt",
           content: "do not run",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now,
-          parentActionId,
+          parentActionId: tree("queued-interrupt").at(-1)?.id ?? null,
         });
-        yield* SessionHandleStore.commitInbox({
+        yield* commitInbox({
           id: "queued-interrupt:interrupt",
-          sessionId: handle.id,
+          sessionId: "queued-interrupt",
           kind: "interrupt",
           content: "",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now + 1,
-          parentActionId,
+          parentActionId: tree("queued-interrupt").at(-1)?.id ?? null,
         });
 
-        yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
+        yield* awaitSignal(reactivate("queued-interrupt", runner));
 
         expect(entries).toBe(0);
-        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toEqual([]);
-        expect(handle.get()).toMatchObject({
+        expect(SessionHandleStore.openTurns(tree("queued-interrupt"))).toEqual([]);
+        expect(kernel().getSnapshot("queued-interrupt", 4)).toMatchObject({
           state: "interrupted",
           turns: [{ terminal: { kind: "interrupted" } }],
         });
@@ -1161,36 +1123,42 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("leading-idle-interrupt", runner), fixture), fixture); });
-        const parentActionId = sessionTree(handle.id).at(-1)?.id ?? null;
-        yield* SessionHandleStore.commitInbox({
+        yield* kernel().materialize({
+          id: "leading-idle-interrupt",
+          parentId: null,
+          role: "resident",
+          tools: [tool("read")],
+          system,
+          policyGeneration: kernel().currentPolicyGeneration(),
+          actionId: "leading-idle-interrupt:configure",
+          at: now,
+        });
+        yield* commitInbox({
           id: "leading-idle-interrupt:interrupt",
-          sessionId: handle.id,
+          sessionId: "leading-idle-interrupt",
           kind: "interrupt",
           content: "",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now,
-          parentActionId,
+          parentActionId: tree("leading-idle-interrupt").at(-1)?.id ?? null,
         });
-        yield* SessionHandleStore.commitInbox({
+        yield* commitInbox({
           id: "leading-idle-interrupt:prompt",
-          sessionId: handle.id,
+          sessionId: "leading-idle-interrupt",
           kind: "prompt",
           content: "run afterward",
           origin: { encodingVersion: 1, value: { source: "test" } },
           createdAt: now + 1,
-          parentActionId,
+          parentActionId: tree("leading-idle-interrupt").at(-1)?.id ?? null,
         });
 
-        yield* awaitSignal(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
+        yield* awaitSignal(reactivate("leading-idle-interrupt", runner));
 
         expect(inputs).toHaveLength(1);
         expect(inputs[0]?.resumeCount).toBe(0);
         expect(inputs[0]?.messages).toEqual([
           {
-            id: SessionHandleStore.inboxRows(handle.id).find(
-              (row: Inbox.Row) => row.kind === "prompt",
-            )?.id,
+            id: inboxRows("leading-idle-interrupt").find((row) => row.kind === "prompt")?.id,
             role: "user",
             text: "run afterward",
           },
@@ -1216,7 +1184,7 @@ describe("durable session handle", () => {
             yield* awaitSignal(aborted.promise);
             return { kind: "result", text: "late result must not commit" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupt", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("interrupt", runner));
 
         const running = yield* Effect.forkChild(handle.prompt("start"));
         const runnerSignal = yield* awaitSignal(
@@ -1234,29 +1202,9 @@ describe("durable session handle", () => {
         );
 
         expect(runnerSignal.aborted).toBe(true);
-        expect(SessionHandleStore.inboxRows(handle.id).map((row: Inbox.Row) => row.status)).toEqual(
-          ["consumed", "consumed"],
-        );
-        const terminals = sessionTree(handle.id)
-          .map(SessionHandleStore.turnTerminal)
-          .filter(
-            (
-              terminal:
-                | {
-                    phase: "terminal";
-                    turnId: string;
-                    kind: "interrupted" | "error" | "result" | "waiting";
-                    text: string;
-                    boundaryActionId: string | null;
-                    resumeCount: number;
-                    reason?: "live_wait" | undefined;
-                    alarmIds?: string[] | undefined;
-                  }
-                | undefined,
-            ): terminal is SessionTurn.Terminal => terminal !== undefined,
-          );
-        expect(terminals).toHaveLength(1);
-        expect(terminals[0]?.kind).toBe("interrupted");
+        expect(inboxRows(handle.id).map((row) => row.status)).toEqual(["consumed", "consumed"]);
+        expect(terminals(handle.id)).toHaveLength(1);
+        expect(terminals(handle.id)[0]?.kind).toBe("interrupted");
         expect(handle.get().state).toBe("interrupted");
       }),
     ));
@@ -1288,7 +1236,7 @@ describe("durable session handle", () => {
             }
             return { kind: "result", text: `run ${entries}` };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("non-cooperative-interrupt", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("non-cooperative-interrupt", runner));
 
         const first = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(firstEntered.promise, "first runner entry"));
@@ -1296,11 +1244,7 @@ describe("durable session handle", () => {
         yield* awaitSignal(bounded(firstAborted.promise, "first runner abort signal"));
         const resumeCommitted = signal<void>();
         sink.onCommit = () => {
-          if (
-            SessionHandleStore.pendingInbox(handle.id).some(
-              (row: Inbox.Row) => row.kind === "resume",
-            )
-          )
+          if (pendingInbox(handle.id).some((row) => row.kind === "resume"))
             resumeCommitted.resolve();
         };
         const resumed = yield* Effect.forkChild(handle.resume());
@@ -1322,144 +1266,38 @@ describe("durable session handle", () => {
       }),
     ));
 
-  test("retained turn ownership holds the generation and lease until released", () =>
-    testProgram(Effect.gen(function* () {
-      const retained = signal<{ readonly release: () => void; readonly pending: () => number }>();
-      const runner: SessionRunner = () => Effect.gen(function* () {
-        const ownership = yield* GenerationOwnership;
-        const owners = yield* ownership.provide(GenerationRawSlots);
-        // Admission and the running turn each own a capture.
-        const before = owners.pending();
-        const release = ownership.retain();
-        retained.resolve({ release, pending: owners.pending });
-        expect(before).toBe(2);
-        expect(owners.pending()).toBe(before + 1);
-        return { kind: "result", text: "retained" };
-      });
-      const { handle, hibernated } = yield* hibernatingSession("retained-generation", runner);
-      const result = yield* bounded(handle.prompt("retain ownership"), "retained turn terminal");
-      const owner = yield* bounded(retained.promise, "generation retained");
-      try {
-        expect(result).toEqual({ kind: "result", text: "retained" });
-        expect(owner.pending()).toBe(1);
-        expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
-        expect(yield* failure(contendLease(handle))).toMatchObject({ _tag: "LeaseRefused", reason: "held" });
-      } finally {
-        owner.release();
-      }
-      expect(owner.pending()).toBe(0);
-      yield* bounded(hibernated.promise, "retained ownership released");
-      expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-    })),
-  );
-
-  test("keeps the durable lease held through an ignored abort so no other runtime can resume", () =>
+  test("retained turn ownership holds the generation until released", () =>
     testProgram(
       Effect.gen(function* () {
-        const run = stubbornRunner();
-        const { handle, hibernated } = yield* hibernatingSession(
-          "lease-held-through-abort",
-          run.runner,
-        );
-        const pending = yield* awaitSignal(interruptStubborn(handle, run));
-
-        // The interrupted terminal is sealed promptly, but the runner ignored the
-        // abort and is still alive, so the durable lease MUST stay held by this
-        // owner. A second runtime/process acquiring it without waiting for the TTL
-        // (no clock advance) must be refused, or two live executors could exist for
-        // one durable session.
-        expect(handle.get().state).toBe("interrupted");
-        yield* awaitSignal(expectLeaseHeldUntilSettled(handle, run, pending, hibernated));
+        const retained = signal<{ readonly release: () => void; readonly pending: () => number }>();
+        const runner: SessionRunner = () =>
+          Effect.gen(function* () {
+            const ownership = yield* GenerationOwnership;
+            const owners = yield* ownership.provide(GenerationRawSlots);
+            // Admission and the running turn each own a capture.
+            const before = owners.pending();
+            const release = ownership.retain();
+            retained.resolve({ release, pending: owners.pending });
+            expect(before).toBe(2);
+            expect(owners.pending()).toBe(before + 1);
+            return { kind: "result", text: "retained" };
+          });
+        const { handle, hibernated } = yield* hibernatingSession("retained-generation", runner);
+        const result = yield* bounded(handle.prompt("retain ownership"), "retained turn terminal");
+        const owner = yield* bounded(retained.promise, "generation retained");
+        try {
+          expect(result).toEqual({ kind: "result", text: "retained" });
+          expect(owner.pending()).toBe(1);
+          expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
+        } finally {
+          owner.release();
+        }
+        expect(owner.pending()).toBe(0);
+        yield* bounded(hibernated.promise, "retained ownership released");
       }),
     ));
 
-  test("a retained runner whose lease lapsed does not wedge the handle: the next prompt still runs", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
-          resumeAfterFirst: true,
-        });
-        const { handle, hibernated } = yield* hibernatingSession("retained-lease-lapsed", runner);
-
-        const running = yield* Effect.forkChild(handle.prompt("start"));
-        yield* awaitSignal(bounded(entered.promise, "runner entry"));
-        const interrupted = yield* Effect.forkChild(handle.interrupt());
-        yield* awaitSignal(bounded(abortSeen.promise, "runner abort signal"));
-        yield* awaitSignal(bounded(interrupted, "interrupt receipt"));
-
-        // The runner outlives its TTL (contract violation) and the lease lapses
-        // before it settles. The retained release must treat the lapsed lease as
-        // nothing-to-release instead of failing a stale commit and wedging every
-        // later turn start behind the detached settlement.
-        now += SessionHandleStore.LEASE_TTL_MS;
-        releaseRunner.resolve();
-        yield* awaitSignal(
-          bounded(
-            Effect.all([awaitSignal(running), awaitSignal(hibernated.promise)], {
-              concurrency: "unbounded",
-            }),
-            "retained settlement",
-          ),
-        );
-
-        const leaseBefore = SessionHandleStore.row(handle.id).leaseFence;
-        yield* awaitSignal(bounded(handle.resume(), "resume after retained settlement"));
-        expect(calls()).toBe(2);
-        expect(handle.get().state).toBe("idle");
-        expect(SessionHandleStore.row(handle.id).leaseFence).toBe(leaseBefore + 1);
-      }),
-    ));
-
-  test("a refused retained release surfaces once to the next turn start and then clears", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const { runner, entered, abortSeen, releaseRunner, calls } = stubbornRunner({
-          resumeAfterFirst: true,
-        });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("retained-release-refused", runner), fixture), fixture); });
-        const running = yield* Effect.forkChild(handle.prompt("start"));
-        yield* awaitSignal(bounded(entered.promise, "runner entry"));
-        yield* awaitSignal(bounded(handle.interrupt(), "interrupt receipt"));
-        yield* awaitSignal(bounded(abortSeen.promise, "runner abort signal"));
-
-        const sessions = Storage.get().sessions;
-        if (sessions === undefined) throw new Error("missing session adapter");
-        const commit = sessions.commit;
-        const releaseRefused = signal<void>();
-        const refuseRelease = spyOn(sessions, "commit").mockImplementation(
-          (input: Parameters<typeof commit>[0]) => {
-            if (input.releaseLease && input.actions.length === 0 && input.sessionId === handle.id) {
-              refuseRelease.mockRestore();
-              releaseRefused.resolve();
-              return Effect.fail(
-                new ForeignFailure({ operation: "session.commit", cause: "release fixture" }),
-              );
-            }
-            return commit(input);
-          },
-        );
-        releaseRunner.resolve();
-        yield* awaitSignal(
-          bounded(
-            Effect.all([awaitSignal(running), awaitSignal(releaseRefused.promise)], {
-              concurrency: "unbounded",
-            }),
-            "retained settlement",
-          ),
-        );
-
-        expect(yield* failure(awaitSignal(handle.resume()))).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "ForeignFailure", operation: "session.commit", cause: "release fixture" },
-        });
-        yield* awaitSignal(bounded(handle.resume(), "resume after the surfaced failure"));
-        expect(calls()).toBe(2);
-        expect(handle.get().state).toBe("idle");
-        expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
-      }),
-    ));
-
-  test("configure during the ignored-abort window keeps the lease held by the live runner", () =>
+  test("configure during the ignored-abort window keeps the fence pinned by the live runner", () =>
     testProgram(
       Effect.gen(function* () {
         const run = stubbornRunner();
@@ -1471,8 +1309,8 @@ describe("durable session handle", () => {
         expect(handle.get().state).toBe("interrupted");
         const fenceBefore = handle.get().lease.fence;
 
-        // A configure while the abort-ignoring runner is still alive must neither
-        // rotate the fence nor release the lease: the live executor still owns it.
+        // A configure while the abort-ignoring runner is still alive must not
+        // rotate the fence: the live activation still owns its authority.
         const receipt = yield* awaitSignal(
           bounded(handle.tools.add([tool("search")]), "configure receipt"),
         );
@@ -1481,12 +1319,18 @@ describe("durable session handle", () => {
         expect(afterConfigure.lease.fence).toBe(fenceBefore);
         expect(afterConfigure.lease.owner).not.toBeNull();
         yield* awaitSignal(
-          expectLeaseHeldUntilSettled(handle, run, pending, hibernated, afterConfigure.lease.fence),
+          expectSingleWriterUntilSettled(
+            handle,
+            run,
+            pending,
+            hibernated,
+            afterConfigure.lease.fence,
+          ),
         );
       }),
     ));
 
-  test("configure re-entered from the interrupted seal observation still sees the lease as held", () =>
+  test("configure re-entered from the interrupted seal observation still sees the fence as pinned", () =>
     testProgram(
       Effect.gen(function* () {
         const run = stubbornRunner();
@@ -1496,34 +1340,12 @@ describe("durable session handle", () => {
           run.runner,
         );
         // Capture the interrupted seal, then submit configure before releasing the
-        // retained raw runner; both operations must observe the same held fence.
+        // retained raw runner; both operations must observe the same pinned fence.
         const reentered = signal<() => ReturnType<SessionHandle["tools"]["add"]>>();
         let fenceAtSeal = -1;
-        sink.onCommit = (committed: {
-          id: string;
-          sessionId: string;
-          revision: number;
-          kind:
-            | "message"
-            | "prompt"
-            | "tool"
-            | "attempt"
-            | "reply"
-            | "outbound"
-            | "request"
-            | "turn"
-            | "llm"
-            | "fold.checkpoint"
-            | "inbox.deliver"
-            | "compaction"
-            | "alarm.arm"
-            | "alarm.fired"
-            | "alarm.paused"
-            | "session.configure"
-            | "policy.decision";
-        }) => {
+        sink.onCommit = (committed: L0Observation.ActionCommitted) => {
           if (committed.kind !== "turn" || fenceAtSeal !== -1) return;
-          const row = SessionHandleStore.row(handle.id);
+          const row = kernel().row(handle.id);
           if (row.state !== "interrupted") return;
           fenceAtSeal = row.leaseFence;
           const configured = handle.tools.add([tool("search")]);
@@ -1536,16 +1358,12 @@ describe("durable session handle", () => {
         const reentrant = yield* awaitSignal(bounded(reentered.promise, "seal observation"));
         yield* awaitSignal(bounded(reentrant(), "re-entrant configure"));
 
-        const row = SessionHandleStore.row(handle.id);
+        const row = kernel().row(handle.id);
         expect(row.leaseFence).toBe(fenceAtSeal);
         expect(row.leaseOwner).not.toBeNull();
-        expect(yield* failure(contendLease(handle, row.leaseFence))).toMatchObject({
-          _tag: "LeaseRefused",
-          reason: "held",
-        });
 
         yield* awaitSignal(settleStubborn(handle, run, { running, interrupted }, hibernated));
-        expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+        expect(kernel().row(handle.id).leaseFence).toBe(fenceAtSeal);
         expect(run.maximumActive()).toBe(1);
       }),
     ));
@@ -1557,9 +1375,7 @@ describe("durable session handle", () => {
         const { handle, hibernated } = yield* hibernatingSession(
           "close-after-positive-grace",
           runner,
-          {
-            closeGraceMs: 1,
-          },
+          { closeGraceMs: 1 },
         );
 
         const running = yield* Effect.forkChild(handle.prompt("start"));
@@ -1568,111 +1384,52 @@ describe("durable session handle", () => {
         // so close() can only return once the grace timer lapses.
         yield* awaitSignal(bounded(handle.interrupt(), "interrupt receipt"));
         try {
-          yield* bounded(Effect.forkDetach(handle.close()).pipe(Effect.flatMap(Fiber.join)), "close after grace lapse");
-          expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
+          yield* bounded(
+            Effect.forkDetach(handle.close()).pipe(Effect.flatMap(Fiber.join)),
+            "close after grace lapse",
+          );
+          expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
         } finally {
           releaseRunner.resolve();
           yield* bounded(
             Effect.all([awaitSignal(running), awaitSignal(hibernated.promise)], {
               concurrency: "unbounded",
             }),
-            "runner settlement + lease release",
+            "runner settlement + hibernation",
           );
         }
-        expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
       }),
     ));
 
-  test("close() returns after the grace window while the lease stays held until the abort-ignoring runner settles", () =>
+  test("close() returns after the zero grace window while the runner settles its turn durably", () =>
     testProgram(
       Effect.gen(function* () {
         const { runner, entered, releaseRunner, maximumActive } = stubbornRunner();
         const { handle, hibernated } = yield* hibernatingSession(
           "close-detaches-after-grace",
           runner,
-          {
-            closeGraceMs: 0,
-          },
+          { closeGraceMs: 0 },
         );
 
         const running = yield* Effect.forkChild(handle.prompt("start"));
         yield* awaitSignal(bounded(entered.promise, "runner entry"));
         yield* awaitSignal(bounded(handle.close(), "close with zero grace"));
 
-        // Detached from the caller only: the lease is still held by this executor
-        // and its heartbeat keeps renewing, so no second executor can start.
-        const row = SessionHandleStore.row(handle.id);
-        expect(row.leaseOwner).not.toBeNull();
-        expect(yield* failure(contendLease(handle, row.leaseFence))).toMatchObject({
-          _tag: "LeaseRefused",
-          reason: "held",
-        });
+        // Detached from the caller only: this activation still holds its fence,
+        // so no second executor can have overlapped.
+        expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
 
-        // Once the runner settles the turn continuation releases the lease itself.
+        // Once the runner settles, the retained continuation finishes durably.
         releaseRunner.resolve();
         yield* awaitSignal(
           bounded(
             Effect.all([awaitSignal(running), awaitSignal(hibernated.promise)], {
               concurrency: "unbounded",
             }),
-            "runner settlement + lease release",
+            "runner settlement + hibernation",
           ),
-        );
-        expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
-        expect((yield* contendLease(handle, SessionHandleStore.row(handle.id).leaseFence)).ok).toBe(
-          true,
         );
         expect(maximumActive()).toBe(1);
-      }),
-    ));
-
-  test("heartbeat loss aborts the runner and the stale fence cannot seal its result", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const entered = signal<SessionRunnerInput>();
-        const aborted = signal<void>();
-        let heartbeat: (() => void) | undefined;
-        runtime = {
-          ...runtime,
-          scheduleHeartbeat: (callback: () => void) => {
-            heartbeat = callback;
-            return () => undefined;
-          },
-        };
-        const runner: SessionRunner = (input: SessionRunnerInput) =>
-          Effect.gen(function* () {
-            input.signal.addEventListener("abort", () => aborted.resolve(), { once: true });
-            entered.resolve(input);
-            yield* awaitSignal(aborted.promise);
-            return { kind: "result", text: "stale completion" };
-          });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("heartbeat-loss", runner), fixture), fixture); });
-
-        const running = yield* Effect.forkChild(handle.prompt("start"));
-        yield* awaitSignal(bounded(entered.promise, "heartbeat runner entry"));
-        now += SessionHandleStore.LEASE_TTL_MS;
-        const stolen = yield* SessionHandleStore.acquireLease({
-          sessionId: handle.id,
-          owner: "replacement-owner",
-          expectedFence: handle.get().lease.fence,
-          now,
-          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-        });
-        expect(stolen.ok).toBe(true);
-        if (heartbeat === undefined) throw new Error("heartbeat was not scheduled");
-        heartbeat();
-
-        yield* awaitSignal(bounded(aborted.promise, "heartbeat abort"));
-        expect(yield* failure(awaitSignal(running))).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "CommitRefused" },
-        });
-        expect(SessionHandleStore.openTurns(sessionTree(handle.id))).toHaveLength(1);
-        expect(
-          sessionTree(handle.id).some((action: LedgerAction.Node) =>
-            SessionHandleStore.turnTerminal(action),
-          ),
-        ).toBe(false);
       }),
     ));
 
@@ -1694,7 +1451,7 @@ describe("durable session handle", () => {
             }
             return { kind: "result", text: `generation ${input.toolsGeneration}` };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("configure-pinning", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("configure-pinning", runner));
 
         const firstTurn = yield* Effect.forkChild(handle.prompt("turn one"));
         const pinned = yield* awaitSignal(bounded(firstEntered.promise, "generation N runner"));
@@ -1707,48 +1464,64 @@ describe("durable session handle", () => {
 
         expect(receipt).toEqual({ generation: 2, revertTo: 1 });
         expect(pinned.toolsGeneration).toBe(1);
-        expect(pinned.tools.map((entry: SessionGeneration.Tool) => entry.name)).toEqual(["read"]);
+        expect(pinned.tools.map((entry) => entry.name)).toEqual(["read"]);
         expect(next.toolsGeneration).toBe(2);
-        expect(next.tools.map((entry: SessionGeneration.Tool) => entry.name)).toEqual([
-          "read",
-          "search",
-        ]);
+        expect(next.tools.map((entry) => entry.name)).toEqual(["read", "search"]);
         expect(next.systemHash).toBe(pinned.systemHash);
       }),
     ));
 
   test("immediate configure interrupts the old turn before selecting and resuming the new generation", () =>
-    testProgram(Effect.gen(function* () {
-      const entered = signal<void>();
-      const inputs: SessionRunnerInput[] = [];
-      const runner: SessionRunner = (input) => Effect.gen(function* () {
-        inputs.push(input);
-        if (inputs.length === 1) {
-          entered.resolve();
-          yield* Effect.never;
-        }
-        return { kind: "result", text: "resumed" };
-      });
-      const handle = yield* withSessionServices(session(residentOptions("immediate-configure", runner), runtime), runtime);
-      const running = yield* Effect.forkChild(handle.prompt("start"));
-      yield* awaitSignal(bounded(entered.promise, "old generation entry"));
-      yield* handle.interrupt();
-      expect(yield* awaitSignal(bounded(running, "interrupted old turn"))).toMatchObject({ kind: "interrupted" });
-      expect(handle.get().state).toBe("interrupted");
-      yield* handle.tools.add([tool("search")]);
-      expect(inputs).toHaveLength(1);
-      yield* handle.resume();
-      expect(inputs.map((input) => [input.toolsGeneration, input.resumeCount])).toEqual([[1, 0], [2, 1]]);
-      expect(inputs[1]?.tools.map((entry) => entry.name)).toEqual(["read", "search"]);
-      const tree = sessionTree(handle.id);
-      const terminal = tree.find((action) => SessionHandleStore.turnTerminal(action)?.kind === "interrupted");
-      const selected = tree.find((action) => action.kind === "session.configure" && action.ordinal > 1);
-      const resumed = tree.find((action) => SessionHandleStore.turnIntent(action)?.toolsGeneration === 2);
-      if (terminal === undefined || selected === undefined || resumed === undefined) throw new Error("missing immediate configure boundary");
-      expect(terminal.ordinal).toBeLessThan(selected.ordinal);
-      expect(selected.ordinal).toBeLessThan(resumed.ordinal);
-      expect(SessionHandleStore.inboxRows(handle.id).map((item) => item.kind)).toEqual(["prompt", "interrupt", "resume"]);
-    })));
+    testProgram(
+      Effect.gen(function* () {
+        const entered = signal<void>();
+        const inputs: SessionRunnerInput[] = [];
+        const runner: SessionRunner = (input) =>
+          Effect.gen(function* () {
+            inputs.push(input);
+            if (inputs.length === 1) {
+              entered.resolve();
+              yield* Effect.never;
+            }
+            return { kind: "result", text: "resumed" };
+          });
+        const handle = yield* declare(residentOptions("immediate-configure", runner));
+        const running = yield* Effect.forkChild(handle.prompt("start"));
+        yield* awaitSignal(bounded(entered.promise, "old generation entry"));
+        yield* handle.interrupt();
+        expect(yield* awaitSignal(bounded(running, "interrupted old turn"))).toMatchObject({
+          kind: "interrupted",
+        });
+        expect(handle.get().state).toBe("interrupted");
+        yield* handle.tools.add([tool("search")]);
+        expect(inputs).toHaveLength(1);
+        yield* handle.resume();
+        expect(inputs.map((input) => [input.toolsGeneration, input.resumeCount])).toEqual([
+          [1, 0],
+          [2, 1],
+        ]);
+        expect(inputs[1]?.tools.map((entry) => entry.name)).toEqual(["read", "search"]);
+        const actions = tree(handle.id);
+        const terminal = actions.find(
+          (action) => SessionHandleStore.turnTerminal(action)?.kind === "interrupted",
+        );
+        const selected = actions.find(
+          (action) => action.kind === "session.configure" && action.ordinal > 1,
+        );
+        const resumed = actions.find(
+          (action) => SessionHandleStore.turnIntent(action)?.toolsGeneration === 2,
+        );
+        if (terminal === undefined || selected === undefined || resumed === undefined)
+          throw new Error("missing immediate configure boundary");
+        expect(terminal.ordinal).toBeLessThan(selected.ordinal);
+        expect(selected.ordinal).toBeLessThan(resumed.ordinal);
+        expect(inboxRows(handle.id).map((item) => item.kind)).toEqual([
+          "prompt",
+          "interrupt",
+          "resume",
+        ]);
+      }),
+    ));
 
   test("rejects an existing tool name before committing a configure action", () =>
     testProgram(
@@ -1757,7 +1530,7 @@ describe("durable session handle", () => {
           Effect.sync(() => {
             return { kind: "result", text: "unused" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("duplicate-tool", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("duplicate-tool", runner));
         const before = handle.get();
 
         expect(yield* failure(awaitSignal(handle.tools.add([tool("read")])))).toMatchObject({
@@ -1767,9 +1540,7 @@ describe("durable session handle", () => {
 
         expect(handle.get()).toEqual(before);
         expect(
-          sessionTree(handle.id).filter(
-            (action: LedgerAction.Node) => action.kind === "session.configure",
-          ),
+          tree(handle.id).filter((action) => action.kind === "session.configure"),
         ).toHaveLength(1);
       }),
     ));
@@ -1778,19 +1549,17 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("complete");
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
-            ...residentOptions("remove-after-reactivation", runner),
-            tools: [tool("read"), tool("search")],
-          }, fixture), fixture); });
+        const handle = yield* declare({
+          ...residentOptions("remove-after-reactivation", runner),
+          tools: [tool("read"), tool("search")],
+        });
 
         yield* awaitSignal(handle.prompt("hibernate the original controller"));
         const receipt = yield* awaitSignal(handle.tools.remove(["read"]));
         yield* awaitSignal(handle.prompt("use the configured generation"));
 
         expect(receipt).toEqual({ generation: 2, revertTo: 1 });
-        expect(inputs.at(-1)?.tools.map((entry: SessionGeneration.Tool) => entry.name)).toEqual([
-          "search",
-        ]);
+        expect(inputs.at(-1)?.tools.map((entry) => entry.name)).toEqual(["search"]);
       }),
     ));
 
@@ -1798,7 +1567,7 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("complete");
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("blocks-after-reactivation", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("blocks-after-reactivation", runner));
         const nextBlocks = [{ id: "safety", source: "operator", content: "Use the safe path." }];
 
         yield* awaitSignal(handle.prompt("hibernate the original controller"));
@@ -1808,86 +1577,10 @@ describe("durable session handle", () => {
         expect(receipt).toEqual({ generation: 2, revertTo: 1 });
         expect(inputs).toHaveLength(2);
         expect(inputs[1]?.systemHash).not.toBe(inputs[0]?.systemHash);
-        expect(inputs[1]?.tools.map((entry: SessionGeneration.Tool) => entry.name)).toEqual([
-          "read",
-        ]);
-        expect(
-          SessionHandleStore.latestGeneration(sessionTree(handle.id)).systemBlocks,
-        ).toEqual(nextBlocks);
-      }),
-    ));
-
-  test("reports typed lease contention from the SQLite-backed session API", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const runner: SessionRunner = () =>
-          Effect.sync(() => {
-            return { kind: "result", text: "must not run" };
-          });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("lease-contention", runner), fixture), fixture); });
-        const acquired = yield* SessionHandleStore.acquireLease({
-          sessionId: handle.id,
-          owner: "other-process",
-          expectedFence: 0,
-          now,
-          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-        });
-        if (!acquired.ok) throw new Error("contention fixture could not acquire its lease");
-
-        expect(yield* failure(awaitSignal(handle.prompt("contended turn")))).toMatchObject({
-          _tag: "LeaseRefused",
-          reason: "held",
-          holder: "other-process",
-          fence: 1,
-          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-        });
-      }),
-    ));
-
-  test("default heartbeat uses an unreferenced timer and clears it after the runner settles", () =>
-    testProgram(
-      Effect.gen(function* () {
-        const entered = signal<void>();
-        const release = signal<void>();
-        const setIntervalSpy = spyOn(globalThis, "setInterval");
-        const clearIntervalSpy = spyOn(globalThis, "clearInterval");
-        const runner: SessionRunner = () =>
-          Effect.gen(function* () {
-            entered.resolve();
-            yield* awaitSignal(release.promise);
-            return { kind: "result", text: "complete" };
-          });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = {
-          authorizeConfigure: allowConfigure,
-          observations: sink,
-          clock: runtime.clock,
-          entropy: runtime.entropy,
-          processId: runtime.processId,
-        }; return yield* withSessionServices(session(residentOptions("default-heartbeat", runner), fixture), fixture); });
-
-        const running = yield* Effect.forkChild(handle.prompt("start"));
-        try {
-          yield* awaitSignal(bounded(entered.promise, "default-heartbeat runner entry"));
-          expect(setIntervalSpy).toHaveBeenCalledTimes(1);
-          const timer = setIntervalSpy.mock.results[0]?.value;
-          if (
-            typeof timer !== "object" ||
-            timer === null ||
-            !("hasRef" in timer) ||
-            typeof timer.hasRef !== "function"
-          ) {
-            throw new Error("default heartbeat did not return a timer handle");
-          }
-          expect(timer.hasRef()).toBe(false);
-          release.resolve();
-          yield* awaitSignal(bounded(running, "default-heartbeat runner completion"));
-          expect(clearIntervalSpy).toHaveBeenCalledWith(timer);
-        } finally {
-          release.resolve();
-          yield* awaitSignal(bounded(running, "default-heartbeat cleanup"));
-          setIntervalSpy.mockRestore();
-          clearIntervalSpy.mockRestore();
-        }
+        expect(inputs[1]?.tools.map((entry) => entry.name)).toEqual(["read"]);
+        expect(SessionHandleStore.latestGeneration(tree(handle.id)).systemBlocks).toEqual(
+          nextBlocks,
+        );
       }),
     ));
 
@@ -1896,26 +1589,26 @@ describe("durable session handle", () => {
       Effect.gen(function* () {
         let hibernations = 0;
         const hibernated = signal<void>();
-        runtime = {
+        runtime = track({
           ...runtime,
           onHibernate: () =>
             Effect.sync(() => {
               hibernations += 1;
               hibernated.resolve();
             }),
-        };
+        });
         const runner: SessionRunner = () =>
           Effect.sync(() => {
             return { kind: "result", text: "complete" };
           });
         const options = residentOptions("hibernate", runner);
-        const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+        const first = yield* declare(options);
 
         yield* awaitSignal(first.prompt("sleep after this"));
         yield* awaitSignal(bounded(hibernated.promise, "runtime hibernation"));
         const snapshot = first.get();
         const fenceBeforeGet = snapshot.lease.fence;
-        const reopened = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+        const reopened = yield* declare(options);
 
         expect(snapshot.state).toBe("idle");
         expect(snapshot.turns.at(-1)?.messages).toEqual([
@@ -1924,7 +1617,8 @@ describe("durable session handle", () => {
         ]);
         expect(hibernations).toBe(1);
         expect(reopened).not.toBe(first);
-        expect(first.get().lease.fence).toBe(fenceBeforeGet);
+        // Redeclaring installs a fresh activation, which adopts the next fence eagerly.
+        expect(first.get().lease.fence).toBe(fenceBeforeGet + 1);
         yield* awaitSignal(first.prompt("wake again"));
         expect(first.get().lease.fence).toBe(fenceBeforeGet + 1);
         expect(hibernations).toBe(2);
@@ -1935,16 +1629,16 @@ describe("durable session handle", () => {
     testProgram(
       Effect.gen(function* () {
         const hibernated = signal<void>();
-        runtime = { ...runtime, onHibernate: () => Effect.sync(() => hibernated.resolve()) };
+        runtime = track({ ...runtime, onHibernate: () => Effect.sync(() => hibernated.resolve()) });
         const runner: SessionRunner = () =>
           Effect.sync(() => {
             return { kind: "result", text: "complete" };
           });
         const options = residentOptions("hibernate-successor", runner);
-        const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+        const first = yield* declare(options);
         yield* awaitSignal(bounded(first.prompt("sleep after this"), "first prompt"));
         yield* awaitSignal(bounded(hibernated.promise, "runtime hibernation"));
-        const successor = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+        const successor = yield* declare(options);
         expect(successor).not.toBe(first);
 
         expect(
@@ -1989,7 +1683,7 @@ describe("durable session handle", () => {
             yield* awaitSignal(release.promise);
             return { kind: "result", text: "done" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("approval-routing", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("approval-routing", runner));
         const request = approvalRequest(handle.id, "turn");
         livePending.push(request);
         const answer = {
@@ -2030,7 +1724,7 @@ describe("durable session handle", () => {
             resumed.resolve(input);
             return { kind: "result", text: "resumed" };
           });
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("content-free-resume", runner), fixture), fixture); });
+        const handle = yield* declare(residentOptions("content-free-resume", runner));
 
         const first = yield* Effect.forkChild(handle.prompt("original prompt"));
         const firstInput = yield* awaitSignal(
@@ -2045,184 +1739,144 @@ describe("durable session handle", () => {
         expect(resumedInput.messages).toEqual(firstInput.messages);
         expect(resumedInput.resumeCount).toBe(1);
         expect(
-          sessionTree(handle.id)
-            .map(SessionHandleStore.delivery)
-            .filter(
-              (
-                item:
-                  | {
-                      phase: "delivery";
-                      turnId: string;
-                      inboxId: string;
-                      kind: "prompt" | "interrupt" | "resume";
-                      content: string;
-                      origin: { encodingVersion: 1; value: PlainValue };
-                      boundary: "before_llm" | "after_llm" | "after_tools";
-                    }
-                  | undefined,
-              ): item is SessionTurn.Delivery => item !== undefined,
-            )
-            .filter(
-              (item: {
-                phase: "delivery";
-                turnId: string;
-                inboxId: string;
-                kind: "prompt" | "interrupt" | "resume";
-                content: string;
-                origin: { encodingVersion: 1; value: PlainValue };
-                boundary: "before_llm" | "after_llm" | "after_tools";
-              }) => item.kind === "resume",
-            )
-            .map(
-              (item: {
-                phase: "delivery";
-                turnId: string;
-                inboxId: string;
-                kind: "prompt" | "interrupt" | "resume";
-                content: string;
-                origin: { encodingVersion: 1; value: PlainValue };
-                boundary: "before_llm" | "after_llm" | "after_tools";
-              }) => item.content,
-            ),
+          deliveries(handle.id)
+            .filter((item) => item.kind === "resume")
+            .map((item) => item.content),
         ).toEqual([""]);
       }),
     ));
 
-  test.each([
-    "result",
-    "error",
-    "interrupted",
-  ] as const)("child %s terminal offers the original parent letter to the atomic commit port", (kind:
-    | "interrupted"
-    | "error"
-    | "result") =>
-    testProgram(
-      Effect.gen(function* () {
-        const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("request-parent", () =>
-            Effect.sync(() => {
-              return { kind: "result", text: "parent" };
-            }),
-          ), fixture), fixture); });
-        expect(
-          Storage.get().actions?.append(
-            {
-              id: "original-send",
-              sessionId: parent.id,
-              parentId: null,
-              kind: "message",
-              intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
-              effect: { encodingVersion: 1, value: { phase: "pending" } },
-              irreversible: true,
-              ts: now,
-            },
-            SessionHandleStore.row(parent.id).revision,
-          ),
-        ).toBeDefined();
-        let commits = 0;
-        runtime = {
-          ...runtime,
-          dispatchOutbound: ({
-            message,
-          }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
-            Effect.gen(function* () {
-              commits += 1;
-              expect(
-                sessionTree(message.sourceSessionId).some(
-                  (action: LedgerAction.Node) =>
-                    SessionHandleStore.turnTerminal(action) !== undefined,
-                ),
-              ).toBe(true);
-              expect(SessionHandleStore.outboundRows(message.sourceSessionId)[0]?.state).toBe(
-                "pending",
-              );
-              expect(SessionHandleStore.inboxRows(parent.id)).toEqual([]);
-              expect(message).toMatchObject({
-                requestId: "original-send",
-                replyTo: "original-binding",
-                sourceSessionId: "reply-child",
-                terminal: kind === "result" ? "completed" : kind,
-              });
-              return (yield* SessionHandleStore.commitReceivedMessage({
-                id: message.messageId,
-                sessionId: message.destinationSessionId,
-                kind: "prompt",
-                content: message.content,
-                createdAt: now,
-                parentActionId: null,
-                origin: { encodingVersion: 1, value: message },
-              }).pipe(
-                Effect.mapError(
-                  (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
-                ),
-              )).receipt;
-            }),
-        };
-        const worker = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
-            id: "reply-child",
-            parentId: parent.id,
-            role: "worker",
-            tools: [],
-            system,
-            runner: () =>
+  test.each(["result", "error", "interrupted"] as const)(
+    "child %s terminal offers the original parent letter to the atomic commit port",
+    (kind: "interrupted" | "error" | "result") =>
+      testProgram(
+        Effect.gen(function* () {
+          const parent = yield* declare(
+            residentOptions("request-parent", () =>
               Effect.sync(() => {
-                return { kind, text: "terminal-text" };
+                return { kind: "result", text: "parent" };
               }),
-          }, fixture), fixture); });
-        yield* awaitSignal(
-          worker.prompt("work", {
-            encodingVersion: 1,
-            value: {
-              kind: "message",
-              messageId: "request",
-              senderSessionId: parent.id,
-              sourceActionId: "original-send",
-              replyTo: "original-binding",
-              deadline: now + 1000,
+            ),
+          );
+          // The parent's original letter, appended under its live activation's authority.
+          const parentRow = kernel().row(parent.id);
+          if (parentRow.leaseOwner === null) throw new Error("parent activation owns no fence");
+          yield* kernel().commit({
+            sessionId: parent.id,
+            owner: parentRow.leaseOwner,
+            fence: parentRow.leaseFence,
+            now,
+            expectedRevision: parentRow.revision,
+            state: parentRow.state,
+            actions: [
+              {
+                id: "original-send",
+                sessionId: parent.id,
+                parentId: tree(parent.id).at(-1)?.id ?? null,
+                kind: "message",
+                intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
+                effect: { encodingVersion: 1, value: { phase: "pending" } },
+                irreversible: true,
+                ts: now,
+              },
+            ],
+          });
+          let commits = 0;
+          const workerRuntime = track({
+            ...runtime,
+            dispatchOutbound: ({
+              message,
+            }: Parameters<NonNullable<SessionFixture["dispatchOutbound"]>>[0]) =>
+              Effect.gen(function* () {
+                commits += 1;
+                expect(
+                  tree(message.sourceSessionId).some(
+                    (action) => SessionHandleStore.turnTerminal(action) !== undefined,
+                  ),
+                ).toBe(true);
+                expect(kernel().outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
+                expect(inboxRows(parent.id)).toEqual([]);
+                expect(message).toMatchObject({
+                  requestId: "original-send",
+                  replyTo: "original-binding",
+                  sourceSessionId: "reply-child",
+                  terminal: kind === "result" ? "completed" : kind,
+                });
+                return (yield* commitInbox({
+                  id: message.messageId,
+                  sessionId: message.destinationSessionId,
+                  kind: "prompt",
+                  content: message.content,
+                  createdAt: now,
+                  parentActionId: tree(message.destinationSessionId).at(-1)?.id ?? null,
+                  origin: { encodingVersion: 1, value: PlainValueSchema.parse(message) },
+                })).receipt;
+              }),
+          });
+          const worker = yield* declare(
+            {
+              id: "reply-child",
+              parentId: parent.id,
+              role: "worker",
+              tools: [],
+              system,
+              runner: () =>
+                Effect.sync(() => {
+                  return { kind, text: "terminal-text" };
+                }),
             },
-          }),
-        );
-        expect(commits).toBe(1);
-        expect(
-          SessionHandleStore.inboxRows(parent.id).map((row: Inbox.Row) => row.content),
-        ).toEqual(["terminal-text"]);
-        expect(
-          sessionTree(worker.id).flatMap((action: LedgerAction.Node) => {
-            const terminal = SessionHandleStore.turnTerminal(action);
-            return terminal === undefined ? [] : [terminal.kind];
-          }),
-        ).toEqual([kind]);
-      }),
-    ));
+            workerRuntime,
+          );
+          yield* awaitSignal(
+            worker.prompt("work", {
+              encodingVersion: 1,
+              value: {
+                kind: "message",
+                messageId: "request",
+                senderSessionId: parent.id,
+                sourceActionId: "original-send",
+                replyTo: "original-binding",
+                deadline: now + 1000,
+              },
+            }),
+          );
+          expect(commits).toBe(1);
+          expect(inboxRows(parent.id).map((row) => row.content)).toEqual(["terminal-text"]);
+          expect(terminals(worker.id).map((terminal) => terminal.kind)).toEqual([kind]);
+        }),
+      ),
+  );
 
-  test("materializes a worker as a parent-linked session with an independent lease", () =>
+  test("materializes a worker as a parent-linked session with an independent fence", () =>
     testProgram(
       Effect.gen(function* () {
         const runner: SessionRunner = () =>
           Effect.sync(() => {
             return { kind: "result", text: "done" };
           });
-        const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("resident-parent", runner), fixture), fixture); });
-        const worker = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
-            id: "worker-child",
-            parentId: parent.id,
-            role: "worker",
-            runner,
-            tools: [tool("read")],
-            system,
-          }, fixture), fixture); });
+        const parent = yield* declare(residentOptions("resident-parent", runner));
+        const worker = yield* declare({
+          id: "worker-child",
+          parentId: parent.id,
+          role: "worker",
+          runner,
+          tools: [tool("read")],
+          system,
+        });
 
         yield* awaitSignal(worker.prompt("do the work"));
 
         expect(worker.id.startsWith("delegation-")).toBe(false);
-        expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker", revision: 9 });
-        expect(SessionHandleStore.row(parent.id).leaseFence).toBe(0);
-        expect(SessionHandleStore.row(worker.id).leaseFence).toBe(1);
+        expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker" });
+        // Each activation adopted its own first fence; neither borrowed the other's.
+        expect(kernel().row(parent.id).leaseFence).toBe(1);
+        expect(kernel().row(worker.id).leaseFence).toBe(1);
       }),
     ));
 });
 
 describe("session crash recovery and observation", () => {
-  test("boot sweep resumes with the original pre-minted result id", () =>
+  test("reactivation resumes with the original pre-minted result id", () =>
     testProgram(
       Effect.gen(function* () {
         yield* commitOpenTurn({
@@ -2237,21 +1891,21 @@ describe("session crash recovery and observation", () => {
             return { kind: "result", text: "recovered" };
           });
 
-        const sweeping = yield* Effect.forkChild(Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }));
+        const waking = yield* Effect.forkChild(reactivate("crashed-turn", runner));
         const input = yield* awaitSignal(bounded(entered.promise, "recovered runner entry"));
-        yield* awaitSignal(bounded(sweeping, "boot sweep terminal"));
+        yield* awaitSignal(bounded(waking, "reactivation terminal"));
 
         expect(input.resultId).toBe("preminted-result");
         expect(input.resumeCount).toBe(1);
-        const terminal = sessionTree("crashed-turn").find(
-          (action: LedgerAction.Node) => SessionHandleStore.turnTerminal(action) !== undefined,
+        const terminal = tree("crashed-turn").find(
+          (action) => SessionHandleStore.turnTerminal(action) !== undefined,
         );
         expect(terminal?.id).toBe("preminted-result");
-        expect(SessionHandleStore.openTurns(sessionTree("crashed-turn"))).toEqual([]);
+        expect(SessionHandleStore.openTurns(tree("crashed-turn"))).toEqual([]);
       }),
     ));
 
-  test("boot sweep refuses an open turn whose pinned generation no longer matches the ledger", () =>
+  test("reactivation refuses an open turn whose pinned generation no longer matches the ledger", () =>
     testProgram(
       Effect.gen(function* () {
         yield* commitOpenTurn({
@@ -2261,125 +1915,90 @@ describe("session crash recovery and observation", () => {
           toolsHash: "not-the-recorded-tools",
         });
         let runs = 0;
-        const sweeping = yield* Effect.forkChild(
-          Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => () =>
-              Effect.sync(() => {
-                runs += 1;
-                return { kind: "result", text: "must not run" };
-              }), fixture), fixture); }),
+        const waking = yield* Effect.forkChild(
+          reactivate("drifted-turn", () =>
+            Effect.sync(() => {
+              runs += 1;
+              return { kind: "result", text: "must not run" };
+            }),
+          ),
         );
-        expect(yield* failure(awaitSignal(sweeping))).toMatchObject({
+        expect(yield* failure(awaitSignal(waking))).toMatchObject({
           _tag: "GenerationUnavailable",
           generation: 1,
         });
         expect(runs).toBe(0);
-        expect(SessionHandleStore.openTurns(sessionTree("drifted-turn"))).toHaveLength(
-          1,
-        );
+        expect(SessionHandleStore.openTurns(tree("drifted-turn"))).toHaveLength(1);
       }),
     ));
 
   test("a prompt denied at a mid-turn boundary is consumed and fails the runner's drain", () =>
     testProgram(
       Effect.gen(function* () {
-        yield* awaitSignal(
+        yield* commitOpenTurn({
+          sessionId: "boundary-deny",
+          resultId: "boundary-result",
+          resumeCount: 0,
+        });
+        const drained = signal<unknown>();
+        const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
-            Storage.reset();
-            Storage.initialize({ dbPath: ":memory:", observationSink: sink });
-            seedPolicy([
-              {
-                name: "deny-boundary-prompt",
-                kind: "prompt",
-                phase: "pre",
-                match: { encodingVersion: 1, value: { op: "inbox", sessionId: "boundary-deny" } },
-                verdict: {
-                  encodingVersion: 1,
-                  value: { type: "deny", reason: "late prompt refused" },
-                },
-                priority: 2_000,
-              },
-            ]);
-            yield* commitOpenTurn({
-              sessionId: "boundary-deny",
-              resultId: "boundary-result",
-              resumeCount: 0,
+            yield* commitInbox({
+              id: "boundary-deny:late",
+              sessionId: input.sessionId,
+              kind: "prompt",
+              content: "late prompt",
+              origin: { encodingVersion: 1, value: { source: "test" } },
+              createdAt: now,
+              parentActionId: tree(input.sessionId).at(-1)?.id ?? null,
             });
-            const isolatedRuntime = { ...runtime };
-            const drained = signal<unknown>();
-            const runner: SessionRunner = (input: SessionRunnerInput) =>
-              Effect.gen(function* () {
-                yield* SessionHandleStore.commitInbox({
-                  id: "boundary-deny:late",
-                  sessionId: input.sessionId,
-                  kind: "prompt",
-                  content: "late prompt",
-                  origin: { encodingVersion: 1, value: { source: "test" } },
-                  createdAt: now,
-                  parentActionId: sessionTree(input.sessionId).at(-1)?.id ?? null,
-                }).pipe(
-                  Effect.mapError(
-                    (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
-                  ),
-                );
-                const boundary = yield* Effect.result(input.boundary("after_llm"));
-                if (boundary._tag === "Failure") {
-                  drained.resolve(boundary.failure);
-                  return yield* Effect.fail(boundary.failure);
-                }
-                return { kind: "result", text: JSON.stringify(boundary.success) };
-              });
-            yield* awaitSignal(
-              bounded(
-                Effect.gen(function* () { const fixture: SessionFixture = isolatedRuntime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }),
-                "boot sweep terminal",
-              ),
-            );
-            expect(yield* awaitSignal(bounded(drained.promise, "boundary refusal"))).toMatchObject({
-              _tag: "ForeignFailure",
-              operation: "session.prompt",
-              cause: "late prompt refused",
-            });
-            const tree = sessionTree("boundary-deny");
-            expect(
-              SessionHandleStore.turnTerminal(
-                tree.find((action: LedgerAction.Node) => action.id === "boundary-result"),
-              ),
-            ).toMatchObject({ kind: "error" });
-            expect(
-              tree
-                .filter((action: LedgerAction.Node) => action.kind === "policy.decision")
-                .map(policyHook),
-            ).toEqual(["turn.pre", "prompt.pre"]);
-            expect(
-              tree
-                .map(SessionHandleStore.delivery)
-                .filter(
-                  (
-                    d:
-                      | {
-                          phase: "delivery";
-                          turnId: string;
-                          inboxId: string;
-                          kind: "prompt" | "interrupt" | "resume";
-                          content: string;
-                          origin: { encodingVersion: 1; value: PlainValue };
-                          boundary: "before_llm" | "after_llm" | "after_tools";
-                        }
-                      | undefined,
-                  ) => d !== undefined,
-                ),
-            ).toEqual([]);
-            expect(
-              SessionHandleStore.inboxRows("boundary-deny").map((row: Inbox.Row) => row.status),
-            ).toEqual(["consumed"]);
-            yield* awaitSignal(closeSessions(isolatedRuntime));
-            Storage.reset();
-          }),
-        );
+            const boundary = yield* Effect.result(input.boundary("after_llm"));
+            if (boundary._tag === "Failure") {
+              drained.resolve(boundary.failure);
+              return yield* Effect.fail(boundary.failure);
+            }
+            return { kind: "result", text: JSON.stringify(boundary.success) };
+          });
+        yield* awaitSignal(bounded(reactivate("boundary-deny", runner), "reactivation terminal"));
+        expect(yield* awaitSignal(bounded(drained.promise, "boundary refusal"))).toMatchObject({
+          _tag: "ForeignFailure",
+          operation: "session.prompt",
+          cause: "late prompt refused",
+        });
+        const actions = tree("boundary-deny");
+        expect(
+          SessionHandleStore.turnTerminal(
+            actions.find((action) => action.id === "boundary-result"),
+          ),
+        ).toMatchObject({ kind: "error" });
+        expect(
+          actions.filter((action) => action.kind === "policy.decision").map(policyHook),
+        ).toEqual(["turn.pre", "prompt.pre"]);
+        // The chain is the inbox: consuming the blocked prompt IS a delivery
+        // action, bound to no turn ("noop") instead of the open turn.
+        expect(deliveries("boundary-deny")).toMatchObject([
+          { turnId: "noop", inboxId: "boundary-deny:late", kind: "prompt" },
+        ]);
+        expect(inboxRows("boundary-deny").map((row) => row.status)).toEqual(["consumed"]);
       }),
+      {
+        policies: [
+          {
+            name: "deny-boundary-prompt",
+            kind: "prompt",
+            phase: "pre",
+            match: { encodingVersion: 1, value: { op: "inbox", sessionId: "boundary-deny" } },
+            verdict: {
+              encodingVersion: 1,
+              value: { type: "deny", reason: "late prompt refused" },
+            },
+            priority: 2_000,
+          },
+        ],
+      },
     ));
 
-  test("boot sweep seals a durable interrupt before admitting an open turn", () =>
+  test("reactivation seals a durable interrupt before admitting an open turn", () =>
     testProgram(
       Effect.gen(function* () {
         yield* commitOpenTurn({
@@ -2387,7 +2006,7 @@ describe("session crash recovery and observation", () => {
           resultId: "cancelled-result",
           resumeCount: 0,
         });
-        yield* SessionHandleStore.commitInbox({
+        yield* commitInbox({
           id: "cancel-request",
           sessionId: "cancelled-turn",
           kind: "interrupt",
@@ -2396,32 +2015,32 @@ describe("session crash recovery and observation", () => {
           origin: { encodingVersion: 1, value: { kind: "sdk" } },
           parentActionId: "cancelled-turn:turn",
         });
-        const prefix = sessionTree("cancelled-turn");
+        const prefix = tree("cancelled-turn");
         let runnerEntries = 0;
         yield* awaitSignal(
           bounded(
-            Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => () =>
-                Effect.sync(() => {
-                  runnerEntries += 1;
-                  return { kind: "result", text: "must not run" };
-                }), fixture), fixture); }),
+            reactivate("cancelled-turn", () =>
+              Effect.sync(() => {
+                runnerEntries += 1;
+                return { kind: "result", text: "must not run" };
+              }),
+            ),
             "cancelled open turn seal",
           ),
         );
         expect(runnerEntries).toBe(0);
-        const actions = sessionTree("cancelled-turn");
+        const actions = tree("cancelled-turn");
         expect(actions.slice(0, prefix.length)).toEqual(prefix);
         expect(
           SessionHandleStore.turnTerminal(
-            actions.find((action: LedgerAction.Node) => action.id === "cancelled-result"),
+            actions.find((action) => action.id === "cancelled-result"),
           ),
         ).toMatchObject({ kind: "interrupted", turnId: "cancelled-turn:turn", resumeCount: 0 });
-        expect(SessionHandleStore.pendingInbox("cancelled-turn")).toEqual([]);
-        expect(SessionHandleStore.row("cancelled-turn").leaseOwner).toBeNull();
+        expect(pendingInbox("cancelled-turn")).toEqual([]);
       }),
     ));
 
-  test("boot sweep seals error at resume budget ten without entering the runner", () =>
+  test("reactivation seals error at resume budget ten without entering the runner", () =>
     testProgram(
       Effect.gen(function* () {
         yield* commitOpenTurn({
@@ -2436,16 +2055,11 @@ describe("session crash recovery and observation", () => {
             return { kind: "result", text: "must not run" };
           });
 
-        yield* awaitSignal(
-          bounded(
-            Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(sweepSessions(() => runner, fixture), fixture); }),
-            "resume budget terminal",
-          ),
-        );
+        yield* awaitSignal(bounded(reactivate("poison-turn", runner), "resume budget terminal"));
 
         expect(runnerEntries).toBe(0);
-        const terminalAction = sessionTree("poison-turn").find(
-          (action: LedgerAction.Node) => action.id === "poison-result",
+        const terminalAction = tree("poison-turn").find(
+          (action) => action.id === "poison-result",
         );
         expect(SessionHandleStore.turnTerminal(terminalAction)).toMatchObject({
           kind: "error",
@@ -2458,130 +2072,56 @@ describe("session crash recovery and observation", () => {
     testProgram(
       Effect.gen(function* () {
         const runs: string[] = [];
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("interrupted-without-terminal", (input: SessionRunnerInput) =>
+        const handle = yield* declare(
+          residentOptions("interrupted-without-terminal", (input: SessionRunnerInput) =>
             Effect.sync(() => {
               runs.push(input.turnId);
               return { kind: "result", text: "never" };
             }),
-          ), fixture), fixture); });
-        const row = SessionHandleStore.row(handle.id);
-        const lease = yield* SessionHandleStore.acquireLease({
+          ),
+        );
+        // An earlier activation left the durable state interrupted with no open
+        // turn and no terminal; the mark rides the live activation's authority.
+        const row = kernel().row(handle.id);
+        if (row.leaseOwner === null) throw new Error("activation owns no fence");
+        yield* kernel().commit({
           sessionId: handle.id,
-          owner: "earlier-runtime",
-          expectedFence: row.leaseFence,
+          owner: row.leaseOwner,
+          fence: row.leaseFence,
           now,
-          expiresAt: now + SessionHandleStore.LEASE_TTL_MS,
-        });
-        if (!lease.ok) throw new Error("test lease refused");
-        const marked = yield* SessionHandleStore.commit({
-          sessionId: handle.id,
-          owner: "earlier-runtime",
-          fence: lease.fence,
-          now,
-          expectedRevision: SessionHandleStore.row(handle.id).revision,
+          expectedRevision: row.revision,
           actions: [],
-          consumeInboxIds: [],
           state: "interrupted",
-          releaseLease: true,
         });
-        if (!marked.ok) throw new Error("test interrupt refused");
 
         expect(
           yield* awaitSignal(bounded(handle.resume(), "resume without terminal")),
         ).toBeUndefined();
         expect(runs).toEqual([]);
         expect(handle.get().state).toBe("interrupted");
-        expect(SessionHandleStore.pendingInbox(handle.id)).toEqual([]);
-        expect(
-          sessionTree(handle.id)
-            .map(SessionHandleStore.delivery)
-            .filter(
-              (
-                delivery:
-                  | {
-                      phase: "delivery";
-                      turnId: string;
-                      inboxId: string;
-                      kind: "prompt" | "interrupt" | "resume";
-                      content: string;
-                      origin: { encodingVersion: 1; value: PlainValue };
-                      boundary: "before_llm" | "after_llm" | "after_tools";
-                    }
-                  | undefined,
-              ): delivery is SessionTurn.Delivery => delivery !== undefined,
-            )
-            .map(
-              (delivery: {
-                phase: "delivery";
-                turnId: string;
-                inboxId: string;
-                kind: "prompt" | "interrupt" | "resume";
-                content: string;
-                origin: { encodingVersion: 1; value: PlainValue };
-                boundary: "before_llm" | "after_llm" | "after_tools";
-              }) => delivery.turnId,
-            ),
-        ).toEqual(["noop"]);
-      }),
-    ));
-
-  test("watch installs its subscription before reading the initial snapshot", () =>
-    testProgram(
-      Effect.gen(function* () {
-        yield* SessionHandleStore.materialize({
-          id: "watch-order",
-          parentId: null,
-          role: "resident",
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: 0,
-          actionId: "watch-order:configure",
-          at: now,
-        });
-        let subscribed = false;
-        const adapter = Storage.get();
-        const sessions = adapter.sessions;
-        if (sessions === undefined) throw new Error("session adapter is unavailable");
-        const get = sessions.get.bind(sessions);
-        Storage.configure({
-          ...adapter,
-          transaction: adapter.transaction.bind(adapter),
-          sessions: {
-            ...sessions,
-            get: (id: string) => {
-              expect(subscribed).toBe(true);
-              return get(id);
-            },
-          },
-        });
-        const watch = SessionHandleStore.watchSnapshot("watch-order", 1, {
-          publish: () => undefined,
-          subscribe: () => {
-            subscribed = true;
-            return () => undefined;
-          },
-        });
-
-        watch.unsubscribe();
+        expect(pendingInbox(handle.id)).toEqual([]);
+        expect(deliveries(handle.id).map((delivery) => delivery.turnId)).toEqual(["noop"]);
       }),
     ));
 
   test("watch reports a revision gap and get replaces state after a dropped observation", () =>
     testProgram(
       Effect.gen(function* () {
-        const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(residentOptions("watched-session", () =>
+        const handle = yield* declare(
+          residentOptions("watched-session", () =>
             Effect.sync(() => {
               return { kind: "result", text: "unused" };
             }),
-          ), fixture), fixture); });
-        const configureId = sessionTree(handle.id)[0]?.id;
+          ),
+        );
+        const configureId = tree(handle.id)[0]?.id;
         if (configureId === undefined) throw new Error("missing configure action");
         const watch = handle.watch();
         const observed = signal<SessionTurn.Observation>();
         const stop = watch.subscribe(observed.resolve);
         sink.dropNextCommit = true;
 
-        yield* SessionHandleStore.commitInbox({
+        yield* commitInbox({
           id: "watched-session:prompt-1",
           sessionId: "watched-session",
           kind: "prompt",
@@ -2590,7 +2130,7 @@ describe("session crash recovery and observation", () => {
           createdAt: now + 1,
           parentActionId: configureId,
         });
-        yield* SessionHandleStore.commitInbox({
+        yield* commitInbox({
           id: "watched-session:prompt-2",
           sessionId: "watched-session",
           kind: "prompt",

@@ -1,8 +1,14 @@
-import { SecretStore, Vault } from "@openomni/ledger";
+import { Vault, type createSecretStore } from "@openomni/ledger";
 
-export function putChannelCredential(id: string, plaintext: string, key: Uint8Array, at: number) {
+export function putChannelCredential(
+  secrets: ReturnType<typeof createSecretStore>,
+  id: string,
+  plaintext: string,
+  key: Uint8Array,
+  at: number,
+) {
   const envelope = Vault.seal(new TextEncoder().encode(plaintext), Vault.kekOf(key));
-  SecretStore.put({
+  secrets.put({
     id,
     ciphertext: envelope.ciphertext,
     wrappedDek: envelope.wrappedDek,

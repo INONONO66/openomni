@@ -183,7 +183,7 @@ function assertInputConsumption(after: SessionSnapshot): void {
 }
 function assertObservations(before: SessionSnapshot | undefined, after: SessionSnapshot, events: readonly L0Observation.ActionCommitted[]): void {
     const appended = after.actions.slice(before?.actions.length ?? 0);
-    // Storage and executor may both notify one commit; two notifications are not two actions.
+    // The store and executor may both notify one commit; two notifications are not two actions.
     const observed = events.filter((committed: L0Observation.ActionCommitted, index: number) => committed.sessionId === after.row.id &&
         events.findIndex((other: L0Observation.ActionCommitted) => other.id === committed.id) === index);
     expect(observed.map((committed: L0Observation.ActionCommitted) => [committed.id, committed.kind])).toEqual(appended.map((action: LedgerAction.Node) => [action.id, action.kind]));

@@ -1,7 +1,18 @@
-import { ForeignFailure } from "@openomni/agent";
+import {
+  Clock,
+  createSessionEntityRunTurn,
+  decideSessionAdmission,
+  Entropy,
+  ForeignFailure,
+  GenerationLayers,
+  ObservationSink,
+  type SessionEntryServices,
+  type SessionError,
+  type SessionRuntime,
+} from "@openomni/agent";
 import type { LedgerError } from "@openomni/ledger";
-import type { Inbox, LedgerAction } from "@openomni/protocol";
-import { Effect } from "effect";
+import type { Inbox, LedgerAction, SessionTurn } from "@openomni/protocol";
+import { Context, Effect, type Scope } from "effect";
 import {
   AppLedger,
   createAppLedger,
@@ -102,4 +113,71 @@ export function localInbox(
         return yield* new ForeignFailure({ operation: "message.commit", cause: "no receipt" });
       return asRow(receipt.action.ordinal);
     });
+}
+
+export type ResolvedTestRuntime = Parameters<typeof createSessionEntityRunTurn>[1];
+
+/** The app's runtime resolution, replayed for fixtures over a built service context. */
+export function resolvedRuntimeFor(
+  runtime: SessionRuntime,
+  context: Context.Context<SessionEntryServices>,
+): ResolvedTestRuntime {
+  return {
+    ...runtime,
+    clock: Context.get(context, Clock).now,
+    entropy: Context.get(context, Entropy).next,
+    observations: Context.get(context, ObservationSink),
+    generations: Context.get(context, GenerationLayers),
+    services: context,
+  };
+}
+
+/**
+ * The entity's backlog drain, minus the mailbox (mirrors the process child):
+ * adopt the fence once, then run admitted decisions until the chain says
+ * stop. Returns the latest turn terminal the drain settled.
+ */
+export function drainSession(deps: {
+  readonly plane: AppLedgerPlane;
+  readonly sessionId: string;
+  readonly runner: Parameters<typeof createSessionEntityRunTurn>[0];
+  readonly runtime: ResolvedTestRuntime;
+  readonly scope: Scope.Scope;
+  readonly owner?: string;
+}): Effect.Effect<SessionTurn.Terminal | undefined, SessionError | LedgerError> {
+  const owner = deps.owner ?? "test-drain";
+  const kernel = deps.plane.openKernel(deps.sessionId);
+  const runTurn = createSessionEntityRunTurn(deps.runner, deps.runtime, deps.scope);
+  return Effect.gen(function* () {
+    const fence = yield* adoptTestFence(kernel, deps.sessionId, owner);
+    const authority = { sessionId: deps.sessionId, owner, fence };
+    for (;;) {
+      const row = kernel.row(deps.sessionId);
+      const open = kernel.latestOpenTurn(deps.sessionId);
+      const terminal = kernel.latestTurnTerminal(deps.sessionId);
+      const snapshot = {
+        row,
+        pending: kernel.pendingMessages(deps.sessionId),
+        ...(open === undefined ? {} : { open }),
+        ...(terminal === undefined ? {} : { terminal }),
+      };
+      const decision = decideSessionAdmission(snapshot);
+      switch (decision.kind) {
+        case "stop":
+          return kernel.latestTurnTerminal(deps.sessionId)?.effect;
+        case "refused":
+          return yield* new ForeignFailure({ operation: "session.admission", cause: "invalid_state" });
+        case "consume":
+          // The consume fold is entity-owned; a fixture reaching it is a
+          // wiring defect, not backlog to silently drop.
+          return yield* new ForeignFailure({ operation: "session.admission", cause: "consume_in_fixture" });
+        case "start":
+          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot });
+          continue;
+        default:
+          yield* runTurn({ authority, kernel, decision, snapshot });
+          continue;
+      }
+    }
+  });
 }

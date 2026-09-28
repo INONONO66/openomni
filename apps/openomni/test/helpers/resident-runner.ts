@@ -6,14 +6,13 @@ import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";
 import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
-import { Bus, closeSessions, wakeSession, type SessionRuntime } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { Bus, closeSessions, type SessionRuntime } from "@openomni/agent";
 import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
 import { runEffect } from "./effect";
 import { effectScope } from "./effect-scope";
+import { drainSession, localInbox, resolvedRuntimeFor, testPlane } from "./ledger";
 
-import { commitMessageInbox } from "../../src/composition/message-session";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -22,48 +21,72 @@ afterEach(async () => {
 });
 
 export function residentRunner(
-  options: Omit<ResidentOptions, "sessionRuntime" | "tools"> & { tools: Partial<ResidentOptions["tools"]>; llm?: Partial<FixtureLlm>; sessionRuntime?: SessionRuntime & { readonly clock?: () => number; readonly entropy?: () => string; readonly observations?: ObservationSink } },
+  options: Omit<ResidentOptions, "sessionRuntime" | "tools" | "policyGeneration"> & {
+    tools: Partial<ResidentOptions["tools"]>;
+    llm?: Partial<FixtureLlm>;
+    sessionRuntime?: Partial<SessionRuntime> & {
+      readonly clock?: () => number;
+      readonly entropy?: () => string;
+      readonly observations?: ObservationSink;
+    };
+  },
 ) {
-  const runtime = options.sessionRuntime ?? {
+  const plane = testPlane();
+  const runtime: SessionRuntime = {
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
     authorizeConfigure: allowConfigure,
+    openKernel: plane.openKernel,
+    listSessions: plane.listSessions,
+    ...options.sessionRuntime,
   };
   const scope = effectScope();
-  seedKernelPolicyRows();
-  const resident = createResident({ ...options, tools: { ...testToolPorts, ...options.tools }, sessionRuntime: runtime });
+  seedKernelPolicyRows(plane.catalog.policies);
+  const resident = createResident({
+    ...options,
+    tools: { ...testToolPorts, ...options.tools },
+    sessionRuntime: runtime,
+    policyGeneration: () => plane.openKernel("policy-probe").currentPolicyGeneration(),
+  });
+  const fixture = options.sessionRuntime;
   const context = scope.runSync(generationServices({
-    clock: runtime.clock, entropy: runtime.entropy,
-    observations: runtime.observations === undefined ? Bus : observationService(runtime.observations),
+    clock: fixture?.clock, entropy: fixture?.entropy,
+    observations: fixture?.observations === undefined ? Bus : observationService(fixture.observations),
     definitions: resident.definitions, llm: { run, resolveModel: Provider.resolveModel, ...options.llm },
+    plane,
   }));
   cleanups.push(async () => {
     await runEffect(closeSessions(runtime).pipe(Effect.provide(context)));
     await scope.close();
+    plane.close();
   });
+  const resolved = resolvedRuntimeFor(runtime, context);
   return {
     ...resident,
     services: context,
     runtime,
+    plane,
     async prompt(sessionId: string, content: string) {
-      const exists = SessionHandleStore.listRows().some((row) => row.id === sessionId);
-      await runEffect(commitMessageInbox({
+      const exists = plane.listSessions().some((row) => row.id === sessionId);
+      await runEffect(localInbox(plane, "resident-runner", fixture?.clock ?? Date.now)({
         id: crypto.randomUUID(),
         sessionId,
         kind: "prompt",
         content,
         origin: { encodingVersion: 1, value: { kind: "test" } },
-        createdAt: Date.now(),
+        createdAt: (fixture?.clock ?? Date.now)(),
         parentActionId: null,
         ...(exists
           ? {}
           : { createSession: resident.materialize(sessionId, null, "resident", "resident") }),
       }));
-      const result = await scope.run(wakeSession(
+      const result = await scope.run(drainSession({
+        plane,
         sessionId,
-        resident.runnerFor(SessionHandleStore.row(sessionId)),
-        runtime,
-      ).pipe(Effect.provide(context)));
+        runner: resident.runnerFor(plane.openKernel(sessionId).row(sessionId)),
+        runtime: resolved,
+        scope: scope.scope,
+      }).pipe(Effect.provide(context)));
       if (result === undefined) throw new Error("resident turn returned no result");
       return result;
     },
