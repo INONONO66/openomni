@@ -1,5 +1,5 @@
 import { ledger, resetLedger } from "../helpers/ledger";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, SessionTransition } from "@openomni/protocol";
 import * as Matcher from "../../src/router/request/matcher";
 

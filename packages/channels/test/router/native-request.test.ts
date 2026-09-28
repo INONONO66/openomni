@@ -1,7 +1,7 @@
 import { ledger, resetLedger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { channelRequests } from "../helpers/channel-requests";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";
 import { effectFailure } from "../helpers/effect-failure";

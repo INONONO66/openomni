@@ -1,5 +1,5 @@
 import { ledger, resetLedger, type TestLedger } from "../../helpers/ledger";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Operational, type BusEvent, type Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,

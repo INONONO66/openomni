@@ -1,7 +1,6 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
-import { acquireEffect, runEffect } from "./helpers/effect";
-import { decodeChannelFailure } from "@openomni/channels";
+import { runEffect } from "./helpers/effect";
 import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { Auth, ForeignFailure } from "@openomni/llm";

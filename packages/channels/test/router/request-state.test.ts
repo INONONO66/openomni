@@ -1,7 +1,7 @@
 import { ledger, resetLedger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { runEffect } from "../helpers/effect";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { SessionTransition } from "@openomni/protocol";
 import { answer, command, openRequest, requestPort } from "../helpers/requests";
 import { requestFixture } from "../helpers/request-record";

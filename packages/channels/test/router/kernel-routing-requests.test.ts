@@ -9,7 +9,6 @@ import { openRequest, requestPort, seededRequests } from "../helpers/requests";
 import { replaceDecisionFacts } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Gateway , type SessionTransition } from "@openomni/protocol";
-import {  } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 import {

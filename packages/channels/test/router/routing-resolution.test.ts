@@ -9,7 +9,6 @@ import { replaceDecisionFacts } from "../helpers/ledger";
 import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
 import { Channel, Ingress, type Gateway, type Inbox, type DecisionFact } from "@openomni/protocol";
 import { messageExecutionReceipt } from "../helpers/message-execution";
-import {  } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   commits,

@@ -1,8 +1,7 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
-import { Cause, Effect, Result, Exit } from "effect";
-import { acquireAppResource } from "../src/gateway";
+import { Cause, Effect, Exit } from "effect";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

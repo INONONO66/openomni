@@ -1,7 +1,6 @@
 import { ledger } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
-import { ChannelGrantStore } from "@openomni/ledger";
 import { registerChannelGrant } from "../helpers/channel-grant";
 import {
   commits,

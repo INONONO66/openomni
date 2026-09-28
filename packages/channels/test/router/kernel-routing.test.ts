@@ -3,7 +3,6 @@ import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Ingress, type BusEvent } from "@openomni/protocol";
-import { BlacklistStore, ChannelGrantStore } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   createMappedOwnerSession,
