@@ -1,4 +1,4 @@
-import { runAgentSync } from "./helpers/executor";
+import { runAgent, runAgentSync } from "./helpers/executor";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { catalogLayer } from "./helpers/service-layers";
 import { Cause, Effect, Exit } from "effect";
@@ -54,7 +54,10 @@ describe("cell-door executor propagation", () => {
     const executor = durableExecutor(allowAll, committed);
     const inner = runAgentSync(createDispatcher().pipe(Effect.provide(catalogLayer([echoTool(() => undefined)]))));
     const outer = runAgentSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([stringQueryTool("outer", "Runs a nested cell tool", async () => {
-      const nested = await isolated(inner.executeCell({ id: "call-inner", tool: "echo", input: { value: "nested" } }, context));
+      // Nested dispatch rides the enclosing isolation directly: isolated() calls
+      // serialize on one module-level chain, so nesting one inside a running
+      // isolated program deadlocks the chain for the whole test process.
+      const nested = await runAgent(inner.executeCell({ id: "call-inner", tool: "echo", input: { value: "nested" } }, context));
       return String(nested.output);
     })]))));
     const result = yield* outer.execute({ id: "call-outer", tool: "outer", input: {} }, context);
