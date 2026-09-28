@@ -1,4 +1,4 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { expect, test } from "bun:test";
@@ -13,7 +13,10 @@ import { ToolBodyFailed } from "../src/errors";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 
 const request = {
   kind: "tool", op: "write", intent: {}, effect: { category: "mutation" },

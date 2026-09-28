@@ -6,8 +6,11 @@ import { restoreModelSelection } from "../src/model-selection";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { isolated } from "./helpers/isolated";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 
 const primary = { provider: "a", id: "primary" };
 const fallback = { provider: "b", id: "fallback" };

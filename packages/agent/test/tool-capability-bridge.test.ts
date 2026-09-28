@@ -13,9 +13,12 @@ import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } fro
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";
 import { runAgent } from "./helpers/executor";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 
 const context = { sessionId: fiberSessionId, turnId: `${fiberSessionId}:turn` };
 const request = (op: string) => ({ kind: "tool", op, intent: {}, effect: { category: "query" } });
@@ -256,7 +259,7 @@ test("bridge: generation-one frame refuses nested dispatch after committed gener
   );
   expect(yield* awaitSignal(observed)).toMatchObject({ _tag: "GenerationUnavailable", generation: 1 });
   expect(bodies).toBe(0);
-  expect(SessionHandleStore.latestGenerationFor(fiberSessionId).generation).toBe(2);
+  expect(isolatedLedger().kernel.latestGenerationFor(fiberSessionId).generation).toBe(2);
   expect(yield* Fiber.join(running)).toMatchObject({ output: "old-outer-settled" });
   expect(sessionTree(fiberSessionId).filter((action: LedgerAction.Node) => action.kind === "tool" && action.intent.value !== null &&
     typeof action.intent.value === "object" && !Array.isArray(action.intent.value) && action.intent.value.callId === "stale")).toHaveLength(0);

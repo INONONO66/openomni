@@ -1,12 +1,15 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
+import { isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { session, closeSessions, type SessionHandle } from "../src/session-handle";
 import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 import { failure } from "./helpers/effect-g2";
 
 function withSession<E, R>(
@@ -20,7 +23,7 @@ function withSession<E, R>(
       clock: () => 1000,
       entropy: () => `configuration-${++sequence}`,
       processId: "configuration",
-      scheduleHeartbeat: () => () => undefined,
+      ...isolatedRuntime(),
       authorizeConfigure,
     };
     seedPolicy();

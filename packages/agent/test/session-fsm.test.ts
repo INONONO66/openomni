@@ -315,8 +315,8 @@ describe("T01-T15 real controller transition witnesses", () => {
       effect: { encodingVersion: 1, value: kind === "alarm.arm" ? { status: "armed", spec: { kind: "at", fireAt: 100 } } : { status: "fired" } },
     });
     const runner = createSessionChatRunner({ prepare: (input) => Effect.gen(function* () {
-      if (source !== "prior") yield* input.ledger.commit(alarmAction("alarm.arm", "alarm", input.turnId));
-      if (source === "cancelled") yield* input.ledger.commit(alarmAction("alarm.fired", "alarm:fired", "alarm"));
+      if (source !== "prior") yield* input.ledger.commit(alarmAction("alarm.arm", "alarm", input.turnId)).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      if (source === "cancelled") yield* input.ledger.commit(alarmAction("alarm.fired", "alarm:fired", "alarm")).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       const executor = yield* createExecutor({ ledger: input.ledger, identity: { sessionId: "S", role: "resident", parentActionId: input.turnId } });
       return prepareChatFixture({ traceContext: { traceId: "trace", sessionId: "S", runId: input.resultId }, config: {
         events: runtime.observations, executor, model: { provider: "test", id: "test" }, tools: [],

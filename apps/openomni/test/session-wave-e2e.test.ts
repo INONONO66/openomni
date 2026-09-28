@@ -13,7 +13,7 @@ import {
   type ExecutionApprovalRequest,
   type SessionHandle,
 } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
 import {
   LlmCall,
@@ -22,24 +22,40 @@ import {
   type AnyToolDefinition,
   type PlainObject,
 } from "@openomni/protocol";
-import { createAlarmWorker } from "../src/composition/alarm-worker";
+import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { runEffect } from "./helpers/effect";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
-  acquireContender,
+  adoptAtFence,
   bounded as waveBounded,
   commitInterrupt,
   interruptDeliveries,
   ProviderRequest,
-  releaseContender,
   trackedWaveTools,
   waveTool,
   interruptSecondModel,
 } from "./helpers/session-wave";
 
 const suite = residentSuite();
+// The booted app's ledger plane, reset per test (W5.2): free helpers below
+// read durable state through it instead of the deleted global store.
+const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+function plane(): AppLedgerPlane {
+  if (planeRef.current === undefined) throw new Error("app plane not booted");
+  return planeRef.current;
+}
+function tree(sessionId: string) {
+  return sessionTree(sessionId, plane().sessionStore(sessionId).actions);
+}
+async function adoptPlane(runtime: Parameters<typeof planeOf>[0]) {
+  planeRef.current = await planeOf(runtime);
+  suite.defer(() => {
+    planeRef.current = undefined;
+  });
+}
 
 function bounded<T>(promise: Promise<T>, label = "wave/recovery"): Promise<T> {
   return waveBounded(promise).catch((cause: unknown) => {
@@ -114,6 +130,7 @@ test("real provider returns calls before any app tool body starts", async () => 
         }),
     },
   });
+  await adoptPlane(app.runtime);
   suite.defer(
     Bus.subscribe(Tool.Events.Started, (event) => {
       if (event.toolName === "provision") bodies += 1;
@@ -126,7 +143,7 @@ test("real provider returns calls before any app tool body starts", async () => 
   );
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
   // When: the public channel triggers a model step with a native tool call.
-  const response = nextResidentTurn(5000);
+  const response = nextResidentTurn(plane(), 5000);
   socket.send(JSON.stringify({ type: "message", text: "read current status" }));
   await response;
   // Then: provider I/O did not execute the body before returning its calls.
@@ -180,20 +197,24 @@ async function waveApp(
         }),
     },
   });
+  await adoptPlane(app.runtime);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
   const cleanup = async () => {
     await suite.cleanup();
-    expect(existsSync(dirname(config.dbPath))).toBe(false);
+    if (config.catalogPath === undefined) throw new Error("suite config always sets catalogPath");
+    expect(existsSync(dirname(config.catalogPath))).toBe(false);
     expect(socket.readyState).toBe(WebSocket.CLOSED);
     const probe = Bun.serve({ hostname: "127.0.0.1", port: app.port, fetch: () => new Response() });
     await probe.stop(true);
   };
-  return { app, socket, received, dbPath: config.dbPath, cleanup };
+  const sessionsDir = config.sessionsDir;
+  if (sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
+  return { app, socket, received, sessionDbPath: (sessionId: string) => sessionFilePath(sessionsDir, sessionId), cleanup };
 }
 
 function toolResults(sessionId: string) {
   const result = z.object({ phase: z.literal("result"), terminal: z.string(), callId: z.string() });
-  return sessionTree(sessionId)
+  return tree(sessionId)
     .filter(
       (action) =>
         action.kind === "tool" &&
@@ -213,7 +234,7 @@ function nextTerminal(): Promise<void> {
     }, 5000);
     const stop = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.sessionId === "gateway-ingress" || event.kind !== "turn") return;
-      const terminal = sessionTree(event.sessionId).find(
+      const terminal = tree(event.sessionId).find(
         (action) => action.id === event.id,
       );
       if (terminal === undefined || SessionHandleStore.turnTerminal(terminal) === undefined) return;
@@ -229,7 +250,7 @@ function nextTerminal(): Promise<void> {
 }
 
 function activeRow() {
-  const row = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
+  const row = plane().listSessions().find((item) => item.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing app session");
   return row;
 }
@@ -250,8 +271,7 @@ function nextApproval(app: Awaited<ReturnType<typeof waveApp>>["app"]) {
 }
 
 function requireBApproval() {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("missing policy adapter");
+  const policies = plane().catalog.policies;
   expect(
     policies.append({
       name: "approve-B",
@@ -291,7 +311,7 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
   // Then: exactly the original turn is interrupted without a body or second call.
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
-  const terminals = sessionTree(activeRow().id).flatMap((action) => {
+  const terminals = tree(activeRow().id).flatMap((action) => {
     const terminal = SessionHandleStore.turnTerminal(action);
     return terminal ? [terminal] : [];
   });
@@ -313,7 +333,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
       async () => {
         started.push(name);
         preCounts.push(
-          sessionTree(activeRow().id).filter(
+          tree(activeRow().id).filter(
             (action) =>
               action.kind === "policy.decision" &&
               z.object({ hook: z.literal("tool.pre") }).safeParse(action.intent.value).success,
@@ -326,8 +346,8 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
       name === "D" ? true : undefined,
     ),
   );
-  const { socket, received, dbPath, cleanup } = await waveApp(definitions, ["A", "B", "C", "D"]);
-  const response = nextResidentTurn(5000);
+  const { socket, received, sessionDbPath, cleanup } = await waveApp(definitions, ["A", "B", "C", "D"]);
+  const response = nextResidentTurn(plane(), 5000);
   try {
     // When: complete parallel bodies in reverse while D is a sequential barrier.
     socket.send(JSON.stringify({ type: "message", text: "run wave" }));
@@ -357,7 +377,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
     expect(
       blocks.filter((block) => block.type === "tool_result").map((block) => block.tool_use_id),
     ).toEqual(["call-A", "call-B", "call-C", "call-D"]);
-    const db = new Database(dbPath, { readonly: true });
+    const db = new Database(sessionDbPath(activeRow().id), { readonly: true });
     try {
       const persisted = db
         .query<{ effect: string }, []>(
@@ -400,7 +420,7 @@ for (const decision of ["approve", "refuse"] as const) {
     const { app, socket, received } = await waveApp(definitions, ["A", "B", "C"]);
     requireBApproval();
     const waiting = nextApproval(app);
-    const response = nextResidentTurn(5000);
+    const response = nextResidentTurn(plane(), 5000);
     socket.send(JSON.stringify({ type: "message", text: "approved wave" }));
     const { handle, request } = await bounded(waiting);
     expect(started).toEqual([]);
@@ -508,14 +528,15 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
       ["call-A", "executed"],
       ["call-B", "outcome_unknown"],
     ]);
-    expect(SessionHandleStore.row(row.id).leaseOwner).not.toBeNull();
+    expect(plane().openKernel(row.id).row(row.id).leaseOwner).not.toBeNull();
     expect(received).toHaveLength(1);
     gate.resolve();
     expect(await bounded(late.promise)).toBe("failed");
     await bounded(runEffect(handle.close()));
-    expect(SessionHandleStore.row(row.id).leaseOwner).toBeNull();
+    // W5.2: fence adoption is permanent; close keeps the last owner on the row.
+    expect(plane().openKernel(row.id).row(row.id).leaseOwner).not.toBeNull();
     expect(
-      sessionTree(row.id).some(
+      tree(row.id).some(
         (action) =>
           z.object({ op: z.literal("late-callback") }).safeParse(action.intent.value).success,
       ),
@@ -589,7 +610,6 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       ["A", "outer"],
     );
     let handle: SessionHandle | undefined;
-    let competitorFence: number | undefined;
     try {
       socket.send(JSON.stringify({ type: "message", text: "run nested effect" }));
       const executor = await bounded(captured.promise);
@@ -624,26 +644,25 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         ["call-A", "executed"],
         ["call-outer", "executed"],
       ]);
-      const held = SessionHandleStore.row(row.id);
-      const competitor = acquireContender(row.id, "nested-contender", held.leaseFence);
-      if (Result.isSuccess(competitor)) competitorFence = competitor.success.fence;
-      // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
+      const held = plane().openKernel(row.id).row(row.id);
+      // Then: abort-raced wrapper settlement cannot regress the live effect's fence.
+      const competitor = adoptAtFence(plane(), row.id, "nested-contender", held.leaseFence);
       expect(competitor).toMatchObject({
         _tag: "Failure",
-        failure: { _tag: "LeaseRefused", reason: "held" },
+        failure: { _tag: "LeaseRefused", reason: "stale" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
       // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
       // point after the wrapper settles: the executor's grace row when it wins the close race,
       // close's seal otherwise. Every other count below excludes that one row.
-      const innerIntent = sessionTree(row.id).find(
+      const innerIntent = tree(row.id).find(
         (action) =>
           action.kind === "tool" &&
           z.object({ phase: z.literal("intent"), callId: z.literal("inner-call") }).safeParse(action.intent.value).success,
       );
       if (innerIntent === undefined) throw new Error("missing inner intent row");
-      const innerRows = () => sessionTree(row.id).filter((action) => action.parentId === innerIntent.id);
-      const otherRows = () => sessionTree(row.id).filter((action) => action.parentId !== innerIntent.id);
+      const innerRows = () => tree(row.id).filter((action) => action.parentId === innerIntent.id);
+      const otherRows = () => tree(row.id).filter((action) => action.parentId !== innerIntent.id);
       const beforeActions = otherRows().length;
       let staleBodyStarts = 0;
       const stale = () =>
@@ -663,11 +682,10 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       // Close joins the raw effect after its exact completion signal.
       await bounded(runEffect(handle.close()));
       expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
-      const released = SessionHandleStore.row(row.id);
-      expect(released.leaseOwner).toBeNull();
-      const next = acquireContender(row.id, "nested-contender", released.leaseFence);
-      if (Result.isSuccess(next)) competitorFence = next.success.fence;
-      expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
+      const released = plane().openKernel(row.id).row(row.id);
+      // W5.2: close retains the adopted fence; a strictly newer fence still adopts.
+      const next = adoptAtFence(plane(), row.id, "nested-contender", released.leaseFence + 1);
+      expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
         _tag: "InvocationClosed", reason: "settled",
       });
@@ -697,7 +715,6 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       await bounded(completed.promise);
       await bounded(wrapperSettled.promise);
       await bounded(runEffect(handle?.close() ?? Effect.void));
-      releaseContender(sessionId, "nested-contender", competitorFence);
       await cleanup();
       expect(existsSync(directory)).toBe(false);
     }
@@ -740,7 +757,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           ? runEffect(dispatcher.executeCell(call, context)).then((result) => [result])
           : runEffect(dispatcher.executeWave([call], context));
       };
-      const { app, socket, received, dbPath, cleanup } = await waveApp(
+      const { app, socket, received, sessionDbPath, cleanup } = await waveApp(
         [
           waveTool("A", async () => "A", true),
           waveTool("outer", async () => {
@@ -753,7 +770,6 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         ["A", "outer"],
       );
       let handle: SessionHandle | undefined;
-      let competitorFence: number | undefined;
       try {
         socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
         const executor = await bounded(captured.promise);
@@ -782,17 +798,16 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           ["call-A", "executed"],
           ["call-outer", "executed"],
         ]);
-        const held = SessionHandleStore.row(sessionId);
-        const contender = acquireContender(sessionId, "timed-contender", held.leaseFence);
-        if (Result.isSuccess(contender)) competitorFence = contender.success.fence;
-        // Then: neither timeout nor SDK interruption transfers the live effect's lease.
+        const held = plane().openKernel(sessionId).row(sessionId);
+        // Then: neither timeout nor SDK interruption regresses the live effect's fence.
+        const contender = adoptAtFence(plane(), sessionId, "timed-contender", held.leaseFence);
         expect(contender).toMatchObject({
           _tag: "Failure",
-          failure: { _tag: "LeaseRefused", reason: "held" },
+          failure: { _tag: "LeaseRefused", reason: "stale" },
         });
         expect(held.leaseOwner).toBe(row.leaseOwner);
-        const beforeActions = sessionTree(sessionId).length;
-        const db = new Database(dbPath, { readonly: true });
+        const beforeActions = tree(sessionId).length;
+        const db = new Database(sessionDbPath(sessionId), { readonly: true });
         try {
           expect(
             db
@@ -816,22 +831,21 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           _tag: "InvocationClosed", reason: "settled",
         });
         expect(staleStarts).toBe(0);
-        expect(sessionTree(sessionId)).toHaveLength(beforeActions);
+        expect(tree(sessionId)).toHaveLength(beforeActions);
         rawGate.resolve();
         await bounded(rawDone.promise);
         await bounded(runEffect(handle?.close() ?? Effect.void));
         expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
-        const released = SessionHandleStore.row(sessionId);
-        expect(released.leaseOwner).toBeNull();
-        const next = acquireContender(sessionId, "timed-contender", released.leaseFence);
-        if (Result.isSuccess(next)) competitorFence = next.success.fence;
-        expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
+        const released = plane().openKernel(sessionId).row(sessionId);
+        // W5.2: close retains the adopted fence; a strictly newer fence still adopts.
+        const next = adoptAtFence(plane(), sessionId, "timed-contender", released.leaseFence + 1);
+        expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
           _tag: "InvocationClosed", reason: "settled",
         });
         expect(staleStarts).toBe(0);
         expect(
-          sessionTree(sessionId)
+          tree(sessionId)
             .slice(beforeActions)
             .map((action) => ({
               kind: action.kind,
@@ -844,7 +858,6 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         rawGate.resolve();
         if (rawStarted) await bounded(rawDone.promise);
         await bounded(runEffect(handle?.close() ?? Effect.void));
-        releaseContender(sessionId, "timed-contender", competitorFence);
         await cleanup();
         expect(existsSync(directory)).toBe(false);
       }
@@ -857,14 +870,28 @@ test("approval-time prompts retain durable identities and enter the next model s
   const { app, socket, received } = await waveApp([waveTool("B", async () => "B")], ["B"]);
   requireBApproval();
   const waiting = nextApproval(app);
-  const response = nextResidentTurn(5000);
+  const response = nextResidentTurn(plane(), 5000);
   socket.send(JSON.stringify({ type: "message", text: "initial" }));
   const { handle, request } = await bounded(waiting);
   // When: two SDK prompts arrive while the wave is held, before any next boundary.
   const first = runEffect(handle.prompt("first continuation"));
   const second = runEffect(handle.prompt("second continuation"));
-  const prompts = SessionHandleStore.inboxRows(handle.id).filter((row) => row.kind === "prompt");
-  expect(prompts.map((row) => row.status)).toEqual(["consumed", "pending", "pending"]);
+  // W5.2: the inbox is the prompt-action chain; pending = not yet delivered.
+  const prompts = tree(handle.id).filter(
+    (action) =>
+      action.kind === "prompt" &&
+      z.object({ inboxKind: z.literal("prompt") }).safeParse(action.effect.value).success,
+  );
+  const pendingIds = plane()
+    .openKernel(handle.id)
+    .pendingMessages(handle.id)
+    .filter((row) => row.kind === "prompt")
+    .map((row) => row.id);
+  expect(prompts.map((row) => (pendingIds.includes(row.id) ? "pending" : "consumed"))).toEqual([
+    "consumed",
+    "pending",
+    "pending",
+  ]);
   expect(received).toHaveLength(1);
   await runEffect(
     handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
@@ -876,7 +903,7 @@ test("approval-time prompts retain durable identities and enter the next model s
     op: z.literal("chat"),
     value: z.object({ messageIds: z.array(z.string()) }),
   });
-  const inputs = sessionTree(handle.id)
+  const inputs = tree(handle.id)
     .filter((action) => action.kind === "llm")
     .flatMap((action) => {
       const parsed = modelIntent.safeParse(action.intent.value);
@@ -889,7 +916,7 @@ test("approval-time prompts retain durable identities and enter the next model s
     throw new Error("missing prompt IDs");
   expect(inputs[0]).toEqual([initialId]);
   expect(inputs[1]?.filter((id) => promptIds.includes(id))).toEqual(promptIds);
-  const delivered = sessionTree(handle.id).flatMap((action) => {
+  const delivered = tree(handle.id).flatMap((action) => {
     const delivery = SessionHandleStore.delivery(action);
     return delivery?.kind === "prompt" ? [delivery] : [];
   });
@@ -909,33 +936,25 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   });
   requireBApproval();
   const waiting = nextApproval(app);
-  const response = nextResidentTurn(5000);
+  const response = nextResidentTurn(plane(), 5000);
   socket.send(JSON.stringify({ type: "message", text: "deadline wave" }));
   const { handle, request } = await bounded(waiting);
   try {
     expect(request.expiresAt).toBe(101);
     expect(started).toEqual([]);
-    const alarms = Storage.get().alarms;
-    if (alarms === undefined) throw new Error("missing alarm storage");
-    const worker = await acquireAppResource(
-      app.runtime,
-      createAlarmWorker({
-        alarms,
-        observations: Bus,
-        clock: () => now,
-        requestTimeout: (requestId: string, at: number) =>
-          handle.requests
-            .transition({ kind: "request.timeout", requestId }, `${requestId}:deadline`, at)
-            .pipe(Effect.asVoid),
-        wake: () => Effect.void,
-        failure: (error) => {
-          throw error;
-        },
-      }),
-    );
-    suite.defer(() => runEffect(worker.close()));
+    // W5.2: the alarm worker is gone; the entity's DeliverAt timer fires the
+    // durable request.timeout transition. Simulate that exact firing here.
+    const open = plane()
+      .openKernel(handle.id)
+      .requestRows(handle.id)
+      .find((row) => row.state === "open");
+    if (open === undefined) throw new Error("missing open approval request");
     now = 101;
-    await runEffect(worker.tick());
+    await runEffect(
+      handle.requests
+        .transition({ kind: "request.timeout", requestId: open.requestId }, `${open.requestId}:deadline`, now)
+        .pipe(Effect.asVoid),
+    );
     await response;
     expect(started).toEqual(["A", "C"]);
     expect(toolResults(handle.id).map((result) => [result.callId, result.terminal])).toEqual([
@@ -972,7 +991,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
       if (queued) return;
       queued = true;
       // Cross-process control arrives through the public durable inbox, not the local AbortController.
-      commitInterrupt(event.sessionId, "after-model-interrupt");
+      void commitInterrupt(plane(), event.sessionId, "after-model-interrupt");
     }),
   );
   const response = nextTerminal();
@@ -980,7 +999,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
   await response;
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
-  expect(interruptDeliveries(activeRow().id)).toMatchObject([
+  expect(interruptDeliveries(plane(), activeRow().id)).toMatchObject([
     { inboxId: "after-model-interrupt", boundary: "after_llm" },
   ]);
 });
@@ -989,7 +1008,7 @@ test("an interrupt after wave results drains before another provider step", asyn
   const { socket, received } = await waveApp([waveTool("A", async () => "A")], ["A"]);
   suite.defer(
     Bus.subscribe(Tool.Events.Completed, (event) => {
-      commitInterrupt(event.sessionId, "after-wave-interrupt");
+      void commitInterrupt(plane(), event.sessionId, "after-wave-interrupt");
     }),
   );
   const response = nextTerminal();
@@ -997,7 +1016,7 @@ test("an interrupt after wave results drains before another provider step", asyn
   await response;
   expect(received).toHaveLength(1);
   expect(toolResults(activeRow().id)).toMatchObject([{ callId: "call-A", terminal: "executed" }]);
-  expect(interruptDeliveries(activeRow().id)).toMatchObject([
+  expect(interruptDeliveries(plane(), activeRow().id)).toMatchObject([
     { inboxId: "after-wave-interrupt", boundary: "before_llm" },
   ]);
 });

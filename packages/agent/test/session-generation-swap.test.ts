@@ -1,4 +1,4 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
@@ -16,7 +16,10 @@ import { createObservationBus } from "../src/observation/bus";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
 import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 
 function bundle(generation: number, name: string, finalized: () => void,
   execute: () => Promise<string> = async () => name, policy = nativePolicy): GenerationBundle {

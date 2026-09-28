@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { createObservationBus } from "../src/observation/bus";
-import { SessionHandleStore } from "@openomni/ledger";
 import { AgentStopError, ContextAdmissionError } from "../src/errors";
 import { failureEvidence } from "../src/executor-outcome";
 import { AgentGenerationLive } from "./helpers/generation-layer";
@@ -18,12 +17,12 @@ test("context admission failure remains typed and has closed durable evidence", 
   expect(failureEvidence(stopped)).toEqual({ tag: "AgentStopError", code: "agent_stop", reason: "budget" });
 })));
 
-test("the generation layer supplies the captured policy, tools, observations, clock and entropy", () => isolated(Effect.gen(function* () {
-  yield* SessionHandleStore.materialize({
+test("the generation layer supplies the captured policy, tools, observations, clock and entropy", () => isolated((ledger) => Effect.gen(function* () {
+  yield* ledger.kernel.materialize({
     id: "layer-session", role: "resident", parentId: null, tools: [],
     system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "configure", at: 1,
   });
-  const snapshot = SessionHandleStore.latestGenerationFor("layer-session");
+  const snapshot = ledger.kernel.latestGenerationFor("layer-session");
   const observations = createObservationBus();
   const options = {
     now: (): number => 123, next: (): string => "fixed-id", observations,

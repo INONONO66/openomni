@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber, Option } from "effect";
 import { runAgent } from "../helpers/executor";
 import { TestClock } from "effect/testing";
-import { CommitRefused, SessionHandleStore } from "@openomni/ledger";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { CommitRefused } from "@openomni/ledger";
+import { sessionTree as kernelSessionTree } from "../helpers/session-tree";
 import { Alarm, LedgerAction, type SessionTransition } from "@openomni/protocol";
 import { CommitFailed } from "../../src/errors";
 import type { ExecutorOptions } from "../../src/executor-contract";
@@ -20,9 +20,12 @@ import {
 import { fixtureHashes } from "../helpers/compiled-policy";
 import { memoryExecutionReads } from "../helpers/execution-reads";
 import { requestLedger } from "../helpers/g0-request-ledger";
-import { isolated } from "../helpers/isolated";
+import { isolated, isolatedLedger } from "../helpers/isolated";
 import { openRequest } from "../helpers/open-request";
-import { allowConfigure } from "../helpers/session-services";
+import { allowConfigure, isolatedRuntime } from "../helpers/session-services";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 
 // Type-level drop-in proof: the timer port replaces the alarm-table port.
 type RetryPortSlot = NonNullable<ExecutorOptions["retryAlarm"]>;
@@ -49,14 +52,16 @@ const action = (input: {
   irreversible: true,
 });
 
-/** The kernel read ports a timer delivery consults. */
-const chainReads = (sessionId: string): TimerChainReads => ({
-  actionById: SessionHandleStore.actionById,
-  requestById: SessionHandleStore.requestById,
-  resultFor: (id) => SessionHandleStore.resultFor(sessionId, id),
-  operationChildrenPage: (id, cursor) =>
-    SessionHandleStore.operationChildrenPage(sessionId, id, cursor),
-});
+/** The kernel read ports a timer delivery consults (the isolation's kernel instance). */
+const chainReads = (sessionId: string): TimerChainReads => {
+  const kernel = isolatedLedger().kernel;
+  return {
+    actionById: kernel.actionById,
+    requestById: kernel.requestById,
+    resultFor: (id) => kernel.resultFor(sessionId, id),
+    operationChildrenPage: (id, cursor) => kernel.operationChildrenPage(sessionId, id, cursor),
+  };
+};
 
 describe("retry delivery chain guard", () => {
   test("re-runs only the live unsettled attempt; settled or superseded deliveries no-op", () =>
@@ -209,8 +214,9 @@ const openApproval = (id: string, deadline: number) =>
       ts: 100,
     });
     const transition = (payload: SessionTransition.Payload, inputId: string, at: number) =>
-      commitSessionRequest(id, { owner: `${id}:owner`, fence: 1 }, payload, inputId, at, {
+      commitSessionRequest(isolatedLedger().kernel, id, { owner: `${id}:owner`, fence: 1 }, payload, inputId, at, {
         authorizeConfigure: allowConfigure,
+        ...isolatedRuntime(),
       });
     const opened = yield* transition({ kind: "request.open", request }, `${id}:open`, 100);
     expect(opened.resolution).toBe("opened");
@@ -232,7 +238,7 @@ describe("deadline delivery chain guard", () => {
           1000,
         );
         expect(expired.resolution).toBe("expired");
-        expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("expired");
+        expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("expired");
 
         // Redelivered deadline acks without committing anything.
         const before = sessionTree(id).length;

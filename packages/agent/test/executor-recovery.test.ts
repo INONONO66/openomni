@@ -9,10 +9,10 @@ import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue } from
 import { createTurnDispatcher } from "../src/index";
 import type { DurableExecutor, ExecutionBatchItem } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
-import { CommitRefused, ForeignFailure as LedgerFailure, SessionHandleStore } from "@openomni/ledger";
+import { CommitRefused, ForeignFailure as LedgerFailure } from "@openomni/ledger";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { requestLedger } from "./helpers/request-ledger";
 
 import { compiledPolicy } from "./helpers/compiled-policy";
@@ -404,7 +404,7 @@ test("SQLite recovery settles all 257 open operations across the page boundary e
   });
   yield* executor.recover();
   for (const intent of intents) {
-    const result = SessionHandleStore.resultFor("session", intent.id);
+    const result = isolatedLedger().kernel.resultFor("session", intent.id);
     if (result === undefined) throw new Error(`missing result for ${intent.id}`);
     expect(effect(result).terminal).toBe("outcome_unknown");
     expect(effect(result).recovery).toEqual({
@@ -412,10 +412,10 @@ test("SQLite recovery settles all 257 open operations across the page boundary e
       proofReceipt: null, revertReceipt: null, rawSettled: false,
     });
   }
-  expect(SessionHandleStore.openOperationsPage("session", "turn")).toEqual([]);
-  const revision = SessionHandleStore.row("session").revision;
+  expect(isolatedLedger().kernel.openOperationsPage("session", "turn")).toEqual([]);
+  const revision = isolatedLedger().kernel.row("session").revision;
   yield* executor.recover();
-  expect(SessionHandleStore.row("session").revision).toBe(revision);
+  expect(isolatedLedger().kernel.row("session").revision).toBe(revision);
 })));
 
 describe("crash-open recovery", () => {

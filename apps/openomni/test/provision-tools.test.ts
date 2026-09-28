@@ -3,7 +3,9 @@ import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "@openomni/ledger";
+import { Vault } from "@openomni/ledger";
+import { testPlane } from "./helpers/ledger";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { type PlainObject, Provisioning } from "@openomni/protocol";
 import type { ChannelRuntimeStatus } from "../src/provisioning/supervisor";
 import { catalogDefinitions } from "../src/tools/core/catalog";
@@ -47,9 +49,11 @@ function portWith(overrides: Partial<ProvisionPort> = {}): {
 } {
   const supervisor: FakeSupervisor = { calls: [], statuses: [] };
   const port: ProvisionPort = {
-    persons: PersonStore,
-    instances: ChannelInstanceStore,
-    secrets: SecretStore,
+    persons: plane().stores.persons,
+    instances: plane().stores.instances,
+    secrets: plane().stores.secrets,
+    actors: plane().stores.actors,
+    transaction: plane().catalog.transaction,
     kek: { kind: "ok", kek: KEK },
     supervisor: {
       reconcile: async () => {
@@ -82,12 +86,19 @@ const MANAGER_MANIFEST = {
   endpoints: [{ channel: "telegram", externalId: "555" }],
 };
 
+const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+function plane(): AppLedgerPlane {
+  if (planeRef.current === undefined) throw new Error("test plane not open");
+  return planeRef.current;
+}
+
 beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
+  planeRef.current = testPlane();
 });
 
 afterEach(() => {
-  Storage.reset();
+  planeRef.current?.close();
+  planeRef.current = undefined;
 });
 
 describe("provision output boundary", () => {
@@ -132,11 +143,11 @@ describe("original Person invocation consent", () => {
       expect(request.parsedInput).toEqual({
         operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } },
       });
-      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
       expect(supervisor.calls).toEqual([]);
       expect((await f.answer()).isError).toBeUndefined();
-      expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("manager");
-      expect(PersonStore.get(MANAGER_MANIFEST.id)?.revision).toBe(0);
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)?.trustTier).toBe("manager");
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)?.revision).toBe(0);
       expect(supervisor.calls).toEqual(["materialize"]);
     } finally {
       await f.close();
@@ -147,13 +158,13 @@ describe("original Person invocation consent", () => {
     const f = consentedDeclare(port, MANAGER_MANIFEST);
     try {
       expect((await f.answer("refuse")).isError).toBe(true);
-      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
       const forged = await personDeclare(port)({
         manifest: MANAGER_MANIFEST,
         approvalId: "invented",
       });
       expect(forged).toContain("Unrecognized key");
-      expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
     } finally {
       await f.close();
     }
@@ -161,7 +172,7 @@ describe("original Person invocation consent", () => {
   test("a collaborator declaration remains direct", async () => {
     const { port } = portWith();
     await personDeclare(port)({ manifest: { ...MANAGER_MANIFEST, trustTier: "collaborator" } });
-    expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("collaborator");
+    expect(plane().stores.persons.get(MANAGER_MANIFEST.id)?.trustTier).toBe("collaborator");
   });
   test("the act itself refuses consent bound to a Person revision that no longer holds", async () => {
     const { port, supervisor } = portWith();
@@ -178,7 +189,7 @@ describe("original Person invocation consent", () => {
         { ...context, domainRevisions },
       );
     await expect(declare({ [MANAGER_MANIFEST.id]: 0 })).rejects.toThrow("domain revision changed");
-    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
     expect(await declare({ [MANAGER_MANIFEST.id]: -1 })).toMatchObject({
       op: "contact_add",
@@ -191,7 +202,7 @@ describe("original Person invocation consent", () => {
     const f = consentedDeclare(port, MANAGER_MANIFEST);
     try {
       await bounded(f.opened);
-      PersonStore.put({
+      plane().stores.persons.put({
         ...MANAGER_MANIFEST,
         displayName: "Changed",
         trustTier: "observer",
@@ -200,7 +211,7 @@ describe("original Person invocation consent", () => {
         updatedAt: NOW,
       });
       await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
-      expect(PersonStore.get(MANAGER_MANIFEST.id)?.trustTier).toBe("observer");
+      expect(plane().stores.persons.get(MANAGER_MANIFEST.id)?.trustTier).toBe("observer");
     } finally {
       await f.close();
     }
@@ -216,7 +227,7 @@ describe("owner Person protection and sole owner", () => {
     endpoints: [{ channel: "telegram", externalId: "1" }],
   };
   function putOwner() {
-    PersonStore.put({ ...ownerManifest, revision: 0, createdBy: "openomni-init", updatedAt: NOW });
+    plane().stores.persons.put({ ...ownerManifest, revision: 0, createdBy: "openomni-init", updatedAt: NOW });
   }
   test("same-tier owner endpoint edits suspend and apply only after consent", async () => {
     putOwner();
@@ -228,10 +239,10 @@ describe("owner Person protection and sole owner", () => {
     const f = consentedDeclare(port, edited);
     try {
       await bounded(f.opened);
-      expect(PersonStore.get(ownerManifest.id)?.endpoints).toHaveLength(1);
+      expect(plane().stores.persons.get(ownerManifest.id)?.endpoints).toHaveLength(1);
       expect((await f.answer()).isError).toBeUndefined();
-      expect(PersonStore.get(ownerManifest.id)?.endpoints).toHaveLength(2);
-      expect(PersonStore.get(ownerManifest.id)?.revision).toBe(1);
+      expect(plane().stores.persons.get(ownerManifest.id)?.endpoints).toHaveLength(2);
+      expect(plane().stores.persons.get(ownerManifest.id)?.revision).toBe(1);
     } finally {
       await f.close();
     }
@@ -242,15 +253,15 @@ describe("owner Person protection and sole owner", () => {
     const f = consentedDeclare(port, { ...ownerManifest, id: "person:second", endpoints: [] });
     try {
       expect((await f.answer()).isError).toBe(true);
-      expect(PersonStore.get("person:second")).toBeUndefined();
-      expect(PersonStore.get(ownerManifest.id)?.trustTier).toBe("owner");
+      expect(plane().stores.persons.get("person:second")).toBeUndefined();
+      expect(plane().stores.persons.get(ownerManifest.id)?.trustTier).toBe("owner");
     } finally {
       await f.close();
     }
   });
   test("contact_remove refuses the owner and removes other people", async () => {
     putOwner();
-    PersonStore.put({
+    plane().stores.persons.put({
       ...MANAGER_MANIFEST,
       displayName: "Sunwoo",
       trustTier: "collaborator",
@@ -262,7 +273,7 @@ describe("owner Person protection and sole owner", () => {
     expect(await personRemove(port)({ personId: ownerManifest.id })).toContain("sole owner");
     expect(await personRemove(port)({ personId: "person:ghost" })).toContain("does not exist");
     await personRemove(port)({ personId: MANAGER_MANIFEST.id });
-    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
     expect(supervisor.calls).toEqual(["removeIdentity:person:sunwoo"]);
   });
 });
@@ -279,8 +290,8 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { wrong: "field" },
     });
     expect(result).toContain("channel_add refused:");
-    expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
-    expect(SecretStore.get("secret:channel-telegram-main")).toBeUndefined();
+    expect(plane().stores.instances.get("channel:telegram:main")).toBeUndefined();
+    expect(plane().stores.secrets.get("secret:channel-telegram-main")).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
   });
 
@@ -295,7 +306,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { token: "x" },
     });
     expect(result).toContain("unknown provider matrix");
-    expect(ChannelInstanceStore.get("channel:matrix:main")).toBeUndefined();
+    expect(plane().stores.instances.get("channel:matrix:main")).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
   });
 
@@ -311,14 +322,14 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       settings: { knob: "x" },
     });
     expect(result).toContain("channel_add refused:");
-    expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
+    expect(plane().stores.instances.get("channel:telegram:main")).toBeUndefined();
     expect(supervisor.calls).toEqual([]);
   });
 
   test("a store refusal while landing the row surfaces as the tool's refusal, not a crash", async () => {
     const { port, supervisor } = portWith({
       instances: {
-        ...ChannelInstanceStore,
+        ...plane().stores.instances,
         put: () => {
           throw new Provisioning.StoreError({
             message: "instance store is read-only during migration",
@@ -348,10 +359,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     });
     expect(result).toContain("channel channel:telegram:main declared");
     expect(result).toContain("channel:telegram:main → mounted");
-    const instance = ChannelInstanceStore.get("channel:telegram:main");
+    const instance = plane().stores.instances.get("channel:telegram:main");
     expect(instance?.credentialRef).toBe("secret:channel-telegram-main");
     expect(instance?.revision).toBe(0);
-    const secret = SecretStore.get("secret:channel-telegram-main");
+    const secret = plane().stores.secrets.get("secret:channel-telegram-main");
     if (secret === undefined) throw new Error("expected a sealed secret");
     const opened = Vault.open(secret, KEK).reveal();
     expect(new TextDecoder().decode(opened)).toBe('{"token":"tg-token"}');
@@ -369,7 +380,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { token: "tg-token" },
     });
     expect(result).toContain("vault is locked (no OPENOMNI_VAULT_KEY)");
-    expect(ChannelInstanceStore.get("channel:telegram:main")).toBeUndefined();
+    expect(plane().stores.instances.get("channel:telegram:main")).toBeUndefined();
   });
 
   test("a locked vault refuses to rotate — the sealed secret stays as it was", async () => {
@@ -384,7 +395,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       () => NOW + 10,
     )({ secretId: "secret:channel-telegram-main", credential: { token: "new-token" } });
     expect(result).toContain("secret_rotate refused: vault is locked (no OPENOMNI_VAULT_KEY)");
-    expect(SecretStore.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
+    expect(plane().stores.secrets.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
     expect(supervisor.calls).toEqual(["reconcile"]);
   });
 
@@ -407,7 +418,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       instanceId: "channel:telegram:main",
     });
     expect(disabled).toContain("channel channel:telegram:main disabled");
-    expect(ChannelInstanceStore.get("channel:telegram:main")?.enabled).toBe(false);
+    expect(plane().stores.instances.get("channel:telegram:main")?.enabled).toBe(false);
     expect(supervisor.calls).toEqual(["reconcile"]);
 
     const enabled = await channelEnable(
@@ -417,8 +428,8 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       instanceId: "channel:telegram:main",
     });
     expect(enabled).toContain("channel channel:telegram:main enabled");
-    expect(ChannelInstanceStore.get("channel:telegram:main")?.enabled).toBe(true);
-    expect(ChannelInstanceStore.get("channel:telegram:main")?.revision).toBe(2);
+    expect(plane().stores.instances.get("channel:telegram:main")?.enabled).toBe(true);
+    expect(plane().stores.instances.get("channel:telegram:main")?.revision).toBe(2);
     expect(supervisor.calls).toEqual(["reconcile", "resume:channel:telegram:main", "reconcile"]);
 
     expect(await channelEnable(port)({ instanceId: "channel:ghost:x" })).toContain(
@@ -446,7 +457,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { wrong: "field" },
     });
     expect(invalid).toContain("secret_rotate refused: channel:telegram:main:");
-    expect(SecretStore.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
+    expect(plane().stores.secrets.get("secret:channel-telegram-main")?.rotatedAt).toBeUndefined();
 
     const rotated = await secretRotate(
       port,
@@ -456,7 +467,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       credential: { token: "new-token" },
     });
     expect(rotated).toContain("secret secret:channel-telegram-main rotated");
-    const secret = SecretStore.get("secret:channel-telegram-main");
+    const secret = plane().stores.secrets.get("secret:channel-telegram-main");
     expect(secret?.createdAt).toBe(NOW);
     expect(secret?.rotatedAt).toBe(NOW + 10);
     expect(supervisor.calls).toEqual(["reconcile"]);
@@ -562,7 +573,7 @@ describe("refusal branches", () => {
       ));
       expect(result.errorKind).toBe("invalid_input");
     }
-    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
@@ -579,14 +590,14 @@ describe("refusal branches", () => {
     )));
     expect(result._tag).toBe("Failure");
     expect(result._tag === "Failure" && result.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
-    expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
+    expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 
   test("a durable-write failure in channel_add is a typed refusal", async () => {
     const { port } = portWith({
       instances: {
-        get: ChannelInstanceStore.get,
-        list: ChannelInstanceStore.list,
+        get: plane().stores.instances.get,
+        list: plane().stores.instances.list,
         put: () => {
           throw new Error("disk full");
         },

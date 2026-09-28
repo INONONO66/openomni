@@ -49,7 +49,6 @@ function sessionRow(state: LedgerSession.State): LedgerSession.Row {
     role: "resident",
     leaseOwner: "kernel",
     leaseFence: 1,
-    leaseExpiresAt: 1000,
     revision: 1,
     state,
     toolsGeneration: 1,
