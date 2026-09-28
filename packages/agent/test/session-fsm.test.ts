@@ -360,8 +360,8 @@ describe("T01-T15 real controller transition witnesses", () => {
       turnIntentAction({ id: "T", parentId: "cfg", sessionId: "S", resultId: "R", inboxIds: [], generation, resumeCount, boundaryActionId: "cfg", at: 1 }),
     ] });
     const inputs: SessionRunnerInput[] = [];
-    // W5.2: wakeSession is gone; waking is a fresh activation over the durable
-    // kernel driving its reconcile (the recover path).
+    // W5.2: the boot-sweep wake plane is gone; waking is a fresh activation
+    // over the durable kernel driving its reconcile (the recover path).
     yield* Effect.scoped(withSessionServices(Effect.gen(function* () {
       const resolved = yield* resolveSessionRuntime(runtime);
       const scope = yield* Effect.scope;

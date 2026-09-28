@@ -7,8 +7,10 @@ import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, sessionTool } from "@openomni/agent";
 import { catalogDefinitions } from "../src/tools/core/catalog";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { rmSync } from "node:fs";
+import { join } from "node:path";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
 import { bounded } from "./helpers/protected-dispatch";
 import { runEffect } from "./helpers/effect";
@@ -20,6 +22,16 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
 const suite = residentSuite();
+/** All received-message evidence in one session's chain (W5.2 inbox = prompt actions). */
+function receivedMessages(plane: AppLedgerPlane, sessionId: string) {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
+    .filter((action) => action.kind === "prompt")
+    .map((action) => ({
+      id: action.id,
+      content: (action.effect.value as { content?: string }).content ?? "",
+      origin: { value: action.intent.value },
+    }));
+}
 function response(target?: string): Response {
   const block =
     target === undefined
@@ -84,10 +96,12 @@ test("process entry logs committed sessions and disposes its runtime", async () 
       return response(requests === 1 ? "sender" : undefined);
     },
   });
-  const runtime = gatewayRuntime({ dbPath: fixture.dbPath });
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
   const dispose = spyOn(runtime, "dispose");
   const createRuntime = mock((options: Parameters<typeof gatewayRuntime>[0]) => {
-    expect(options).toEqual({ dbPath: fixture.dbPath });
+    expect(options).toEqual({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
     return runtime;
   });
   const answerRequested = Promise.withResolvers<SessionTransition.Answer>();
@@ -106,11 +120,13 @@ test("process entry logs committed sessions and disposes its runtime", async () 
       content: "work",
       replyTo: "process-entry-original",
     })).isError).not.toBe(true);
-    const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
     if (child === undefined) throw new Error("missing commissioned process session");
     const request: ProcessSessionRequest = {
       sessionId: child.id,
-      dbPath: fixture.dbPath,
+      catalogPath,
+      sessionsDir,
+      entityIdleMs: 50,
       model: { provider: "anthropic", id: "claude-opus-4-5" },
       apiKey: "process-key",
       transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
@@ -129,8 +145,7 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(stdin.isPaused()).toBe(true);
     expect(stdin.listenerCount("data")).toBe(0);
-    Storage.initialize({ dbPath: fixture.dbPath });
-    expect(SessionHandleStore.inboxRows("sender").some(
+    expect(receivedMessages(fixture.plane, "sender").some(
       (row) => row.content === "PROCESS_SENTINEL",
     )).toBe(true);
   } finally {
@@ -138,7 +153,6 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     await runtime.dispose();
     stdin.destroy();
     await provider.stop(true);
-    Storage.reset();
     Bus.reset();
     rmSync(fixture.directory, { recursive: true, force: true });
   }
@@ -163,7 +177,9 @@ test.each([
     },
   });
   const deadline = Date.now() + 60_000;
-  const runtime = gatewayRuntime({ dbPath: fixture.dbPath });
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
   try {
     expect(
       (
@@ -176,13 +192,15 @@ test.each([
         })
       ).isError,
     ).not.toBe(true);
-    const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
     if (child === undefined) throw new Error("missing commissioned process session");
     const notified: string[] = [];
     await acquireAppResource(runtime, serveProcessSession(
       {
         sessionId: child.id,
-        dbPath: fixture.dbPath,
+        catalogPath,
+        sessionsDir,
+        entityIdleMs: 50,
         model: { provider: "anthropic", id: "claude-opus-4-5" },
         apiKey: "process-key",
         transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
@@ -191,15 +209,14 @@ test.each([
       undefined,
       runtime,
     ));
-    Storage.initialize({ dbPath: fixture.dbPath });
     expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
     expect(
-      SessionHandleStore.inboxRows("sender").filter(
+      receivedMessages(fixture.plane, "sender").filter(
         (row) => row.content === "PROCESS_TOOL_SENTINEL",
       ),
     ).toHaveLength(toolSend ? 1 : 0);
-    const received = SessionHandleStore.inboxRows("sender").filter(
+    const received = receivedMessages(fixture.plane, "sender").filter(
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
     expect(received).toHaveLength(1);
@@ -208,14 +225,21 @@ test.each([
       origin: { value: { replyTo: "process-original", terminal: "completed" } },
     });
     expect(
-      sessionTree(child.id).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id, fixture.plane.sessionStore(child.id).actions).filter(
+        (action) => action.kind === "alarm.arm",
+      ),
     ).toEqual([]);
-    expect(SessionHandleStore.requestRows("sender")[0]?.state).toBe("resolved");
-    expect(Storage.get().alarms?.due(deadline)).toEqual([]);
+    const senderKernel = fixture.plane.openKernel("sender");
+    expect(senderKernel.requestRows("sender")[0]?.state).toBe("resolved");
+    // W5.2: no alarm rows exist; the resolved request carries no live deadline.
+    expect(
+      senderKernel
+        .requestRows("sender")
+        .filter((row) => row.state === "open" && row.deadline !== null && row.deadline <= deadline),
+    ).toEqual([]);
   } finally {
     await runtime.dispose();
     await provider.stop(true);
-    Storage.reset();
     Bus.reset();
     rmSync(fixture.directory, { recursive: true, force: true });
   }
@@ -286,15 +310,16 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   });
   await ownerStart(app, "initial-process");
   expect(await received).toEqual({ ok: true });
-  const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+  const plane = await planeOf(app.runtime);
+  const child = plane.listSessions().find((row) => row.role === "worker");
   if (child?.parentId === undefined || child.parentId === null)
     throw new Error("missing process child");
-  const replies = SessionHandleStore.inboxRows(child.parentId).filter((row) =>
+  const replies = receivedMessages(plane, child.parentId).filter((row) =>
     row.id.endsWith(":reply"),
   );
   expect(requests).toBe(2);
   expect(
-    SessionHandleStore.inboxRows(child.parentId).some(
+    receivedMessages(plane, child.parentId).some(
       (row) => row.content === "PROCESS_TOOL_SENTINEL",
     ),
   ).toBe(true);

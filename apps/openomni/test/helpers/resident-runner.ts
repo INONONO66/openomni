@@ -61,11 +61,20 @@ export function residentRunner(
     plane.close();
   });
   const resolved = resolvedRuntimeFor(runtime, context);
+  const drain = (sessionId: string) =>
+    scope.run(drainSession({
+      plane,
+      sessionId,
+      runner: resident.runnerFor(plane.openKernel(sessionId).row(sessionId)),
+      runtime: resolved,
+      scope: scope.scope,
+    }).pipe(Effect.provide(context)));
   return {
     ...resident,
     services: context,
     runtime,
     plane,
+    drain,
     async prompt(sessionId: string, content: string) {
       const exists = plane.listSessions().some((row) => row.id === sessionId);
       await runEffect(localInbox(plane, "resident-runner", fixture?.clock ?? Date.now)({
@@ -80,13 +89,7 @@ export function residentRunner(
           ? {}
           : { createSession: resident.materialize(sessionId, null, "resident", "resident") }),
       }));
-      const result = await scope.run(drainSession({
-        plane,
-        sessionId,
-        runner: resident.runnerFor(plane.openKernel(sessionId).row(sessionId)),
-        runtime: resolved,
-        scope: scope.scope,
-      }).pipe(Effect.provide(context)));
+      const result = await drain(sessionId);
       if (result === undefined) throw new Error("resident turn returned no result");
       return result;
     },

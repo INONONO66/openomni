@@ -3,14 +3,9 @@ import { statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  ActorRegistry,
-  ChannelInstanceStore,
-  PersonStore,
-  SecretStore,
-  Storage,
-  Vault,
-} from "@openomni/ledger";
+import { Vault } from "@openomni/ledger";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { testPlane } from "./helpers/ledger";
 import { Actor, type Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile, validateProviderCredential } from "../src/channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../src/gateway";
@@ -153,10 +148,10 @@ describe("declared channel profile", () => {
   });
 
   test("vaultCredentialReader opens real store rows and reports lock reasons", () => {
-    Storage.initialize({ dbPath: ":memory:" });
+    const plane = testPlane();
     try {
       const envelope = Vault.seal(new TextEncoder().encode('{"token":"tg"}'), kek);
-      SecretStore.put({
+      plane.stores.secrets.put({
         id: "secret:channel-telegram-main",
         ciphertext: envelope.ciphertext,
         wrappedDek: envelope.wrappedDek,
@@ -164,39 +159,49 @@ describe("declared channel profile", () => {
         purpose: "channel_credential",
         createdAt: NOW,
       });
-      const reader = vaultCredentialReader({ kind: "ok", kek });
+      const readSecret = (id: string) => plane.stores.secrets.get(id);
+      const reader = vaultCredentialReader({ kind: "ok", kek }, readSecret);
       const hit = reader("secret:channel-telegram-main");
       expect(hit.kind === "ok" && new TextDecoder().decode(hit.plaintext)).toBe('{"token":"tg"}');
       const miss = reader("secret:absent");
       expect(miss.kind === "locked" && miss.reason.includes("secret:absent")).toBe(true);
-      const locked = vaultCredentialReader({ kind: "locked", reason: "no key" })("secret:any");
+      const locked = vaultCredentialReader({ kind: "locked", reason: "no key" }, readSecret)("secret:any");
       expect(locked).toEqual({ kind: "locked", reason: "no key" });
       const wrongKek = vaultCredentialReader({
         kind: "ok",
         kek: Vault.kekOf(new Uint8Array(32).fill(8)),
-      })("secret:channel-telegram-main");
+      }, readSecret)("secret:channel-telegram-main");
       expect(wrongKek.kind === "locked" && wrongKek.reason.includes("kek")).toBe(true);
     } finally {
-      Storage.reset();
+      plane.close();
     }
   });
 });
 
 describe("boot profile selection (§8.1, §8.4)", () => {
-  let home: string;
+  const state: { home: string; plane: AppLedgerPlane | undefined } = { home: "", plane: undefined };
+  const plane = () => {
+    if (state.plane === undefined) throw new Error("test plane not open");
+    return state.plane;
+  };
+  const provisionStores = () => ({
+    instances: plane().stores.instances,
+    secrets: plane().stores.secrets,
+  });
 
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), "select-profile-test-"));
-    Storage.initialize({ dbPath: ":memory:" });
+    state.home = await mkdtemp(join(tmpdir(), "select-profile-test-"));
+    state.plane = testPlane();
   });
 
   afterEach(async () => {
-    Storage.reset();
-    await rm(home, { recursive: true });
+    state.plane?.close();
+    state.plane = undefined;
+    await rm(state.home, { recursive: true });
   });
 
   test("no declarations means no external channels", () => {
-    const selection = desiredChannels({}, home);
+    const selection = desiredChannels(provisionStores(), {}, state.home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([]);
@@ -206,6 +211,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   // declaration without one mounts at the mount tier, never owner.
   test("a declared row carries its grant tier, and an undeclared grant mounts at the mount tier", () => {
     putChannelCredential(
+      plane().stores.secrets,
       "secret:channel-telegram-main",
       '{"token":"tg"}',
       new Uint8Array(32).fill(7),
@@ -215,19 +221,19 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     // Every declared tier threads through exactly: a remap of any single tier
     // (e.g. observer -> owner) fails here rather than surviving on one literal.
     for (const tier of Actor.TrustTier.options) {
-      ChannelInstanceStore.put(instance({ grant: { defaultTier: tier } }));
-      const declaredTier = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      plane().stores.instances.put(instance({ grant: { defaultTier: tier } }));
+      const declaredTier = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
       expect(declaredTier.rows[0]?.defaultTier).toBe(tier);
     }
 
-    ChannelInstanceStore.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
-    const noTier = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    plane().stores.instances.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
+    const noTier = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
     expect(noTier.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
   });
 
   test("a disabled declaration stays unmounted", () => {
-    ChannelInstanceStore.put(instance({ enabled: false, credentialRef: undefined }));
-    const selection = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    plane().stores.instances.put(instance({ enabled: false, credentialRef: undefined }));
+    const selection = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([
@@ -236,8 +242,8 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   });
 
   test("§8.4 locked vault: enabled declarations become vault_locked statuses, nothing mounts", () => {
-    ChannelInstanceStore.put(instance({}));
-    const selection = desiredChannels({}, home);
+    plane().stores.instances.put(instance({}));
+    const selection = desiredChannels(provisionStores(), {}, state.home);
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses[0]?.state).toBe("vault_locked");
@@ -246,16 +252,17 @@ describe("boot profile selection (§8.1, §8.4)", () => {
 
   test("§8.7 the declared bounce key folds revision with the secret's rotation epoch", () => {
     const envelope = putChannelCredential(
+      plane().stores.secrets,
       "secret:channel-telegram-main",
       '{"token":"tg"}',
       new Uint8Array(32).fill(7),
       NOW,
     );
-    ChannelInstanceStore.put(instance({ revision: 4 }));
-    const get = spyOn(SecretStore, "get");
+    plane().stores.instances.put(instance({ revision: 4 }));
+    const get = spyOn(plane().stores.secrets, "get");
     let before: ReturnType<typeof desiredChannels>;
     try {
-      before = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+      before = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
       expect(get.mock.calls).toEqual([["secret:channel-telegram-main"]]);
     } finally {
       get.mockRestore();
@@ -263,7 +270,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     expect(before.rows[0]?.instanceId).toBe("channel:telegram:main");
     expect(before.rows[0]?.key).toBe(`4:${NOW}`);
 
-    SecretStore.put({
+    plane().stores.secrets.put({
       id: "secret:channel-telegram-main",
       ciphertext: envelope.ciphertext,
       wrappedDek: envelope.wrappedDek,
@@ -272,22 +279,26 @@ describe("boot profile selection (§8.1, §8.4)", () => {
       createdAt: NOW,
       rotatedAt: NOW + 50,
     });
-    const after = desiredChannels({ OPENOMNI_VAULT_KEY: KEY_B64 }, home);
+    const after = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
     expect(after.rows[0]?.key).toBe(`4:${NOW + 50}`);
   });
 });
 
 describe("materializePersons", () => {
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   beforeEach(() => {
-    Storage.initialize({ dbPath: ":memory:" });
+    planeRef.current = testPlane();
   });
 
   afterEach(() => {
-    Storage.reset();
+    planeRef.current?.close();
+    planeRef.current = undefined;
   });
 
   test("Person manifests become identity and endpoint facts, idempotently", () => {
-    PersonStore.put({
+    const plane = planeRef.current;
+    if (plane === undefined) throw new Error("test plane not open");
+    plane.stores.persons.put({
       id: "person:ino",
       displayName: "Ino",
       kind: "human",
@@ -300,14 +311,15 @@ describe("materializePersons", () => {
       createdBy: "openomni-init",
       updatedAt: NOW,
     });
-    materializePersons();
-    materializePersons();
-    const identity = ActorRegistry.getIdentity("person:ino");
+    const stores = { persons: plane.stores.persons, actors: plane.stores.actors };
+    materializePersons(stores);
+    materializePersons(stores);
+    const identity = plane.stores.actors.getIdentity("person:ino");
     expect(identity?.trustTier).toBe("owner");
     expect(identity?.displayName).toBe("Ino");
-    const resolved = ActorRegistry.resolveEndpoint("telegram", "12345");
+    const resolved = plane.stores.actors.resolveEndpoint("telegram", "12345");
     expect(resolved?.endpoint.actorId).toBe("person:ino");
-    const discord = ActorRegistry.resolveEndpoint("discord", "9876", "guild-1");
+    const discord = plane.stores.actors.resolveEndpoint("discord", "9876", "guild-1");
     expect(discord?.endpoint.workspace).toBe("guild-1");
   });
 });

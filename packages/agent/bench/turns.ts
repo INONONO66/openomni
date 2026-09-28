@@ -1,6 +1,6 @@
 import { runAgentSync } from "../test/helpers/executor";
 import { chatServices } from "../test/helpers/chat-services";
-import { allowConfigure, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
+import { allowConfigure, kernelRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
 import { catalogLayer, executorLayer } from "../test/helpers/service-layers";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import {
@@ -8,7 +8,7 @@ import {
   KERNEL_POLICY_REGISTRY,
   SEEDED_POLICY_ROWS,
 } from "@openomni/policy";
-import { Storage } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
 import { accumulateUsage, Llm } from "@openomni/llm";
 import type { Token } from "@openomni/protocol";
 import { Entropy, ObservationSink } from "../src/services";
@@ -132,9 +132,17 @@ export function toolDispatch() {
 }
 
 export async function roundTrip() {
-  Storage.initialize({ dbPath: ":memory:", observationSink: events });
-  seedPolicy();
-  const runtime: SessionFixture = { observations: events, authorizeConfigure: allowConfigure };
+  // Handle-scoped kernel over fresh in-memory stores (W5.2): the benchmark owns
+  // its stores' lifetime and keeps the no-op observation port as the commit sink.
+  const sessionStore = openSessionStore(":memory:", events);
+  const catalog = openCatalogStore(":memory:", events);
+  const kernel = SessionHandleStore.createSessionKernel(sessionStore, catalog);
+  seedPolicy([], catalog.policies);
+  const runtime: SessionFixture = {
+    observations: events,
+    authorizeConfigure: allowConfigure,
+    ...kernelRuntime(() => kernel),
+  };
   const scope = await runBenchEffect(Scope.make());
   const services = Context.pick(Llm)(await runBenchEffect(Layer.buildWithScope(chatLayer, scope)));
   const runner = createSessionChatRunner({
@@ -157,7 +165,12 @@ export async function roundTrip() {
     runBenchEffect(
       closeSessions(runtime).pipe(
         Effect.ensuring(Scope.close(scope, Exit.void)),
-        Effect.ensuring(Effect.sync(() => Storage.reset())),
+        Effect.ensuring(
+          Effect.sync(() => {
+            sessionStore.close();
+            catalog.close();
+          }),
+        ),
       ),
     );
   try {
@@ -174,7 +187,7 @@ export async function roundTrip() {
         runtime,
       ).pipe(Scope.provide(scope)),
     );
-    return { handle, run: () => runBenchEffect(handle.prompt("hello")), close };
+    return { handle, kernel, run: () => runBenchEffect(handle.prompt("hello")), close };
   } catch (error) {
     await close();
     throw error;
