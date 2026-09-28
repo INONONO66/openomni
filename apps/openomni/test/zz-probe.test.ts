@@ -1,37 +1,62 @@
 import { test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { join } from "node:path";
 import { Effect } from "effect";
-import { messageFixture } from "./helpers/message-fixture";
-import { sessionFilePath } from "../src/composition/cluster-runtime";
-import { storageDirectories } from "./helpers/storage-directories";
-import { runEffect } from "./helpers/effect";
-import { Bus, ObservationSink } from "@openomni/agent";
+import { ForeignFailure } from "@openomni/agent";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { planeOf } from "./helpers/ledger";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
+import { ownerStart } from "./helpers/owner-start";
 
-const directories = storageDirectories(true);
+// Probe-only: surface the cause chain that ForeignFailure's empty message hides.
+ForeignFailure.prototype.toString = function (this: { operation: string; cause: string }) {
+  return `ForeignFailure(${this.operation} :: ${this.cause})`;
+};
 
-function sessionDb(fixture: { directory: string }, sessionId: string) {
-  return sessionFilePath(join(fixture.directory, "sessions"), sessionId);
-}
+const suite = residentSuite();
 
-test("probe corrupted evidence surfaces", async () => {
-  const fixture = messageFixture();
-  directories.push(fixture.directory);
-  using db = new Database(sessionDb(fixture, fixture.sessionId));
-  db.exec(
-    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = json_remove(intent, '$.inputHash') WHERE id = NEW.id; END`,
-  );
-  const result = await fixture.send({
-    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-    type: "message",
-    content: "corrupt-evidence",
+test("probe in-turn commission", async () => {
+  let commissioned = false;
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+  const done = Promise.withResolvers<void>();
+  const app = await suite.boot({
+    config: suite.config("probe-commission-"),
+    sessionRuntime: { clock: () => 100 },
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) =>
+        Effect.gen(function* () {
+          const runPlane = planeRef.current;
+          if (runPlane === undefined) throw new Error("plane not resolved");
+          const role = runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role;
+          console.log("PROBE run", input.trace.sessionId, role);
+          if (role === "worker") {
+            sink.onMessage(assistantMessage(input, { text: "CHILD_RESULT" }));
+            return { type: "stop" as const };
+          }
+          if (!commissioned) {
+            const output = requestToolStep(input, sink, {
+              id: "commission",
+              tool: "send_message",
+              input: commissionInput({ message: "work", deadline_ms: 900, reply_to: "ORIGINAL" }),
+            });
+            if (output === undefined) return { type: "stop" as const };
+            console.log("PROBE commission", JSON.stringify(output).slice(0, 2000));
+            commissioned = true;
+            done.resolve();
+          }
+          sink.onMessage(assistantMessage(input, { text: "PARENT" }));
+          return { type: "stop" as const };
+        }),
+    },
   });
-  console.log("OUTCOME result", JSON.stringify(result));
-  try {
-    const { sessionTree } = await import("../../../packages/ledger/test/helpers/session-tree");
-    const rows = sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions);
-    for (const row of rows) console.log("OUTCOME action", row.kind, JSON.stringify(row.effect).slice(0, 400));
-  } catch (error) {
-    console.log("OUTCOME tree-error", String(error));
+  planeRef.current = await planeOf(app.runtime);
+  await ownerStart(app, "initial");
+  await done.promise;
+  const { sessionTree } = await import("../../../packages/ledger/test/helpers/session-tree");
+  for (const row of planeRef.current.listSessions()) {
+    for (const action of sessionTree(row.id, planeRef.current.sessionStore(row.id).actions)) {
+      const text = JSON.stringify(action.effect);
+      if (text.includes("failures\":[{")) console.log("PROBE evidence", row.id, action.kind, text.slice(0, 1500));
+    }
   }
 });
