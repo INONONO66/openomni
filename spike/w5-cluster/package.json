@@ -1,0 +1,20 @@
+{
+  "name": "@openomni/spike-w5-cluster",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "W5.1 #1196 throwaway spike: effect/cluster SingleRunner over per-session SQLite. Never merged.",
+  "scripts": {
+    "test": "bun test --timeout 60000"
+  },
+  "dependencies": {
+    "@effect/sql-sqlite-bun": "4.0.0-rc.118",
+    "effect": "4.0.0-rc.118",
+    "@openomni/ledger": "workspace:*",
+    "@openomni/agent": "workspace:*",
+    "@openomni/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
