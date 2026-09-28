@@ -64,8 +64,8 @@ test("committed configure swaps the next captured Layer; old body and terminal s
   const finishedA = yield* Deferred.make<void>();
   const release = Promise.withResolvers<string>();
   let finalizersA = 0;
-  const a = bundle(1, "A", () => { finalizersA += 1; Deferred.unsafeDone(finishedA, Exit.void); }, async () => {
-    Deferred.unsafeDone(entered, Exit.void);
+  const a = bundle(1, "A", () => { finalizersA += 1; Deferred.doneUnsafe(finishedA, Exit.void); }, async () => {
+    Deferred.doneUnsafe(entered, Exit.void);
     return release.promise;
   });
   const b = bundle(2, "B", () => undefined);
@@ -106,8 +106,8 @@ test("dispatch table stays captured across configure even when the next generati
   const entered = yield* Deferred.make<void>();
   const retired = yield* Deferred.make<void>();
   const release = Promise.withResolvers<string>();
-  const a = bundle(1, "echo", () => { Deferred.unsafeDone(retired, Exit.void); }, async () => {
-    Deferred.unsafeDone(entered, Exit.void);
+  const a = bundle(1, "echo", () => { Deferred.doneUnsafe(retired, Exit.void); }, async () => {
+    Deferred.doneUnsafe(entered, Exit.void);
     return release.promise;
   });
   const b = bundle(2, "echo", () => undefined, async () => "B");
@@ -238,8 +238,8 @@ test("retired generation stays acquired after interrupted fiber until its raw sl
   const release = Promise.withResolvers<string>();
   let finalized = 0;
   const generations = yield* makeSessionGenerations(bundle(1, "A", () => {
-    finalized += 1; Deferred.unsafeDone(closed, Exit.void);
-  }, async () => { Deferred.unsafeDone(entered, Exit.void); return release.promise; }));
+    finalized += 1; Deferred.doneUnsafe(closed, Exit.void);
+  }, async () => { Deferred.doneUnsafe(entered, Exit.void); return release.promise; }));
   const running = yield* Effect.forkChild(Effect.scoped(Effect.gen(function* () {
     const captured = yield* generations.capture();
     return yield* captured.provide(testExecutor({ ...options, closeGraceMs: 0 }).run({

@@ -81,7 +81,7 @@ export class PeerRequestTable<TPeer = undefined> {
     const pending = this.pending.get(response.id);
     if (!pending || !this.samePeer(pending.peer, peer)) return;
     this.pending.delete(response.id);
-    Deferred.unsafeDone(pending.result, response.error
+    Deferred.doneUnsafe(pending.result, response.error
       ? Exit.fail(new IpcRemoteError({ code: response.error.code, message: `IPC error ${response.error.code}: ${response.error.message}`, requestId: response.id, method: pending.method }))
       : Exit.succeed(response.result));
   }
@@ -110,7 +110,7 @@ export class PeerRequestTable<TPeer = undefined> {
     for (const [id, pending] of this.pending) {
       if (!matches(pending.peer)) continue;
       this.pending.delete(id);
-      Deferred.unsafeDone(pending.result, Exit.fail(error));
+      Deferred.doneUnsafe(pending.result, Exit.fail(error));
     }
   }
 }

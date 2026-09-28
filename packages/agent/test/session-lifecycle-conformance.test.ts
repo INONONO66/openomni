@@ -458,9 +458,9 @@ describe("session lifecycle conformance", () => {
             }),
         }, fixture), fixture); }));
         const wave = (yield* waveSession("W"));
-        let plainRunning: Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError> | undefined;
+        let plainRunning: Fiber.Fiber<SessionRunnerResult | undefined, SessionError> | undefined;
         let wavePending: ExecutionApprovalRequest | undefined;
-        let waveRunning: Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError> | undefined;
+        let waveRunning: Fiber.Fiber<SessionRunnerResult | undefined, SessionError> | undefined;
         let waveApprovals: ExecutionApprovals | undefined;
         const result = (yield* toEffect(runLifecycleTrace({
             sessions: ["S", "W"],
@@ -583,7 +583,7 @@ describe("session lifecycle conformance", () => {
         const timed = (yield* waveSession("TIMED", { approvalTimeoutMs: 100 }));
         const interrupted = (yield* waveSession("INTERRUPTED"));
         const timedPort = (yield* Effect.gen(function* () { const fixture: SessionFixture = timed.runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
-        const runs = new Map<string, Fiber.RuntimeFiber<SessionRunnerResult | undefined, SessionError>>();
+        const runs = new Map<string, Fiber.Fiber<SessionRunnerResult | undefined, SessionError>>();
         const result = (yield* toEffect(runLifecycleTrace({
             sessions: ["REFUSED", "TIMED", "INTERRUPTED"],
             dispatched: () => refused.dispatched() + timed.dispatched() + interrupted.dispatched(),
@@ -1739,7 +1739,7 @@ const rejectReplay: SessionRunner = () => Effect.die(new Error("sealed child rep
 function toEffect<A, E = never, R = never>(value: Effect.Effect<A, E, R> | Promise<A> | A): Effect.Effect<A, E, R> {
  return Effect.isEffect(value) ? value : value instanceof Promise ? Effect.promise(() => value) : Effect.succeed(value);
 }
-function waitFor<A, E = never>(value: Promise<A> | Fiber.RuntimeFiber<A, E> | Effect.Effect<A, E, Scope.Scope>, label: string): Effect.Effect<A, E | Error, Scope.Scope> {
+function waitFor<A, E = never>(value: Promise<A> | Fiber.Fiber<A, E> | Effect.Effect<A, E, Scope.Scope>, label: string): Effect.Effect<A, E | Error, Scope.Scope> {
  const program = value instanceof Promise ? Effect.promise(() => value) : "await" in value ? Fiber.join(value) : value;
  return program.pipe(Effect.timeoutFail({duration: SIGNAL_TIMEOUT_MS, onTimeout: () => new Error(label)}));
 }

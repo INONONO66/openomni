@@ -117,7 +117,7 @@ test("ignored raw abort fixes outcome_unknown without awaiting raw settlement or
     name: "write", description: "write", category: "mutation" as const,
     input: z.object({}), output: z.string(), visibility: { model: [] as const, cell: [] as const },
     execute: async () => {
-      Deferred.unsafeDone(entered, Exit.void);
+      Deferred.doneUnsafe(entered, Exit.void);
       return released.promise;
     }, render: (_input: object, output: string) => output,
   };

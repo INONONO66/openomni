@@ -38,7 +38,7 @@ export function execute(request: Machine.ExecRequest, signal: AbortSignal): Effe
     child.once("error", (error) => { failed = spawnFailure(error); });
     child.once("close", (exitCode, exitSignal) => {
       exited = true;
-      Deferred.unsafeDone(closed, failed ? Exit.fail(failed) : Exit.succeed({ status: "completed", stdout: Buffer.concat(stdout).toString("base64"), stderr: Buffer.concat(stderr).toString("base64"), exitCode, signal: exitSignal, truncated }));
+      Deferred.doneUnsafe(closed, failed ? Exit.fail(failed) : Exit.succeed({ status: "completed", stdout: Buffer.concat(stdout).toString("base64"), stderr: Buffer.concat(stderr).toString("base64"), exitCode, signal: exitSignal, truncated }));
     });
     const abort = Effect.callback<never>((resume) => {
       const listener = () => resume(Effect.interrupt);

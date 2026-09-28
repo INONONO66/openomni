@@ -382,7 +382,7 @@ export class PythonKernel {
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
       this.processExits.set(process, exited);
-      process.once("close", () => { this.exits.delete(exited); Deferred.unsafeDone(exited, Exit.void); });
+      process.once("close", () => { this.exits.delete(exited); Deferred.doneUnsafe(exited, Exit.void); });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
       this.lines = lines;

@@ -59,7 +59,7 @@ test("bridge: nested failure in an admitted async body preserves its typed outco
     const frame = currentInvocation();
     const result = await runAgent(Effect.exit(frame.executor.run(request("nested"), () =>
       Effect.fail(new ToolBodyFailed({ tool: "nested", cause: "nested-outcome" })))));
-    Deferred.unsafeDone(observed, Exit.succeed(result));
+    Deferred.doneUnsafe(observed, Exit.succeed(result));
     return "handled";
   })]);
   expect(yield* fixture.run).toMatchObject({ output: "handled" });
@@ -85,7 +85,7 @@ test("bridge: two concurrent nested calls resolve independently in call order", 
       Effect.andThen(Deferred.await(first))))).then((result: ExecutionResult) => { replies.push("one"); return result; });
     const two = runAgent(frame.executor.run(request("two"), () => Deferred.succeed(secondEntered, undefined).pipe(
       Effect.andThen(Deferred.await(second))))).then((result: ExecutionResult) => {
-        replies.push("two"); Deferred.unsafeDone(secondReplied, Exit.void); return result;
+        replies.push("two"); Deferred.doneUnsafe(secondReplied, Exit.void); return result;
       });
     const results = await Promise.all([one, two]);
     expect(results).toEqual([{ terminal: "executed", value: "first" }, { terminal: "executed", value: "second" }]);
@@ -113,7 +113,7 @@ test("bridge: closing the executor rejects every pending nested request with Inv
       runAgent(Effect.exit(frame.executor.run(request(`pending-${index}`), () =>
         Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))))));
     const results = await Promise.all(pending);
-    Deferred.unsafeDone(replies, Exit.succeed(results));
+    Deferred.doneUnsafe(replies, Exit.succeed(results));
     return "closed";
   })], closing.signal);
   const running = yield* Effect.forkScoped(fixture.run);
@@ -137,14 +137,14 @@ test("bridge: cancel-before-reply interrupts the body and late nested reply perf
     tool("outer", async () => {
       const frame = currentInvocation();
       const result = await runAgent(Effect.exit(frame.cell.executeCell({ id: "nested", tool: "inner", input: {} }, context)));
-      Deferred.unsafeDone(rejected, Exit.succeed(failure(result)));
+      Deferred.doneUnsafe(rejected, Exit.succeed(failure(result)));
       return "cancelled";
     }),
     tool("inner", async (_input: PlainValue, call: ToolExecutionContext) => {
-      call.signal.addEventListener("abort", () => { Deferred.unsafeDone(interrupted, Exit.void); }, { once: true });
-      Deferred.unsafeDone(entered, Exit.void);
+      call.signal.addEventListener("abort", () => { Deferred.doneUnsafe(interrupted, Exit.void); }, { once: true });
+      Deferred.doneUnsafe(entered, Exit.void);
       const value = await reply.promise;
-      Deferred.unsafeDone(rawSettled, Exit.void);
+      Deferred.doneUnsafe(rawSettled, Exit.void);
       return value;
     }),
   ]);
@@ -175,7 +175,7 @@ test("bridge: detached late requests after settle fail with InvocationClosed and
   const fixture = yield* setup([
     tool("outer", async () => {
       const frame = currentInvocation();
-      Deferred.unsafeDone(ready, Exit.succeed([
+      Deferred.doneUnsafe(ready, Exit.succeed([
         frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
         frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
       ]));
@@ -197,7 +197,7 @@ test("bridge: detached late requests after a rejected body fail with InvocationC
   const fixture = yield* setup([
     tool("outer", async () => {
       const frame = currentInvocation();
-      Deferred.unsafeDone(ready, Exit.succeed([
+      Deferred.doneUnsafe(ready, Exit.succeed([
         frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
         frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
       ]));
@@ -217,7 +217,7 @@ test("bridge: a forked invocation owns its lifetime independently of the body vi
   const frames = yield* Deferred.make<{ readonly view: InvocationFrame; readonly forked: ReturnType<typeof forkInvocation> }>();
   const fixture = yield* setup([tool("outer", async () => {
     const view = currentInvocation();
-    Deferred.unsafeDone(frames, Exit.succeed({ view, forked: forkInvocation("forked") }));
+    Deferred.doneUnsafe(frames, Exit.succeed({ view, forked: forkInvocation("forked") }));
     return "forked";
   })]);
   expect(yield* fixture.run).toMatchObject({ output: "forked" });
@@ -236,12 +236,12 @@ test("bridge: generation-one frame refuses nested dispatch after committed gener
   let bodies = 0;
   const definitions = [tool("outer", async () => {
     const frame = currentInvocation();
-    Deferred.unsafeDone(entered, Exit.void);
+    Deferred.doneUnsafe(entered, Exit.void);
     await selected.promise;
     const before = sessionTree(fiberSessionId);
     const result = await runAgent(Effect.exit(frame.cell.executeCell({ id: "stale", tool: "inner", input: {} }, context)));
     expect(sessionTree(fiberSessionId)).toEqual(before);
-    Deferred.unsafeDone(observed, Exit.succeed(failure(result)));
+    Deferred.doneUnsafe(observed, Exit.succeed(failure(result)));
     return "old-outer-settled";
   }), tool("inner", async () => { bodies += 1; return "forbidden"; })];
   const fixture = yield* setup(definitions);

@@ -87,7 +87,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       return Effect.gen(function* () {
         const done = yield* Deferred.make<void>();
         pending.add(done);
-        return yield* execution.pipe(Effect.ensuring(Effect.sync(() => { pending.delete(done); Deferred.unsafeDone(done, Exit.void); })));
+        return yield* execution.pipe(Effect.ensuring(Effect.sync(() => { pending.delete(done); Deferred.doneUnsafe(done, Exit.void); })));
       });
     }
     function fsOp(request: Machine.FsRequest): Effect.Effect<Machine.FsResult, MachineError> {

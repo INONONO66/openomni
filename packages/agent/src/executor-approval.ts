@@ -33,7 +33,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
     if (suspended === undefined || persisted === undefined || persisted.state === "open") return;
     const value = persisted.state === "resolved" ? "approve"
       : persisted.state === "expired" ? "timeout" : "refuse";
-    Deferred.unsafeDone(suspended.decision, Exit.succeed(value));
+    Deferred.doneUnsafe(suspended.decision, Exit.succeed(value));
   }
   const approvals: ExecutionApprovals = {
     pending: () => [...pending.values()].map((value) => structuredClone(value.request)),

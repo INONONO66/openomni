@@ -24,7 +24,7 @@ export class CompactionSession {
   #inFlight = false;
   #failureStreak = 0;
   #generation = 0;
-  #preparation: Fiber.RuntimeFiber<void, never> | undefined;
+  #preparation: Fiber.Fiber<void, never> | undefined;
   #entered = true;
   readonly #listeners = new Set<() => void>();
 

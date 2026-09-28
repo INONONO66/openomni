@@ -330,7 +330,7 @@ it("holds the entire wave until every captured approval has a durable answer", (
   const opened = yield* Deferred.make<void>();
   let requests = 0;
   const ledger = yield* requestLedger({ onRequest: (request) => {
-    if (request.state === "open" && ++requests === 2) Deferred.unsafeDone(opened, Effect.void);
+    if (request.state === "open" && ++requests === 2) Deferred.doneUnsafe(opened, Effect.void);
   } });
   const record = recording({ ...ledger, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "auth" }) });
   const bodies: string[] = [];

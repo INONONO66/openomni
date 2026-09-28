@@ -376,7 +376,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     return Effect.gen(function* () {
       const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
       const exits = new Map<number, BodyExit>();
-      const group: Fiber.RuntimeFiber<void, never>[] = [];
+      const group: Fiber.Fiber<void, never>[] = [];
       const join = Effect.suspend(() => Effect.gen(function* () {
         const waiting = Effect.forEach(group, Fiber.await, { discard: true });
         const exit = yield* Effect.exit(restore(waiting));

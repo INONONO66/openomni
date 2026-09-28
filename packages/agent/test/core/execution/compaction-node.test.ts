@@ -291,7 +291,7 @@ it("forwards session cancellation into an in-flight compaction summarizer", () =
           return yield* Effect.callback<string>((resume) => {
             const abort = () => resume(Effect.interrupt);
             signal.addEventListener("abort", abort, { once: true });
-            Deferred.unsafeDone(started, Effect.succeed(signal));
+            Deferred.doneUnsafe(started, Effect.succeed(signal));
             return Effect.sync(() => signal.removeEventListener("abort", abort));
           });
         }),
