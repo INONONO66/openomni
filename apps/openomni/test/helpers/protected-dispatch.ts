@@ -10,7 +10,7 @@ import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled
 import { bounded } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestLedger } from "../../../../packages/agent/test/helpers/effect-g1";
 import { createRequestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
-import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
+import type { AppLedgerPlane, SessionKernel } from "../../src/composition/cluster-runtime";
 import { testPlane } from "./ledger";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
 import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
@@ -23,7 +23,7 @@ export function protectedDispatch(
   observations: ObservationSink = { publish: () => undefined },
   options: {
     readonly plane?: AppLedgerPlane;
-    readonly kernel?: Parameters<typeof requestLedger>[0]["kernel"];
+    readonly kernel?: SessionKernel;
   } = {},
 ) {
   const opened = Promise.withResolvers<SessionTransition.Request>();
