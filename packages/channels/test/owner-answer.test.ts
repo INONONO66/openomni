@@ -1,4 +1,4 @@
-import { ledger, resetLedger } from "./helpers/ledger";
+import { adoptLedgerFence, ledger, resetLedger } from "./helpers/ledger";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { channelRequests } from "./helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -38,8 +38,7 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "owner-answer-"));
   dbPath = join(directory, "ledger.sqlite");
   at = 10;
-  resetLedger();
-  Storage.initialize({ dbPath });
+  resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: dbPath });
 });
 
 afterEach(async () => {
@@ -51,7 +50,7 @@ afterEach(async () => {
 async function approval() {
   originalAction("protected-call", "owner-session", { person: "alice", trustTier: "trusted" });
   const row = ledger().kernel.row("owner-session");
-  const generation = ledger().kernel.latestGenerationFor(sessionTree(row.id, ledger().sessions.actions));
+  const generation = ledger().kernel.latestGenerationFor(row.id);
   const request = requestFixture({
     requestId: "protected-call",
     sessionId: row.id,
@@ -69,14 +68,7 @@ async function approval() {
     correlation: {},
   });
   request.bindingDigest = requestBindingDigest(request);
-  const lease = await runEffect(ledger().kernel.acquireLease({
-    sessionId: row.id,
-    owner: "fixture",
-    expectedFence: row.leaseFence,
-    now: 2,
-    expiresAt: 100,
-  }));
-  if (!lease.ok) throw new Error("fixture lease refused");
+  const fence = adoptLedgerFence(row.id, "fixture");
   const decision = decideRequestTransition(
     {
       version: 1,
@@ -84,24 +76,21 @@ async function approval() {
       sessionId: row.id,
       at: 2,
       expectedRevision: row.revision,
-      authority: { owner: "fixture", fence: lease.fence },
+      authority: { owner: "fixture", fence },
       payload: { kind: "request.open", request },
     },
     { row: ledger().kernel.row(row.id), invocation: ledger().kernel.actionById(request.requestId), inputRecord: ledger().kernel.requestInputById(row.id, "open") },
   );
   expect(decision.resolution).toBe("opened");
-  const result = await runEffect(ledger().kernel.commitRequestTransition({
+  await runEffect(ledger().kernel.commitRequestTransition({
     sessionId: row.id,
     owner: "fixture",
-    fence: lease.fence,
+    fence,
     now: 2,
     expectedRevision: row.revision,
     actions: [...decision.actions],
-    consumeInboxIds: [],
     state: row.state,
-    releaseLease: true,
   }));
-  if (!result.ok) throw new Error("fixture request refused");
   return request;
 }
 
@@ -249,8 +238,7 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   expect(await frame(first.socket, wire)).toMatchObject({ result: { status: "executed" } });
   const before = sessionTree(request.sessionId, ledger().sessions.actions);
   await first.server.stop(true);
-  resetLedger();
-  Storage.initialize({ dbPath });
+  resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: dbPath });
   at = 20;
   const second = await connect(router());
   expect(await frame(second.socket, wire)).toMatchObject({ result: { status: "executed" } });

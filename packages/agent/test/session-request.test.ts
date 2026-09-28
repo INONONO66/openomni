@@ -1,8 +1,8 @@
 import { expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Effect } from "effect";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { isolatedLedger } from "./helpers/isolated";
+import { sessionTree } from "./helpers/session-tree";
 import { childAdmission, fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import { openRequest } from "./helpers/open-request";
 import {
@@ -20,7 +20,6 @@ const row: LedgerSession.Row = {
   role: "resident",
   leaseOwner: "kernel",
   leaseFence: 1,
-  leaseExpiresAt: 1000,
   revision: 1,
   state: "running",
   toolsGeneration: 1,
@@ -449,28 +448,31 @@ it("gives timeout and cancellation only one terminal winner", () => {
 
 it.each([false, true])("child admission commits as one SQLite unit (inbox fault: %s)", (fault: boolean) => fileRequest((dbPath) => Effect.gen(function* () {
   const { port, opening } = yield* requestPlane();
-  const before = sessionTree("parent");
+  const before = sessionTree(isolatedLedger().kernel, "parent");
   using raw = new Database(dbPath);
-  if (fault) raw.run(`CREATE TRIGGER refuse_child BEFORE INSERT ON inbox
+  // W5.2: the inbox table is gone; child ingress is the `child:prompt` chain action.
+  if (fault) raw.run(`CREATE TRIGGER refuse_child BEFORE INSERT ON action
+    WHEN NEW.id = 'child:prompt'
     BEGIN SELECT RAISE(ABORT, 'test inbox fault'); END`);
-  const admission = childAdmission("plane:request:request", SessionHandleStore.row("parent").leaseFence + 1);
+  const admission = childAdmission("plane:request:request", isolatedLedger().kernel.row("parent").leaseFence + 1);
   const opened = port.open({ ...opening, admission });
   if (fault) {
     expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "ForeignFailure" } });
-    expect(sessionTree("parent")).toEqual(before);
-    expect(SessionHandleStore.requestById("invocation")).toBeUndefined();
-    expect(Storage.get().alarms?.get("invocation:deadline")).toBeUndefined();
-    expect(SessionHandleStore.listRows().map(({ id }) => id)).toEqual(["parent"]);
-    expect(SessionHandleStore.inboxRows("child")).toEqual([]);
-    expect(sessionTree("child")).toEqual([]);
+    expect(sessionTree(isolatedLedger().kernel, "parent")).toEqual(before);
+    expect(isolatedLedger().kernel.requestById("invocation")).toBeUndefined();
+    expect(isolatedLedger().kernel.listRows().map(({ id }) => id)).toEqual(["parent"]);
+    expect(isolatedLedger().kernel.pendingMessages("child")).toEqual([]);
+    expect(sessionTree(isolatedLedger().kernel, "child")).toEqual([]);
     return;
   }
   expect(yield* opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, state: "open" });
-  expect(Storage.get().alarms?.get("invocation:deadline")).toMatchObject({ status: "armed", fireAt: 200 });
-  expect(sessionTree("child").map(({ id }) => id)).toEqual(["child:configure", "child:prompt"]);
-  expect(SessionHandleStore.inboxRows("child")).toHaveLength(1);
+  // W5.2: the alarms table is deleted; the deadline is durable on the request row.
+  expect(isolatedLedger().kernel.requestById("invocation")?.deadline).toBe(200);
+  expect(sessionTree(isolatedLedger().kernel, "child").map(({ id }) => id)).toEqual(["child:configure", "child:prompt"]);
+  expect(isolatedLedger().kernel.pendingMessages("child")).toHaveLength(1);
   expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "child" }, { id: "parent" }]);
-  expect(SessionHandleStore.row("parent").leaseOwner).toBeNull();
+  // W5.2: no lease release; the admission's fence owner stays durable.
+  expect(isolatedLedger().kernel.row("parent").leaseOwner).not.toBeNull();
 })));
 
 it.each([
@@ -482,14 +484,14 @@ it.each([
   const opened = yield* port.open({ ...opening, resolution, threshold, expectedResponders: ["a", "b", "c"] });
   expect(opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, effectHash: canonicalDigest({ route: "children" }) });
   expect(yield* port.answer({ ...planeAnswer(opened, "a", "ambiguous"), bindingDigest: "wrong-request" })).toBe("rejected");
-  expect(SessionHandleStore.pendingInbox("parent")).toEqual([]);
+  expect(isolatedLedger().kernel.pendingMessages("parent")).toEqual([]);
   for (const [index, responder] of ["a", "b", "c"].entries()) {
     const reply = planeAnswer(opened, responder);
     const resolution = index + 1 < threshold ? "attached" : index + 1 === threshold ? "resolved" : "duplicate";
     expect(yield* port.answer(reply)).toBe(resolution);
     expect(yield* port.answer({ ...reply, inputId: `${responder}:again` })).toBe("duplicate");
   }
-  expect(SessionHandleStore.requestById(opened.requestId)).toMatchObject({ state: "resolved", replies: opened.expectedResponders.slice(0, threshold).map((responderId) => ({ responderId })) });
-  expect(SessionHandleStore.pendingInbox("parent").map(({ id }) => SessionHandleStore.actionById(id)?.parentId)).toEqual(Array.from({ length: threshold }, () => "invocation"));
-  expect(sessionTree("parent").filter(({ id }) => id === "invocation:resolution")).toHaveLength(1);
+  expect(isolatedLedger().kernel.requestById(opened.requestId)).toMatchObject({ state: "resolved", replies: opened.expectedResponders.slice(0, threshold).map((responderId) => ({ responderId })) });
+  expect(isolatedLedger().kernel.pendingMessages("parent").map(({ id }) => isolatedLedger().kernel.actionById(id)?.parentId)).toEqual(Array.from({ length: threshold }, () => "invocation"));
+  expect(sessionTree(isolatedLedger().kernel, "parent").filter(({ id }) => id === "invocation:resolution")).toHaveLength(1);
 })));

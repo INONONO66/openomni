@@ -1,10 +1,11 @@
-import { resetLedger } from "../../helpers/ledger";
+import { ledger, resetLedger, type TestLedger } from "../../helpers/ledger";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Operational, type BusEvent, type Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
 } from "../../../src/router/messaging/reply-grant.js";
+import { unconfiguredChannelStores } from "../../../src/router/stores";
 
 /**
  * #708 reply-grant materialization mechanics (design §2b stage-0 rule):

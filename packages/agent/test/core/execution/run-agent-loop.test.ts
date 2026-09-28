@@ -1,17 +1,17 @@
-import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
 import { prepareChatFixture } from "../../helpers/chat-services";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
 import { Effect, Fiber } from "effect";
-import { isolated } from "../../helpers/isolated";
+import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "../../helpers/isolated";
 import { dispatchingRunner } from "../../helpers/effect-g2";
 import { expect, test, spyOn } from "bun:test";
 import { seedPolicy } from "../../helpers/seed-policy";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { Message, canonicalDigest, type PlainValue, type Inbox } from "@openomni/protocol";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { Message, canonicalDigest, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { session, closeSessions } from "../../../src/session-handle";
 import { createSessionChatRunner } from "../../../src/session-chat-runner";
@@ -22,18 +22,52 @@ import {
   eraseTool,
 } from "../../../src/tool-dispatcher";
 import { createAssistantMessage } from "../../../src/core/message-factory";
+import { createObservationBus } from "../../../src/observation/bus";
 import { restoreCompactionProjection } from "../../../src/compaction/durable";
 import { assistantStep } from "../../helpers/dispatching-runner";
 
 const object = (value: PlainValue) =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 
-test("reopened SQLite hydrates exact tool-bearing assistant identities and rendered results", () =>
-  isolated(
+/**
+ * File-backed isolation (W5.2): the Storage singleton is gone, so reopen is a
+ * store close + fresh open over the same SQLite files, behind the isolation's
+ * lazy `isolatedLedger()` pointer.
+ */
+function reopenableLedger(prefix: string): IsolatedLedgerHandle & { readonly reopen: () => void } {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  const bus = createObservationBus();
+  const open = () => {
+    const sessionStore = openSessionStore(join(directory, "chat.sqlite"), bus);
+    const catalog = openCatalogStore(join(directory, "catalog.sqlite"), bus);
+    return { sessionStore, catalog, kernel: SessionHandleStore.createSessionKernel(sessionStore, catalog) };
+  };
+  let current = open();
+  return {
+    get kernel() { return current.kernel; },
+    openKernel: () => current.kernel,
+    listSessions: () => current.kernel.listRows(),
+    get session() { return current.sessionStore; },
+    get catalog() { return current.catalog; },
+    bus,
+    reopen: () => {
+      current.sessionStore.close();
+      current.catalog.close();
+      current = open();
+    },
+    close: () => {
+      current.sessionStore.close();
+      current.catalog.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+test("reopened SQLite hydrates exact tool-bearing assistant identities and rendered results", () => {
+  const ledger = reopenableLedger("937-history-");
+  return isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        const directory = mkdtempSync(join(tmpdir(), "937-history-"));
-        const dbPath = join(directory, "chat.sqlite");
         const definitions = [
           eraseTool(
             defineTool({
@@ -50,7 +84,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
         ];
         let calls = 0;
         const inputs: Message.WithParts[][] = [];
-        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
+        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
         const runner = dispatchingRunner(
           definitions,
           () => runtime,
@@ -73,8 +107,6 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           },
         );
         try {
-          Storage.reset();
-          Storage.initialize({ dbPath });
           seedPolicy();
           const options = {
             id: "history",
@@ -99,9 +131,8 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             }),
           );
           yield* closeSessions(runtime);
-          Storage.reset();
-          Storage.initialize({ dbPath });
-          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
+          ledger.reopen();
+          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
           expect((yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("after reopen"))?.kind).toBe(
             "result",
           );
@@ -117,26 +148,25 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             ),
           ).toHaveLength(1);
           expect(
-            sessionTree("history").filter(
+            sessionTree(isolatedLedger().kernel, "history").filter(
               (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "message",
             ),
           ).not.toHaveLength(0);
         } finally {
           yield* closeSessions(runtime);
-          Storage.reset();
-          rmSync(directory, { recursive: true, force: true });
         }
       }),
     ),
-  ));
+    () => ledger,
+  );
+});
 
-test("compaction projection and lossless revert survive SQLite reopen without deleting originals", () =>
-  isolated(
+test("compaction projection and lossless revert survive SQLite reopen without deleting originals", () => {
+  const ledger = reopenableLedger("937-compaction-reopen-");
+  return isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        const directory = mkdtempSync(join(tmpdir(), "937-compaction-reopen-"));
-        const dbPath = join(directory, "chat.sqlite");
-        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
+        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
         let calls = 0;
         let reopenedInput: Message.WithParts[] = [];
         let nextBoundary: Message.WithParts[] = [];
@@ -204,8 +234,6 @@ test("compaction projection and lossless revert survive SQLite reopen without de
             }); }),
         });
         try {
-          Storage.reset();
-          Storage.initialize({ dbPath });
           seedPolicy();
           const options = { id: "compact", role: "resident" as const, runner };
           const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
@@ -213,14 +241,22 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           const second = yield* Effect.forkScoped(handle.prompt("second"));
           yield* Effect.promise(() => summarizing.promise).pipe(Effect.timeout("5 seconds"));
           const admitted = Promise.withResolvers<void>();
-          const commitInbox = SessionHandleStore.commitInbox;
+          // W5.2: the inbox table is gone; ingress is a committed `prompt`
+          // chain action, so the durable-admission tap rides kernel.commit.
+          const kernel = isolatedLedger().kernel;
+          const commit = kernel.commit.bind(kernel);
           let count = 0;
-          const tap = spyOn(SessionHandleStore, "commitInbox").mockImplementation(
-            (inbox: Inbox.Commit) =>
-              commitInbox(inbox).pipe(
+          const tap = spyOn(kernel, "commit").mockImplementation(
+            (input: LedgerSession.Commit) =>
+              commit(input).pipe(
                 Effect.tap(() =>
                   Effect.sync(() => {
-                    if (inbox.content.startsWith("during-") && ++count === 2) admitted.resolve();
+                    const during = input.actions.filter(
+                      (action) =>
+                        action.kind === "prompt" &&
+                        String(object(action.effect.value)?.content ?? "").startsWith("during-"),
+                    ).length;
+                    if (during > 0 && (count += during) >= 2) admitted.resolve();
                   }),
                 ),
               ),
@@ -230,13 +266,13 @@ test("compaction projection and lossless revert survive SQLite reopen without de
             Effect.forkScoped(handle.prompt(content)),
           );
           yield* Effect.promise(() => admitted.promise).pipe(Effect.timeout("5 seconds"));
-          const pending = SessionHandleStore.pendingInbox("compact");
+          const pending = kernel.pendingMessages("compact");
           expect(
-            pending.map((item: import("@openomni/protocol").Inbox.Row) => item.content),
+            pending.map((item) => item.content),
           ).toEqual(["during-1", "during-2"]);
           summary.resolve("checkpoint");
           yield* Effect.forEach([second, ...concurrent], Fiber.join);
-          const before = sessionTree("compact");
+          const before = sessionTree(kernel, "compact");
           const node = [...before]
             .reverse()
             .find(
@@ -255,7 +291,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
             nextBoundary
               .slice(-2)
               .map((message: import("@openomni/protocol").Message.WithParts) => message.info.id),
-          ).toEqual(pending.map((item: import("@openomni/protocol").Inbox.Row) => item.id));
+          ).toEqual(pending.map((item) => item.id));
           const record = z
             .object({
               summary: z.string(),
@@ -277,17 +313,16 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           expect(canonicalDigest(record.revert.removedEntries)).toBe(record.discarded.sha256);
           expect(restored.slice(0, record.discarded.count)).toEqual(record.revert.removedEntries);
           yield* closeSessions(runtime);
-          Storage.reset();
-          Storage.initialize({ dbPath });
-          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure };
+          ledger.reopen();
+          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
           yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("reopened");
           expect(reopenedInput.slice(0, -1)).toEqual(afterConcurrent);
-          expect(sessionTree("compact").slice(0, before.length)).toEqual(before);
+          expect(sessionTree(isolatedLedger().kernel, "compact").slice(0, before.length)).toEqual(before);
         } finally {
           yield* closeSessions(runtime);
-          Storage.reset();
-          rmSync(directory, { recursive: true, force: true });
         }
       }),
     ),
-  ));
+    () => ledger,
+  );
+});

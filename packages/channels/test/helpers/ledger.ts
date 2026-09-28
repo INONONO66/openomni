@@ -1,5 +1,6 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
-import type { Storage as ProtocolStorage } from "@openomni/protocol";
+import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { Effect } from "effect";
+import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";
 
 /**
@@ -77,4 +78,74 @@ export function replaceDecisionFacts(
 ): void {
   const facts = current.plane.sessions.decisionFacts;
   current.plane.setDecisionFacts(replace(facts));
+}
+
+/** Strictly-newer fence adoption on the shared fixture kernel (W5.2 F5). */
+export function adoptLedgerFence(sessionId: string, owner: string): number {
+  const kernel = current.plane.kernel;
+  for (;;) {
+    const row = kernel.row(sessionId);
+    if (row.leaseOwner === owner) return row.leaseFence;
+    const adopted = Effect.runSync(
+      kernel.adoptFence({ sessionId, owner, fence: row.leaseFence + 1 }).pipe(
+        Effect.map((receipt) => receipt.fence),
+        Effect.catchTag("LeaseRefused", () => Effect.succeed(undefined)),
+      ),
+    );
+    if (adopted !== undefined) return adopted;
+  }
+}
+
+/**
+ * The historical inbox commit, replayed onto the chain (W5.2 F1): one
+ * `prompt` action whose intent is the origin and whose effect carries the
+ * inbox kind + content; idempotent on the action id.
+ */
+export function commitReceivedMessage(
+  input: Inbox.Commit,
+): Effect.Effect<{ row: Inbox.Row }, LedgerError> {
+  return Effect.suspend(() => {
+    const kernel = current.plane.kernel;
+    const asRow = (ordinal: number): Inbox.Row => ({
+      id: input.id,
+      sessionId: input.sessionId,
+      kind: input.kind,
+      content: input.content,
+      origin: input.origin,
+      status: "pending",
+      consumedBy: null,
+      consumedAt: null,
+      createdAt: input.createdAt,
+      ordinal,
+    });
+    const existing = kernel.actionById(input.id);
+    if (existing !== undefined) return Effect.succeed({ row: asRow(existing.ordinal) });
+    const fence = adoptLedgerFence(input.sessionId, "fixture-inbox");
+    const row = kernel.row(input.sessionId);
+    const action: LedgerAction.Append = {
+      id: input.id,
+      parentId: input.parentActionId,
+      sessionId: input.sessionId,
+      kind: "prompt",
+      intent: input.origin,
+      effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
+      irreversible: true,
+      ts: input.createdAt,
+    };
+    return kernel
+      .commit({
+        sessionId: input.sessionId,
+        owner: "fixture-inbox",
+        fence,
+        now: input.createdAt,
+        expectedRevision: row.revision,
+        actions: [action],
+        state: row.state,
+      })
+      .pipe(
+        Effect.map((committed) => ({
+          row: asRow(committed.receipts[0]?.action.ordinal ?? row.revision + 1),
+        })),
+      );
+  });
 }

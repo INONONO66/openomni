@@ -7,9 +7,11 @@ test("channels barrel exposes only its runtime public surface", () => {
     "ForeignFailure",
     "SendAdmissionConflict",
     "WebSocketHandler",
+    "createChannelStores",
     "createGatewayRouter",
     "decodeChannelFailure",
     "resolveChannelGrant",
+    "unconfiguredChannelStores",
   ]);
   expect("WebSocketFrames" in barrel).toBe(false);
   expect("InvalidInbound" in barrel).toBe(false);

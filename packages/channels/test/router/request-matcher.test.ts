@@ -136,7 +136,7 @@ describe("request matcher — ingress evidence", () => {
       channel: "telegram",
       externalId: "target-1",
     });
-    const targets = Matcher.targetsOfRequest(record);
+    const targets = Matcher.targetsOfRequest(ledger().stores, record);
     const evidenceFor = (actorId: string, endpointId: string, externalId: string) =>
       Matcher.ingressEvidence(
         directEvent({
@@ -182,7 +182,7 @@ describe("request matcher — ingress evidence", () => {
       resolution: "first",
     });
 
-    expect(Matcher.targetsOfRequest(record)).toEqual([]);
+    expect(Matcher.targetsOfRequest(ledger().stores, record)).toEqual([]);
   });
 
   test("returns every credited expected responder of a request row and never decides", () => {
@@ -207,13 +207,13 @@ describe("request matcher — ingress evidence", () => {
 
     expect(
       Matcher.responderCandidates(
-        Matcher.targetsOfRequest(record),
+        Matcher.targetsOfRequest(ledger().stores, record),
         Matcher.ingressEvidence(replyFromB, claim),
       ),
     ).toEqual(["actor-b"]);
     expect(
       Matcher.responderCandidates(
-        Matcher.targetsOfRequest(record),
+        Matcher.targetsOfRequest(ledger().stores, record),
         Matcher.ingressEvidence(replyFromStranger, claim),
       ),
     ).toEqual([]);

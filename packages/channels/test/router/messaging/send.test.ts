@@ -8,7 +8,7 @@ import { runEffect } from "../../helpers/effect";
 import { replaceDecisionFacts } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import type { Gateway, PlainObject } from "@openomni/protocol";
+import type { Gateway, PlainObject, SessionTransition } from "@openomni/protocol";
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import type { KernelDeliveryReceipt } from "../../../src/support/deliver";

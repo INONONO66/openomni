@@ -1,4 +1,4 @@
-import { ledger, resetLedger } from "../helpers/ledger";
+import { commitReceivedMessage, ledger, resetLedger } from "../helpers/ledger";
 import { Effect } from "effect";
 import { runEffect } from "../helpers/effect";
 import { channelRequests } from "../helpers/channel-requests";
@@ -7,7 +7,7 @@ import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
 import { KERNEL_POLICY_REGISTRY, compilePolicySnapshot } from "@openomni/policy";
-import { Storage,  } from "@openomni/ledger";
+
 import { decodeChannelFailure } from "../../src/errors";
 import { Bus } from "../helpers/observation";
 import {
@@ -58,7 +58,6 @@ let router: GatewayRouter | undefined;
 export function resetStores(): void {
   resetLedger();
   Bus.reset();
-  Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
 }
 
 export function resetRouterState(): void {
@@ -182,7 +181,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
         const existed = ledger().kernel.pendingMessages(row.sessionId).some(
           (input: Inbox.Row) => input.id === row.id,
         );
-        const received = yield* ledger().kernel.commitReceivedMessage(row);
+        const received = yield* commitReceivedMessage(row);
         if (!existed) commits.push(row);
         return received.row;
       }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
