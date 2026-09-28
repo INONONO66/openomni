@@ -6,8 +6,10 @@ import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { SessionHandleStore, SurfaceKey } from "@openomni/ledger";
+import { createSurfaceKeyStore } from "@openomni/ledger";
 import { ConfigurationError, loadConfig, type OpenOmniConfig } from "../src/config";
+import { sessionFilePath } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
@@ -15,6 +17,11 @@ import { declareChannel } from "./helpers/declared-channel";
 import { expectAbsentWebhook } from "./helpers/http";
 
 const REPLY = "A deterministic Resident reply.";
+/** Suite configs always name their store paths; narrow the optional field once. */
+function statePath(value: string | undefined): string {
+  if (value === undefined) throw new Error("suite config is missing a state path");
+  return value;
+}
 const WS_TOKEN = "e2e-upgrade-token";
 const suite = residentSuite();
 
@@ -60,7 +67,7 @@ async function upgradeResponse(port: number, path: string) {
   }
 }
 
-async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }> {
+async function bootWithConfig(config: OpenOmniConfig) {
   const app = await suite.boot({
     config,
     llm: {
@@ -71,10 +78,10 @@ async function bootWithConfig(config: OpenOmniConfig): Promise<{ port: number }>
       }),
     },
   });
-  return { port: app.port };
+  return app;
 }
 
-function bootApp(): Promise<{ port: number }> {
+function bootApp() {
   return bootWithConfig(suite.config("openomni-resident-", { wsToken: WS_TOKEN }));
 }
 
@@ -99,7 +106,8 @@ async function withConfigEnv(env: Record<string, string>, fn: () => Promise<void
 
 function configEnvFor(directory: string): Record<string, string> {
   return {
-    OPENOMNI_DB_PATH: join(directory, "chat.db"),
+    OPENOMNI_CATALOG_PATH: join(directory, "catalog.sqlite"),
+    OPENOMNI_SESSIONS_DIR: join(directory, "sessions"),
     OPENOMNI_WS_PORT: "0",
     OPENOMNI_WS_TOKEN: WS_TOKEN,
     OPENOMNI_MODEL_PROVIDER: "fake",
@@ -116,7 +124,8 @@ const CONFIG_ENV = [
   "GITHUB_WEBHOOK_SECRET",
   "GITHUB_TOKEN",
   "GITHUB_BOT_USERNAME",
-  "OPENOMNI_DB_PATH",
+  "OPENOMNI_CATALOG_PATH",
+  "OPENOMNI_SESSIONS_DIR",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",
@@ -145,17 +154,18 @@ describe("OpenOmni Resident WebSocket", () => {
         }),
       },
     });
-    const db = new Database(config.dbPath, { readonly: true });
+    const plane = await planeOf(app.runtime);
+    const db = new Database(statePath(config.catalogPath), { readonly: true });
     try {
       const refusal = await upgradeResponse(app.port, `/ws?token=${WS_TOKEN}`);
       const before = db
-        .query("SELECT COUNT(*) AS count FROM session WHERE id != 'gateway-ingress'")
+        .query("SELECT COUNT(*) AS count FROM session_index WHERE id != 'gateway-ingress'")
         .get();
       console.log(
         "967-U1 HTTP",
         JSON.stringify({
           port: app.port,
-          dbPath: config.dbPath,
+          catalogPath: config.catalogPath,
           ...refusal,
           providerCalls,
           sessions: before,
@@ -164,36 +174,33 @@ describe("OpenOmni Resident WebSocket", () => {
       expect(refusal.status).toBe(401);
       expect(providerCalls).toBe(0);
       expect(before).toEqual({ count: 0 });
-      expect(
-        db
-          .query("SELECT COUNT(*) AS count FROM action WHERE session_id != 'gateway-ingress'")
-          .get(),
-      ).toEqual({ count: 0 });
+      expect(plane.listSessions().filter((row) => row.id !== "gateway-ingress")).toEqual([]);
 
       const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
       expect(ws.protocol).toBe("auth");
-      const response = nextResidentTurn();
+      const response = nextResidentTurn(plane);
       ws.send(JSON.stringify({ type: "message", text: "967-U1 input" }));
       const reply = await response;
       expect(reply).toMatchObject({ text: REPLY });
       expect(providerCalls).toBe(1);
-      expect(
-        SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress"),
-      ).toHaveLength(1);
-      const session = SessionHandleStore.listRows().filter(
-        (row) => row.id !== "gateway-ingress",
-      )[0];
+      const persisted = plane.listSessions().filter((row) => row.id !== "gateway-ingress");
+      expect(persisted).toHaveLength(1);
+      const session = persisted[0];
       if (session === undefined) throw new Error("resident session was not persisted");
-      const snapshot = SessionHandleStore.getSnapshot(session.id);
+      const snapshot = plane.openKernel(session.id).getSnapshot(session.id);
       expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
       expect(snapshot.turns.at(-1)?.messages).toEqual([
         { role: "user", text: "967-U1 input" },
         { role: "assistant", text: REPLY },
       ]);
-      const sessions = db
+      using sessionDb = new Database(
+        sessionFilePath(statePath(config.sessionsDir), session.id),
+        { readonly: true },
+      );
+      const sessions = sessionDb
         .query("SELECT id, role, state, revision FROM session WHERE id != 'gateway-ingress'")
         .all();
-      const actions = db
+      const actions = sessionDb
         .query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal")
         .all();
       expect(sessions).toHaveLength(1);
@@ -212,13 +219,13 @@ describe("OpenOmni Resident WebSocket", () => {
     } finally {
       db.close();
       await suite.cleanup();
-      expect(existsSync(dirname(config.dbPath))).toBe(false);
+      expect(existsSync(dirname(statePath(config.catalogPath)))).toBe(false);
       console.log(
         "967-U1 cleanup",
         JSON.stringify({
           port: app.port,
-          dbPath: config.dbPath,
-          directoryExists: existsSync(dirname(config.dbPath)),
+          catalogPath: config.catalogPath,
+          directoryExists: existsSync(dirname(statePath(config.catalogPath))),
         }),
       );
     }
@@ -242,12 +249,12 @@ describe("OpenOmni Resident WebSocket", () => {
       await suite.cleanup();
     }
     expect(ws.readyState).toBe(WebSocket.CLOSED);
-    expect(existsSync(dirname(config.dbPath))).toBe(false);
+    expect(existsSync(dirname(statePath(config.catalogPath)))).toBe(false);
     console.log(
       "967-U1 failure cleanup",
       JSON.stringify({
         state: ws.readyState,
-        directoryExists: existsSync(dirname(config.dbPath)),
+        directoryExists: existsSync(dirname(statePath(config.catalogPath))),
         port: app.port,
       }),
     );
@@ -255,28 +262,29 @@ describe("OpenOmni Resident WebSocket", () => {
 
   it("boots WebSocket-only when no channel credentials are configured", async () => {
     const app = await bootApp();
+    const plane = await planeOf(app.runtime);
 
     await expectAbsentWebhook(app.port);
 
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
     expect(ws.protocol).toBe("auth");
-    const reply = nextResidentTurn();
+    const reply = nextResidentTurn(plane);
     ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
 
     expect(await reply).toMatchObject({ text: REPLY });
 
-    const sessions = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
+    const sessions = plane.listSessions().filter((row) => row.id !== "gateway-ingress");
     expect(sessions).toHaveLength(1);
     const session = sessions[0];
     if (session === undefined) throw new Error("Expected one persisted session");
-    const snapshot = SessionHandleStore.getSnapshot(session.id);
+    const snapshot = plane.openKernel(session.id).getSnapshot(session.id);
     expect(snapshot).toMatchObject({ role: "resident", state: "idle" });
     expect(snapshot.turns.at(-1)?.messages).toEqual([
       { role: "user", text: "Help me judge this." },
       { role: "assistant", text: REPLY },
     ]);
 
-    const surfaceKeys = SurfaceKey.listBySession(session.id);
+    const surfaceKeys = createSurfaceKeyStore(plane.catalog).listBySession(session.id);
     expect(surfaceKeys).toHaveLength(1);
     expect(surfaceKeys[0]).toStartWith("ws:");
   });
@@ -310,7 +318,7 @@ describe("OpenOmni Resident WebSocket", () => {
 
   it("mounts a declared GitHub driver on the existing HTTP server", async () => {
     const config = suite.config("declared-github-", { wsToken: WS_TOKEN });
-    suite.defer(declareChannel(config.dbPath, "github", { secret: "github-webhook-secret" }));
+    suite.defer(declareChannel(statePath(config.catalogPath), "github", { secret: "github-webhook-secret" }));
     const app = await bootWithConfig(config);
 
     const response = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
@@ -324,12 +332,13 @@ describe("OpenOmni Resident WebSocket", () => {
 
   it("rejects an upgrade carrying the wrong subprotocol token", async () => {
     const app = await bootApp();
+    const plane = await planeOf(app.runtime);
 
     await expect(
       suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]),
     ).rejects.toThrow("WebSocket failed before opening");
     expect(
-      SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress"),
+      plane.listSessions().filter((row) => row.id !== "gateway-ingress"),
     ).toHaveLength(0);
   });
 

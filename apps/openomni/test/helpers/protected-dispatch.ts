@@ -10,6 +10,7 @@ import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled
 import { bounded } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestLedger } from "../../../../packages/agent/test/helpers/effect-g1";
 import { createRequestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import { testPlane } from "./ledger";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
 import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
@@ -20,13 +21,21 @@ export function protectedDispatch(
   definition: AnyToolDefinition,
   input: Record<string, PlainValue>,
   observations: ObservationSink = { publish: () => undefined },
+  options: {
+    readonly plane?: AppLedgerPlane;
+    readonly kernel?: Parameters<typeof requestLedger>[0]["kernel"];
+  } = {},
 ) {
   const opened = Promise.withResolvers<SessionTransition.Request>();
-  let now = 100;
+  const clockRef = { now: 100 };
+  const plane = options.plane ?? testPlane();
+  const sessionId = crypto.randomUUID();
+  const kernel = options.kernel ?? plane.openKernel(sessionId);
   const recording = runSyncEffect(requestLedger({
-    id: crypto.randomUUID(),
-    clock: () => now,
-    domainRevisions: createRequestDomainRevisions(testPlane().stores),
+    id: sessionId,
+    clock: () => clockRef.now,
+    domainRevisions: createRequestDomainRevisions(plane.stores),
+    kernel,
     onRequest(request) {
       if (request.state === "open") opened.resolve(request);
     },
@@ -52,6 +61,8 @@ export function protectedDispatch(
   });
   return {
     outcome,
+    plane,
+    kernel,
     ...recording,
     executor,
     running,
@@ -66,7 +77,7 @@ export function protectedDispatch(
       return bounded(running);
     },
     setClock(at: number) {
-      now = at;
+      clockRef.now = at;
     },
     async close() {
       controller.abort();

@@ -9,10 +9,12 @@ import { requestLedger, crashAfterRequestOpen, type RequestLedger } from "../../
 import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { compiledPolicy } from "../../../packages/agent/test/helpers/compiled-policy";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { requestDomainRevisions } from "../src/tools/core/request-domain-revisions";
+import { createRequestDomainRevisions } from "../src/tools/core/request-domain-revisions";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
-import { ActorRegistry, SessionHandleStore, Storage } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { testPlane } from "./helpers/ledger";
 import { eraseTool } from "@openomni/agent";
 import type { PlainObject } from "@openomni/protocol";
 import { createProvisionTool, PROVISION_POLICY_ROWS } from "../src/tools/provision";
@@ -27,20 +29,29 @@ const MERGE = {
   op: "contact_merge",
   args: { endpointId: "ep:mallory", toActorId: "actor:alice" },
 } as const;
-const provision = () => eraseTool(createProvisionTool(provisionPort()));
+const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+const plane = (): AppLedgerPlane => {
+  if (planeRef.current === undefined) throw new Error("test plane not open");
+  return planeRef.current;
+};
+const actors = () => plane().stores.actors;
+const provision = () => eraseTool(createProvisionTool(provisionPort(plane())));
 /** The provisional contact's current standing in the actor registry. */
-const malloryStanding = () => ActorRegistry.getIdentity("contact:mallory")?.standing;
+const malloryStanding = () => actors().getIdentity("contact:mallory")?.standing;
 
 beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
-  ActorRegistry.mintProvisional(
+  planeRef.current = testPlane();
+  actors().mintProvisional(
     { id: "contact:mallory", kind: "unknown", trustTier: "observer", standing: "provisional" },
     { id: "ep:mallory", channel: "whatsapp", externalId: "mallory" },
   );
-  ActorRegistry.registerIdentity({ id: "actor:alice", kind: "human", trustTier: "collaborator" });
-  ActorRegistry.registerIdentity({ id: "actor:bob", kind: "human", trustTier: "observer" });
+  actors().registerIdentity({ id: "actor:alice", kind: "human", trustTier: "collaborator" });
+  actors().registerIdentity({ id: "actor:bob", kind: "human", trustTier: "observer" });
 });
-afterEach(() => Storage.reset());
+afterEach(() => {
+  planeRef.current?.close();
+  planeRef.current = undefined;
+});
 
 it("consent is a require_approval policy row on the two contact authority ops, nothing else", () => {
   expect(PROVISION_POLICY_ROWS.map((row) => [row.match.value, row.verdict.value])).toEqual([
@@ -83,7 +94,7 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
   expect(malloryStanding()).toBe("provisional");
 });
 it("executes exactly the original promotion after authenticated consent", async () => {
-  const f = protectedDispatch(provision(), { operation: PROMOTE });
+  const f = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane() });
   try {
     const request = await bounded(f.opened);
     expect(malloryStanding()).toBe("provisional");
@@ -92,14 +103,14 @@ it("executes exactly the original promotion after authenticated consent", async 
     expect(registered.isError).toBeUndefined();
     expect(registered.output).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
     expect(malloryStanding()).toBe("registered");
-    expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
+    expect(f.kernel.requestById(request.requestId)?.state).toBe("resolved");
     expect(f.ledger.actionById?.(`${request.requestId}:application`)).toBeDefined();
   } finally {
     await f.close();
   }
 });
 it("Owner refusal never promotes a provisional contact", async () => {
-  const f = protectedDispatch(provision(), { operation: PROMOTE });
+  const f = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane() });
   try {
     expect((await f.answer("refuse")).isError).toBe(true);
     expect(malloryStanding()).toBe("provisional");
@@ -108,23 +119,23 @@ it("Owner refusal never promotes a provisional contact", async () => {
   }
 });
 it("rejects an endpoint move after source or target changes, including same-clock edits", async () => {
-  const f = protectedDispatch(provision(), { operation: MERGE });
+  const f = protectedDispatch(provision(), { operation: MERGE }, undefined, { plane: plane() });
   try {
     await bounded(f.opened);
-    ActorRegistry.mergeEndpoint("ep:mallory", "actor:bob");
+    actors().mergeEndpoint("ep:mallory", "actor:bob");
     await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
-    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("actor:bob");
+    expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("actor:bob");
   } finally {
     await f.close();
   }
 });
 it("merges only the approved endpoint into the exact target", async () => {
-  const f = protectedDispatch(provision(), { operation: MERGE });
+  const f = protectedDispatch(provision(), { operation: MERGE }, undefined, { plane: plane() });
   try {
     const merged = await f.answer();
     expect(merged.isError).toBeUndefined();
     expect(merged.output).toBe("endpoint ep:mallory merged into actor:alice");
-    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("actor:alice");
+    expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("actor:alice");
   } finally {
     await f.close();
   }
@@ -140,26 +151,26 @@ for (const [name, operation] of [
   it(`consent to merge ${name} is refused by the act itself, never applied`, async () => {
     const f = protectedDispatch(provision(), {
       operation: { op: "contact_merge", args: operation },
-    });
+    }, undefined, { plane: plane() });
     try {
       const result = await f.answer();
       expect(result.isError).toBe(true);
       expect(result.output).toContain("endpoint or target is missing, or already bound");
-      expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+      expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
     } finally {
       await f.close();
     }
   });
 }
 it("invalidates a merge when the source identity changes without moving its endpoint", async () => {
-  const f = protectedDispatch(provision(), { operation: MERGE });
+  const f = protectedDispatch(provision(), { operation: MERGE }, undefined, { plane: plane() });
   try {
     await bounded(f.opened);
-    const source = ActorRegistry.getIdentity("contact:mallory");
+    const source = actors().getIdentity("contact:mallory");
     if (source === undefined) throw new Error("missing source identity");
-    ActorRegistry.registerIdentity({ ...source, trustTier: "manager" });
+    actors().registerIdentity({ ...source, trustTier: "manager" });
     await expect(f.answer()).rejects.toMatchObject({ code: "stale_approval" });
-    expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+    expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
   } finally {
     await f.close();
   }
@@ -176,19 +187,22 @@ it("refuses malformed output at the real dispatcher boundary", async () => {
 });
 it("bounds pending Owner requests across sessions without applying a ninth act", async () => {
   const pending: ReturnType<typeof protectedDispatch>[] = [];
+  // W5.2: the approval budget counts open approvals visible to one kernel, so
+  // every session in this wave shares the budget kernel's session file.
+  const budgetKernel = plane().openKernel("provision-budget");
   try {
     for (let index = 0; index < 8; index += 1) {
-      const f = protectedDispatch(provision(), { operation: PROMOTE });
+      const f = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane(), kernel: budgetKernel });
       pending.push(f);
       await bounded(f.opened);
     }
-    const ninth = protectedDispatch(provision(), { operation: PROMOTE });
+    const ninth = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane(), kernel: budgetKernel });
     pending.push(ninth);
     const ninthResult = await bounded(ninth.outcome);
     expect(ninthResult._tag).toBe("Failure");
     expect(ninthResult._tag === "Failure" && ninthResult.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
     expect(
-      SessionHandleStore.requestRows().filter((request) => request.state === "open"),
+      budgetKernel.requestRows().filter((request) => request.state === "open"),
     ).toHaveLength(8);
     expect(malloryStanding()).toBe("provisional");
   } finally {
@@ -225,34 +239,46 @@ for (const operation of [PROMOTE, MERGE]) {
     it(`${operation.op} preserves Owner Wait across SQLite reopen and ${decision} settles exactly once`, async () => {
       const directory = mkdtempSync(join(tmpdir(), "provision-restart-"));
       const dbPath = join(directory, "ledger.sqlite");
-      Storage.reset();
-      Storage.initialize({ dbPath });
-      ActorRegistry.mintProvisional(
-        { id: "contact:mallory", kind: "unknown", trustTier: "observer", standing: "provisional" },
-        { id: "ep:mallory", channel: "whatsapp", externalId: "mallory" },
-      );
-      ActorRegistry.registerIdentity({ id: "actor:alice", kind: "human", trustTier: "collaborator" });
+      const catalogPath = join(directory, "catalog.sqlite");
+      const open = () => {
+        const session = openSessionStore(dbPath);
+        const catalog = openCatalogStore(catalogPath);
+        return {
+          kernel: SessionHandleStore.createSessionKernel(session, catalog),
+          close: () => {
+            session.close();
+            catalog.close();
+          },
+          actions: session.actions,
+        };
+      };
+      const first = open();
+      const handleRef: { current: ReturnType<typeof open> } = { current: first };
       try {
         await runEffect(Effect.scoped(Effect.gen(function* () {
-          const initial = yield* requestLedger({ domainRevisions: requestDomainRevisions });
+          const initial = yield* requestLedger({ kernel: first.kernel, domainRevisions: createRequestDomainRevisions(plane().stores) });
           const crashed = yield* restartDispatcher(crashAfterRequestOpen(initial, "provision.crash"));
           const call = { id: "original", tool: "provision", input: { operation } };
           expect(yield* Effect.result(crashed.executeWave([call], {
             sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
           }))).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "provision.crash" } });
-          const original = SessionHandleStore.requestRows()[0];
+          const original = first.kernel.requestRows()[0];
           if (original === undefined) throw new Error("missing Owner request");
           expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,
             expectedResponders: ["owner"], parsedInput: call.input });
           expect(malloryStanding()).toBe("provisional");
-          expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
-          const firstStore = Storage.get();
-          Storage.reset();
-          Storage.initialize({ dbPath });
-          expect(Storage.get()).not.toBe(firstStore);
-          expect(SessionHandleStore.requestById(original.requestId)).toEqual(original);
+          expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+          // The restart: close the sqlite handles and reopen the same files.
+          first.close();
+          const reopened = open();
+          handleRef.current = reopened;
+          expect(reopened.kernel.requestById(original.requestId)).toEqual(original);
           const ready = Promise.withResolvers<void>();
-          const recovered = yield* restartDispatcher(yield* requestLedger({ domainRevisions: requestDomainRevisions }), ready.resolve);
+          const recovered = yield* restartDispatcher(yield* requestLedger({
+            id: initial.identity.sessionId,
+            kernel: reopened.kernel,
+            domainRevisions: createRequestDomainRevisions(plane().stores),
+          }), ready.resolve);
           const recovery = recovered.executor.recover;
           if (recovery === undefined) throw new Error("missing recovery");
           const running = yield* Effect.forkScoped(recovery());
@@ -265,8 +291,8 @@ for (const operation of [PROMOTE, MERGE]) {
           yield* Fiber.join(running);
           expect(yield* Effect.result(approvals.answer({ request: pending, decision, credential: "owner" })))
             .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
-          expect(SessionHandleStore.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
-          const settled = sessionTree(initial.identity.sessionId);
+          expect(reopened.kernel.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
+          const settled = sessionTree(initial.identity.sessionId, reopened.actions);
           expect(settled.filter((action: LedgerAction.Node) => action.id === `${original.requestId}:application`))
             .toHaveLength(decision === "approve" ? 1 : 0);
           const result = settled.find((action: LedgerAction.Node) => {
@@ -278,13 +304,13 @@ for (const operation of [PROMOTE, MERGE]) {
             ? { terminal: "executed", toolResult: { toolCallId: call.id } }
             : { terminal: "blocked_pre", toolResult: { toolCallId: call.id, isError: true } });
           expect(malloryStanding()).toBe(decision === "approve" && operation.op === "contact_promote" ? "registered" : "provisional");
-          expect(ActorRegistry.getEndpoint("ep:mallory")?.actorId)
+          expect(actors().getEndpoint("ep:mallory")?.actorId)
             .toBe(decision === "approve" && operation.op === "contact_merge" ? "actor:alice" : "contact:mallory");
           yield* recovery();
-          expect(sessionTree(initial.identity.sessionId)).toEqual(settled);
+          expect(sessionTree(initial.identity.sessionId, reopened.actions)).toEqual(settled);
         })).pipe(Effect.provide(runnerTestLayer)));
       } finally {
-        Storage.reset();
+        handleRef.current.close();
         rmSync(directory, { recursive: true, force: true });
       }
     });
