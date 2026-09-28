@@ -10,3 +10,8 @@ Findings the reviewer must judge (not yet adjudicated):
 6. Protocol retains Inbox.Commit / Alarm.Watch* schemas as wire vocabulary; 16 pre-existing protocol `unknown` sites carried to #1113.
 7. Cluster entity reaper resolution >=5s; ConfigProvider.fromEnv() snapshots env at module load; L2.4 readUntil timer nit; session-handle teardown swallows thrown expect during 30s close grace; turnId:"noop" delivery drift; ForeignFailure double-wrap in corrupted-catalog boot; cluster-runtime pre-hooks watch fail-closed noop.
 8. Owner stop conditions: any wire/DTO shape change visible to desktop or channels; any ratchet growth.
+
+Parent adjudications after wave 4 (head 0700556b):
+- Protocol diff is limited to packages/protocol/src/ledger/l0.ts + storage/index.ts: deletes L0 lease (AcquireLease/LeaseResult/RenewLease, leaseExpiresAt), alarm (Alarm.Arm/Fire/Kind/RequestDeadline/Row/Status) and InboxAdmission rows; adds AdoptFence. grep on main: 0 refs from apps/desktop, packages/channels, packages/ui src → storage-internal, NOT a wire/DTO change visible to desktop/channels. Reviewer: confirm.
+- Full `bun test --coverage` 4627 pass / 30 fail: 29 = script/run-quality-mutations.test.ts Python probe tests failing only because D945_PYTHON was unset in the monitor shell (python 3.13 also fails identically on main; python 3.12 on main = 114/0); 1 = intentional 967-U1 nested meta-test. Patch-coverage gate: 1 uncovered line (monitor-ports.ts:247) fixed in 0700556b (DA:247=60).
+- Wave 4 coverage lanes C1/C2/C3 added tests only; the one production edit C3 attempted (facade lookup firing onRequestReady) was reverted by parent instruction.
