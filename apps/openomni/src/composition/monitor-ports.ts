@@ -150,7 +150,7 @@ export function watchState(
       epoch,
       fence: kernel.row(sessionId).leaseFence,
       lastBatch,
-      notifications: fired.length + (timeout === undefined ? 0 : 1),
+      notifications: fired.length,
       createdAt: first.ts,
       updatedAt,
     },

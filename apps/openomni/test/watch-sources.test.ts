@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AlarmRuntimeError,
+  commandSource,
   createWatchSources,
   type WatchFire,
   type WatchTimeoutArm,
@@ -119,6 +120,75 @@ test("path watch fires on observed modification with the stat-identity source ke
   } finally {
     await sources.closeAll();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("path watch native callback observes a created target", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "watch-sources-create-"));
+  const path = join(directory, "target");
+  const created = eventSignal<WatchFire>("native path create", SPAWNED_PTY_MS);
+  const sources = createWatchSources(
+    {
+      watchFired: (fire) => {
+        created.resolve(fire);
+        return Promise.resolve();
+      },
+      watchTimeout: () => Promise.resolve(),
+    },
+    { clock: () => 0, failure: (_id, error) => created.reject(error) },
+  );
+  try {
+    await sources.install({
+      sessionId: "monitor-session",
+      id: "watch-create",
+      epoch: 1,
+      watch: { path, event: "create", description: "native create", persistent: true },
+    });
+    writeFileSync(path, "created");
+    expect(await created.promise).toMatchObject({
+      watchId: "watch-create",
+      sourceKey: expect.stringContaining("path:create:"),
+      content: JSON.stringify({ path, event: "create" }),
+      terminal: false,
+    });
+  } finally {
+    await sources.closeAll();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("command close accepts EPERM after readback finds no live group members", async () => {
+  const failures: Error[] = [];
+  const source = commandSource(
+    "read hold",
+    () => undefined,
+    () => undefined,
+    (error) => failures.push(error),
+  );
+  const spawn = Bun.spawn;
+  const epermSpawn = new Proxy(spawn, {
+    apply(target, thisArg, args) {
+      const [command, options] = args;
+      if (Array.isArray(command) && command[0] === "/bin/kill") {
+        const pid = command.at(-1);
+        return Reflect.apply(target, thisArg, [
+          [
+            "/bin/sh",
+            "-c",
+            `/bin/kill -KILL -- ${pid}; printf 'Operation not permitted\\n' >&2; exit 1`,
+          ],
+          options,
+        ]);
+      }
+      return Reflect.apply(target, thisArg, args);
+    },
+  });
+  Reflect.set(Bun, "spawn", epermSpawn);
+  try {
+    await source.close();
+    expect(failures).toEqual([]);
+  } finally {
+    Reflect.set(Bun, "spawn", spawn);
   }
 });
 

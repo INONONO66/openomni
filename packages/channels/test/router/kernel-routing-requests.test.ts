@@ -264,6 +264,27 @@ test.each(["throw", "wrong_type"] as const)("route correction %s fails closed", 
   expect(commits).toEqual([]);
 });
 
+test("missing decision-fact storage refuses a route correction", async () => {
+  await runEffect(await openRequest("missing-correction", {
+    expectedResponders: ["someone-else"],
+  }));
+  replaceDecisionFacts((decisionFacts) => ({
+    ...decisionFacts,
+    record: (fact: Parameters<typeof decisionFacts.record>[0]) => {
+      const outcome = decisionFacts.record(fact);
+      if (fact.type === Ingress.ROUTE_DECIDED_FACT_TYPE) {
+        ledger().setDecisionFacts(undefined);
+      }
+      return outcome;
+    },
+  }));
+  expect(await effectFailure(kernelRouter().ingest(sender, facts("reply")))).toMatchObject({
+    code: "route_record_failed",
+    message: "Storage adapter does not implement decision facts — routing corrections fail closed",
+  });
+  expect(commits).toEqual([]);
+});
+
 test("recorded rejection correction is idempotent", async () => {
   await runEffect(await openRequest("correction", {
     expectedResponders: ["actor-external-worker", "b"],

@@ -170,7 +170,6 @@ export function messageMaterialization(
         role: input.role,
         leaseOwner: null,
         leaseFence: 0,
-        leaseExpiresAt: null,
         revision: 0,
         state: "idle",
         toolsGeneration: snapshot.generation,
