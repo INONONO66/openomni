@@ -17,7 +17,7 @@
   "dependencies": {
     "@openomni/protocol": "workspace:*",
     "drizzle-orm": "0.45.2",
-    "effect": "3.22.2",
+    "effect": "4.0.0-rc.118",
     "zod": "^4.5.4"
   },
   "devDependencies": {
