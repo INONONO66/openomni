@@ -5,6 +5,8 @@ import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { Bus } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
+import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { bounded } from "./helpers/protected-dispatch";
@@ -17,11 +19,14 @@ test("real external WebSocket reply wakes its original idle request owner withou
   let received = 0;
   const waiting = Promise.withResolvers<string>();
   const completed = Promise.withResolvers<string>();
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   suite.defer(
     Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-      if (event.kind !== "turn") return;
+      if (event.kind !== "turn" || planeRef.current === undefined) return;
       const terminal = SessionHandleStore.turnTerminal(
-        sessionTree(event.sessionId).find((action) => action.id === event.id),
+        sessionTree(event.sessionId, planeRef.current.sessionStore(event.sessionId).actions).find(
+          (action) => action.id === event.id,
+        ),
       );
       if (terminal?.text === "WAITING_EXTERNAL_SENTINEL") waiting.resolve(event.sessionId);
       if (terminal?.text === "DONE_EXTERNAL_SENTINEL") completed.resolve(event.sessionId);
@@ -68,6 +73,8 @@ test("real external WebSocket reply wakes its original idle request owner withou
       }),
     },
   });
+  planeRef.current = await planeOf(app.runtime);
+  const plane = planeRef.current;
   const owner = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
     "auth",
     "token",
@@ -82,7 +89,7 @@ test("real external WebSocket reply wakes its original idle request owner withou
   const [delivery, source] = await Promise.all([question, bounded(waiting.promise), admitted]);
   expect(delivery.text).toBe("QUESTION_SENTINEL");
   expect(typeof delivery.messageId).toBe("string");
-  expect(SessionHandleStore.row(source).state).toBe("idle");
+  expect(plane.openKernel(source).row(source).state).toBe("idle");
   const receipt = nextFrame(peer, (frame) => frame.type === "receipt" || frame.type === "error");
   peer.send(
     JSON.stringify({
@@ -94,11 +101,15 @@ test("real external WebSocket reply wakes its original idle request owner withou
   expect(await receipt).toMatchObject({ type: "receipt", status: "accepted" });
   expect(await bounded(completed.promise)).toBe(source);
   expect(received).toBe(1);
-  const request = SessionHandleStore.requestRows(source)[0];
+  const request = plane.openKernel(source).requestRows(source)[0];
   expect(request?.state).toBe("resolved");
   expect(request?.replies).toHaveLength(1);
   expect(
-    SessionHandleStore.inboxRows(source).filter((row) => row.id === request?.replies[0]?.replyId),
+    sessionTree(source, plane.sessionStore(source).actions).filter(
+      (action) => action.kind === "prompt" && action.id === request?.replies[0]?.replyId,
+    ),
   ).toHaveLength(1);
-  assertNoLegacyRequestStores(config.dbPath);
+  const sessionsDir = config.sessionsDir;
+  if (sessionsDir === undefined) throw new Error("suite config is missing sessionsDir");
+  assertNoLegacyRequestStores(sessionFilePath(sessionsDir, source));
 });

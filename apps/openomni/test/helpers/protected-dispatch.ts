@@ -30,7 +30,7 @@ export function protectedDispatch(
   const clockRef = { now: 100 };
   const plane = options.plane ?? testPlane();
   const sessionId = crypto.randomUUID();
-  const kernel = options.kernel ?? plane.openKernel(sessionId);
+  const kernel: SessionKernel = options.kernel ?? plane.openKernel(sessionId);
   const recording = runSyncEffect(requestLedger({
     id: sessionId,
     clock: () => clockRef.now,
@@ -62,7 +62,8 @@ export function protectedDispatch(
   return {
     outcome,
     plane,
-    kernel,
+    // TS2742 guard: name the kernel through the app's portable alias.
+    kernel: kernel as SessionKernel,
     ...recording,
     executor,
     running,

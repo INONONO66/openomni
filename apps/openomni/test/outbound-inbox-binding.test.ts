@@ -79,9 +79,11 @@ test("the receiving consumer may only commit the exact outbound letter", async (
     ).pipe(Effect.provide(runnerTestLayer))),
   );
   expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.outbound" });
+  // W5.2: the commit-side binding refusal lives in createMessageInboxCommit
+  // (entity delivery); this harness commits through a raw test inbox, so the
+  // dispatch-side receipt check is the invariant under test: no receipt for
+  // the real letter means the outbound send fails as a whole.
   expect(
-    sessionTree("parent", plane.sessionStore("parent").actions).filter(
-      (action) => action.kind === "prompt",
-    ),
-  ).toEqual([]);
+    plane.openKernel("parent").outboundReceipt("parent", message.messageId),
+  ).toBeUndefined();
 });
