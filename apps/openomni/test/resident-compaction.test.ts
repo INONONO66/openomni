@@ -1,26 +1,19 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Sink } from "@openomni/llm";
-import { initialize } from "@openomni/ledger";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { assistantMessage } from "./helpers/assistant-message";
-
-import { storageDirectories } from "./helpers/storage-directories";
-
-const directories = storageDirectories();
+import { testPlane } from "./helpers/ledger";
 
 describe("Resident compaction", () => {
   it("replaces oversized hydrated history before continuing the Resident run", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-resident-compaction-"));
-    directories.push(directory);
-    initialize({ dbPath: join(directory, "chat.db") });
     const sessionId = "resident-compaction";
+    // One shared plane: the second resident must hydrate the seeded history.
+    const plane = testPlane();
 
     const seed = createResident({
+      plane,
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       tools: { ...testToolPorts,},
@@ -44,6 +37,7 @@ describe("Resident compaction", () => {
     const messageCounts: number[] = [];
     let calls = 0;
     const resident = createResident({
+      plane,
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       compaction: Effect.succeed({

@@ -12,6 +12,7 @@ import { createResident, type ResidentOptions } from "../../src/resident";
 import { runEffect } from "./effect";
 import { effectScope } from "./effect-scope";
 import { drainSession, localInbox, resolvedRuntimeFor, testPlane } from "./ledger";
+import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 
@@ -24,6 +25,7 @@ export function residentRunner(
   options: Omit<ResidentOptions, "sessionRuntime" | "tools" | "policyGeneration"> & {
     tools: Partial<ResidentOptions["tools"]>;
     llm?: Partial<FixtureLlm>;
+    plane?: AppLedgerPlane;
     sessionRuntime?: Partial<SessionRuntime> & {
       readonly clock?: () => number;
       readonly entropy?: () => string;
@@ -31,7 +33,8 @@ export function residentRunner(
     };
   },
 ) {
-  const plane = testPlane();
+  const ownsPlane = options.plane === undefined;
+  const plane = options.plane ?? testPlane();
   const runtime: SessionRuntime = {
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
@@ -58,7 +61,7 @@ export function residentRunner(
   cleanups.push(async () => {
     await runEffect(closeSessions(runtime).pipe(Effect.provide(context)));
     await scope.close();
-    plane.close();
+    if (ownsPlane) plane.close();
   });
   const resolved = resolvedRuntimeFor(runtime, context);
   const drain = (sessionId: string) =>

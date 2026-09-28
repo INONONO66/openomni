@@ -1,37 +1,33 @@
 import { runEffect } from "./helpers/effect";
 import { decodeChannelFailure } from "@openomni/channels";
 import { Effect, Result } from "effect";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import type { SessionTransition } from "@openomni/protocol";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
-import { commitMessageInbox } from "../src/composition/message-session";
 import { dispatchOutboundMessage } from "../src/composition/terminal-message";
 import { seedKernelPolicyRows } from "../src/policy-seed";
+import { localInbox, testPlane } from "./helpers/ledger";
 
-beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-  seedKernelPolicyRows();
-  Bus.reset();
-});
+const plane = testPlane();
+seedKernelPolicyRows(plane.catalog.policies);
 afterEach(() => {
-  Storage.reset();
   Bus.reset();
 });
 
 function materialize(id: string) {
+  const kernel = plane.openKernel(id);
   Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
-        SessionHandleStore.materialize({
+        kernel.materialize({
           id,
           parentId: null,
           role: "resident",
           tools: [],
           system: { preset: "", blocks: [] },
-          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
+          policyGeneration: kernel.currentPolicyGeneration(),
           actionId: `${id}:config`,
           at: 100,
         }),
@@ -59,7 +55,7 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   const dispatch = dispatchOutboundMessage(
     () =>
       Effect.gen(function* () {
-        yield* commitMessageInbox({
+        yield* localInbox(plane, "binding-test", () => 100)({
           id: "different-letter",
           sessionId: message.destinationSessionId,
           kind: "prompt",
@@ -75,6 +71,7 @@ test("the receiving consumer may only commit the exact outbound letter", async (
         };
       }).pipe(Effect.mapError(decodeChannelFailure("test.inbox"))),
     () => 100,
+    plane.openKernel,
   );
   const failure = await runEffect(
     Effect.scoped(Effect.flip(
@@ -82,5 +79,9 @@ test("the receiving consumer may only commit the exact outbound letter", async (
     ).pipe(Effect.provide(runnerTestLayer))),
   );
   expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "message.outbound" });
-  expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
+  expect(
+    sessionTree("parent", plane.sessionStore("parent").actions).filter(
+      (action) => action.kind === "prompt",
+    ),
+  ).toEqual([]);
 });

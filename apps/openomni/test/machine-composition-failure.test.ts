@@ -23,7 +23,7 @@ test("the app machine host translates a codemode failure at its callback boundar
   );
   try {
     const app = await startOpenOmni({ config: {
-      dbPath: ":memory:", host: "127.0.0.1", wsPort: 0,
+      host: "127.0.0.1", wsPort: 0,
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
       machines: { socketPath: socketPath(), enrolled: [] },
     } });

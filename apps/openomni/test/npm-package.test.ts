@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Storage } from "@openomni/ledger";
 import { Bus } from "@openomni/agent";
 import { PROCESS_SESSION_NO_REQUEST_EXIT } from "../src/process-entry";
 import { startOpenOmni } from "../src/index";
@@ -16,7 +15,6 @@ afterEach(async () => {
   await stopApp?.();
   stopApp = undefined;
   Bus.reset();
-  Storage.reset();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -33,7 +31,8 @@ describe("health endpoint", () => {
     const directory = tempDir("openomni-health-");
     const app = await startOpenOmni({
       config: {
-        dbPath: join(directory, "openomni.db"),
+        catalogPath: join(directory, "catalog.sqlite"),
+        sessionsDir: join(directory, "sessions"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "health-test", apiKey: "test-key" },
@@ -54,7 +53,8 @@ describe("npm package staging", () => {
     const env = {
       HOME: home,
       PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-      OPENOMNI_DB_PATH: join(home, "storage.db"),
+      OPENOMNI_CATALOG_PATH: join(home, "catalog.sqlite"),
+      OPENOMNI_SESSIONS_DIR: join(home, "sessions"),
       OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
       OPENOMNI_AUTH_FILE: join(home, "auth.json"),
       OPENOMNI_MODELS_PATH: join(home, "models.json"),

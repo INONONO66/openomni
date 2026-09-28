@@ -3,9 +3,10 @@ import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
+import { watchState } from "../src/tools/core/monitor-ports";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
+import { planeOf } from "./helpers/ledger";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
 
 const suite = residentSuite();
@@ -56,22 +57,31 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   } finally {
     clearTimeout(waitTimer);
   }
-  const alarm = Storage.get().alarms?.due(Number.MAX_SAFE_INTEGER)[0];
-  if (alarm === undefined) throw new Error("no created alarm");
+  const plane = await planeOf(app.runtime);
+  const arm = plane
+    .listSessions()
+    .flatMap((row) =>
+      sessionTree(row.id, plane.sessionStore(row.id).actions)
+        .filter((action) => action.kind === "alarm.arm")
+        .map((action) => ({ sessionId: row.id, watchId: action.id.split(":arm:")[0] ?? "" })),
+    )[0];
+  if (arm === undefined) throw new Error("no created watch");
+  const kernel = plane.openKernel(arm.sessionId);
   expect(calls).toBe(1);
-  expect(alarm.fence).toBe(1); // Already started by the tool-origin bus publication.
-  expect(SessionHandleStore.getSnapshot(alarm.sessionId).turns.at(-1)?.terminal?.kind).toBe(
+  const armed = watchState(kernel, arm.sessionId, arm.watchId);
+  expect(armed?.state).toMatchObject({ status: "armed", epoch: 1 }); // Already started by the tool-origin bus publication.
+  expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe(
     "waiting",
   );
-  expect(app.sessions.get(alarm.sessionId)).toBeUndefined();
+  expect(app.sessions.get(arm.sessionId)).toBeUndefined();
 
   const woke = Promise.withResolvers<void>();
   const guard = AbortSignal.timeout(5000);
   const abort = () => woke.reject(new Error("monitor app wake timed out"));
   guard.addEventListener("abort", abort, { once: true });
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.sessionId !== alarm.sessionId || event.kind !== "turn") return;
-    if (SessionHandleStore.getSnapshot(alarm.sessionId).turns.at(-1)?.terminal?.kind === "result")
+    if (event.sessionId !== arm.sessionId || event.kind !== "turn") return;
+    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result")
       woke.resolve();
   });
   suite.defer(() => {
@@ -87,12 +97,16 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   await woke.promise;
   expect(await writer.exited).toBe(0);
   expect(calls).toBe(2);
-  const inbox = SessionHandleStore.inboxRows(alarm.sessionId).filter(
-    (row) => row.origin.value === alarm.id,
-  );
-  expect(inbox).toHaveLength(1);
-  expect(inbox[0]).toMatchObject({ content: "WAKE", status: "consumed" });
-  expect(
-    sessionTree(alarm.sessionId).filter((action) => action.kind === "alarm.fired"),
-  ).toHaveLength(1);
+  const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
+  const prompts = tree.filter((action) => {
+    if (action.kind !== "prompt") return false;
+    const intent = action.intent.value as { kind?: string; watchId?: string };
+    return intent.kind === "alarm" && intent.watchId === arm.watchId;
+  });
+  expect(prompts).toHaveLength(1);
+  const prompt = prompts[0];
+  if (prompt === undefined) throw new Error("missing watch prompt");
+  expect((prompt.effect.value as { content?: string }).content).toContain("WAKE");
+  expect(kernel.pendingMessages(arm.sessionId)).not.toContain(prompt.id);
+  expect(tree.filter((action) => action.kind === "alarm.fired")).toHaveLength(1);
 });
