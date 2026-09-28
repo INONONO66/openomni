@@ -186,7 +186,7 @@ export class WebSocketHandler {
     connection: WsConnectionData,
     data: string | Buffer,
   ): Effect.Effect<WebSocketFrameOutcome, ChannelError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* Effect.try({
         try: () => this.publish(Operational.Events.Debug, {
           traceId: newTraceId(),

@@ -149,7 +149,7 @@ test("scope finalizers all run and aggregate failures in reverse release order",
   const exit = await runtime.runPromise(Effect.exit(runtime.disposeEffect));
   expect(order).toEqual(["second.close", "first.close"]);
   expect(Exit.isFailure(exit)).toBe(true);
-  if (Exit.isFailure(exit)) expect(Array.from(Cause.defects(exit.cause))).toEqual([second, first]);
+  if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([second, first]);
   expect(Storage.getInitializedDbPath()).toBeNull();
   await runtime.dispose();
 });

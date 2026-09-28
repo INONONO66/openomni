@@ -1,4 +1,4 @@
-import { Cause, Chunk, Effect, Exit, Fiber, Option } from "effect";
+import { Cause, Effect, Exit, Fiber, Option } from "effect";
 
 /** Await an exact external signal or an owned fiber, with timeout only as a failure guard. */
 export function awaitSignal<A, E = never, R = never>(
@@ -17,7 +17,7 @@ export function failure<A, E, R>(
     if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected a failed Effect"));
     return Option.getOrElse(
       Cause.findErrorOption(exit.cause),
-      () => Chunk.toReadonlyArray(Cause.defects(exit.cause))[0],
+      () => exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)[0],
     );
   });
 }
@@ -27,6 +27,6 @@ export function boundedSignal<A, E = never, R = never>(
   label: string,
 ) {
   return awaitSignal(value).pipe(
-    Effect.timeoutFail({ duration: 1000, onTimeout: () => new Error(`Timed out: ${label}`) }),
+    Effect.timeoutOrElse({ duration: 1000, orElse: () => Effect.fail(new Error(`Timed out: ${label}`))}),
   );
 }

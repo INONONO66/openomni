@@ -1,7 +1,8 @@
 import { runAgentSync } from "../../helpers/executor";
 import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
-import { Effect, TestClock, TestContext } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { isolated } from "../../helpers/isolated";
 
 import { Tool } from "@openomni/protocol";
@@ -148,5 +149,5 @@ it("publishes TimedOut and Completed exactly once after the timeout result commi
       Tool.Events.TimedOut.name,
       Tool.Events.Completed.name,
     ]);
-  }).pipe(Effect.provide(TestContext.TestContext)),
+  }).pipe(Effect.provide(TestClock.layer())),
 ));

@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { Cause, Effect, Exit, Fiber, TestClock, TestContext } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { Retry } from "@openomni/llm";
 import { abortError, isAbort } from "../../src/core/retry";
 import { isolated } from "../helpers/isolated";
@@ -74,7 +75,7 @@ describe("Retry.sleep", () => {
             removed.mockRestore();
           }
         }),
-      ).pipe(Effect.provide(TestContext.TestContext)),
+      ).pipe(Effect.provide(TestClock.layer())),
     ));
 });
 

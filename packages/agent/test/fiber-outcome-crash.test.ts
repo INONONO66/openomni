@@ -42,7 +42,8 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
   const fiber = yield* Effect.forkChild(executor.run(request, () =>
     Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))));
   yield* Deferred.await(entered);
-  const exit = yield* Fiber.interrupt(fiber);
+  yield* Fiber.interrupt(fiber);
+  const exit = yield* Fiber.await(fiber);
   expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   expect(results()).toHaveLength(1);
   expect(results()).toMatchObject([{ terminal: "interrupted", evidence: { failures: [], defects: [], interrupted: true } }]);

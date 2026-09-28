@@ -1741,7 +1741,7 @@ function toEffect<A, E = never, R = never>(value: Effect.Effect<A, E, R> | Promi
 }
 function waitFor<A, E = never>(value: Promise<A> | Fiber.Fiber<A, E> | Effect.Effect<A, E, Scope.Scope>, label: string): Effect.Effect<A, E | Error, Scope.Scope> {
  const program = value instanceof Promise ? Effect.promise(() => value) : "await" in value ? Fiber.join(value) : value;
- return program.pipe(Effect.timeoutFail({duration: SIGNAL_TIMEOUT_MS, onTimeout: () => new Error(label)}));
+ return program.pipe(Effect.timeoutOrElse({duration: SIGNAL_TIMEOUT_MS, orElse: () => Effect.fail(new Error(label))}));
 }
 function traceTest(body: () => Effect.Effect<void, SessionError | Error, Scope.Scope>) {
  return isolated(Effect.scoped(Effect.gen(function* () {

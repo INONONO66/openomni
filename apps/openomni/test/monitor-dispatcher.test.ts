@@ -81,7 +81,7 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ));
   expect(Exit.isFailure(missingContext)).toBe(true);
   if (Exit.isFailure(missingContext)) {
-    expect([...Cause.defects(missingContext.cause)]).toEqual([expect.any(ExecutorContextError)]);
+    expect(missingContext.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([expect.any(ExecutorContextError)]);
   }
   await expect(
     monitorTool.execute(

@@ -51,13 +51,13 @@ export class PeerRequestTable<TPeer = undefined> {
     this.samePeer = options.samePeer ?? Object.is;
   }
   call(peer: TPeer, method: string, params: Ipc.Request["params"], timeoutMs: number): Effect.Effect<Ipc.Response["result"], IpcError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const request = Ipc.createRequest((this.options.idSource ?? (() => crypto.randomUUID()))(), method, params);
       const result = yield* Deferred.make<Ipc.Response["result"], IpcError>();
       this.pending.set(request.id, { peer, method, result });
       return yield* Effect.try({ try: () => this.options.send(peer, request), catch: decodeIpcFailure("request.send") }).pipe(
         Effect.andThen(Deferred.await(result)),
-        Effect.timeoutFail({ duration: timeoutMs, onTimeout: () => new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }) }),
+        Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new IpcTimeoutError({ message: `request timeout: ${method}`, requestId: request.id, method }))}),
         Effect.ensuring(Effect.sync(() => { this.pending.delete(request.id); })),
       );
     });

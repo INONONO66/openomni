@@ -577,7 +577,7 @@ describe("refusal branches", () => {
       },
       { sessionId: "test", turnId: "turn" },
     )));
-    expect(result._tag).toBe("Left");
+    expect(result._tag).toBe("Failure");
     expect(result._tag === "Failure" && result.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
     expect(PersonStore.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });

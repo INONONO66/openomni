@@ -1,7 +1,7 @@
 import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
-import { Cause, Chunk, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 import { createExecutionApprovals } from "./executor-approval";
@@ -300,7 +300,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         });
       }
       if (Exit.isFailure(exit)) {
-        const commitFailure = Chunk.toReadonlyArray(Cause.failures(exit.cause)).find((error) => error._tag === "CommitFailed");
+        const commitFailure = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).find((error) => error._tag === "CommitFailed");
         if (commitFailure !== undefined) return Effect.fail(commitFailure);
         const failure = Option.getOrElse(Cause.findErrorOption(exit.cause), () =>
           new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
@@ -316,7 +316,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   }
 
   function completionFailure<R>(stage: Stage<R>, value: PlainValue, cause: Cause.Cause<ExecutionError>) {
-    const failures = Chunk.toReadonlyArray(Cause.failures(cause));
+    const failures = cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
     if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
     const terminalExists = stage.intent !== undefined && options.ledger.resultFor?.(stage.intent.action.id) !== undefined;
     if (terminalExists) return Effect.failCause(cause);

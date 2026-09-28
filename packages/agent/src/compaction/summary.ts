@@ -37,9 +37,9 @@ export function withSummarizerDeadline(
   return (messages, previousAnchor, budget, operationSignal = signal) => Effect.gen(function* () {
     if (operationSignal?.aborted) return yield* Effect.interrupt;
     return yield* summarize(messages, previousAnchor, budget, operationSignal).pipe(
-      Effect.timeoutFail({ duration: deadlineMs, onTimeout: () => new ForeignFailure({
+      Effect.timeoutOrElse({ duration: deadlineMs, orElse: () => Effect.fail(new ForeignFailure({
         operation: "compaction.summarize", cause: `summarizer_deadline:${deadlineMs}`,
-      }) }),
+      }))}),
     );
   });
 }

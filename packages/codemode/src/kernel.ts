@@ -315,7 +315,7 @@ export class PythonKernel {
   }
 
   close(): Effect.Effect<void, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.lifetime.abort();
       if (this.process) yield* this.discard(this.process);
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
@@ -323,12 +323,12 @@ export class PythonKernel {
   }
 
   private execute(request: Machine.CellRequest, callTool: CellToolCaller, output: PendingCell["output"]): Effect.Effect<Machine.CellResult, CodeError> {
-    return Effect.scoped(Effect.gen(this, function* () {
+    return Effect.scoped(Effect.gen({ self: this }, function* () {
       const process = this.process ?? (yield* this.start());
       const frames = yield* Queue.unbounded<string | DriverFailure>();
       const pending: PendingCell = { cellId: request.cellId, process, frames, output, inFlight: new Set() };
       this.pending = pending;
-      return yield* Effect.gen(this, function* () {
+      return yield* Effect.gen({ self: this }, function* () {
         yield* this.write(process, request);
         for (;;) {
           const line = yield* Queue.take(frames);
@@ -345,7 +345,7 @@ export class PythonKernel {
             return frame.result;
           }
         }
-      }).pipe(Effect.ensuring(Effect.gen(this, function* () {
+      }).pipe(Effect.ensuring(Effect.gen({ self: this }, function* () {
         if (this.pending === pending) {
           this.pending = undefined;
           yield* Effect.orDie(this.discard(process));
@@ -357,7 +357,7 @@ export class PythonKernel {
   }
 
   private answerToolCall(pending: PendingCell, frame: ToolCallFrame, callTool: CellToolCaller): Effect.Effect<void, CodeError, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (frame.cellId !== pending.cellId) {
         return yield* this.write(pending.process, { status: "failed", error: `tool call refused: cell ${frame.cellId} is not the running cell`, callId: frame.callId });
       }
@@ -377,7 +377,7 @@ export class PythonKernel {
   }
 
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
@@ -400,7 +400,7 @@ export class PythonKernel {
   }
 
   private discard(process: ChildProcessWithoutNullStreams): Effect.Effect<void, CodeError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
     const exited = this.processExits.get(process);
     if (exited === undefined) return yield* Effect.die("missing process close witness");
     yield* Effect.try({ try: () => {

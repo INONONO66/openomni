@@ -88,7 +88,7 @@ test("a pending Owner request keeps the server available while failed recovery i
     app = undefined;
     expect(Exit.isFailure(shutdown)).toBe(true);
     if (Exit.isFailure(shutdown)) {
-      expect(Array.from(Cause.defects(shutdown.cause))).toEqual([
+      expect(shutdown.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([
         [
           Option.none(),
           Option.some(

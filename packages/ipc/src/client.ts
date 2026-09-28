@@ -84,7 +84,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
       socket.once("connect", () => { connected = true; resume(Effect.void); });
       socket.connect(socketPath);
     }).pipe(
-      Effect.timeoutFail({ duration: opts.connectTimeoutMs ?? 5000, onTimeout: () => new IpcConnectionError({ message: `connect timeout: ${socketPath}` }) }),
+      Effect.timeoutOrElse({ duration: opts.connectTimeoutMs ?? 5000, orElse: () => Effect.fail(new IpcConnectionError({ message: `connect timeout: ${socketPath}` }))}),
       Effect.onError(() => close),
     );
     return client;

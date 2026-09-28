@@ -1,6 +1,6 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { Cause, Chunk, Effect, Exit, Scope } from "effect";
+import { Cause, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -226,8 +226,8 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isSuccess(exit)) throw new Error("expected lost-fence failures");
         expect([
-          ...Chunk.toReadonlyArray(Cause.failures(exit.cause)),
-          ...Chunk.toReadonlyArray(Cause.defects(exit.cause)),
+          ...exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
+          ...exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect),
         ]).toMatchObject([
           {
             _tag: "CommitFailed",

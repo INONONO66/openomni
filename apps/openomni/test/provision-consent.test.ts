@@ -185,7 +185,7 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
     const ninth = protectedDispatch(provision(), { operation: PROMOTE });
     pending.push(ninth);
     const ninthResult = await bounded(ninth.outcome);
-    expect(ninthResult._tag).toBe("Left");
+    expect(ninthResult._tag).toBe("Failure");
     expect(ninthResult._tag === "Failure" && ninthResult.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
     expect(
       SessionHandleStore.requestRows().filter((request) => request.state === "open"),

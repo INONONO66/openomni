@@ -87,7 +87,7 @@ function attempts(actions: readonly LedgerAction.Append[]) {
 for (const prefix of ["text", "tool"] as const) {
   test(`a failed ${prefix} prefix forbids fallback and keeps billed evidence`, () => isolated(Effect.gen(function* () {
     const value = yield* scenario(prefix);
-    expect(value.result._tag).toBe("Left");
+    expect(value.result._tag).toBe("Failure");
     expect(value.providers).toEqual([primary.provider]);
     expect(value.arms).toEqual([]);
     expect(attempts(value.committed)).toHaveLength(1);
@@ -104,7 +104,7 @@ for (const prefix of ["text", "tool"] as const) {
 
 test("reasoning-only failure re-admits the fallback and attributes the failure to the original route", () => isolated(Effect.gen(function* () {
   const value = yield* scenario("reasoning");
-  expect(value.result._tag).toBe("Right");
+  expect(value.result._tag).toBe("Success");
   expect(value.providers).toEqual([primary.provider, fallback.provider]);
   expect(value.resolved).toEqual([primary, fallback]);
   expect(value.arms).toEqual([1]);
@@ -133,7 +133,7 @@ test("a canonical assistant write refusal vetoes fallback after a successful pro
 
 test("a provider floor beyond the retry header budget stops without scheduling an early retry", () => isolated(Effect.gen(function* () {
   const value = yield* scenario("none", Retry.RETRY_HEADER_DELAY_CAP + 1);
-  expect(value.result._tag).toBe("Left");
+  expect(value.result._tag).toBe("Failure");
   expect(value.providers).toEqual([primary.provider]);
   expect(value.arms).toEqual([]);
   expect(attempts(value.committed)).toHaveLength(1);
