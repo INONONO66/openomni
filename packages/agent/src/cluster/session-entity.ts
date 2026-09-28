@@ -192,7 +192,7 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
     require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE detach fork ${handle.authority.sessionId} pid=${process.pid} t=${Date.now()}\n`);
     yield* Effect.forkIn(
       body.pipe(
-        Effect.onExit((exit) => Effect.sync(() => require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE detach exit ${handle.authority.sessionId} ${exit._tag} ${exit._tag === "Failure" ? String(exit.cause).slice(0, 300) : ""} t=${Date.now()}\n`))),
+        Effect.onExit((exit) => Effect.sync(() => require("node:fs").appendFileSync("/tmp/pse-probe.log", `PROBE detach exit ${handle.authority.sessionId} ${exit._tag} ${exit._tag === "Failure" ? JSON.stringify(exit.cause, (_k, v) => v instanceof Error ? { name: v.name, message: v.message, ...v } : v) : ""} t=${Date.now()}\n`))),
         Effect.ensuring(Effect.sync(() => {
           if (handle.live.current === token) handle.live.current = undefined;
         })),
