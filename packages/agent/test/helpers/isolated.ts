@@ -58,6 +58,8 @@ type IsolatedProgram<A, E> = Effect.Effect<A, E, import("effect").Scope.Scope | 
  * Runs one scoped Effect program against a fresh handle-scoped ledger; the
  * only test-side runner for agent programs. Concurrent calls serialize so the
  * lazy `isolatedLedger()` pointer always names exactly one isolation.
+ * NEVER nest isolated() inside a running isolated program: the module-level
+ * chain serializes all calls, so the inner call deadlocks the whole process.
  */
 export function isolated<A, E>(
   program: IsolatedProgram<A, E> | ((ledger: IsolatedLedger) => IsolatedProgram<A, E>),
