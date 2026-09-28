@@ -6,17 +6,21 @@ import { acquireAppResource, gatewayRuntime } from "../src/gateway";
 import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, sessionTool } from "@openomni/agent";
+import { Database } from "bun:sqlite";
 import { catalogDefinitions } from "../src/tools/core/catalog";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import {
+  type AppLedgerPlane,
+  sessionFilePath,
+} from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
 import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
 import { bounded } from "./helpers/protected-dispatch";
 import { runEffect } from "./helpers/effect";
 import { z } from "zod";
 import { messageFixture } from "./helpers/message-fixture";
-import { Gateway, SessionTransition } from "@openomni/protocol";
+import { Gateway, type LedgerAction, SessionTransition } from "@openomni/protocol";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
@@ -53,6 +57,30 @@ function response(target?: string): Response {
     { type: "content_block_delta", index: 0, delta },
     { type: "content_block_stop", index: 0 },
     ...messageEnd(target === undefined ? "end_turn" : "tool_use", 2),
+  ];
+  return sseResponse(frames);
+}
+
+function toolResponse(input: object): Response {
+  const frames = [
+    messageStart(crypto.randomUUID(), "claude-opus-4-5", 4),
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block: {
+        type: "tool_use",
+        id: "process-focused-tool",
+        name: "send_message",
+        input: {},
+      },
+    },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "input_json_delta", partial_json: JSON.stringify(input) },
+    },
+    { type: "content_block_stop", index: 0 },
+    ...messageEnd("tool_use", 2),
   ];
   return sseResponse(frames);
 }
@@ -158,6 +186,206 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   }
 });
 
+test("process session drain stops without invoking a model when the session is idle", async () => {
+  const fixture = messageFixture("resident");
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  try {
+    await acquireAppResource(
+      runtime,
+      serveProcessSession(
+        {
+          sessionId: fixture.sessionId,
+          catalogPath,
+          sessionsDir,
+          entityIdleMs: 50,
+          model: { provider: "fake", id: "fixture" },
+          apiKey: "fixture-key",
+        },
+        () => {
+          throw new Error("idle drain must not commit a message");
+        },
+        undefined,
+        runtime,
+      ),
+    );
+    expect(fixture.plane.openKernel(fixture.sessionId).pendingMessages(fixture.sessionId)).toEqual(
+      [],
+    );
+  } finally {
+    await runtime.dispose();
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("process session drain defers entity-owned resume consumption", async () => {
+  const fixture = messageFixture("resident");
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const deferred = spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const kernel = fixture.plane.openKernel(fixture.sessionId);
+    const initial = kernel.row(fixture.sessionId);
+    const owner = "resume-fixture";
+    const adopted = await runEffect(
+      kernel.adoptFence({
+        sessionId: fixture.sessionId,
+        owner,
+        fence: initial.leaseFence + 1,
+      }),
+    );
+    const row = kernel.row(fixture.sessionId);
+    const resume: LedgerAction.Append = {
+      id: "resume-pending",
+      parentId: kernel.latestAction(fixture.sessionId)?.id ?? null,
+      sessionId: fixture.sessionId,
+      kind: "prompt",
+      intent: { encodingVersion: 1, value: { kind: "sdk" } },
+      effect: {
+        encodingVersion: 1,
+        value: { inboxKind: "resume", content: "continue" },
+      },
+      irreversible: true,
+      ts: 100,
+    };
+    await runEffect(
+      kernel.commit({
+        sessionId: fixture.sessionId,
+        owner,
+        fence: adopted.fence,
+        now: 100,
+        expectedRevision: row.revision,
+        actions: [resume],
+        state: "idle",
+      }),
+    );
+
+    await acquireAppResource(
+      runtime,
+      serveProcessSession(
+        {
+          sessionId: fixture.sessionId,
+          catalogPath,
+          sessionsDir,
+          entityIdleMs: 50,
+          model: { provider: "fake", id: "fixture" },
+          apiKey: "fixture-key",
+        },
+        () => {
+          throw new Error("deferred consume must not commit a message");
+        },
+        undefined,
+        runtime,
+      ),
+    );
+
+    expect(deferred).toHaveBeenCalledWith(
+      `process drain deferred consume: ${fixture.sessionId}`,
+    );
+    expect(kernel.pendingMessages(fixture.sessionId).map((message) => message.id)).toEqual([
+      "resume-pending",
+    ]);
+  } finally {
+    deferred.mockRestore();
+    await runtime.dispose();
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("process session drain recovers an open turn through the default admission path", async () => {
+  const fixture = messageFixture("resident");
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => response(),
+  });
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  try {
+    const kernel = fixture.plane.openKernel(fixture.sessionId);
+    const generation = kernel.latestGenerationFor(fixture.sessionId);
+    const row = kernel.row(fixture.sessionId);
+    const owner = "recover-fixture";
+    const adopted = await runEffect(
+      kernel.adoptFence({
+        sessionId: fixture.sessionId,
+        owner,
+        fence: row.leaseFence + 1,
+      }),
+    );
+    const current = kernel.row(fixture.sessionId);
+    const turnId = "process-open-turn";
+    await runEffect(
+      kernel.commit({
+        sessionId: fixture.sessionId,
+        owner,
+        fence: adopted.fence,
+        now: 100,
+        expectedRevision: current.revision,
+        actions: [
+          {
+            id: turnId,
+            parentId: kernel.latestAction(fixture.sessionId)?.id ?? null,
+            sessionId: fixture.sessionId,
+            kind: "turn",
+            intent: {
+              encodingVersion: 1,
+              value: {
+                phase: "intent",
+                resultId: `${turnId}:result`,
+                inboxIds: [],
+                resumeCount: 0,
+                boundaryActionId: null,
+                toolsGeneration: generation.generation,
+                toolsHash: generation.toolsHash,
+                systemHash: generation.systemHash,
+                policyGeneration: generation.policyGeneration,
+              },
+            },
+            effect: { encodingVersion: 1, value: { phase: "pending" } },
+            ts: 100,
+            irreversible: true,
+          },
+        ],
+        state: "running",
+      }),
+    );
+
+    await acquireAppResource(
+      runtime,
+      serveProcessSession(
+        {
+          sessionId: fixture.sessionId,
+          catalogPath,
+          sessionsDir,
+          entityIdleMs: 50,
+          model: { provider: "anthropic", id: "claude-opus-4-5" },
+          apiKey: "process-key",
+          transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+        },
+        () => {
+          throw new Error("recovery must not commit a child message");
+        },
+        undefined,
+        runtime,
+      ),
+    );
+
+    expect(kernel.latestTurnTerminal(fixture.sessionId)?.action.id).toBe(`${turnId}:result`);
+    expect(kernel.row(fixture.sessionId).state).toBe("idle");
+  } finally {
+    await runtime.dispose();
+    await provider.stop(true);
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
 test.each([
   false,
   true,
@@ -237,6 +465,116 @@ test.each([
         .requestRows("sender")
         .filter((row) => row.state === "open" && row.deadline !== null && row.deadline <= deadline),
     ).toEqual([]);
+  } finally {
+    await runtime.dispose();
+    await provider.stop(true);
+    Bus.reset();
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  {
+    name: "reads policy generation for a new-session attempt",
+    input: {
+      to: { kind: "new_session", role: "worker", runner: "resident", parent: "me" },
+      message: "PROCESS_NEW_SESSION",
+    },
+    workerCount: 1,
+    senderMessages: 0,
+    failTarget: false,
+    requestCount: 2,
+  },
+  {
+    name: "refuses a typed target commit failure",
+    input: {
+      to: { kind: "session", id: "sender" },
+      message: "PROCESS_REFUSED_TARGET",
+    },
+    workerCount: 1,
+    senderMessages: 0,
+    failTarget: true,
+    requestCount: 2,
+  },
+])("process-session focused message path $name", async ({
+  input,
+  workerCount,
+  senderMessages,
+  failTarget,
+  requestCount,
+}) => {
+  const tools = catalogDefinitions(testToolPorts)
+    .filter(
+      (tool: import("@openomni/protocol").AnyToolDefinition) =>
+        tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"),
+    )
+    .map(sessionTool);
+  const fixture = messageFixture("resident", undefined, tools);
+  let requests = 0;
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => {
+      requests += 1;
+      return requests === 1 ? toolResponse(input) : response();
+    },
+  });
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  try {
+    expect(
+      (
+        await fixture.send({
+          to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+          type: "message",
+          content: "focused process path",
+          replyTo: "focused-process",
+        })
+      ).isError,
+    ).not.toBe(true);
+    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
+    if (child === undefined) throw new Error("missing focused process child");
+    if (failTarget) {
+      const database = new Database(sessionFilePath(sessionsDir, "sender"));
+      database.exec(
+        "CREATE TRIGGER refuse_process_message BEFORE INSERT ON action BEGIN SELECT RAISE(ABORT, 'forced process refusal'); END",
+      );
+      database.close();
+    }
+    const serving = acquireAppResource(
+      runtime,
+      serveProcessSession(
+        {
+          sessionId: child.id,
+          catalogPath,
+          sessionsDir,
+          entityIdleMs: 50,
+          model: { provider: "anthropic", id: "claude-opus-4-5" },
+          apiKey: "process-key",
+          transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+        },
+        () => undefined,
+        undefined,
+        runtime,
+      ),
+    );
+    if (failTarget) {
+      await expect(serving).rejects.toMatchObject({
+        _tag: "ForeignFailure",
+        operation: "message.outbound",
+      });
+    } else await serving;
+
+    expect(requests).toBe(requestCount);
+    expect(fixture.plane.listSessions().filter((row) => row.role === "worker")).toHaveLength(
+      workerCount,
+    );
+    expect(
+      receivedMessages(fixture.plane, "sender").filter(
+        (message) => message.content === "PROCESS_REFUSED_TARGET",
+      ),
+    ).toHaveLength(senderMessages);
   } finally {
     await runtime.dispose();
     await provider.stop(true);

@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import { bootResource } from "../src/composition/boot";
+import { createSessionEntityPortsSlot } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
 
 import { startOpenOmni } from "../src/index";
@@ -70,6 +71,12 @@ test("failed boot releases acquired resources in reverse and rethrows the typed 
   const runtime = gatewayRuntime({});
   const order: string[] = [];
   const failure = new AppLifecycleFailure({ operation: "fixture.acquire", cause: "refused" });
+  const message = Object.getOwnPropertyDescriptor(
+    AppLifecycleFailure.prototype,
+    "message",
+  )?.get;
+  if (message === undefined) throw new Error("missing lifecycle failure message getter");
+  expect(message.call(failure)).toBe("fixture.acquire: refused");
   const incident = spyOn(console, "error").mockImplementation(() => undefined);
   try {
     const boot = runAppBoot(
@@ -147,4 +154,21 @@ test("scope finalizers all run and aggregate failures in reverse release order",
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([second, first]);
   await runtime.dispose();
+});
+
+test("a runtime with fixed entity ports refuses late rebinding", async () => {
+  const ports = createSessionEntityPortsSlot().ports;
+  await gatewayRuntime({}).dispose();
+  const runtime = gatewayRuntime({
+    entity: { owner: "fixed-entity", ports },
+  });
+  try {
+    await expect(
+      startOpenOmni({ runtime, config }),
+    ).rejects.toThrow(
+      "session entity ports were fixed at runtime construction",
+    );
+  } finally {
+    await runtime.dispose();
+  }
 });
