@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790429248492,
+  "lastUpdate": 1790592406420,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75481,6 +75481,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 113690,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5b925d12bbfa154c40c84ddaed3652c999984251",
+          "message": "W5.0: Effect 4 rc pin, zero behavior change (#1198)\n\n* kernel(W5.0 #1195): pin effect 4.0.0-rc.118, tsc inventory\n\nBare pin, no code changes. 1792 unique tsc errors across 246 files\nbucketed in .omo/reports/kernel-campaign-w50/inventory.md. protocol: 0.\n\nPart of #1195 / #1113 / #930\n\n* kernel(W5.0 #1195): codemod effect-combinators (effect v4 rename, 132 files)\n\n* kernel(W5.0 #1195): codemod either-to-result (effect v4 rename, 68 files)\n\n* kernel(W5.0 #1195): codemod context-service (effect v4 rename, 21 files)\n\n* kernel(W5.0 #1195): codemod deferred-fiber (effect v4 rename, 15 files)\n\n* kernel(W5.0 #1195): codemod layer (effect v4 rename, 14 files)\n\n* kernel(W5.0 #1195): codemod cause (effect v4 rename, 26 files)\n\n* kernel(W5.0 #1195): codemod scope (effect v4 rename, 14 files)\n\n* kernel(W5.0 #1195): codemod semaphore (effect v4 rename, 7 files)\n\n* kernel(W5.0 #1195): codemod queue-offer-unsafe (effect v4 rename, 4 files)\n\n* kernel(W5.0 #1195): codemod residual renames (gen self, timeoutOrElse, Cause reasons, TestClock layer, Result tags)\n\n* kernel(W5.0 #1195): hand-port v4 seams (Context.Reference, withFiber, TagIdentity, Scope layer, fiber tests)\n\n* kernel(W5.0 #1195): typed failing generation layer; shift runner-site allowlist lines for effect/testing import (224 unchanged)\n\n* kernel(W5.0 #1195): shutdownSessions keeps v3 validate semantics under v4 result mode\n\n* docs(W5.0 #1195): close SLOP H18 stale comments against live code\n\n* docs(W5.0 #1195): Effect 4.0.0-rc.118 pin receipt, per-session persistence target (#1197), AGENTS stamp\n\n* kernel(W5.0 #1195): boundary checker recognizes v4 Context.Service and Reference keys\n\nv4 declares services as class X extends Context.Service<X, S>()(key), so the key\nlives on the outer call; Context.Tag/GenericTag/unsafeGet no longer exist.\nFixtures ported in lockstep; the OutboundMessage Reference key joins the\n@openomni/openomni band the R4 prefix ratchet already enforces. Inventory is\nagain the 17 production services main reports; allowlist stays 233.\n\n* kernel(W5.0 #1195): arm the lease heartbeat before the runner enters\n\nEffect 4 forkIn defers the child to the dispatcher by default; v3 started it\nbefore the parent resumed. startImmediately: true restores the v3 ordering the\nsession-handle heartbeat tests pin (found by adversarial review).\n\n* kernel(W5.0 #1195): port the last v3 Die-cause assertion in channels routing-resolution\n\nv4 Exit failures carry cause.reasons; the test asserted the v3 {_tag: Die, defect}\nshape through toMatchObject, which tsc cannot catch (found by adversarial review).\n\n* kernel(W5.0 #1195): grant run-settle abort the start tick v3's scheduler guaranteed\n\nv3 queued forked fibers FIFO and drained the queue at every async\nresumption, so a speculation forked before the run's last async boundary\nalways entered (summarizer call issued, then aborted) before the run's\nensuring finalizer. v4 resumes fibers via direct evaluate, bypassing the\ndispatcher queue, so the queued preparation was interrupted un-started\nand the LLM call was never issued.\n\nFix: CompactionSession.settleAbort() yields once before abort(), used\nonly by runAgent's settle finalizer. Direct abort() stays tick-free,\nmatching v3 (a fork aborted in the same synchronous continuation never\nstarted).\n\nRepro both directions:\n- without settleAbort (plain forkScoped): turn-yield.test.ts 'aborts\n  active speculative preparation when the run settles' fails\n  (calls=0, expected 1).\n- with { startImmediately: true } instead (rejected fix): synchronous\n  entry overshoots v3 and fails speculate.test.ts 'aborts before the\n  scheduled summary starts' (calls=1, expected 0) and\n  boundaries.test.ts 'consumes candidates and disables further\n  speculative work' (inFlight already false after prepare).\n\n* kernel(W5.0 #1195): machine attach survives dispose interrupting its closed-wait\n\nv4 ManagedRuntime registers every run* fiber in its fiberScope and\ndispose() closes that scope, so the SIGTERM handler's runtime.dispose()\ninterrupts the fiber awaiting daemon.closed; the rejected runPromise\n('All fibers interrupted without error' from causeSquash) escaped as an\nunhandled rejection and exited the CLI 1 before the handler's exit(0).\nv3 dispose never interrupted in-flight run fibers.\n\nFix: await runPromiseExit(daemon.closed) and treat an interrupts-only\ncause as the clean shutdown path (exit 0); real failures still throw\nvia Cause.squash and exit 1.\n\n* kernel(W5.0 #1195): port dispose-through-runtime assertion off the runtime's own fiberScope\n\nv4 disposeEffect closes the ManagedRuntime's own scope, which owns the\nfiberScope every run* fiber is registered in - running disposeEffect\nthrough runtime.runPromise interrupts its host fiber, and the swapped\ncontextEffect surfaces as the 'ManagedRuntime disposed' defect. v3 ran\ndispose through the runtime without self-interruption.\n\nTest-only port: run Effect.exit(disposeEffect) at the test boundary via\nthe runEffect helper; the reasons/isDieReason defect assertion is\nunchanged.\n\n* kernel(W5.0 #1195): await daemon.closed outside the CLI runtime so dispose cannot interrupt it\n\ndaemon.closed is Effect<void, MachineError> with no requirements. Awaiting it via\nEffect.runPromise outside the ManagedRuntime keeps v3 behavior exactly: SIGTERM\ndisposes the runtime, the daemon closes, the wait resolves, exit 0; a MachineError\nstill rejects to a nonzero exit. Replaces the runPromiseExit + interrupts-only\nbranch (d6b0ea8d), which added an untested real-failure path.\n\n* docs(W5.0 #1195): V-verify receipt — 15/15 lanes 4979/0, patch coverage 100%, ratchets unchanged\n\n* test(ipc): raw server socket in client-edges tolerates the RST its own oversized frame provokes\n\nOn Linux the client's DoS-guard destroy() now lands while bytes are still unread\n(v4 dispatcher runs the decode task at once; v3 drained the fiber queue first), so\nthe peer read fails with ECONNRESET. The production server already handles socket\nerrors; the test's raw net.Socket did not. Docker oven/bun:1.4.1: main 4/4 pass,\nbranch without fix 6/6 fail, with fix 5/5 pass. Outcome (IpcProtocolError,\nconnected=false) unchanged.\n\n* test(ipc): explain the raw socket error listener instead of leaving it empty (lint noEmptyBlockStatements)",
+          "timestamp": "2026-09-28T10:43:37Z",
+          "tree_id": "656faa24de156dd738227b7d7e47e7f7d1f56b11",
+          "url": "https://github.com/INONONO66/openomni/commit/5b925d12bbfa154c40c84ddaed3652c999984251"
+        },
+        "date": 1790592405986,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 844,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1186,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1548275,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 365895,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6460043,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 994,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 123917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 720062,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 387049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3105,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 10988143,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1388126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18310,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 171736,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 866162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 215727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15662170,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 87,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 114940,
             "unit": "ns/op"
           }
         ]
