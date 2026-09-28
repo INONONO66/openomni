@@ -10,6 +10,7 @@ import { appFixture } from "./helpers/app-fixture";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { approvalRequest } from "./helpers/approval-request";
 import { bounded } from "./helpers/protected-dispatch";
+import { runEffect } from "./helpers/effect";
 
 test("a pending Owner request keeps the server available while failed recovery is reported", async () => {
   const directory = mkdtempSync(join(tmpdir(), "recovery-failure-"));
@@ -83,7 +84,9 @@ test("a pending Owner request keeps the server available while failed recovery i
     const failure = await bounded(reported.promise);
     expect(failure).toBeInstanceOf(Error);
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
-    const shutdown = await app.runtime.runPromise(Effect.exit(app.runtime.disposeEffect));
+    // v4: disposeEffect closes the runtime's own fiberScope, so running it
+    // through the runtime interrupts its host fiber. Run it at the test boundary.
+    const shutdown = await runEffect(Effect.exit(app.runtime.disposeEffect));
     await app.runtime.dispose();
     app = undefined;
     expect(Exit.isFailure(shutdown)).toBe(true);
