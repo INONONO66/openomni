@@ -92,7 +92,8 @@ export function createSessionTurn(
       const row = SessionHandleStore.row(sessionId);
       const controller = new AbortController();
       state.controller = controller;
-      state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope);
+      // v4 forkIn defers the child to the dispatcher; the lease heartbeat must be armed before the runner enters.
+      state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope, { startImmediately: true });
       let parentActionId = input.parentActionId;
       let boundaryActionId = input.boundaryActionId;
       const ledger = ports.createExecutionLedger(input.turnId);
