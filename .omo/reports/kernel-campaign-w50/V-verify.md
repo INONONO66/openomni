@@ -74,3 +74,7 @@ Exit 0: `patch coverage: all changed executable lines are covered` (`.omo/report
 2. `ManagedRuntime.dispose` interrupts every fiber the runtime is running, including waits issued through it.
 3. `Exit` failures carry `cause.reasons`; assert via `Cause.isDieReason` / `Cause.squash`.
 4. `Effect.all(..., { mode: "result" })` yields `Result`; `shutdown.ts` validate semantics kept with `Result.isFailure`.
+
+## CI follow-up: Test (ipc) on Linux (run 36408534310)
+
+`client-edges.test.ts` "oversized server frame" failed on ubuntu only: the raw `net.Socket` the test uses as a server had no error listener, and its read raised ECONNRESET. Docker `oven/bun:1.4.1` repro: main (v3) 4/4 pass; branch without fix 6/6 fail; branch with fix 5/5 pass; macOS passes on both. Cause: v4's dispatcher (`callbacks.ts`) runs the decode task at once instead of after the v3 fiber queue drained, so the client's DoS-guard `destroy()` fires while bytes are still unread in the kernel buffer (RST instead of FIN). Outcome is unchanged (`IpcProtocolError`, `connected=false`); only the teardown lands earlier. The production server already attaches an error handler; the fix adds one to the test's raw socket only.
