@@ -21,14 +21,12 @@ export const ChainAppendReceipt = Schema.Struct({
 export type ChainAppendReceipt = typeof ChainAppendReceipt.Type;
 
 /** Ack for a request command; carries the pure authority's resolution token. */
-export const RequestReceipt = Schema.Struct({ resolution: Schema.String });
-export type RequestReceipt = typeof RequestReceipt.Type;
+const RequestReceipt = Schema.Struct({ resolution: Schema.String });
 
 /** Timer acks distinguish applied work from a chain-guarded no-op (F2). */
-export const TimerReceipt = Schema.Struct({
+const TimerReceipt = Schema.Struct({
   outcome: Schema.Literals(["applied", "noop"]),
 });
-export type TimerReceipt = typeof TimerReceipt.Type;
 
 /**
  * A received message (C1). `origin` is the canonical JSON of the envelope's
@@ -81,7 +79,7 @@ export const RequestCancelRpc = Rpc.make("RequestCancel", {
 }).annotate(ClusterSchema.Persisted, true);
 
 /** Wake for a scheduled retry (C2); delivered no earlier than `notBefore`. */
-export class RetryScheduledPayload extends Schema.Class<RetryScheduledPayload>(
+class RetryScheduledPayload extends Schema.Class<RetryScheduledPayload>(
   "@openomni/agent/cluster/RetryScheduledPayload",
 )({
   alarmId: Schema.String,
@@ -99,7 +97,7 @@ export const RetryScheduledRpc = Rpc.make("RetryScheduled", {
 }).annotate(ClusterSchema.Persisted, true);
 
 /** Request deadline wake (C2); delivered at the request's inclusive deadline. */
-export class DeadlinePayload extends Schema.Class<DeadlinePayload>(
+class DeadlinePayload extends Schema.Class<DeadlinePayload>(
   "@openomni/agent/cluster/DeadlinePayload",
 )({
   requestId: Schema.String,
@@ -130,7 +128,7 @@ export const WatchFiredRpc = Rpc.make("WatchFired", {
 }).annotate(ClusterSchema.Persisted, true);
 
 /** Watch timeout wake (C2); the chain fold decides applied-versus-noop. */
-export class WatchTimeoutPayload extends Schema.Class<WatchTimeoutPayload>(
+class WatchTimeoutPayload extends Schema.Class<WatchTimeoutPayload>(
   "@openomni/agent/cluster/WatchTimeoutPayload",
 )({
   watchId: Schema.String,

@@ -69,7 +69,7 @@ import {
   watchFiredHook,
   watchOccurrenceKey,
   watchTimeoutHook,
-} from "./tools/core/monitor-ports";
+} from "./composition/monitor-ports";
 import {
   acquireAppResource,
   channelRequests,
@@ -496,8 +496,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // owning session; the chain fold decides applied-versus-noop at delivery.
     // The arm is forked, never awaited: requests open inside the owning
     // entity's own turn RPC, and awaiting a second RPC on that same entity
-    // from within its handler would deadlock the mailbox. Fail-open by
-    // design — a lost arm is a logged incident, not a refused request.
+    // from within its handler would deadlock the mailbox. The fork joins the
+    // app runtime's lifetime scope (never detached), so shutdown interrupts
+    // or awaits it; a lost arm is a logged incident, not a refused request.
+    const appScope = await runAppBoot(runtime, AppScope);
     const requestPorts = channelRequests(requests);
     const requestsWithDeadlines: typeof requestPorts = {
       ...requestPorts,
@@ -515,7 +517,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                         console.error(`deadline arm failed: ${request.requestId}`, error);
                       }),
                     ),
-                    Effect.forkDetach,
+                    Effect.forkIn(appScope),
                     Effect.asVoid,
                   ),
           ),
@@ -781,6 +783,20 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await supervisor.stopAll();
       await runAppEffect(runtime, shutdownSessions(sessionRuntime, recovery));
       if (cells !== undefined) await runAppEffect(runtime, cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))));
+      // Shutdown join contract (W5.2 S4): a ws frame's ingest runs the full
+      // turn inside the delivering entity RPC, so a turn suspended in a
+      // protected tool wave (open request, no answer) would hold its frame —
+      // and its captured generations — forever. Interrupt every live turn
+      // through the facade: the interrupt row, the wave's request.cancel and
+      // the interrupted turn terminal are all durable chain commits (fail-
+      // closed — a refused commit fails stop loud), after which each frame
+      // unwinds and releases its generation before the drain below.
+      await Promise.all(
+        liveTurns.ids().map((id) => {
+          const facade = sessionFacade(id);
+          return facade === undefined ? Promise.resolve() : runAppEffect(runtime, facade.interrupt());
+        }),
+      );
       // Every accepted ws frame's ingest holds a captured ingress generation
       // until it unwinds; join them before the generation drain.
       await wsCallbacks.settled();

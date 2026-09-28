@@ -9,8 +9,6 @@
 import type { Gateway, Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
-export type EgressBudgetStore = ReturnType<typeof createEgressBudgetStore>;
-
 type ClaimResult<Refusal> =
   | Readonly<{ kind: "claimed" }>
   | Readonly<{ kind: "refused"; reason: Refusal }>;

@@ -85,8 +85,9 @@ export async function reconstructionMain(
     const witness = reconstructionSnapshot();
     if (stage !== "wake") return witness;
     const kernel = isolatedLedger().kernel;
-    // W5.2: the Storage-era `wakeSession` is gone; waking is a fresh controller
-    // activation over the durable kernel driving its reconcile (recover path).
+    // W5.2: the Storage-era wake entry point is gone; waking is a fresh
+    // controller activation over the durable kernel driving its reconcile
+    // (recover path).
     const runtime: SessionFixture = {
       observations: { publish: () => undefined },
       clock: () => 100_000,

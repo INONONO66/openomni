@@ -144,7 +144,7 @@ function describeHashCell(cell: z.infer<typeof HashCell>): string {
 
 const VerifyRow = ActionSqlRowSafeIntegers.extend({ prev_hash: HashCell, action_hash: HashCell });
 
-export function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict {
+function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict {
   const rows = VerifyRow.array().parse(
     db.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(sessionId),
   );

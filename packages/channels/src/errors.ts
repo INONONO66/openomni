@@ -5,7 +5,9 @@ import { z } from "zod";
 const ForeignFailureFields = z.object({ operation: z.string(), cause: z.string() });
 export class ForeignFailure extends Data.TaggedError("ForeignFailure")<
   z.infer<typeof ForeignFailureFields>
-> {}
+> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
 
 export class DeliveryNotSent extends Data.TaggedError("DeliveryNotSent")<
   z.infer<typeof ForeignFailureFields>

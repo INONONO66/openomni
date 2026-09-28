@@ -22,7 +22,7 @@ import { session } from "../src/session-handle";
 const SECRET = "sk-live-credential-never-shown";
 
 /**
- * The deleted `wakeSession` equivalent (W5.2): a fresh activation over the
+ * The deleted Storage-era wake equivalent (W5.2): a fresh activation over the
  * isolation's kernel driving its reconcile.
  */
 function wake(id: string, runner: SessionRunner, fixture: SessionFixture) {

@@ -33,7 +33,7 @@ export function insertSession(db: Database, row: LedgerSession.Row): boolean {
   return result.changes === 1;
 }
 
-export function selectSessionSql(db: Database, id: string): SessionSqlRow | undefined {
+function selectSessionSql(db: Database, id: string): SessionSqlRow | undefined {
   const row = SessionSqlRow.nullable().parse(db.query(`${sessionSelect} WHERE id = ?`).get(id));
   return row === null ? undefined : row;
 }

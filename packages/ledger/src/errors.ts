@@ -62,7 +62,9 @@ export class CorruptRecord extends Data.TaggedError("CorruptRecord")<{
 export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
   readonly operation: string;
   readonly cause: string;
-}> {}
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
 
 export type LedgerError =
   | SessionNotFound

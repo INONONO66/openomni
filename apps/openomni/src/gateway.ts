@@ -29,7 +29,8 @@ import { outboundMessage } from "./composition/terminal-message";
 import { Cause, Effect, Result, Exit, ManagedRuntime, Option, Scope } from "effect";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import type { WatchSources } from "./composition/watch-sources";
-import { createWatchMonitorPorts, MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
+import { createWatchMonitorPorts } from "./composition/monitor-ports";
+import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
   AppLive,

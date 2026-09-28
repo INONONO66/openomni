@@ -1,24 +1,13 @@
 import { expect, test } from "bun:test";
-import { Context } from "effect";
-import {
-  type CommitReceipt,
-  LedgerWrites,
-  type SessionWriteAdapter,
-} from "../packages/ledger/src/index";
+import type { CommitReceipt, SessionWriteAdapter } from "../packages/ledger/src/index";
 import type { IpcServer } from "../packages/ipc/src/index";
 import { checkEffectBoundaryFindings, effectServiceInventory, type BoundaryFinding, type ServiceUsage } from "./check-effect-boundaries";
 
 /**
- * Tag keys are machine-consumed identities: two packages built at different
- * times must still resolve the same Context entry, so the key is pinned here.
  * Runtime packages whose only Effect surface was a declared-unused Tag
- * (ipc, machines, codemode, channels) export plain functions instead.
+ * (ipc, machines, codemode, channels, ledger) export plain functions/handles
+ * instead — the boundary law (R9) refuses tags nothing reads.
  */
-test("the ledger write Tag is keyed by its package path", () => {
-  expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
-  expect(Context.isKey(LedgerWrites)).toBe(true);
-});
-
 test("ledger write receipts are the ok arms of the protocol results", () => {
   // Type-level contract: the commit receipt is the `ok: true` arm and the
   // session adapter keeps the fenced chain-write surface (W5.2: the lease and
@@ -41,10 +30,11 @@ test("every production Tag is consumed or has an exact existing-debt receipt", (
   expect(inventory.map((service: ServiceUsage) => service.key)).toEqual(expect.arrayContaining([
     "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink",
     "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
-    "@openomni/ledger/LedgerWrites", "@openomni/llm/Llm",
+    "@openomni/llm/Llm",
   ]));
   expect(inventory.map((service: ServiceUsage) => service.key)).not.toEqual(expect.arrayContaining([
     "@openomni/ipc/Ipc", "@openomni/machines/Machines", "@openomni/codemode/Codemode", "@openomni/channels/WebSocketFrames",
+    "@openomni/ledger/LedgerWrites",
   ]));
   const debt = checkEffectBoundaryFindings().filter((entry: BoundaryFinding) => entry.code === "R9_UNUSED_TAG");
   expect(debt.filter((entry: BoundaryFinding) => entry.failing)).toEqual([]);

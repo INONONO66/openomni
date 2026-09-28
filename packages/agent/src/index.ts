@@ -2,11 +2,11 @@
 export type { ChatAgentConfig } from "./core/types";
 export { createSessionRequests } from "./session-requests";
 export { decideRequestTransition, requestBindingDigest } from "./session-request";
-export { decideSessionAdmission } from "./session-admission";
+export { decideSessionAdmission, requestAuthorityKernel } from "./session-admission";
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
-export { closeSessions, getSessionHandle, session } from "./session-handle";
+export { closeSessions, session } from "./session-handle";
 export { createSessionEntityRunTurn } from "./session-controller";
 export { createExecutor, ExecutionApprovalError } from "./executor";
 export * from "./errors";
@@ -38,7 +38,6 @@ export {
   SessionEntityLive,
   type SessionEntityEnv,
 } from "./cluster/session-entity";
-export { sessionKernels } from "./cluster/kernel-registry";
 export {
   deadlineDelivery,
   retryDelivery,

@@ -24,7 +24,7 @@ export interface SessionKernelRegistry {
   lookup(sessionId: string): SessionKernel | undefined;
 }
 
-export function makeSessionKernelRegistry(): SessionKernelRegistry {
+function makeSessionKernelRegistry(): SessionKernelRegistry {
   const kernels = new Map<string, SessionKernel>();
   return {
     register(sessionId: string, kernel: SessionKernel) {

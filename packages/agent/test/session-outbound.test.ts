@@ -53,7 +53,7 @@ function reopenableLedger(): IsolatedLedgerHandle & { readonly reopen: () => voi
 }
 
 /**
- * The deleted `wakeSession`/`sweepSessions` equivalent (W5.2): recovery is a
+ * The deleted Storage-era wake/sweep equivalent (W5.2): recovery is a
  * fresh activation over the isolation's kernel driving its reconcile.
  */
 function wake(id: string, runner: SessionRunner, fixture: SessionFixture) {

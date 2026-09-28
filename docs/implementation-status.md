@@ -10,9 +10,10 @@ W5.0 (#1195) Effect pin `3.22.2` → `4.0.0-rc.118` (exact, published 2026-09-28
 SessionLayer; `packages/agent/src/tool-dispatcher.ts` resolves ToolCatalog.
 `packages/agent/src/core/execution/run.ts` and
 `apps/openomni/src/composition/completion.ts` resolve Llm and ObservationSink.
-App boot and gateway resolve LedgerWrites (`apps/openomni/src/index.ts`,
-`apps/openomni/src/gateway.ts`); `packages/ledger/src/layers.ts` distinguishes
-owning storage acquisition/release from borrowed LedgerLive ports.
+App boot and gateway thread the ledger plane explicitly
+(`apps/openomni/src/index.ts`, `apps/openomni/src/gateway.ts`);
+`createAppLedger` (`apps/openomni/src/composition/cluster-runtime.ts`) owns
+storage acquisition/release.
 
 `apps/openomni/src/runtime.ts` builds AppLive with a final Layer.mergeAll.
 `apps/openomni/src/composition/generation-layers.ts` constructs the selected

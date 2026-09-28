@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type { LedgerSession, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { LedgerError } from "./errors";
 import type { CatalogStore } from "./storage/catalog-store.js";
@@ -27,6 +27,3 @@ export interface LedgerHandles {
   readonly openSession: (sessionId: string) => SessionStore;
 }
 
-export class LedgerWrites extends Context.Service<LedgerWrites, LedgerHandles>()(
-  "@openomni/ledger/LedgerWrites",
-) {}

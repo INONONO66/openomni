@@ -20,13 +20,13 @@ export class AlarmRuntimeError extends Error {
   }
 }
 
-export function assertAlarmRuntime(): void {
+function assertAlarmRuntime(): void {
   if (Bun.Terminal === undefined || !Bun.semver.satisfies(Bun.version, ">=1.4.0"))
     throw new AlarmRuntimeError();
 }
 
 /** Opaque throws are normalized to a typed boundary outcome, never cast to Error. */
-export class AlarmSourceError extends Error {
+class AlarmSourceError extends Error {
   constructor(
     readonly site:
       | "pty.data"
@@ -223,7 +223,7 @@ export interface WatchSenders {
   watchTimeout(arm: WatchTimeoutArm): Promise<void>;
 }
 
-export interface WatchSourceSpec {
+interface WatchSourceSpec {
   readonly sessionId: string;
   readonly id: string;
   readonly epoch: number;

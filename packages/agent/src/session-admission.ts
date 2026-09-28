@@ -377,10 +377,13 @@ export function commitSessionRequest(
     });
     if (decision.actions.length > 0) {
       // Reply intakes and gateway admissions are received-message chain
-      // actions in the same fenced batch (the inbox table is gone).
+      // actions in the same fenced batch (the inbox table is gone). A
+      // foreign-session admission (a `new_session` child's message) never
+      // rides this single-session fenced batch: the child's own entity
+      // commits it through `ports.inbox.commit`.
       const intake = [
         ...(decision.receive === undefined ? [] : [decision.receive]),
-        ...(admission === undefined ? [] : [admission]),
+        ...(admission === undefined || admission.sessionId !== sessionId ? [] : [admission]),
       ].map((commit) => receivedMessageAction({ ...commit, at: commit.createdAt }));
       yield* kernel.commitRequestTransition({
         sessionId,
@@ -394,4 +397,50 @@ export function commitSessionRequest(
     }
     return decision;
   });
+}
+
+/**
+ * Out-of-turn request authority over a possibly-live activation (W5.2 F5):
+ * adopting a fresh fence while an entity turn is running would steal that
+ * activation's authority and kill its wave. This kernel view instead BORROWS
+ * the running activation's owner+fence: `adoptFence` on a running session
+ * records the live pair (and the borrowing caller) without touching the row,
+ * `row()` reports the borrowing caller as `leaseOwner` so the pure request
+ * decision (`ownsRequestRevision`) runs under the true live authority, and the
+ * commit lands under the live owner+fence (same process: it lands between the
+ * turn's awaits). Fence and revision are never masked — a rotated fence or a
+ * moved revision still refuses — and only the caller that adopted through this
+ * view gains the borrow; any other owner keeps being rejected. An idle session
+ * falls back to a real adoption, the documented out-of-turn takeover.
+ */
+export function requestAuthorityKernel(base: SessionKernel, sessionId: string): SessionKernel {
+  const holder: {
+    borrowed: { readonly owner: string; readonly fence: number } | undefined;
+    caller: string | undefined;
+  } = { borrowed: undefined, caller: undefined };
+  return {
+    ...base,
+    row: (id: string) => {
+      const row = base.row(id);
+      return holder.borrowed !== undefined && holder.caller !== undefined && id === sessionId
+        ? { ...row, leaseOwner: holder.caller }
+        : row;
+    },
+    adoptFence: (input) =>
+      Effect.suspend(() => {
+        const row = base.row(sessionId);
+        if (input.sessionId === sessionId && row.state === "running" && row.leaseOwner !== null) {
+          holder.borrowed = { owner: row.leaseOwner, fence: row.leaseFence };
+          holder.caller = input.owner;
+          return Effect.succeed({ ok: true as const, fence: row.leaseFence });
+        }
+        return base.adoptFence(input);
+      }),
+    commitRequestTransition: (input) =>
+      base.commitRequestTransition(
+        holder.borrowed === undefined
+          ? input
+          : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },
+      ),
+  };
 }

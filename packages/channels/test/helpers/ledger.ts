@@ -26,7 +26,7 @@ export interface TestLedgerPaths {
   readonly sessions: string;
 }
 
-export function createTestLedger(paths?: TestLedgerPaths): TestLedger {
+function createTestLedger(paths?: TestLedgerPaths): TestLedger {
   const catalog = openCatalogStore(paths?.catalog ?? ":memory:");
   const sessions = openSessionStore(paths?.sessions ?? ":memory:");
   const kernel = SessionHandleStore.createSessionKernel(sessions, catalog);

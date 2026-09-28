@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Bus } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
-import { watchState } from "../src/tools/core/monitor-ports";
+import { watchState } from "../src/composition/monitor-ports";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { planeOf } from "./helpers/ledger";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";

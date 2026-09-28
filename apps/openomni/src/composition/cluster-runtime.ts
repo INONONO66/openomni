@@ -94,7 +94,7 @@ export interface AppLedgerOptions {
 }
 
 /** Catalog-backed durable stores the app composes tools and boot over. */
-export interface AppCatalogStores {
+interface AppCatalogStores {
   readonly actors: ReturnType<typeof createActorRegistry>;
   readonly persons: ReturnType<typeof createPersonStore>;
   readonly instances: ReturnType<typeof createChannelInstanceStore>;
@@ -396,7 +396,7 @@ type SessionRunnerInput = Parameters<SessionRunner>[0];
  * serialized mailbox. The wrapped runner publishes the turn's approval gate
  * and boundary drain here for exactly the turn's lifetime.
  */
-export interface LiveTurnEntry {
+interface LiveTurnEntry {
   approvals: SessionHandle["approvals"] | undefined;
   readonly boundary: SessionRunnerInput["boundary"];
   /** The turn's own commit/transition port - request transitions ride the turn's fence. */
@@ -405,6 +405,8 @@ export interface LiveTurnEntry {
 
 export interface SessionLivePlane {
   get(sessionId: string): LiveTurnEntry | undefined;
+  /** Sessions with a turn currently running in this process (shutdown join set). */
+  ids(): readonly string[];
   /** Publishes the turn's live surfaces for the runner's lifetime; nested turns keep the outermost entry. */
   wrapRunner(sessionId: string, runner: SessionRunner): SessionRunner;
 }
@@ -413,6 +415,7 @@ export function createSessionLivePlane(): SessionLivePlane {
   const entries = new Map<string, LiveTurnEntry>();
   return {
     get: (sessionId) => entries.get(sessionId),
+    ids: () => [...entries.keys()],
     wrapRunner: (sessionId, runner) => (input) =>
       Effect.suspend(() => {
         const entry: LiveTurnEntry = { approvals: undefined, boundary: input.boundary, ledger: input.ledger };
@@ -437,35 +440,8 @@ export function createSessionLivePlane(): SessionLivePlane {
 /**
  * Out-of-turn request authority over a possibly-live activation (W5.2 F5):
  * `createSessionRequests` adopts a fresh fence when no registry handle exists,
- * which would steal a running entity turn's authority and kill its wave. This
- * kernel view instead BORROWS the running activation's owner+fence for the
- * request transition commit (same process, same thread: the commit lands
- * between the turn's awaits) and only falls back to a real adoption when the
- * session is idle - where a takeover is the documented out-of-turn semantics.
+ * which would steal a running entity turn's authority and kill its wave. The
+ * borrowing kernel view lives with the request authority in the agent package
+ * so the decision seam and its regression tests share one implementation.
  */
-export function requestAuthorityKernel(
-  base: SessionKernel,
-  sessionId: string,
-): SessionKernel {
-  const holder: { borrowed: { owner: string; fence: number } | undefined } = {
-    borrowed: undefined,
-  };
-  return {
-    ...base,
-    adoptFence: (input) =>
-      Effect.suspend(() => {
-        const row = base.row(sessionId);
-        if (row.state === "running" && row.leaseOwner !== null) {
-          holder.borrowed = { owner: row.leaseOwner, fence: row.leaseFence };
-          return Effect.succeed({ ok: true as const, fence: row.leaseFence });
-        }
-        return base.adoptFence(input);
-      }),
-    commitRequestTransition: (input) =>
-      base.commitRequestTransition(
-        holder.borrowed === undefined
-          ? input
-          : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },
-      ),
-  };
-}
+export { requestAuthorityKernel } from "@openomni/agent";

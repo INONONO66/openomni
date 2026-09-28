@@ -87,14 +87,15 @@ subscribers and ordinary Effect callbacks are not banned by this rule.
 service APIs are not the floor. The executor consumes `Clock`, `Entropy`,
 `ObservationSink` and `SessionLayer`; the dispatcher consumes `ToolCatalog`
 (`packages/agent/src/executor.ts`, `packages/agent/src/tool-dispatcher.ts`).
-LLM work consumes `Llm` (`packages/agent/src/core/execution/run.ts`), and app
-write consumers resolve `LedgerWrites` (`apps/openomni/src/index.ts`).
+LLM work consumes `Llm` (`packages/agent/src/core/execution/run.ts`); app
+write consumers receive ledger handles explicitly from the composition plane
+(`apps/openomni/src/composition/cluster-runtime.ts`).
 
 Resource-owning Layers use scoped acquisition and release: `Layer.scoped` with
 `Effect.acquireRelease` for the generation observation bus and bundle-owned
-subscriptions/files. The ledger's `Layer.unwrapScoped` acquisition owns the
-real storage close; `LedgerLive(storage)` only borrows existing ports
-(`packages/ledger/src/layers.ts`). Pure Clock/Entropy values, immutable session
+subscriptions/files. The composition root's `createAppLedger`
+(`apps/openomni/src/composition/cluster-runtime.ts`) owns the real storage
+open/close. Pure Clock/Entropy values, immutable session
 snapshots and definition-only catalogs may use `Layer.succeed`; a synthetic
 no-op finalizer is not resource ownership.
 

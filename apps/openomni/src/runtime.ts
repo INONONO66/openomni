@@ -10,7 +10,7 @@ import {
   type SessionEntityPorts,
   type SessionError,
 } from "@openomni/agent";
-import { LedgerWrites, type LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "@openomni/ledger";
 import { LlmLive, type Llm } from "@openomni/llm";
 import { pid } from "node:process";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
@@ -27,7 +27,9 @@ import { GenerationLayersLive } from "./composition/generation-layers";
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
   readonly cause: string;
-}> {}
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
 
 export const lifecycleFailure = (operation: string) =>
   flow(String, (cause) => new AppLifecycleFailure({ operation, cause }));
@@ -80,18 +82,12 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
     ...(options.sessionsDir === undefined ? {} : { sessionsDir: options.sessionsDir }),
     observationSink: observations,
   });
-  // The ledger service plane is THE plane: LedgerWrites is a projection of the
-  // same handles, so composition and entity activations share one catalog.
-  const ledger = Layer.effect(
-    LedgerWrites,
-    Effect.map(AppLedger, (appLedger) => appLedger.handles),
-  ).pipe(Layer.provideMerge(plane));
   const process = AgentProcessLive(observations, {
     clock: options.clock,
     entropy: options.entropy,
   });
   const generations = GenerationLayersLive.pipe(
-    Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)),
+    Layer.provideMerge(Layer.mergeAll(process, bundles, plane)),
   );
   const host = clusterHostLayer({
     catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
@@ -128,7 +124,6 @@ export type AppServices =
   | Clock
   | Entropy
   | ObservationSink
-  | LedgerWrites
   | AppLedger
   | AppScope
   | Llm

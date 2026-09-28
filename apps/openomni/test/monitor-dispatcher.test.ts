@@ -17,9 +17,9 @@ import {
   watchFiredHook,
   watchOccurrenceKey,
   watchState,
-  type MonitorPorts,
   type WatchSpec,
-} from "../src/tools/core/monitor-ports";
+} from "../src/composition/monitor-ports";
+import type { MonitorPorts } from "../src/tools/core/monitor-ports";
 import { runEffect } from "./helpers/effect";
 import { adoptTestFence } from "./helpers/ledger";
 

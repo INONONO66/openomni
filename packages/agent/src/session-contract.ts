@@ -179,12 +179,12 @@ export function resolveSessionRuntime(runtime: SessionRuntime): Effect.Effect<Re
   });
 }
 
-export interface SessionToolsHandle {
+interface SessionToolsHandle {
   add(tools: readonly SessionTool[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
   remove(names: readonly string[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
 }
 
-export interface SessionSystemBlocksHandle {
+interface SessionSystemBlocksHandle {
   set(
     blocks: readonly SessionGeneration.SystemBlock[],
   ): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;

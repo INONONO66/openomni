@@ -12,7 +12,7 @@ Policy ownership updated on `kernel/s1-authority-cut-2` (2026-09-18): the uncons
 
 Desktop internals cleanup on `refactor/desktop-cleanup` (PR #1047): `state/selectors.ts` owns the session index and read-only derivations, `state/session-actions.ts` owns the session mutations, and `chat/session-content.tsx` binds SDK content while App keeps Chat ownership. Whole-store render/clock cadence, hook order, preference writes, preload validation, the desktop bridge, `SessionRow`, turn-cost mapping and UI contracts are unchanged. No development global is exposed. File inventory: `docs/desktop-shell.md`.
 
-The W0.5 consumed-service contract is documented in `docs/kernel-contract.md` under “Extension points (4) and bundle contract”. Extension is through tool/system configuration, data-only policy rows with named services, observation subscriptions, and inbox messages only; there is no arbitrary code-callback registration road. `packages/ledger/src/layers.ts` owns storage acquisition/release and borrowed write-port provision; app boot resolves LedgerWrites (`apps/openomni/src/index.ts`).
+The W0.5 consumed-service contract is documented in `docs/kernel-contract.md` under “Extension points (4) and bundle contract”. Extension is through tool/system configuration, data-only policy rows with named services, observation subscriptions, and inbox messages only; there is no arbitrary code-callback registration road. The composition root owns storage acquisition/release: `createAppLedger` (`apps/openomni/src/composition/cluster-runtime.ts`) opens the catalog and per-session stores, and app boot threads the plane explicitly (`apps/openomni/src/index.ts`).
 
 ## OVERVIEW
 

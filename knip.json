@@ -47,7 +47,7 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/agent": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/helpers/cluster-crash-child.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "packages/channels": {

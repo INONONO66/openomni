@@ -1,8 +1,6 @@
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter } from "../storage/timestamped-store";
 
-export type ReplyGrantStore = ReturnType<typeof createReplyGrantStore>;
-
 /** Channels owns normalization; this store persists only the current projection. */
 export function createReplyGrantStore(source: {
   readonly replyGrant?: ProtocolStorage.ReplyGrantSubAdapter;

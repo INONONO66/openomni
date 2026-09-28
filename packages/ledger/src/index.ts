@@ -5,13 +5,12 @@ export { replaceFileAtomically } from "./storage";
 // W5.2 handle-scoped stores (plan F1): opened per entity activation / composition root.
 export { openCatalogStore, openSessionStore } from "./storage";
 export { createDecisionFactPort } from "./storage/decision-fact-port";
-export type { DecisionFacts } from "./storage/decision-fact-port";
 export * as SessionHandleStore from "./session/kernel.js";
-export { createSurfaceKeyStore, type SurfaceKeyStore } from "./surface-key";
+export { createSurfaceKeyStore } from "./surface-key";
 export { createActorRegistry, type ActorRegistry } from "./actor/index.js";
 export { createBlacklistStore, type BlacklistStore } from "./blacklist/index.js";
 export { createChannelGrantStore, type ChannelGrantStore } from "./channel-grant/index.js";
-export { createReplyGrantStore, type ReplyGrantStore } from "./reply-grant/index.js";
+export { createReplyGrantStore } from "./reply-grant/index.js";
 export {
   createPersonStore,
   createChannelInstanceStore,
@@ -21,16 +20,9 @@ export {
   type SecretStore,
   Vault,
 } from "./provisioning/index.js";
-export { createEgressBudgetStore, type EgressBudgetStore } from "./egress/index.js";
+export { createEgressBudgetStore } from "./egress/index.js";
 export * from "./errors";
-export {
-  LedgerWrites,
-  type LedgerHandles,
-  type SessionWriteAdapter,
-  type AdoptReceipt,
-  type CommitReceipt,
-} from "./services";
-export { LedgerCatalogLive, LedgerLive } from "./layers";
+export { type LedgerHandles, type SessionWriteAdapter, type CommitReceipt } from "./services";
 
 /** Narrow l0 write-kernel surface (W5.2 review F6): fenced chain commits plus
  * the hash identity needed to verify them, without deep package imports. */

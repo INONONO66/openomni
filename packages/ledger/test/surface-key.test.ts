@@ -1,16 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Channel } from "@openomni/protocol";
-import { Context } from "effect";
-import { LedgerWrites } from "../src/services";
 import { SessionNotFound, StorageUnavailable } from "../src/errors";
 import { createSurfaceKeyStore } from "../src/surface-key";
 import { materializeSession } from "./helpers/session";
 import { useMemoryStores } from "./helpers/storage";
 
-test("ledger service and error contracts are runtime values", () => {
-  expect(LedgerWrites.key).toBe("@openomni/ledger/LedgerWrites");
-  const service = {} as Context.Service.Shape<typeof LedgerWrites>;
-  expect(Context.get(Context.make(LedgerWrites, service), LedgerWrites)).toBe(service);
+test("ledger error contracts are runtime values", () => {
   expect(new SessionNotFound({ sessionId: "missing" })._tag).toBe("SessionNotFound");
   expect(new StorageUnavailable({ capability: "storage" })._tag).toBe("StorageUnavailable");
 });

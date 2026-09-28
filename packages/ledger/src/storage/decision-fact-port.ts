@@ -1,7 +1,7 @@
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 /** Narrow first-writer-wins port on one store handle's transaction boundary. */
-export namespace DecisionFacts {
+namespace DecisionFacts {
   export type Port = ProtocolStorage.DecisionFactSubAdapter;
 
   export interface Source {

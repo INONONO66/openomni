@@ -67,7 +67,7 @@ export interface TestTurnInput {
   readonly items: readonly Inbox.Row[];
 }
 
-export interface TestTurnResult {
+interface TestTurnResult {
   readonly kind: "result" | "interrupted";
   readonly text: string;
 }
@@ -93,12 +93,12 @@ export function blockingRunner(onEnter: (turnId: string) => void): TestTurnRunne
 }
 
 /** The options handle send helpers resolve for on-demand session provisioning. */
-export class TestClusterEnv extends Context.Service<TestClusterEnv, TestClusterOptions>()(
+class TestClusterEnv extends Context.Service<TestClusterEnv, TestClusterOptions>()(
   "@openomni/agent-test/TestClusterEnv",
 ) {}
 
 /** Bun webcrypto-backed Crypto service (platform-bun is not a workspace dep). */
-export const BunTestCrypto = Layer.succeed(
+const BunTestCrypto = Layer.succeed(
   Crypto.Crypto,
   Crypto.make({
     randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
@@ -273,7 +273,7 @@ function entityEnvLayer(options: TestClusterOptions) {
  * the catalog file. ShardingConfig is pinned explicitly (review R2 / plan D9):
  * never ambient `layerFromEnv` values in tests.
  */
-export function clusterHostLayer(options: TestClusterOptions) {
+function clusterHostLayer(options: TestClusterOptions) {
   return SingleRunner.layer({
     runnerStorage: "sql",
     shardingConfig: {

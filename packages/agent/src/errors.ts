@@ -26,7 +26,11 @@ export class Interrupted extends Data.TaggedError("Interrupted")<Record<never, n
 
 export class CommitFailed extends Data.TaggedError("CommitFailed")<{
   readonly error: LedgerError;
-}> {}
+}> {
+  override get message(): string {
+    return this.error.message === "" ? this.error._tag : `${this.error._tag}: ${this.error.message}`;
+  }
+}
 
 export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
   readonly reason: string;
@@ -35,7 +39,9 @@ export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
 export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
   readonly operation: string;
   readonly cause: string;
-}> {}
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
 
 export class SessionMissing extends Data.TaggedError("SessionMissing")<{
   readonly sessionId: string;
@@ -54,7 +60,11 @@ export class GenerationUnsettled extends Data.TaggedError("GenerationUnsettled")
   readonly sessionId: string;
   readonly generation: number;
   readonly owners: number;
-}> {}
+}> {
+  override get message(): string {
+    return `session ${this.sessionId} generation ${this.generation} has ${this.owners} live owner(s)`;
+  }
+}
 
 export class BundleError extends Data.TaggedError("BundleError")<{
   readonly code: "namespace" | "duplicate" | "requirement" | "metadata" | "missing_output" | "acquisition" | "policy" | "selection";

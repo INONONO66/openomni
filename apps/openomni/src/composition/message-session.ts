@@ -9,7 +9,7 @@ import { outboundMessage } from "./terminal-message";
 type Ports = Parameters<typeof createGatewayRouter>[0];
 
 /** The Session entity client resolved once at boot (host-scoped). */
-export type SessionEntityClient = Effect.Success<typeof SessionEntity.client>;
+type SessionEntityClient = Effect.Success<typeof SessionEntity.client>;
 
 export interface MessageInboxDeps {
   readonly plane: AppLedgerPlane;
