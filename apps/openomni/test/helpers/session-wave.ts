@@ -1,9 +1,9 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
-import { Effect } from "effect";
+import { Effect, type Result } from "effect";
 import { Bus, defineTool, eraseTool } from "@openomni/agent";
 import type { AppSessionHandle } from "../../src/index";
 import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/protocol";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/ledger";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
 import { runEffect } from "./effect";
@@ -84,7 +84,12 @@ export function interruptSecondModel(
  * adopting at or below the current fence refuses as stale, adopting above
  * it steals authority. The lease plane's held/expiry states are gone.
  */
-export function adoptAtFence(plane: AppLedgerPlane, sessionId: string, owner: string, fence: number) {
+export function adoptAtFence(
+  plane: AppLedgerPlane,
+  sessionId: string,
+  owner: string,
+  fence: number,
+): Result.Result<AdoptReceipt, LedgerError> {
   return Effect.runSync(Effect.result(plane.openKernel(sessionId).adoptFence({ sessionId, owner, fence })));
 }
 

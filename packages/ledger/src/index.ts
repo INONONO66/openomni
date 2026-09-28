@@ -22,7 +22,7 @@ export {
 } from "./provisioning/index.js";
 export { createEgressBudgetStore } from "./egress/index.js";
 export * from "./errors";
-export { type LedgerHandles, type SessionWriteAdapter, type CommitReceipt } from "./services";
+export { type AdoptReceipt, type LedgerHandles, type SessionWriteAdapter, type CommitReceipt } from "./services";
 
 /** Narrow l0 write-kernel surface (W5.2 review F6): fenced chain commits plus
  * the hash identity needed to verify them, without deep package imports. */
