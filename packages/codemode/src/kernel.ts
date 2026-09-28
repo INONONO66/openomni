@@ -366,7 +366,7 @@ export class PythonKernel {
       yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
         Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
         Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catch((error) => Effect.sync(() => { pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.catch((error) => Effect.sync(() => { Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
         Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
       ));
     });
@@ -387,11 +387,11 @@ export class PythonKernel {
       this.process = process;
       this.lines = lines;
       lines.on("line", (line) => {
-        if (this.pending?.process === process) this.pending.frames.unsafeOffer(line);
+        if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });
       const fail = (message: string) => {
         if (this.process === process) { this.process = undefined; this.lines = undefined; }
-        if (this.pending?.process === process) this.pending.frames.unsafeOffer(new DriverFailure({ operation: "driver.process", message, cause: message }));
+        if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, new DriverFailure({ operation: "driver.process", message, cause: message }));
       };
       process.once("error", (error) => fail(error.message));
       process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));

@@ -41,7 +41,7 @@ export function createAlarmWorker(options: {
     const report = (work: Effect.Effect<void, Failure>) =>
       work.pipe(Effect.catch((error) => Effect.sync(() => options.failure(error))));
     const offer = (work: Effect.Effect<void, Failure>) => {
-      if (!stopped) queue.unsafeOffer(work);
+      if (!stopped) Queue.offerUnsafe(queue, work);
     };
     const consumer = yield* Effect.forkIn(
       Effect.forever(Queue.take(queue).pipe(Effect.flatMap(report))),
