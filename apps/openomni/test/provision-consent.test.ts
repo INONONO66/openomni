@@ -239,7 +239,7 @@ for (const operation of [PROMOTE, MERGE]) {
           const call = { id: "original", tool: "provision", input: { operation } };
           expect(yield* Effect.result(crashed.executeWave([call], {
             sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
-          }))).toMatchObject({ _tag: "Failure", left: { _tag: "ForeignFailure", operation: "provision.crash" } });
+          }))).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "provision.crash" } });
           const original = SessionHandleStore.requestRows()[0];
           if (original === undefined) throw new Error("missing Owner request");
           expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,
@@ -264,7 +264,7 @@ for (const operation of [PROMOTE, MERGE]) {
           yield* approvals.answer({ request: pending, decision, credential: "owner" });
           yield* Fiber.join(running);
           expect(yield* Effect.result(approvals.answer({ request: pending, decision, credential: "owner" })))
-            .toMatchObject({ _tag: "Failure", left: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
+            .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
           expect(SessionHandleStore.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
           const settled = sessionTree(initial.identity.sessionId);
           expect(settled.filter((action: LedgerAction.Node) => action.id === `${original.requestId}:application`))

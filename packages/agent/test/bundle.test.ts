@@ -16,9 +16,7 @@ const seed = { provides: [], requires: [], layer: Layer.empty } as const;
 // Deliberately corrupt a genuine provider at the runtime boundary, without lying
 // to TypeScript about Layer.empty's output or casting an erased Context.
 function missingNumberContext() {
-  const context = Context.make(NumberService, 7);
-  context.mapUnsafe.delete(NumberService.key);
-  return context;
+  return Context.makeUnsafe<NumberService>(new Map());
 }
 const row: Omit<PolicyRow.Row, "generation"> = { name: "number/allow", kind: "tool", phase: "pre", priority: 1, match: { encodingVersion: 1, value: {} }, verdict: { encodingVersion: 1, value: { type: "allow" } } };
 const tool = { name: "number__echo", description: "echo", category: "query", input: z.string(), output: z.string(), visibility: { model: ["resident"], cell: [] }, execute: async (value: string) => value, render: (value: string) => value } as const;

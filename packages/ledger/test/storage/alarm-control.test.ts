@@ -172,7 +172,7 @@ for (const op of ["cancel", "rearm"] as const) {
       } else {
         expect(result).toMatchObject({
           _tag: "Failure",
-          left: { _tag: "AlarmRefused", alarmId: id, operation: op },
+          failure: { _tag: "AlarmRefused", alarmId: id, operation: op },
         });
         expect(snapshot(adapter, observations, id)).toEqual(before);
       }

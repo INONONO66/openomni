@@ -45,7 +45,7 @@ export function causeEvidence(cause: Cause.Cause<ExecutionError>): PlainObject {
   return {
     failures: cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).map(failureEvidence),
     defects: Cause.hasDies(cause)
-      ? Cause.prettyErrors(Cause.stripFailures(cause)).map((error) => ({
+      ? Cause.prettyErrors(Cause.fromReasons(cause.reasons.filter(Cause.isDieReason))).map((error) => ({
           name: error.name,
           cause: error.message,
         }))

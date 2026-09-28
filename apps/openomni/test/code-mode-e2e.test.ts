@@ -509,11 +509,11 @@ test("a detached eval cell admits nested calls after run returns and refuses the
       Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)))));
     await bounded(pendingEntered.promise);
     expect(await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } })).not.toHaveProperty("isError", true);
-    expect(await bounded(pending)).toMatchObject({ _tag: "Failure", left: { _tag: "InvocationClosed", reason: "interrupted" } });
+    expect(await bounded(pending)).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed", reason: "interrupted" } });
     expect(await runEffect(Effect.result(frame.executor.run(request, () => Effect.sync(() => {
       nestedBodies += 1;
       return "forbidden";
-    }))))).toMatchObject({ _tag: "Failure", left: { _tag: "InvocationClosed" } });
+    }))))).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed" } });
     expect(nestedBodies).toBe(1);
   } finally {
     firstReply.resolve("cleanup");

@@ -225,9 +225,9 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   }
 
   function executeBody<R>(stage: Stage<R>, signal: AbortSignal, guarded: boolean, settled: (body: BodyExit) => void) {
-    return Effect.withFiberRuntime<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
+    return Effect.withFiber<void, never, Exclude<R, RawToolSlots | Scope.Scope>>((fiber) => Effect.uninterruptible(
       Effect.suspend(() => {
-        const generation = Context.getOption(fiber.currentContext, GenerationRawSlots);
+        const generation = Context.getOption(fiber.context, GenerationRawSlots);
         const slots = createRawSlots((settlement) => {
           if (Option.isSome(generation)) {
             const release = generation.value.open();
@@ -240,7 +240,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         const owned = Effect.scopedWith((scope) => Effect.provide(
           body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
         ));
-        const abort = () => fiber.unsafeInterruptAsFork(fiber.id());
+        const abort = () => fiber.interruptUnsafe(fiber.id);
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
         const exitEffect = Effect.exit(Effect.interruptible(owned)).pipe(

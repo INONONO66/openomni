@@ -10,7 +10,7 @@ import {
 } from "@openomni/agent";
 import { createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
 import { SessionHandleStore } from "@openomni/ledger";
-import { Effect, FiberRef } from "effect";
+import { Effect } from "effect";
 import { acquireAppResource, channelRequests, channelTransaction, gatewayRuntime, toolPorts } from "./gateway";
 import type { AppRuntime } from "./runtime";
 import { Model, type SessionTransition } from "@openomni/protocol";
@@ -85,7 +85,7 @@ export function serveProcessSession(
     inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
     prepare: prepareMessage(resident.materialize),
     run: (sender, execution, body) => Effect.gen(function* () {
-      const outbound = yield* FiberRef.get(outboundMessage);
+      const outbound = yield* outboundMessage;
       const result = yield* (outbound?.executor ?? currentExecutor()).run(
         execution,
         (intent) => body(intent).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "message.body", cause: String(error) }))),

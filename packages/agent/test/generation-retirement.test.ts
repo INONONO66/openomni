@@ -59,5 +59,5 @@ test("a retired generation cannot reacquire ownership after its last release not
     release();
     return runAgentSync(Effect.result(owner.capture(first).pipe(Effect.provideService(Scope.Scope, scope))));
   });
-  expect(attempted).toMatchObject({ _tag: "Failure", left: { _tag: "GenerationUnavailable", generation: 1 } });
+  expect(attempted).toMatchObject({ _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 1 } });
 })).pipe(Effect.timeout("5 seconds"))));

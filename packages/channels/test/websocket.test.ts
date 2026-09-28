@@ -148,7 +148,7 @@ describe("WebSocketHandler ingress and receipts", () => {
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, raw)));
     expect(result).toMatchObject({
-      _tag: "Failure", left: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
+      _tag: "Failure", failure: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
     });
     expect(entries).toBe(0);
     if (result._tag === "Failure" && result.failure._tag === "InvalidInbound" && reason === "invalid_json") {

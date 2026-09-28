@@ -9,6 +9,6 @@ export function shutdownSessions(runtime: SessionRuntime, recovery: Promise<void
       closeSessions(runtime),
       Effect.tryPromise({ try: () => recovery, catch: lifecycleFailure("sessions.recovery") }),
     ],
-    { concurrency: "unbounded", mode: "validate", discard: true },
+    { concurrency: "unbounded", mode: "result", discard: true },
   );
 }

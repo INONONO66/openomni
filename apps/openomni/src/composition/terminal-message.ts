@@ -1,4 +1,4 @@
-import { Effect, FiberRef } from "effect";
+import { Context, Effect } from "effect";
 import { createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { GatewayRouter } from "@openomni/channels";
@@ -11,7 +11,7 @@ interface OutboundContext {
   receipt?: LedgerAction.Receipt;
 }
 
-export const outboundMessage = FiberRef.unsafeMake<OutboundContext | undefined>(undefined);
+export const outboundMessage = Context.Reference<OutboundContext | undefined>("@openomni/app/OutboundMessage", { defaultValue: () => undefined });
 
 /** The gateway admits recorded bytes; the receiver, not this source, owns its inbox. */
 export function dispatchOutboundMessage(
@@ -58,7 +58,7 @@ export function dispatchOutboundMessage(
         throw new Error("outbound receiving consumer did not commit a receipt");
       return receipt;
     }).pipe(
-      Effect.locally(outboundMessage, context),
+      Effect.provideService(outboundMessage, context),
       Effect.mapError((error) => new ForeignFailure({ operation: "message.outbound", cause: String(error) })),
     );
   });

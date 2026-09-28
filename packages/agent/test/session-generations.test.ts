@@ -41,7 +41,7 @@ test("drain refuses retained owners and retires every settled generation", () =>
       expect(retained.pending()).toBe(1);
       expect(yield* Effect.result(manager.drain)).toMatchObject({
         _tag: "Failure",
-        left: { _tag: "GenerationUnsettled", sessionId: "generation-drain", generation: 2, owners: 1 },
+        failure: { _tag: "GenerationUnsettled", sessionId: "generation-drain", generation: 2, owners: 1 },
       });
       expect(closed).toEqual([1]);
     } finally {
@@ -53,7 +53,7 @@ test("drain refuses retained owners and retires every settled generation", () =>
     yield* manager.drain;
     expect(closed).toEqual([1, 2]);
     expect(yield* Effect.result(manager.capture())).toMatchObject({
-      _tag: "Failure", left: { _tag: "GenerationUnavailable", generation: 2 },
+      _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 2 },
     });
   })),
 );

@@ -630,7 +630,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       // Then: abort-raced wrapper settlement cannot transfer the live effect's lease.
       expect(competitor).toMatchObject({
         _tag: "Failure",
-        left: { _tag: "LeaseRefused", reason: "held" },
+        failure: { _tag: "LeaseRefused", reason: "held" },
       });
       expect(held.leaseOwner).toBe(row.leaseOwner);
       // The gated wrapper's grace outcome lands exactly once under the inner intent, at any
@@ -667,7 +667,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       expect(released.leaseOwner).toBeNull();
       const next = acquireContender(row.id, "nested-contender", released.leaseFence);
       if (Result.isSuccess(next)) competitorFence = next.success.fence;
-      expect(next).toMatchObject({ _tag: "Success", right: { fence: row.leaseFence + 1 } });
+      expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
       expect(await runEffect(Effect.flip(stale()))).toMatchObject({
         _tag: "InvocationClosed", reason: "settled",
       });
@@ -788,7 +788,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         // Then: neither timeout nor SDK interruption transfers the live effect's lease.
         expect(contender).toMatchObject({
           _tag: "Failure",
-          left: { _tag: "LeaseRefused", reason: "held" },
+          failure: { _tag: "LeaseRefused", reason: "held" },
         });
         expect(held.leaseOwner).toBe(row.leaseOwner);
         const beforeActions = sessionTree(sessionId).length;
@@ -825,7 +825,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         expect(released.leaseOwner).toBeNull();
         const next = acquireContender(sessionId, "timed-contender", released.leaseFence);
         if (Result.isSuccess(next)) competitorFence = next.success.fence;
-        expect(next).toMatchObject({ _tag: "Success", right: { fence: row.leaseFence + 1 } });
+        expect(next).toMatchObject({ _tag: "Success", success: { fence: row.leaseFence + 1 } });
         expect(await runEffect(Effect.flip(stale()))).toMatchObject({
           _tag: "InvocationClosed", reason: "settled",
         });

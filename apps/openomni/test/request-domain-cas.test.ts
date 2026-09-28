@@ -72,7 +72,7 @@ test("a second Owner decision cannot spend the same promotion CAS", async () => 
     const promoted = ActorRegistry.getIdentity("contact:cas");
     expect(promoted?.standing).toBe("registered");
     expect(await runEffect(Effect.result(approvals.answer({ request, decision: "refuse", credential: "owner-token" }))))
-      .toMatchObject({ _tag: "Failure", left: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
+      .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
     expect(ActorRegistry.getIdentity("contact:cas")).toEqual(promoted);
   } finally {
     await running.close();

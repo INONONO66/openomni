@@ -1,4 +1,4 @@
-import { Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Scope } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -167,7 +167,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     envPath,
     startApp,
     async attachMachine(configPath) {
-      const runtime = ManagedRuntime.make(Layer.scope);
+      const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
       const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
       console.log(JSON.stringify(daemon.attachment));

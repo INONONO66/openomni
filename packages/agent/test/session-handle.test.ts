@@ -1,7 +1,7 @@
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { Inbox, PlainValue } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { awaitSignal, failure, boundedSignal as bounded } from "./helpers/g0-signals";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
@@ -1568,7 +1568,7 @@ describe("durable session handle", () => {
         // so close() can only return once the grace timer lapses.
         yield* awaitSignal(bounded(handle.interrupt(), "interrupt receipt"));
         try {
-          yield* bounded(handle.close().pipe(Effect.disconnect), "close after grace lapse");
+          yield* bounded(Effect.forkDetach(handle.close()).pipe(Effect.flatMap(Fiber.join)), "close after grace lapse");
           expect(SessionHandleStore.row(handle.id).leaseOwner).not.toBeNull();
         } finally {
           releaseRunner.resolve();

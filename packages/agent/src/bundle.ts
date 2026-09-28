@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Option, type Scope } from "effect";
 import { BundleError } from "./errors";
 import { Clock, Entropy, ObservationSink, ToolCatalog } from "./services";
 
-type TagIdentity = Pick<Context.Service<never, never>, "key" | "_op">;
+type TagIdentity = Pick<Context.Service<never, never>, "key" | typeof Context.ServiceTypeId>;
 type Identifier<T> = T extends { readonly Identifier: infer I } ? I : never;
 type Identifiers<T extends readonly TagIdentity[]> = Identifier<T[number]>;
 type Genuine<T> = T extends Context.Service<infer I, infer S> ? T extends Context.Service<I, S> ? T extends { readonly key: PolicyId<string> } ? S extends PolicyRegistry ? true : false : true : false : false;

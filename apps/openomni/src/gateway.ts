@@ -26,7 +26,7 @@ import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Cause, Effect, Result, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
+import { Cause, Effect, Result, Exit, ManagedRuntime, Option, Scope } from "effect";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
@@ -329,7 +329,7 @@ export function createResidentGateway(
               ),
             );
           if (sender.kind === "external") return yield* externalRun(sender, request, execute);
-          const outbound = yield* FiberRef.get(outboundMessage);
+          const outbound = yield* outboundMessage;
           const result = yield* (outbound?.executor ?? currentExecutor()).run(request, execute);
           return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
         }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),

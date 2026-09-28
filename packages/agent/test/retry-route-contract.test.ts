@@ -124,7 +124,7 @@ test("reasoning-only failure re-admits the fallback and attributes the failure t
 
 test("a canonical assistant write refusal vetoes fallback after a successful provider attempt", () => isolated(Effect.gen(function* () {
   const value = yield* scenario("none", 0, true);
-  expect(value.result).toMatchObject({ _tag: "Failure", left: { _tag: "CommitFailed" } });
+  expect(value.result).toMatchObject({ _tag: "Failure", failure: { _tag: "CommitFailed" } });
   expect(value.providers).toEqual([primary.provider]);
   expect(value.resolved).toEqual([primary]);
   expect(value.arms).toEqual([]);
