@@ -645,7 +645,7 @@ describe("session lifecycle conformance", () => {
                         const aborted = interrupted.settled.promise;
                         (yield* toEffect(interrupted.handle.interrupt()));
                         const exit = yield* waitFor(aborted, "interrupted wave");
-                        expect(Exit.isFailure(exit) && Cause.isInterruptedOnly(exit.cause)).toBe(true);
+                        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
                         (yield* waitFor(opened.running, "interrupted turn"));
                     }),
                 },

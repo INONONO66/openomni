@@ -96,7 +96,7 @@ export async function runAppBoot<A, E>(
   const exit = await runtime.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
   const failure = Option.getOrElse(
-    Cause.failureOption(exit.cause),
+    Cause.findErrorOption(exit.cause),
     () => new AppLifecycleFailure({ operation: "app.boot", cause: Cause.pretty(exit.cause) }),
   );
   console.error("app boot incident", failure);

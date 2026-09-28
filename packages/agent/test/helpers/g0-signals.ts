@@ -16,7 +16,7 @@ export function failure<A, E, R>(
     const exit = yield* Effect.exit(program);
     if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected a failed Effect"));
     return Option.getOrElse(
-      Cause.failureOption(exit.cause),
+      Cause.findErrorOption(exit.cause),
       () => Chunk.toReadonlyArray(Cause.defects(exit.cause))[0],
     );
   });

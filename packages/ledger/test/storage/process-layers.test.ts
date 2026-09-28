@@ -57,7 +57,7 @@ test.each([
       if (fail) {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit))
-          expect(Cause.failureOption(exit.cause)).toEqual(Option.some("boot.refused"));
+          expect(Cause.findErrorOption(exit.cause)).toEqual(Option.some("boot.refused"));
       } else {
         expect(exit).toEqual(Exit.succeed(undefined));
       }

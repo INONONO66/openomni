@@ -10,9 +10,9 @@ test("aborting a shell interrupts and waits for its process group to close", asy
   const fiber = Effect.runFork(nativeExecute(request, controller.signal));
   controller.abort();
   const exit = await Effect.runPromise(Fiber.await(fiber));
-  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   const preAborted = await Effect.runPromiseExit(nativeExecute(request, controller.signal));
-  expect(Exit.isFailure(preAborted) && Cause.isInterrupted(preAborted.cause)).toBe(true);
+  expect(Exit.isFailure(preAborted) && Cause.hasInterrupts(preAborted.cause)).toBe(true);
 });
 
 test("the execution deadline kills the real shell and settles timed_out", async () => {
@@ -58,7 +58,7 @@ test.each(["ESRCH", "EPERM", "EINVAL"])("aborted exec handles group kill failure
         expect.objectContaining({ _tag: "SpawnFailure", operation: "exec.spawn", cause: String(error) }),
       ]);
     } else {
-      expect(Cause.isInterruptedOnly(exit.cause)).toBe(true);
+      expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
       expect(await within(closed.promise, "fallback child close")).toEqual({ code: null, signal: "SIGKILL" });
     }
   } finally {

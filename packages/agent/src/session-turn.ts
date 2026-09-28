@@ -242,8 +242,8 @@ function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) 
 
 function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: SessionRunnerResult): SessionRunnerResult {
   if (Exit.isFailure(exit)) {
-    if (Cause.isInterrupted(exit.cause)) return { kind: "interrupted", text: "" };
-    const cause = Option.getOrElse(Cause.failureOption(exit.cause), () => new ForeignFailure({ operation: "session.turn", cause: Cause.pretty(exit.cause) }));
+    if (Cause.hasInterrupts(exit.cause)) return { kind: "interrupted", text: "" };
+    const cause = Option.getOrElse(Cause.findErrorOption(exit.cause), () => new ForeignFailure({ operation: "session.turn", cause: Cause.pretty(exit.cause) }));
     return { kind: "error", text: cause.message, cause };
   }
   const outcome = exit.value;

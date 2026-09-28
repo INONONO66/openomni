@@ -44,12 +44,12 @@ export function failureEvidence(error: ExecutionError): PlainObject {
 export function causeEvidence(cause: Cause.Cause<ExecutionError>): PlainObject {
   return {
     failures: Chunk.toReadonlyArray(Cause.failures(cause)).map(failureEvidence),
-    defects: Cause.isDie(cause)
+    defects: Cause.hasDies(cause)
       ? Cause.prettyErrors(Cause.stripFailures(cause)).map((error) => ({
           name: error.name,
           cause: error.message,
         }))
       : [],
-    interrupted: Cause.isInterrupted(cause),
+    interrupted: Cause.hasInterrupts(cause),
   };
 }

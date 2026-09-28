@@ -487,7 +487,7 @@ test("noncooperative bodies release the wave but retain the lease and cannot com
       );
       late.resolve(
         Exit.isFailure(outcome)
-          ? Cause.isInterrupted(outcome.cause)
+          ? Cause.hasInterrupts(outcome.cause)
             ? "interrupted"
             : "failed"
           : "committed",

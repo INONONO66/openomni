@@ -14,7 +14,7 @@ describe("Retry.sleep", () => {
         const timeout = spyOn(globalThis, "setTimeout");
         try {
           const exit = yield* Effect.exit(Retry.sleep(5_000, controller.signal));
-          expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+          expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
           expect(timeout).not.toHaveBeenCalled();
         } finally {
           timeout.mockRestore();
@@ -40,7 +40,7 @@ describe("Retry.sleep", () => {
             yield* boundedSignal(registered.promise, "abort listener registered");
             controller.abort();
             const exit = yield* Fiber.await(sleeping);
-            expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+            expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
           } finally {
             listener.mockRestore();
           }

@@ -49,7 +49,7 @@ function outcomeFields(outcome: ExecutionResult): PlainObject {
   return outcome.terminal === "blocked_post" ? { reason: outcome.reason, disposition: outcome.disposition } : { reason: outcome.reason };
 }
 function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionError): ExecutionResult {
-  if (Cause.isInterrupted(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
+  if (Cause.hasInterrupts(cause) || failure._tag === "Interrupted") return { terminal: "interrupted", reason: "fiber_interrupted" };
   return failure._tag === "OutcomeUnknown"
     ? { terminal: "outcome_unknown", reason: failure.reason }
     : { terminal: "executed", value: null, failure };
@@ -302,7 +302,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       if (Exit.isFailure(exit)) {
         const commitFailure = Chunk.toReadonlyArray(Cause.failures(exit.cause)).find((error) => error._tag === "CommitFailed");
         if (commitFailure !== undefined) return Effect.fail(commitFailure);
-        const failure = Option.getOrElse(Cause.failureOption(exit.cause), () =>
+        const failure = Option.getOrElse(Cause.findErrorOption(exit.cause), () =>
           new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
         return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
       }
@@ -320,7 +320,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
     const terminalExists = stage.intent !== undefined && options.ledger.resultFor?.(stage.intent.action.id) !== undefined;
     if (terminalExists) return Effect.failCause(cause);
-    const failure = Option.getOrElse(Cause.failureOption(cause), () =>
+    const failure = Option.getOrElse(Cause.findErrorOption(cause), () =>
       new ForeignFailure({ operation: `${stage.request.op}.completion`, cause: Cause.pretty(cause) }));
     return appendOutcome(stage, { terminal: "executed", value, failure }, {
       disposition: "irreversible", evidence: causeEvidence(cause),

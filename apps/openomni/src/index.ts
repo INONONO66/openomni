@@ -405,7 +405,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           yield* Effect.forkIn(
             wakeEffect(id).pipe(
               Effect.catchCause((cause) =>
-                Cause.isInterruptedOnly(cause)
+                Cause.hasInterruptsOnly(cause)
                   ? Effect.void
                   : Effect.sync(() => {
                       console.error("session wake failed", Cause.pretty(cause));

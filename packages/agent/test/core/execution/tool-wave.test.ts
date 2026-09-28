@@ -427,7 +427,7 @@ it("propagates a fallback body's interruption instead of settling the slot as an
   if (built.type !== "ready") throw new Error("turn unavailable");
   built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
   const exit = yield* Effect.exit(settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds")));
-  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   expect(built.turn.turnAssistant.message.parts).toMatchObject([
     { callID: "A", state: { status: "pending" } },
     { callID: "B", state: { status: "pending" } },

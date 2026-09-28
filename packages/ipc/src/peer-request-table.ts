@@ -94,7 +94,7 @@ export class PeerRequestTable<TPeer = undefined> {
       (result) => this.options.send(peer, Ipc.createResponse(request.id, result)),
       (method, params) => this.options.send(peer, Ipc.createNotification(method, params)),
     )).pipe(Effect.catchCause((cause) => {
-      const failure = Cause.failureOption(cause);
+      const failure = Cause.findErrorOption(cause);
       if (Option.isNone(failure)) return Effect.failCause(cause);
       const error = failure.value;
       const message = error._tag === "ForeignFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;

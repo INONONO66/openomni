@@ -43,7 +43,7 @@ test("interrupted fiber seals one interrupted action after its entry signal", ()
     Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))));
   yield* Deferred.await(entered);
   const exit = yield* Fiber.interrupt(fiber);
-  expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+  expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   expect(results()).toHaveLength(1);
   expect(results()).toMatchObject([{ terminal: "interrupted", evidence: { failures: [], defects: [], interrupted: true } }]);
 })));

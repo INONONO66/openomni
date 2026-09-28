@@ -349,7 +349,7 @@ test("caller cancellation before SQLite commit cannot split alarm prompt and inb
   });
   cancel.mockRestore();
   expect(observedAbort).toBe(true);
-  if (Exit.isFailure(exit)) expect(Cause.isInterruptedOnly(exit.cause)).toBe(true);
+  if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
   expect(controller.signal.aborted).toBe(true);
   expect(sessionTree("session", f.storage.actions).map((action) => action.kind)).toEqual([
     "alarm.arm",

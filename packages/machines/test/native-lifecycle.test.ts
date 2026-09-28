@@ -62,7 +62,7 @@ test("interrupting native exec kills the real shell and sleeping grandchild and 
       const fiber = yield* Effect.forkScoped(execute({ cmd: command, cwd: "/" }, new AbortController().signal));
       const pids = yield* Effect.promise(() => within(observed.ready, "shell and grandchild PID handshake"));
       const exit = yield* Fiber.interrupt(fiber);
-      expect(Exit.isFailure(exit) && Cause.isInterruptedOnly(exit.cause)).toBe(true);
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
       yield* Effect.promise(() => within(observed.closed, "real child close"));
       observed.assertClosed();
       expectGone(pids);

@@ -42,8 +42,8 @@ export function settleModelTools(
           return Effect.exit(Effect.suspend(() => execute(call, { signal: config.signal }))).pipe(
             Effect.flatMap((exit) => {
               if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
-              if (Cause.isInterrupted(exit.cause)) return Effect.failCause(exit.cause);
-              const output = Option.match(Cause.failureOption(exit.cause), {
+              if (Cause.hasInterrupts(exit.cause)) return Effect.failCause(exit.cause);
+              const output = Option.match(Cause.findErrorOption(exit.cause), {
                 onNone: () => Cause.pretty(exit.cause),
                 onSome: (error) => error.message,
               });

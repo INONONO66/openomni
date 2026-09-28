@@ -73,14 +73,14 @@ describe("Retry", () => {
         controller.abort();
         return yield* Fiber.await(fiber);
       }).pipe(Effect.provide(TestContext.TestContext))));
-      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     });
 
     test("an already-aborted signal interrupts without scheduling work", async () => {
       const controller = new AbortController();
       controller.abort();
       const exit = await Effect.runPromiseExit(Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal));
-      expect(Exit.isFailure(exit) && Cause.isInterrupted(exit.cause)).toBe(true);
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     });
 
 

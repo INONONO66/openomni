@@ -21,7 +21,7 @@ const context = { sessionId: fiberSessionId, turnId: `${fiberSessionId}:turn` };
 const request = (op: string) => ({ kind: "tool", op, intent: {}, effect: { category: "query" } });
 const awaitSignal = <A, E>(signal: Deferred.Deferred<A, E>) => Deferred.await(signal).pipe(Effect.timeout("5 seconds"));
 function failure<A, E>(exit: Exit.Exit<A, E>): E | undefined {
-  return Exit.isFailure(exit) ? Option.getOrUndefined(Cause.failureOption(exit.cause)) : undefined;
+  return Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
 }
 function tool(name: string, execute: (input: PlainValue, context: ToolExecutionContext) => Promise<string>): AnyToolDefinition {
   return { name, description: name, category: "query", input: z.object({}), output: z.string(),
