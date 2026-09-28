@@ -4,8 +4,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalDigest, FoldCheckpoint, NamedError, PlainValueSchema } from "@openomni/protocol";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { SessionHandleStore } from "@openomni/ledger";
+import { isolatedLedger, isolatedRun } from "./helpers/isolated";
+import { openCrashStores } from "./helpers/crash-stores";
+import { sessionTree } from "./helpers/session-tree";
 import {
   FoldCheckpointIntegrityError,
   foldHistoryState,
@@ -175,26 +177,23 @@ for (const field of ["state", "stateHash", "foldVersion", "revision"] as const) 
           sessionId: reconstructionSession,
         },
       });
-      await Storage.withIsolation(() => {
-        Storage.initialize({ dbPath });
-        try {
-          expect(SessionHandleStore.verifyChain(reconstructionSession).kind).toBe("broken");
-          expect(SessionHandleStore.row(reconstructionSession).revision).toBe(cut.revision);
-        } finally {
-          Storage.reset();
-        }
-      });
+      await isolatedRun((ledger) => {
+        expect(ledger.kernel.verifyChain(reconstructionSession).kind).toBe("broken");
+        expect(ledger.kernel.row(reconstructionSession).revision).toBe(cut.revision);
+      }, () => openCrashStores(dbPath));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 }
 
-test("in-process reconstruction uses capped suffix reads and rejects a stale seed hash on an intact row chain", () =>
-  Storage.withIsolation(async () => {
-    const directory = mkdtempSync(join(tmpdir(), "fold-in-process-"));
-    try {
-      const dbPath = join(directory, "kernel.sqlite");
+test("in-process reconstruction uses capped suffix reads and rejects a stale seed hash on an intact row chain", () => {
+  const directory = mkdtempSync(join(tmpdir(), "fold-in-process-"));
+  const dbPath = join(directory, "kernel.sqlite");
+  // One outer isolation over the file-backed stores; the in-process mains
+  // reuse it via activeIsolation() so isolations never nest.
+  return isolatedRun(async (isolation) => {
+    {
       const written = await reconstructionMain("write", dbPath);
       expect(written.digest).toBe(written.oracle);
       expect(await reconstructionMain("read", dbPath)).toEqual(written);
@@ -219,16 +218,15 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
       await expect(
         reconstructionProcessMain(["read", `${dbPath}.other`], emit, exit),
       ).rejects.toThrow();
-      const adapter = Storage.get().actions;
-      if (adapter === undefined) throw new Error("missing action adapter");
+      const adapter = isolation.session.actions;
       const range = adapter.range.bind(adapter);
       const limits: number[] = [];
       adapter.range = (id, cursor, limit) => {
         limits.push(limit);
         return range(id, cursor, limit);
       };
-      const hydrated = hydrateSessionHistory(reconstructionSession);
-      const oracle = foldHistoryState(reconstructionSession, sessionTree(reconstructionSession));
+      const hydrated = hydrateSessionHistory(isolation.kernel, reconstructionSession);
+      const oracle = foldHistoryState(reconstructionSession, sessionTree(isolation.kernel, reconstructionSession));
       expect(canonicalDigest(PlainValueSchema.parse(hydrated.state))).toBe(
         canonicalDigest(PlainValueSchema.parse(oracle)),
       );
@@ -236,7 +234,7 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
       expect(limits.every((limit) => limit > 0 && limit <= 256)).toBe(true);
       const checkpoint = written.checkpoint;
       if (checkpoint === undefined) throw new Error("missing checkpoint");
-      const revision = SessionHandleStore.row(reconstructionSession).revision;
+      const revision = isolation.kernel.row(reconstructionSession).revision;
       const effect = FoldCheckpoint.Effect.parse(checkpoint.effect.value);
       const corrupted = adapter.append(
         {
@@ -268,10 +266,10 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
         revision,
       );
       expect(corrupted).toBeDefined();
-      expect(SessionHandleStore.verifyChain(reconstructionSession).kind).toBe("intact");
-      const before = sessionTree(reconstructionSession);
+      expect(isolation.kernel.verifyChain(reconstructionSession).kind).toBe("intact");
+      const before = sessionTree(isolation.kernel, reconstructionSession);
       try {
-        hydrateSessionHistory(reconstructionSession);
+        hydrateSessionHistory(isolation.kernel, reconstructionSession);
         throw new Error("corrupt checkpoint accepted");
       } catch (error) {
         expect(error).toBeInstanceOf(NamedError);
@@ -290,15 +288,13 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
         expect(error.data.actual).toMatch(/^sha256:/);
         expect(error.data.actual).not.toBe(error.data.expected);
       }
-      expect(sessionTree(reconstructionSession)).toEqual(before);
+      expect(sessionTree(isolation.kernel, reconstructionSession)).toEqual(before);
       await reconstructionProcessMain(["wake", dbPath], emit, exit);
       expect(emitted.pop()).toMatchObject({
         name: "FoldCheckpointIntegrityError",
         data: { reason: "stateHash" },
       });
       expect(exited).toEqual([0, 0, 1]);
-    } finally {
-      Storage.reset();
-      rmSync(directory, { recursive: true, force: true });
     }
-  }));
+  }, () => openCrashStores(dbPath)).finally(() => rmSync(directory, { recursive: true, force: true }));
+});

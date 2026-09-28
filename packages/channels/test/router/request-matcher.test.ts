@@ -1,12 +1,13 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, SessionTransition } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/ledger";
 import * as Matcher from "../../src/router/request/matcher";
 
 type ResponderTarget = Parameters<typeof Matcher.responderCandidates>[0][number];
 import { requestFixture } from "../helpers/request-record";
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
+beforeEach(() => {
+  resetLedger();
+});
 
 const correlation = Object.freeze({
   endpointId: "endpoint-1",
@@ -124,12 +125,12 @@ describe("request matcher — ingress evidence", () => {
       expectedResponders: ["actor-target", "actor-r2"],
       resolution: "first",
     });
-    ActorRegistry.registerIdentity({
+    ledger().stores.actors.registerIdentity({
       id: "actor-target",
       kind: "human",
       trustTier: "collaborator",
     });
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint-target",
       actorId: "actor-target",
       channel: "telegram",

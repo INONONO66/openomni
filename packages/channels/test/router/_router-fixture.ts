@@ -1,3 +1,4 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { Effect } from "effect";
 import { runEffect } from "../helpers/effect";
 import { channelRequests } from "../helpers/channel-requests";
@@ -6,13 +7,7 @@ import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
 import { KERNEL_POLICY_REGISTRY, compilePolicySnapshot } from "@openomni/policy";
-import {
-  ActorRegistry,
-  ChannelGrantStore,
-  SessionHandleStore,
-  Storage,
-  SurfaceKey,
-} from "@openomni/ledger";
+import { Storage,  } from "@openomni/ledger";
 import { decodeChannelFailure } from "../../src/errors";
 import { Bus } from "../helpers/observation";
 import {
@@ -61,7 +56,7 @@ const decisions: Ingress.RoutingDecisionPayload[] = [];
 let router: GatewayRouter | undefined;
 
 export function resetStores(): void {
-  Storage.reset();
+  resetLedger();
   Bus.reset();
   Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
 }
@@ -155,10 +150,11 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     ],
   });
   router = createGatewayRouter({
+    stores: ledger().stores,
     transaction: channelTransaction,
     requests: channelRequests(requestPort(overrides.clock ?? Date.now, (sessionIds: readonly string[]) => {
       for (const sessionId of sessionIds) {
-        for (const row of SessionHandleStore.inboxRows(sessionId)) {
+        for (const row of ledger().kernel.pendingMessages(sessionId)) {
           if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
           commits.push({ ...row, parentActionId: null });
           overrides.committed?.(row);
@@ -173,7 +169,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     },
     inbox: {
       commit: (row: Inbox.Commit) => Effect.gen(function* () {
-        yield* SessionHandleStore.materialize({
+        yield* ledger().kernel.materialize({
           id: row.sessionId,
           parentId: null,
           role: "resident",
@@ -183,10 +179,10 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           actionId: `${row.sessionId}:configure`,
           at: 0,
         });
-        const existed = SessionHandleStore.inboxRows(row.sessionId).some(
+        const existed = ledger().kernel.pendingMessages(row.sessionId).some(
           (input: Inbox.Row) => input.id === row.id,
         );
-        const received = yield* SessionHandleStore.commitReceivedMessage(row);
+        const received = yield* ledger().kernel.commitReceivedMessage(row);
         if (!existed) commits.push(row);
         return received.row;
       }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
@@ -249,15 +245,15 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
 }
 
 export function registerOwnerDm(): void {
-  ActorRegistry.registerIdentity({ id: "actor-owner", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerIdentity({ id: "actor-owner", kind: "human", trustTier: "owner" });
+  ledger().stores.actors.registerEndpoint({
     id: "endpoint-owner-dm",
     actorId: "actor-owner",
     channel: ownerSender.surface,
     externalId: ownerSender.externalId,
     workspace: ownerFacts.workspaceId,
   });
-  ChannelGrantStore.put({
+  ledger().stores.channelGrants.put({
     id: "grant-owner-dm",
     surface: ownerFacts.surface,
     workspace: ownerFacts.workspaceId,
@@ -269,7 +265,7 @@ export function registerOwnerDm(): void {
 
 export function createMappedOwnerSession(): { readonly id: string } {
   const id = crypto.randomUUID();
-  SurfaceKey.claim(
+  ledger().stores.surfaceKeys.claim(
     Channel.SurfaceKey.fromChannel({
       surface: ownerFacts.surface,
       namespace: "owner-workspace",

@@ -1,10 +1,10 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { Effect } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
 import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Storage } from "@openomni/ledger";
 import { Gateway, type Inbox } from "@openomni/protocol";
 import { z } from "zod";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
@@ -13,12 +13,15 @@ import { requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 
 beforeEach(resetStores);
-afterEach(() => Storage.reset());
+afterEach(() => {
+  resetLedger();
+});
 
 function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
+    stores: ledger().stores,
     transaction: channelTransaction,
     sink: () => undefined,
     inbox: {

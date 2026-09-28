@@ -1,7 +1,8 @@
+import { ledger } from "../helpers/ledger";
 import { effectFailure } from "../helpers/effect-failure";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
-import { ChannelGrantStore } from "@openomni/ledger";
+
 import {
   commits,
   kernelRouter,
@@ -13,7 +14,7 @@ import {
 
 beforeEach(() => {
   resetRouterState();
-  ChannelGrantStore.put({
+  ledger().stores.channelGrants.put({
     id: "grant",
     surface: "discord",
     kind: "trusted_channel",
@@ -40,7 +41,7 @@ describe("GatewayRouter conversation isolation", () => {
     expect(first).not.toBe(second);
   });
   test("allowlist refuses strangers while admitting the authenticated listed sender", async () => {
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant",
       surface: "discord",
       kind: "trusted_channel",

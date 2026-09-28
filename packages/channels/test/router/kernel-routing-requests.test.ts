@@ -1,3 +1,4 @@
+import { ledger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
@@ -7,14 +8,8 @@ import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort, seededRequests } from "../helpers/requests";
 import { replaceDecisionFacts } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
-import { Channel, Ingress, type Gateway } from "@openomni/protocol";
-import {
-  ActorRegistry,
-  BlacklistStore,
-  Storage,
-  SurfaceKey,
-  SessionHandleStore,
-} from "@openomni/ledger";
+import { Channel, Ingress, type Gateway , type SessionTransition } from "@openomni/protocol";
+import {  } from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
 import {
@@ -45,8 +40,8 @@ function scope(id: string) {
   return { surface: "telegram", channel: "telegram:dm", id: `telegram::telegram%3Adm:${id}` };
 }
 function registerResponder(actorId = "actor-external-worker", externalId = "seller-1"): void {
-  ActorRegistry.registerIdentity({ id: actorId, kind: "human", trustTier: "assigned_worker" });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerIdentity({ id: actorId, kind: "human", trustTier: "assigned_worker" });
+  ledger().stores.actors.registerEndpoint({
     id: `telegram:${externalId}`,
     actorId,
     channel: "telegram",
@@ -61,7 +56,7 @@ beforeEach(() => {
 
 test("correlated reply resolves the request and commits only to its owner", async () => {
   await runEffect(await openRequest("request-session-owner"));
-  SurfaceKey.claim(
+  ledger().stores.surfaceKeys.claim(
     Channel.SurfaceKey.fromChannel({
       surface: "telegram",
       namespace: "telegram",
@@ -84,7 +79,7 @@ test("correlated reply resolves the request and commits only to its owner", asyn
   });
   expect(commits).toHaveLength(1);
   expect(commits[0]?.sessionId).toBe("request-owner");
-  expect(SessionHandleStore.requestById("request-session-owner")).toMatchObject({
+  expect(ledger().kernel.requestById("request-session-owner")).toMatchObject({
     state: "resolved",
 
     replies: [{ replyId: scope("reply").id, responderId: "actor-external-worker" }],
@@ -101,15 +96,15 @@ test("first quorum reply commits input but leaves the request open", async () =>
     status: "executed",
     handle: { target: "request-owner" },
   });
-  expect(SessionHandleStore.requestById("quorum")).toMatchObject({ state: "open" });
-  expect(SessionHandleStore.requestById("quorum")?.replies).toHaveLength(1);
+  expect(ledger().kernel.requestById("quorum")).toMatchObject({ state: "open" });
+  expect(ledger().kernel.requestById("quorum")?.replies).toHaveLength(1);
 });
 
 async function expectStableReplyReplay(): Promise<void> {
-  const before = sessionTree("request-owner");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
-  expect(sessionTree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
+  expect(ledger().kernel.pendingMessages("request-owner")).toHaveLength(1);
 }
 
 test("duplicate unresolved reply reuses its receipt without another durable input", async () => {
@@ -120,7 +115,7 @@ test("duplicate unresolved reply reuses its receipt without another durable inpu
   }));
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
   await expectStableReplyReplay();
-  expect(SessionHandleStore.requestById("duplicate")?.replies).toHaveLength(1);
+  expect(ledger().kernel.requestById("duplicate")?.replies).toHaveLength(1);
   expect(commits).toHaveLength(1);
 });
 
@@ -131,7 +126,7 @@ test("late reply lazily expires the request while retaining partial progress", a
     threshold: 2,
     deadline: 10_000,
   }));
-  const request = SessionHandleStore.requestById("late");
+  const request = ledger().kernel.requestById("late");
   if (!request) throw new Error("missing request");
   expect(
     await runEffect(requestPort().answer({
@@ -157,20 +152,20 @@ test("late reply lazily expires the request while retaining partial progress", a
     code: "request_reply_rejected",
     _tag: "IngressRoutingError",
   });
-  expect(SessionHandleStore.requestById("late")).toMatchObject({
+  expect(ledger().kernel.requestById("late")).toMatchObject({
     state: "expired",
     outcome: "outcome_unknown",
   });
-  expect(SessionHandleStore.requestById("late")?.replies).toHaveLength(1);
+  expect(ledger().kernel.requestById("late")?.replies).toHaveLength(1);
   expect(commits).toEqual([]);
 });
 
 test("resolved reply redelivery preserves the original request revision", async () => {
   await runEffect(await openRequest("redelivery"));
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
-  const resolved = SessionHandleStore.requestById("redelivery");
+  const resolved = ledger().kernel.requestById("redelivery");
   await expectStableReplyReplay();
-  expect(SessionHandleStore.requestById("redelivery")).toEqual(resolved);
+  expect(ledger().kernel.requestById("redelivery")).toEqual(resolved);
   // Kernel admission and receiving inbox are one durable transition.
   expect(commits).toHaveLength(1);
 });
@@ -203,18 +198,18 @@ test.each([
     },
   });
   expect(await effectFailure(router.ingest(sender, facts("handoff-reply")))).toBe(handoffFault);
-  expect(SessionHandleStore.requestById("handoff")?.state).toBe(
+  expect(ledger().kernel.requestById("handoff")?.state).toBe(
     site === "before" ? "open" : "resolved",
   );
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(site === "before" ? 0 : 1);
+  expect(ledger().kernel.pendingMessages("request-owner")).toHaveLength(site === "before" ? 0 : 1);
   now = 20;
   await runEffect(router.ingest(sender, facts("handoff-reply")));
-  const before = sessionTree("request-owner");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   now = 30;
   await runEffect(router.ingest(sender, facts("handoff-reply")));
-  expect(sessionTree("request-owner")).toEqual(before);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
-  expect(SessionHandleStore.requestById("handoff")?.replies).toHaveLength(1);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
+  expect(ledger().kernel.pendingMessages("request-owner")).toHaveLength(1);
+  expect(ledger().kernel.requestById("handoff")?.replies).toHaveLength(1);
 });
 
 test("unexpected responder is refused with an authoritative route correction", async () => {
@@ -226,12 +221,12 @@ test("unexpected responder is refused with an authoritative route correction", a
     code: "request_reply_rejected",
     _tag: "IngressRoutingError",
   });
-  expect(SessionHandleStore.requestById("intruder")).toMatchObject({ state: "open", replies: [] });
-  expect(Storage.get().decisionFacts?.head(Ingress.routeStreamId(scope("reply")))?.type).toBe(
+  expect(ledger().kernel.requestById("intruder")).toMatchObject({ state: "open", replies: [] });
+  expect(ledger().sessions.decisionFacts?.head(Ingress.routeStreamId(scope("reply")))?.type).toBe(
     "route.decided",
   );
   expect(
-    Storage.get().decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("reply"))),
+    ledger().sessions.decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("reply"))),
   ).toMatchObject({
     type: "route.not_delivered",
     key: Ingress.routeCorrectionStreamId(scope("reply")),
@@ -282,7 +277,7 @@ test("recorded rejection correction is idempotent", async () => {
     });
   }
   expect(
-    Storage.get().decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("another-reply"))),
+    ledger().sessions.decisionFacts?.head(Ingress.routeCorrectionStreamId(scope("another-reply"))),
   ).toMatchObject({
     type: "route.not_delivered",
     key: Ingress.routeCorrectionStreamId(scope("another-reply")),
@@ -299,7 +294,7 @@ test.each([
     status: "blocked_pre",
   });
   expect(routingDecisions()[0]).toMatchObject({ stage: "request_correlation", outcome: "block" });
-  expect(SessionHandleStore.requestById("disallowed")).toMatchObject({
+  expect(ledger().kernel.requestById("disallowed")).toMatchObject({
     state: "open",
     replies: [],
   });
@@ -312,6 +307,7 @@ test("awaited send resolves quorum from distinct authenticated responder endpoin
   registerResponder("target", "target");
   const messaging = createExistingAgentMessaging({
     requests: channelRequests(seededRequests()),
+    stores: ledger().stores,
     transaction: channelTransaction,
     deliver: () => ({ value: "accepted", externalMessageId: "platform-message" }),
     grants: () => [
@@ -352,19 +348,19 @@ test("awaited send resolves quorum from distinct authenticated responder endpoin
         { ...facts(externalId), reply: { chain: [], replyToMessageId: "platform-message" } },
       )),
     ).toMatchObject({ status: "executed", handle: { target: "request-owner" } });
-    expect(SessionHandleStore.requestById("quorum")?.state).toBe(
+    expect(ledger().kernel.requestById("quorum")?.state).toBe(
       externalId === "responder-1" ? "open" : "resolved",
     );
   }
   expect(
-    SessionHandleStore.requestById("quorum")?.replies.map((reply: NonNullable<ReturnType<typeof SessionHandleStore.requestById>>["replies"][number]) => reply.responderId),
+    ledger().kernel.requestById("quorum")?.replies.map((reply: SessionTransition.Request["replies"][number]) => reply.responderId),
   ).toEqual(["r1", "r2"]);
   expect(commits).toHaveLength(2);
 });
 
 test("blacklist takes precedence over reply correlation", async () => {
   await runEffect(await openRequest("blacklisted"));
-  BlacklistStore.put({
+  ledger().stores.blacklist.put({
     id: "blocked",
     kind: "endpoint",
     value: "telegram:seller-1",
@@ -374,7 +370,7 @@ test("blacklist takes precedence over reply correlation", async () => {
     status: "blocked_pre",
   });
   expect(routingDecisions()[0]).toMatchObject({ stage: "blacklist", outcome: "drop" });
-  expect(SessionHandleStore.requestById("blacklisted")).toMatchObject({
+  expect(ledger().kernel.requestById("blacklisted")).toMatchObject({
     state: "open",
     replies: [],
   });

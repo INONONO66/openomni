@@ -1,6 +1,6 @@
 import { Gateway } from "@openomni/protocol";
 import { expect } from "bun:test";
-import { ActorRegistry } from "@openomni/ledger";
+import { ledger } from "./ledger";
 
 type SendInput = Gateway.SendInput;
 type SenderTargetGrant = Gateway.SenderTargetGrant;
@@ -33,7 +33,8 @@ export function registerAgentFixture(
   actorId: string,
   endpoints: readonly { id: string; externalId: string }[] = [],
 ): void {
-  ActorRegistry.registerIdentity({
+  const actors = ledger().stores.actors;
+  actors.registerIdentity({
     id: actorId,
     kind: "ai_agent",
     trustTier: "collaborator",
@@ -41,7 +42,7 @@ export function registerAgentFixture(
     updatedAt: messagingNow,
   });
   for (const endpoint of endpoints) {
-    ActorRegistry.registerEndpoint({
+    actors.registerEndpoint({
       id: endpoint.id,
       actorId,
       channel: "qa",

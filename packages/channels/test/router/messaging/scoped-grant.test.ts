@@ -1,10 +1,11 @@
+import { ledger } from "../../helpers/ledger";
 import { channelRequests } from "../../helpers/channel-requests";
 import { channelTransaction } from "../../helpers/channel-transaction";
 import { runEffect } from "../../helpers/effect";
 import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/ledger";
+
 import { Bus } from "../../helpers/observation";
 import {
   deliverySurfaceKey,
@@ -106,7 +107,8 @@ describe("send kernel over reply-scoped instances", () => {
   function messaging() {
     return createExistingAgentMessaging({
       requests: channelRequests(seededRequests()),
-      transaction: channelTransaction,
+      stores: ledger().stores,
+    transaction: channelTransaction,
       deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };
@@ -135,7 +137,7 @@ describe("send kernel over reply-scoped instances", () => {
   });
 
   test("cross-surface use of the instance is refused ungranted — containment is pinned", async () => {
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint:target-discord",
       actorId: "actor:target",
       channel: "discord",

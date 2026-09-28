@@ -291,17 +291,22 @@ function executePoint(point: CrashPoint, bodies: string[]) {
   });
 }
 
-function workerClock(point: CrashPoint, bodies: string[]) {
-  // dispatchSessionOutbound reads the clock for commit([], true) after committing the ACK.
-  if (
-    point === "delivery_ack_committed_before_owner_cleanup" &&
-    bodies.includes("accepted") &&
-    isolatedLedger().kernel.outboundRows(sessionId).some(
-      (item: import("@openomni/protocol").SessionTransition.Outbound) => item.state === "delivered",
+/**
+ * The entity-plane owner-cleanup seam: hibernation runs only after the ACK
+ * commit is durable, so crashing here leaves the delivered outbound row with
+ * its activation authority never cleaned up.
+ */
+function hibernateCut(point: CrashPoint, bodies: string[]) {
+  return () => Effect.sync(() => {
+    if (
+      point === "delivery_ack_committed_before_owner_cleanup" &&
+      bodies.includes("accepted") &&
+      isolatedLedger().kernel.outboundRows(sessionId).some(
+        (item: import("@openomni/protocol").SessionTransition.Outbound) => item.state === "delivered",
+      )
     )
-  )
-    stop(point, bodies);
-  return 100;
+      stop(point, bodies);
+  });
 }
 
 function outboundPort(
@@ -342,7 +347,8 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       ...isolatedRuntime(),
       authorizeConfigure: allowConfigure,
       observations,
-      clock: () => workerClock(point, bodies),
+      clock: () => 100,
+      onHibernate: hibernateCut(point, bodies),
       dispatchOutbound: outboundPort(point, bodies, dbPath),
     };
     const runner = () =>

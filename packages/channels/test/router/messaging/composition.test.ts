@@ -1,8 +1,8 @@
+import { ledger } from "../../helpers/ledger";
 import { effectFailure } from "../../helpers/effect-failure";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../../helpers/effect";
 import { replaceDecisionFacts } from "../../helpers/ledger";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import type { Gateway } from "@openomni/protocol";
 import type { ChannelDeliveryRoute } from "../../../src/router";
 import { makeRouter as makeFixtureRouter, resetRouterState } from "../_router-fixture";
@@ -61,7 +61,7 @@ function makeRouter(routes?: ReadonlyMap<string, ChannelDeliveryRoute>) {
 beforeEach(() => {
   resetRouterState();
   delivered.length = 0;
-  ChannelGrantStore.put({
+  ledger().stores.channelGrants.put({
     id: "market",
     surface: "discord",
     workspace: "shop-ws",
@@ -70,8 +70,8 @@ beforeEach(() => {
     defaultTier: "collaborator",
     createdBy: "owner",
   });
-  ActorRegistry.registerIdentity({ id: "actor-buyer", kind: "human", trustTier: "collaborator" });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerIdentity({ id: "actor-buyer", kind: "human", trustTier: "collaborator" });
+  ledger().stores.actors.registerEndpoint({
     id: "ep-buyer",
     actorId: "actor-buyer",
     channel: "discord",
@@ -96,13 +96,10 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
     delivery: { kind: "actor", value: "accepted" },
   });
   if (sent.status !== "executed") throw new Error("not executed");
-  const request = SessionHandleStore.requestRows("persona-owner")[0];
+  const request = ledger().kernel.requestRows("persona-owner")[0];
+  // W5.2: the deadline wake is a persisted entity DeliverAt message, not an
+  // alarm row; the durable fact asserted here is the open request's deadline.
   expect(request).toMatchObject({ deadline: reply.deadline, state: "open" });
-  expect(Storage.get().alarms?.get(`${request?.requestId}:deadline`)).toMatchObject({
-    kind: "at",
-    fireAt: reply.deadline,
-    status: "armed",
-  });
   expect(delivered).toEqual([
     { externalId: "buyer-external", body: "yes", idempotencyKey: sent.handle.messageId },
   ]);
@@ -132,7 +129,7 @@ test("restart reads the durable live-grant projection, never route history", asy
 });
 
 test("historical route facts cannot reconstruct authority on restart", async () => {
-  Storage.get().decisionFacts?.record({
+  ledger().sessions.decisionFacts?.record({
     key: "route:forged",
     type: "route.decided",
     data: { outcome: "route", actorId: "actor-buyer" },
@@ -146,7 +143,7 @@ test("historical route facts cannot reconstruct authority on restart", async () 
 
 test("endpoint rebinding invalidates a durable reply grant", async () => {
   await runEffect(makeRouter().ingest(sender, facts));
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerEndpoint({
     id: "ep-buyer",
     actorId: "actor-buyer",
     channel: "discord",

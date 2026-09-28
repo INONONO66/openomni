@@ -1,9 +1,9 @@
+import { ledger, resetLedger } from "../../helpers/ledger";
 import { channelRequests } from "../../helpers/channel-requests";
 import { channelTransaction } from "../../helpers/channel-transaction";
 import { runEffect } from "../../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/ledger";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { seededRequests } from "../../helpers/requests";
 
@@ -11,16 +11,17 @@ import { seededRequests } from "../../helpers/requests";
 // ":memory:" adapter behind, which would resurrect its registered actors —
 // reset first so each test registers the fixture exactly once on a fresh db.
 beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetLedger();
 });
 
-afterEach(() => Storage.reset());
+afterEach(() => {
+  resetLedger();
+});
 
 for (const at of [1, 1.5]) {
   test(`send admits a valid Gateway.SendInput whose instant is at=${at}`, async () => {
     for (const id of ["sender", "target"]) {
-      ActorRegistry.registerIdentity({
+      ledger().stores.actors.registerIdentity({
         id,
         kind: "ai_agent",
         trustTier: "collaborator",
@@ -28,7 +29,7 @@ for (const at of [1, 1.5]) {
         updatedAt: 0,
       });
     }
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint",
       actorId: "target",
       channel: "qa",
@@ -54,7 +55,8 @@ for (const at of [1, 1.5]) {
     let deliveries = 0;
     const messaging = createExistingAgentMessaging({
       requests: channelRequests(seededRequests()),
-      transaction: channelTransaction,
+      stores: ledger().stores,
+    transaction: channelTransaction,
       grants: () => [grant],
       deliver: () => {
         deliveries += 1;

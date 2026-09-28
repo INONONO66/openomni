@@ -1,9 +1,10 @@
+import { ledger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";
 import { z } from "zod";
-import { ActorRegistry, ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
+
 import type { GatewayRouterPorts } from "../../src/router";
 import { commits, makeRouter, resetRouterState } from "./_router-fixture";
 
@@ -14,19 +15,19 @@ test.each([
   "owner",
   "ambient",
 ] as const)("perimeter resolves %s addressee independently from sender standing", async (addressee: "owner" | "bot" | "ambient") => {
-  ChannelGrantStore.put({
+  ledger().stores.channelGrants.put({
     id: "channel",
     surface: "ws",
     kind: "trusted_channel",
     defaultTier: "owner",
     createdBy: "owner",
   });
-  ActorRegistry.registerIdentity({
+  ledger().stores.actors.registerIdentity({
     id: "addressee",
     kind: addressee === "bot" ? "resident" : "human",
     trustTier: addressee === "owner" ? "owner" : "observer",
   });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerEndpoint({
     id: "ws:addressee",
     actorId: "addressee",
     channel: "ws",
@@ -52,7 +53,7 @@ test.each([
     },
   ));
   expect(projected).toMatchObject([{ sender: "external", senderTier: "owner", addressee }]);
-  expect(ActorRegistry.resolveEndpoint("ws", "owner")?.identity.trustTier).toBe("owner");
+  expect(ledger().stores.actors.resolveEndpoint("ws", "owner")?.identity.trustTier).toBe("owner");
   expect(commits).toEqual([]);
 });
 
@@ -72,10 +73,10 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(sessionTree("sender").filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
+  expect(sessionTree("sender", ledger().sessions.actions).filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
     [],
   );
-  expect(SessionHandleStore.requestRows("sender")).toMatchObject([
+  expect(ledger().kernel.requestRows("sender")).toMatchObject([
     { deadline: 100, expectedResponders: ["child"] },
   ]);
   expect(commits).toHaveLength(1);

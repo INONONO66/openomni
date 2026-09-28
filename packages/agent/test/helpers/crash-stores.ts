@@ -2,7 +2,7 @@ import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomn
 import { createObservationBus } from "../../src/observation/bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 
-export type CrashStores = IsolatedLedgerHandle;
+export type CrashStores = IsolatedLedgerHandle & { readonly dbPath: string };
 
 /**
  * The handle-scoped store layout crash children and their inspecting parents
@@ -15,6 +15,7 @@ export function openCrashStores(dbPath: string): CrashStores {
   const catalog = openCatalogStore(`${dbPath}.catalog`, bus);
   const kernel = SessionHandleStore.createSessionKernel(session, catalog);
   return {
+    dbPath,
     session,
     catalog,
     kernel,

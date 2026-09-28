@@ -1,6 +1,7 @@
+import { ledger } from "../helpers/ledger";
 import { runEffect } from "../helpers/effect";
 import { beforeEach, expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+
 import { openRequest } from "../helpers/requests";
 import {
   commits,
@@ -55,5 +56,5 @@ test("Request correlation selects the owner inbox instead of the default session
     stage: "request_correlation",
     sessionId: "request-owner",
   });
-  expect(SessionHandleStore.requestById("request-contract")?.state).toBe("resolved");
+  expect(ledger().kernel.requestById("request-contract")?.state).toBe("resolved");
 });

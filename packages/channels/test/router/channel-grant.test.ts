@@ -1,3 +1,4 @@
+import { ledger } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { ChannelGrantStore } from "@openomni/ledger";
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 test("registered Owner still needs a channel grant", async () => {
-  ChannelGrantStore.remove("grant-owner-dm");
+  ledger().stores.channelGrants.remove("grant-owner-dm");
   expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });

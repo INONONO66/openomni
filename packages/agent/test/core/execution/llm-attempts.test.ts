@@ -1,13 +1,12 @@
-import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../helpers/session-tree";
 import { testExecutor } from "../../helpers/executor";
 import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { isolated } from "../../helpers/isolated";
+import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
 import { ForeignFailure } from "../../../src/errors";
 import { LlmRunFailure } from "@openomni/llm";
-import { Storage } from "@openomni/ledger";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { Alarm, LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";
@@ -298,7 +297,7 @@ test.each([
   const request = approvals?.pending()[0];
   if (approvals === undefined || request === undefined) throw new Error("missing retry approval");
   expect(
-    intents(sessionTree(recording.identity.sessionId), "attempt").map((action: LedgerAction.Append) => action.id),
+    intents(sessionTree(isolatedLedger().kernel, recording.identity.sessionId), "attempt").map((action: LedgerAction.Append) => action.id),
   ).toContain(request.id);
   yield* approvals.answer({ request, credential: "proof", decision });
   const result = yield* Fiber.join(terminal);
@@ -306,7 +305,7 @@ test.each([
   else {
     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "PolicyDenied" } });
     expect(
-      (sessionTree(recording.identity.sessionId))
+      (sessionTree(isolatedLedger().kernel, recording.identity.sessionId))
         .filter((action: LedgerAction.Node) => action.kind === "attempt")
         .map((action: LedgerAction.Node) => action.effect.value),
     ).toContainEqual(
@@ -318,7 +317,7 @@ test.each([
   }
   expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
-  expect(intents(sessionTree(recording.identity.sessionId), "llm")).toHaveLength(1);
+  expect(intents(sessionTree(isolatedLedger().kernel, recording.identity.sessionId), "llm")).toHaveLength(1);
 }))));
 
 test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -335,7 +334,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
       return { type: "stop" };
     }));
   expect(calls).toBe(2);
-  const actions = sessionTree(recording.identity.sessionId);
+  const actions = sessionTree(isolatedLedger().kernel, recording.identity.sessionId);
   const attemptIntents = intents(actions, "attempt");
   expect(attemptIntents).toHaveLength(2);
   const alarmId = `${attemptIntents[0]?.id}:retry:1`;
@@ -347,17 +346,10 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
     reason: "transient_error",
     notBefore: 100,
   });
-  const settled = LedgerAction.Node.parse(
-    actions.find(
-      (action: LedgerAction.Node) =>
-        action.kind === "alarm.arm" &&
-        action.parentId === alarmId &&
-        effectRecord(action).status === "cancelled",
-    ),
-  );
   const secondIntent = LedgerAction.Node.parse(attemptIntents[1]);
-  // Record before act: arm precedes the consumed schedule, which precedes the re-attempt.
-  expect(armed.ordinal).toBeLessThan(settled.ordinal);
-  expect(settled.ordinal).toBeLessThan(secondIntent.ordinal);
-  expect(Storage.get().alarms?.get(alarmId)).toMatchObject({ status: "cancelled", kind: "at" });
+  // Record before act: the armed schedule precedes the re-attempt. W5.2: the
+  // cancel/settle plane is gone (supersede happens at delivery), so the single
+  // armed row plus exactly one re-attempt is the consumed-once evidence.
+  expect(armed.ordinal).toBeLessThan(secondIntent.ordinal);
+  expect(actions.filter((action: LedgerAction.Node) => action.kind === "alarm.arm")).toHaveLength(1);
 }))));

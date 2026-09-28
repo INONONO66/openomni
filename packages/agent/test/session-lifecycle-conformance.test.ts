@@ -114,14 +114,20 @@ function kernel(): SessionKernel {
 function snapshotFrom(reads: SessionKernel, sessionId: string): SessionSnapshot | undefined {
     if (!reads.listRows().some((row: LedgerSession.Row) => row.id === sessionId))
         return undefined;
-    return {
-        row: reads.row(sessionId),
-        actions: sessionTree(reads, sessionId),
-        inbox: receivedMessages(reads, sessionId).rows,
-        requests: reads.requestRows(sessionId),
-        outbound: reads.outboundRows(sessionId),
-        tail: reads.getSnapshot(sessionId, 4),
-    };
+    console.error("R1");
+    const row = reads.row(sessionId);
+    console.error("R2");
+    const actions = sessionTree(reads, sessionId);
+    console.error("R3");
+    const inbox = receivedMessages(reads, sessionId).rows;
+    console.error("R4");
+    const requests = reads.requestRows(sessionId);
+    console.error("R5");
+    const outbound = reads.outboundRows(sessionId);
+    console.error("R6");
+    const tail = reads.getSnapshot(sessionId, 4);
+    console.error("R7");
+    return { row, actions, inbox, requests, outbound, tail };
 }
 function snapshotOf(sessionId: string): SessionSnapshot | undefined {
     return snapshotFrom(kernel(), sessionId);
@@ -177,12 +183,8 @@ function assertInputConsumption(after: SessionSnapshot): void {
     for (const row of after.inbox) {
         expect(after.actions.some((action: LedgerAction.Node) => action.id === row.id)).toBe(true);
         expect(deliveries.get(row.id) ?? 0).toBeLessThanOrEqual(1);
-        if (row.status === "pending") {
-            expect(row.consumedBy).toBeNull();
-            expect(deliveries.has(row.id)).toBe(false);
-        }
-        else
-            expect(row.consumedBy).not.toBeNull();
+        // The chain is the inbox: consumption is the delivery action itself.
+        expect(deliveries.has(row.id)).toBe(row.status === "consumed");
     }
 }
 function assertObservations(before: SessionSnapshot | undefined, after: SessionSnapshot, events: readonly L0Observation.ActionCommitted[]): void {
@@ -223,6 +225,7 @@ function runtimeFor(overrides: Partial<SessionRuntime> = {}): SessionRuntime {
         clock: () => now,
         entropy: () => `id-${++nextId}`,
         processId: "conformance",
+        closeGraceMs: 0,
         authorizeConfigure: allowConfigure,
         authorizeApproval: () => Effect.succeed({
             kind: "owner" as const,
@@ -252,20 +255,32 @@ export function runLifecycleTrace(trace: Trace) {
             previous.set(sessionId, seed);
         }
         for (const step of trace.steps) {
+            console.error("STEP-ENTER", step.name);
             const mark = sink.committedEvents.length;
             (yield* toEffect(step.run()));
+            console.error("STEP-DONE", step.name);
+            console.error("STEP-EVENTS", step.name);
             const events = sink.committedEvents.slice(mark);
             const current = new Map<string, SessionSnapshot>();
             for (const sessionId of trace.sessions) {
+                console.error("SNAP", step.name, sessionId);
                 const after = snapshotOf(sessionId);
                 if (after === undefined)
                     continue;
                 const before = previous.get(sessionId);
+                try {
                 assertAppendOnly(before, after);
+                console.error("A1");
                 assertCausalLinks(after);
+                console.error("A2");
                 assertTerminalUniqueness(after);
+                console.error("A3");
                 assertInputConsumption(after);
+                console.error("A4");
                 assertObservations(before, after, events);
+                console.error("A5");
+                } catch (e) { console.error("ASSERT-THROWN", e); throw e; }
+                console.error("SNAP-OK", step.name, sessionId);
                 current.set(sessionId, after);
                 previous.set(sessionId, after);
             }
@@ -1551,10 +1566,15 @@ function waitFor<A, E = never>(value: Promise<A> | Fiber.Fiber<A, E> | Effect.Ef
 }
 function traceTest(body: () => Effect.Effect<void, SessionError | Error, Scope.Scope>) {
  return isolated(Effect.scoped(Effect.gen(function* () {
+
  now = 1_000; nextId = 0;
+ console.error("TRACE-TEST-START");
  seedPolicy();
- try { yield* body(); } finally {
+ console.error("POLICY-SEEDED");
+ try { yield* body(); } catch (thrown) { console.error("BODY-THROWN", thrown); throw thrown; } finally {
+ console.error("CLOSING");
  for (const runtime of runtimes.splice(0)) yield* closeSessions(runtime);
+ console.error("CLOSED");
  }
  })), (): IsolatedLedgerHandle => {
  sink = new TraceSink();

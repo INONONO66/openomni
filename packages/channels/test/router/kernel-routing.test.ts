@@ -1,3 +1,4 @@
+import { ledger } from "../helpers/ledger";
 import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
@@ -69,8 +70,8 @@ describe("GatewayRouter kernel routing", () => {
   test("reads blacklist and channel facts once", async () => {
     registerOwnerDm();
     createMappedOwnerSession();
-    const blacklist = spyOn(BlacklistStore, "list");
-    const channels = spyOn(ChannelGrantStore, "list");
+    const blacklist = spyOn(ledger().stores.blacklist, "list");
+    const channels = spyOn(ledger().stores.channelGrants, "list");
     try {
       await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
       expect(blacklist).toHaveBeenCalledTimes(1);

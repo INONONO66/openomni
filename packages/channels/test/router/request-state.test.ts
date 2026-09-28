@@ -1,13 +1,14 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { SessionTransition } from "@openomni/protocol";
 import { answer, command, openRequest, requestPort } from "../helpers/requests";
 import { requestFixture } from "../helpers/request-record";
 
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
+beforeEach(() => {
+  resetLedger();
+});
 
 test.each([
   "first",
@@ -21,11 +22,11 @@ test.each([
       index + 1 === threshold ? "resolved" : "attached",
     );
   }
-  const stored = SessionHandleStore.requestById("original");
+  const stored = ledger().kernel.requestById("original");
   expect(stored?.replies).toHaveLength(threshold);
   expect(stored?.sessionId).toBe("request-owner");
   expect(
-    sessionTree("request-owner").filter(
+    sessionTree("request-owner", ledger().sessions.actions).filter(
       (action) => action.id === "original:resolution",
     ),
   ).toHaveLength(1);
@@ -38,17 +39,17 @@ test("same reply and same responder never advance the request twice", async () =
     threshold: 2,
   }));
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
-  const before = sessionTree("request-owner");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
-  expect(sessionTree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
   expect(await runEffect(answer("original", "a", "reply-a-new", 3))).toBe("duplicate");
-  expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(1);
+  expect(ledger().kernel.requestById("original")?.replies).toHaveLength(1);
 });
 
 test("unknown responder is rejected without attaching", async () => {
   await runEffect(await openRequest("original"));
   expect(await runEffect(answer("original", "stranger", "reply", 2))).toBe("rejected");
-  expect(SessionHandleStore.requestById("original")?.replies).toEqual([]);
+  expect(ledger().kernel.requestById("original")?.replies).toEqual([]);
 });
 
 test.each([0, 1])("timeout keeps %s partial replies in original action history", async (count: number) => {
@@ -65,11 +66,11 @@ test.each([0, 1])("timeout keeps %s partial replies in original action history",
   expect(
     (await command("original", { kind: "request.timeout", requestId: "original" }, 10)).resolution,
   ).toBe("expired");
-  expect(SessionHandleStore.requestById("original")).toMatchObject({
+  expect(ledger().kernel.requestById("original")).toMatchObject({
     state: "expired",
     outcome: "outcome_unknown",
   });
-  expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(count);
+  expect(ledger().kernel.requestById("original")?.replies).toHaveLength(count);
 });
 
 test("cancellation preserves partial replies and cannot be reversed by late input", async () => {
@@ -102,7 +103,7 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
     )).resolution,
   ).toBe("cancelled");
   expect(await runEffect(answer("original", "b", "late", 5))).toBe("duplicate");
-  expect(SessionHandleStore.requestById("original")).toMatchObject({
+  expect(ledger().kernel.requestById("original")).toMatchObject({
     state: "cancelled",
     replies: [{ replyId: "early" }],
   });
@@ -111,15 +112,15 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
 test.each([10, 11])("answer at %s cannot cross the deadline", async (at: number) => {
   await runEffect(await openRequest("original", { deadline: 10 }));
   expect(await runEffect(answer("original", "actor-external-worker", "late", at))).toBe("late_unknown");
-  expect(SessionHandleStore.requestById("original")?.replies).toEqual([]);
-  expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
+  expect(ledger().kernel.requestById("original")?.replies).toEqual([]);
+  expect(ledger().kernel.requestById("original")?.state).toBe("expired");
 });
 
 test("resolved request cannot reopen for supplementary replies", async () => {
   await runEffect(await openRequest("original"));
   expect(await runEffect(answer("original", "actor-external-worker", "first", 2))).toBe("resolved");
   expect(await runEffect(answer("original", "actor-external-worker", "second", 3))).toBe("duplicate");
-  expect(SessionHandleStore.requestById("original")?.replies).toHaveLength(1);
+  expect(ledger().kernel.requestById("original")?.replies).toHaveLength(1);
 });
 
 test.each([
@@ -139,14 +140,14 @@ test.each([
     at: 2,
   };
   await runEffect(port.receipt(receipt));
-  const before = sessionTree("request-owner");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   await runEffect(port.receipt(receipt));
-  expect(sessionTree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
   expect(
     before.find((action) => action.id === "original:input:receipt")?.effect.value,
   ).toMatchObject({ receipt });
-  expect(SessionHandleStore.requestById("original")?.correlation.replyToMessageId).toBe("platform");
-  expect(SessionHandleStore.requestById("original")?.state).toBe("open");
+  expect(ledger().kernel.requestById("original")?.correlation.replyToMessageId).toBe("platform");
+  expect(ledger().kernel.requestById("original")?.state).toBe("open");
 });
 
 test.each([

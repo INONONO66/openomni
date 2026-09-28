@@ -1,3 +1,4 @@
+import { ledger } from "../../helpers/ledger";
 import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
 import { effectFailure } from "../../helpers/effect-failure";
 import { channelRequests } from "../../helpers/channel-requests";
@@ -8,7 +9,6 @@ import { replaceDecisionFacts } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 import type { Gateway, PlainObject } from "@openomni/protocol";
-import { ActorRegistry, EgressBudgetStore, Storage, SessionHandleStore } from "@openomni/ledger";
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import type { KernelDeliveryReceipt } from "../../../src/support/deliver";
@@ -35,7 +35,7 @@ let grants: SenderTargetGrant[];
 
 function inspectDebitCount(): number {
   let count: number | undefined;
-  EgressBudgetStore.claim(
+  ledger().stores.egressBudgets.claim(
     {
       id: "test:inspection-never-recorded",
       senderId: "actor:sender",
@@ -55,6 +55,7 @@ function inspectDebitCount(): number {
 
 function messaging() {
   return createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
     requests: channelRequests(seededRequests()),
     deliver: (message: OutboundMessage) => {
@@ -77,7 +78,7 @@ beforeEach(() => {
 test("preflight reads authority without debiting, opening requests, or delivering", () => {
   expect(messaging().preflight(buildAwaitedSendInput())).toBeUndefined();
   expect(inspectDebitCount()).toBe(0);
-  expect(SessionHandleStore.requestRows()).toHaveLength(0);
+  expect(ledger().kernel.requestRows()).toHaveLength(0);
   expect(deliveries).toEqual([]);
 });
 
@@ -108,7 +109,7 @@ describe("sender-target grant (policy plane)", () => {
 
     expectDenied(receipt, "ungranted");
     expect(deliveries).toHaveLength(0);
-    expect(SessionHandleStore.requestRows()).toHaveLength(0);
+    expect(ledger().kernel.requestRows()).toHaveLength(0);
     await bounded(observed.promise);
     // Pin (D11): the denial audit inherits the send input's trace.
     expect(audits).toEqual([{ code: "ungranted", time: messagingNow, traceId: "trace-messaging" }]);
@@ -120,7 +121,7 @@ describe("sender-target grant (policy plane)", () => {
     const receipt = await runEffect(messaging().send(buildAwaitedSendInput()));
 
     expectDenied(receipt, "ungranted");
-    expect(SessionHandleStore.requestRows()).toHaveLength(0);
+    expect(ledger().kernel.requestRows()).toHaveLength(0);
   });
 
   test("an expired grant is not active — time is an input, denial is ungranted", async () => {
@@ -177,7 +178,7 @@ describe("explicit target resolution (fail closed)", () => {
   });
 
   test("multi-endpoint actor without a pin is denied target_ambiguous; a pin resolves it", async () => {
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint:target-b",
       actorId: "actor:target",
       channel: "qa",
@@ -232,7 +233,7 @@ describe("fire-and-forget delivery", () => {
       channel: "qa",
       externalId: "target-1",
     });
-    expect(SessionHandleStore.requestRows()).toHaveLength(0);
+    expect(ledger().kernel.requestRows()).toHaveLength(0);
     expect(deliveries).toEqual([
       {
         messageId: "message:test",
@@ -258,7 +259,7 @@ describe("fire-and-forget delivery", () => {
 describe("awaited delivery", () => {
   test("appends exactly one owner-correct Request with correlation, responders, policy, and deadline", async () => {
     const receipt = expectAwaited(await runEffect(messaging().send(buildAwaitedSendInput())));
-    const stored = SessionHandleStore.requestById("request:test-awaited");
+    const stored = ledger().kernel.requestById("request:test-awaited");
     expect(stored).toEqual(receipt.request);
     expect(stored).toMatchObject({
       sessionId: "session:owner",
@@ -273,7 +274,7 @@ describe("awaited delivery", () => {
       deadline: messagingNow + 600_000,
       createdAt: messagingNow,
     });
-    expect(SessionHandleStore.requestRows()).toHaveLength(1);
+    expect(ledger().kernel.requestRows()).toHaveLength(1);
     expect(deliveries[0]?.requestId).toBe("request:test-awaited");
   });
 
@@ -296,7 +297,7 @@ describe("awaited delivery", () => {
     ));
 
     expectDenied(duplicate, "request_duplicate");
-    expect(SessionHandleStore.requestRows()).toHaveLength(1);
+    expect(ledger().kernel.requestRows()).toHaveLength(1);
     expect(deliveries).toHaveLength(1);
     await bounded(observed.promise);
     expect(audits).toEqual(["request_duplicate"]);
@@ -310,6 +311,7 @@ describe("awaited delivery", () => {
 describe("delivery receipt", () => {
   test("a platform message id from the owner re-keys the request correlation to it", async () => {
     const withReceipt = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-77" }),
@@ -322,20 +324,20 @@ describe("delivery receipt", () => {
     // from 1 at create — head === revision on the owner stream, #510).
     expect(receipt.request.correlation.replyToMessageId).toBe("platform:msg-77");
     expect(
-      sessionTree(receipt.request.sessionId).filter(
+      sessionTree(receipt.request.sessionId, ledger().sessions.actions).filter(
         (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request",
       ),
     ).toHaveLength(2);
-    const stored = SessionHandleStore.requestById("request:test-awaited");
+    const stored = ledger().kernel.requestById("request:test-awaited");
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
     expect(
-      SessionHandleStore.requestRows().filter(
+      ledger().kernel.requestRows().filter(
         (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "platform:msg-77",
       ),
     ).toHaveLength(1);
     expect(
-      SessionHandleStore.requestRows().filter(
+      ledger().kernel.requestRows().filter(
         (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "message:test-awaited",
       ),
     ).toHaveLength(0);
@@ -349,6 +351,7 @@ describe("delivery receipt", () => {
 
   test("a fire-and-forget receipt records nothing — there is no request to re-key", async () => {
     const withReceipt = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-88" }),
@@ -359,7 +362,7 @@ describe("delivery receipt", () => {
     const receipt = await runEffect(withReceipt.send(buildSendInput()));
 
     expect(receipt.kind).toBe("sent");
-    expect(SessionHandleStore.requestRows()).toHaveLength(0);
+    expect(ledger().kernel.requestRows()).toHaveLength(0);
   });
 });
 
@@ -369,7 +372,7 @@ describe("durable send admission faults", () => {
     ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
   ] as const)("fails closed on an %s", async (_name: "unexpected type" | "corrupt payload", type: "other.fact" | "gateway.send.admitted", data: PlainObject | { readonly signature: 7 }) => {
     const input = buildSendInput({ messageId: `message:bad-${_name}` });
-    const facts = Storage.get().decisionFacts;
+    const facts = ledger().sessions.decisionFacts;
     if (facts === undefined) throw new Error("decision fact sub-adapter missing");
     const recorded = facts.record({
       key: `gateway_send:${encodeURIComponent(input.messageId)}`,
@@ -385,10 +388,9 @@ describe("durable send admission faults", () => {
 
   test("fails closed when a budget callback replaces the active adapter before admission", async () => {
     const input = buildSendInput({ messageId: "message:reentrant-adapter-swap" });
-    const detached = Storage.get();
-    const detachedFacts = detached.decisionFacts;
-    if (detachedFacts === undefined) throw new Error("decision fact sub-adapter missing");
+    const detachedFacts = ledger().sessions.decisionFacts;
     const reentrant = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: (message: OutboundMessage) => {
@@ -397,11 +399,7 @@ describe("durable send admission faults", () => {
       },
       grants: () => grants,
       budgets: () => {
-        Storage.configure({
-          ...detached,
-          decisionFacts: undefined,
-          transaction: detached.transaction.bind(detached),
-        });
+        ledger().setDecisionFacts(undefined);
         return [
           {
             id: "budget:reentrant-adapter-swap",
@@ -422,13 +420,14 @@ describe("durable send admission faults", () => {
       ).toBeUndefined();
       expect(deliveries).toEqual([]);
     } finally {
-      Storage.configure(detached);
+      ledger().setDecisionFacts(detachedFacts);
     }
   });
 
   test("fails closed when decision facts disappear before admission lookup", async () => {
-    const detached = Storage.get();
+    const detachedFacts = ledger().sessions.decisionFacts;
     const withoutFacts = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: (message: OutboundMessage) => {
@@ -436,11 +435,7 @@ describe("durable send admission faults", () => {
         return { value: "accepted" as const };
       },
       grants: () => {
-        Storage.configure({
-          ...detached,
-          transaction: detached.transaction.bind(detached),
-          decisionFacts: undefined,
-        });
+        ledger().setDecisionFacts(undefined);
         return grants;
       },
       publish: Bus.publish,
@@ -450,14 +445,14 @@ describe("durable send admission faults", () => {
       expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
       expect(deliveries).toEqual([]);
     } finally {
-      Storage.configure(detached);
+      ledger().setDecisionFacts(detachedFacts);
     }
   });
 
   test("fails closed when a concurrent record returns a corrupt winner", async () => {
     replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
+      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         facts.record({ ...fact, data: { signature: 7 } });
         return facts.record(fact);
@@ -471,7 +466,7 @@ describe("durable send admission faults", () => {
   test("an incompatible concurrent admission still rejects an awaited send", async () => {
     replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
+      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         const data = z.record(z.string(), z.json()).parse(fact.data);
         expect(facts.record({ ...fact, data: { ...data, signature: "conflicting" } }).kind).toBe(
@@ -487,7 +482,7 @@ describe("durable send admission faults", () => {
   test("uses the matching admission that won a concurrent record race", async () => {
     replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
       ...facts,
-      record: (fact: Parameters<NonNullable<ReturnType<typeof Storage.get>["decisionFacts"]>["record"]>[0]) => {
+      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
         if (fact.type !== "gateway.send.admitted") return facts.record(fact);
         const result = facts.record(fact);
         expect(result.kind).toBe("recorded");
@@ -503,6 +498,7 @@ describe("durable send admission faults", () => {
 
   test("propagates an unexpected request-store failure before delivery", async () => {
     const service = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
       requests: {
         ...channelRequests(seededRequests()),
@@ -541,7 +537,7 @@ describe("durable send admission faults", () => {
     expect((await runEffect(messaging().send(first))).kind).toBe("sent");
     expect(await effectFailure(messaging().send(second))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
-    expect(SessionHandleStore.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
+    expect(ledger().kernel.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
       "message:first-owner",
     );
   });
@@ -562,7 +558,7 @@ type Probe = Readonly<{
   effects: number;
   attempts: number;
   debits: number;
-  request: ReturnType<typeof SessionHandleStore.requestById>;
+  request: SessionTransition.Request | undefined;
 }>;
 
 async function probe(point: FaultPoint): Promise<Probe> {
@@ -573,6 +569,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
   let failAfterReceipt = point === "after_receipt_cas";
 
   const messaging = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
     requests: channelRequests(seededRequests()),
     deliver: (message: OutboundMessage) => {
@@ -627,7 +624,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
     request:
       input.requestSpec === undefined
         ? undefined
-        : SessionHandleStore.requestById(input.requestSpec.requestId),
+        : ledger().kernel.requestById(input.requestSpec.requestId),
   };
 }
 

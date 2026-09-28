@@ -2,25 +2,48 @@ import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { Effect, Layer } from "effect";
 import { Clock, Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
 import { runEffect } from "./effect";
-import { SessionHandleStore } from "@openomni/ledger";
 import {
   canonicalDigest,
   type Gateway,
   type PlainValue,
   type SessionTransition,
 } from "@openomni/protocol";
+import { ledger } from "./ledger";
 
 /** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */
 const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
+
+/** Strictly-newer fence adoption: the takeover CAS that replaced leases (W5.2 F5). */
+function adoptFixtureFence(sessionId: string, owner: string): number {
+  const kernel = ledger().kernel;
+  for (;;) {
+    const row = kernel.row(sessionId);
+    if (row.leaseOwner === owner) return row.leaseFence;
+    const adopted = Effect.runSync(
+      kernel.adoptFence({ sessionId, owner, fence: row.leaseFence + 1 }).pipe(
+        Effect.map((receipt) => receipt.fence),
+        Effect.catchTag("LeaseRefused", () => Effect.succeed(undefined)),
+      ),
+    );
+    if (adopted !== undefined) return adopted;
+  }
+}
 
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
   clock: () => number = () => 1,
   onInboxCommitted?: (sessionIds: readonly string[]) => void,
-  runtime: Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure"> = {},
+  runtime: Partial<Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure">> = {},
 ) {
   return runEffect(
-    createSessionRequests({ ...runtime, authorizeConfigure: allowConfigure, processId: "channels-test", onInboxCommitted }).pipe(
+    createSessionRequests({
+      openKernel: () => ledger().kernel,
+      listSessions: () => ledger().kernel.listRows(),
+      ...runtime,
+      authorizeConfigure: allowConfigure,
+      processId: "channels-test",
+      onInboxCommitted,
+    }).pipe(
       Effect.provide(Layer.mergeAll(
         Layer.succeed(Clock, { now: clock }),
         Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
@@ -31,31 +54,31 @@ export function requestPort(
 }
 
 export function originalAction(requestId: string, sessionId: string, value: PlainValue = {}) {
-  Effect.runSync(SessionHandleStore.materialize({
-    id: sessionId,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: 0,
-    actionId: `${sessionId}:configure`,
-    at: 0,
-  }));
-  const existing = sessionTree(sessionId).find((action) => action.id === requestId);
+  const kernel = ledger().kernel;
+  Effect.runSync(
+    kernel
+      .materialize({
+        id: sessionId,
+        parentId: null,
+        role: "resident",
+        tools: [],
+        system: { preset: "", blocks: [] },
+        policyGeneration: 0,
+        actionId: `${sessionId}:configure`,
+        at: 0,
+      })
+      .pipe(Effect.orDie),
+  );
+  const existing = sessionTree(sessionId, ledger().sessions.actions).find(
+    (action) => action.id === requestId,
+  );
   if (existing) return;
-  const row = SessionHandleStore.row(sessionId);
-  const lease = Effect.runSync(SessionHandleStore.acquireLease({
+  const fence = adoptFixtureFence(sessionId, "fixture");
+  const row = kernel.row(sessionId);
+  Effect.runSync(kernel.commit({
     sessionId,
     owner: "fixture",
-    expectedFence: row.leaseFence,
-    now: 1,
-    expiresAt: 100,
-  }));
-  if (!lease.ok) throw new Error("fixture lease refused");
-  const result = Effect.runSync(SessionHandleStore.commit({
-    sessionId,
-    owner: "fixture",
-    fence: lease.fence,
+    fence,
     expectedRevision: row.revision,
     now: 1,
     actions: [
@@ -73,11 +96,8 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
         ts: 1,
       },
     ],
-    consumeInboxIds: [],
     state: "idle",
-    releaseLease: true,
   }));
-  if (!result.ok) throw new Error("fixture commit refused");
 }
 
 export async function openRequest(requestId: string, overrides: Partial<Gateway.RequestSpec> = {}) {
@@ -97,12 +117,12 @@ export async function openRequest(requestId: string, overrides: Partial<Gateway.
 }
 
 export function seededRequests(clock?: () => number) {
-  let at = 1;
-  const port = requestPort(clock ?? (() => at));
+  const at = { value: 1 };
+  const port = requestPort(clock ?? (() => at.value));
   return {
     ...port,
     open: (input: Parameters<typeof port.open>[0]) => {
-      at = input.at;
+      at.value = input.at;
       originalAction(input.requestId, input.sessionId);
       return port.open(input);
     },
@@ -115,43 +135,38 @@ export async function command(
   at: number,
   inputId = `${payload.kind}:${at}`,
 ) {
-  const request = SessionHandleStore.requestById(requestId);
+  const kernel = ledger().kernel;
+  const request = kernel.requestById(requestId);
   if (!request) throw new Error("missing request");
   const sessionId = request.sessionId;
-  const row = SessionHandleStore.row(sessionId);
-  const lease = await Effect.runPromise(SessionHandleStore.acquireLease({
-    sessionId,
-    owner: "command",
-    expectedFence: row.leaseFence,
-    now: at,
-    expiresAt: at + 100,
-  }));
-  if (!lease.ok) throw new Error("command lease refused");
-  const current = SessionHandleStore.row(sessionId);
+  const fence = adoptFixtureFence(sessionId, "command");
+  const current = kernel.row(sessionId);
   const decision = decideRequestTransition(
     {
       version: 1,
       sessionId,
       inputId,
       at,
-      authority: { owner: "command", fence: lease.fence },
+      authority: { owner: "command", fence },
       expectedRevision: current.revision,
       payload,
     },
-    { row: current, inputRecord: SessionHandleStore.requestInputById(sessionId, inputId), invocation: SessionHandleStore.actionById(requestId), request },
+    {
+      row: current,
+      inputRecord: kernel.requestInputById(sessionId, inputId),
+      invocation: kernel.actionById(requestId),
+      request,
+    },
   );
-  const committed = await Effect.runPromise(SessionHandleStore.commitRequestTransition({
+  await Effect.runPromise(kernel.commitRequestTransition({
     sessionId,
     owner: "command",
-    fence: lease.fence,
+    fence,
     now: at,
     expectedRevision: current.revision,
     actions: [...decision.actions],
-    consumeInboxIds: [],
     state: current.state,
-    releaseLease: true,
   }));
-  if (!committed.ok) throw new Error("command commit refused");
   return decision;
 }
 
@@ -161,7 +176,7 @@ export function answer(
   inputId: string,
   receivedAt: number,
 ) {
-  const request = SessionHandleStore.requestById(requestId);
+  const request = ledger().kernel.requestById(requestId);
   if (!request) throw new Error("missing request");
   return requestPort(() => receivedAt).answer({
     inputId,

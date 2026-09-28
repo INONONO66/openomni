@@ -1,9 +1,10 @@
+import { ledger } from "../helpers/ledger";
 import { beforeEach } from "bun:test";
 import { type Gateway, Ingress } from "@openomni/protocol";
 import { z } from "zod";
 
 export const actorFixtureSchema = Ingress.ActorSchema.catchall(z.json());
-import { ActorRegistry, ChannelGrantStore } from "@openomni/ledger";
+
 import { resetStores } from "./_router-fixture";
 
 export function setupIngressActorResolverTest(): void {
@@ -14,7 +15,7 @@ export function setupIngressActorResolverTest(): void {
       ["discord", "guild-b"],
       ["telegram", "guild"],
     ] as const) {
-      ChannelGrantStore.put({
+      ledger().stores.channelGrants.put({
         id: `grant-${surface}-${workspace}`,
         surface,
         workspace,
@@ -45,8 +46,8 @@ export function makeEvent(
 }
 
 export function registerOwnerEndpoint(workspace?: string): void {
-  ActorRegistry.registerIdentity({ id: "act_owner", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerIdentity({ id: "act_owner", kind: "human", trustTier: "owner" });
+  ledger().stores.actors.registerEndpoint({
     id: "ep_discord_user_1",
     actorId: "act_owner",
     channel: "discord",

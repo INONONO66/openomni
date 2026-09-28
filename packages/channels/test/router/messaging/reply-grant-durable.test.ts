@@ -1,5 +1,5 @@
+import { ledger, resetLedger } from "../../helpers/ledger";
 import { expect, test } from "bun:test";
-import { SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,11 +7,14 @@ import { createReplyGrantInstances } from "../../../src/router/messaging/reply-g
 import { resolveScopedSenderTargetGrant } from "../../../src/router/messaging/grant";
 
 test("committed scoped reply authority survives closing storage and constructing a new router source", () => {
-  Storage.withIsolation(() => {
+  {
     const directory = mkdtempSync(join(tmpdir(), "reply-grant-restart-"));
     const path = join(directory, "ledger.sqlite");
     const at = 4_000_000_000_000;
     const ports = {
+      get stores() {
+        return ledger().stores;
+      },
       rules: () => [
         {
           id: "rule-1",
@@ -26,7 +29,7 @@ test("committed scoped reply authority survives closing storage and constructing
       publish: () => undefined,
     };
     try {
-      Storage.configure(new SqliteStorageAdapter(path));
+      resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: path });
       createReplyGrantInstances(ports).admit({
         actorId: "guest",
         endpoint: { channel: "telegram", externalId: "chat-1" },
@@ -35,8 +38,7 @@ test("committed scoped reply authority survives closing storage and constructing
         at,
         sourceId: "inbox-1",
       });
-      Storage.reset();
-      Storage.configure(new SqliteStorageAdapter(path));
+      resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: path });
 
       const grants = createReplyGrantInstances(ports).list(at);
 
@@ -59,8 +61,8 @@ test("committed scoped reply authority survives closing storage and constructing
         }),
       ).toBeUndefined();
     } finally {
-      Storage.reset();
+  resetLedger();
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }
 });

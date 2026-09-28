@@ -1,16 +1,16 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { executorLayer, catalogLayer } from "./helpers/service-layers";
 import { expect, it } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect, Fiber } from "effect";
 import { ExecutionApprovalError, ForeignFailure } from "../src/errors";
 import { createExecutor, } from "../src/executor";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { z } from "zod";
 import { createDispatcher, defineTool } from "../src/tool-dispatcher";
 import { bounded } from "./helpers/bounded";
@@ -58,7 +58,7 @@ function fixture(overrides: Partial<ResolvedExecutorOptions> = {}) {
         {
           request,
           body: () => Effect.sync(() => {
-            expect(SessionHandleStore.requestRows(executorIdentity.sessionId)[0]?.state).toBe("resolved");
+            expect(isolatedLedger().kernel.requestRows(executorIdentity.sessionId)[0]?.state).toBe("resolved");
             bodies.push("write");
             return { status: "success" };
           }),
@@ -95,7 +95,7 @@ for (const decision of ["approve", "refuse"] as const) {
     expect(durable.inputHash).toBe(canonicalDigest(request.intent));
     expect(durable.parsedInput).toEqual(request.intent);
     expect(
-      sessionTree(f.identity.sessionId).find(
+      sessionTree(isolatedLedger().kernel, f.identity.sessionId).find(
         (action) => action.id === durable.requestId,
       )?.kind,
     ).toBe("tool");
@@ -111,7 +111,7 @@ for (const decision of ["approve", "refuse"] as const) {
       decision === "approve" ? ["read", "write", "last"] : ["read", "last"],
     );
     expect(
-      sessionTree(f.identity.sessionId).filter(
+      sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
         (action) => action.id === `${pending.id}:resolution`,
       ),
     ).toHaveLength(1);
@@ -143,7 +143,7 @@ it("rejects forged input, changed domain facts and unavailable Owner authority",
     { terminal: "interrupted", reason: "fiber_interrupted" },
   ]);
   expect(f.bodies).toEqual([]);
-  expect(SessionHandleStore.requestById(pending.id)?.state).toBe("cancelled");
+  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("cancelled");
 }))));
 it("rechecks cancellation after asynchronous authentication", () => isolated(Effect.scoped(Effect.gen(function* () {
   const authorizing = yield* Deferred.make<void>();
@@ -169,10 +169,11 @@ it("rechecks cancellation after asynchronous authentication", () => isolated(Eff
 it("waits for the durable deadline owner instead of registering an executor timer", () => isolated(Effect.scoped(Effect.gen(function* () {
   const f = yield* fixture();
   const request = yield* f.opened;
-  expect(Storage.get().alarms?.get(`${request.requestId}:deadline`)).toMatchObject({
-    kind: "at",
-    fireAt: request.deadline,
-    status: "armed",
+  // W5.2: the alarms table is deleted; the durable deadline owner is the
+  // request row itself (the timer plane fires `request.timeout` from it).
+  expect(isolatedLedger().kernel.requestById(request.requestId)).toMatchObject({
+    state: "open",
+    deadline: request.deadline,
   });
   expect(f.approvals.pending()).toHaveLength(1);
   expect(f.bodies).toEqual([]);
@@ -191,16 +192,16 @@ it("expires exactly once at the deadline, even with a delayed alarm", () => isol
   expect(yield* Effect.flip(
     f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
   )).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
-  expect(SessionHandleStore.requestById(pending.id)?.state).toBe("expired");
+  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
   yield* expireApproval(f, request.requestId, now);
   expect((yield* Fiber.join(f.running))[1]).toEqual({
     terminal: "blocked_pre",
     reason: "approval_timeout",
   });
   yield* expireApproval(f, request.requestId, now);
-  expect(SessionHandleStore.requestById(pending.id)?.state).toBe("expired");
+  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
   expect(
-    sessionTree(f.identity.sessionId).filter(
+    sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
       (action) => action.id === `${pending.id}:resolution`,
     ),
   ).toHaveLength(1);
@@ -249,7 +250,7 @@ it("does not treat an uncommitted notification as approval authority", () => iso
   f.approvals.notify?.({ ...request, state: "resolved", outcome: "answered" });
   expect(f.bodies).toEqual([]);
   expect(f.approvals.pending()).toHaveLength(1);
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
+  expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("open");
   f.controller.abort();
   yield* Fiber.join(f.running);
   expect(f.bodies).toEqual([]);
@@ -308,7 +309,7 @@ it("propagates a failed deadline commit without settling the live suspension", (
   expect(yield* Effect.flip(expireApproval(f, request.requestId, 100))).toBe(failure);
   expect(f.bodies).toEqual([]);
   expect(f.approvals.pending()).toHaveLength(1);
-  expect(SessionHandleStore.requestRows("deadline-failure")[0]?.state).toBe("open");
+  expect(isolatedLedger().kernel.requestRows("deadline-failure")[0]?.state).toBe("open");
   f.controller.abort();
   yield* Fiber.join(f.running);
 }))));
