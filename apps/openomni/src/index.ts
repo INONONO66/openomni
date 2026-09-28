@@ -22,7 +22,7 @@ import {
   ExecutionApprovalError,
 } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
-import { SessionGeneration, type LedgerAction } from "@openomni/protocol";
+import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
@@ -269,13 +269,39 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // Request transitions never steal a live activation's fence: the borrowed
     // kernel view commits under the running turn's authority (idle sessions
     // keep the documented takeover adoption).
-    const requests = await runAppBoot(
+    const bootRequests = await runAppBoot(
       runtime,
       createSessionRequests({
         ...sessionRuntime,
         openKernel: (id) => requestAuthorityKernel(plane.openKernel(id), id),
       }),
     );
+    // An out-of-turn answer on an idle entity session must land through the
+    // entity's own RequestResolve RPC: the RPC handler commits AND drains, so
+    // the woken turn runs before the ack (the app-side doorbell is process-
+    // only). Running sessions keep the borrowed-authority direct commit — a
+    // second RPC on a busy mailbox would queue behind the very turn that may
+    // be awaiting this answer. Process runners keep direct commit + doorbell.
+    const requests: typeof bootRequests = {
+      ...bootRequests,
+      answer: (answer) =>
+        Effect.suspend(() => {
+          const row = plane.openKernel(answer.sessionId).row(answer.sessionId);
+          if (row.state === "running" || sessionRunner(answer.sessionId) === "process")
+            return bootRequests.answer(answer);
+          return entityClient(answer.sessionId)
+            .RequestResolve({
+              requestId: answer.requestId,
+              inputId: answer.inputId,
+              payload: JSON.stringify({ kind: "request.answer", answer }),
+              principal: JSON.stringify(answer.principal),
+            })
+            .pipe(
+              Effect.map((receipt) => SessionTransition.Resolution.parse(receipt.resolution)),
+              Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "request.answer")),
+            );
+        }),
+    };
     // Recovery is the cluster's: persisted undelivered entity messages redeliver
     // on activation; there is no boot sweep to await.
     const recovery: Promise<void> = Promise.resolve();
