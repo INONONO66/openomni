@@ -47,7 +47,7 @@ describe("health endpoint", () => {
 });
 
 describe("npm package staging", () => {
-  test("build stages a dependency-free package whose bundle boots with real migrations", async () => {
+  test("build stages a dependency-free package whose bundle boots against a fresh ledger", async () => {
     const staging = tempDir("openomni-pack-staging-");
     const home = tempDir("openomni-pack-home-");
     const env = {
@@ -86,8 +86,8 @@ describe("npm package staging", () => {
     expect(manifest.name).toBe("openomni");
     expect(manifest.dependencies).toBeUndefined();
     expect(existsSync(join(staging, manifest.bin.openomni ?? ""))).toBe(true);
-    // Layout contract pinned by ledger's `import.meta.dir + ../../migration`.
-    expect(existsSync(join(staging, "migration", "0001_initial", "migration.sql"))).toBe(true);
+    // W5.2: no migration plane ships; the schema is embedded in the bundle.
+    expect(existsSync(join(staging, "migration"))).toBe(false);
     expect(existsSync(join(staging, "dist", "app", "process-entry.js"))).toBe(true);
 
     // Boot the bundle exactly as the daemon would: `bun dist/app/main.js start`.
