@@ -129,9 +129,9 @@ test("conversation correlation cannot select the physical default session", asyn
   expect(result.handle.target).not.toBe(fixture.sessionId);
 });
 
-// W5.2: the tool surface renders typed failures by tag only, so the two
-// corruption cases are distinguished at the kernel evidence seam the gateway
-// consults (`policyDecisionRuleIds`), not by refusal text.
+// W5.2 S6: typed failures now render their carried cause, so each corruption
+// case surfaces its own refusal text; the kernel evidence seam the gateway
+// consults (`policyDecisionRuleIds`) still distinguishes them durably.
 test.each([
   {
     mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))",
@@ -154,7 +154,7 @@ test.each([
     content: "corrupt-evidence",
   });
   expect(result.isError).toBe(true);
-  expect(result.output).toContain("ForeignFailure");
+  expect(result.output).toContain(error);
   const stashed = db
     .query("SELECT json_extract(intent, '$.inputHash') AS hash FROM corrupt_keep")
     .all() as { hash: string }[];
