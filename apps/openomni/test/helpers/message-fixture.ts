@@ -27,20 +27,6 @@ import { dispatchOutboundMessage } from "../../src/composition/terminal-message"
 import type { z } from "zod";
 import { Effect } from "effect";
 import { acquireSyncEffect, runEffect, runSyncEffect } from "./effect";
-// TEMP PROBE: surface ForeignFailure cause chains
-import { ForeignFailure as AgentFF, CommitFailed as AgentCF } from "@openomni/agent";
-import { ForeignFailure as ChanFF } from "@openomni/channels";
-Object.defineProperty(AgentCF.prototype, "message", {
-  get() { return `commit-error=${JSON.stringify(this.error, (_k, v) => (v instanceof Error ? `${v.name}:${v.message}` : v))}`; },
-  configurable: true,
-});
-for (const ctor of [AgentFF, ChanFF]) {
-  Object.defineProperty(ctor.prototype, "message", {
-    get() { return `cause=${JSON.stringify(this.cause)} op=${JSON.stringify(this.operation)}`; },
-    configurable: true,
-  });
-}
-
 
 /** The model-facing vocabulary is read off the sealed tool, not re-exported for tests. */
 type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input"]>;
@@ -112,7 +98,7 @@ export function messageFixture(
           },
           ledger: input.ledger,
         });
-        const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provideService(ToolCatalog, { definitions: [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args).pipe(Effect.tapCause((c) => Effect.sync(() => console.log("CAUSE", require("node:util").inspect(c, { depth: 8 })))))) }, () => 100))] }));
+        const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provideService(ToolCatalog, { definitions: [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args)) }, () => 100))] }));
         result = yield* dispatcher.execute(
           { id: crypto.randomUUID(), tool: "send_message", input: payload },
           { sessionId, turnId: input.turnId },

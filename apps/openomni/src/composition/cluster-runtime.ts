@@ -399,6 +399,8 @@ type SessionRunnerInput = Parameters<SessionRunner>[0];
 export interface LiveTurnEntry {
   approvals: SessionHandle["approvals"] | undefined;
   readonly boundary: SessionRunnerInput["boundary"];
+  /** The turn's own commit/transition port - request transitions ride the turn's fence. */
+  readonly ledger: SessionRunnerInput["ledger"];
 }
 
 export interface SessionLivePlane {
@@ -413,7 +415,7 @@ export function createSessionLivePlane(): SessionLivePlane {
     get: (sessionId) => entries.get(sessionId),
     wrapRunner: (sessionId, runner) => (input) =>
       Effect.suspend(() => {
-        const entry: LiveTurnEntry = { approvals: undefined, boundary: input.boundary };
+        const entry: LiveTurnEntry = { approvals: undefined, boundary: input.boundary, ledger: input.ledger };
         entries.set(sessionId, entry);
         return runner({
           ...input,

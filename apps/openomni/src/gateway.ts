@@ -59,7 +59,7 @@ export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
         return disposal;
       }
       disposal ??= runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
-        Effect.mapError((error) => { console.error("DEBUG drain", JSON.stringify(error)); return new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) }); }),
+        Effect.mapError((error) => new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) })),
       )).catch((error: Error) => { disposal = undefined; throw error; }).then(() => dispose().finally(() => {
         if (processRuntime === runtime) processRuntime = undefined;
       }));

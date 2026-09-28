@@ -73,6 +73,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
         content: answer.decision,
       };
       const result = yield* transition({ kind: "request.answer", answer: input }, input.inputId);
+      console.error("PROBE approval answer", JSON.stringify({ resolution: result.resolution, hasRequest: result.request !== undefined, state: result.request?.state }));
       if (result.request !== undefined) notify(result.request);
       if (result.request === undefined || !["resolved", "refused"].includes(result.resolution))
         return yield* new ExecutionApprovalError({ code: "stale_approval" });

@@ -688,10 +688,24 @@ export async function startOpenOmni(options: StartOptions = {}) {
         },
         // The mid-turn deadline seam (W5.2): a durable DeliverAt Deadline
         // serializes behind the running turn's own entity RPC, so a live
-        // turn's request timeout rides the composition's borrowed-authority
-        // request port, which notifies the turn's live approval gate.
+        // turn's request timeout rides the turn's own transition port (the
+        // deleted controller handle's `requests.transition` path) and then
+        // notifies the turn's live approval gate.
         requests: {
-          timeout: (requestId, at) => requests.timeout(requestId, at),
+          timeout: (requestId, at) =>
+            Effect.gen(function* () {
+              const entry = liveTurns.get(id);
+              if (entry?.ledger.transition === undefined)
+                return yield* Effect.fail(
+                  new ExecutionApprovalError({ code: "approval_authority_unavailable" }),
+                );
+              const decision = yield* entry.ledger.transition(
+                { kind: "request.timeout", requestId },
+                `${requestId}:deadline`,
+                at,
+              );
+              if (decision.request !== undefined) entry.approvals?.notify?.(decision.request);
+            }),
         },
         interrupt: () =>
           Effect.gen(function* () {
