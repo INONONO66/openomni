@@ -1,8 +1,8 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
-import { Storage, SessionHandleStore } from "@openomni/ledger";
 import { session, createTurnDispatcher, defineTool, eraseTool, sessionTool, type SessionRuntime } from "@openomni/agent";
+import { planeOf } from "./helpers/ledger";
 import { z } from "zod";
 import { createResident } from "../src/resident";
 import { eventSignal } from "./helpers/event-signal";
@@ -18,7 +18,7 @@ import { allowConfigure } from "./helpers/generation-services";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
-  const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => now });
+  const runtime = gatewayRuntime({ clock: () => now });
   const events: (string | number)[] = [];
   const closing = Promise.withResolvers<void>();
   const settled = Promise.withResolvers<void>();
@@ -53,7 +53,6 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
       handlers.set(signal, handler);
     },
     exit: (code) => {
-      expect(Storage.getInitializedDbPath()).toBeNull();
       events.push("exit");
       exited.resolve(code);
     },
@@ -63,7 +62,6 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
   await closing.promise;
   expect(stops).toBe(1);
   expect(events).toEqual(["ingress.stop", "sessions.close", 100]);
-  expect(Storage.getInitializedDbPath()).toBe(":memory:");
   now = 150;
   settled.resolve();
   expect(await exited.promise).toBe(0);
@@ -71,7 +69,7 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
 });
 
 test("a cleanup failure is an observed shutdown incident and cannot produce a successful exit", async () => {
-  const runtime = gatewayRuntime({ dbPath: ":memory:" });
+  const runtime = gatewayRuntime({});
   const failure = new AppLifecycleFailure({ operation: "sessions.close", cause: "commit_refused" });
   await runAppBoot(
     runtime,
@@ -92,7 +90,6 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
     expect(await exited.promise).toBe(1);
     expect(incident.mock.calls).toHaveLength(1);
     expect(incident.mock.calls[0]?.[1]).toBeInstanceOf(Error);
-    expect(Storage.getInitializedDbPath()).toBeNull();
   } finally {
     incident.mockRestore();
   }
@@ -100,9 +97,10 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
 
 for (const settleAfterTurn of [false, true]) {
 test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
-  const runtime = gatewayRuntime({ dbPath: ":memory:", clock: () => 1000 });
+  const runtime = gatewayRuntime({ clock: () => 1000 });
   await runAppBoot(runtime, Effect.void);
-  seedKernelPolicyRows();
+  const plane = await planeOf(runtime);
+  seedKernelPolicyRows(plane.catalog.policies);
   const entered = eventSignal<void>("raw tool entered");
   const interrupted = eventSignal<void>("raw tool interrupted");
   const raw = Promise.withResolvers<string>();
@@ -120,10 +118,19 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
   }));
   const sessionRuntime: SessionRuntime = {
     authorizeConfigure: allowConfigure,
+    openKernel: plane.openKernel,
+    listSessions: plane.listSessions,
     closeGraceMs: 0,
     onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
   };
-  const resident = createResident({ model: { provider: "test", id: "test" }, apiKey: "test", tools: { ...testToolPorts,}, toolDefinitions: [tool], sessionRuntime });
+  const resident = createResident({
+    model: { provider: "test", id: "test" },
+    apiKey: "test",
+    tools: { ...testToolPorts },
+    toolDefinitions: [tool],
+    sessionRuntime,
+    policyGeneration: () => plane.openKernel("shutdown-raw").currentPolicyGeneration(),
+  });
   await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.initialize(resident.definitions)));
   const handle = await acquireAppResource(runtime, session({
     id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],
@@ -135,25 +142,25 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
   const turn = runAppEffect(runtime, handle.prompt("hold raw tool"));
   try {
     await entered.promise;
-    const lease = SessionHandleStore.row(handle.id);
+    const kernel = plane.openKernel(handle.id);
+    const lease = kernel.row(handle.id);
     expect(lease.leaseOwner).not.toBeNull();
     await runAppEffect(runtime, shutdownSessions(sessionRuntime, Promise.resolve()));
     order.push("close.returned");
     await interrupted.promise;
-    expect(SessionHandleStore.row(handle.id)).toMatchObject({ leaseOwner: lease.leaseOwner, leaseFence: lease.leaseFence });
-    expect(sessionTree(handle.id).some((action) => {
+    expect(kernel.row(handle.id)).toMatchObject({ leaseOwner: lease.leaseOwner, leaseFence: lease.leaseFence });
+    expect(sessionTree(handle.id, plane.sessionStore(handle.id).actions).some((action) => {
       const value = action.effect.value;
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
     })).toBe(true);
     await expect(runtime.dispose()).rejects.toMatchObject({ _tag: "AppLifecycleFailure", operation: "shutdown.raw_unsettled" });
-    expect(Storage.getInitializedDbPath()).toBe(":memory:");
-    expect(gatewayRuntime({ dbPath: ":memory:" })).toBe(runtime);
+    expect(gatewayRuntime({})).toBe(runtime);
     if (settleAfterTurn) await turn;
     raw.resolve("late raw settlement");
     await turn;
     await released.promise;
     expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
-    expect(SessionHandleStore.row(handle.id).leaseOwner).toBeNull();
+    expect(kernel.row(handle.id).leaseOwner).toBeNull();
   } finally {
     raw.resolve("late raw settlement");
     await turn;

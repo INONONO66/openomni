@@ -2,30 +2,26 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
 import {
-  closeSessions, GenerationLayers,
-  createObservationBus,
-  createSessionRequests,
-  createSessionChatRunner,
-  createTurnDispatcher,
   eraseTool,
   ExecutorContextError,
-  getSessionHandle,
-  session,
-  sessionTool,
   ToolRefused,
-  wakeSession,
-  type SessionRuntime,
+  type SessionEntityTimerContext,
 } from "@openomni/agent";
-import { LedgerWrites, Storage } from "@openomni/ledger";
-import { Effect, Scope, Exit, Cause } from "effect";
-import { Llm, type RunInput, type Sink } from "@openomni/llm";
-import { createMonitorPorts, gatewayRuntime } from "../src/gateway";
-import { createAlarmWorker } from "../src/composition/alarm-worker";
+import { Effect, Exit, Cause } from "effect";
+import { createAppLedger, type AppLedgerPlane } from "../src/composition/cluster-runtime";
+import type { WatchSources } from "../src/composition/watch-sources";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { createMonitorTool } from "../src/tools/monitor";
-import { assistantMessage } from "./helpers/assistant-message";
+import {
+  createWatchMonitorPorts,
+  watchFiredHook,
+  watchOccurrenceKey,
+  watchState,
+  type MonitorPorts,
+  type WatchSpec,
+} from "../src/tools/core/monitor-ports";
 import { runEffect } from "./helpers/effect";
-import { allowConfigure } from "./helpers/generation-services";
+import { adoptTestFence } from "./helpers/ledger";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -91,208 +87,170 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ).rejects.toBeInstanceOf(ToolRefused);
 });
 
-test("monitor controls enforce session identity and throw on refused transitions", () =>
-  Storage.withIsolation(async () => {
-    const appRuntime = gatewayRuntime({ dbPath: ":memory:", clock: () => 1000 });
-    const ports = await createMonitorPorts(appRuntime);
+interface WatchFixture {
+  readonly plane: AppLedgerPlane;
+  readonly ports: MonitorPorts;
+  readonly fence: number;
+  readonly installed: string[];
+  readonly closed: string[];
+}
+
+const OWNER = "watch-test-owner";
+const SESSION = "monitor-session";
+
+const watchSpec = (notificationLimit: number): WatchSpec => ({
+  watch: { command: "true", description: "control", persistent: true },
+  policyGeneration: 1,
+  notificationLimit,
+});
+
+async function watchFixture(): Promise<WatchFixture> {
+  const plane = createAppLedger({});
+  const installed: string[] = [];
+  const closed: string[] = [];
+  const sources: WatchSources = {
+    install: (spec) => {
+      installed.push(spec.id);
+      return Promise.resolve();
+    },
+    observe: () => undefined,
+    close: (id) => {
+      closed.push(id);
+      return Promise.resolve();
+    },
+    closeAll: () => Promise.resolve(),
+  };
+  seedKernelPolicyRows(plane.catalog.policies);
+  const kernel = plane.openKernel(SESSION);
+  await runEffect(
+    kernel.materialize({
+      id: SESSION,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: "configure",
+      at: 1,
+    }),
+  );
+  const fence = await runEffect(adoptTestFence(kernel, SESSION, OWNER));
+  const ports = createWatchMonitorPorts({
+    openKernel: plane.openKernel,
+    sources,
+    clock: () => 1000,
+    entropy: () => "entropy",
+    run: (effect) => runEffect(effect),
+  });
+  return { plane, ports, fence, installed, closed };
+}
+
+test("monitor controls fold arm/rearm/cancel as chain facts scoped to the arming session", async () => {
+  const fixture = await watchFixture();
+  const { plane, ports } = fixture;
+  try {
     const monitorTool = createMonitorTool(ports);
-    try {
-      await appRuntime.runPromise(
-        Effect.gen(function* () {
-          const ledger = yield* LedgerWrites;
-          yield* ledger.sessions.create({
-            id: "monitor-session",
-            parentId: null,
-            role: "resident",
-            state: "idle",
-            revision: 0,
-            leaseOwner: null,
-            leaseFence: 0,
-            leaseExpiresAt: null,
-            toolsGeneration: 0,
-            systemHash: "",
-            policyGeneration: 1,
-          });
+    const armed = await ports.arm(
+      {
+        id: "control",
+        sessionId: SESSION,
+        kind: "watch",
+        fireAt: 1000,
+        spec: { encodingVersion: 1, value: watchSpec(8) },
+      },
+      new AbortController().signal,
+    );
+    expect(armed).toMatchObject({ id: "control", status: "armed", epoch: 1 });
+    expect(fixture.installed).toEqual(["control"]);
+    const context = {
+      sessionId: SESSION,
+      turnId: "turn",
+      callId: "call",
+      signal: new AbortController().signal,
+    };
+    // Rearm of a live watch is a no-op: the armed epoch stands.
+    expect(
+      await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
+    ).toMatchObject({ id: "control", status: "armed", epoch: 1 });
+    // A foreign session's chain holds no such watch: refused, not cancelled.
+    await expect(
+      monitorTool.execute(
+        { operation: { op: "cancel", id: "control" } },
+        { ...context, sessionId: "foreign" },
+      ),
+    ).rejects.toMatchObject({ _tag: "MonitorRefused" });
+    expect(
+      await monitorTool.execute({ operation: { op: "cancel", id: "control" } }, context),
+    ).toMatchObject({ status: "cancelled", epoch: 1 });
+    expect(fixture.closed).toEqual(["control"]);
+    // Rearm revives a cancelled watch under the next epoch.
+    expect(
+      await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
+    ).toMatchObject({ id: "control", status: "armed", epoch: 2 });
+    expect(fixture.installed).toEqual(["control", "control"]);
+  } finally {
+    plane.close();
+  }
+});
+
+test("watchFiredHook commits occurrence, wake prompt, and budget pause as one chain batch", async () => {
+  const fixture = await watchFixture();
+  const { plane, ports } = fixture;
+  try {
+    await ports.arm(
+      {
+        id: "budget",
+        sessionId: SESSION,
+        kind: "watch",
+        fireAt: 1000,
+        spec: { encodingVersion: 1, value: watchSpec(2) },
+      },
+      new AbortController().signal,
+    );
+    const hookClosed: string[] = [];
+    const hook = watchFiredHook({ closeSource: (id) => hookClosed.push(id) });
+    const kernel = plane.openKernel(SESSION);
+    const context: SessionEntityTimerContext = {
+      kernel,
+      authority: { sessionId: SESSION, owner: OWNER, fence: fixture.fence },
+      now: 1010,
+    };
+    const fire = (sourceKey: string) =>
+      runEffect(
+        hook(context, {
+          watchId: "budget",
+          epoch: 1,
+          sourceKey: watchOccurrenceKey("budget", 1, sourceKey),
+          batch: JSON.stringify({ content: `WAKE ${sourceKey}`, terminal: false }),
         }),
       );
-      await ports.arm(
-        {
-          id: "control",
-          sessionId: "monitor-session",
-          kind: "watch",
-          fireAt: 1000,
-          spec: {
-            encodingVersion: 1,
-            value: {
-              watch: { command: "true", description: "control", persistent: true },
-              notificationLimit: 8,
-              policyGeneration: 1,
-            },
-          },
-        },
-        new AbortController().signal,
-      );
-      const context = {
-        sessionId: "monitor-session",
-        turnId: "turn",
-        callId: "call",
-        signal: new AbortController().signal,
-      };
-      expect(
-        await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
-      ).toMatchObject({
-        id: "control",
-        epoch: 2,
-      });
-      await expect(
-        monitorTool.execute(
-          { operation: { op: "cancel", id: "control" } },
-          { ...context, sessionId: "foreign" },
-        ),
-      ).rejects.toMatchObject({
-        _tag: "MonitorRefused",
-        errorKind: "precondition_failed",
-        failure: {
-          _tag: "AlarmRefused",
-          operation: "cancel",
-          reason: "session",
-          alarmId: "control",
-        },
-      });
-      expect(
-        await monitorTool.execute({ operation: { op: "cancel", id: "control" } }, context),
-      ).toMatchObject({
-        status: "cancelled",
-      });
-      await expect(
-        monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
-      ).rejects.toMatchObject({
-        _tag: "MonitorRefused",
-        errorKind: "precondition_failed",
-        failure: { _tag: "AlarmRefused", operation: "rearm", reason: "state", alarmId: "control" },
-      });
-    } finally {
-      await appRuntime.dispose();
-    }
-  }));
-
-test("monitor create seals live-wait with one model call; PTY inbox wakes a hibernated session", () =>
-  Storage.withIsolation(async () => {
-    const events = createObservationBus();
-    const appRuntime = gatewayRuntime({ dbPath: ":memory:", observations: events });
-    const monitorTool = createMonitorTool(await createMonitorPorts(appRuntime));
-    const storage = Storage.get();
-    if (storage.alarms === undefined) throw new Error("fixture alarm storage missing");
-    seedKernelPolicyRows();
-    const runtime: SessionRuntime = { authorizeConfigure: allowConfigure };
-    const scope = await runEffect(Scope.make());
-    const definitions = [eraseTool(monitorTool)];
-    let calls = 0;
-    const runner = createSessionChatRunner({
-      prepare(input) {
-        return Effect.gen(function* () {
-        const dispatcher = yield* createTurnDispatcher(input, runtime);
-        return {
-          around: (operation) => operation.pipe(Effect.provideService(Llm, {
-              resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
-              run: (request: RunInput, sink: Sink) => Effect.sync(() => {
-                calls += 1;
-                const message = assistantMessage(request, {
-                  text: calls === 1 ? "waiting" : "observed",
-                });
-                if (calls === 1)
-                  message.parts.push({
-                    id: "monitor-part",
-                    messageID: message.info.id,
-                    sessionID: input.sessionId,
-                    type: "tool",
-                    callID: "monitor-call",
-                    tool: "monitor",
-                    state: {
-                      status: "pending",
-                      input: {
-                        operation: {
-                          op: "create",
-                          description: "wake",
-                          source: {
-                            kind: "command",
-                            command: "printf 'WAKE\\n'; read value",
-                            filter: "^WAKE$",
-                            persistent: true,
-                          },
-                        },
-                      },
-                    },
-                  });
-                sink.onMessage(message);
-                return { type: "stop" as const };
-              }),
-            })),
-          traceContext: {
-            traceId: "monitor-trace",
-            sessionId: input.sessionId,
-            runId: input.resultId,
-          },
-          config: {
-            executor: dispatcher.executor,
-            model: { provider: "test", id: "test" },
-            tools: [...dispatcher.specs],
-            toolWave: (wave, signal) =>
-              dispatcher.executeWave(wave, {
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                signal,
-              }),
-            toolExecutor: (call) =>
-              dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
-
-          },
-        };
-        });
-      },
+    expect(await fire("first")).toBe("applied");
+    const afterFirst = watchState(kernel, SESSION, "budget");
+    expect(afterFirst?.state).toMatchObject({
+      status: "armed",
+      notifications: 1,
+      lastBatch: "WAKE first",
     });
-    await appRuntime.runPromise(Effect.flatMap(GenerationLayers, (generations) => generations.initialize({ resident: definitions, worker: definitions })));
-    const requests = await appRuntime.runPromise(createSessionRequests(runtime));
-    const services = await appRuntime.runPromise(Effect.context<import("../src/runtime").AppServices>());
-    const handle = await appRuntime.runPromise(Scope.provide(session(
-      { id: "live-wait", role: "resident", runner, tools: definitions.map(sessionTool) },
-      runtime,
-    ), scope));
-    const woke = Promise.withResolvers<void>();
-    const errors: Error[] = [];
-    const worker = await runEffect(Scope.provide(createAlarmWorker({
-      alarms: storage.alarms,
-      requestTimeout: requests.timeout,
-      observations: events,
-      schedule: () => () => undefined,
-      failure: (error) => {
-        errors.push(error);
-        woke.reject(error);
-      },
-      wake: (id: string) => Scope.provide(wakeSession(id, runner, runtime), scope).pipe(
-        Effect.tap(() => Effect.sync(() => woke.resolve())), Effect.asVoid, Effect.provide(services),
-      ),
-    }), scope));
-    try {
-      const result = await runEffect(handle.prompt("watch and wait"));
-      expect(result?.kind).toBe("waiting");
-      expect(calls).toBe(1);
-      expect(getSessionHandle(handle.id, runtime)).toBeUndefined();
-      const guard = AbortSignal.timeout(5000);
-      const abort = () => woke.reject(new Error("alarm did not wake hibernated session"));
-      guard.addEventListener("abort", abort, { once: true });
-      await runEffect(worker.start());
-      await woke.promise;
-      guard.removeEventListener("abort", abort);
-      expect(calls).toBe(2);
-      expect(
-        sessionTree(handle.id).filter((action) => action.kind === "alarm.fired"),
-      ).toHaveLength(1);
-      expect(errors).toEqual([]);
-    } finally {
-      await runEffect(worker.close());
-      await appRuntime.runPromise(closeSessions(runtime));
-      await runEffect(Scope.close(scope, Exit.void));
-      await appRuntime.dispose();
-    }
-  }));
+    expect(hookClosed).toEqual([]);
+    // Second occurrence exhausts the wake budget: fired + prompt + paused in one commit.
+    expect(await fire("second")).toBe("applied");
+    const afterSecond = watchState(kernel, SESSION, "budget");
+    expect(afterSecond?.state).toMatchObject({ status: "paused", notifications: 2 });
+    expect(hookClosed).toEqual(["budget"]);
+    // A superseded wake against the paused epoch resolves to noop, not a commit.
+    expect(await fire("third")).toBe("noop");
+    const prompts = sessionTree(SESSION, plane.sessionStore(SESSION).actions).filter(
+      (action) => action.kind === "prompt",
+    );
+    expect(prompts.map((action) => action.effect.value)).toEqual([
+      { inboxKind: "prompt", content: "WAKE first" },
+      { inboxKind: "prompt", content: "WAKE second" },
+    ]);
+    expect(prompts.map((action) => action.intent.value)).toEqual([
+      expect.objectContaining({ kind: "alarm", watchId: "budget", epoch: 1 }),
+      expect.objectContaining({ kind: "alarm", watchId: "budget", epoch: 1 }),
+    ]);
+  } finally {
+    plane.close();
+  }
+});

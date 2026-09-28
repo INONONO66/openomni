@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import { runEffect } from "./helpers/effect";
 import { Auth } from "@openomni/llm";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { existsSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
+import { sessionFilePath } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
@@ -66,14 +68,16 @@ for (const visible of ["none", "text", "tool"] as const) {
       },
     });
     const app = await suite.boot({ config });
+    const plane = await planeOf(app.runtime);
     const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-    const reply = nextResidentTurn();
+    const reply = nextResidentTurn(plane);
     socket.send(JSON.stringify({ type: "message", text: "attempt" }));
     await reply;
-    const sessionId = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0]
-      ?.id;
+    const sessionId = plane.listSessions().filter((row) => row.id !== "gateway-ingress")[0]?.id;
     if (sessionId === undefined) throw new Error("missing session");
-    const db = new Database(config.dbPath, { readonly: true });
+    const sessionsDir = config.sessionsDir;
+    if (sessionsDir === undefined) throw new Error("suite config is missing sessionsDir");
+    const db = new Database(sessionFilePath(sessionsDir, sessionId), { readonly: true });
     try {
       const parents = db
         .query(
@@ -115,7 +119,7 @@ for (const visible of ["none", "text", "tool"] as const) {
           .get(),
       ).toEqual({ count: visible === "none" ? 2 : 1 });
       if (visible !== "none")
-        expect(SessionHandleStore.getSnapshot(sessionId).turns[0]?.terminal?.kind).toBe("error");
+        expect(plane.openKernel(sessionId).getSnapshot(sessionId).turns[0]?.terminal?.kind).toBe("error");
       console.log(
         "937 SSE attempt",
         JSON.stringify({ visible, requests, retryAlarms, parents, attempts }),
@@ -204,16 +208,19 @@ test("real cross-provider fallback sends only the fallback's stored credential",
       fallbacks: [{ provider: "openai", id: "gpt-4o" }],
     },
   });
+  const catalogPath = config.catalogPath;
+  if (catalogPath === undefined) throw new Error("suite config is missing catalogPath");
   const old = process.env.OPENOMNI_AUTH_FILE;
-  process.env.OPENOMNI_AUTH_FILE = join(config.dbPath, "..", "auth.json");
+  process.env.OPENOMNI_AUTH_FILE = join(catalogPath, "..", "auth.json");
   suite.defer(() => {
     if (old === undefined) delete process.env.OPENOMNI_AUTH_FILE;
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
   await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }));
   const app = await suite.boot({ config });
+  const plane = await planeOf(app.runtime);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-  const reply = nextResidentTurn();
+  const reply = nextResidentTurn(plane);
   socket.send(JSON.stringify({ type: "message", text: "fallback" }));
   await reply;
   expect(authorization.map((request) => request.key)).toEqual([
@@ -221,13 +228,12 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     "Bearer fallback-key",
   ]);
   expect(authorization[1]?.path).toBe("/v1/responses");
-  const row = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress")[0];
+  const row = plane.listSessions().filter((row) => row.id !== "gateway-ingress")[0];
   if (row === undefined) throw new Error("missing fallback session");
-  expect(SessionHandleStore.getSnapshot(row.id).turns[0]?.terminal?.kind).toBe("result");
-  expect(SessionHandleStore.getSnapshot(row.id).turns[0]?.messages.at(-1)?.text).toBe(
-    "fallback completed",
-  );
-  expect(Storage.getInitializedDbPath()).toBe(config.dbPath);
+  const snapshot = plane.openKernel(row.id).getSnapshot(row.id);
+  expect(snapshot.turns[0]?.terminal?.kind).toBe("result");
+  expect(snapshot.turns[0]?.messages.at(-1)?.text).toBe("fallback completed");
+  expect(existsSync(catalogPath)).toBe(true);
   console.log("937 fallback transport", JSON.stringify(authorization));
   await suite.cleanup();
 });
