@@ -101,7 +101,7 @@ test("terminal commit refusal publishes no success and leaves the intent open", 
     },
   });
   const exit = yield* Effect.result(executor.run(request, () => Effect.succeed({ status: "success" })));
-  expect(exit).toMatchObject({ _tag: "Left", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
+  expect(exit).toMatchObject({ _tag: "Failure", left: { _tag: "CommitFailed", error: { _tag: "CommitRefused", reason: "fence" } } });
   expect(results()).toEqual([]);
   expect(published).not.toContain("tool.execution.completed");
   expect(sessionTree(fiberSessionId).filter((action) => action.kind === "tool")).toHaveLength(1);

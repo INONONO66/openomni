@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import ts from "typescript";
 import * as Agent from "../packages/agent/src/errors";
 import * as Channels from "../packages/channels/src/errors";
@@ -127,7 +127,7 @@ for (const entry of packages) {
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
       const caught = Effect.runSync(Effect.result(Effect.fail(failure)));
-      expect(Either.isLeft(caught) && caught.left === failure).toBe(true);
+      expect(Result.isFailure(caught) && caught.failure === failure).toBe(true);
       expect("data" in failure).toBe(false);
     }
     const cause: string = entry.failures.ForeignFailure.cause;

@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { ForeignFailure, type ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
@@ -149,11 +149,11 @@ export function attemptAnchoredCut(
   let summarizerError: Error | undefined;
   if (precomputed === undefined && boundedInput.length > 0) {
     const merged = yield* Effect.result(onSummarize(boundedInput, previousAnchor, budget));
-    if (Either.isRight(merged)) {
-      anchorText = merged.right.trim().length > 0 ? merged.right : previousAnchor;
+    if (Result.isSuccess(merged)) {
+      anchorText = merged.success.trim().length > 0 ? merged.success : previousAnchor;
     } else {
-      if (merged.left._tag === "Interrupted") return yield* merged.left;
-      summarizerError = merged.left;
+      if (merged.failure._tag === "Interrupted") return yield* merged.failure;
+      summarizerError = merged.failure;
       anchorText = previousAnchor;
     }
   }

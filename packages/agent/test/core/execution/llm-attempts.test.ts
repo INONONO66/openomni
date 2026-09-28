@@ -302,9 +302,9 @@ test.each([
   ).toContain(request.id);
   yield* approvals.answer({ request, credential: "proof", decision });
   const result = yield* Fiber.join(terminal);
-  if (decision === "approve") expect(result).toMatchObject({ _tag: "Right", right: { terminal: "executed" } });
+  if (decision === "approve") expect(result).toMatchObject({ _tag: "Success", right: { terminal: "executed" } });
   else {
-    expect(result).toMatchObject({ _tag: "Left", left: { _tag: "PolicyDenied" } });
+    expect(result).toMatchObject({ _tag: "Failure", left: { _tag: "PolicyDenied" } });
     expect(
       (sessionTree(recording.identity.sessionId))
         .filter((action: LedgerAction.Node) => action.kind === "attempt")

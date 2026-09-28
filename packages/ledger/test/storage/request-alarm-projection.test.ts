@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { LedgerSession } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 import { runLedgerSync } from "../helpers/effect";
@@ -70,7 +70,7 @@ function childRequest() {
     },
   };
   const commit = () =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       runLedgerSync(Effect.result(SessionHandleStore.commitRequestTransition(input))),
       (error) => error,
     );
@@ -113,7 +113,7 @@ test.each([
   expectCommitted(fixture.commit([fixture.original, requestStateAction(fixture.request)]));
   const alarms = Storage.get().alarms;
   if (alarms === undefined) throw new Error("missing alarm adapter");
-  const owned = Either.getOrThrowWith(
+  const owned = Result.getOrThrowWith(
     runLedgerSync(Effect.result(alarms.acquire("original:deadline", 0))),
     (error) => error,
   );

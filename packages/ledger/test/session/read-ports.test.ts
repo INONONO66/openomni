@@ -1,10 +1,10 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 
 function materialize(id: string) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.materialize({

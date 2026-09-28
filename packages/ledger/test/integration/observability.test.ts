@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   Alarm,
@@ -55,7 +55,7 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.sessions.create(session("session-observed")))),
       (error) => error,
     );
@@ -80,13 +80,13 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.sessions.create(session("session-surfaces")))),
       (error) => error,
     );
 
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             adapter.inbox.commit(
@@ -105,7 +105,7 @@ describe("ledger-first observations", () => {
       ),
     ).toBeDefined();
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             adapter.alarms.arm(
@@ -144,7 +144,7 @@ describe("ledger-first observations", () => {
     };
     const adapter = new SqliteStorageAdapter(":memory:", sink);
     adapters.push(adapter);
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.sessions.create(session("session-refused")))),
       (error) => error,
     );
@@ -164,11 +164,11 @@ describe("ledger-first observations", () => {
     const throwingAdapter = new SqliteStorageAdapter(":memory:", throwing);
     const noopAdapter = new SqliteStorageAdapter(":memory:", { publish: () => undefined });
     adapters.push(throwingAdapter, noopAdapter);
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(throwingAdapter.sessions.create(session("session-parity")))),
       (error) => error,
     );
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(noopAdapter.sessions.create(session("session-parity")))),
       (error) => error,
     );

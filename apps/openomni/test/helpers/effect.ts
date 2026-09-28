@@ -1,15 +1,15 @@
-import { Effect, Either, Exit, Scope } from "effect";
+import { Effect, Result, Exit, Scope } from "effect";
 
 /** Runs an app test Effect at the test boundary. */
 export function runEffect<A, E>(effect: Effect.Effect<A, E, never>): Promise<A> {
   return Effect.runPromise(Effect.result(effect)).then((result) =>
-    Either.getOrThrowWith(result, (error) => error),
+    Result.getOrThrowWith(result, (error) => error),
   );
 }
 
 /** Synchronous storage setup, preserving the typed failure at the test boundary. */
 export function runSyncEffect<A, E>(effect: Effect.Effect<A, E, never>): A {
-  return Either.getOrThrowWith(Effect.runSync(Effect.result(effect)), (error) => error);
+  return Result.getOrThrowWith(Effect.runSync(Effect.result(effect)), (error) => error);
 }
 
 const scopes: Scope.CloseableScope[] = [];

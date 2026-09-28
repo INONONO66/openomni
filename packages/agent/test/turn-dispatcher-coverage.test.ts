@@ -211,6 +211,6 @@ describe("tool body outcomes", () => {
     const dispatcher = runAgentSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
     const result = await isolated(Effect.result(dispatcher.execute(call("echo"), context)));
-    expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "test" } });
+    expect(result).toMatchObject({ _tag: "Failure", left: { _tag: "ForeignFailure", operation: "test" } });
   });
 });

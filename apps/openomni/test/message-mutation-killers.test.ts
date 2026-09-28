@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -239,7 +239,7 @@ function materialize(
   parentId: string | null = null,
   role: "resident" | "worker" = "resident",
 ) {
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.materialize({
@@ -320,7 +320,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
           at: 100,
         }),
       );
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commitInbox({

@@ -1,4 +1,4 @@
-import { Effect, Either, Exit, Scope } from "effect";
+import { Effect, Result, Exit, Scope } from "effect";
 import { createObservationBus, createSessionRequests } from "@openomni/agent";
 import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { type Alarm, L0Observation, type Inbox } from "@openomni/protocol";
@@ -32,7 +32,7 @@ export function alarmFixture(
   const events = createObservationBus();
   const storage = new SqliteStorageAdapter(path, events);
   Storage.configure(storage);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         storage.sessions.create({
@@ -76,7 +76,7 @@ export function alarmFixture(
   const worker = workerFixture.worker;
   /** A committed one-shot retry.scheduled alarm, due at the fixture clock. */
   function armRetry(id: string) {
-    const row = Either.getOrThrowWith(
+    const row = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           storage.alarms.arm({
@@ -102,7 +102,7 @@ export function alarmFixture(
     return row;
   }
   function arm(id: string, watch: Alarm.Watch, limit = 8) {
-    const row = Either.getOrThrowWith(
+    const row = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           storage.alarms.arm({

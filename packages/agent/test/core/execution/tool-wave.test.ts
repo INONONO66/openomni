@@ -381,7 +381,7 @@ it("dispatches zero tools when the canonical assistant call-block write fails", 
       run: (_input, sink) => Effect.sync(() => { sink.onMessage(pendingAssistant(["A"])); return { type: "stop" as const }; }),
     },
   }).run(runInput([{ role: "user", content: "call tools" }])));
-  expect(result).toMatchObject({ _tag: "Left" });
+  expect(result).toMatchObject({ _tag: "Failure" });
   expect(failedWrites).toBe(1);
   expect(bodies).toBe(0);
   expect(toolResults(ledger.committed)).toEqual([]);

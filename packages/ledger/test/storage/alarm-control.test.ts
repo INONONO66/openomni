@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Alarm, LedgerSession, type L0Observation } from "@openomni/protocol";
@@ -24,7 +24,7 @@ type Status = Alarm.Status;
 /** One backend with an owner session and a capture of every committed action. */
 function openOwner(db: Database) {
   const { adapter, observations } = observedL0Adapters(db);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         adapter.sessions.create(
@@ -72,7 +72,7 @@ const cases = Alarm.Kind.options.flatMap((kind) =>
 );
 
 function fireOnce(adapter: Adapter, id: string, sourceKey: string, terminal: boolean) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         adapter.alarms.fire({
@@ -95,7 +95,7 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
   armed: () => undefined,
   cancelled: (adapter, id) => {
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.alarms.cancel(id, "owner", 101))),
         (error) => error,
       )?.status,
@@ -113,7 +113,7 @@ const driveTo: Record<Status, (adapter: Adapter, id: string) => void> = {
 
 function seedAlarm(adapter: Adapter, id: string, kind: Kind, status: Status): void {
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           adapter.alarms.arm({
@@ -154,7 +154,7 @@ for (const op of ["cancel", "rearm"] as const) {
     initializeSqliteDatabase(db);
     const { adapter, observations } = openOwner(db);
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.alarms[op]("missing", "owner", 100))),
         (error) => error,
       ),
@@ -167,11 +167,11 @@ for (const op of ["cancel", "rearm"] as const) {
         expectTransition(
           op,
           before.fence,
-          Either.getOrThrowWith(result, (error) => error),
+          Result.getOrThrowWith(result, (error) => error),
         );
       } else {
         expect(result).toMatchObject({
-          _tag: "Left",
+          _tag: "Failure",
           left: { _tag: "AlarmRefused", alarmId: id, operation: op },
         });
         expect(snapshot(adapter, observations, id)).toEqual(before);

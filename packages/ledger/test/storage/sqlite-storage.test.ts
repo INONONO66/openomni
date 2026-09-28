@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -285,7 +285,7 @@ describe("SqliteStorageAdapter", () => {
         receipts: db.query("SELECT name FROM _migrations ORDER BY name").all(),
         sessions: db.query("SELECT * FROM session ORDER BY id").all(),
       });
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             adapter.sessions.create({
@@ -385,7 +385,7 @@ describe("SqliteStorageAdapter", () => {
       // gateway-domain surface (docs/gateway-design.md §4) and a session-row
       // removal may not mutate it behind the gateway's back. The surviving
       // entry converges by brain-side re-materialization on the next Deliver.
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
@@ -399,11 +399,11 @@ describe("SqliteStorageAdapter", () => {
 
   describe("surfaceKey", () => {
     beforeEach(() => {
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s1")))),
         (error) => error,
       );
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("s2")))),
         (error) => error,
       );
@@ -445,7 +445,7 @@ describe("SqliteStorageAdapter", () => {
         messages: db.query("SELECT * FROM message").all(),
         parts: db.query("SELECT * FROM part").all(),
       };
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.sessions.create(canonicalRow("live")))),
         (error) => error,
       );
@@ -464,7 +464,7 @@ describe("SqliteStorageAdapter", () => {
 
     test("data survives close and reopen", () => {
       const session = canonicalRow("s1");
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(adapter.sessions.create(session))),
         (error) => error,
       );

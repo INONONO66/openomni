@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { ExecutorContext, type ExecutionError, type Executor } from "@openomni/agent";
 import { executor as productionExecutor } from "./executor";
 import { runEffect } from "./effect";
@@ -8,7 +8,7 @@ export async function admittedEffect<T>(
   operation: Effect.Effect<T, ExecutionError>,
   executor: Executor = productionExecutor,
 ): Promise<T> {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     await runEffect(Effect.result(Effect.provideService(operation, ExecutorContext, executor))),
     (error) => error,
   );

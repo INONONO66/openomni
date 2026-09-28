@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LedgerSession, SessionTransition } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
@@ -37,7 +37,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(commit([original]));
     materializeSession("other");
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.acquireLease({
@@ -54,7 +54,7 @@ describe("SQLite global request count CAS", () => {
     ).toBe(true);
     const other = { ...request, sessionId: "other", requestId: "other-original" };
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -81,7 +81,7 @@ describe("SQLite global request count CAS", () => {
       alarms: Storage.get().alarms?.due(100),
     };
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(SessionHandleStore.commit(proposal(other, 0)))),
         (error) => error,
       ),
@@ -89,7 +89,7 @@ describe("SQLite global request count CAS", () => {
     expect(SessionHandleStore.row(request.sessionId)).toEqual(before.row);
     const alarms = Storage.get().alarms?.due(100);
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(SessionHandleStore.commit(pending))),
         (error) => error,
       ),
@@ -108,7 +108,7 @@ describe("SQLite global request count CAS", () => {
     expect(Storage.get().alarms?.due(100)).toEqual(alarms);
     expect(SessionHandleStore.requestById(request.requestId)).toBeUndefined();
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({ ...pending, requestCount: { since: 0, count: 1 } }),
@@ -124,7 +124,7 @@ describe("SQLite global request count CAS", () => {
     expectCommitted(commit([original, requestStateAction(request)]));
     expectCommitted(commit([requestStateAction(request, "duplicate-open")]));
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -150,7 +150,7 @@ describe("SQLite global request count CAS", () => {
       ]),
     );
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -164,7 +164,7 @@ describe("SQLite global request count CAS", () => {
     );
     expectCommitted(commit([requestStateAction(request, "reopened")]));
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -190,7 +190,7 @@ describe("SQLite global request count CAS", () => {
       ]),
     );
     expectCommitted(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({

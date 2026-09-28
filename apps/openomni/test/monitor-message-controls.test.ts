@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Scope, Exit, Either } from "effect";
+import { Effect, Scope, Exit, Result } from "effect";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Bus, createSessionRequests, ToolRefused } from "@openomni/agent";
@@ -98,7 +98,7 @@ for (const status of ["armed", "fired"] as const) {
 
           // A refused control must preserve both the pending timeout and shared scan.
           expect(
-            Either.getOrThrowWith(
+            Result.getOrThrowWith(
               await runEffect(
                 Effect.result(
                   alarmStore().arm({
@@ -124,7 +124,7 @@ for (const status of ["armed", "fired"] as const) {
           expect(SessionHandleStore.inboxRows("sender")).toHaveLength(2);
 
           expect(
-            Either.getOrThrowWith(
+            Result.getOrThrowWith(
               await runEffect(
                 Effect.result(
                   alarmStore().arm({

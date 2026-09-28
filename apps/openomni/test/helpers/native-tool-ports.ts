@@ -1,11 +1,11 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import type { MachineHost } from "@openomni/machines";
 import type { ComposedCodemode } from "../../src/composition/codemode";
 import type { ToolPorts } from "../../src/tools/core/catalog";
 import { runEffect } from "./effect";
 
 async function runTyped<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-  return Either.getOrThrowWith(await runEffect(Effect.result(effect)), (error) => error);
+  return Result.getOrThrowWith(await runEffect(Effect.result(effect)), (error) => error);
 }
 
 export function testMachinePorts(host: MachineHost): NonNullable<ToolPorts["machines"]> {

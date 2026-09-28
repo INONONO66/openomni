@@ -46,8 +46,8 @@ export function protectedDispatch(
   );
   const outcome = runEffect(Effect.result(execution));
   const running = outcome.then((result) => {
-    if (result._tag === "Left") throw result.left;
-    return result.right;
+    if (result._tag === "Failure") throw result.failure;
+    return result.success;
   });
   return {
     outcome,
@@ -61,7 +61,7 @@ export function protectedDispatch(
       if (pending === undefined) throw new Error("missing protected invocation");
       if (executor.approvals === undefined) throw new Error("missing approval port");
       const answer = await runEffect(Effect.result(executor.approvals.answer({ request: pending, decision, credential: "owner-token" })));
-      if (answer._tag === "Left") throw answer.left;
+      if (answer._tag === "Failure") throw answer.failure;
       return bounded(running);
     },
     setClock(at: number) {

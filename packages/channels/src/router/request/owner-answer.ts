@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { decodeChannelFailure, type ChannelError } from "../../errors";
 import { canonicalDigest, Gateway, SessionTransition } from "@openomni/protocol";
 import { ActorRegistry } from "@openomni/ledger";
@@ -30,9 +30,9 @@ export function answerOwnerRequest(
   const authenticated = yield* Effect.result(ports.authenticateAnswer(sender, credential, request.requestId).pipe(
     Effect.flatMap((value) => Effect.try({ try: () => SessionTransition.Principal.parse(value), catch: decodeChannelFailure("answer.principal") })),
   ));
-  if (Either.isLeft(authenticated) || authenticated.right.kind !== "owner")
+  if (Result.isFailure(authenticated) || authenticated.success.kind !== "owner")
     return { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" };
-  const principal = authenticated.right;
+  const principal = authenticated.success;
   const authenticatedAt = Math.max(receivedAt, (ports.clock ?? Date.now)());
   const endpoint = ActorRegistry.resolveEndpoint(sender.surface, sender.externalId);
   if (

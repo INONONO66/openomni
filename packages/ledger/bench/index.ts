@@ -1,5 +1,5 @@
 // Run with: bun run bench/index.ts
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Bench } from "tinybench";
@@ -179,7 +179,7 @@ async function runSessionCommit(): Promise<void> {
     bench.add(
       "action",
       () => {
-        result = Either.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
+        result = Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
       },
       {
         beforeEach() {

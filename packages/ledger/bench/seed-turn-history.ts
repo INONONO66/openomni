@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { type LedgerSession, type SessionGeneration, SessionTurn } from "@openomni/protocol";
 import { SessionHandleStore } from "../src/index";
 import { materializeSession } from "../test/helpers/session";
@@ -10,7 +10,7 @@ export function seedTurnHistory(id: string, count = 10): void {
   let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
   for (let index = 0; index < count; index += 1) {
     const request = prepareTurnCommit(id, index, parentId, generation);
-    Either.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
+    Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
     parentId = request.actions.at(-1)?.id ?? null;
   }
 }
@@ -26,7 +26,7 @@ export function prepareTurnCommit(
   const turnId = `${id}:turn:${index}`;
   const resultId = `${turnId}:result`;
   const now = index + 2;
-  const lease = Either.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.acquireLease({
+  const lease = Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.acquireLease({
     sessionId: id,
     owner: "bench",
     expectedFence: row.leaseFence,

@@ -1,6 +1,6 @@
 import { sessionTree } from "../helpers/session-tree";
 import { runLedgerSync } from "../helpers/effect";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type BusEvent,
@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 function materialize(id: string) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     runLedgerSync(
       Effect.result(
         SessionHandleStore.materialize({
@@ -416,7 +416,7 @@ describe("session kernel folds", () => {
     const sessionId = "snapshot-session";
     const created = materialize(sessionId);
     const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
-    const first = Either.getOrThrowWith(
+    const first = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(
@@ -426,7 +426,7 @@ describe("session kernel folds", () => {
       ),
       (error) => error,
     );
-    const second = Either.getOrThrowWith(
+    const second = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("prompt-2", sessionId, "second", first.id)),
@@ -437,7 +437,7 @@ describe("session kernel folds", () => {
     expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([first, second]);
     expect(SessionHandleStore.inboxRows(sessionId)).toEqual([first, second]);
 
-    const lease = Either.getOrThrowWith(
+    const lease = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.acquireLease({
@@ -454,7 +454,7 @@ describe("session kernel folds", () => {
     expect(lease).toEqual({ ok: true, fence: 1 });
     if (!lease.ok) throw new Error("lease acquisition failed");
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.renewLease({
@@ -493,7 +493,7 @@ describe("session kernel folds", () => {
       generation,
       resultId: "result-1",
     });
-    const running = Either.getOrThrowWith(
+    const running = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commit({
@@ -520,7 +520,7 @@ describe("session kernel folds", () => {
       turns: [{ state: "running", messages: [{ text: "first" }, { text: "second" }] }],
     });
 
-    const continuation = Either.getOrThrowWith(
+    const continuation = Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("prompt-3", sessionId, "third", "turn-1")),
@@ -544,7 +544,7 @@ describe("session kernel folds", () => {
       resultId: "result-1",
     });
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -572,7 +572,7 @@ describe("session kernel folds", () => {
       text: "answer",
     });
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -628,7 +628,7 @@ describe("session kernel folds", () => {
       if (seen.length === 2) resolveObservations();
     });
 
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-1", "watched", "one", "watched:configure")),
@@ -637,7 +637,7 @@ describe("session kernel folds", () => {
       (error) => error,
     );
     sink.dropNextCommit = true;
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-2", "watched", "two", "watch-1")),
@@ -645,7 +645,7 @@ describe("session kernel folds", () => {
       ),
       (error) => error,
     );
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("watch-3", "watched", "three", "watch-2")),
@@ -676,7 +676,7 @@ describe("session kernel folds", () => {
       });
     });
 
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-1", "resync", "one", "resync:configure")),
@@ -685,7 +685,7 @@ describe("session kernel folds", () => {
       (error) => error,
     );
     sink.dropNextCommit = true;
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-2", "resync", "two", "resync-1")),
@@ -693,7 +693,7 @@ describe("session kernel folds", () => {
       ),
       (error) => error,
     );
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-3", "resync", "three", "resync-2")),
@@ -701,7 +701,7 @@ describe("session kernel folds", () => {
       ),
       (error) => error,
     );
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commitInbox(prompt("resync-4", "resync", "four", "resync-3")),
@@ -761,7 +761,7 @@ describe("session kernel folds", () => {
   test("wrapper failures stay loud when rows or required capabilities are absent", () => {
     expect(() => SessionHandleStore.row("missing")).toThrow("session not found");
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.acquireLease({
@@ -777,7 +777,7 @@ describe("session kernel folds", () => {
       ),
     ).toThrow(expect.objectContaining({ _tag: "SessionNotFound" }));
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commit({
@@ -797,7 +797,7 @@ describe("session kernel folds", () => {
       ),
     ).toThrow(expect.objectContaining({ _tag: "SessionNotFound" }));
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             SessionHandleStore.commitInbox(

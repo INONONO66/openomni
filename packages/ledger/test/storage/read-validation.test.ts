@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -62,7 +62,7 @@ describe("canonical SQLite reads fail closed", () => {
   });
 
   test("corrupt inbox origin rejects reads without consuming the row", () => {
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       runLedgerSync(
         Effect.result(
           SessionHandleStore.commitInbox({

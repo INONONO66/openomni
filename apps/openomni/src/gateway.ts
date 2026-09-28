@@ -26,7 +26,7 @@ import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Cause, Effect, Either, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
+import { Cause, Effect, Result, Exit, FiberRef, ManagedRuntime, Option, Scope } from "effect";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
@@ -74,8 +74,8 @@ export function runAppEffect<A, E>(
   signal?: AbortSignal,
 ): Promise<A> {
   return runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
-    if (Either.isLeft(result)) throw result.left;
-    return result.right;
+    if (Result.isFailure(result)) throw result.failure;
+    return result.success;
   });
 }
 
@@ -183,8 +183,8 @@ export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPo
   );
   const execute = <A>(effect: Effect.Effect<A, LedgerError>, signal: AbortSignal): Promise<A> =>
     runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
-      if (Either.isLeft(result)) throw new MonitorRefused(result.left);
-      return result.right;
+      if (Result.isFailure(result)) throw new MonitorRefused(result.failure);
+      return result.success;
     });
   return {
     arm: (input, signal) => execute(alarms.arm(input), signal),
@@ -282,7 +282,7 @@ export function channelTransaction<A>(
   return Effect.try({
     try: () =>
       DecisionFacts.transaction(() =>
-        Either.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
+        Result.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
       ),
     catch: decodeChannelFailure("message.transaction"),
   });

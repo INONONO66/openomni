@@ -1,10 +1,10 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
 
 /** Lands an outbound message in the destination's inbox exactly as a live dispatcher would. */
 export function receiveOutbound(message: SessionTransition.OutboundMessage, createdAt: number) {
-  return Either.getOrThrowWith(
+  return Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.commitReceivedMessage({

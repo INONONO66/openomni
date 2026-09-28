@@ -2322,11 +2322,11 @@ describe("session crash recovery and observation", () => {
                   ),
                 );
                 const boundary = yield* Effect.result(input.boundary("after_llm"));
-                if (boundary._tag === "Left") {
-                  drained.resolve(boundary.left);
-                  return yield* Effect.fail(boundary.left);
+                if (boundary._tag === "Failure") {
+                  drained.resolve(boundary.failure);
+                  return yield* Effect.fail(boundary.failure);
                 }
-                return { kind: "result", text: JSON.stringify(boundary.right) };
+                return { kind: "result", text: JSON.stringify(boundary.success) };
               });
             yield* awaitSignal(
               bounded(

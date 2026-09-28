@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { createServer, type Socket } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -85,7 +85,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
         const gone = bound(Promise.all(original.map((peer) => peer.closed)).then(() => undefined));
         if (mode === "rearm") {
           const readyAgain = fixture.next("group", (row) => row.content === "READY");
-          Either.getOrThrowWith(
+          Result.getOrThrowWith(
             fixture.run(
               Effect.result(fixture.storage.alarms.rearm("group", "monitor-session", 1000)),
             ),
@@ -107,7 +107,7 @@ for (const mode of ["cancel", "timeout", "budget", "exit", "shutdown", "rearm"] 
           expect(await writer.exited).toBe(0);
         } else {
           if (mode === "cancel")
-            Either.getOrThrowWith(
+            Result.getOrThrowWith(
               fixture.run(
                 Effect.result(fixture.storage.alarms.cancel("group", "monitor-session", 1000)),
               ),

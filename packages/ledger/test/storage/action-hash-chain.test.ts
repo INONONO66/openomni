@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
@@ -43,7 +43,7 @@ function append(id: string, sessionId = "chain"): LedgerAction.Append {
 function fresh() {
   const adapter = new SqliteStorageAdapter(":memory:");
   Storage.configure(adapter);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         adapter.sessions.create(

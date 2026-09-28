@@ -159,7 +159,7 @@ test("unavailable generations fail closed; revert appends a selection", () => is
     yield* generations.configure(selected, options.ledger.commit(selectAction(selected.snapshot)).pipe(
       Effect.mapError((error) => new CommitFailed({ error })),
     ));
-    expect(yield* Effect.result(generations.capture(a))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+    expect(yield* Effect.result(generations.capture(a))).toMatchObject({ _tag: "Failure", left: { _tag: "GenerationUnavailable", generation: 1 } });
   }
   const reverted = yield* generations.capture();
   expect(reverted.snapshot).toMatchObject({ generation: 3, revertTo: 2, systemValue: "A" });
@@ -213,7 +213,7 @@ for (const corruption of ["system", "tools", "policy"] as const) {
         ...(corruption === "policy" ? { policyGeneration: 2 } : {}),
       };
       const result = yield* Effect.result(generations.capture({ ...original, snapshot }));
-      expect(result).toMatchObject({ _tag: "Left", left: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
+      expect(result).toMatchObject({ _tag: "Failure", left: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
       expect(bodies).toBe(0);
       expect((yield* generations.capture()).snapshot.generation).toBe(2);
     }));
@@ -226,7 +226,7 @@ test("missing historical executable refuses capture instead of adopting the newe
   const generations = yield* makeSessionGenerations(current);
   const historical = bundle(1, "A", () => undefined);
   const missing = { ...historical, layer: Layer.fail(new GenerationUnavailable({ generation: 1 })) };
-  expect(yield* Effect.result(generations.capture(missing))).toMatchObject({ _tag: "Left", left: { _tag: "GenerationUnavailable", generation: 1 } });
+  expect(yield* Effect.result(generations.capture(missing))).toMatchObject({ _tag: "Failure", left: { _tag: "GenerationUnavailable", generation: 1 } });
   expect(bodies).toBe(0);
   expect((yield* generations.capture()).snapshot).toEqual(current.snapshot);
 }))));

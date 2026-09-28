@@ -1,4 +1,4 @@
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { describe, expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Storage } from "../../src/storage/storage";
@@ -57,14 +57,14 @@ describe("fenced session write discipline", () => {
       const { sessions } = adapter;
       const sessionId = `session-same-owner-fence-${name}`;
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
       ).toBe(true);
 
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -80,7 +80,7 @@ describe("fenced session write discipline", () => {
         ),
       ).toEqual({ ok: true, fence: 1 });
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -97,7 +97,7 @@ describe("fenced session write discipline", () => {
       ).toEqual({ ok: true, fence: 2 });
 
       expect(() =>
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.commit({
@@ -132,14 +132,14 @@ describe("fenced session write discipline", () => {
       const { sessions } = adapter;
       const sessionId = `session-fence-${name}`;
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
       ).toBe(true);
 
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -155,7 +155,7 @@ describe("fenced session write discipline", () => {
         ),
       ).toEqual({ ok: true, fence: 1 });
       expect(() =>
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -179,7 +179,7 @@ describe("fenced session write discipline", () => {
         }),
       );
       expect(() =>
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -195,7 +195,7 @@ describe("fenced session write discipline", () => {
         ),
       ).toThrow(expect.objectContaining({ _tag: "LeaseRefused", reason: "stale", fence: 1 }));
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.acquireLease({
@@ -211,7 +211,7 @@ describe("fenced session write discipline", () => {
         ),
       ).toEqual({ ok: true, fence: 2 });
 
-      const committed = Either.getOrThrowWith(
+      const committed = Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             sessions.commit({
@@ -234,7 +234,7 @@ describe("fenced session write discipline", () => {
       expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2, leaseOwner: null });
 
       expect(() =>
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.commit({
@@ -274,7 +274,7 @@ describe("fenced session write discipline", () => {
       const { sessions, inbox } = adapter;
       const sessionId = `session-boundary-${name}`;
       expect(
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
           (error) => error,
         ),
@@ -302,10 +302,10 @@ describe("fenced session write discipline", () => {
       ];
       for (const row of rows)
         expect(
-          Either.getOrThrowWith(Effect.runSync(Effect.result(inbox.commit(row))), (error) => error),
+          Result.getOrThrowWith(Effect.runSync(Effect.result(inbox.commit(row))), (error) => error),
         ).toBeDefined();
 
-      const acquired = Either.getOrThrowWith(
+      const acquired = Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             sessions.acquireLease({
@@ -343,7 +343,7 @@ describe("fenced session write discipline", () => {
         ts: 12,
       });
 
-      const committed = Either.getOrThrowWith(
+      const committed = Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             sessions.commit({
@@ -376,11 +376,11 @@ describe("canonical batch rollback", () => {
   test("a refused later action rolls back earlier actions, revision and inbox consumption", () => {
     for (const [name, { sessions, inbox }] of kernelStores()) {
       const sessionId = `rollback-${name}`;
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(sessions.create(l0Session(sessionId)))),
         (error) => error,
       );
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             inbox.commit({
@@ -396,7 +396,7 @@ describe("canonical batch rollback", () => {
         ),
         (error) => error,
       );
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(
             sessions.acquireLease({
@@ -415,7 +415,7 @@ describe("canonical batch rollback", () => {
       const first = { ...terminalAction(sessionId), ts: 3 };
       const refused = { ...first, id: `${sessionId}:refused`, parentId: "missing-parent" };
       expect(() =>
-        Either.getOrThrowWith(
+        Result.getOrThrowWith(
           Effect.runSync(
             Effect.result(
               sessions.commit({

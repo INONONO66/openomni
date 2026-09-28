@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { Alarm, LedgerSession, type LedgerAction } from "@openomni/protocol";
 import type { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
@@ -24,11 +24,11 @@ function row() {
 }
 
 function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(Effect.result(adapter.sessions.create(row()))),
     (error) => error,
   );
-  const armed = Either.getOrThrowWith(
+  const armed = Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         adapter.alarms.arm({
@@ -50,19 +50,19 @@ function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
     (error) => error,
   );
   expect(armed).toMatchObject({ status: "armed", epoch: 1, fence: 0 });
-  const owned = Either.getOrThrowWith(
+  const owned = Result.getOrThrowWith(
     Effect.runSync(Effect.result(adapter.alarms.acquire("watch", 0))),
     (error) => error,
   );
   if (owned === undefined) throw new Error("acquisition refused");
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.alarms.acquire("watch", 0))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
   const fire = (sourceKey: string, content: string, fence = owned.fence) =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           adapter.alarms.fire({
@@ -86,7 +86,7 @@ function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
   expect(() => fire("duplicate", "A")).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
   expect(fire("budget", "B")?.row.status).toBe("paused");
   expect(() => fire("stale", "C")).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
-  const rearmed = Either.getOrThrowWith(
+  const rearmed = Result.getOrThrowWith(
     Effect.runSync(Effect.result(adapter.alarms.rearm("watch", "alarm-session", 1100))),
     (error) => error,
   );
@@ -98,13 +98,13 @@ function exercise(adapter: ReturnType<typeof createSqliteL0Adapters>) {
     status: "armed",
   });
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.alarms.cancel("watch", "alarm-session", 1101))),
       (error) => error,
     )?.status,
   ).toBe("cancelled");
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(adapter.alarms.rearm("watch", "alarm-session", 1102))),
       (error) => error,
     ),
@@ -128,11 +128,11 @@ test("alarm adapter parity: arm/cancel/rearm/due and fenced budget delivery", ()
 test("alarm rollback: fired action and inbox share one transaction, bus follows commit", () => {
   const fixture = sqlite();
   try {
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(fixture.adapter.sessions.create(row()))),
       (error) => error,
     );
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           fixture.adapter.alarms.arm({
@@ -158,7 +158,7 @@ test("alarm rollback: fired action and inbox share one transaction, bus follows 
       "CREATE TRIGGER refuse_alarm_prompt BEFORE INSERT ON inbox BEGIN SELECT RAISE(ABORT, 'alarm inbox fault'); END",
     );
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(fixture.adapter.alarms.fire(input))),
         (error) => error,
       ),
@@ -172,19 +172,19 @@ test("alarm rollback: fired action and inbox share one transaction, bus follows 
     expect(fixture.adapter.alarms.get("at")?.status).toBe("armed");
     fixture.db.run("DROP TRIGGER refuse_alarm_prompt");
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(fixture.adapter.alarms.fire({ ...input, at: 999 }))),
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
     expect(
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(fixture.adapter.alarms.fire(input))),
         (error) => error,
       )?.inbox.origin.value,
     ).toBe("at");
     expect(() =>
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(Effect.result(fixture.adapter.alarms.fire(input))),
         (error) => error,
       ),

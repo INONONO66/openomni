@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect } from "bun:test";
 import { Bus, defineTool, eraseTool, type SessionHandle } from "@openomni/agent";
 import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
@@ -97,7 +97,7 @@ export function releaseContender(sessionId: string, owner: string, fence: number
   if (fence === undefined) return;
   const row = SessionHandleStore.row(sessionId);
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commit({
@@ -119,7 +119,7 @@ export function releaseContender(sessionId: string, owner: string, fence: number
 }
 
 export function commitInterrupt(sessionId: string, id: string) {
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.commitInbox({

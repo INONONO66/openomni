@@ -1,5 +1,5 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Inbox, LedgerSession, L0Observation, type LedgerAction } from "@openomni/protocol";
@@ -14,7 +14,7 @@ beforeEach(() => {
   Bus.reset();
   Storage.initialize({ dbPath, observationSink: Bus });
   materializeSession("parent");
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.acquireLease({
@@ -93,7 +93,7 @@ test("child identity and first inbox are visible together at the commit signal",
     if (event.id === "letter") observed.resolve();
   });
   try {
-    const committed = Either.getOrThrowWith(
+    const committed = Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     );
@@ -116,7 +116,7 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
   );
   // When insertion fails after preparing the child.
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     ),
@@ -129,7 +129,7 @@ test("inbox insertion fault rolls back child configuration and identity", () => 
 
 test("stale sender fence refuses child allocation before any write", () => {
   // Given a sender whose fence was superseded.
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.acquireLease({
@@ -145,7 +145,7 @@ test("stale sender fence refuses child allocation before any write", () => {
   );
   // When the stale sender tries to create a child.
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
       (error) => error,
     ),
@@ -157,7 +157,7 @@ test("stale sender fence refuses child allocation before any write", () => {
 
 test("message id reuse cannot allocate a second child", () => {
   // Given a committed letter.
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
     (error) => error,
   );
@@ -176,7 +176,7 @@ test("message id reuse cannot allocate a second child", () => {
   };
   // When the source id is reused against a new target.
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(reused))),
       (error) => error,
     ),
@@ -189,7 +189,7 @@ test("message id reuse cannot allocate a second child", () => {
 test("the commit transaction rechecks fanout and releases capacity after terminal", () => {
   const first = childMessage();
   first.limits.fanout = 1;
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(Effect.result(SessionHandleStore.commitInbox(first))),
     (error) => error,
   );
@@ -208,13 +208,13 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   };
   expect(SessionHandleStore.openChildCount("parent")).toBe(1);
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(second))),
       (error) => error,
     ),
   ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused", reason: "admission" }));
   expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["child", "parent"]);
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.acquireLease({
@@ -229,7 +229,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
     (error) => error,
   );
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(
           SessionHandleStore.commit({
@@ -271,7 +271,7 @@ test("the commit transaction rechecks fanout and releases capacity after termina
   ).toBe(true);
   expect(SessionHandleStore.openChildCount("parent")).toBe(0);
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(second))),
       (error) => error,
     ).id,
@@ -283,7 +283,7 @@ test("root configuration and first inbox use the same atomic inbox port", () => 
   root.createSession.row.parentId = null;
   root.createSession.row.role = "resident";
   expect(
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commitInbox(root))),
       (error) => error,
     ).id,
@@ -294,11 +294,11 @@ test("root configuration and first inbox use the same atomic inbox port", () => 
 
 test("a source terminal and its outbound obligation roll back on the same fault", () => {
   // Given an existing child holding its own fence.
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(Effect.result(SessionHandleStore.commitInbox(childMessage()))),
     (error) => error,
   );
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.acquireLease({
@@ -351,7 +351,7 @@ test("a source terminal and its outbound obligation roll back on the same fault"
   };
   // When the last write in the terminal unit fails.
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(Effect.result(SessionHandleStore.commit(request))),
       (error) => error,
     ),

@@ -1,5 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -80,7 +80,7 @@ test("monitor path: subscribed create and modify, then cancellation fences callb
       expect(alarmPathEvent((await modified).content)).toEqual({ path, event: "modify" });
       const old = fixture.storage.alarms.get("modify");
       if (old === undefined) throw new Error("missing alarm");
-      Either.getOrThrowWith(
+      Result.getOrThrowWith(
         Effect.runSync(
           Effect.result(fixture.storage.alarms.cancel("modify", "monitor-session", 1001)),
         ),

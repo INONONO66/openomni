@@ -1,12 +1,12 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { Inbox } from "@openomni/protocol";
 import { SessionHandleStore, Storage } from "../../src/index";
 
 beforeEach(() => {
   Storage.initialize({ dbPath: ":memory:" });
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(
         SessionHandleStore.materialize({
@@ -37,12 +37,12 @@ const message: Inbox.Commit = {
 };
 
 test("equivalent received message returns the original durable receipt without another input", () => {
-  const first = Either.getOrThrowWith(
+  const first = Result.getOrThrowWith(
     Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(message))),
     (error) => error,
   );
   const revision = SessionHandleStore.row("receiver").revision;
-  const duplicate = Either.getOrThrowWith(
+  const duplicate = Result.getOrThrowWith(
     Effect.runSync(
       Effect.result(SessionHandleStore.commitReceivedMessage({ ...message, createdAt: 3 })),
     ),
@@ -54,13 +54,13 @@ test("equivalent received message returns the original durable receipt without a
 });
 
 test("divergent received message refuses without changing canonical history", () => {
-  Either.getOrThrowWith(
+  Result.getOrThrowWith(
     Effect.runSync(Effect.result(SessionHandleStore.commitReceivedMessage(message))),
     (error) => error,
   );
   const before = sessionTree("receiver");
   expect(() =>
-    Either.getOrThrowWith(
+    Result.getOrThrowWith(
       Effect.runSync(
         Effect.result(SessionHandleStore.commitReceivedMessage({ ...message, content: "altered" })),
       ),
