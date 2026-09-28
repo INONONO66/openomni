@@ -1,0 +1,36 @@
+bun test v1.4.1 (4661e494f)
+
+test/check4-admission.test.ts:
+(pass) Table A: mailbox admission equals the inbox-table admission > A01 idle + [] -> stop [0.04ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A02 idle + [prompt] -> start [0.41ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A03 idle + [interrupt, prompt] -> consume [interrupt] [0.04ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A04 idle + [prompt, prompt] -> start (second stays queued) [0.03ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A05 idle + [resume] -> consume [resume] [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A06 idle + [resume, resume, prompt] -> consume control prefix [0.04ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A07 running + open -> recover [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A08 running without open -> refused [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A09 interrupted + [resume] + terminal interrupted -> resume [0.04ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A10 interrupted + [resume] without interrupted terminal -> consume [0.03ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A11 interrupted + [prompt] -> stop [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A12 foreign-session item -> refused [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A13 foreign open -> refused
+(pass) Table A: mailbox admission equals the inbox-table admission > A14 foreign terminal -> refused [0.03ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A15 idle + own open -> refused [0.02ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A16 FIFO invariance (idle): items after the first prompt never change the decision [0.84ms]
+(pass) Table A: mailbox admission equals the inbox-table admission > A17 interrupted scans the whole mailbox for resume — identical on both planes [0.06ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B1 [resolve] -> resolved [1.04ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B2 [resolve, cancel] -> resolved then duplicate (terminal already won) [0.24ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B3 [cancel, resolve] -> cancelled; later resolve is refused-as-duplicate, never applied [0.13ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B4 [cancel, timeout] -> cancelled then duplicate [0.14ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B5 [timeout, resolve] -> expired then late_unknown [0.09ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B6 duplicate resolve -> resolved then duplicate [0.12ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B7 [open, resolve] -> opened then resolved [0.97ms]
+(pass) Table B: request commands in mailbox FIFO order equal the inbox order > B8 cancel-first means the resolve never resolves and produces no inbox intake [0.07ms]
+check4 FIFO spans: [{"ordinal":1,"start":245.823,"end":288.697},{"ordinal":2,"start":289.815,"end":331.316},{"ordinal":3,"start":331.88,"end":373.35}]
+(pass) Integration: entity mailbox is FIFO with one writer per session > C1 three concurrent prompts serialize: ordinals 1,2,3 and no handler overlap [215.67ms]
+(pass) Integration: entity mailbox is FIFO with one writer per session > C2 the unmodified Session entity also serializes three concurrent prompts [37.46ms]
+
+ 27 pass
+ 0 fail
+ 98 expect() calls
+Ran 27 tests across 1 file. [464.00ms]

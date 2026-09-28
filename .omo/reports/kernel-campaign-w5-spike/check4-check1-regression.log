@@ -1,0 +1,12 @@
+bun test v1.4.1 (4661e494f)
+
+test/check1-boot.test.ts:
+(pass) a: runtime boots and cluster_* tables exist in the catalog file [10.63ms]
+(pass) b: prompts append to OUR hash chain (ordinal 1 then 2, linked prev_hash) [207.21ms]
+(pass) c: cluster_messages holds processed rows for the Session entity [0.38ms]
+(pass) d: per-session files: s1 exists, s2 gets its own file [30.88ms]
+
+ 4 pass
+ 0 fail
+ 20 expect() calls
+Ran 4 tests across 1 file. [413.00ms]

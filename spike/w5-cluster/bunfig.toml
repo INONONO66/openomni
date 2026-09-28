@@ -1,0 +1,4 @@
+# SPIKE-ONLY: see test/preload-module-map.ts (maps @openomni/* to package src
+# so deep imports of packages/agent sources resolve without built dist/).
+[test]
+preload = ["./test/preload-module-map.ts"]
