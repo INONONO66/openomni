@@ -2,8 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, type Inbox, type SessionTransition } from "@openomni/protocol";
+import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { createSessionRequests } from "../../src/session-requests";
 import type { RunnerServices } from "../../src/services";
 import { openCrashStores } from "./crash-stores";
@@ -59,29 +58,6 @@ export const requestPlane = (clock = () => 100) => Effect.gen(function* () {
   };
   return { runtime, port, opening };
 });
-
-export function childAdmission(owner: string, fence: number): Inbox.Commit {
-  const kernel = isolatedLedger().kernel;
-  return {
-    id: "child:prompt", sessionId: "child", kind: "prompt", content: "commission",
-    origin: { encodingVersion: 1, value: {
-      kind: "message", messageId: "commission", senderSessionId: "parent", sourceActionId: "invocation",
-    } },
-    parentActionId: null, createdAt: 100,
-    sender: { sessionId: "parent", owner, fence }, limits: { fanout: 1, depth: 1 },
-    createSession: {
-      row: {
-        id: "child", parentId: "parent", role: "worker", leaseOwner: null, leaseFence: 0,
-        revision: 0, state: "idle", toolsGeneration: 1,
-        systemHash: kernel.row("parent").systemHash, policyGeneration: 0,
-      },
-      initialAction: SessionHandleStore.configureAction({
-        id: "child:configure", sessionId: "child", parentId: null, operation: "create",
-        snapshot: kernel.latestGenerationFor("parent"), at: 100,
-      }),
-    },
-  };
-}
 
 export function planeAnswer(request: SessionTransition.Request, responder = "child", id = `${responder}:answer`): SessionTransition.Answer {
   return {

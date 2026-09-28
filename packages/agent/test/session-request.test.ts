@@ -3,11 +3,12 @@ import { Database } from "bun:sqlite";
 import { Effect } from "effect";
 import { isolatedLedger } from "./helpers/isolated";
 import { sessionTree } from "./helpers/session-tree";
-import { childAdmission, fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
+import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import { openRequest } from "./helpers/open-request";
 import {
   canonicalDigest,
   PlainObjectSchema,
+  type Inbox,
   type LedgerAction,
   type LedgerSession,
   type SessionTransition,
@@ -446,33 +447,41 @@ it("gives timeout and cancellation only one terminal winner", () => {
   ).toBe("duplicate");
 });
 
-it.each([false, true])("child admission commits as one SQLite unit (inbox fault: %s)", (fault: boolean) => fileRequest((dbPath) => Effect.gen(function* () {
+// W5.2: the inbox table and the atomic cross-session child unit are deleted
+// (production stores are per-session files, so a parent+child transaction
+// cannot exist); commissioning moved to the entity plane. What remains live is
+// the gateway admission intake: a received-message chain action committed in
+// the same fenced batch as the request open.
+it.each([false, true])("gateway admission intake commits atomically with the request open (fault: %s)", (fault: boolean) => fileRequest((dbPath) => Effect.gen(function* () {
   const { port, opening } = yield* requestPlane();
-  const before = sessionTree(isolatedLedger().kernel, "parent");
+  const kernel = isolatedLedger().kernel;
+  const before = sessionTree(kernel, "parent");
   using raw = new Database(dbPath);
-  // W5.2: the inbox table is gone; child ingress is the `child:prompt` chain action.
-  if (fault) raw.run(`CREATE TRIGGER refuse_child BEFORE INSERT ON action
-    WHEN NEW.id = 'child:prompt'
-    BEGIN SELECT RAISE(ABORT, 'test inbox fault'); END`);
-  const admission = childAdmission("plane:request:request", isolatedLedger().kernel.row("parent").leaseFence + 1);
+  if (fault) raw.run(`CREATE TRIGGER refuse_admission BEFORE INSERT ON action
+    WHEN NEW.id = 'commission:prompt'
+    BEGIN SELECT RAISE(ABORT, 'test admission fault'); END`);
+  const admission: Inbox.Commit = {
+    id: "commission:prompt", sessionId: "parent", kind: "prompt", content: "commission",
+    origin: { encodingVersion: 1, value: {
+      kind: "message", messageId: "commission", senderSessionId: "parent", sourceActionId: "invocation",
+    } },
+    parentActionId: "invocation", createdAt: 100,
+  };
   const opened = port.open({ ...opening, admission });
   if (fault) {
     expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "ForeignFailure" } });
-    expect(sessionTree(isolatedLedger().kernel, "parent")).toEqual(before);
-    expect(isolatedLedger().kernel.requestById("invocation")).toBeUndefined();
-    expect(isolatedLedger().kernel.listRows().map(({ id }) => id)).toEqual(["parent"]);
-    expect(isolatedLedger().kernel.pendingMessages("child")).toEqual([]);
-    expect(sessionTree(isolatedLedger().kernel, "child")).toEqual([]);
+    expect(sessionTree(kernel, "parent")).toEqual(before);
+    expect(kernel.requestById("invocation")).toBeUndefined();
+    expect(kernel.pendingMessages("parent")).toEqual([]);
     return;
   }
   expect(yield* opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, state: "open" });
-  // W5.2: the alarms table is deleted; the deadline is durable on the request row.
-  expect(isolatedLedger().kernel.requestById("invocation")?.deadline).toBe(200);
-  expect(sessionTree(isolatedLedger().kernel, "child").map(({ id }) => id)).toEqual(["child:configure", "child:prompt"]);
-  expect(isolatedLedger().kernel.pendingMessages("child")).toHaveLength(1);
-  expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "child" }, { id: "parent" }]);
-  // W5.2: no lease release; the admission's fence owner stays durable.
-  expect(isolatedLedger().kernel.row("parent").leaseOwner).not.toBeNull();
+  // The deadline is durable on the request row (the alarms table is deleted).
+  expect(kernel.requestById("invocation")?.deadline).toBe(200);
+  expect(kernel.pendingMessages("parent").map(({ id }) => id)).toEqual(["commission:prompt"]);
+  expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "parent" }]);
+  // No lease release: the admission's fence owner stays durable.
+  expect(kernel.row("parent").leaseOwner).not.toBeNull();
 })));
 
 it.each([

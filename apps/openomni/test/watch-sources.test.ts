@@ -63,6 +63,7 @@ test("command watch sends filtered lines in source order and a terminal exit sum
     { clock: () => 41_000, failure: (_id, error) => terminal.reject(error) },
   );
   await sources.install({
+    sessionId: "monitor-session",
     id: "watch-cmd",
     epoch: 3,
     watch: {
@@ -74,7 +75,9 @@ test("command watch sends filtered lines in source order and a terminal exit sum
   });
   const summary = await terminal.promise;
   await sources.closeAll();
-  expect(timeouts).toEqual([{ watchId: "watch-cmd", epoch: 3, fireAt: 42_000 }]);
+  expect(timeouts).toEqual([
+    { sessionId: "monitor-session", watchId: "watch-cmd", epoch: 3, fireAt: 42_000 },
+  ]);
   expect(fires.map((fire) => [fire.sourceKey, fire.content])).toEqual([
     ["line:3:1", "keep:1"],
     ["line:3:3", "keep:2"],
@@ -95,6 +98,7 @@ test("path watch fires on observed modification with the stat-identity source ke
   });
   try {
     await sources.install({
+      sessionId: "monitor-session",
       id: "watch-path",
       epoch: 1,
       watch: { path, event: "modify", description: "path modify", persistent: true },
@@ -138,6 +142,7 @@ test("a faulting path source sends a terminal source_error summary and the typed
   );
   try {
     await sources.install({
+      sessionId: "monitor-session",
       id: "watch-fault",
       epoch: 2,
       watch: { path, event: "modify", description: "faulting stat", persistent: true },
@@ -177,6 +182,7 @@ test("a rejecting watchFired send routes through the failure callback with the w
     { clock: () => 0, failure: (id, error) => failed.resolve([id, error]) },
   );
   await sources.install({
+    sessionId: "monitor-session",
     id: "watch-refused",
     epoch: 1,
     watch: { command: "printf 'ONE\\n'; exit 0", description: "refused sends", persistent: true },
@@ -202,11 +208,13 @@ test("reinstalling a watch id replaces the previous epoch's handle before new oc
     { clock: () => 0, failure: (_id, error) => secondExit.reject(error) },
   );
   await sources.install({
+    sessionId: "monitor-session",
     id: "watch-epoch",
     epoch: 1,
     watch: { command: "read hold", description: "first epoch", persistent: true },
   });
   await sources.install({
+    sessionId: "monitor-session",
     id: "watch-epoch",
     epoch: 2,
     watch: { command: "printf 'E2\\n'; exit 0", description: "second epoch", persistent: true },

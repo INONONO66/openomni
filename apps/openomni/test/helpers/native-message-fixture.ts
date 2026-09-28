@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Bus, closeSessions, createDispatcher, createExecutor, createSessionRequests, eraseTool, session, type SessionRuntime } from "@openomni/agent";
 import { decodeChannelFailure } from "@openomni/channels";
-import { initialize } from "@openomni/ledger";
+import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
 import { Effect, Exit, Scope } from "effect";
 import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
-import { commitMessageInbox, messageMaterialization, prepareMessage } from "../../src/composition/message-session";
+import { messageMaterialization, prepareMessage } from "../../src/composition/message-session";
+import { localInbox } from "./ledger";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 import { allowConfigure, generationServices } from "./generation-services";
 import { ToolCatalog } from "@openomni/agent";
@@ -18,22 +19,25 @@ import { runEffect, acquireSyncEffect, runSyncEffect } from "./effect";
 /** Owns the native session scope while the test drives durable message deadlines. */
 export async function nativeMessageFixture(role: LedgerSession.Role, messaging: OutboundMessaging) {
   const directory = mkdtempSync(join(tmpdir(), "message-policy-"));
-  const dbPath = join(directory, "test.sqlite");
-  initialize({ dbPath, observationSink: Bus });
-  seedKernelPolicyRows();
+  const catalogPath = join(directory, "catalog.sqlite");
+  const sessionsDir = join(directory, "sessions");
+  const plane = createAppLedger({ catalogPath, sessionsDir, observationSink: Bus });
+  seedKernelPolicyRows(plane.catalog.policies);
   const scope = await runEffect(Scope.make());
   const sessionId = "sender";
   const runtime: SessionRuntime = {
     authorizeConfigure: allowConfigure,
-    dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), () => 100),
+    openKernel: plane.openKernel,
+    listSessions: plane.listSessions,
+    dispatchOutbound: dispatchOutboundMessage((...args) => gateway.ingest(...args), () => 100, plane.openKernel),
   };
-  const context = acquireSyncEffect(generationServices({ clock: () => 100 }));
+  const context = acquireSyncEffect(generationServices({ clock: () => 100, plane }));
   const requests = runSyncEffect(createSessionRequests(runtime).pipe(Effect.provide(context)));
   const gateway = await runEffect(createResidentGateway({
     clock: () => 100,
     requests: channelRequests(requests),
-    inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-    prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({ id, parentId, role: childRole, runner, tools: [], preset: "", at: 100 })),
+    inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+    prepare: prepareMessage(plane, (id, parentId, childRole, runner) => messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration())({ id, parentId, role: childRole, runner, tools: [], preset: "", at: 100 })),
   }, messaging).pipe(Effect.provide(context)));
   let result: Tool.Result | undefined;
   const handle = await runEffect(Scope.provide(session({
@@ -57,7 +61,7 @@ export async function nativeMessageFixture(role: LedgerSession.Role, messaging: 
     }),
   }, runtime).pipe(Effect.provide(context)), scope));
   return {
-    directory, dbPath,
+    directory, plane,
     async send(input: Gateway.SendMessage): Promise<Tool.Result> {
       result = undefined;
       await runEffect(handle.prompt(JSON.stringify(input)));
