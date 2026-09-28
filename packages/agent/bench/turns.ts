@@ -136,7 +136,8 @@ export async function roundTrip() {
   // its stores' lifetime and keeps the no-op observation port as the commit sink.
   const sessionStore = openSessionStore(":memory:", events);
   const catalog = openCatalogStore(":memory:", events);
-  const kernel = SessionHandleStore.createSessionKernel(sessionStore, catalog);
+  const kernel: SessionHandleStore.SessionKernel =
+    SessionHandleStore.createSessionKernel(sessionStore, catalog);
   seedPolicy([], catalog.policies);
   const runtime: SessionFixture = {
     observations: events,
