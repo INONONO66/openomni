@@ -274,6 +274,16 @@ export interface SessionEntityTurnInput {
     | { readonly kind: "start" }
     | Extract<SessionAdmissionDecision, { kind: "recover" } | { kind: "resume" }>;
   readonly snapshot: SessionAdmissionSnapshot;
+  /**
+   * Detaches the admitted turn's post-boundary remainder (W5.2 S4). The port
+   * calls it only after the durable turn boundary (deliveries + turn
+   * envelope, state `running`) is committed; the entity forks the body under
+   * the activation so the delivering RPC acks at the boundary instead of
+   * joining the whole model turn (a parent awaiting its child's Prompt RPC
+   * inside its own turn would otherwise deadlock the two mailboxes).
+   * Fixtures may run the body inline.
+   */
+  readonly detach: (body: Effect.Effect<void, SessionError>) => Effect.Effect<void, SessionError>;
 }
 
 export interface SessionEntityTimerContext {

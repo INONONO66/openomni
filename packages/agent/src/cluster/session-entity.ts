@@ -5,7 +5,7 @@ import {
   type Inbox,
   type LedgerAction,
 } from "@openomni/protocol";
-import { Context, Effect } from "effect";
+import { Context, Effect, Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
 import type { SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";
@@ -66,6 +66,12 @@ interface ActivationHandle {
   readonly env: SessionEntityEnv;
   readonly kernel: SessionKernel;
   readonly authority: SessionEntityAuthority;
+  /** The activation's scope: detached turn remainders fork here. */
+  readonly scope: Scope.Scope;
+  /** Serializes admission decisions between the mailbox and a detached turn's continuation. */
+  readonly gate: Semaphore.Semaphore;
+  /** Token of the currently detached turn; set before the fork, cleared when its body exits. */
+  readonly live: { current: object | undefined };
 }
 
 /**
@@ -174,14 +180,42 @@ function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): 
 }
 
 /**
+ * Detached turn remainder (W5.2 S4): the port hands back the post-boundary
+ * body; it forks under the activation scope so the delivering RPC acks at
+ * the durable boundary. The continuation re-enters the drain when the turn
+ * ends, picking up backlog that arrived after the turn's last boundary.
+ */
+function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionError>): Effect.Effect<void, SessionError> {
+  return Effect.gen(function* () {
+    const token = {};
+    handle.live.current = token;
+    yield* Effect.forkIn(
+      body.pipe(
+        Effect.ensuring(Effect.sync(() => {
+          if (handle.live.current === token) handle.live.current = undefined;
+        })),
+        Effect.andThen(Effect.suspend(() => drain(handle))),
+        Effect.orDie,
+      ),
+      handle.scope,
+    );
+  });
+}
+
+/**
  * Backlog drain (F4): consume-decisions are folded here; the first admitted
  * turn decision is handed to the composition-owned turn port, which reaches
- * its own durable boundary before the caller's ack.
+ * its own durable boundary before the caller's ack; the remainder of the
+ * turn runs detached (see `detachTurn`). While a detached turn is live the
+ * drain is a no-op — the turn's own boundaries consume fresh backlog and
+ * its continuation re-drains at the end.
  */
 function drain(handle: ActivationHandle): Effect.Effect<void, LedgerError | SessionError> {
   const { authority, kernel, env } = handle;
-  return Effect.gen(function* () {
+  const detach = (body: Effect.Effect<void, SessionError>) => detachTurn(handle, body);
+  return handle.gate.withPermits(1)(Effect.gen(function* () {
     for (;;) {
+      if (handle.live.current !== undefined) return;
       const snapshot = admissionSnapshot(handle);
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {
@@ -192,12 +226,12 @@ function drain(handle: ActivationHandle): Effect.Effect<void, LedgerError | Sess
           yield* consumePending(handle, decision.items);
           continue;
         case "start":
-          return yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot });
+          return yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
         default:
-          return yield* env.ports.runTurn({ authority, kernel, decision, snapshot });
+          return yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
       }
     }
-  });
+  }));
 }
 
 function receive(
@@ -305,7 +339,9 @@ export const SessionEntityLive = SessionEntity.toLayer(
     yield* adoptFence(kernel, authority).pipe(Effect.orDie);
     const unregister = sessionKernels.register(sessionId, kernel);
     yield* Effect.addFinalizer(() => Effect.sync(unregister));
-    const handle: ActivationHandle = { env, kernel, authority };
+    const scope = yield* Effect.scope;
+    const gate = yield* Semaphore.make(1);
+    const handle: ActivationHandle = { env, kernel, authority, scope, gate, live: { current: undefined } };
     yield* drain(handle).pipe(Effect.orDie);
     const { timers } = env.ports;
     return {
