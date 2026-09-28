@@ -16,11 +16,13 @@ import {
   createSessionEntityRunTurn,
   createSessionRequests,
   SessionEntity,
+  type SessionHandle,
   type SessionRuntime,
-  getSessionHandle,
   ForeignFailure as AgentFailure,
   ExecutionApprovalError,
 } from "@openomni/agent";
+import { SessionHandleStore } from "@openomni/ledger";
+import { SessionGeneration, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
@@ -57,6 +59,8 @@ import { createMessageInboxCommit, prepareMessage } from "./composition/message-
 import { dispatchOutboundMessage } from "./composition/terminal-message";
 import {
   AppLedger,
+  createSessionLivePlane,
+  requestAuthorityKernel,
   sessionTimerPort,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -226,6 +230,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
       actors: plane.stores.actors,
       persons: plane.stores.persons,
     });
+    // Live entity turns publish their approval gate + boundary drain here;
+    // request readiness and the session facade reach running turns through it.
+    const liveTurns = createSessionLivePlane();
+    const notifyLiveApprovals = (id: string): void => {
+      const approvals = liveTurns.get(id)?.approvals;
+      if (approvals === undefined) return;
+      for (const request of plane.openKernel(id).requestRows(id)) {
+        if (request.mode === "approval") approvals.notify?.(request);
+      }
+    };
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
       openKernel: plane.openKernel,
@@ -236,7 +250,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
         plane.openKernel,
       ),
       requestDomainRevisions: domainRevisions,
-      onRequestReady: (id) => sessionRuntime.onInboxCommitted?.([id]),
+      onRequestReady: (id) => {
+        notifyLiveApprovals(id);
+        sessionRuntime.onInboxCommitted?.([id]);
+      },
       // Entity sessions drain inside the delivering RPC before it acks; only
       // process-runner sessions still need this doorbell.
       onInboxCommitted: (ids) => {
@@ -249,7 +266,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
         }),
       authorizeConfigure: configureAuthority(services.generations, plane.openKernel),
     };
-    const requests = await runAppBoot(runtime, createSessionRequests(sessionRuntime));
+    // Request transitions never steal a live activation's fence: the borrowed
+    // kernel view commits under the running turn's authority (idle sessions
+    // keep the documented takeover adoption).
+    const requests = await runAppBoot(
+      runtime,
+      createSessionRequests({
+        ...sessionRuntime,
+        openKernel: (id) => requestAuthorityKernel(plane.openKernel(id), id),
+      }),
+    );
     // Recovery is the cluster's: persisted undelivered entity messages redeliver
     // on activation; there is no boot sweep to await.
     const recovery: Promise<void> = Promise.resolve();
@@ -569,7 +595,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
               catch: foreignFailure((fields) => new AgentFailure(fields), "process.wake"),
             }).pipe(Effect.asVoid)
           : createSessionEntityRunTurn(
-              resident.runnerFor(input.kernel.row(input.authority.sessionId)),
+              liveTurns.wrapRunner(
+                input.authority.sessionId,
+                resident.runnerFor(input.kernel.row(input.authority.sessionId)),
+              ),
               resolvedRuntime,
               services.scope,
             )(input),
@@ -630,6 +659,100 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("websocket.close"),
       }),
     );
+    /**
+     * The live-turn facade (replaces the deleted registry handle): approvals
+     * and interrupts reach the turn running inside the entity's delivering
+     * RPC through the composition's live plane; configuration commits ride
+     * the activation's borrowed authority. Only live turns have a handle -
+     * a hibernated entity session answers through the entity client instead.
+     */
+    const borrowedAuthority = (id: string) => {
+      const kernel = plane.openKernel(id);
+      const row = kernel.row(id);
+      if (row.leaseOwner === null) throw new Error(`session has no activation authority: ${id}`);
+      return { kernel, row, owner: row.leaseOwner, fence: row.leaseFence };
+    };
+    const sessionFacade = (id: string): AppSessionHandle | undefined => {
+      if (liveTurns.get(id) === undefined) return undefined;
+      return {
+        id,
+        approvals: {
+          pending: () => liveTurns.get(id)?.approvals?.pending() ?? [],
+          answer: (answer) =>
+            Effect.suspend(() => {
+              const approvals = liveTurns.get(id)?.approvals;
+              return approvals === undefined
+                ? Effect.fail(new ExecutionApprovalError({ code: "stale_approval" }))
+                : approvals.answer(answer);
+            }),
+        },
+        interrupt: () =>
+          Effect.gen(function* () {
+            const entry = liveTurns.get(id);
+            if (entry === undefined) return;
+            const { kernel, row, owner, fence } = borrowedAuthority(id);
+            // The durable interrupt row first (cancellation is chain evidence),
+            // then the turn's own boundary drain consumes it and aborts the wave.
+            const received: LedgerAction.Append = {
+              id: services.entropy.next(),
+              parentId: kernel.latestAction(id)?.id ?? null,
+              sessionId: id,
+              kind: "prompt",
+              intent: { encodingVersion: 1, value: { kind: "session", id } },
+              effect: { encodingVersion: 1, value: { inboxKind: "interrupt", content: "" } },
+              irreversible: true,
+              ts: services.clock.now(),
+            };
+            yield* kernel
+              .commit({
+                sessionId: id, owner, fence, now: services.clock.now(),
+                expectedRevision: row.revision, actions: [received],
+                state: row.state === "running" ? "interrupted" : row.state,
+              })
+              .pipe(Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.interrupt")));
+            yield* entry.boundary("before_llm");
+          }),
+        tools: {
+          add: (additions) =>
+            Effect.gen(function* () {
+              const { kernel, row, owner, fence } = borrowedAuthority(id);
+              const before = kernel.latestGenerationFor(id);
+              const generation = before.generation + 1;
+              const accepted = yield* sessionRuntime.authorizeConfigure({
+                sessionId: id, role: row.role, operation: "tools.add", generation,
+              });
+              if (!accepted)
+                return yield* Effect.fail(new AgentFailure({ operation: "session.configure", cause: "denied" }));
+              const snapshot = SessionHandleStore.generationSnapshot({
+                generation,
+                revertTo: before.generation,
+                tools: [...before.tools, ...additions.map((tool) => SessionGeneration.Tool.parse(tool))],
+                system: { preset: before.systemPreset, blocks: before.systemBlocks },
+                policyGeneration: before.policyGeneration,
+                bundles: before.bundles,
+              });
+              const configured = SessionHandleStore.configureAction({
+                id: services.entropy.next(), sessionId: id,
+                parentId: kernel.latestAction(id)?.id ?? null,
+                operation: "tools.add", snapshot, at: services.clock.now(),
+              });
+              const commit = kernel
+                .commit({
+                  sessionId: id, owner, fence, now: services.clock.now(),
+                  expectedRevision: row.revision, actions: [configured], state: row.state,
+                  generation: {
+                    toolsGeneration: snapshot.generation,
+                    systemHash: snapshot.systemHash,
+                    policyGeneration: snapshot.policyGeneration,
+                  },
+                })
+                .pipe(Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.configure")));
+              yield* services.generations.configure({ sessionId: id, generation }, snapshot, commit);
+              return { generation: snapshot.generation, revertTo: snapshot.revertTo };
+            }),
+        },
+      };
+    };
     let stopping: Promise<void> | undefined;
     const stop = async () => {
       await boundServer.stop(true);
@@ -641,7 +764,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     return {
       port: boundPort,
       gateway,
-      sessions: { get: (id: string) => getSessionHandle(id, sessionRuntime) },
+      sessions: { get: sessionFacade },
       // The boot's honest channel record: where config came from and why each
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
@@ -682,4 +805,19 @@ export function installShutdownHandlers(deps: {
   };
   deps.on("SIGINT", handler);
   deps.on("SIGTERM", handler);
+}
+
+/**
+ * The composition-owned live session handle (W5.2): the subset of the deleted
+ * registry `SessionHandle` a live entity turn can honestly serve. `get`
+ * returns one only while a turn is running - a hibernated entity session has
+ * no live surface, its interaction is the entity client's mailbox.
+ */
+export interface AppSessionHandle {
+  readonly id: string;
+  readonly approvals: SessionHandle["approvals"];
+  interrupt(): Effect.Effect<void, import("@openomni/agent").SessionError>;
+  readonly tools: {
+    add: SessionHandle["tools"]["add"];
+  };
 }

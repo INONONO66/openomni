@@ -11,7 +11,6 @@ import {
   currentExecutor,
   InvocationClosed,
   type ExecutionApprovalRequest,
-  type SessionHandle,
 } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
@@ -27,6 +26,7 @@ import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { runEffect } from "./helpers/effect";
+import type { AppSessionHandle } from "../src/index";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
   adoptAtFence,
@@ -257,7 +257,7 @@ function activeRow() {
 
 function nextApproval(app: Awaited<ReturnType<typeof waveApp>>["app"]) {
   const waiting = Promise.withResolvers<{
-    handle: SessionHandle;
+    handle: AppSessionHandle;
     request: ExecutionApprovalRequest;
   }>();
   suite.defer(
@@ -609,7 +609,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       ],
       ["A", "outer"],
     );
-    let handle: SessionHandle | undefined;
+    let handle: AppSessionHandle | undefined;
     try {
       socket.send(JSON.stringify({ type: "message", text: "run nested effect" }));
       const executor = await bounded(captured.promise);
@@ -769,7 +769,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
         ],
         ["A", "outer"],
       );
-      let handle: SessionHandle | undefined;
+      let handle: AppSessionHandle | undefined;
       try {
         socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
         const executor = await bounded(captured.promise);

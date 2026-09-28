@@ -2,6 +2,8 @@ import { SqliteClient } from "@effect/sql-sqlite-bun";
 import {
   deadlineDelivery,
   decideRequestTransition,
+  type SessionHandle,
+  type SessionRunner,
   retryDelivery,
   SessionEntityContext,
   SessionEntityLive,
@@ -383,4 +385,85 @@ export function sessionEntityLayer(options: SessionEntityRuntimeOptions) {
     }),
   );
   return SessionEntityLive.pipe(Layer.provide(env));
+}
+
+type SessionRunnerInput = Parameters<SessionRunner>[0];
+
+/**
+ * The composition's window into one live entity turn (W5.2 plan §1): the
+ * entity runs turns inside its delivering RPC, so mid-turn interaction
+ * (approval answers, durable interrupts) cannot ride a second RPC on the
+ * serialized mailbox. The wrapped runner publishes the turn's approval gate
+ * and boundary drain here for exactly the turn's lifetime.
+ */
+export interface LiveTurnEntry {
+  approvals: SessionHandle["approvals"] | undefined;
+  readonly boundary: SessionRunnerInput["boundary"];
+}
+
+export interface SessionLivePlane {
+  get(sessionId: string): LiveTurnEntry | undefined;
+  /** Publishes the turn's live surfaces for the runner's lifetime; nested turns keep the outermost entry. */
+  wrapRunner(sessionId: string, runner: SessionRunner): SessionRunner;
+}
+
+export function createSessionLivePlane(): SessionLivePlane {
+  const entries = new Map<string, LiveTurnEntry>();
+  return {
+    get: (sessionId) => entries.get(sessionId),
+    wrapRunner: (sessionId, runner) => (input) =>
+      Effect.suspend(() => {
+        const entry: LiveTurnEntry = { approvals: undefined, boundary: input.boundary };
+        entries.set(sessionId, entry);
+        return runner({
+          ...input,
+          bindApprovals: (approvals) => {
+            entry.approvals = approvals;
+            input.bindApprovals?.(approvals);
+          },
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (entries.get(sessionId) === entry) entries.delete(sessionId);
+            }),
+          ),
+        );
+      }),
+  };
+}
+
+/**
+ * Out-of-turn request authority over a possibly-live activation (W5.2 F5):
+ * `createSessionRequests` adopts a fresh fence when no registry handle exists,
+ * which would steal a running entity turn's authority and kill its wave. This
+ * kernel view instead BORROWS the running activation's owner+fence for the
+ * request transition commit (same process, same thread: the commit lands
+ * between the turn's awaits) and only falls back to a real adoption when the
+ * session is idle - where a takeover is the documented out-of-turn semantics.
+ */
+export function requestAuthorityKernel(
+  base: SessionKernel,
+  sessionId: string,
+): SessionKernel {
+  const holder: { borrowed: { owner: string; fence: number } | undefined } = {
+    borrowed: undefined,
+  };
+  return {
+    ...base,
+    adoptFence: (input) =>
+      Effect.suspend(() => {
+        const row = base.row(sessionId);
+        if (row.state === "running" && row.leaseOwner !== null) {
+          holder.borrowed = { owner: row.leaseOwner, fence: row.leaseFence };
+          return Effect.succeed({ ok: true as const, fence: row.leaseFence });
+        }
+        return base.adoptFence(input);
+      }),
+    commitRequestTransition: (input) =>
+      base.commitRequestTransition(
+        holder.borrowed === undefined
+          ? input
+          : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },
+      ),
+  };
 }

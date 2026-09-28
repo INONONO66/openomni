@@ -1,6 +1,7 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
-import { Bus, defineTool, eraseTool, type SessionHandle } from "@openomni/agent";
+import { Bus, defineTool, eraseTool } from "@openomni/agent";
+import type { AppSessionHandle } from "../../src/index";
 import { LlmCall, type AnyToolDefinition } from "@openomni/protocol";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
@@ -66,7 +67,7 @@ export function bounded<T>(promise: Promise<T>): Promise<T> {
 export function interruptSecondModel(
   suite: Pick<ResidentSuite, "defer">,
   requestCount: () => number,
-  currentHandle: () => SessionHandle | undefined,
+  currentHandle: () => AppSessionHandle | undefined,
 ): Promise<void> {
   const interrupted = Promise.withResolvers<void>();
   suite.defer(
