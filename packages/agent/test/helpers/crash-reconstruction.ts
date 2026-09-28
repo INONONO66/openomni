@@ -168,7 +168,7 @@ function restartGenerations(captures: number[], missing: boolean) {
         Layer.succeed(ObservationSink, observations), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY)),
     });
     return {
-      initialize: () => Effect.void, drain: owner.drain,
+      initialize: () => Effect.void, settle: owner.settle, drain: owner.drain,
       configure: <A>(_id: import("@openomni/protocol").SessionGeneration.Id, _snapshot: import("@openomni/protocol").SessionGeneration.Snapshot,
         commit: Effect.Effect<A, import("../../src/errors").SessionError>) => commit,
       capture: (id: import("@openomni/protocol").SessionGeneration.Id) => {
