@@ -197,7 +197,11 @@ test("authenticated Owner executes the captured Person invocation once across SI
     const rejected = await first.inspect();
     expect(rejected.person).toBeNull();
     expect(requestOf(rejected).state).toBe("open");
-    expect(rejected.sessions[0]?.actions).toEqual(captured.actions);
+    // W5.2: the catalog also lists the boot-created gateway-ingress session,
+    // so select the request's session by id instead of assuming order.
+    expect(
+      rejected.sessions.find((session) => session.row.id === request.sessionId)?.actions,
+    ).toEqual(captured.actions);
 
     await first.crash();
     // W5.2: leases are fence-based, not time-based; restart wall-clock time
@@ -219,7 +223,10 @@ test("authenticated Owner executes the captured Person invocation once across SI
     expect(requestOf(recovered.snapshot)).toEqual(request);
     expect(recovered.snapshot.person).toBeNull();
     expect(recovered.snapshot.modelCalls).toBe(0);
-    expect(recovered.snapshot.sessions[0]?.generation).toEqual(captured.generation);
+    expect(
+      recovered.snapshot.sessions.find((session) => session.row.id === request.sessionId)
+        ?.generation,
+    ).toEqual(captured.generation);
     const ownerSocket = await connect(recovered.port);
     const applied = second.next("applied");
     const settled = second.next("settled");
@@ -301,9 +308,12 @@ test("real Owner socket cannot apply an original Person invocation against a cha
     const after = await process.inspect();
     expect(after.person).toEqual(drifted.person);
     expect(requestOf(after).state).toBe("open");
-    const previous = drifted.sessions[0]?.actions ?? [];
-    expect(after.sessions[0]?.actions.slice(0, previous.length)).toEqual(previous);
-    expect(after.sessions[0]?.actions.slice(previous.length)).toMatchObject([
+    // W5.2: select the request's session by id (catalog also lists gateway-ingress).
+    const sessionActions = (snapshot: OwnerSnapshot) =>
+      snapshot.sessions.find((session) => session.row.id === request.sessionId)?.actions ?? [];
+    const previous = sessionActions(drifted);
+    expect(sessionActions(after).slice(0, previous.length)).toEqual(previous);
+    expect(sessionActions(after).slice(previous.length)).toMatchObject([
       { kind: "reply", effect: { value: { resolution: "rejected" } } },
     ]);
     expect(after.modelCalls).toBe(1);
