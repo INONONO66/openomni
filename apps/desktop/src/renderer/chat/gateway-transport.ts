@@ -101,7 +101,6 @@ export function createGatewayChatTransport(
   
   const outstanding = new Map<string, OutstandingMessage>();
   const lastChatId = new WeakMap<SocketLike, string>();
-  const durableIds = new Map<string, string>();
   const reads = new Map<string, {
     readonly socket: SocketLike;
     readonly resolve: (page: SessionRead.Page) => void;
@@ -126,22 +125,16 @@ export function createGatewayChatTransport(
     }
     reads.delete(frame.sessionId);
     pendingRead?.resolve(frame);
-    if (frame.phase === "completed" || frame.phase === "failed" || frame.phase === "interrupted") {
-      for (let index = pending.length - 1; index >= 0; index -= 1) {
-        const turn = pending[index];
-        if (turn?.socket !== source || durableIds.get(turn.chatId) !== frame.sessionId) continue;
-        pending.splice(index, 1);
-        turn.emit({ type: "finish" });
-        turn.close();
-      }
-    }
+    // A terminal phase on a session-level page is not chat-stream completion:
+    // it may describe a previous turn, and the current turn's message frame can
+    // arrive after it. Pending chats settle only on their own message/error
+    // frames (or socket drain), never on a session read.
   }
 
   function bindSession(source: SocketLike, frame: z.infer<typeof SessionRead.Receipt>): void {
     const chatId = pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
     const result = frame.result;
     if (chatId === undefined || result === undefined || result.status === "blocked_pre") return;
-    durableIds.set(chatId, result.handle.target);
     options.onSessionBound?.(chatId, result.handle.target);
   }
 

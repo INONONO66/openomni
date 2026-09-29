@@ -160,6 +160,39 @@ export function toolPorts(
 }
 
 /**
+ * The emitted phase and when it began. phaseSince is the durable transition
+ * that ESTABLISHED the phase: the current open turn's intent for running, the
+ * terminal that recorded the interruption or sealed the turn for
+ * terminal-derived phases, and genesis for a bare idle session. Never the
+ * latest activity or a previous turn's terminal, which would move within one
+ * phase or predate the current turn (review r1 finding 6).
+ */
+function phaseFacts(
+  kernel: SessionHandleStore.SessionKernel,
+  sessionId: string,
+  state: SessionRead.Page["state"],
+  terminal: ReturnType<SessionHandleStore.SessionKernel["latestTurnTerminal"]>,
+  latest: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>,
+): { phase: SessionRead.Page["phase"]; phaseSince: number } {
+  if (state === "running") {
+    const openTurn = kernel.latestOpenTurn(sessionId);
+    const openIntent = openTurn === undefined ? undefined : kernel.actionById(openTurn.turnId);
+    return { phase: state, phaseSince: openIntent?.ts ?? latest?.ts ?? 0 };
+  }
+  if (state === "interrupted") {
+    const sealed = terminal?.effect.kind === "interrupted" ? terminal.action.ts : undefined;
+    return { phase: state, phaseSince: sealed ?? latest?.ts ?? 0 };
+  }
+  if (terminal !== undefined) {
+    const phase = terminal.effect.kind === "result" ? "completed"
+      : terminal.effect.kind === "error" ? "failed"
+      : terminal.effect.kind === "waiting" ? "waiting_input" : "idle";
+    return { phase, phaseSince: terminal.action.ts };
+  }
+  return { phase: "idle", phaseSince: kernel.latestAction(sessionId, 1)?.ts ?? 0 };
+}
+
+/**
  * The history page is one transactional revision snapshot. Session action rows
  * are retained from genesis, so a valid old cursor is always repairable by
  * paging; an epoch change or a cursor ahead of the durable head is a typed gap.
@@ -196,15 +229,13 @@ export function readSessionCursor(
       oldestRevision: 0,
     };
   }
-  const phase = after.state !== "idle" ? after.state : terminal?.effect.kind === "result"
-    ? "completed" : terminal?.effect.kind === "error" ? "failed"
-    : terminal?.effect.kind === "waiting" ? "waiting_input" : "idle";
+  const { phase, phaseSince } = phaseFacts(kernel, frame.sessionId, after.state, terminal, latest);
   return SessionRead.Page.parse({
     type: frame.cursor === undefined ? "session_snapshot" as const : "session_page" as const,
     sessionId: frame.sessionId,
     state: after.state,
     phase,
-    phaseSince: terminal?.action.ts ?? latest?.ts ?? 0,
+    phaseSince,
     epoch: after.leaseFence,
     afterRevision,
     headRevision: page.headRevision,

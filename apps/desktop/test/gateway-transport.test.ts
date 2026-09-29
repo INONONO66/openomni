@@ -575,6 +575,71 @@ describe("createGatewayChatTransport", () => {
     ).toBe(true);
   });
 
+  test("a session-level terminal page cannot settle another turn's pending chat", async () => {
+    // Review r1 finding 1: with an established read subscription, a terminal
+    // session page arriving before the second turn's message frame must not
+    // close that turn's stream — both answers have to be emitted.
+    const readFrame = z.object({ type: z.string().optional() }).loose();
+    const sessionPage = (kind: "session_snapshot" | "session_page", revision: number) => ({
+      type: kind, sessionId: "durable", state: "idle", phase: "completed",
+      phaseSince: 100, epoch: 1, afterRevision: revision - 1, headRevision: revision,
+      nextRevision: null,
+      actions: [{ revision, actionId: `action-${revision}`, kind: "turn", at: 100 }],
+      usage: [], toolWallMs: 0,
+    });
+    let turns = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
+          const frame = readFrame.parse(JSON.parse(typeof raw === "string" ? raw : raw.toString()));
+          if (frame.type === "session_read") {
+            ws.send(JSON.stringify(sessionPage("session_snapshot", 2)));
+            return;
+          }
+          turns += 1;
+          ws.send(JSON.stringify({
+            type: "receipt", status: "accepted",
+            result: { status: "executed", handle: { messageId: `input-${turns}`, target: "durable" }, delivery: { kind: "session" } },
+          }));
+          if (turns === 1) {
+            ws.send(JSON.stringify({ type: "message", messageId: "msg-1", text: "answer 1" }));
+            return;
+          }
+          // The terminal page describes the PREVIOUS completion and lands
+          // before this turn's own answer frame.
+          ws.send(JSON.stringify(sessionPage("session_page", 3)));
+          ws.send(JSON.stringify({ type: "message", messageId: "msg-2", text: "answer 2" }));
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const stop = transport.subscribeSession(() => undefined);
+
+    const first = await collect(await send(transport, [userMessage("one")]));
+    expect(
+      first.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer 1"]);
+    await transport.readSession("durable");
+
+    const second = await collect(await send(transport, [userMessage("two")]));
+    stop();
+    expect(second.map((chunk) => chunk.type)).toEqual([
+      "start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    expect(
+      second.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer 2"]);
+  });
+
   test("the SDK reduces the chunks into one assistant message", async () => {
     const { url } = serveWire([
       [

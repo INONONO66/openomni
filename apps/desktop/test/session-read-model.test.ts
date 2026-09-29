@@ -56,7 +56,7 @@ function serveReads() {
   return {
     requests,
     url: `ws://127.0.0.1:${server.port}`,
-    send(value: SessionRead.Page) {
+    send(value: SessionRead.Page | { type: "message"; messageId: string; text: string }) {
       if (connection === undefined) throw new Error("socket not open");
       connection.send(JSON.stringify(value));
     },
@@ -107,9 +107,17 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
   });
   wire.send(page("completed", 4));
   await received;
+  // The terminal page updates the read model only (review r1 finding 1): the
+  // chat stream settles on its own message frame, never on a session phase.
+  wire.send({ type: "message", messageId: "reply-1", text: "done" });
   const reader = stream.getReader();
-  expect((await reader.read()).value?.type).toBe("finish");
-  expect((await reader.read()).done).toBe(true);
+  const chunks: string[] = [];
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    chunks.push(next.value.type);
+  }
+  expect(chunks).toEqual(["start", "text-start", "text-delta", "text-end", "finish"]);
   const delayed = new Promise<void>((resolve) => {
     const stop = transport.subscribeSession((next) => {
       if (next.headRevision === 3) { stop(); resolve(); }
@@ -123,4 +131,45 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
   expect(consoleStore.state.tabs).toBe(localState.tabs);
   expect(consoleStore.state.drafts).toBe(localState.drafts);
   expect(consoleStore.state.activeTabId).toBe(localState.activeTabId);
+});
+
+test("an empty same-epoch same-head continuation keeps the authoritative activity", async () => {
+  // Review r1 finding 2: a refetch that finds no new actions must not erase
+  // the cached page's last-activity timestamp with the local fallback.
+  const requests: SessionRead.Request[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request, self) => self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+    websocket: {
+      message(socket: ServerWebSocket<undefined>, raw) {
+        const request = SessionRead.Request.parse(JSON.parse(String(raw)));
+        requests.push(request);
+        const head = {
+          sessionId: "durable", state: "idle" as const, phase: "completed" as const,
+          phaseSince: 900, epoch: 2, headRevision: 1, nextRevision: null, usage: [], toolWallMs: 0,
+        };
+        socket.send(JSON.stringify(request.cursor === undefined
+          ? { ...head, type: "session_snapshot", afterRevision: 0,
+              actions: [{ revision: 1, actionId: "action-1", kind: "turn", at: 900 }] }
+          : { ...head, type: "session_page", afterRevision: request.cursor.revision, actions: [] }));
+      },
+    },
+  });
+  cleanups.push(() => server.stop(true));
+  const client = new QueryClient();
+  cleanups.push(() => client.clear());
+  const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+  const localId = createSession(10);
+  bindDurableSession(localId, "durable");
+  const local = consoleStore.state.sessions[0];
+  if (local === undefined) throw new Error("local session missing");
+
+  const first = await client.fetchQuery(sessionReadOptions(client, transport, "durable"));
+  expect(sessionReadModel(local, first).lastActivityAt).toBe(900);
+
+  const second = await client.fetchQuery(sessionReadOptions(client, transport, "durable"));
+  expect(requests.map((request) => request.cursor)).toEqual([undefined, { revision: 1, epoch: 2 }]);
+  expect(second.actions.map((action) => action.at)).toEqual([900]);
+  expect(sessionReadModel(local, second).lastActivityAt).toBe(900);
 });

@@ -23,11 +23,17 @@ export const queryKeys = {
   session: (sessionId: string) => ["gateway", "session", sessionId] as const,
 };
 
-/** Reject delayed pages so a sealed terminal cannot become running again. */
+/**
+ * Reject delayed pages so a sealed terminal cannot become running again, and
+ * keep the populated page when a same-epoch refetch at the same head returns
+ * an empty continuation: no new actions is not new authority, and replacing
+ * the cached slice would erase the authoritative last-activity timestamp.
+ */
 function newerPage(previous: SessionRead.Page | undefined, page: SessionRead.Page): SessionRead.Page {
   if (previous === undefined || page.epoch > previous.epoch) return page;
   if (page.epoch < previous.epoch || page.headRevision < previous.headRevision) return previous;
-  return page.headRevision === previous.headRevision && page.afterRevision < previous.afterRevision
+  return page.headRevision === previous.headRevision &&
+    (page.afterRevision < previous.afterRevision || page.actions.length === 0)
     ? previous : page;
 }
 
