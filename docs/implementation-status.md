@@ -1,8 +1,97 @@
 # Implementation Status
 
+## W5.3 #1113 closure receipt (2026-09-29, ⏳ pending merge)
+
+W5.3 on `kernel/1113-w5-closure-20260929` (draft PR #1240, HEAD `10c26e80`,
+base `8390912c`) closes the W5 absolute-quality lanes. Lane receipts live
+under `.omo/reports/kernel-campaign-w53/`.
+
+- **Effect runner owners (A1):** `script/conformance/effect-runner-sites.json`
+  is `[]` (48 → 0). `script/check-effect-boundaries.ts` names exactly one
+  test-runner owner per package (`RUNNER_OWNERS`: the openomni, agent,
+  channels, ipc, ledger, llm, and machines test helpers) plus the two named
+  bench entrypoints (`packages/agent/bench/turns.ts`,
+  `packages/ledger/bench/index.ts`); the production edges remain
+  `apps/openomni/src/cli/main.ts` and `apps/openomni/src/gateway.ts`. No
+  production `src/` file changed for A1.
+- **Written any/unknown 0 (A2/A2b/A3):** repository-wide written
+  `any`/`unknown` type keywords went 68 → 0 (A2 protocol 16 → 0, A2b the last
+  4 protocol sites, A3/A3b the script/app/package sites). The new AST gate
+  `script/check-written-types.ts` (`check-written-types` package command,
+  wired into CI next to `check-effect-boundaries`) has no baseline and
+  excludes only `*.test.ts(x)`; it exits 0 with
+  `OK: written any/unknown types: 0`. A2 also deleted 53 dead protocol export
+  identities (`app-connector/`, `Mcp.Events`, `McpConfig`, `Deadline`, and the
+  Tool/Transcript/Policy/Machine/Ingress aliases with zero production
+  consumers).
+- **One app-owned read model (A4/A4b):** the single read surface is the
+  `session_read` handler in `apps/openomni/src/gateway.ts`; channels only
+  parses and transports the frame. Every read wire DTO is Zod plain data in
+  `packages/protocol/src/gateway/session-read.ts` (`SessionRead.Request` /
+  `Cursor` / `Page` / `Gap` / `Receipt`); the `session_snapshot`,
+  `session_page`, and `session_gap` frames are additive. Usage provenance is
+  `reported | estimated | unknown`, forked at the provider accounting site
+  (`packages/llm/src/processor/stream-events.ts`) and written once by the
+  durable attempt-result writer. Inspection is bounded
+  (`packages/agent/src/session-lifecycle/inspect.ts`: limit 1-256, shared
+  descendant budget, indexed catalog child pages, zero `kernel.listRows`
+  loops). Desktop owns one query per durable session ID; tabs, drafts and
+  selection stay local, and `DEFAULT_PROJECT_ID` plus the renderer
+  `phase: "idle"` seeds are grep-zero.
+- **A5 mutation baseline fix:** the #1049 baseline-compiler rejection is fixed
+  by root-file candidate ownership (each compiler project diagnoses only its
+  `getRootFileNames()`); the execution-copy tracked-deletion mirror is scoped
+  to git roots (non-git fixture roots no longer fail); `quality-audit` gained
+  TypeScript function metrics — cyclomatic (<22), Halstead difficulty (<80),
+  CRAP (<25) — implemented in `script/quality-typescript-metrics.ts` and
+  pinned in `script/conformance/quality-contract.json`.
+- **W4 #1112 disposition (A6):** inert `RunInput.maxSteps` and orphaned
+  `Retry.sleep` are deleted; the named executor files have zero duplicate
+  abort/race owners; `tool-body.ts` keeps its one invocation-scoped
+  cancellation bridge; channel HTTP retry and reconnect stay transport
+  behavior. Full audit: `.omo/reports/kernel-campaign-w53/W4-1112-receipt.md`
+  (H10 closed).
+- **Review r1 findings 1-7 landed** (`review-r1.md`; fixes in `F1.md`,
+  `F2.md`, and commits `cb4bf00e`/`f4542212`): (1) session-level terminal
+  pages no longer settle other turns' pending chats; (2) an empty same-epoch
+  same-head continuation keeps the cached page; (3) the descendant budget is
+  independent of the mandatory root visit; (4) paged turn ancestry resolves
+  through indexed `actionById` reads; (5) script entry points use top-level
+  try/catch instead of inferred-`any` `Promise.catch`; (6) `phaseSince`
+  derives from the phase-establishing transition; (7) the resume regression
+  asserts exactly one delivery again. Each fix has a fails-before /
+  passes-after regression.
+
+Wave-B gate line (`B-verify.md`, run locally at branch HEAD): build 0,
+check-types 0, lint 0, lint:tools 0, lint:docs 0, check-topology 0,
+check-deps 0, check-import-cycles 0, check-dead-exports 0,
+verify-tsconfig-inheritance 0, check-effect-boundaries 0,
+check-written-types 0; root `bun test --timeout 15000 --coverage`:
+**4635 pass / 0 fail**.
+
+Honest audit deltas (`quality-audit --dry-run`; no local LCOV lanes, so
+`complete: false`):
+
+| Kind | `8390912c` baseline | W5.3 HEAD |
+| --- | ---: | ---: |
+| coverage (missing-file records, not debt) | 3116 | 485 |
+| complexity | 17 | 14 |
+| cyclomatic (new, <22) | — | 1 |
+| halstead (new, <80) | — | 0 |
+| crap (new, <25; needs LCOV) | — | 761 (no coverage input) |
+| clones | 280 | 280 |
+| types (transitive inferred sites, not written keywords) | 2779 | 2123 |
+
+Not claimed: CI green, patch coverage, or mutation completion. B-verify
+measured 71 patch-uncovered changed lines across 12 files locally; wave C
+lanes C1/C2/C3 close them, and the authoritative gate is the CI
+patch-coverage job on PR #1240. The full mutation campaign remains the
+scheduled `quality-mutation.yml` run.
+
 ## W5.2 session entity receipt (#1197, 2026-09-28)
 
-W5.2 on `kernel/1197-session-entity-20260928` (PR #1239, ⏳ pending merge)
+W5.2 merged as `8390912c` (PR #1239, 2026-09-29) on
+`kernel/1197-session-entity-20260928`; it
 ships one `Session` entity per `sessionId` on the `effect/cluster`
 `SingleRunner` exposed by Effect `4.0.0-rc.118`. Each activation opens one
 fresh-schema SQLite file under the configured sessions directory and shares a
