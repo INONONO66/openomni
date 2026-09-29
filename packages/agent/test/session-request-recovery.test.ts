@@ -1,13 +1,12 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, kernelRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { ForeignFailure } from "../src/errors";
 import { expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { Storage, SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { createTurnDispatcher, defineTool, eraseTool } from "../src/tool-dispatcher";
@@ -16,21 +15,36 @@ import { compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger, crashAfterRequestOpen, failure, type RequestLedger } from "./helpers/effect-g1";
 import { bounded } from "./helpers/bounded";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
+import { openCrashStores } from "./helpers/crash-stores";
 import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import type { RunnerServices } from "../src/services";
 
-function persisted<A, E>(program: (dbPath: string) => Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>) {
-  return isolated(Effect.scoped(Effect.gen(function* () {
-    const directory = mkdtempSync(join(tmpdir(), "request-recovery-"));
-    const dbPath = join(directory, "ledger.sqlite");
-    Storage.reset();
-    Storage.initialize({ dbPath });
-    yield* Effect.addFinalizer(() => Effect.sync(() => {
-      Storage.reset();
+/**
+ * File-backed isolation with a process-crash restart (W5.2): the Storage
+ * singleton is gone, so "reopen" is closing the store handles and opening
+ * fresh ones over the same SQLite files behind the lazy `isolatedLedger()`.
+ */
+function persisted<A, E>(program: (reopen: () => void) => Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>) {
+  const directory = mkdtempSync(join(tmpdir(), "request-recovery-"));
+  const dbPath = join(directory, "ledger.sqlite");
+  let current = openCrashStores(dbPath);
+  const ledger: IsolatedLedgerHandle = {
+    get kernel() { return current.kernel; },
+    openKernel: () => current.kernel,
+    listSessions: () => current.kernel.listRows(),
+    get session() { return current.session; },
+    get catalog() { return current.catalog; },
+    get bus() { return current.bus; },
+    close: () => {
+      current.close();
       rmSync(directory, { recursive: true, force: true });
-    }));
-    return yield* program(dbPath);
-  })));
+    },
+  };
+  const reopen = () => {
+    current.close();
+    current = openCrashStores(dbPath);
+  };
+  return isolated(Effect.scoped(program(reopen)), () => ledger);
 }
 const proof = { kind: "owner", principalId: "owner", evidenceId: "authenticated" } as const;
 function definitions(bodies: string[]) {
@@ -89,7 +103,7 @@ function dispatcher(
   });
 }
 function currentRequest(): SessionTransition.Request {
-  const request = SessionHandleStore.requestRows()[0];
+  const request = isolatedLedger().kernel.requestRows()[0];
   if (request === undefined) throw new Error("missing durable request");
   return request;
 }
@@ -111,7 +125,7 @@ function ownerAnswer(request: SessionTransition.Request): SessionTransition.Answ
     content: "approve",
   };
 }
-it("reopens SQLite and resumes the exact original wave without a model reconstruction", () => persisted((dbPath: string) => Effect.gen(function* () {
+it("reopens SQLite and resumes the exact original wave without a model reconstruction", () => persisted((reopen) => Effect.gen(function* () {
   const bodies: string[] = [];
   const initial = yield* requestLedger();
   const crashed = yield* dispatcher(
@@ -123,8 +137,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   )).toMatchObject({ _tag: "ForeignFailure", operation: "process lost after durable suspension" });
   const originalId = currentRequest().requestId;
   expect(bodies).toEqual([]);
-  Storage.reset();
-  Storage.initialize({ dbPath });
+  reopen();
   const ready = Promise.withResolvers<void>();
   const recovered = yield* dispatcher(yield* requestLedger(), bodies, ready.resolve);
   const recovery = recovered.executor.recover?.();
@@ -146,12 +159,12 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
   expect(
-    sessionTree(initial.identity.sessionId).filter(
+    sessionTree(isolatedLedger().kernel, initial.identity.sessionId).filter(
       (action: LedgerAction.Node) => action.id === `${originalId}:application`,
     ),
   ).toHaveLength(1);
 })));
-it("a committed application claim prevents replay after result persistence fails", () => persisted((dbPath: string) => Effect.gen(function* () {
+it("a committed application claim prevents replay after result persistence fails", () => persisted((reopen) => Effect.gen(function* () {
   const bodies: string[] = [];
   const ready = Promise.withResolvers<void>();
   const initial = yield* requestLedger();
@@ -194,12 +207,11 @@ it("a committed application claim prevents replay after result persistence fails
   });
   expect(yield* Fiber.join(settled)).toMatchObject({ _tag: "ForeignFailure", operation: "result.persist" });
   expect(bodies).toHaveLength(3);
-  Storage.reset();
-  Storage.initialize({ dbPath });
+  reopen();
   const recovered = yield* dispatcher(yield* requestLedger(), bodies);
   yield* recovered.executor.recover();
   expect(bodies).toHaveLength(3);
-  const effects = sessionTree(initial.identity.sessionId).map(
+  const effects = sessionTree(isolatedLedger().kernel, initial.identity.sessionId).map(
     (action: LedgerAction.Node) => action.effect.value,
   );
   expect(
@@ -212,36 +224,29 @@ it("a committed application claim prevents replay after result persistence fails
     ),
   ).toHaveLength(3);
 })));
-it("a gateway answer cannot borrow another live owner's lease", () => persisted((_dbPath: string) => Effect.gen(function* () {
+// W5.2: the TTL "held lease" refusal is the deleted lease plane. With no live
+// handle, an out-of-turn gateway transition adopts a strictly newer fence and
+// resolves; a still-live in-process writer is covered by the live-handle fence
+// pin in session-request-controller and session-failure-boundaries.
+it("a gateway answer adopts a strictly newer fence over a crashed writer and resolves", () => persisted(() => Effect.gen(function* () {
   const initial = yield* requestLedger();
   const crashed = yield* dispatcher(crashAfterRequestOpen(initial, "lost"), []);
   expect(yield* failure(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
   )).toMatchObject({ _tag: "ForeignFailure", operation: "lost" });
   const request = currentRequest();
-  const before = SessionHandleStore.row(request.sessionId);
+  const before = isolatedLedger().kernel.row(request.sessionId);
   const gateway = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 200,
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
+    ...isolatedRuntime(),
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
-  expect(yield* failure(gateway.answer(ownerAnswer(request)))).toMatchObject({
-    _tag: "CommitFailed", error: {
-    _tag: "LeaseRefused",
-    reason: "held",
-    holder: before.leaseOwner,
-    fence: before.leaseFence,
-  } });
-  expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
-  expect(currentRequest().state).toBe("open");
-  const dormant = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
-    clock: () => 40_000,
-    observations: { publish: () => undefined },
-    authorizeConfigure: allowConfigure,
-  }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
-  expect(yield* dormant.answer(ownerAnswer(request))).toBe("resolved");
+  expect(yield* gateway.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");
-  expect(SessionHandleStore.row(request.sessionId).leaseOwner).toBeNull();
+  const after = isolatedLedger().kernel.row(request.sessionId);
+  expect(after.leaseFence).toBe(before.leaseFence + 1);
+  expect(after.leaseOwner).not.toBe(before.leaseOwner);
 })));
 
 it.each(["answer", "timeout", "cancel"] as const)("%s wins once across a request-port restart", (winner: "answer" | "timeout" | "cancel") => fileRequest((dbPath) => Effect.gen(function* () {
@@ -257,16 +262,19 @@ it.each(["answer", "timeout", "cancel"] as const)("%s wins once across a request
   if (winner === "answer") expect(yield* port.answer(answer)).toBe("resolved");
   if (winner === "cancel") expect(yield* port.cancel(cancel)).toBe("cancelled");
   if (winner === "timeout") { now = 200; yield* port.timeout(opened.requestId, now); }
-  const terminal = SessionHandleStore.actionById("invocation:resolution");
-  Storage.reset();
-  Storage.initialize({ dbPath });
-  const reopened = yield* withSessionServices(createSessionRequests(runtime), runtime);
+  const terminal = isolatedLedger().kernel.actionById("invocation:resolution");
+  // Process restart: a fresh store handle over the same files, a fresh port.
+  const second = openCrashStores(dbPath);
+  yield* Effect.addFinalizer(() => Effect.sync(() => second.close()));
+  const restarted = { ...runtime, ...kernelRuntime(() => second.kernel) };
+  const reopened = yield* withSessionServices(createSessionRequests(restarted), restarted);
   expect(yield* reopened.cancel({ ...cancel, inputId: "cancel-after-reopen" })).toBe("duplicate");
   now = 200;
   yield* reopened.timeout(opened.requestId, now);
   expect(yield* reopened.answer({ ...answer, inputId: "late-answer", receivedAt: 199 })).toBe("late_unknown");
-  expect(SessionHandleStore.actionById("invocation:resolution")).toEqual(terminal);
-  expect(SessionHandleStore.requestById(opened.requestId)?.state).toBe(({ answer: "resolved", timeout: "expired", cancel: "cancelled" } as const)[winner]);
-  expect(SessionHandleStore.pendingInbox("parent")).toHaveLength(winner === "answer" ? 1 : 0);
-  expect(Storage.get().alarms?.get("invocation:deadline")?.status).toBe(winner === "timeout" ? "fired" : "cancelled");
+  expect(second.kernel.actionById("invocation:resolution")).toEqual(terminal);
+  expect(second.kernel.requestById(opened.requestId)?.state).toBe(({ answer: "resolved", timeout: "expired", cancel: "cancelled" } as const)[winner]);
+  expect(second.kernel.pendingMessages("parent")).toHaveLength(winner === "answer" ? 1 : 0);
+  // W5.2: the alarms table is deleted; request deadlines live on the entity
+  // timer plane, so there is no "invocation:deadline" row to assert here.
 })));

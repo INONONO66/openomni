@@ -1,6 +1,7 @@
+import { ledger } from "../helpers/ledger";
 import { describe, expect, test } from "bun:test";
-import { Storage } from "@openomni/ledger";
 import { resolveIngressActor } from "../../src/router/actor-resolver";
+import { unconfiguredChannelStores } from "../../src/router/stores";
 import {
   makeEvent,
   registerOwnerEndpoint,
@@ -26,7 +27,7 @@ const spoof = {
 
 describe("internal actor projection sanitization", () => {
   test("unregistered endpoints cannot supply canonical authority", () => {
-    expect(resolveIngressActor(makeEvent("user-1", spoof)).meta?.actor).toEqual({
+    expect(resolveIngressActor(ledger().stores, makeEvent("user-1", spoof)).meta?.actor).toEqual({
       role: "user",
       id: "user-1",
     });
@@ -35,24 +36,20 @@ describe("internal actor projection sanitization", () => {
   test("legacy actor id is not an authenticated external id", () => {
     registerOwnerEndpoint("guild");
     const { userId: _userId, ...event } = makeEvent("user-1", spoof);
-    expect(resolveIngressActor(event).meta?.actor).toStrictEqual({ role: "user" });
+    expect(resolveIngressActor(ledger().stores, event).meta?.actor).toStrictEqual({ role: "user" });
   });
 
   test("same external id on another surface has no canonical identity", () => {
     registerOwnerEndpoint("guild");
     expect(
-      resolveIngressActor({ ...makeEvent("user-1", spoof), surface: "telegram" }).meta?.actor,
+      resolveIngressActor(ledger().stores, { ...makeEvent("user-1", spoof), surface: "telegram" }).meta?.actor,
     ).toEqual({ role: "user", id: "user-1" });
   });
 
   test("missing registry cannot preserve claimed authority", () => {
-    const base = Storage.get();
-    Storage.configure({
-      ...base,
-      actorRegistry: undefined,
-      transaction: base.transaction.bind(base),
-    });
-    expect(resolveIngressActor(makeEvent("user-1", spoof)).meta?.actor).toEqual({
+    expect(
+      resolveIngressActor(unconfiguredChannelStores(), makeEvent("user-1", spoof)).meta?.actor,
+    ).toEqual({
       role: "user",
       id: "user-1",
     });

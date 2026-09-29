@@ -9,8 +9,8 @@ import {
   type WebSocketHandler,
   type WsConnection,
 } from "@openomni/channels";
-import { type ChannelError, decodeChannelFailure } from "@openomni/channels";
-import { ChannelGrantStore, DecisionFacts, LedgerWrites, type LedgerError } from "@openomni/ledger";
+import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
+import type { ChannelGrantStore } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
 import {
   Bus,
@@ -24,9 +24,12 @@ import {
 import { Gateway as GatewayProtocol } from "@openomni/protocol";
 import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
-import { createIngressExecutor } from "./composition/ingress-executor";
+import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
 import { Cause, Effect, Result, Exit, ManagedRuntime, Option, Scope } from "effect";
+import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
+import type { WatchSources } from "./composition/watch-sources";
+import { createWatchMonitorPorts } from "./composition/monitor-ports";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
 import {
   AppLifecycleFailure,
@@ -155,44 +158,63 @@ export function toolPorts(
 }
 
 export function webSocketCallbacks(runtime: AppRuntime, handler: WebSocketHandler) {
+  const inflight = new Set<Promise<void>>();
   return {
-    ...handler.ws,
-    message(ws: WsConnection, data: string | Buffer): Promise<void> {
-      return runtime.runPromise(
-        handler.handleFrame(ws.data, data).pipe(
-          Effect.match({
-            onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
-            onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
-          }),
-        ),
-      );
+    callbacks: {
+      ...handler.ws,
+      message(ws: WsConnection, data: string | Buffer): Promise<void> {
+        const settled = runtime.runPromise(
+          handler.handleFrame(ws.data, data).pipe(
+            Effect.match({
+              onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
+              onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
+            }),
+          ),
+        );
+        const tracked: Promise<void> = settled
+          .catch(() => undefined)
+          .finally(() => void inflight.delete(tracked));
+        inflight.add(tracked);
+        return settled;
+      },
+    },
+    /**
+     * Shutdown join (W5.2): an accepted frame's ingest captures the
+     * gateway-ingress generation for the whole ingest, so the generation
+     * drain must not start before every in-flight frame has unwound.
+     */
+    settled(): Promise<void> {
+      return Promise.all([...inflight]).then(() => undefined);
     },
   };
 }
 
-export async function createMonitorPorts(runtime: AppRuntime): Promise<MonitorPorts> {
-  const { alarms, clock, entropy } = await runAppBoot(
+/** The watch plane's tool ports: chain-fact commits plus native source installs. */
+export async function createMonitorPorts(
+  runtime: AppRuntime,
+  sources: WatchSources,
+): Promise<MonitorPorts> {
+  const { plane, clock, entropy } = await runAppBoot(
     runtime,
     Effect.gen(function* () {
       return {
-        alarms: (yield* LedgerWrites).alarms,
+        plane: yield* AppLedger,
         clock: yield* Clock,
         entropy: yield* Entropy,
       };
     }),
   );
-  const execute = <A>(effect: Effect.Effect<A, LedgerError>, signal: AbortSignal): Promise<A> =>
-    runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
-      if (Result.isFailure(result)) throw new MonitorRefused(result.failure);
-      return result.success;
-    });
-  return {
-    arm: (input, signal) => execute(alarms.arm(input), signal),
-    cancel: (id, sessionId, at, signal) => execute(alarms.cancel(id, sessionId, at), signal),
-    rearm: (id, sessionId, at, signal) => execute(alarms.rearm(id, sessionId, at), signal),
+  return createWatchMonitorPorts({
+    openKernel: plane.openKernel,
+    sources,
     clock: clock.now,
     entropy: entropy.next,
-  };
+    run: <A>(effect: Effect.Effect<A, Error>, signal: AbortSignal): Promise<A> =>
+      runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
+        if (Result.isFailure(result)) throw new MonitorRefused(result.failure);
+        return result.success;
+      }),
+  });
 }
 
 /**
@@ -232,9 +254,12 @@ export interface TrustedChannelGrant {
  * the perimeter refuses it fail-closed. Grants are current authority, not
  * history — revoking one erases no recorded fact.
  */
-export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => void {
+export function registerTrustedChannelGrant(
+  grants: ChannelGrantStore,
+  grant: TrustedChannelGrant,
+): () => void {
   const id = `openomni-resident-${grant.surface}`;
-  ChannelGrantStore.put({
+  grants.put({
     id,
     surface: grant.surface,
     kind: "trusted_channel",
@@ -245,7 +270,7 @@ export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => v
     createdBy: "local-owner",
   });
   return () => {
-    ChannelGrantStore.remove(id);
+    grants.remove(id);
   };
 }
 
@@ -257,11 +282,12 @@ export function registerTrustedChannelGrant(grant: TrustedChannelGrant): () => v
  * no tier of its own, so no mounted named surface can acquire one.
  */
 export function createMountedChannelGrantRegistrar(
+  grants: ChannelGrantStore,
   allowedSendersBySurface: Readonly<Record<string, readonly string[]>> | undefined,
 ): (surfaceId: string, defaultTier: Actor.TrustTier) => () => void {
   return (surfaceId, defaultTier) => {
     const allowedSenders = allowedSendersBySurface?.[surfaceId];
-    return registerTrustedChannelGrant({
+    return registerTrustedChannelGrant(grants, {
       surface: surfaceId,
       defaultTier,
       ...(allowedSenders === undefined ? {} : { allowedSenders }),
@@ -276,16 +302,33 @@ export interface OutboundMessaging {
   readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];
 }
 
-export function channelTransaction<A>(
-  operation: Effect.Effect<A, ChannelError>,
-): Effect.Effect<A, ChannelError> {
-  return Effect.try({
-    try: () =>
-      DecisionFacts.transaction(() =>
-        Result.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
-      ),
-    catch: decodeChannelFailure("message.transaction"),
-  });
+/** One synchronous ledger unit on the ingress session file (decision facts live there). */
+export function channelTransaction(
+  run: <T>(operation: () => T) => T,
+): <A>(operation: Effect.Effect<A, ChannelError>) => Effect.Effect<A, ChannelError> {
+  return (operation) =>
+    Effect.try({
+      try: () =>
+        run(() =>
+          Result.getOrThrowWith(Effect.runSync(Effect.result(operation)), (error) => error),
+        ),
+      catch: decodeChannelFailure("message.transaction"),
+    });
+}
+
+/** The perimeter's store source over the app plane: catalog adapters plus the ingress session's decision facts. */
+export function channelStoreSource(plane: AppLedgerPlane): ChannelStoreSource {
+  const ingress = plane.sessionStore(GATEWAY_INGRESS_SESSION);
+  return {
+    actorRegistry: plane.catalog.actorRegistry,
+    blacklist: plane.catalog.blacklist,
+    channelGrant: plane.catalog.channelGrant,
+    replyGrant: plane.catalog.replyGrant,
+    egressBudget: plane.catalog.egressBudget,
+    surfaceKey: plane.catalog.surfaceKey,
+    decisionFacts: ingress.decisionFacts,
+    transaction: ingress.transaction,
+  };
 }
 
 export function channelRequests(
@@ -310,14 +353,19 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError, SessionEntryServices | BundleDefinitions> {
+): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
   return Effect.gen(function* () {
-    registerTrustedChannelGrant({ surface: "ws", defaultTier: LOOPBACK_BOOTSTRAP_TIER });
-    const externalRun = yield* createIngressExecutor();
-    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers) }));
+    const plane = yield* AppLedger;
+    registerTrustedChannelGrant(plane.stores.channelGrants, {
+      surface: "ws",
+      defaultTier: LOOPBACK_BOOTSTRAP_TIER,
+    });
+    const externalRun = yield* createIngressExecutor(plane);
+    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel), openKernel: plane.openKernel, listSessions: plane.listSessions }));
     return createGatewayRouter({
       ...ports,
-      transaction: channelTransaction,
+      stores: ports.stores ?? createChannelStores(channelStoreSource(plane)),
+      transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
       requests,
       sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
       run: (sender, request, body) =>
@@ -331,7 +379,10 @@ export function createResidentGateway(
           if (sender.kind === "external") return yield* externalRun(sender, request, execute);
           const outbound = yield* outboundMessage;
           const result = yield* (outbound?.executor ?? currentExecutor()).run(request, execute);
-          return { ...result, matchedRuleIds: messageDecisionRules(sender.id, request) };
+          return {
+            ...result,
+            matchedRuleIds: messageDecisionRules(plane.openKernel(sender.id), sender.id, request),
+          };
         }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
       observe: (sender, observation) =>
         scopeObservation(Bus, {

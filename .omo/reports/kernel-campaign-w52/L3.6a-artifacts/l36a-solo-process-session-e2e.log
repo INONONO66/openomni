@@ -1,0 +1,74 @@
+bun test v1.4.1 (4661e494f)
+
+test/process-session-e2e.test.ts:
+(pass) process entry exits on empty stdin and closes its reply channel [1.78ms]
+(pass) process entry logs committed sessions and disposes its runtime [152.96ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [70.79ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [93.09ms]
+[20:39:43.952] ERROR (#325): Defect in entity, restarting CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/session-turn.ts:199:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at onExit (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:1126:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:1137:7)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:737:13)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15) {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 250,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "b6bfdb33-4052-4391-9326-d3d85507ce39",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+[20:39:44.458] ERROR (#325): Defect building entity handlers LeaseRefused: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/cluster/session-entity.ts:98:30)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at Session(b6bfdb33-4052-4391-9326-d3d85507ce39).Prompt {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 250,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "b6bfdb33-4052-4391-9326-d3d85507ce39",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+(pass) startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement [1493.02ms]
+
+ 5 pass
+ 0 fail
+ 42 expect() calls
+Ran 5 tests across 1 file. [2.08s]

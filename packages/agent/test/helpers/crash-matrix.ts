@@ -1,15 +1,17 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./session-tree";
 import { runAgent, testExecutor } from "./executor";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { foldCrashMain, foldCrashPoint, foldCrashProof } from "./fold-crash";
 import { configureCrashPoint } from "./crash-configure";
 import { reconstructionCut, reconstructionPoint } from "./crash-reconstruction";
 import { turnTestLayer, catalogLayer, runnerTestLayer } from "./service-layers";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
+import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
+import { openCrashStores } from "./crash-stores";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import { SessionHandleStore, Storage, type LedgerError } from "@openomni/ledger";
+import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import {
   LedgerAction,
   Message,
@@ -19,9 +21,12 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionLedger } from "../../src/executor";
-import { createRetryAlarmPort } from "../../src/executor-retry-alarm";
+import { createLedgerRetryTimerPort } from "../../src/executor-attempts";
 import { executeCompaction } from "../../src/compaction/execute-cut";
-import { session, wakeSession } from "../../src/session-handle";
+import { session } from "../../src/session-handle";
+import { reactivateSession } from "./wake-session";
+import { commitReceivedMessage } from "./ingress";
+
 import { receiveOutbound } from "./receive-outbound";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import { requestLedger } from "./request-ledger";
@@ -53,7 +58,7 @@ export const crashPoint = z.enum([
   "platform_send_ambiguous_without_reconciliation",
   "compaction_concurrent_tail_committed_before_owner_crash",
   "outbound_flood_deadline_before_timer_rearm",
-  "alarm_fire_committed_before_hibernated_doorbell",
+  "watch_fired_committed_before_entity_wake",
   "owner_reclaimed_before_stale_transcript_flush",
   ...reconstructionPoint.options,
 ]);
@@ -82,7 +87,6 @@ export const crashWitness = z
     lease: z.object({
       owner: z.string().nullable(),
       fence: z.number(),
-      expiresAt: z.number().nullable(),
     }),
     openTurns: z.array(
       z.object({ turnId: z.string(), resultId: z.string(), resumeCount: z.number() }),
@@ -135,13 +139,14 @@ export function emitCrashWitness(witness: Witness, write: (fd: number, value: st
 
 // Synchronous witness output also permits cuts inside the synchronous store commit port.
 function stop(point: z.infer<typeof allCrashPoints>, bodies: string[], pending?: LedgerAction.Append, fold?: z.infer<typeof foldCrashProof>): never {
-  const row = SessionHandleStore.row(sessionId);
+  const kernel = isolatedLedger().kernel;
+  const row = kernel.row(sessionId);
   const witness = crashWitness.parse({
     crashPoint: point,
     bodies,
     ...(fold === undefined ? {} : { fold }),
-    lease: { owner: row.leaseOwner, fence: row.leaseFence, expiresAt: row.leaseExpiresAt },
-    openTurns: SessionHandleStore.openTurns(sessionTree(sessionId)),
+    lease: { owner: row.leaseOwner, fence: row.leaseFence },
+    openTurns: SessionHandleStore.openTurns(sessionTree(kernel, sessionId)),
     ...(pending === undefined
       ? {}
       : { pending: { kind: pending.kind, effect: pending.effect.value } }),
@@ -202,9 +207,10 @@ function executePoint(point: CrashPoint, bodies: string[]) {
       ledger,
       policy: compiledPolicy(),
       observations,
-      // The durable arm commits before the cut: only the wait itself is lost.
+      // The durable arm (retry.scheduled chain action) commits before the cut:
+      // only the wait itself is lost.
       retryAlarm: {
-        ...createRetryAlarmPort(sessionId, recording.clock),
+        ...createLedgerRetryTimerPort(ledger, sessionId, recording.clock),
         wait: () => Effect.sync(() => stop(point, bodies)),
       },
     });
@@ -258,7 +264,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
             Effect.gen(function* () {
               bodies.push("summary");
               if (point === "compaction_concurrent_tail_committed_before_owner_crash") {
-                yield* SessionHandleStore.commitReceivedMessage({
+                yield* commitReceivedMessage(isolatedLedger().kernel, {
                   id: "tail",
                   sessionId,
                   kind: "prompt",
@@ -285,18 +291,22 @@ function executePoint(point: CrashPoint, bodies: string[]) {
   });
 }
 
-function workerClock(point: CrashPoint, bodies: string[]) {
-  // dispatchSessionOutbound reads the clock for commit([], true) after committing the ACK.
-  if (
-    point === "delivery_ack_committed_before_owner_cleanup" &&
-    bodies.includes("accepted") &&
-    SessionHandleStore.outboundRows(sessionId).some(
-      (item: ReturnType<typeof SessionHandleStore.outboundRows>[number]) =>
-        item.state === "delivered",
+/**
+ * The entity-plane owner-cleanup seam: hibernation runs only after the ACK
+ * commit is durable, so crashing here leaves the delivered outbound row with
+ * its activation authority never cleaned up.
+ */
+function hibernateCut(point: CrashPoint, bodies: string[]) {
+  return () => Effect.sync(() => {
+    if (
+      point === "delivery_ack_committed_before_owner_cleanup" &&
+      bodies.includes("accepted") &&
+      isolatedLedger().kernel.outboundRows(sessionId).some(
+        (item: import("@openomni/protocol").SessionTransition.Outbound) => item.state === "delivered",
+      )
     )
-  )
-    stop(point, bodies);
-  return 100;
+      stop(point, bodies);
+  });
 }
 
 function outboundPort(
@@ -321,7 +331,7 @@ function outboundPort(
       ) {
         if (point === "platform_send_committed_before_local_ack_reconciled_sent")
           appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
-        const { receipt } = receiveOutbound(message, 100);
+        const { receipt } = receiveOutbound(isolatedLedger().kernel, message, 100);
         bodies.push("accepted");
         if (point === "platform_send_committed_before_local_ack_reconciled_sent")
           stop(point, bodies);
@@ -334,9 +344,11 @@ function outboundPort(
 function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
   return Effect.gen(function* () {
     const runtime: SessionRuntime = {
+      ...isolatedRuntime(),
       authorizeConfigure: allowConfigure,
       observations,
-      clock: () => workerClock(point, bodies),
+      clock: () => 100,
+      onHibernate: hibernateCut(point, bodies),
       dispatchOutbound: outboundPort(point, bodies, dbPath),
     };
     const runner = () =>
@@ -346,7 +358,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       });
     if (point === "inbox_admitted_before_turn_open") {
       yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, role: "resident", runner }, fixture), fixture); });
-      yield* SessionHandleStore.commitReceivedMessage({
+      yield* commitReceivedMessage(isolatedLedger().kernel, {
         id: "admitted",
         sessionId,
         kind: "prompt",
@@ -358,7 +370,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       return stop(point, bodies);
     }
     yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner }, fixture), fixture); });
-    const commission = yield* SessionHandleStore.commitReceivedMessage({
+    const commission = yield* commitReceivedMessage(isolatedLedger().kernel, {
       id: "commission",
       sessionId: "parent",
       kind: "prompt",
@@ -393,9 +405,7 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
   const [cut, dbPath, stage] = z
     .tuple([allCrashPoints, z.string().min(1), z.enum(["initial", "resume"])])
     .parse(args);
-  return witnessSink.run(emit, async () => {
-    Storage.initialize({ dbPath });
-    seedPolicy();
+  const main = async () => {
     const reconstruct = reconstructionPoint.safeParse(cut);
     if (reconstruct.success) return runAgent(reconstructionCut(reconstruct.data, dbPath,
       (bodies, pending, proof) => stop(cut, bodies, pending, proof)));
@@ -405,8 +415,8 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
     return runAgent(Effect.scoped(Effect.gen(function* () {
       const bodies: string[] = [];
       if (stage === "resume") {
-        const fixture: SessionFixture = { observations, clock: () => 100_000, authorizeConfigure: allowConfigure };
-        yield* withSessionServices(wakeSession(sessionId, () => Effect.sync(() => {
+        const fixture: SessionFixture = { ...isolatedRuntime(), observations, clock: () => 100_000, authorizeConfigure: allowConfigure };
+        yield* withSessionServices(reactivateSession(sessionId, () => Effect.sync(() => {
           stop(point, bodies);
           return { kind: "result" as const, text: "" };
         }), fixture), fixture);
@@ -414,6 +424,14 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
         yield* admissionPoint(point, bodies, dbPath);
       } else yield* executePoint(point, bodies);
     }).pipe(Effect.provide(runnerTestLayer))));
+  };
+  return witnessSink.run(emit, () => {
+    const ambient = activeIsolation();
+    if (ambient !== undefined) return main();
+    return isolatedRun(() => {
+      seedPolicy();
+      return main();
+    }, () => openCrashStores(dbPath));
   });
 }
 

@@ -44,6 +44,8 @@ export interface ResidentOptions {
   readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;
+  /** The catalog's current policy generation; new sessions pin it at creation. */
+  readonly policyGeneration: () => number;
 }
 
 /** Resident and worker use the same session-owned runner and dispatcher. */
@@ -121,7 +123,7 @@ export function createResident(options: ResidentOptions) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new Error(`runner is not registered: ${runner}`);
       }
-      return messageMaterialization({
+      return messageMaterialization(options.policyGeneration)({
         id,
         parentId,
         role,

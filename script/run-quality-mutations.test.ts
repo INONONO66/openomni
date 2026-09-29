@@ -157,9 +157,8 @@ test("reach probes type-check under the repository's strict compiler options", (
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// script/alarm-type-contract.test.ts compiles kernel source and fails on any
-// call or binding whose compiler type is any/unknown; a reach copy of that
-// source must pass it too.
+// The literal-zero any/unknown DoD applies to compiled kernel source; a reach
+// copy of that source must introduce no compiler-inferred any/unknown either.
 test("reach probes introduce no compiler-inferred any or unknown", () => {
 	const directory = mkdtempSync(join(tmpdir(), "mutation-probe-any-"));
 	try {

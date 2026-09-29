@@ -1,5 +1,6 @@
+import type { Actor } from "@openomni/protocol";
+import { ledger, resetLedger } from "../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
 import { resetGrantStore } from "../helpers/channel-grant";
 import { resolveChannelGrant } from "../../src/router/channel-grant";
 
@@ -12,7 +13,7 @@ const restrictiveGrant = {
   kind: "blocked_channel",
   createdBy: "act_owner",
   createdAt: 200,
-} as const satisfies ChannelGrantStore.Grant;
+} as const satisfies Actor.ChannelGrant;
 
 const permissiveGrant = {
   id: "a-permissive",
@@ -22,7 +23,7 @@ const permissiveGrant = {
   defaultTier: "owner",
   createdBy: "act_owner",
   createdAt: 100,
-} as const satisfies ChannelGrantStore.Grant;
+} as const satisfies Actor.ChannelGrant;
 
 const equalSpecificityInput = {
   surface: "discord",
@@ -31,29 +32,28 @@ const equalSpecificityInput = {
 } as const;
 
 function resolveBothOrders(
-  first: ChannelGrantStore.Grant,
-  second: ChannelGrantStore.Grant,
+  first: Actor.ChannelGrant,
+  second: Actor.ChannelGrant,
 ): (string | undefined)[] {
   return [
     [first, second],
     [second, first],
   ].map((grants) => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-    for (const grant of grants) ChannelGrantStore.put(grant);
-    return resolveChannelGrant({ surface: "discord" })?.grant.id;
+    resetLedger();
+    for (const grant of grants) ledger().stores.channelGrants.put(grant);
+    return resolveChannelGrant(ledger().stores, { surface: "discord" })?.grant.id;
   });
 }
 
 describe("channel grant authority", () => {
   test("chooses the most specific matching grant", () => {
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant-surface",
       surface: "discord",
       kind: "trusted_channel",
       createdBy: "act_owner",
     });
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant-channel",
       surface: "discord",
       workspace: "guild",
@@ -63,7 +63,7 @@ describe("channel grant authority", () => {
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant(equalSpecificityInput)).toMatchObject({
+    expect(resolveChannelGrant(ledger().stores, equalSpecificityInput)).toMatchObject({
       grant: { id: "grant-channel" },
       inboundTreatment: "evidence_only",
     });
@@ -74,10 +74,9 @@ describe("channel grant authority", () => {
       [permissiveGrant, restrictiveGrant],
       [restrictiveGrant, permissiveGrant],
     ].map((grants) => {
-      Storage.reset();
-      Storage.initialize({ dbPath: ":memory:" });
-      for (const grant of grants) ChannelGrantStore.put(grant);
-      return resolveChannelGrant(equalSpecificityInput)?.grant.id;
+      resetLedger();
+      for (const grant of grants) ledger().stores.channelGrants.put(grant);
+      return resolveChannelGrant(ledger().stores, equalSpecificityInput)?.grant.id;
     });
 
     expect(winners).toEqual([restrictiveGrant.id, restrictiveGrant.id]);
@@ -90,7 +89,7 @@ describe("channel grant authority", () => {
       kind: "trusted_channel",
       defaultTier: "observer",
       createdBy: "act_owner",
-    } as const satisfies ChannelGrantStore.Grant;
+    } as const satisfies Actor.ChannelGrant;
     const ownerTier = { ...observerTier, id: "a-owner", defaultTier: "owner" } as const;
     expect(resolveBothOrders(observerTier, ownerTier)).toEqual(["b-observer", "b-observer"]);
 
@@ -99,14 +98,14 @@ describe("channel grant authority", () => {
       surface: "discord",
       kind: "broadcast_channel",
       createdBy: "act_owner",
-    } as const satisfies ChannelGrantStore.Grant;
+    } as const satisfies Actor.ChannelGrant;
     const trustedEvidence = {
       id: "a-trusted",
       surface: "discord",
       kind: "trusted_channel",
       inboundTreatment: "evidence_only",
       createdBy: "act_owner",
-    } as const satisfies ChannelGrantStore.Grant;
+    } as const satisfies Actor.ChannelGrant;
     expect(resolveBothOrders(broadcastKind, trustedEvidence)).toEqual([
       "b-broadcast",
       "b-broadcast",
@@ -117,7 +116,7 @@ describe("channel grant authority", () => {
       surface: "discord",
       kind: "trusted_channel",
       createdBy: "act_owner",
-    } as const satisfies ChannelGrantStore.Grant;
+    } as const satisfies Actor.ChannelGrant;
     expect(resolveBothOrders(firstId, { ...firstId, id: "b-second" })).toEqual([
       "a-first",
       "a-first",
@@ -125,7 +124,7 @@ describe("channel grant authority", () => {
   });
 
   test("normalizes an explicit treatment against the grant kind exactly once", () => {
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant-override",
       surface: "discord",
       kind: "broadcast_channel",
@@ -133,17 +132,17 @@ describe("channel grant authority", () => {
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant({ surface: "discord" })?.inboundTreatment).toBe("evidence_only");
+    expect(resolveChannelGrant(ledger().stores, { surface: "discord" })?.inboundTreatment).toBe("evidence_only");
   });
 
   test("returns no resolution when no raw fact matches", () => {
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant-discord",
       surface: "discord",
       kind: "trusted_channel",
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant(ledger().stores, { surface: "telegram" })).toBeUndefined();
   });
 });

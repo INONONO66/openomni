@@ -1,4 +1,4 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../test/helpers/session-tree";
 import { describe, expect, test } from "bun:test";
 import { SessionTurn } from "@openomni/protocol";
 import { z } from "zod";
@@ -43,7 +43,7 @@ describe("turn benchmarks", () => {
       expect(snapshot.turns[0]?.messages.map((message) => message.role)).toEqual([
         "user", "assistant",
       ]);
-      const actions = sessionTree(turn.handle.id);
+      const actions = sessionTree(turn.kernel, turn.handle.id);
       expect(actions.filter((action) => action.kind === "message")).toHaveLength(2);
       const terminals = actions.filter((action) =>
         action.kind === "turn" && SessionTurn.Terminal.safeParse(action.effect.value).success,

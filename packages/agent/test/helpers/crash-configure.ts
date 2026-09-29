@@ -1,17 +1,19 @@
 import { writeSync } from "node:fs";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { LedgerAction, SessionGeneration } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./session-tree";
 import { ForeignFailure, type SessionError } from "../../src/errors";
-import { closeSessions, session, wakeSession } from "../../src/session-handle";
+import { closeSessions, session } from "../../src/session-handle";
+import { reactivateSession } from "./wake-session";
 import type { SessionRunnerInput } from "../../src/session-contract";
 import { GenerationLayers, SessionLayer } from "../../src/services";
-import { isolated } from "./isolated";
+import { isolated, isolatedLedger } from "./isolated";
+import { openCrashStores } from "./crash-stores";
+import { commitReceivedMessage } from "./ingress";
+import { seedPolicy } from "./seed-policy";
 import { awaitCrashStart, holdCrashBarrier } from "./crash-channel";
-import { allowConfigure, type SessionFixture, withSessionServices } from "./session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./session-services";
 
 export const configureCrashPoint = "session_configure_commit_before_hibernate";
 const sessionId = "configure-crash-session";
@@ -30,6 +32,7 @@ function cut() {
   return Effect.gen(function* () {
     let hibernations = 0;
     const runtime: SessionFixture = {
+      ...isolatedRuntime(),
       authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => 100,
       onHibernate: () => Effect.sync(() => { hibernations += 1; }),
     };
@@ -42,8 +45,8 @@ function cut() {
         configure: <A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>) =>
           generations.configure(id, snapshot, commit).pipe(Effect.tap(() => Effect.sync(() =>
             holdCrashBarrier(JSON.stringify(configureCutProof.parse({
-              crashPoint: configureCrashPoint, snapshot: SessionHandleStore.latestGenerationFor(sessionId),
-              actions: sessionTree(sessionId), hibernations,
+              crashPoint: configureCrashPoint, snapshot: isolatedLedger().kernel.latestGenerationFor(sessionId),
+              actions: sessionTree(isolatedLedger().kernel, sessionId), hibernations,
             }))),
           ))),
       }));
@@ -55,12 +58,14 @@ function cut() {
 
 function recover() {
   return Effect.gen(function* () {
-    const before = sessionTree(sessionId);
-    const snapshot = SessionHandleStore.latestGenerationFor(sessionId);
+    const kernel = isolatedLedger().kernel;
+    const before = sessionTree(kernel, sessionId);
+    const snapshot = kernel.latestGenerationFor(sessionId);
     const captured: SessionGeneration.Snapshot[] = [];
     const runnerGenerations: number[] = [];
     let configureCalls = 0;
     const runtime: SessionFixture = {
+      ...isolatedRuntime(),
       observations: { publish: () => undefined }, clock: () => 100_000,
       authorizeConfigure: () => Effect.suspend(() => {
         configureCalls += 1;
@@ -73,16 +78,16 @@ function recover() {
       return { kind: "result" as const, text: "G1_RESULT" };
     });
     try {
-      yield* withSessionServices(wakeSession(sessionId, runner, runtime), runtime);
-      const idle = sessionTree(sessionId);
-      yield* SessionHandleStore.commitReceivedMessage({
+      yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
+      const idle = sessionTree(kernel, sessionId);
+      yield* commitReceivedMessage(kernel, {
         id: "G1_PROBE", sessionId, kind: "prompt", content: "G1_PROBE", createdAt: 100_000,
         origin: { encodingVersion: 1, value: {} }, parentActionId: null,
       });
-      yield* withSessionServices(wakeSession(sessionId, runner, runtime), runtime);
-      const after = sessionTree(sessionId);
-      yield* withSessionServices(wakeSession(sessionId, runner, runtime), runtime);
-      return configureRecoveryProof.parse({ before, idle, after, repeated: sessionTree(sessionId),
+      yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
+      const after = sessionTree(kernel, sessionId);
+      yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
+      return configureRecoveryProof.parse({ before, idle, after, repeated: sessionTree(kernel, sessionId),
         snapshot, captured, configureCalls, runnerGenerations });
     } finally {
       yield* closeSessions(runtime);
@@ -94,12 +99,9 @@ if (import.meta.main) {
   const [stage, dbPath] = z.tuple([z.enum(["crash", "recover"]), z.string().min(1)]).parse(process.argv.slice(2));
   awaitCrashStart();
   const proof = await isolated(Effect.gen(function* () {
-    Storage.reset(); Storage.initialize({ dbPath });
     if (stage === "recover") return yield* recover();
-    const policies = Storage.get().policies;
-    if (policies === undefined) return yield* Effect.die("missing policies");
-    policies.appendGeneration(() => SEEDED_POLICY_ROWS);
+    seedPolicy();
     return yield* cut();
-  }));
+  }), () => openCrashStores(dbPath));
   writeSync(1, `${JSON.stringify(proof)}\n`);
 }

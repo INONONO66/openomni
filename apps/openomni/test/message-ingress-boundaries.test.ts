@@ -3,24 +3,34 @@ import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
-import { ActorRegistry, EgressBudgetStore, SessionHandleStore, Storage } from "@openomni/ledger";
+import { createChannelStores } from "@openomni/channels";
 import { Gateway, L0Observation } from "@openomni/protocol";
+import { join } from "node:path";
+import { channelStoreSource } from "../src/gateway";
+import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { messageFixture } from "./helpers/message-fixture";
-import { z } from "zod";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorPolicy } from "./helpers/message-scenarios";
 
 const directories = storageDirectories(true);
 
-function registerPeer() {
-  ActorRegistry.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+function registerPeer(plane: AppLedgerPlane) {
+  plane.stores.actors.registerIdentity({ id: "peer", kind: "human", trustTier: "owner" });
+  plane.stores.actors.registerEndpoint({
     id: "ws:peer",
     actorId: "peer",
     channel: "ws",
     externalId: "peer",
   });
+}
+const sessionDb = (fixture: { directory: string }, sessionId: string) =>
+  sessionFilePath(join(fixture.directory, "sessions"), sessionId);
+/** Received-message evidence: prompt actions in the target's chain (W5.2). */
+function promptContents(plane: AppLedgerPlane, sessionId: string): string[] {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
+    .filter((action) => action.kind === "prompt")
+    .map((action) => (action.effect.value as { content?: string }).content ?? "");
 }
 const sender = { kind: "external", surface: "ws", externalId: "peer" } as const;
 const facts = {
@@ -49,7 +59,7 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
       ...actorPolicy("peer", 20),
     });
     directories.push(fixture.directory);
-    registerPeer();
+    registerPeer(fixture.plane);
     for (let index = 0; index < 2; index++)
       expect(
         (
@@ -70,14 +80,12 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
     }));
     if (mode === "ambiguous") {
       expect(receipt.status).toBe("blocked_pre");
-      expect(SessionHandleStore.inboxRows("sender").some((row) => row.content === "ANSWER")).toBe(
-        false,
-      );
+      expect(promptContents(fixture.plane, "sender").includes("ANSWER")).toBe(false);
       return;
     }
     expect(receipt).toMatchObject({ status: "executed", handle: { target: "sender" } });
-    expect(SessionHandleStore.inboxRows("sender").at(-1)?.content).toBe("ANSWER");
-    const resolved = SessionHandleStore.requestRows("sender").filter(
+    expect(promptContents(fixture.plane, "sender").at(-1)).toBe("ANSWER");
+    const resolved = fixture.plane.openKernel("sender").requestRows("sender").filter(
       (request) => request.state === "resolved",
     );
     expect(resolved).toHaveLength(1);
@@ -89,7 +97,7 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
 
 for (const refuse of [false, true]) {
   test(`actor deadline and send admission ${refuse ? "roll back together" : "commit before delivery"}`, async () => {
-    let dbPath = "";
+    const paths = { ingress: "", sender: "" };
     let deliveries = 0;
     const fixture = messageFixture("resident", {
       deliveryRoutes: new Map([
@@ -97,19 +105,19 @@ for (const refuse of [false, true]) {
           "ws",
           async () => {
             deliveries += 1;
-            using independent = new Database(dbPath, { readonly: true });
+            // W5.2: the admission facts live in two session files; both must be
+            // durable before any physical delivery runs.
+            using ingress = new Database(paths.ingress, { readonly: true });
+            using senderFile = new Database(paths.sender, { readonly: true });
             expect(
-              independent.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n,
-            ).toBe(1);
-            expect(
-              independent
+              ingress
                 .query<{ n: number }, []>(
                   "SELECT COUNT(*) AS n FROM decision_fact WHERE key LIKE 'gateway_send:%'",
                 )
                 .get()?.n,
             ).toBe(1);
             expect(
-              independent
+              senderFile
                 .query<{ n: number }, []>(
                   "SELECT COUNT(*) AS n FROM action WHERE kind = 'request' AND json_extract(effect, '$.resolution') = 'opened'",
                 )
@@ -122,12 +130,13 @@ for (const refuse of [false, true]) {
       ...actorPolicy("peer", 10),
     });
     directories.push(fixture.directory);
-    dbPath = fixture.dbPath;
-    registerPeer();
-    using db = new Database(dbPath);
+    paths.ingress = sessionDb(fixture, "gateway-ingress");
+    paths.sender = sessionDb(fixture, fixture.sessionId);
+    registerPeer(fixture.plane);
+    using db = new Database(paths.ingress);
     if (refuse)
       db.exec(
-        "CREATE TRIGGER refuse_deadline BEFORE INSERT ON alarm BEGIN SELECT RAISE(ABORT, 'deadline fault'); END",
+        "CREATE TRIGGER refuse_admission BEFORE INSERT ON decision_fact BEGIN SELECT RAISE(ABORT, 'admission fault'); END",
       );
     const result = await fixture.send({
       to: { kind: "actor", actorId: "peer" },
@@ -137,9 +146,6 @@ for (const refuse of [false, true]) {
     });
     expect(result.isError === true).toBe(refuse);
     expect(deliveries).toBe(refuse ? 0 : 1);
-    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n).toBe(
-      refuse ? 0 : 1,
-    );
     expect(
       db
         .query<{ n: number }, []>(
@@ -147,27 +153,33 @@ for (const refuse of [false, true]) {
         )
         .get()?.n,
     ).toBe(refuse ? 0 : 1);
-    expect(SessionHandleStore.requestRows(fixture.sessionId)).toHaveLength(refuse ? 0 : 1);
-    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n).toBe(
-      refuse ? 0 : 1,
-    );
+    const senderKernel = fixture.plane.openKernel(fixture.sessionId);
+    expect(senderKernel.requestRows(fixture.sessionId)).toHaveLength(refuse ? 0 : 1);
+    if (!refuse) {
+      // The deadline rides the request row itself now; no separate alarm fact.
+      expect(senderKernel.requestRows(fixture.sessionId)[0]?.deadline).toBe(200);
+    }
+    using catalogDb = new Database(join(fixture.directory, "catalog.sqlite"), { readonly: true });
+    // W5.2 accepted seam: the egress debit is a catalog write on its own
+    // connection, claimed before the admission fact, so a refused admission
+    // leaves the (idempotent, messageId-keyed) debit behind.
+    expect(catalogDb.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n).toBe(1);
   });
 }
 
-test("child admission observations see the inbox and deadline together on another connection", async () => {
+test("child admission observations see the deadline before the child's inbox commit", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  using db = new Database(fixture.dbPath, { readonly: true });
-  const visible: Array<{ inbox: number; alarm: number }> = [];
+  const visible: Array<{ deadline: number | null | undefined }> = [];
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.kind !== "request" && !(event.kind === "prompt" && event.sessionId !== "sender"))
-      return;
+    if (event.kind !== "prompt" || event.sessionId === "sender") return;
+    // W5.2: by the time the child's prompt commits in its own session file,
+    // the sender's deadline-bearing request must already be durable.
     visible.push({
-      inbox:
-        db
-          .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM inbox WHERE session_id != 'sender'")
-          .get()?.n ?? 0,
-      alarm: db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM alarm").get()?.n ?? 0,
+      deadline: fixture.plane
+        .openKernel("sender")
+        .requestRows("sender")
+        .find((request) => request.state === "open")?.deadline,
     });
   });
   try {
@@ -181,65 +193,10 @@ test("child admission observations see the inbox and deadline together on anothe
         })
       ).isError,
     ).not.toBe(true);
-    expect(visible).toEqual([
-      { inbox: 1, alarm: 1 },
-      { inbox: 1, alarm: 1 },
-    ]);
+    expect(visible).toEqual([{ deadline: 200 }]);
   } finally {
     unsubscribe();
   }
-});
-
-test("alarm insertion failure rolls back the child, configuration, inbox and alarm action", async () => {
-  const fixture = messageFixture();
-  directories.push(fixture.directory);
-  using db = new Database(fixture.dbPath);
-  db.exec(
-    "CREATE TRIGGER fail_alarm BEFORE INSERT ON alarm BEGIN SELECT RAISE(ABORT, 'alarm fault'); END",
-  );
-  const receipt = await fixture.send({
-    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-    type: "message",
-    content: "LOST_DEADLINE",
-    deadline: 200,
-  });
-  expect(receipt.isError).toBe(true);
-  expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toEqual([]);
-  expect(db.query("SELECT id FROM alarm").all()).toEqual([]);
-  expect(db.query("SELECT id FROM inbox WHERE session_id != 'sender'").all()).toEqual([]);
-  expect(SessionHandleStore.requestRows("sender")).toEqual([]);
-  expect(sessionTree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
-    [],
-  );
-});
-
-test("process loss between request and child inbox insertion exposes neither after reopen", async () => {
-  const child = Bun.spawn(
-    [process.execPath, new URL("./fixtures/message-admission-crash.ts", import.meta.url).pathname],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  expect(stderr).toBe("");
-  expect(exit).toBe(86);
-  const fixture = z.object({ directory: z.string(), dbPath: z.string() }).parse(JSON.parse(stdout));
-  directories.push(fixture.directory);
-  Storage.initialize({ dbPath: fixture.dbPath });
-  expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual(["gateway-ingress", "sender"]);
-  expect(SessionHandleStore.inboxRows("sender")).toHaveLength(1);
-  expect(SessionHandleStore.requestRows("sender")).toEqual([]);
-  expect(sessionTree("sender").filter((action) => action.kind === "alarm.arm")).toEqual(
-    [],
-  );
-  using db = new Database(fixture.dbPath);
-  expect(db.query("SELECT id FROM inbox WHERE session_id != 'sender'").all()).toEqual([]);
-  expect(db.query("SELECT id FROM alarm").all()).toEqual([]);
 });
 
 for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
@@ -263,7 +220,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
       },
     });
     directories.push(fixture.directory);
-    registerPeer();
+    registerPeer(fixture.plane);
     const observations: Gateway.MessageObservation[] = [];
     const unsubscribe = Bus.subscribe(Gateway.MessageObserved, (event) => observations.push(event));
     try {
@@ -271,7 +228,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
       let receipt = initial;
       if (restriction === "spent") {
         if (initial.status !== "executed") throw new Error("initial admission refused");
-        EgressBudgetStore.claim(
+        createChannelStores(channelStoreSource(fixture.plane)).egressBudgets.claim(
           {
             id: "spent",
             senderId: initial.handle.target,
@@ -293,7 +250,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
             matchedRuleIds: ["message.external.egress_budget"],
           }),
         );
-      using db = new Database(fixture.dbPath);
+      using db = new Database(join(fixture.directory, "catalog.sqlite"));
       expect(
         db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM egress_debit").get()?.count,
       ).toBe(restriction === "spent" ? 1 : 0);

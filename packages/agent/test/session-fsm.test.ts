@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition } from "@openomni/protocol";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { decideSessionAdmission } from "../src/session-admission";
 import { decideRequestTransition } from "../src/session-request";
-import { session, wakeSession } from "../src/session-handle";
+import { session } from "../src/session-handle";
+import { resolveSessionRuntime } from "../src/session-contract";
+import { createController } from "../src/session-controller";
 import { turnIntentAction, turnTerminalAction } from "../src/session-record";
 import type { SessionRunner, SessionRunnerInput } from "../src/session-contract";
 import { createExecutor } from "../src/executor";
@@ -13,16 +15,17 @@ import { CommitFailed } from "../src/errors";
 import { createSessionChatRunner } from "../src/session-chat-runner";
 import { prepareChatFixture } from "./helpers/chat-services";
 import { assistantStep } from "./helpers/dispatching-runner";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+import { commitReceivedMessage } from "./helpers/ingress";
 import { nth } from "./helpers/nth";
-import { allowConfigure, withSessionServices, type SessionFixture } from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./helpers/session-services";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
 import { answerThenCompact } from "./helpers/effect-g2";
 
 const row: LedgerSession.Row = {
   id: "S", parentId: null, role: "resident", leaseOwner: "owner", leaseFence: 1,
-  leaseExpiresAt: 1000, revision: 1, state: "running", toolsGeneration: 1,
+  revision: 1, state: "running", toolsGeneration: 1,
   systemHash: "system", policyGeneration: 1,
 };
 const generation = SessionHandleStore.generationSnapshot({
@@ -61,7 +64,7 @@ function fixture(): SessionFixture {
     authorizeConfigure: allowConfigure,
     observations: { publish: () => undefined, subscribe: () => () => undefined },
     clock: () => 20, entropy: () => `fsm-${++sequence}`, processId: "fsm",
-    scheduleHeartbeat: () => () => undefined,
+    ...isolatedRuntime(),
   };
 }
 function declare(runtime: SessionFixture, runner: SessionRunner, id = "S") {
@@ -147,10 +150,11 @@ describe("T12/T13 request source x event x authority product", () => {
       const invalid = [
         { ...valid, sessionId: "foreign" }, { ...valid, expectedRevision: 0 },
         { ...valid, authority: { owner: "foreign", fence: 1 } },
-        { ...valid, authority: { owner: "owner", fence: 2 } }, { ...valid, at: 1000 },
+        // W5.2: the lease-TTL plane is deleted, so a late `at` alone no longer
+        // rejects; expiry is the request deadline (T13 below).
+        { ...valid, authority: { owner: "owner", fence: 2 } },
       ];
       for (const contender of invalid) expect(decideRequestTransition(contender, snapshot)).toEqual({ resolution: "rejected", actions: [] });
-      expect(decideRequestTransition(valid, { ...snapshot, row: { ...row, leaseExpiresAt: null } })).toEqual({ resolution: "rejected", actions: [] });
     });
   }
   test("T12 exact invocation, delivery input and replay record identities cannot be substituted", () => {
@@ -184,11 +188,11 @@ describe("T01-T15 real controller transition witnesses", () => {
     const runner: SessionRunner = () => Effect.sync(() => { bodies += 1; return { kind: "result", text: "" }; });
     const handle = yield* declare(runtime, runner);
     expect(yield* declare(runtime, runner)).toBe(handle);
-    const before = sessionTree("S");
+    const before = sessionTree(isolatedLedger().kernel, "S");
     const other = fixture();
     const conflict = yield* Effect.exit(withSessionServices(session({ id: "S", role: "worker", parentId: "parent", runner }, other), other));
     expect(conflict._tag).toBe("Failure");
-    expect(sessionTree("S")).toEqual(before);
+    expect(sessionTree(isolatedLedger().kernel, "S")).toEqual(before);
     expect(before.map((action) => action.kind)).toEqual(["session.configure"]);
     expect(bodies).toBe(0);
   })));
@@ -201,8 +205,8 @@ describe("T01-T15 real controller transition witnesses", () => {
     let bodies = 0;
     const handle = yield* declare(runtime, (input) => Effect.gen(function* () {
       bodies += 1;
-      expect(SessionHandleStore.latestOpenTurn("S")).toMatchObject({ turnId: input.turnId, resultId: input.resultId });
-      expect(SessionHandleStore.pendingInbox("S")).toEqual([]);
+      expect(isolatedLedger().kernel.latestOpenTurn("S")).toMatchObject({ turnId: input.turnId, resultId: input.resultId });
+      expect(isolatedLedger().kernel.pendingMessages("S")).toEqual([]);
       yield* Deferred.succeed(entered, input);
       yield* Deferred.await(release);
       return { kind: "result", text: "done" };
@@ -216,8 +220,8 @@ describe("T01-T15 real controller transition witnesses", () => {
     expect(bodies).toBe(1);
     yield* Deferred.succeed(release, undefined);
     yield* bounded(Fiber.join(running));
-    expect(SessionHandleStore.latestTurnTerminal("S")?.action.id).toBe(input.resultId);
-    expect(SessionHandleStore.pendingInbox("S")).toEqual([]);
+    expect(isolatedLedger().kernel.latestTurnTerminal("S")?.action.id).toBe(input.resultId);
+    expect(isolatedLedger().kernel.pendingMessages("S")).toEqual([]);
   })));
 
   for (const boundary of ["before_llm", "after_llm", "after_tools"] as const) {
@@ -240,16 +244,18 @@ describe("T01-T15 real controller transition witnesses", () => {
       const running = yield* Effect.forkScoped(handle.prompt("start"));
       yield* bounded(Deferred.await(entered));
       // Durable ingress is independent of the runner, including compaction/approval waits.
-      for (const [ordinal, content] of ["one", "two"].entries()) yield* SessionHandleStore.commitInbox({
+      for (const [ordinal, content] of ["one", "two"].entries()) yield* commitReceivedMessage(isolatedLedger().kernel, {
         id: `queued-${ordinal}`, sessionId: "S", kind: "prompt", content, createdAt: 21 + ordinal,
-        origin: { encodingVersion: 1, value: {} }, parentActionId: SessionHandleStore.latestAction("S")?.id ?? null,
+        origin: { encodingVersion: 1, value: {} }, parentActionId: isolatedLedger().kernel.latestAction("S")?.id ?? null,
       });
-      expect(SessionHandleStore.pendingInbox("S").map((item) => item.content)).toEqual(["one", "two"]);
+      expect(isolatedLedger().kernel.pendingMessages("S").map((item) => item.content)).toEqual(["one", "two"]);
       expect(drained).toEqual([]);
       yield* Deferred.succeed(release, undefined);
       yield* bounded(Fiber.join(running));
       expect(drained).toEqual([["one", "two"]]);
-      expect(SessionHandleStore.inboxRows("S").map((item) => item.status)).toEqual(["consumed", "consumed", "consumed"]);
+      // W5.2: the inbox table is gone; consumption evidence is the drained
+      // batch above plus an empty pending backlog.
+      expect(isolatedLedger().kernel.pendingMessages("S")).toEqual([]);
     })));
   }
 
@@ -270,7 +276,7 @@ describe("T01-T15 real controller transition witnesses", () => {
     const first = yield* bounded(Deferred.await(entered));
     yield* bounded(handle.interrupt());
     yield* bounded(Fiber.join(running));
-    const fixed = SessionHandleStore.latestTurnTerminal("S");
+    const fixed = isolatedLedger().kernel.latestTurnTerminal("S");
     expect(fixed?.action.id).toBe(first.resultId);
     expect(fixed?.effect.kind).toBe("interrupted");
     yield* handle.system.blocks.set([{ id: "new", source: "test", content: "new" }]);
@@ -279,7 +285,7 @@ describe("T01-T15 real controller transition witnesses", () => {
     expect(inputs[1]?.turnId).not.toBe(first.turnId);
     expect(inputs[1]?.resultId).not.toBe(first.resultId);
     expect(inputs[1]?.toolsGeneration).toBe(2);
-    expect(SessionHandleStore.actionById(first.resultId)).toEqual(fixed?.action);
+    expect(isolatedLedger().kernel.actionById(first.resultId)).toEqual(fixed?.action);
   })));
 
   for (const kind of ["result", "error"] as const) test(`T09 ${kind} seals exactly one pre-minted terminal and releases its lease`, () => isolated(Effect.gen(function* () {
@@ -287,24 +293,30 @@ describe("T01-T15 real controller transition witnesses", () => {
     const runtime = fixture();
     const handle = yield* declare(runtime, () => Effect.succeed({ kind, text: "terminal" }));
     yield* handle.prompt("start");
-    const actions = sessionTree("S");
+    const actions = sessionTree(isolatedLedger().kernel, "S");
     const intent = actions.find((action) => SessionHandleStore.turnIntent(action) !== undefined);
     const endings = actions.filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
     expect(endings).toHaveLength(1);
     expect(endings[0]?.id).toBe(SessionHandleStore.turnIntent(intent)?.resultId);
     expect(SessionHandleStore.turnTerminal(endings[0])?.kind).toBe(kind);
-    expect(SessionHandleStore.row("S")).toMatchObject({ state: "idle", leaseOwner: null });
+    // W5.2: terminals keep the fence owner durable; there is no lease release.
+    expect(isolatedLedger().kernel.row("S").state).toBe("idle");
+    expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
   })));
 
   for (const source of ["current", "prior", "cancelled"] as const) test(`T09 live_wait requires a still-armed action from this turn: ${source}`, () => isolated(Effect.gen(function* () {
     seedPolicy();
     const runtime = fixture();
-    const alarms = Storage.get().alarms;
-    if (alarms === undefined) throw new Error("missing alarms");
-    const arm = () => alarms.arm({ id: "alarm", sessionId: "S", kind: "at", fireAt: 100 });
+    // W5.2: the alarms table is gone; an armed alarm is an `alarm.arm` chain
+    // action with no settling `alarm.fired` child (session-stop-evidence).
+    const alarmAction = (kind: "alarm.arm" | "alarm.fired", id: string, parentId: string | null): LedgerAction.Append => ({
+      id, parentId, sessionId: "S", kind, ts: 20, irreversible: true,
+      intent: { encodingVersion: 1, value: { phase: "intent", op: kind } },
+      effect: { encodingVersion: 1, value: kind === "alarm.arm" ? { status: "armed", spec: { kind: "at", fireAt: 100 } } : { status: "fired" } },
+    });
     const runner = createSessionChatRunner({ prepare: (input) => Effect.gen(function* () {
-      if (source !== "prior") yield* arm().pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      if (source === "cancelled") yield* alarms.cancel("alarm", "S", 20).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      if (source !== "prior") yield* input.ledger.commit(alarmAction("alarm.arm", "alarm", input.turnId)).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      if (source === "cancelled") yield* input.ledger.commit(alarmAction("alarm.fired", "alarm:fired", "alarm")).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       const executor = yield* createExecutor({ ledger: input.ledger, identity: { sessionId: "S", role: "resident", parentActionId: input.turnId } });
       return prepareChatFixture({ traceContext: { traceId: "trace", sessionId: "S", runId: input.resultId }, config: {
         events: runtime.observations, executor, model: { provider: "test", id: "test" }, tools: [],
@@ -317,29 +329,51 @@ describe("T01-T15 real controller transition witnesses", () => {
         },
       } });
     }) });
+    if (source === "prior") {
+      // Armed before this turn opened: an out-of-turn fence adoption commit,
+      // before the handle activates (a live activation adopts strictly newer).
+      const kernel = isolatedLedger().kernel;
+      yield* kernel.materialize({ id: "S", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "prior-cfg", at: 1 });
+      const lease = yield* kernel.adoptFence({ sessionId: "S", owner: "prior-arm", fence: kernel.row("S").leaseFence + 1 });
+      yield* kernel.commit({
+        sessionId: "S", owner: "prior-arm", fence: lease.fence, now: 20,
+        expectedRevision: kernel.row("S").revision, state: kernel.row("S").state,
+        actions: [alarmAction("alarm.arm", "alarm", null)],
+      });
+    }
     const handle = yield* declare(runtime, runner);
-    if (source === "prior") yield* arm();
     const result = yield* handle.prompt("start");
     if (source === "current") expect(result).toMatchObject({ kind: "waiting", reason: "live_wait", alarmIds: ["alarm"] });
     else expect(result?.kind).toBe("error");
-    expect(SessionHandleStore.latestTurnTerminal("S")?.effect.kind).toBe(source === "current" ? "waiting" : "error");
-    expect(SessionHandleStore.row("S").leaseOwner).toBeNull();
+    expect(isolatedLedger().kernel.latestTurnTerminal("S")?.effect.kind).toBe(source === "current" ? "waiting" : "error");
+    // W5.2: waiting/error terminals keep the fence owner durable.
+    expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
   })));
 
   for (const resumeCount of [0, SessionHandleStore.RESUME_BUDGET]) test(`T10 recovery budget ${resumeCount} keeps captured IDs and G`, () => isolated(Effect.gen(function* () {
     seedPolicy();
     const runtime = fixture();
-    yield* SessionHandleStore.materialize({ id: "S", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "cfg", at: 1 });
-    const lease = yield* SessionHandleStore.acquireLease({ sessionId: "S", owner: "dead", expectedFence: 0, now: 1, expiresAt: 2 });
-    yield* SessionHandleStore.commit({ sessionId: "S", owner: "dead", fence: lease.fence, now: 1, expectedRevision: 1, state: "running", releaseLease: false, consumeInboxIds: [], actions: [
+    const kernel = isolatedLedger().kernel;
+    yield* kernel.materialize({ id: "S", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "cfg", at: 1 });
+    const lease = yield* kernel.adoptFence({ sessionId: "S", owner: "dead", fence: kernel.row("S").leaseFence + 1 });
+    yield* kernel.commit({ sessionId: "S", owner: "dead", fence: lease.fence, now: 1, expectedRevision: 1, state: "running", actions: [
       turnIntentAction({ id: "T", parentId: "cfg", sessionId: "S", resultId: "R", inboxIds: [], generation, resumeCount, boundaryActionId: "cfg", at: 1 }),
     ] });
     const inputs: SessionRunnerInput[] = [];
-    yield* withSessionServices(wakeSession("S", (input) => Effect.sync(() => { inputs.push(input); return { kind: "result", text: "recovered" }; }), runtime), runtime);
+    // W5.2: the boot-sweep wake plane is gone; waking is a fresh activation
+    // over the durable kernel driving its reconcile (the recover path).
+    yield* Effect.scoped(withSessionServices(Effect.gen(function* () {
+      const resolved = yield* resolveSessionRuntime(runtime);
+      const scope = yield* Effect.scope;
+      const controller = yield* createController(kernel, "S",
+        (input) => Effect.sync(() => { inputs.push(input); return { kind: "result", text: "recovered" }; }),
+        resolved, { reactivate: () => Effect.die("no reactivation"), release: () => undefined }, scope);
+      yield* controller.reconcile();
+    }), runtime));
     expect(inputs).toHaveLength(resumeCount === 0 ? 1 : 0);
     if (resumeCount === 0) expect(inputs[0]).toMatchObject({ turnId: "T", resultId: "R", toolsGeneration: 1, resumeCount: 1 });
-    expect(SessionHandleStore.latestTurnTerminal("S")?.action.id).toBe("R");
-    expect(SessionHandleStore.latestTurnTerminal("S")?.effect.kind).toBe(resumeCount === 0 ? "result" : "error");
+    expect(isolatedLedger().kernel.latestTurnTerminal("S")?.action.id).toBe("R");
+    expect(isolatedLedger().kernel.latestTurnTerminal("S")?.effect.kind).toBe(resumeCount === 0 ? "result" : "error");
   })));
 
   test("T14 in-flight pins stay fixed and the next turn captures the appended generation", () => isolated(Effect.gen(function* () {
@@ -374,19 +408,19 @@ describe("T01-T15 real controller transition witnesses", () => {
       return yield* answerThenCompact(executor, input);
     }));
     yield* handle.prompt("start");
-    const before = sessionTree("S");
+    const before = sessionTree(isolatedLedger().kernel, "S");
     const compaction = before.find((action) => action.kind === "compaction" && PlainObjectSchema.parse(action.intent.value).op === "compact");
     if (compaction === undefined) throw new Error("missing compaction");
     expect((yield* Effect.exit(handle.restoreContext("missing")))._tag).toBe("Failure");
-    expect(sessionTree("S")).toEqual(before);
+    expect(sessionTree(isolatedLedger().kernel, "S")).toEqual(before);
     const foreign = yield* declare(runtime, () => Effect.succeed({ kind: "result", text: "" }), "FOREIGN");
-    const foreignBefore = sessionTree("FOREIGN");
+    const foreignBefore = sessionTree(isolatedLedger().kernel, "FOREIGN");
     expect((yield* Effect.exit(foreign.restoreContext(compaction.id)))._tag).toBe("Failure");
-    expect(sessionTree("FOREIGN")).toEqual(foreignBefore);
-    expect(SessionHandleStore.row("FOREIGN").leaseOwner).toBeNull();
+    expect(sessionTree(isolatedLedger().kernel, "FOREIGN")).toEqual(foreignBefore);
     expect((yield* handle.restoreContext(compaction.id)).terminal).toBe("executed");
-    expect(sessionTree("S").slice(0, before.length)).toEqual(before);
-    expect(SessionHandleStore.row("S").leaseOwner).toBeNull();
-    expect(canonicalDigest(sessionTree("S"))).not.toBe(canonicalDigest(before));
+    expect(sessionTree(isolatedLedger().kernel, "S").slice(0, before.length)).toEqual(before);
+    // W5.2: no lease release; the restore's fence owner stays durable.
+    expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+    expect(canonicalDigest(sessionTree(isolatedLedger().kernel, "S"))).not.toBe(canonicalDigest(before));
   })));
 });

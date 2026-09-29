@@ -1,17 +1,18 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { channelRequests } from "../helpers/channel-requests";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";
 import { effectFailure } from "../helpers/effect-failure";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { answerNativeRequest } from "../../src/router/request/native";
 import { openRequest, requestPort } from "../helpers/requests";
 import { makeRouter } from "./_router-fixture";
 
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
+beforeEach(() => {
+  resetLedger();
+});
 const sender = { kind: "session", id: "child" } as const;
 function outbound(
   overrides: Partial<SessionTransition.OutboundMessage> = {},
@@ -72,25 +73,25 @@ test("native reply reaches the canonical receiving inbox once and retains its or
       content: message.content,
     });
   expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
-  expect(SessionHandleStore.requestById("original")?.state).toBe("resolved");
-  const before = sessionTree("request-owner");
+  expect(ledger().kernel.requestById("original")?.state).toBe("resolved");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   expect(await runEffect(deliver())).toMatchObject({ status: "executed", delivery: { kind: "session" } });
-  expect(sessionTree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
   expect(received).toEqual(["request-owner"]);
-  expect(SessionHandleStore.inboxRows("request-owner")).toHaveLength(1);
-  expect(SessionHandleStore.inboxRows("request-owner")[0]?.origin.value).toEqual(message);
+  expect(ledger().kernel.pendingMessages("request-owner")).toHaveLength(1);
+  expect(ledger().kernel.pendingMessages("request-owner")[0]?.origin.value).toEqual(message);
 });
 
 test("native reply rejects an altered authenticated sender, content, or destination binding", async () => {
   await runEffect(await openRequest("original", { expectedResponders: [sender.id], correlation: {} }));
   const port = channelRequests(requestPort());
-  const before = sessionTree("request-owner");
+  const before = sessionTree("request-owner", ledger().sessions.actions);
   expect(await effectFailure(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound(), "altered", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2))).toBeInstanceOf(Error);
   expect(await effectFailure(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2))).toBeInstanceOf(Error);
   expect(await runEffect(answerNativeRequest(port, sender, undefined, "ordinary", 2))).toBe(false);
-  expect(sessionTree("request-owner")).toEqual(before);
+  expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
 });
 
 test("a late native answer records the timeout winner without manufacturing new conversational input", async () => {
@@ -104,6 +105,6 @@ test("a late native answer records the timeout winner without manufacturing new 
       2,
     )),
   ).toBe(true);
-  expect(SessionHandleStore.requestById("original")?.state).toBe("expired");
-  expect(SessionHandleStore.inboxRows("request-owner")).toEqual([]);
+  expect(ledger().kernel.requestById("original")?.state).toBe("expired");
+  expect(ledger().kernel.pendingMessages("request-owner")).toEqual([]);
 });

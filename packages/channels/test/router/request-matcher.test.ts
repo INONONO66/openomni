@@ -1,12 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { ledger, resetLedger } from "../helpers/ledger";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Ingress, SessionTransition } from "@openomni/protocol";
-import { ActorRegistry, Storage } from "@openomni/ledger";
 import * as Matcher from "../../src/router/request/matcher";
 
 type ResponderTarget = Parameters<typeof Matcher.responderCandidates>[0][number];
 import { requestFixture } from "../helpers/request-record";
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
+beforeEach(() => {
+  resetLedger();
+});
 
 const correlation = Object.freeze({
   endpointId: "endpoint-1",
@@ -124,18 +125,18 @@ describe("request matcher — ingress evidence", () => {
       expectedResponders: ["actor-target", "actor-r2"],
       resolution: "first",
     });
-    ActorRegistry.registerIdentity({
+    ledger().stores.actors.registerIdentity({
       id: "actor-target",
       kind: "human",
       trustTier: "collaborator",
     });
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint-target",
       actorId: "actor-target",
       channel: "telegram",
       externalId: "target-1",
     });
-    const targets = Matcher.targetsOfRequest(record);
+    const targets = Matcher.targetsOfRequest(ledger().stores, record);
     const evidenceFor = (actorId: string, endpointId: string, externalId: string) =>
       Matcher.ingressEvidence(
         directEvent({
@@ -181,7 +182,7 @@ describe("request matcher — ingress evidence", () => {
       resolution: "first",
     });
 
-    expect(Matcher.targetsOfRequest(record)).toEqual([]);
+    expect(Matcher.targetsOfRequest(ledger().stores, record)).toEqual([]);
   });
 
   test("returns every credited expected responder of a request row and never decides", () => {
@@ -206,13 +207,13 @@ describe("request matcher — ingress evidence", () => {
 
     expect(
       Matcher.responderCandidates(
-        Matcher.targetsOfRequest(record),
+        Matcher.targetsOfRequest(ledger().stores, record),
         Matcher.ingressEvidence(replyFromB, claim),
       ),
     ).toEqual(["actor-b"]);
     expect(
       Matcher.responderCandidates(
-        Matcher.targetsOfRequest(record),
+        Matcher.targetsOfRequest(ledger().stores, record),
         Matcher.ingressEvidence(replyFromStranger, claim),
       ),
     ).toEqual([]);

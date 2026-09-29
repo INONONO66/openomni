@@ -5,8 +5,9 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
-import { SessionHandleStore } from "@openomni/ledger";
 import { Bus, currentInvocation, type InvocationFrame } from "@openomni/agent";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
 import {
   attachMachineDaemon as attachDaemon,
@@ -126,6 +127,7 @@ test("app root runs machine read write shell and code through one eval cell", as
       }),
     },
   });
+  const plane = await planeOf(app.runtime);
   const daemon = await attachMachineDaemon({
     socketPath,
     fsExports: new Map([["data", root]]),
@@ -140,7 +142,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   });
   suite.defer(() => runEffect(daemon.close()));
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
-  const reply = nextResidentTurn(15_000);
+  const reply = nextResidentTurn(plane, 15_000);
   ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
   const answer = String((await reply).text);
   expect(answer).toContain("[0, 255, 128, 65]");
@@ -159,12 +161,15 @@ test("a cell creates three child sessions through send_message", async () => {
     model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
     machines: { socketPath, enrolled: [enrollment] },
   });
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   const app = await suite.boot({
     config,
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) => Effect.sync(() => {
-        if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
+        const plane = planeRef.current;
+        if (plane === undefined) throw new Error("plane not resolved before model run");
+        if (plane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
           // Each worker answers with the instruction it was actually given, so
           // a cell that dropped or duplicated one would be visible.
           const asked = (input.messages.at(-1)?.parts ?? [])
@@ -204,6 +209,7 @@ test("a cell creates three child sessions through send_message", async () => {
     },
   });
 
+  planeRef.current = await planeOf(app.runtime);
   const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
 
@@ -211,7 +217,7 @@ test("a cell creates three child sessions through send_message", async () => {
     "auth",
     WS_TOKEN,
   ]);
-  const reply = nextResidentTurn(30_000);
+  const reply = nextResidentTurn(planeRef.current, 30_000);
   ws.send(JSON.stringify({ type: "message", text: "check everything" }));
 
   const answer = String((await reply).text);
@@ -223,23 +229,25 @@ test("a cell creates three child sessions through send_message", async () => {
   // Three workers ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("cell=3");
-  expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toHaveLength(3);
+  expect(planeRef.current.listSessions().filter((row) => row.role === "worker")).toHaveLength(3);
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns.length).toBeGreaterThanOrEqual(2);
   expect(new Set(residentTurns).size).toBe(1);
   expect(witness.pids).toHaveLength(1);
+  const catalogPath = config.catalogPath;
+  if (catalogPath === undefined) throw new Error("suite config is missing catalogPath");
   await suite.cleanup();
   expect(witness.completed).toBe(true);
   expect(existsSync(socketPath)).toBe(false);
-  expect(existsSync(dirname(config.dbPath))).toBe(false);
+  expect(existsSync(dirname(catalogPath))).toBe(false);
   console.log(
     "967-U1 code-mode cleanup",
     JSON.stringify({
       pids: witness.pids,
       socketPath,
       socketExists: existsSync(socketPath),
-      dbPath: config.dbPath,
-      directoryExists: existsSync(dirname(config.dbPath)),
+      catalogPath,
+      directoryExists: existsSync(dirname(catalogPath)),
     }),
   );
 }, 60_000);
@@ -278,7 +286,7 @@ test("the catalog remains available while machine execution refuses without atta
     "auth",
     WS_TOKEN,
   ]);
-  const reply = nextResidentTurn(15_000);
+  const reply = nextResidentTurn(await planeOf(app.runtime), 15_000);
   ws.send(JSON.stringify({ type: "message", text: "run something" }));
 
   const answer = String((await reply).text);

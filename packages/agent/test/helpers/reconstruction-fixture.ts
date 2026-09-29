@@ -11,6 +11,7 @@ import { executeCompaction } from "../../src/compaction/execute-cut";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
 import { compiledPolicy } from "./compiled-policy";
 import { textMessage } from "./messages";
+import { isolatedLedger } from "./isolated";
 import { requestLedger } from "./request-ledger";
 import { seedPolicy } from "./seed-policy";
 
@@ -163,7 +164,7 @@ export async function reconstructionFixture(
   requireCommit(changed);
   const compact = (summarize = async () => "durable summary") =>
     runAgent(executeCompaction({
-      history: hydrateSessionHistory(reconstructionSession).history,
+      history: hydrateSessionHistory(isolatedLedger().kernel, reconstructionSession).history,
       executor,
       events: {
         publish(event) {

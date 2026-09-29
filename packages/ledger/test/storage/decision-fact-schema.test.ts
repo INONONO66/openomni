@@ -16,9 +16,8 @@ afterEach(() => {
 
 /**
  * The drizzle DDL view (decision-fact-schema.ts, drizzle.config.ts casing
- * `snake_case`) must map onto the table the ordered migrations create —
- * script/check-ledger-schema-drift.ts owns full shape parity; this test keeps
- * the runtime column mapping honest against the applied 0040 DDL.
+ * `snake_case`) must map onto the table the fresh schema creates; this test
+ * keeps the runtime column mapping honest against the applied DDL.
  */
 test("decision-fact drizzle view reads and writes the migrated decision_fact table", () => {
   const client = drizzle({ client: db, schema: { decisionFact }, casing: "snake_case" });

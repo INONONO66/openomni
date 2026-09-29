@@ -1,16 +1,25 @@
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
-import { Storage } from "./storage";
 
-/** Narrow first-writer-wins port on the shared storage transaction boundary. */
-export namespace DecisionFacts {
+/** Narrow first-writer-wins port on one store handle's transaction boundary. */
+namespace DecisionFacts {
   export type Port = ProtocolStorage.DecisionFactSubAdapter;
 
-  /** One perimeter admission unit, including its injected durable deadline write. */
-  export function transaction<T>(operation: () => T): T {
-    return Storage.get().transaction(operation);
+  export interface Source {
+    readonly decisionFacts?: Port;
+    transaction<T>(operation: () => T): T;
   }
+}
 
-  export function port(): Port | undefined {
-    return Storage.get().decisionFacts;
-  }
+/**
+ * Handle-scoped decision-fact port (W5.2 F1): the perimeter injects the store
+ * handle whose transaction boundary its admission unit runs in.
+ */
+export function createDecisionFactPort(source: DecisionFacts.Source): {
+  transaction<T>(operation: () => T): T;
+  port(): DecisionFacts.Port | undefined;
+} {
+  return {
+    transaction: (operation) => source.transaction(operation),
+    port: () => source.decisionFacts,
+  };
 }

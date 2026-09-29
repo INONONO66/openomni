@@ -34,7 +34,7 @@
     {
       "crashPoint": "retry_backoff_wait",
       "recovery": "rearmed",
-      "note": "A committed retry.scheduled alarm (kind at) survives the crash; boot recovery consumes (cancels) the schedule via the single alarm owner and wakes the session, and the resumed turn completes the attempt exactly once."
+      "note": "A committed retry.scheduled chain action (alarm.arm) survives the crash; the redelivered RetryScheduled delivery is a chain-guarded no-op against the settled attempt, the entity wake resumes the open turn, and the attempt completes exactly once."
     },
     {
       "crashPoint": "compaction_summary_before_result_commit",
@@ -92,9 +92,9 @@
       "note": "SIGKILL after flood refusal propagates; a fresh process retries immediately and then sends nothing on repeated wake. No persisted outbound notBefore/deadline or atomic outbound+alarm transition exists. Residual rearm and zero attempts before the deadline remain blocked; this is only the honest current rearmed class."
     },
     {
-      "crashPoint": "alarm_fire_committed_before_hibernated_doorbell",
+      "crashPoint": "watch_fired_committed_before_entity_wake",
       "recovery": "rearmed",
-      "note": "SIGKILL immediately after alarm.fire commits its occurrence and inbox prompt for a hibernated session, before a doorbell. A fresh process reopens the same SQLite database and wakes once; one runner consumes the original prompt, the alarm stays fired with one occurrence, and another wake does not execute. TestClock supplies logical time; the ledger mints the occurrence identity."
+      "note": "SIGKILL immediately after the WatchFired delivery commits its occurrence chain action and the pending wake prompt for a hibernated session, before any entity wake. A fresh process reopens the same session file and catalog and wakes once; one runner consumes the original prompt, every redelivery of the occurrence is a chain-guarded no-op (zero re-fire), and another wake does not execute. TestClock supplies logical time; the chain carries the occurrence identity."
     },
     {
       "crashPoint": "owner_reclaimed_before_stale_transcript_flush",

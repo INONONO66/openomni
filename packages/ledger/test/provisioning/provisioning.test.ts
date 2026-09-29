@@ -2,10 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createDecipheriv, type DecipherGCM } from "node:crypto";
 import { expectNamedFailure } from "../helpers/errors";
-import { useSqliteStorage } from "../helpers/storage";
+import { useSqliteStores } from "../helpers/storage";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
-import { ChannelInstanceStore, PersonStore, SecretStore, Storage, Vault } from "../../src/index.js";
+import {
+  createChannelInstanceStore,
+  createPersonStore,
+  createSecretStore,
+  Vault,
+} from "../../src/index.js";
 
 const NOW = 1_756_000_000_000;
 
@@ -38,33 +43,36 @@ function secretRow(id: string, envelope: Vault.Envelope): Provisioning.Secret {
 }
 
 describe("provisioning stores", () => {
-  const fixture = useSqliteStorage("provisioning");
+  const stores = useSqliteStores("provisioning");
+  const persons = () => createPersonStore(stores.catalog);
+  const instances = () => createChannelInstanceStore(stores.catalog);
+  const secrets = () => createSecretStore(stores.catalog);
 
   test("Person roundtrips, lists, and removes", () => {
-    const declared = PersonStore.put(person("person:alice", "collaborator"));
-    expect(PersonStore.get("person:alice")).toEqual(declared);
-    expect(PersonStore.list()).toEqual([declared]);
-    expect(PersonStore.remove("person:alice")).toBe(true);
-    expect(PersonStore.get("person:alice")).toBeUndefined();
-    expect(PersonStore.remove("person:alice")).toBe(false);
+    const declared = persons().put(person("person:alice", "collaborator"));
+    expect(persons().get("person:alice")).toEqual(declared);
+    expect(persons().list()).toEqual([declared]);
+    expect(persons().remove("person:alice")).toBe(true);
+    expect(persons().get("person:alice")).toBeUndefined();
+    expect(persons().remove("person:alice")).toBe(false);
   });
 
   test("sole-owner invariant: a second owner Person is a typed owner_exists refusal", () => {
-    PersonStore.put(person("person:ino", "owner"));
+    persons().put(person("person:ino", "owner"));
     expectNamedFailure(
-      () => PersonStore.put(person("person:mallory", "owner")),
+      () => persons().put(person("person:mallory", "owner")),
       Provisioning.StoreError.name,
       { code: "owner_exists", id: "person:ino" },
     );
-    expect(PersonStore.get("person:mallory")).toBeUndefined();
+    expect(persons().get("person:mallory")).toBeUndefined();
   });
 
   test("the reigning owner Person may be re-declared and other tiers coexist", () => {
-    PersonStore.put(person("person:ino", "owner"));
-    const updated = PersonStore.put({ ...person("person:ino", "owner"), revision: 1 });
+    persons().put(person("person:ino", "owner"));
+    const updated = persons().put({ ...person("person:ino", "owner"), revision: 1 });
     expect(updated.revision).toBe(1);
-    PersonStore.put(person("person:bob", "observer"));
-    expect(PersonStore.list()).toHaveLength(2);
+    persons().put(person("person:bob", "observer"));
+    expect(persons().list()).toHaveLength(2);
   });
 
   test("ChannelInstance roundtrips with settings and credentialRef intact", () => {
@@ -78,45 +86,44 @@ describe("provisioning stores", () => {
       createdBy: "test",
       updatedAt: NOW,
     };
-    ChannelInstanceStore.put(instance);
-    expect(ChannelInstanceStore.get(instance.id)).toEqual(instance);
-    expect(ChannelInstanceStore.list()).toEqual([instance]);
-    expect(ChannelInstanceStore.remove(instance.id)).toBe(true);
-    expect(ChannelInstanceStore.list()).toEqual([]);
+    instances().put(instance);
+    expect(instances().get(instance.id)).toEqual(instance);
+    expect(instances().list()).toEqual([instance]);
+    expect(instances().remove(instance.id)).toBe(true);
+    expect(instances().list()).toEqual([]);
   });
 
   test("Secret BLOB envelope roundtrips byte-exact through SQLite", () => {
     const kek = kekFixture(7);
     const envelope = Vault.seal(new TextEncoder().encode('{"token":"tg-token"}'), kek);
     const row = secretRow("secret:channel-telegram-main", envelope);
-    SecretStore.put(row);
-    const loaded = SecretStore.get(row.id);
+    secrets().put(row);
+    const loaded = secrets().get(row.id);
     if (loaded === undefined) throw new Error("expected the secret row back");
     expect(loaded.ciphertext).toEqual(envelope.ciphertext);
     expect(loaded.wrappedDek).toEqual(envelope.wrappedDek);
     expect(loaded.kekId).toBe(kek.id);
     expect(Vault.open(loaded, kek).revealText()).toBe('{"token":"tg-token"}');
-    expect(SecretStore.list()).toHaveLength(1);
-    expect(SecretStore.remove(row.id)).toBe(true);
+    expect(secrets().list()).toHaveLength(1);
+    expect(secrets().remove(row.id)).toBe(true);
   });
 
   test("§8.2: the database file never contains credential plaintext", async () => {
     const plaintext = "hunter2-super-secret-token";
     const kek = kekFixture(9);
-    SecretStore.put(
+    secrets().put(
       secretRow("secret:leak-probe", Vault.seal(new TextEncoder().encode(plaintext), kek)),
     );
-    const fileBytes = await readFile(fixture.path);
+    const fileBytes = await readFile(stores.catalogPath);
     expect(fileBytes.includes(plaintext)).toBe(false);
   });
 
   test("a storage adapter without the provisioning seam fails closed with adapter_absent", () => {
-    Storage.reset();
-    Storage.configure({ transaction: (fn) => fn() });
+    const bare = { transaction: <T>(fn: () => T): T => fn() };
     for (const attempt of [
-      () => PersonStore.list(),
-      () => ChannelInstanceStore.list(),
-      () => SecretStore.list(),
+      () => createPersonStore(bare).list(),
+      () => createChannelInstanceStore(bare).list(),
+      () => createSecretStore(bare).list(),
     ]) {
       expectNamedFailure(attempt, Provisioning.StoreError.name, { code: "adapter_absent" });
     }

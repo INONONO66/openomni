@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EgressBudgetStore, Storage } from "../../src/index";
+import { createEgressBudgetStore, openCatalogStore } from "../../src/index";
+import { useMemoryStores } from "../helpers/storage";
 import type { Gateway } from "@openomni/protocol";
 
 /** #219 active-egress debit ledger: atomic, idempotent counted-window claims. */
@@ -23,18 +24,12 @@ describe("EgressBudgetStore", () => {
     ...overrides,
   });
 
-  beforeEach(() => {
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:" });
-  });
-
-  afterEach(() => {
-    Storage.reset();
-  });
+  const stores = useMemoryStores();
+  const budget = () => createEgressBudgetStore(stores.catalog);
 
   test("an empty ledger presents a zero state to the first claim", () => {
-    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
-    const result = EgressBudgetStore.claim(row("first"), NOW - WINDOW, (state) => {
+    let observed: Gateway.EgressDebitState | undefined;
+    const result = budget().claim(row("first"), NOW - WINDOW, (state) => {
       observed = state;
       return "allow";
     });
@@ -43,16 +38,12 @@ describe("EgressBudgetStore", () => {
   });
 
   test("claims fold per-class window counts and a window-independent lastSendAt", () => {
-    EgressBudgetStore.claim(row("d1", { at: NOW - 90_000 }), NOW - WINDOW, () => "allow");
-    EgressBudgetStore.claim(row("d2", { at: NOW - 10_000 }), NOW - WINDOW, () => "allow");
-    EgressBudgetStore.claim(
-      row("d3", { class: "converse", at: NOW - 5_000 }),
-      NOW - WINDOW,
-      () => "allow",
-    );
+    budget().claim(row("d1", { at: NOW - 90_000 }), NOW - WINDOW, () => "allow");
+    budget().claim(row("d2", { at: NOW - 10_000 }), NOW - WINDOW, () => "allow");
+    budget().claim(row("d3", { class: "converse", at: NOW - 5_000 }), NOW - WINDOW, () => "allow");
 
-    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
-    const probe = EgressBudgetStore.claim(row("probe"), NOW - WINDOW, (state) => {
+    let observed: Gateway.EgressDebitState | undefined;
+    const probe = budget().claim(row("probe"), NOW - WINDOW, (state) => {
       observed = state;
       return "inspect" as const;
     });
@@ -66,11 +57,11 @@ describe("EgressBudgetStore", () => {
   });
 
   test("claims are isolated per (sender, target) pair", () => {
-    EgressBudgetStore.claim(row("a", { targetActorId: "t1" }), NOW - WINDOW, () => "allow");
-    EgressBudgetStore.claim(row("b", { targetActorId: "t2" }), NOW - WINDOW, () => "allow");
+    budget().claim(row("a", { targetActorId: "t1" }), NOW - WINDOW, () => "allow");
+    budget().claim(row("b", { targetActorId: "t2" }), NOW - WINDOW, () => "allow");
 
-    let observed: ReturnType<typeof EgressBudgetStore.read> | undefined;
-    EgressBudgetStore.claim(row("probe", { targetActorId: "other" }), NOW - WINDOW, (state) => {
+    let observed: Gateway.EgressDebitState | undefined;
+    budget().claim(row("probe", { targetActorId: "other" }), NOW - WINDOW, (state) => {
       observed = state;
       return "inspect" as const;
     });
@@ -78,13 +69,13 @@ describe("EgressBudgetStore", () => {
   });
 
   test("read-only applicability sees committed window counts without charging ingress", () => {
-    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual({
+    expect(budget().read("s", "t", NOW - WINDOW)).toEqual({
       countInWindow: 0,
       notifyInWindow: 0,
       converseInWindow: 0,
     });
-    EgressBudgetStore.claim(row("notify"), NOW - WINDOW, () => "allow");
-    EgressBudgetStore.claim(
+    budget().claim(row("notify"), NOW - WINDOW, () => "allow");
+    budget().claim(
       row("converse", { class: "converse", at: NOW + 1 }),
       NOW - WINDOW,
       () => "allow",
@@ -95,14 +86,14 @@ describe("EgressBudgetStore", () => {
       converseInWindow: 1,
       lastSendAt: NOW + 1,
     };
-    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual(expected);
-    expect(EgressBudgetStore.read("s", "t", NOW - WINDOW)).toEqual(expected);
-    expect(EgressBudgetStore.read("s", "other", NOW - WINDOW)).toEqual({
+    expect(budget().read("s", "t", NOW - WINDOW)).toEqual(expected);
+    expect(budget().read("s", "t", NOW - WINDOW)).toEqual(expected);
+    expect(budget().read("s", "other", NOW - WINDOW)).toEqual({
       countInWindow: 0,
       notifyInWindow: 0,
       converseInWindow: 0,
     });
-    expect(EgressBudgetStore.read("s", "t", NOW + 2)).toEqual({
+    expect(budget().read("s", "t", NOW + 2)).toEqual({
       countInWindow: 0,
       notifyInWindow: 0,
       converseInWindow: 0,
@@ -111,8 +102,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("two contenders for the last SQLite window slot produce exactly one claim", () => {
-    const adapter = Storage.get().egressBudget;
-    if (adapter === undefined) throw new Error("egress budget adapter missing");
+    const adapter = stores.catalog.egressBudget;
 
     const results = [row("race-a"), row("race-b")].map((candidate) =>
       adapter.claim(candidate, NOW - WINDOW, (state) => state.countInWindow < 1),
@@ -122,8 +112,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("retrying a recorded claim is idempotent and never charges the window twice", () => {
-    const adapter = Storage.get().egressBudget;
-    if (adapter === undefined) throw new Error("egress budget adapter missing");
+    const adapter = stores.catalog.egressBudget;
 
     const first = row("retry-a");
     expect(adapter.claim(first, NOW - WINDOW, (state) => state.countInWindow < 1)).toBe("claimed");
@@ -135,8 +124,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("retrying an id with different fields is refused as a conflicting claim", () => {
-    const adapter = Storage.get().egressBudget;
-    if (adapter === undefined) throw new Error("egress budget adapter missing");
+    const adapter = stores.catalog.egressBudget;
 
     expect(adapter.claim(row("conflict-a"), NOW - WINDOW, () => true)).toBe("claimed");
     const conflicting = { ...row("conflict-a"), targetActorId: "act_someone_else" };
@@ -153,11 +141,9 @@ describe("EgressBudgetStore", () => {
     // would leave the probe insert free to succeed and fail this test.
     const dir = mkdtempSync(join(tmpdir(), "egress-claim-"));
     const dbPath = join(dir, "claim.sqlite");
-    Storage.reset();
-    Storage.initialize({ dbPath });
+    const catalog = openCatalogStore(dbPath);
     try {
-      const adapter = Storage.get().egressBudget;
-      if (adapter === undefined) throw new Error("egress budget adapter missing");
+      const adapter = catalog.egressBudget;
       const probe = new Database(dbPath);
       probe.exec("PRAGMA busy_timeout = 0");
       const insertProbeRow = () => {
@@ -180,15 +166,13 @@ describe("EgressBudgetStore", () => {
       insertProbeRow();
       probe.close();
     } finally {
-      Storage.reset();
+      catalog.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
   test("fails closed when the sub-adapter is absent", () => {
-    Storage.reset();
-    Storage.configure({ transaction: (operation) => operation() });
-    expect(() => EgressBudgetStore.claim(row("missing"), 0, () => "allow")).toThrow(
+    expect(() => createEgressBudgetStore({}).claim(row("missing"), 0, () => "allow")).toThrow(
       "does not implement egressBudget",
     );
   });

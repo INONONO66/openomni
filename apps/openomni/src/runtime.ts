@@ -1,21 +1,73 @@
-import { AgentProcessLive, Bus, type BundleDefinitions, BundlesLive, type Clock, type Entropy, type GenerationLayers, type ObservationSink, type SessionError } from "@openomni/agent";
-import { LedgerStorageLive, type LedgerWrites, type LedgerError } from "@openomni/ledger";
+import {
+  AgentProcessLive,
+  Bus,
+  type BundleDefinitions,
+  BundlesLive,
+  type Clock,
+  type Entropy,
+  type GenerationLayers,
+  type ObservationSink,
+  type SessionEntityPorts,
+  type SessionError,
+} from "@openomni/agent";
+import type { LedgerError } from "@openomni/ledger";
 import { LlmLive, type Llm } from "@openomni/llm";
+import { pid } from "node:process";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
+import {
+  type AppLedger,
+  appLedgerLayer,
+  clusterHostLayer,
+  createSessionEntityPortsSlot,
+  sessionEntityLayer,
+  type ClusterServices,
+} from "./composition/cluster-runtime";
 import { GenerationLayersLive } from "./composition/generation-layers";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
   readonly cause: string;
-}> {}
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
 
 export const lifecycleFailure = (operation: string) =>
   flow(String, (cause) => new AppLifecycleFailure({ operation, cause }));
 
-export class AppScope extends Context.Service<AppScope, Scope.Scope>()("@openomni/openomni/AppScope") {}
+export class AppScope extends Context.Service<AppScope, Scope.Scope>()(
+  "@openomni/openomni/AppScope",
+) {}
+
+/**
+ * The runtime-owned late-binding seam for the session entity's ports: the
+ * entity layer always mounts (a runtime without it silently swallows every
+ * delivery), and the composition root binds the real turn/timer ports here
+ * once boot resolves them. Construction-time `entity` options pin the ports
+ * instead; binding then is a wiring defect and dies loud.
+ */
+export class SessionEntityBinding extends Context.Service<
+  SessionEntityBinding,
+  { bind(ports: SessionEntityPorts): void }
+>()("@openomni/openomni/SessionEntityBinding") {}
 
 export interface AppRuntimeOptions {
-  readonly dbPath: string;
+  /** Catalog SQLite file (session index + cluster mailbox); absent = in-memory. */
+  readonly catalogPath?: string;
+  /** Directory of per-session ledger files; absent = in-memory session stores. */
+  readonly sessionsDir?: string;
+  /** Milliseconds of mailbox silence before a session entity passivates. */
+  readonly entityIdleMs?: number;
+  /**
+   * Where the SingleRunner keeps its cluster_* tables; defaults to the
+   * catalog. A process child MUST pin ":memory:" — two runners on one
+   * catalog file would fight over the same runner tables.
+   */
+  readonly clusterStoragePath?: string;
+  /** Session entity activation; present once composition supplies the turn port. */
+  readonly entity?: {
+    readonly owner: string;
+    readonly ports: SessionEntityPorts;
+  };
   readonly clock?: () => number;
   readonly entropy?: () => string;
   readonly observations?: typeof Bus;
@@ -25,15 +77,59 @@ export interface AppRuntimeOptions {
 
 export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
   const observations = options.observations ?? Bus;
-  const ledger = LedgerStorageLive({ dbPath: options.dbPath, observationSink: observations });
-  const process = AgentProcessLive(observations, { clock: options.clock, entropy: options.entropy });
-  const generations = GenerationLayersLive.pipe(Layer.provideMerge(Layer.mergeAll(process, bundles, ledger)));
+  const plane = appLedgerLayer({
+    ...(options.catalogPath === undefined ? {} : { catalogPath: options.catalogPath }),
+    ...(options.sessionsDir === undefined ? {} : { sessionsDir: options.sessionsDir }),
+    observationSink: observations,
+  });
+  const process = AgentProcessLive(observations, {
+    clock: options.clock,
+    entropy: options.entropy,
+  });
+  const generations = GenerationLayersLive.pipe(
+    Layer.provideMerge(Layer.mergeAll(process, bundles, plane)),
+  );
+  const host = clusterHostLayer({
+    catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
+    entityIdleMs: options.entityIdleMs ?? 60_000,
+  }).pipe(Layer.orDie);
+  const seam =
+    options.entity === undefined
+      ? (() => {
+          const slot = createSessionEntityPortsSlot();
+          return { owner: `openomni:${pid}`, ports: slot.ports, bind: slot.bind };
+        })()
+      : {
+          owner: options.entity.owner,
+          ports: options.entity.ports,
+          bind: (): void => {
+            throw new Error("session entity ports were fixed at runtime construction");
+          },
+        };
+  const entity: Layer.Layer<never, never, ClusterServices | AppLedger> = sessionEntityLayer({
+    owner: seam.owner,
+    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    ports: seam.ports,
+  });
+  const binding = Layer.succeed(SessionEntityBinding, { bind: seam.bind });
   return Layer.mergeAll(
     Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
-  );
+    binding,
+    entity.pipe(Layer.provide(plane)),
+  ).pipe(Layer.provideMerge(host));
 }
 
-export type AppServices = Clock | Entropy | ObservationSink | LedgerWrites | AppScope | Llm | BundleDefinitions | GenerationLayers;
+export type AppServices =
+  | Clock
+  | Entropy
+  | ObservationSink
+  | AppLedger
+  | AppScope
+  | Llm
+  | BundleDefinitions
+  | GenerationLayers
+  | SessionEntityBinding
+  | ClusterServices;
 type AppRuntimeError = AppLifecycleFailure | LedgerError | SessionError;
 export type AppRuntime = ManagedRuntime.ManagedRuntime<AppServices, AppRuntimeError>;

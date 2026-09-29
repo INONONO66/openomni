@@ -1,26 +1,15 @@
 import { Effect, Result } from "effect";
 import { type LedgerAction, type LedgerSession, SessionTransition } from "@openomni/protocol";
-import { SessionHandleStore } from "../../src/index";
-import { materializeSession } from "./session";
+import type { SessionHandleStore } from "../../src/index";
+import { adoptWriter, materializeSession } from "./session";
 import { runLedgerSync } from "./effect";
 
-export function requestFixture(mode: SessionTransition.Request["mode"] = "reply") {
-  materializeSession("request-session");
-  const lease = Result.getOrThrowWith(
-    runLedgerSync(
-      Effect.result(
-        SessionHandleStore.acquireLease({
-          sessionId: "request-session",
-          owner: "writer",
-          expectedFence: 0,
-          now: 2,
-          expiresAt: 1002,
-        }),
-      ),
-    ),
-    (error) => error,
-  );
-  if (!lease.ok) throw new Error("fixture lease refused");
+export function requestFixture(
+  kernel: SessionHandleStore.SessionKernel,
+  mode: SessionTransition.Request["mode"] = "reply",
+) {
+  materializeSession(kernel, "request-session");
+  const authority = adoptWriter(kernel, "request-session");
   const request = SessionTransition.Request.parse({
     requestId: "original",
     sessionId: "request-session",
@@ -60,27 +49,25 @@ export function requestFixture(mode: SessionTransition.Request["mode"] = "reply"
   };
   const commit = (
     actions: LedgerAction.Append[],
-    revision = SessionHandleStore.row(request.sessionId).revision,
+    revision = kernel.row(request.sessionId).revision,
   ) =>
     Result.getOrThrowWith(
       runLedgerSync(
         Effect.result(
-          SessionHandleStore.commitRequestTransition({
+          kernel.commitRequestTransition({
             sessionId: request.sessionId,
-            owner: "writer",
-            fence: lease.fence,
+            owner: authority.owner,
+            fence: authority.fence,
             now: 4,
             expectedRevision: revision,
             actions,
-            consumeInboxIds: [],
             state: "idle",
-            releaseLease: false,
           }),
         ),
       ),
       (error) => error,
     );
-  return { request, original, commit, lease };
+  return { request, original, commit, authority };
 }
 
 export function requestStateAction(

@@ -1,5 +1,5 @@
 import type { Ingress, SessionTransition } from "@openomni/protocol";
-import { ActorRegistry } from "@openomni/ledger";
+import type { ChannelStores } from "../stores.js";
 type Correlation = SessionTransition.Correlation;
 
 /** Physical responder evidence only; kernel request transitions own admission and persistence. */
@@ -86,12 +86,15 @@ export function ingressEvidence(
  * (`deliveryActorId === undefined` while the endpoint pin is present) fails
  * closed: no candidates, rather than a weaker unpinned target set.
  */
-export function targetsOfRequest(record: SessionTransition.Request): ResponderTarget[] {
+export function targetsOfRequest(
+  stores: ChannelStores,
+  record: SessionTransition.Request,
+): ResponderTarget[] {
   const deliveryEndpointId = record.correlation.endpointId;
   const deliveryActorId =
     deliveryEndpointId === undefined
       ? undefined
-      : ActorRegistry.getEndpoint(deliveryEndpointId)?.actorId;
+      : stores.actors.getEndpoint(deliveryEndpointId)?.actorId;
   if (deliveryEndpointId !== undefined && deliveryActorId === undefined) {
     return [];
   }

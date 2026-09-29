@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
 import { Cause, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
@@ -23,6 +23,9 @@ export type {
   ExecutionApprovalRequest, ExecutionBatchResult, ExecutionResult, ExecutorOptions,
 } from "./executor-contract";
 
+/** Raw-slot settlement grace after body exit: an explicit executor-owned
+ * default (W5.2), decoupled from the deleted lease plane's TTL. */
+const DEFAULT_CLOSE_GRACE_MS = 30_000;
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 type Decision = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };
 type Admission = Pick<Decision, "generation" | "receipt" | "verdict" | "value" | "reason" | "transforms">;
@@ -248,7 +251,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
             signal.removeEventListener("abort", abort);
             if (slots.pending() === 0) return Effect.succeed(exit);
             const grace = Effect.forkScoped(Effect.interruptible(slots.awaitSettled).pipe(
-              Effect.timeoutOption(options.closeGraceMs ?? SessionHandleStore.LEASE_TTL_MS),
+              Effect.timeoutOption(options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS),
             ));
             return Effect.scoped(grace.pipe(Effect.flatMap(Fiber.join), Effect.as(exit)));
           }),
@@ -469,7 +472,7 @@ function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["ver
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }
-function assertFresh(request: ExecutionRequest, captured: ReturnType<typeof SessionHandleStore.requestById>): void {
+function assertFresh(request: ExecutionRequest, captured: ReturnType<SessionHandleStore.SessionKernel["requestById"]>): void {
   if (captured !== undefined && request.domainRevisions !== undefined &&
       canonicalDigest({ ...request.domainRevisions() }) !== canonicalDigest(captured.domainRevisions))
     throw new ExecutionApprovalError({ code: "stale_approval" });

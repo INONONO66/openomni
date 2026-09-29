@@ -33,8 +33,10 @@ export function executeProvision(port: ProvisionPort | undefined) {
   const composed = port === undefined ? undefined : provisionExecutors(port);
   const executors = () => composed ?? refusal("provision", "provisioning is not composed");
   return async ({ operation }: z.output<typeof ProvisionInput>, context: ToolExecutionContext) => {
-    if (operation.op === "contact_promote" || operation.op === "contact_merge")
-      return mutateContact(operation, context.domainRevisions);
+    if (operation.op === "contact_promote" || operation.op === "contact_merge") {
+      if (port === undefined) return refusal("provision", "provisioning is not composed");
+      return mutateContact(port, operation, context.domainRevisions);
+    }
     const run = executors();
     switch (operation.op) {
       case "contact_add":
@@ -68,8 +70,10 @@ export function executeProvision(port: ProvisionPort | undefined) {
 
 export function provisionApproval(port: ProvisionPort | undefined) {
   return ({ operation }: z.output<typeof ProvisionInput>) => {
-    if (operation.op === "contact_promote" || operation.op === "contact_merge")
-      return { required: false, domainRevisions: contactDomainRevisions(operation) };
+    if (operation.op === "contact_promote" || operation.op === "contact_merge") {
+      if (port === undefined) return { required: false, domainRevisions: {} };
+      return { required: false, domainRevisions: contactDomainRevisions(port.actors, operation) };
+    }
     if (operation.op !== "contact_add" || port === undefined)
       return { required: false, domainRevisions: {} };
     const manifest = {

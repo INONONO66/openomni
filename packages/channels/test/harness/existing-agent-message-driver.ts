@@ -4,7 +4,7 @@ import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ActorRegistry, SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
+import { ledger, resetLedger } from "../helpers/ledger";
 import { Bus } from "../helpers/observation";
 import { runEffect } from "../helpers/effect";
 import { channelRequests } from "../helpers/channel-requests";
@@ -22,21 +22,23 @@ export type ExistingAgentMessageDriverExecution = Readonly<{ exitCode: 0 | 1; st
 const USAGE = `Usage: existing-agent-message-driver --scenario <${scenarios.join("|")}> --json`;
 
 async function prepareScenario() {
+  const actors = ledger().stores.actors;
   for (const id of ["target", "a", "b", "c", "multi"]) {
-    ActorRegistry.registerIdentity({ id, kind: "human", trustTier: "collaborator" });
+    actors.registerIdentity({ id, kind: "human", trustTier: "collaborator" });
   }
-  ActorRegistry.registerEndpoint({
+  actors.registerEndpoint({
     id: "endpoint",
     actorId: "target",
     channel: "qa",
     externalId: "target",
   });
   for (const id of ["one", "two"])
-    ActorRegistry.registerEndpoint({ id, actorId: "multi", channel: "qa", externalId: id });
+    actors.registerEndpoint({ id, actorId: "multi", channel: "qa", externalId: id });
   originalAction("request:qa:briefing", "session:qa-owner", { content: "verdict" });
-  const baseline = SessionHandleStore.listRows().length;
+  const baseline = ledger().kernel.listRows().length;
   const deliveries: OutboundMessage[] = [];
   const messaging = createExistingAgentMessaging({
+    stores: ledger().stores,
     transaction: channelTransaction,
     requests: channelRequests(requestPort(() => 10)),
     publish: Bus.publish,
@@ -61,7 +63,7 @@ async function prepareScenario() {
     body: "notice",
     at: 10,
   }));
-  const countAfterFire = SessionHandleStore.requestRows().length;
+  const countAfterFire = ledger().kernel.requestRows().length;
   await runEffect(messaging.send({
     messageId: "physical",
     traceId: "trace",
@@ -90,13 +92,13 @@ type ScenarioContext = Awaited<ReturnType<typeof prepareScenario>>;
 async function restartQuorum(context: ScenarioContext, restart: () => void) {
   const { baseline, deliveries, fire, countAfterFire, first } = context;
   restart();
-  const reopened = SessionHandleStore.requestById("request:qa:briefing");
+  const reopened = ledger().kernel.requestById("request:qa:briefing");
   const second = await runEffect(answer("request:qa:briefing", "b", "reply-b", 30));
-  const final = SessionHandleStore.requestById("request:qa:briefing");
-  const terminals = sessionTree("session:qa-owner").filter(
+  const final = ledger().kernel.requestById("request:qa:briefing");
+  const terminals = sessionTree("session:qa-owner", ledger().sessions.actions).filter(
     (action: LedgerAction.Node) => action.id === "request:qa:briefing:resolution",
   );
-  const allocationDelta = SessionHandleStore.listRows().length - baseline;
+  const allocationDelta = ledger().kernel.listRows().length - baseline;
   const ok =
     fire.kind === "sent" &&
     countAfterFire === 0 &&
@@ -136,11 +138,11 @@ async function restartQuorum(context: ScenarioContext, restart: () => void) {
 
 async function duplicateAmbiguous(context: ScenarioContext) {
   const { messaging, baseline } = context;
-  const before = SessionHandleStore.requestById("request:qa:briefing");
+  const before = ledger().kernel.requestById("request:qa:briefing");
   const replay = await runEffect(answer("request:qa:briefing", "a", "reply-a", 20));
   const replayUnchanged =
     JSON.stringify(before) ===
-    JSON.stringify(SessionHandleStore.requestById("request:qa:briefing"));
+    JSON.stringify(ledger().kernel.requestById("request:qa:briefing"));
   const duplicate = await runEffect(answer("request:qa:briefing", "a", "reply-a-new", 21));
   const claim = { endpointId: "endpoint", channelId: "room", replyToMessageId: "platform" };
   originalAction("second-request", "session:qa-owner");
@@ -155,7 +157,7 @@ async function duplicateAmbiguous(context: ScenarioContext) {
     deadline: 100,
     at: 30,
   }));
-  const ambiguous = findRequestCandidates(SessionHandleStore.requestRows(), claim);
+  const ambiguous = findRequestCandidates(ledger().kernel.requestRows(), claim);
   const denied = await runEffect(messaging.send({
     messageId: "multi",
     traceId: "trace",
@@ -165,12 +167,12 @@ async function duplicateAmbiguous(context: ScenarioContext) {
     body: "ambiguous",
     at: 30,
   }));
-  const after = SessionHandleStore.requestById("request:qa:briefing");
+  const after = ledger().kernel.requestById("request:qa:briefing");
   const unchanged =
     before?.state === after?.state &&
     before?.threshold === after?.threshold &&
     JSON.stringify(before?.replies) === JSON.stringify(after?.replies);
-  const allocationDelta = SessionHandleStore.listRows().length - baseline;
+  const allocationDelta = ledger().kernel.listRows().length - baseline;
   const ok =
     replay === "attached" &&
     replayUnchanged &&
@@ -200,7 +202,7 @@ async function duplicateAmbiguous(context: ScenarioContext) {
   };
 }
 
-function quorumState(request: ReturnType<typeof SessionHandleStore.requestById>) {
+function quorumState(request: SessionTransition.Request | undefined) {
   return {
     state: request?.state ?? "",
     replies: request?.replies.length ?? 0,
@@ -211,28 +213,25 @@ function quorumState(request: ReturnType<typeof SessionHandleStore.requestById>)
 
 async function scenario(name: Scenario) {
   const directory = mkdtempSync(join(tmpdir(), "channels-request-"));
-  const path = join(directory, "ledger.sqlite");
-  let adapter: SqliteStorageAdapter | undefined;
+  const paths = {
+    catalog: join(directory, "catalog.sqlite"),
+    sessions: join(directory, "sessions.sqlite"),
+  };
   let result:
     | Awaited<ReturnType<typeof restartQuorum>>
     | Awaited<ReturnType<typeof duplicateAmbiguous>>;
   try {
-    adapter = new SqliteStorageAdapter(path, Bus);
-    Storage.configure(adapter);
+    resetLedger(paths);
     const context = await prepareScenario();
     result =
       name === "restart-quorum"
         ? await restartQuorum(context, () => {
-            adapter?.close();
-            adapter = undefined;
-            Storage.reset();
-            adapter = new SqliteStorageAdapter(path, Bus);
-            Storage.configure(adapter);
+            // A real process restart: close every handle, reopen the same files.
+            resetLedger(paths);
           })
         : await duplicateAmbiguous(context);
   } finally {
-    adapter?.close();
-    Storage.reset();
+    resetLedger();
     Bus.reset();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -260,7 +259,7 @@ async function executeDriver(
         resultCode: "invalid_arguments",
       }),
     };
-  const receipt = await Bus.withIsolation(() => Storage.withIsolation(() => scenario(name)));
+  const receipt = await Bus.withIsolation(() => scenario(name));
   return { exitCode: receipt.ok ? 0 : 1, stdout: JSON.stringify(receipt) };
 }
 

@@ -1,0 +1,387 @@
+bun test v1.4.1 (4661e494f)
+
+test/request-channel-e2e.test.ts:
+(pass) real external WebSocket reply wakes its original idle request owner without legacy writes [202.23ms]
+
+test/code-mode-e2e.test.ts:
+967-U1 interpreter birth {"pid":28657,"parentPid":28654}
+967-U1 interpreter birth {"pid":28659,"parentPid":28654}
+967-U1 interpreter exit {"pid":28657,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28657,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28659,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28659,"code":null,"signal":"SIGKILL"}
+(pass) app root runs machine read write shell and code through one eval cell [179.43ms]
+967-U1 interpreter birth {"pid":28660,"parentPid":28654}
+967-U1 interpreter exit {"pid":28660,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28660,"code":null,"signal":"SIGKILL"}
+967-U1 code-mode cleanup {"pids":[28660],"socketPath":"/tmp/omo-app-28654-2.sock","socketExists":false,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-i7j7Z9/catalog.sqlite","directoryExists":false}
+(pass) a cell creates three child sessions through send_message [251.16ms]
+(pass) the catalog remains available while machine execution refuses without attachment [75.56ms]
+967-U1 interpreter birth {"pid":28661,"parentPid":28654}
+967-U1 interpreter birth {"pid":28662,"parentPid":28654}
+967-U1 interpreter exit {"pid":28661,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28661,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28662,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28662,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-4.sock","socketExists":false}
+(pass) a cell cannot present another cell's id when calling back [35.45ms]
+967-U1 interpreter birth {"pid":28667,"parentPid":28654}
+967-U1 interpreter birth {"pid":28669,"parentPid":28654}
+967-U1 interpreter exit {"pid":28669,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28669,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28667,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28667,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-5.sock","socketExists":false}
+967-U1 code-mode failure cleanup {"pids":[28667,28669],"socketPath":"/tmp/omo-app-28654-5.sock","socketExists":false,"directory":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-failure-YvNmFD","directoryExists":false}
+(pass) 967-U1 error cleanup owns the host and awaits every interpreter [64.20ms]
+967-U1 interpreter birth {"pid":28671,"parentPid":28654}
+967-U1 interpreter exit {"pid":28671,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28671,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-6.sock","socketExists":false}
+(pass) a detached eval cell admits nested calls after run returns and refuses them after stop [1041.40ms]
+967-U1 interpreter birth {"pid":28673,"parentPid":28654}
+967-U1 interpreter birth {"pid":28674,"parentPid":28654}
+967-U1 interpreter exit {"pid":28674,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28674,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28673,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28673,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-7.sock","socketExists":false}
+(pass) cells from different sessions never share interpreter state [70.89ms]
+967-U1 interpreter birth {"pid":28675,"parentPid":28654}
+967-U1 interpreter exit {"pid":28675,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28675,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter birth {"pid":28677,"parentPid":28654}
+967-U1 interpreter exit {"pid":28677,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28677,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-8.sock","socketExists":false}
+(pass) eval background run and peek stay running; stop settles the typed cancelled state once [1067.82ms]
+967-U1 interpreter birth {"pid":28678,"parentPid":28654}
+967-U1 interpreter exit {"pid":28678,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28678,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-9.sock","socketExists":false}
+(pass) eval background peek and stop race spends the cell id and settles cancelled exactly once [1045.31ms]
+967-U1 interpreter birth {"pid":28682,"parentPid":28654}
+967-U1 interpreter exit {"pid":28682,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28682,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-10.sock","socketExists":false}
+(pass) eval peek and stop refuse another session's cell id and a forged one [33.27ms]
+967-U1 interpreter birth {"pid":28683,"parentPid":28654}
+967-U1 interpreter exit {"pid":28683,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28683,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-11.sock","socketExists":false}
+(pass) completion(prompt, model=, system=, schema=) reaches the port and decodes the validated JSON [31.97ms]
+967-U1 interpreter birth {"pid":28684,"parentPid":28654}
+967-U1 interpreter exit {"pid":28684,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28684,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-12.sock","socketExists":false}
+(pass) a cell rejects legacy batched completion input and serves one prompt [30.97ms]
+967-U1 interpreter birth {"pid":28685,"parentPid":28654}
+967-U1 interpreter exit {"pid":28685,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28685,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-13.sock","socketExists":false}
+(pass) a failing completion call raises ToolError inside the cell instead of returning failure text [29.33ms]
+967-U1 interpreter birth {"pid":28686,"parentPid":28654}
+967-U1 interpreter exit {"pid":28686,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28686,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-14.sock","socketExists":false}
+(pass) parallel() runs independent tool calls concurrently and returns both results in input order [30.51ms]
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28654-15.sock","socketExists":false}
+(pass) a machine offering more than it is enrolled for keeps only the intersection [0.91ms]
+
+test/send-message-e2e.test.ts:
+(pass) an external turn never dispatches an unsolicited reply for connection ?actor=owner [68.92ms]
+(pass) an external turn never dispatches an unsolicited reply for connection  [59.85ms]
+(pass) an explicit model send_message routes through MessagePort.ingest to the external surface [70.11ms]
+(pass) a child session terminal commits exactly one parent reply with the original reply binding [159.90ms]
+
+test/process-session-e2e.test.ts:
+(pass) process entry exits on empty stdin and closes its reply channel [0.64ms]
+(pass) process entry logs committed sessions and disposes its runtime [90.61ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [65.37ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [88.67ms]
+[20:40:16.139] ERROR (#2395): Defect in entity, restarting CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/session-turn.ts:199:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at onExit (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:1126:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:1137:7)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:737:13)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15) {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 189,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "5443edb5-c414-4ee9-a252-33654af13ad1",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+[20:40:16.648] ERROR (#2395): Defect building entity handlers LeaseRefused: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/cluster/session-entity.ts:98:30)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at Session(5443edb5-c414-4ee9-a252-33654af13ad1).Prompt {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 189,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "5443edb5-c414-4ee9-a252-33654af13ad1",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+(pass) startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement [1492.40ms]
+
+test/message-terminal-boundaries.test.ts:
+(pass) startOpenOmni reports pre-denied socket admission as an error, not accepted [32.02ms]
+(pass) startOpenOmni deadline-bound child delivers result under the original request [103.47ms]
+(pass) startOpenOmni deadline-bound child delivers error under the original request [106.05ms]
+58 |       if (disposed) {
+59 |         disposal ??= dispose();
+60 |         return disposal;
+61 |       }
+62 |       disposal ??= runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
+63 |         Effect.mapError((error) => new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) })),
+                                        ^
+error: shutdown.raw_unsettled: GenerationUnsettled: session gateway-ingress generation 1 has 1 live owner(s)
+ operation: "shutdown.raw_unsettled",
+      _tag: "AppLifecycleFailure",
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:63:36)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2487:9)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2539:19)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2550:31)
+      at runAppEffect (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:79:18)
+      at dispose (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:62:20)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/src/index.ts:829:21)
+(fail) startOpenOmni deadline-bound child delivers interrupted under the original request [5008.57ms]
+  ^ this test timed out after 5000ms.
+[20:40:22.436] WARN (#2762): Could not read messages from storage ~effect/cluster/ClusterError/PersistenceError: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/cluster/ClusterError.js:118:63)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+    at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+  [cause]: effect/sql/SqlError: Failed to execute statement
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:87:32)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+      at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+      at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+      at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+    [cause]: effect/sql/SqlError/UnknownError: Failed to execute statement
+        at classifySqliteError (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/sql/SqlError.js:486:20)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:88:19)
+        at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+        at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+        at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+        at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+        at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+      [cause]: SQLiteError: disk I/O error
+          at all (unknown)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:85:61)
+          at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+          at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+          at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+          at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+          at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10)
+    }
+  }
+} {
+  module: "effect/cluster/Sharding",
+  fiber: "Storage read loop",
+  runner: RunnerAddress(localhost:34431),
+}
+
+test/message-ingress-boundaries.test.ts:
+[20:40:22.449] ERROR (#2835): Defect in entity, restarting SQLiteError: disk I/O error
+    at get (unknown)
+    at latestAction (/Users/ino/Develop/openomni-w52/packages/ledger/src/storage/sqlite-l0-actions.ts:40:12)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/session-turn.ts:133:37) {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 157,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "252188f4-274b-4f08-b908-0b960794cc1c",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+[20:40:22.449] ERROR (#2836): Defect in entity, restarting SQLiteError: disk I/O error
+    at get (unknown)
+    at latestAction (/Users/ino/Develop/openomni-w52/packages/ledger/src/storage/sqlite-l0-actions.ts:40:12)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/packages/agent/src/session-turn.ts:133:37) {
+  module: "EntityManager",
+  address: EntityAddress {
+    shardId: {
+      group: "default",
+      id: 18,
+      "~effect/cluster/ShardId": "~effect/cluster/ShardId",
+      "~effect/Equal": [Function],
+      "~effect/Hash": [Function],
+      "~effect/PrimaryKey": [Function],
+      toString: [Function: toString],
+    },
+    entityType: "Session",
+    entityId: "1582d90e-407a-4b75-92ca-a88c857c1ec5",
+    "~effect/cluster/EntityAddress": "~effect/cluster/EntityAddress",
+    toString: [Function: toString],
+    "~effect/Equal": [Function],
+    "~effect/Hash": [Function],
+    "~effect/Schema/Class/~effect/cluster/EntityAddress": [Getter],
+    pipe: [Function: pipe],
+  },
+  runner: RunnerAddress(localhost:34431),
+}
+[20:40:22.462] WARN (#2762): Could not read messages from storage ~effect/cluster/ClusterError/PersistenceError: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/cluster/ClusterError.js:118:63)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+    at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+  [cause]: effect/sql/SqlError: Failed to execute statement
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:87:32)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+      at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+      at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+      at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+    [cause]: effect/sql/SqlError/UnknownError: Failed to execute statement
+        at classifySqliteError (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/sql/SqlError.js:486:20)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:88:19)
+        at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+        at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+        at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+        at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+        at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+      [cause]: SQLiteError: disk I/O error
+          at all (unknown)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:85:61)
+          at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+          at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+          at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+          at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+          at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10)
+    }
+  }
+} {
+  module: "effect/cluster/Sharding",
+  fiber: "Storage read loop",
+  runner: RunnerAddress(localhost:34431),
+}
+(pass) complete reply chain selects ancestor through the compiled gateway [40.70ms]
+(pass) complete reply chain selects nearer through the compiled gateway [40.12ms]
+(pass) complete reply chain selects ambiguous through the compiled gateway [46.59ms]
+[20:40:22.577] WARN (#2762): Could not read messages from storage ~effect/cluster/ClusterError/PersistenceError: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/cluster/ClusterError.js:118:63)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+    at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+  [cause]: effect/sql/SqlError: Failed to execute statement
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:87:32)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+      at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+      at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+      at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+    [cause]: effect/sql/SqlError/UnknownError: Failed to execute statement
+        at classifySqliteError (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/sql/SqlError.js:486:20)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:88:19)
+        at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+        at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+        at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+        at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+        at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+      [cause]: SQLiteError: disk I/O error
+          at all (unknown)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:85:61)
+          at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+          at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+          at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+          at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+          at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10)
+    }
+  }
+} {
+  module: "effect/cluster/Sharding",
+  fiber: "Storage read loop",
+  runner: RunnerAddress(localhost:34431),
+}
+(pass) actor deadline and send admission commit before delivery [28.57ms]
+(pass) actor deadline and send admission roll back together [21.97ms]
+(pass) child admission observations see the deadline before the child's inbox commit [30.12ms]
+(pass) Table A projects live dnc budget without debiting ingress [20.84ms]
+(pass) Table A projects live zero budget without debiting ingress [16.10ms]
+(pass) Table A projects live spent budget without debiting ingress [22.17ms]
+(pass) Table A projects live allowed budget without debiting ingress [24.39ms]
+
+1 tests failed:
+(fail) startOpenOmni deadline-bound child delivers interrupted under the original request [5008.57ms]
+  ^ this test timed out after 5000ms.
+
+ 38 pass
+ 1 fail
+ 234 expect() calls
+Ran 39 tests across 6 files. [12.11s]

@@ -30,6 +30,8 @@ export interface GenerationLayersService {
   initialize(definitions: Readonly<Record<import("@openomni/protocol").LedgerSession.Role, readonly AnyToolDefinition[]>>): Effect.Effect<void, SessionError>;
   capture(id: SessionGeneration.Id): Effect.Effect<CapturedGeneration, SessionError, Scope.Scope>;
   configure<A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>): Effect.Effect<A, SessionError>;
+  /** Awaits live generation owners (detached turns unwinding) before the fail-fast `drain`. */
+  readonly settle: Effect.Effect<void>;
   readonly drain: Effect.Effect<void, SessionError>;
 }
 

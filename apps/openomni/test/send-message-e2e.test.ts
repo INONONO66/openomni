@@ -4,8 +4,9 @@ import { expect, spyOn, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import { L0Observation, SessionTransition, SessionTurn } from "@openomni/protocol";
+import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
@@ -47,16 +48,19 @@ test.each([
       }),
     },
   });
+  const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws${query}`, ["auth", "token"]);
   const ingest = spyOn(app.gateway, "ingest");
   suite.defer(() => ingest.mockRestore());
   const receipt = nextFrame(ws, (frame) => frame.type === "receipt");
-  const terminal = nextResidentTurn();
+  const terminal = nextResidentTurn(plane);
   ws.send(JSON.stringify({ text: "start" }));
   expect(await receipt).toMatchObject({ type: "receipt", status: "accepted" });
   expect((await terminal).text).toBe("FINAL_SENTINEL");
   expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([]);
-  const actions = SessionHandleStore.listRows().flatMap((row) => sessionTree(row.id));
+  const actions = plane
+    .listSessions()
+    .flatMap((row) => sessionTree(row.id, plane.sessionStore(row.id).actions));
   expect(actions.filter((action) => action.kind === "outbound")).toEqual([]);
 });
 
@@ -81,11 +85,12 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
       }),
     },
   });
+  const plane = await planeOf(app.runtime);
   const ingest = spyOn(app.gateway, "ingest");
   suite.defer(() => ingest.mockRestore());
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "token"]);
   const delivered = nextFrame(ws, (frame) => frame.type === "message");
-  const terminal = nextResidentTurn();
+  const terminal = nextResidentTurn(plane);
   ws.send(JSON.stringify({ text: "send explicitly" }));
   expect(await delivered).toMatchObject({ text: "EXPLICIT_SENTINEL" });
   expect((await terminal).text).toBe("LOCAL_ONLY_SENTINEL");
@@ -109,8 +114,11 @@ test("a child session terminal commits exactly one parent reply with the origina
     () => ({ ok: true }),
     (error: Error) => ({ ok: false, error }),
   );
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    const action = sessionTree(event.sessionId).find(
+    const eventPlane = planeRef.current;
+    if (eventPlane === undefined) return;
+    const action = sessionTree(event.sessionId, eventPlane.sessionStore(event.sessionId).actions).find(
       (candidate) => candidate.id === event.id,
     );
     if (action === undefined) return;
@@ -145,7 +153,9 @@ test("a child session terminal commits exactly one parent reply with the origina
     llm: {
       resolveModel: fakeProviderModel,
       run: (input, sink) => Effect.sync(() => {
-        if (SessionHandleStore.row(input.trace.sessionId).role === "worker") {
+        const runPlane = planeRef.current;
+        if (runPlane === undefined) throw new Error("plane not resolved before model run");
+        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
           sink.onMessage(assistantMessage(input, { text: "CHILD_SENTINEL" }));
           return { type: "stop" };
         }
@@ -164,15 +174,22 @@ test("a child session terminal commits exactly one parent reply with the origina
       }),
     },
   });
+  planeRef.current = await planeOf(app.runtime);
+  const plane = planeRef.current;
   await ownerStart(app, "initial");
   expect(await completed).toEqual({ ok: true });
-  const child = SessionHandleStore.listRows().find((row) => row.role === "worker");
+  const child = plane.listSessions().find((row) => row.role === "worker");
   if (child?.parentId === null || child?.parentId === undefined)
     throw new Error("child parent missing");
-  const rows = SessionHandleStore.inboxRows(child.parentId).filter((row) => {
-    const value = row.origin.value;
-    return SessionTransition.OutboundMessage.safeParse(value).success;
-  });
+  const parentTree = sessionTree(child.parentId, plane.sessionStore(child.parentId).actions);
+  const rows = parentTree
+    .filter((action) => action.kind === "prompt")
+    .map((action) => ({
+      id: action.id,
+      content: (action.effect.value as { content?: string }).content ?? "",
+      origin: { value: action.intent.value },
+    }))
+    .filter((row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success);
   expect(rows).toHaveLength(1);
   expect(rows[0]?.origin.value).toMatchObject({
     sourceSessionId: child.id,
@@ -180,14 +197,22 @@ test("a child session terminal commits exactly one parent reply with the origina
     replyTo: "original-binding",
   });
   expect(rows[0]?.content).toContain("CHILD_SENTINEL");
-  const outbound = SessionHandleStore.outboundRows(child.id)[0];
-  const receipt = sessionTree(child.parentId).find(
+  const outbound = plane.openKernel(child.id).outboundRows(child.id)[0];
+  const receipt = parentTree.find(
     (action) => action.id === outbound?.destinationReceipt?.id,
   );
   expect(receipt).toMatchObject({
     kind: "reply",
     effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },
   });
-  expect(rows[0]?.status).toBe("consumed");
-  assertNoLegacyRequestStores(config.dbPath);
+  // W5.2 consumed = no longer pending in the parent's kernel inbox.
+  expect(
+    plane
+      .openKernel(child.parentId)
+      .pendingMessages(child.parentId)
+      .some((item) => item.id === rows[0]?.id),
+  ).toBe(false);
+  const sessionsDir = config.sessionsDir;
+  if (sessionsDir === undefined) throw new Error("suite config is missing sessionsDir");
+  assertNoLegacyRequestStores(sessionFilePath(sessionsDir, child.parentId));
 });

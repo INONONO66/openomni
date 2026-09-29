@@ -6,11 +6,10 @@ import { fileURLToPath } from "node:url";
  * Builds the publishable npm artifact at `apps/openomni/dist-npm`.
  *
  * The staging layout is a contract, not a convenience:
- * - `dist/app/main.js`  — the CLI bundle. Ledger resolves its SQL migration
- *   directory as `join(import.meta.dir, "../../migration")`, so the bundle
- *   MUST sit exactly two levels below the package root, with `migration/`
- *   copied to the root. The pack smoke test boots the bundle against a real
- *   database to keep this coupling honest.
+ * - `dist/app/main.js`  — the CLI bundle. The ledger schema is embedded in
+ *   the bundle (W5.2: no migration plane, fresh per-session files), so the
+ *   package root carries only `bin/`, `dist/` and the README. The pack smoke
+ *   test boots the bundle against a real database to keep this honest.
  * - `dist/app/process-entry.js` — the process-transport worker, resolved by
  *   the app as a sibling of the running bundle.
  * - `bin/openomni.js` — node-runnable stub that re-executes under bun.
@@ -18,7 +17,6 @@ import { fileURLToPath } from "node:url";
  *   are folded into the bundles and never exist on the npm registry.
  */
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-const repoRoot = join(appDir, "..", "..");
 const staging = process.argv[2] ?? join(appDir, "dist-npm");
 
 rmSync(staging, { recursive: true, force: true });
@@ -36,9 +34,6 @@ for (const entrypoint of ["src/cli/main.ts", "src/process-entry.ts"]) {
   }
 }
 
-cpSync(join(repoRoot, "packages", "ledger", "migration"), join(staging, "migration"), {
-  recursive: true,
-});
 cpSync(join(appDir, "npm", "README.md"), join(staging, "README.md"));
 cpSync(join(appDir, "npm", "openomni-bin.js"), join(staging, "bin", "openomni.js"));
 
@@ -51,7 +46,7 @@ const manifest = {
   description: "Single-Owner Agent OS — one Resident, running 24/7 on your machine",
   type: "module",
   bin: { openomni: "bin/openomni.js" },
-  files: ["bin", "dist", "migration", "README.md"],
+  files: ["bin", "dist", "README.md"],
   repository: { type: "git", url: "git+https://github.com/INONONO66/openomni.git" },
   engines: { node: ">=20" },
   publishConfig: { access: "public" },

@@ -1,10 +1,10 @@
 import { once } from "node:events";
 import { z } from "zod";
-import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import { openCatalogStore } from "../../src/storage/catalog-store";
 
 const [path, id] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
 if (!process.send) throw new Error("reply-grant contender requires IPC");
-const adapter = new SqliteStorageAdapter(path);
+const adapter = openCatalogStore(path);
 let result: "claimed" | "existing" | "capacity";
 try {
   const start = once(process, "message", { signal: AbortSignal.timeout(10_000) });

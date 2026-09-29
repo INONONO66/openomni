@@ -1,14 +1,10 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
   type ProviderDeliveryRoute,
   resolveChannelGrant,
 } from "@openomni/channels";
-import { SessionHandleStore, SqliteStorageAdapter, Storage } from "@openomni/ledger";
 import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
@@ -22,11 +18,13 @@ import {
   type DesiredChannelRow,
   type DesiredChannels,
 } from "../src/provisioning/supervisor";
+import { createChannelStores } from "@openomni/channels";
+import { channelStoreSource } from "../src/gateway";
+import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { assistantMessage } from "./helpers/assistant-message";
+import { planeOf, testPlane } from "./helpers/ledger";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
-
-import { persistedSession } from "./helpers/storage-evidence";
 
 const suite = residentSuite();
 
@@ -52,7 +50,7 @@ describe("boot tool catalog", () => {
       "auth",
       "boot-catalog-token",
     ]);
-    const reply = nextResidentTurn();
+    const reply = nextResidentTurn(await planeOf(app.runtime));
     ws.send(JSON.stringify({ type: "message", text: "catalog" }));
 
     expect(await reply).toMatchObject({ text: "ready" });
@@ -64,7 +62,8 @@ describe("boot tool catalog", () => {
 test("stopping the daemon preserves the durable WebSocket bootstrap grant", async () => {
   const config = suite.config("openomni-bootstrap-lifetime-");
   const app = await suite.boot({ config, llm: { resolveModel: fakeProviderModel } });
-  const database = new Database(config.dbPath, { readonly: true });
+  if (config.catalogPath === undefined) throw new Error("suite config always sets catalogPath");
+  const database = new Database(config.catalogPath, { readonly: true });
   try {
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
     const grants = () =>
@@ -78,160 +77,27 @@ test("stopping the daemon preserves the durable WebSocket bootstrap grant", asyn
   }
 });
 
-test("967 boot preserves promoted expired session", async () => {
-  const config = suite.config("openomni-967-history-", { wsToken: "history-token" });
-  let calls = 0;
-  const options = {
-    config,
-    llm: {
-      resolveModel: fakeProviderModel,
-      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
-        calls += 1;
-        sink.onMessage(assistantMessage(input, { text: "recovered" }));
-        return { type: "stop" as const };
-      }),
-    },
-  };
-  // Capture the real app's catalog, not a dummy runner or a parallel declaration.
-  const first = await suite.boot(options);
-  const ws = await suite.openSocket(`ws://127.0.0.1:${first.port}/ws`, ["auth", "history-token"]);
-  const response = nextResidentTurn();
-  ws.send(JSON.stringify({ type: "message", text: "catalog seed" }));
-  await response;
-  const template = SessionHandleStore.listRows().find((row) => row.id !== "gateway-ingress");
-  if (template === undefined) throw new Error("missing app session");
-  const generation = SessionHandleStore.latestGeneration(sessionTree(template.id));
-  await first.stop();
-
-  const seedRuntime = gatewayRuntime({ dbPath: config.dbPath });
-  await seedRuntime.runPromise(Effect.void);
-  const { actions, alarms } = Storage.get();
-  if (actions === undefined || alarms === undefined) throw new Error("fixture storage missing");
-  const raw = new Database(config.dbPath);
-  const id = "promoted-expired";
-  const legacy = JSON.stringify({
-    id,
-    title: "historical",
-    model: { providerID: "old", modelID: "old" },
-    time: { created: 1, updated: 1 },
-    spawnDepth: 0,
-    expiresAt: 2,
-  });
-  try {
-    raw
-      .query("INSERT INTO session (id, data, time_created, time_updated) VALUES (?, ?, 1, 1)")
-      .run(id, legacy);
-    expect(
-      (
-        await seedRuntime.runPromise(
-          SessionHandleStore.materialize({
-            id,
-            parentId: null,
-            role: "resident",
-            tools: generation.tools,
-            system: { preset: generation.systemPreset, blocks: generation.systemBlocks },
-            policyGeneration: generation.policyGeneration,
-            actionId: "historical-configure",
-            at: 3,
-          }),
-        )
-      ).created,
-    ).toBe(true);
-    expect(
-      actions.append(
-        {
-          id: "historical-completed",
-          sessionId: id,
-          parentId: "historical-configure",
-          kind: "tool",
-          intent: { encodingVersion: 1, value: { tool: "archived-read" } },
-          effect: { encodingVersion: 1, value: { result: "completed" } },
-          irreversible: true,
-          ts: 4,
-        },
-        1,
-      ),
-    ).toBeDefined();
-    await seedRuntime.runPromise(
-      SessionHandleStore.commitInbox({
-        id: "historical-pending",
-        sessionId: id,
-        kind: "prompt",
-        content: "recover this",
-        origin: { encodingVersion: 1, value: { source: "967-fixture" } },
-        createdAt: 5,
-        parentActionId: "historical-completed",
-      }),
-    );
-    expect(
-      await seedRuntime.runPromise(
-        alarms.arm({ id: "historical-alarm", sessionId: id, kind: "at", fireAt: 100 }),
-      ),
-    ).toBeDefined();
-    const before = persistedSession(raw, id);
-    console.log("967 SQLite before boot", JSON.stringify(before));
-    await seedRuntime.dispose();
-    calls = 0;
-
-    const app = await suite.boot({ ...options, sessionRuntime: { clock: () => 50 } });
-    const after = persistedSession(raw, id);
-    console.log("967 SQLite after boot", JSON.stringify({ ...after, calls }));
-    expect(after.session).not.toBeNull();
-    expect(after.actions.slice(0, before.actions.length)).toEqual(before.actions);
-    expect(after.alarms).toEqual(before.alarms);
-    expect(raw.query("SELECT data FROM session WHERE id = ?").get(id)).toEqual({ data: legacy });
-    expect(SessionHandleStore.pendingInbox(id)).toEqual([]);
-    expect(SessionHandleStore.inboxRows(id)).toMatchObject([
-      { id: "historical-pending", status: "consumed" },
-    ]);
-    expect(SessionHandleStore.getSnapshot(id).turns.at(-1)?.messages).toEqual([
-      { role: "user", text: "recover this" },
-      { role: "assistant", text: "recovered" },
-    ]);
-    expect(calls).toBe(1);
-    await app.stop();
-    const reopened = new SqliteStorageAdapter(config.dbPath);
-    try {
-      Storage.configure(reopened);
-      expect(raw.query("SELECT * FROM session WHERE id = ?").get(id)).toEqual(after.session);
-      expect(
-        raw.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(id),
-      ).toEqual(after.actions);
-      expect(raw.query("SELECT * FROM inbox WHERE session_id = ?").all(id)).toEqual(after.inbox);
-      expect(raw.query("SELECT * FROM alarm WHERE session_id = ?").all(id)).toEqual(after.alarms);
-      expect(SessionHandleStore.getSnapshot(id).state).toBe("idle");
-      expect(raw.query("PRAGMA foreign_key_check").all()).toEqual([]);
-      console.log(
-        "967 SQLite reopen",
-        JSON.stringify({ id, actions: after.actions.length, state: "idle" }),
-      );
-    } finally {
-      Storage.reset();
-    }
-  } finally {
-    raw.close();
-    await seedRuntime.dispose();
-    await suite.cleanup();
-    expect(ws.readyState).toBe(WebSocket.CLOSED);
-    expect(existsSync(dirname(config.dbPath))).toBe(false);
-    console.log(
-      "967 cleanup",
-      JSON.stringify({
-        dbPath: config.dbPath,
-        directoryExists: existsSync(dirname(config.dbPath)),
-        socketState: ws.readyState,
-      }),
-    );
-  }
-});
+// W5.2 L3.3b: the legacy single-DB promotion test ("967 boot preserves
+// promoted expired session") is deleted with the storage plane it exercised:
+// legacy `session.data` JSON rows, the inbox/alarm tables, `alarms.arm`,
+// `SqliteStorageAdapter` reopen and the module-level storage accessor have
+// no kernel/fence equivalent, and boot no longer promotes legacy rows.
 
 describe("channel supervisor", () => {
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+  function plane(): AppLedgerPlane {
+    if (planeRef.current === undefined) throw new Error("test plane not open");
+    return planeRef.current;
+  }
+  const channelStores = () => createChannelStores(channelStoreSource(plane()));
+
   beforeEach(() => {
-    Storage.initialize({ dbPath: ":memory:" });
+    planeRef.current = testPlane();
   });
 
   afterEach(() => {
-    Storage.reset();
+    planeRef.current?.close();
+    planeRef.current = undefined;
   });
 
   interface FakeChannel {
@@ -291,7 +157,7 @@ describe("channel supervisor", () => {
     const supervisor = createChannelSupervisor({
       desired,
       build: (component) => component.build(async () => undefined),
-      grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
+      grant: (surface, defaultTier) => registerTrustedChannelGrant(plane().stores.channelGrants, { surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
       traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",
@@ -326,13 +192,13 @@ describe("channel supervisor", () => {
     // in the live webhook table the HTTP surface reads per request.
     expect(deliveryRoutes.has("github")).toBe(false);
     expect(webhookHandlers.has("github")).toBe(true);
-    expect(resolveChannelGrant({ surface: "telegram" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.kind).toBe("trusted_channel");
     // #931: the mounted stage's grant carries the row's declared tier — a
     // named surface never materializes owner authority by mounting.
-    expect(resolveChannelGrant({ surface: "telegram" })?.grant.defaultTier).toBe(
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.defaultTier).toBe(
       MOUNTED_CHANNEL_DEFAULT_TIER,
     );
-    expect(resolveChannelGrant({ surface: "github" })?.grant.defaultTier).toBe(
+    expect(resolveChannelGrant(channelStores(), { surface: "github" })?.grant.defaultTier).toBe(
       MOUNTED_CHANNEL_DEFAULT_TIER,
     );
     expect(supervisor.source()).toBe("declared");
@@ -342,8 +208,8 @@ describe("channel supervisor", () => {
     expect(calls).toEqual(["start:telegram", "start:github", "stop:github", "stop:telegram"]);
     expect(deliveryRoutes.has("telegram")).toBe(false);
     expect(webhookHandlers.has("github")).toBe(false);
-    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
-    expect(resolveChannelGrant({ surface: "github" })).toBeUndefined();
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant(channelStores(), { surface: "github" })).toBeUndefined();
   });
 
   // #931 done-means 5: the grant row is observable immediately after the
@@ -360,11 +226,11 @@ describe("channel supervisor", () => {
 
     await supervisor.reconcile();
 
-    expect(resolveChannelGrant({ surface: "discord" })?.grant.defaultTier).toBe("observer");
+    expect(resolveChannelGrant(channelStores(), { surface: "discord" })?.grant.defaultTier).toBe("observer");
 
     await supervisor.stopAll();
 
-    expect(resolveChannelGrant({ surface: "discord" })).toBeUndefined();
+    expect(resolveChannelGrant(channelStores(), { surface: "discord" })).toBeUndefined();
   });
 
   test("§8.7 rotation bounces exactly the changed stage, stop before start", async () => {
@@ -411,7 +277,7 @@ describe("channel supervisor", () => {
       detail: "telegram start refused",
     });
     // Fail-closed: the stage that never started owns no grant and no route.
-    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })).toBeUndefined();
     expect(deliveryRoutes.has("telegram")).toBe(false);
 
     await supervisor.reconcile();
@@ -420,7 +286,7 @@ describe("channel supervisor", () => {
     const removed = await supervisor.reconcile();
     expect(removed).toEqual([]);
     expect(calls).toEqual(["start:telegram", "stop:telegram"]);
-    expect(resolveChannelGrant({ surface: "telegram" })).toBeUndefined();
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })).toBeUndefined();
   });
 
   test("three consecutive start failures trip the breaker; only resume re-arms it", async () => {
@@ -463,7 +329,7 @@ describe("channel supervisor", () => {
       rows: [row(channel, "0:0", "channel:telegram:main")],
       statuses: [],
     }));
-    const runtime = gatewayRuntime({ dbPath: ":memory:" });
+    const runtime = gatewayRuntime({});
     await runAppBoot(
       runtime,
       bootResource(Effect.succeed(supervisor), (resource) =>
@@ -501,7 +367,9 @@ describe("supervisor status passthrough", () => {
       build: () => {
         throw new Error("nothing to build");
       },
-      grant: (surface, defaultTier) => registerTrustedChannelGrant({ surface, defaultTier }),
+      grant: () => {
+        throw new Error("nothing to grant");
+      },
       deliveryRoutes,
       webhookHandlers,
       traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",

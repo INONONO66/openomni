@@ -1,5 +1,9 @@
 # Alarm/monitor stage-1 decision annex (#947)
 
+> **Historical context:** W5.2 #1197 superseded this frozen stage-1 storage and
+> worker design with entity-owned `DeliverAt` timing. Names below describe the
+> former implementation only.
+
 Frozen before implementation, against `b1da490c` (2026-09-06).
 This is the #930 working baseline, not a receipt for #969-#973's unified
 transition campaign. The existing alarm table and createAlarms remain owners.

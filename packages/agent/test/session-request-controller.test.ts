@@ -1,42 +1,41 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { expect, it } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
-import { Storage, SessionHandleStore } from "@openomni/ledger";
-import type { SessionTransition } from "@openomni/protocol";
+import { L0Observation, type SessionTransition } from "@openomni/protocol";
 import { session, closeSessions } from "../src/session-handle";
 import { createTurnDispatcher, eraseTool, sessionTool } from "../src/tool-dispatcher";
 import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/session-requests";
-import { suspendedRequest, failure } from "./helpers/effect-g2";
+import { suspendedRequest, } from "./helpers/effect-g2";
 
+// W5.2: the TTL-expiry test ("does not reacquire an expired lease under a still-live
+// suspended runner") is deleted with the lease plane — takeover is a fence adoption now,
+// covered by the crash-matrix takeover cells and the kernel adoptFence CAS tests.
 let runtime: SessionRuntime;
 function setup() {
   return Effect.gen(function* () {
     let now = 100;
     const suspended = Promise.withResolvers<void>();
     const effects: string[] = [];
+    const ledger = isolatedLedger();
     runtime = {
       authorizeConfigure: allowConfigure,
       clock: () => now,
       entropy: () => crypto.randomUUID(),
-      observations: {
-        publish: () => {
-          if (
-            SessionHandleStore.requestRows("controller").some(
-              (request: import("@openomni/protocol").SessionTransition.Request) =>
-                request.state === "open",
-            )
-          )
-            suspended.resolve();
-        },
-      },
-      scheduleHeartbeat: () => () => undefined,
+      observations: { publish: () => undefined },
+      closeGraceMs: 0,
+      ...isolatedRuntime(),
     };
+    // The commit sink is the isolation bus now: watch it for the opened request row.
+    ledger.bus.subscribe(L0Observation.ActionCommittedEvent, () => {
+      if (ledger.kernel.requestRows("controller").some((request: SessionTransition.Request) => request.state === "open"))
+        suspended.resolve();
+    });
     const tool = eraseTool(
       valueTool({
         name: "protected",
@@ -48,8 +47,6 @@ function setup() {
         approval: () => ({ required: true, domainRevisions: {} }),
       }),
     );
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:", observationSink: runtime.observations });
     seedPolicy();
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
     const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
@@ -104,8 +101,8 @@ it("the injected gateway port uses the live controller's fence and releases the 
         expect(yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))).toBe("resolved");
         yield* Fiber.join(running);
         expect(f.effects).toEqual(["original"]);
-        expect(SessionHandleStore.row(f.handle.id).leaseFence).toBe(fence);
-        expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
+        expect(isolatedLedger().kernel.row(f.handle.id).leaseFence).toBe(fence);
+        expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("resolved");
       }),
     ),
   ));
@@ -120,9 +117,9 @@ it("configuration drift refuses consent while interruption cancels the whole sus
         expect(f.effects).toEqual([]);
         yield* f.handle.interrupt();
         yield* Fiber.join(running);
-        expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("cancelled");
+        expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("cancelled");
         expect(
-          sessionTree(f.handle.id).some(
+          sessionTree(isolatedLedger().kernel, f.handle.id).some(
             (action: import("@openomni/protocol").LedgerAction.Node) => {
               const effect = action.effect.value;
               return (
@@ -138,26 +135,6 @@ it("configuration drift refuses consent while interruption cancels the whole sus
           ),
         ).toBe(true);
         expect(f.effects).toEqual([]);
-      }),
-    ),
-  ));
-it("does not reacquire an expired lease under a still-live suspended runner", () =>
-  isolated(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const f = yield* setup();
-        const { settled, request, fence } = yield* suspendedRequest(f.handle, f.suspended);
-        f.setClock(40_000);
-        expect(
-          yield* failure((yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))),
-        ).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "LeaseRefused", reason: "stale" },
-        });
-        expect(SessionHandleStore.row(f.handle.id).leaseFence).toBe(fence);
-        expect(f.effects).toEqual([]);
-        yield* f.handle.close();
-        yield* settled;
       }),
     ),
   ));

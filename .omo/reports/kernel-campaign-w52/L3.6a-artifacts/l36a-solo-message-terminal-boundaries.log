@@ -1,0 +1,75 @@
+bun test v1.4.1 (4661e494f)
+
+test/message-terminal-boundaries.test.ts:
+(pass) startOpenOmni reports pre-denied socket admission as an error, not accepted [60.30ms]
+(pass) startOpenOmni deadline-bound child delivers result under the original request [139.92ms]
+(pass) startOpenOmni deadline-bound child delivers error under the original request [114.70ms]
+58 |       if (disposed) {
+59 |         disposal ??= dispose();
+60 |         return disposal;
+61 |       }
+62 |       disposal ??= runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
+63 |         Effect.mapError((error) => new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) })),
+                                        ^
+error: shutdown.raw_unsettled: GenerationUnsettled: session gateway-ingress generation 1 has 1 live owner(s)
+ operation: "shutdown.raw_unsettled",
+      _tag: "AppLifecycleFailure",
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:63:36)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2487:9)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2539:19)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2550:31)
+      at runAppEffect (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:79:18)
+      at dispose (/Users/ino/Develop/openomni-w52/apps/openomni/src/gateway.ts:62:20)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/src/index.ts:829:21)
+(fail) startOpenOmni deadline-bound child delivers interrupted under the original request [5009.14ms]
+  ^ this test timed out after 5000ms.
+[20:39:50.616] WARN (#326): Could not read messages from storage ~effect/cluster/ClusterError/PersistenceError: 
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/cluster/ClusterError.js:118:63)
+    at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+    at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+    at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+  [cause]: effect/sql/SqlError: Failed to execute statement
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:87:32)
+      at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+      at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+      at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+      at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+      at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+      at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+    [cause]: effect/sql/SqlError/UnknownError: Failed to execute statement
+        at classifySqliteError (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/sql/SqlError.js:486:20)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:88:19)
+        at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+        at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+        at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+        at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+        at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+        at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10) {
+      [cause]: SQLiteError: disk I/O error
+          at all (unknown)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/@effect+sql-sqlite-bun@4.0.0-rc.118+b37c82cde0db38aa/node_modules/@effect/sql-sqlite-bun/dist/SqliteClient.js:85:61)
+          at runLoop (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+          at evaluate (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+          at <anonymous> (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+          at flushScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+          at runTasks (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+          at afterScheduled (/Users/ino/Develop/openomni-w52/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10)
+    }
+  }
+} {
+  module: "effect/cluster/Sharding",
+  fiber: "Storage read loop",
+  runner: RunnerAddress(localhost:34431),
+}
+
+ 3 pass
+ 1 fail
+ 24 expect() calls
+Ran 4 tests across 1 file. [5.59s]

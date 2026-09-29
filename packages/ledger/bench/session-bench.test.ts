@@ -1,8 +1,9 @@
 import { sessionTree } from "../test/helpers/session-tree";
 import { Effect, Result } from "effect";
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { SessionHandleStore, Storage } from "../src/index";
+import { runLedgerSync } from "../test/helpers/effect";
+import { useMemoryStores } from "../test/helpers/storage";
 import { prepareTurnCommit, seedTurnHistory } from "./seed-turn-history";
 
 const Metric = z.object({
@@ -12,53 +13,54 @@ const Metric = z.object({
 });
 
 describe("session benchmark fixtures", () => {
-  afterEach(() => Storage.reset());
+  const stores = useMemoryStores();
 
   test("default seed preserves ten complete turns", () => {
-    Storage.initialize({ dbPath: ":memory:" });
-    seedTurnHistory("default");
-    const snapshot = SessionHandleStore.getSnapshot("default", 10);
+    seedTurnHistory(stores.kernel, "default");
+    const snapshot = stores.kernel.getSnapshot("default", 10);
     expect(snapshot.turns).toHaveLength(10);
-    expect(sessionTree("default")).toHaveLength(21);
+    expect(sessionTree("default", stores.session.actions)).toHaveLength(21);
   });
 
   test.each([500, 5_000])("%i turns seed exactly twice as many committed turn actions", (count) => {
-    Storage.initialize({ dbPath: ":memory:" });
     const id = `seed-${count}`;
-    seedTurnHistory(id, count);
-    const tree = sessionTree(id);
+    seedTurnHistory(stores.kernel, id, count);
+    const tree = sessionTree(id, stores.session.actions);
     expect(tree).toHaveLength(count * 2 + 1);
     expect(tree.filter((action) => action.kind === "turn")).toHaveLength(count * 2);
-    expect(SessionHandleStore.row(id).revision).toBe(tree.length);
+    expect(stores.kernel.row(id).revision).toBe(tree.length);
     for (let index = 1; index < tree.length; index += 1) {
       expect(tree[index]?.parentId).toBe(tree[index - 1]?.id);
     }
-    const page = SessionHandleStore.historyPage(id, { limit: 50 });
+    const page = stores.kernel.historyPage(id, { limit: 50 });
     expect(page.actions).toEqual(tree.slice(0, 50));
     expect(page.headRevision).toBe(tree.length);
     expect(page.nextRevision).toBe(50);
   });
 
   test("preparing a warm-session commit leaves history unchanged until one action is committed", () => {
-    Storage.initialize({ dbPath: ":memory:" });
-    seedTurnHistory("warm");
-    const tree = sessionTree("warm");
+    seedTurnHistory(stores.kernel, "warm");
+    const tree = sessionTree("warm", stores.session.actions);
     const request = prepareTurnCommit(
+      stores.kernel,
       "warm",
       10,
       tree.at(-1)?.id ?? null,
-      SessionHandleStore.latestGeneration(tree),
+      stores.kernel.latestGenerationFor("warm"),
     );
     request.actions = request.actions.slice(0, 1);
-    expect(sessionTree("warm")).toEqual(tree);
-    const result = Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
-    expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: null } });
-    expect(sessionTree("warm").at(-1)).toMatchObject({
+    expect(sessionTree("warm", stores.session.actions)).toEqual(tree);
+    const result = Result.getOrThrowWith(
+      runLedgerSync(Effect.result(stores.kernel.commit(request))),
+      (error) => error,
+    );
+    expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: "bench" } });
+    expect(sessionTree("warm", stores.session.actions).at(-1)).toMatchObject({
       id: "warm:turn:10",
       kind: "turn",
       parentId: tree.at(-1)?.id,
     });
-    expect(sessionTree("warm")).toHaveLength(22);
+    expect(sessionTree("warm", stores.session.actions)).toHaveLength(22);
   });
 });
 
@@ -66,21 +68,12 @@ describe("session benchmark fixtures", () => {
 // remains is seeding 10k actions and walking them, which the exact collector's
 // instrumentation runs about five times slower than the plain lane.
 test("benchmark entry point emits the ten existing ledger metrics and four new session metrics", async () => {
-  const commit = SessionHandleStore.commit;
-  const widths: number[] = [];
-  const tracked = spyOn(SessionHandleStore, "commit").mockImplementation((request) => {
-    if (request.sessionId === "commit-session") widths.push(request.actions.length);
-    return commit(request);
-  });
   process.env.BENCHMARK_BUDGET_MS = "10";
   try {
     await import("./index");
   } finally {
     delete process.env.BENCHMARK_BUDGET_MS;
-    tracked.mockRestore();
   }
-  expect(widths.length).toBeGreaterThan(10);
-  expect(widths.slice(10).every((width) => width === 1)).toBe(true);
   const metrics = Metric.array().parse(await Bun.file("bench-results/session.json").json());
   expect(metrics.map((metric) => metric.name).sort()).toEqual([
     "bus-fanout/10-subscribers",

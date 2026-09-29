@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
@@ -9,9 +9,9 @@ import { makeSessionGenerations } from "../src/session-generations";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { createTurnDispatcher, defineTool, sessionTool } from "../src/tool-dispatcher";
 import { createObservationBus } from "../src/observation/bus";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 
 function policyRow(name: string, verdict: PlainValue, priority = 100): BundleRow {
   return { name, kind: "tool", phase: "pre", priority,
@@ -36,8 +36,7 @@ function generationFixture(rows: readonly BundleRow[], bodies: PlainValue[]) {
     const demo = bundle({ name: "demo", provides: [Policy], requires: [], tools: [tool], rows, layer: PolicyLive });
     const definitions = yield* BundleDefinitions.pipe(Effect.provide(BundlesLive([demo])));
     const selected = definitions.select(["demo"]);
-    const source = Storage.get().policies;
-    if (source === undefined) return yield* Effect.die("missing policies");
+    const source = isolatedLedger().catalog.policies;
     const policyGeneration = source.appendGeneration(() => [...SEEDED_POLICY_ROWS, ...selected.rows]);
     const snapshot = SessionHandleStore.generationSnapshot({
       generation: 1, revertTo: 0, policyGeneration, bundles: selected.names,
@@ -101,7 +100,7 @@ for (const type of ["transform", "obligation"] as const) {
     expect(policy.evaluate({ kind: "tool", phase: "pre", value: {} })).toMatchObject({
       verdict: "deny", reason: "unknown_ref", error: { code: "unknown_ref", ref: "demo/missing" },
     });
-    const tree = sessionTree(fiberSessionId);
+    const tree = sessionTree(isolatedLedger().kernel, fiberSessionId);
     const decisions = tree.filter((action: LedgerAction.Node) => action.kind === "policy.decision");
     expect(decisions.map(effectValue)).toMatchObject([{ terminal: "blocked_pre", reason: "unknown_ref" }]);
     expect(tree.filter((action: LedgerAction.Node) => action.kind === "tool")).toEqual([]);

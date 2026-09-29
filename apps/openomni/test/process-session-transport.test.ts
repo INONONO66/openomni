@@ -22,7 +22,9 @@ function transport(scenario: string, answer?: SessionTransition.Resolution | Err
     sessions: createProcessSessionTransport({
       command: [process.execPath, CHILD, scenario],
       worker: {
-        dbPath: "unused.sqlite",
+        catalogPath: "unused-catalog.sqlite",
+        sessionsDir: "unused-sessions",
+        entityIdleMs: 60_000,
         model: { provider: "anthropic", id: "claude-opus-4-5" },
         apiKey: "process-key",
       },
@@ -73,7 +75,9 @@ test("native process entry validates and releases a request for a missing durabl
   const directory = mkdtempSync(join(tmpdir(), "openomni-missing-session-"));
   const request = {
     sessionId: "MISSING_SESSION_SENTINEL",
-    dbPath: join(directory, "storage.sqlite"),
+    catalogPath: join(directory, "catalog.sqlite"),
+    sessionsDir: join(directory, "sessions"),
+    entityIdleMs: 60_000,
     model: { provider: "anthropic", id: "fixture" },
     apiKey: "fixture-key",
   };

@@ -1,4 +1,4 @@
-import { ForeignFailure as LedgerFailure, SessionHandleStore, Storage } from "@openomni/ledger";
+import { ForeignFailure as LedgerFailure } from "@openomni/ledger";
 import {
   canonicalDigest,
   FoldCheckpoint,
@@ -9,7 +9,8 @@ import {
 import { z } from "zod";
 import { Effect } from "effect";
 import { runAgent } from "./executor";
-import { allowConfigure, withSessionServices, type SessionFixture } from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
+import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/compaction/successor";
 import { closeSessions, session } from "../../src/session-handle";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
@@ -44,14 +45,15 @@ type Proof = z.infer<typeof foldCrashProof>;
 type Stop = (bodies: string[], pending: LedgerAction.Append | undefined, proof: Proof) => void;
 
 function proof(): Proof {
-  const loaded = hydrateSessionHistory(reconstructionSession);
+  const kernel = isolatedLedger().kernel;
+  const loaded = hydrateSessionHistory(kernel, reconstructionSession);
   return {
     revision: loaded.revision,
     digest: canonicalDigest(loaded.history),
     stateDigest: canonicalDigest({ foldVersion: 1, state: PlainValueSchema.parse(loaded.state) }),
     messageIds: loaded.history.map((message) => message.info.id),
     checkpointId:
-      SessionHandleStore.latestFoldCheckpoint(reconstructionSession).checkpoint?.id ?? null,
+      kernel.latestFoldCheckpoint(reconstructionSession).checkpoint?.id ?? null,
   };
 }
 
@@ -60,7 +62,7 @@ function transactionCut(stop: Stop) {
   const before = proof();
   const rollback = new Error("injected transaction rollback");
   try {
-    Storage.get().transaction(() => {
+    isolatedLedger().session.transaction(() => {
       requireCommit(
         recording.commitBatch(
           paddingActions(reconstructionSession, recording.identity.turnId, 254),
@@ -84,7 +86,7 @@ async function tamperedCut(stop: Stop) {
     revision: before.revision,
     at: 100,
     reason: "interval",
-    state: hydrateSessionHistory(reconstructionSession).state,
+    state: hydrateSessionHistory(isolatedLedger().kernel, reconstructionSession).state,
   });
   const effect = FoldCheckpoint.Effect.parse(checkpoint.effect.value);
   const receipt = await runAgent(recording.ledger.commit({
@@ -101,7 +103,7 @@ async function tamperedCut(stop: Stop) {
 }
 
 async function contextCut(stop: Stop) {
-  const runtime: SessionFixture = { observations: { publish: () => undefined }, clock: () => 100, authorizeConfigure: allowConfigure };
+  const runtime: SessionFixture = { ...isolatedRuntime(), observations: { publish: () => undefined }, clock: () => 100, authorizeConfigure: allowConfigure };
   return runAgent(Effect.scoped(withSessionServices(Effect.gen(function* () {
   const handle = yield* session(
     {

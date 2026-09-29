@@ -1,40 +1,60 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { describe, expect, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
 import { OutcomeUnknown, CommitFailed } from "../src/errors";
 import { seedPolicy } from "./helpers/seed-policy";
 import { approveWriteRow } from "./helpers/compiled-policy";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { LlmRunFailure, type Run } from "@openomni/llm";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
-import { Bus, closeSessions, createTurnDispatcher, wakeSession, type SessionRunner } from "../src/index";
+import { closeSessions, createTurnDispatcher, type SessionRunner } from "../src/index";
+import { resolveSessionRuntime } from "../src/session-contract";
+import { createController } from "../src/session-controller";
+import { commitReceivedMessage } from "./helpers/ingress";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
 import { session } from "../src/session-handle";
 
 const SECRET = "sk-live-credential-never-shown";
+
+/**
+ * The deleted Storage-era wake equivalent (W5.2): a fresh activation over the
+ * isolation's kernel driving its reconcile.
+ */
+function wake(id: string, runner: SessionRunner, fixture: SessionFixture) {
+  return withSessionServices(Effect.gen(function* () {
+    const resolved = yield* resolveSessionRuntime(fixture);
+    const wakeScope = yield* Effect.scope;
+    const controller = yield* createController(
+      isolatedLedger().kernel, id, runner, resolved,
+      { reactivate: () => Effect.die(new Error("no reactivation in inspection tests")), release: () => undefined },
+      wakeScope,
+    );
+    yield* controller.reconcile();
+  }), fixture);
+}
 let nextId = 0;
 let bodies = 0;
 let scope: Scope.Scope;
 const runtime: SessionRuntime = {
   authorizeConfigure: allowConfigure,
-  observations: Bus,
+  observations: { publish: () => undefined },
   clock: () => 1_000,
   entropy: () => `inspect-id-${++nextId}`,
   processId: "inspection-test",
-  scheduleHeartbeat: () => () => undefined,
   retryAlarm: nullRetryAlarm,
+  ...isolatedRuntime(),
   authorizeApproval: () =>
     Effect.sync(() => {
       return { kind: "owner", principalId: "owner", evidenceId: "auth-1" };
     }),
   dispatchOutbound({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) {
     return Effect.gen(function* () {
-      const received = yield* SessionHandleStore.commitReceivedMessage({
+      const received = yield* commitReceivedMessage(isolatedLedger().kernel, {
         id: message.messageId,
         sessionId: message.destinationSessionId,
         kind: "prompt",
@@ -47,7 +67,7 @@ const runtime: SessionRuntime = {
           (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
         ),
       );
-      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
+      yield* wake(message.destinationSessionId, parentRunner, runtime).pipe(
         Effect.provideService(Scope.Scope, scope),
         Effect.orDie,
       );
@@ -90,7 +110,7 @@ function providerFailure(): Run.Failure {
 /** Waits for the next committed action of `kind` in `sessionId`, subscribed before the trigger. */
 function committed(sessionId: string, kind: string): Promise<L0Observation.ActionCommitted> {
   return new Promise((resolve: (event: L0Observation.ActionCommitted) => void) => {
-    const stop = Bus.subscribe(
+    const stop = isolatedLedger().bus.subscribe(
       L0Observation.ActionCommittedEvent,
       (event: L0Observation.ActionCommitted) => {
         if (event.kind !== kind) return;
@@ -194,16 +214,11 @@ const parentRunner: SessionRunner = (input: import("../src/session-handle").Sess
 /** Parent turn, commissioned child whose answer wakes the parent, then a monitor wake. */
 function lifecycle() {
   return Effect.gen(function* () {
-    Bus.reset();
     nextId = 0;
     bodies = 0;
-    Storage.reset();
-    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
     seedPolicy(rows);
     scope = yield* Effect.scope;
-    yield* Effect.addFinalizer(() =>
-      closeSessions(runtime).pipe(Effect.orDie, Effect.ensuring(Effect.sync(() => Bus.reset()))),
-    );
+    yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
     const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
     yield* parent.prompt("hello");
     const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
@@ -215,7 +230,7 @@ function lifecycle() {
             return { kind: "result", text: "child answer" };
           }),
       }, fixture), fixture); });
-    const commission = sessionTree("parent").find(
+    const commission = sessionTree(isolatedLedger().kernel, "parent").find(
       (action: import("@openomni/protocol").LedgerAction.Node) =>
         SessionHandleStore.turnTerminal(action) !== undefined,
     );
@@ -229,22 +244,41 @@ function lifecycle() {
         sourceActionId: commission.id,
       },
     });
-    const alarms = Storage.get().alarms;
-    if (alarms === undefined) throw new Error("missing alarm adapter");
-    yield* alarms.arm({ id: "monitor", sessionId: "parent", kind: "at", fireAt: 1_000 });
-    const owned = yield* alarms.acquire("monitor", 0);
-    if (owned === undefined) throw new Error("alarm acquisition refused");
-    const woke = committed("parent", "turn");
-    yield* alarms.fire({
-      id: "monitor",
-      epoch: 1,
-      fence: owned.fence,
-      sourceKey: `timer:${owned.fireAt}`,
-      at: 1_000,
-      content: "monitor woke",
-      terminal: true,
+    // W5.2: the alarms table is deleted; a watch is `alarm.arm`/`alarm.fired`
+    // chain actions guarded by occurrence id (cluster timer plane), and the
+    // wake is the fired occurrence's received message plus a fresh activation.
+    const kernel = isolatedLedger().kernel;
+    const monitorWriter = yield* kernel.adoptFence({
+      sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").leaseFence + 1,
     });
-    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(wakeSession("parent", parentRunner, fixture), fixture); });
+    yield* kernel.commit({
+      sessionId: "parent", owner: "monitor-writer", fence: monitorWriter.fence, now: 1_000,
+      expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
+      actions: [{
+        id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
+        intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
+        effect: { encodingVersion: 1, value: { phase: "pending" } },
+        ts: 1_000, irreversible: true,
+      }],
+    });
+    const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
+    const woke = committed("parent", "turn");
+    yield* kernel.commit({
+      sessionId: "parent", owner: "monitor-writer", fence: monitorWriter.fence, now: 1_000,
+      expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
+      actions: [{
+        id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm.fired",
+        intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
+        effect: { encodingVersion: 1, value: { terminal: "executed" } },
+        ts: 1_000, irreversible: true,
+      }],
+    });
+    yield* commitReceivedMessage(kernel, {
+      id: "monitor-woke", sessionId: "parent", kind: "prompt", content: "monitor woke",
+      origin: { encodingVersion: 1, value: { kind: "alarm", alarmId: "monitor" } },
+      createdAt: 1_000, parentActionId: monitorFire,
+    });
+    yield* wake("parent", parentRunner, runtime);
     yield* Effect.promise(() => woke).pipe(Effect.timeout("5 seconds"));
     return parent;
   });
@@ -257,7 +291,7 @@ describe("action-based history and diagnostic projections", () => {
         Effect.gen(function* () {
           const parent = yield* lifecycle();
           const inspection = parent.inspect({ depth: 1 });
-          const tree = sessionTree("parent");
+          const tree = sessionTree(isolatedLedger().kernel, "parent");
           expect(
             inspection.transitions.map(
               (
@@ -277,10 +311,12 @@ describe("action-based history and diagnostic projections", () => {
           const known = new Set(
             tree.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
           );
+          // W5.2: the inbox table is gone; received-message chain actions
+          // (kind "prompt") are the inbox rows.
           const inbox = new Set(
-            SessionHandleStore.inboxRows("parent").map(
-              (row: import("@openomni/protocol").Inbox.Row) => row.id,
-            ),
+            tree
+              .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "prompt")
+              .map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
           );
           for (const transition of inspection.transitions) {
             switch (transition.cause.kind) {
@@ -410,7 +446,7 @@ describe("action-based history and diagnostic projections", () => {
             ["parent", "pending"],
             ["parent", "executed"],
           ]);
-          const obligation = SessionHandleStore.outboundRows("child")[0];
+          const obligation = isolatedLedger().kernel.outboundRows("child")[0];
           expect(fromChild?.actionId).toBe(obligation?.message.messageId ?? "");
           expect(fromChild?.cause).toEqual({
             kind: "inbox",
@@ -462,7 +498,7 @@ describe("action-based history and diagnostic projections", () => {
             ).toBe(true);
           }
           const rendered = JSON.stringify(inspection);
-          expect(JSON.stringify(sessionTree("parent"))).toContain(SECRET);
+          expect(JSON.stringify(sessionTree(isolatedLedger().kernel, "parent"))).toContain(SECRET);
           expect(rendered).not.toContain(SECRET);
           expect(rendered).not.toContain("/etc/shadow");
         }),
@@ -474,13 +510,14 @@ describe("action-based history and diagnostic projections", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const parent = yield* lifecycle();
-          const before = sessionTree("parent");
+          const kernel = isolatedLedger().kernel;
+          const before = sessionTree(kernel, "parent");
           const ran = bodies;
           parent.inspect({ depth: 2 });
           parent.history({ limit: 5 });
           expect(bodies).toBe(ran);
-          expect(sessionTree("parent")).toEqual(before);
-          expect(sessionTree("child")).toEqual(sessionTree("child"));
+          expect(sessionTree(kernel, "parent")).toEqual(before);
+          expect(sessionTree(kernel, "child")).toEqual(sessionTree(kernel, "child"));
         }),
       ),
     ));
@@ -490,7 +527,7 @@ describe("action-based history and diagnostic projections", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const parent = yield* lifecycle();
-          const before = sessionTree("parent");
+          const before = sessionTree(isolatedLedger().kernel, "parent");
           const rebuilt: typeof before = [];
           let page = parent.history({ afterRevision: 0, limit: 4 });
           for (;;) {

@@ -7,7 +7,7 @@ import {
   targetKey,
   type BusEvent,
 } from "@openomni/protocol";
-import { SurfaceKey } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import { recordRouteDecided } from "./route-record";
 import { applyChannelGrantTreatment } from "./authority.js";
 import { matchBlacklist } from "./blacklist.js";
@@ -160,11 +160,12 @@ function routedEvent<Event extends Gateway.DeliveredEvent>(
 }
 
 function blacklistState(
+  stores: ChannelStores,
   event: Gateway.DeliveredEvent,
   correlation: ScopedCorrelation | undefined,
 ): RouteState["blacklist"] {
   const actor = event.meta?.actor;
-  const entry = matchBlacklist({
+  const entry = matchBlacklist(stores, {
     actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
     endpointId:
       (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
@@ -186,6 +187,7 @@ function blacklistState(
 }
 
 function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
+  stores: ChannelStores,
   event: Event,
   surfaceKey: string,
   traceId: string,
@@ -202,9 +204,9 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   const gatheredRequest = findRequestCandidates(requests.list(), correlation);
   const request = routeRequestState(gatheredRequest);
   const target = targetKey(resolveTarget(event));
-  const surfaceSessionId = SurfaceKey.lookup(surfaceKey);
-  const blacklist = blacklistState(event, correlation);
-  const channelResolution = resolveChannelGrant({
+  const surfaceSessionId = stores.surfaceKeys.lookup(surfaceKey);
+  const blacklist = blacklistState(stores, event, correlation);
+  const channelResolution = resolveChannelGrant(stores, {
     surface: event.surface,
     workspace: event.workspace,
     channel: event.channel,
@@ -235,7 +237,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     decision.stage === "surface_default" &&
     decision.sessionId === undefined
   ) {
-    const id = SurfaceKey.claim(surfaceKey, crypto.randomUUID());
+    const id = stores.surfaceKeys.claim(surfaceKey, crypto.randomUUID());
     decision.sessionId = id;
     decision.factsUsed = decision.factsUsed.map((fact) =>
       fact === "surface.default:new" ? `surface.default:${id}` : fact,
@@ -284,6 +286,7 @@ function pinReplyGrantEndpoint(
 // the typed route_ambiguous rejection — candidates are never mutated on
 // lookup.
 export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
+  stores: ChannelStores,
   event: Event,
   surfaceKey: string,
   traceId: string,
@@ -291,13 +294,13 @@ export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   requests: GatewayRouterPorts["requests"],
   at: number,
 ): KernelRouteResolution<Event> {
-  const resolution = resolveKernelRoute(event, surfaceKey, traceId, requests, at);
+  const resolution = resolveKernelRoute(stores, event, surfaceKey, traceId, requests, at);
   const decision = Ingress.Events.RoutingDecision.schema.parse(
     pinReplyGrantEndpoint(resolution.decision, event),
   );
   // Redelivery passes the equivalence gate or fails closed — execution below
   // always uses the fresh decision with its own fresh resolution.
-  const effective = recordRouteDecided(Ingress.routeStreamId(event), decision);
+  const effective = recordRouteDecided(stores, Ingress.routeStreamId(event), decision);
   // Observe-only projection — strictly after the append (or after the gated
   // equivalent replay); lossy by contract, published through the injected
   // sink (channels never imports the observation channel). A divergent

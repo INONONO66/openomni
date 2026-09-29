@@ -10,15 +10,15 @@ import {
   session,
   type SessionRuntime,
 } from "@openomni/agent";
-import { initialize } from "@openomni/ledger";
+import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
 import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
 import { decodeChannelFailure } from "@openomni/channels";
 import {
-  commitMessageInbox,
   messageMaterialization,
   prepareMessage,
 } from "../../src/composition/message-session";
+import { localInbox } from "./ledger";
 import { allowConfigure, generationServices } from "./generation-services";
 import { ToolCatalog } from "@openomni/agent";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
@@ -34,42 +34,56 @@ type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input
 export function messageFixture(
   role: LedgerSession.Role = "resident",
   messaging?: OutboundMessaging,
-  tools: Parameters<typeof messageMaterialization>[0]["tools"] = [],
+  tools: Parameters<ReturnType<typeof messageMaterialization>>[0]["tools"] = [],
 ) {
   const directory = mkdtempSync(join(tmpdir(), "message-policy-"));
-  const dbPath = join(directory, "test.sqlite");
-  initialize({ dbPath, observationSink: Bus });
-  seedKernelPolicyRows();
+  const catalogPath = join(directory, "catalog.sqlite");
+  const sessionsDir = join(directory, "sessions");
+  const plane = createAppLedger({ catalogPath, sessionsDir, observationSink: Bus });
+  seedKernelPolicyRows(plane.catalog.policies);
   const sessionId = "sender";
   const runtime: SessionRuntime = {
     authorizeConfigure: allowConfigure,
+    openKernel: plane.openKernel,
+    listSessions: plane.listSessions,
     dispatchOutbound: dispatchOutboundMessage(
       (...args) => gateway.ingest(...args),
       () => 100,
+      plane.openKernel,
     ),
   };
-  const context = acquireSyncEffect(generationServices({ clock: () => 100 }));
+  const context = acquireSyncEffect(generationServices({ clock: () => 100, plane }));
   const requests = runSyncEffect(createSessionRequests(runtime).pipe(Effect.provide(context)));
   const gateway = runSyncEffect(createResidentGateway({
     clock: () => 100,
     requests: channelRequests(requests),
-    inbox: { commit: (input) => commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-    prepare: prepareMessage((id, parentId, childRole, runner) => messageMaterialization({
-      id,
-      parentId,
-      role: childRole,
-      runner,
-      tools,
-      preset: "",
-      at: 100,
-    })),
+    inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+    prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
+      messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration())({
+        id,
+        parentId,
+        role: childRole,
+        runner,
+        tools,
+        preset: "",
+        at: 100,
+      })),
   }, messaging).pipe(Effect.provide(context)));
   let result: Tool.Result | undefined;
+  // Optional mid-turn arrival: committed inside the running turn (riding the
+  // live owner+fence) so it is still pending when the send is admitted —
+  // boundary drains consume everything committed before the turn opened.
+  let beforeDispatch: Effect.Effect<void> | undefined;
   const handle = acquireSyncEffect(session(
     {
       id: sessionId,
       role,
       runner: (input) => Effect.gen(function* () {
+        if (beforeDispatch !== undefined) {
+          const hook = beforeDispatch;
+          beforeDispatch = undefined;
+          yield* hook;
+        }
         const payload = toolInput(
           Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
         );
@@ -96,12 +110,13 @@ export function messageFixture(
   ).pipe(Effect.provide(context)));
   return {
     directory,
-    dbPath,
+    plane,
     gateway,
     sessionId,
     requests,
-    async send(input: Gateway.SendMessage): Promise<Tool.Result> {
+    async send(input: Gateway.SendMessage, midTurn?: Effect.Effect<void>): Promise<Tool.Result> {
       result = undefined;
+      beforeDispatch = midTurn;
       await runEffect(handle.prompt(JSON.stringify(input)));
       if (result === undefined) throw new Error("fixture tool did not execute");
       return result;

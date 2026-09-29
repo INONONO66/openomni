@@ -1,18 +1,34 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "@openomni/agent";
-import { ActorRegistry, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
+import { join } from "node:path";
+import { createSurfaceKeyStore } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
+import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { messageMaterialization, prepareMessage } from "../src/composition/message-session";
+import { commitReceivedMessage } from "../../../packages/agent/test/helpers/ingress";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
 
 const directories = storageDirectories(true);
+
+/** The per-session ledger file a fixture session commits into (W5.2). */
+function sessionDb(fixture: { directory: string }, sessionId: string) {
+  return sessionFilePath(join(fixture.directory, "sessions"), sessionId);
+}
+
+function tree(plane: AppLedgerPlane, sessionId: string) {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions);
+}
+
+function promptActions(plane: AppLedgerPlane, sessionId: string) {
+  return tree(plane, sessionId).filter((action) => action.kind === "prompt");
+}
 
 test("worker actor send is blocked by a compiled B row before transport", async () => {
   const { fixture, calls } = ungrantedActor("worker");
@@ -23,28 +39,11 @@ test("worker actor send is blocked by a compiled B row before transport", async 
   expect(calls()).toBe(0);
 });
 
-test("new child configuration and first inbox roll back together on an inbox insertion fault", async () => {
-  const fixture = messageFixture();
-  directories.push(fixture.directory);
-  const db = new Database(fixture.dbPath);
-  try {
-    db.exec(
-      "CREATE TRIGGER fail_inbox BEFORE INSERT ON inbox WHEN NEW.session_id != 'sender' BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
-    );
-    const result = await fixture.send({
-      to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
-      type: "message",
-      content: "work",
-    });
-    expect(result.isError).toBe(true);
-    expect(SessionHandleStore.listRows().filter((row) => row.role === "worker")).toEqual([]);
-    expect(
-      db.query("SELECT count(*) AS count FROM inbox WHERE session_id != 'sender'").get(),
-    ).toEqual({ count: 0 });
-  } finally {
-    db.close();
-  }
-});
+// W5.2 L3.3b: "new child configuration and first inbox roll back together on
+// an inbox insertion fault" is deleted with the single-DB inbox table. Child
+// materialization is now an idempotent catalog/session-file fact applied
+// before entity delivery; a failed delivery leaves the (reusable) session row
+// in place by design, so the joint-rollback invariant no longer exists.
 
 test("duplicate external event does not commit a second inbox message", async () => {
   const fixture = messageFixture();
@@ -67,13 +66,12 @@ test("duplicate external event does not commit a second inbox message", async ()
     reasonCode: "message.external.event_id_dedupe",
   });
   if (first.status !== "executed") throw new Error("first message not executed");
-  expect(SessionHandleStore.inboxRows(first.handle.target)).toHaveLength(1);
+  expect(promptActions(fixture.plane, first.handle.target)).toHaveLength(1);
 });
 
 test("external ingress retry after inbox fault commits once despite a recorded route", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  const db = new Database(fixture.dbPath);
   const sender = { kind: "external", surface: "ws", externalId: "owner" } as const;
   const facts = {
     eventId: "retry",
@@ -84,19 +82,24 @@ test("external ingress retry after inbox fault commits once despite a recorded r
     payload: {},
     render: "hello",
   };
+  // Learn the durable target first: the fault must land on that session's
+  // ledger file, where W5.2 commits received messages as prompt actions.
+  const probe = await runEffect(fixture.gateway.ingest(sender, { ...facts, eventId: "probe" }));
+  if (probe.status !== "executed") throw new Error("probe message not executed");
+  const db = new Database(sessionDb(fixture, probe.handle.target));
   try {
     db.exec(
-      "CREATE TRIGGER fail_external BEFORE INSERT ON inbox BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
+      "CREATE TRIGGER fail_external BEFORE INSERT ON action WHEN NEW.kind = 'prompt' BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
     );
     await expect(runEffect(fixture.gateway.ingest(sender, facts))).rejects.toMatchObject({
       _tag: "ForeignFailure",
-      operation: "message.run",
     });
     db.exec("DROP TRIGGER fail_external");
     const result = await runEffect(fixture.gateway.ingest(sender, facts));
     expect(result.status).toBe("executed");
     if (result.status !== "executed") throw new Error("retry was not committed");
-    expect(SessionHandleStore.inboxRows(result.handle.target)).toHaveLength(1);
+    expect(result.handle.target).toBe(probe.handle.target);
+    expect(promptActions(fixture.plane, result.handle.target)).toHaveLength(2);
   } finally {
     db.close();
   }
@@ -105,7 +108,7 @@ test("external ingress retry after inbox fault commits once despite a recorded r
 test("conversation correlation cannot select the physical default session", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  SurfaceKey.claim("ws:unrelated-conversation", fixture.sessionId);
+  createSurfaceKeyStore(fixture.plane.catalog).claim("ws:unrelated-conversation", fixture.sessionId);
   const result = await runEffect(
     fixture.gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
@@ -126,6 +129,9 @@ test("conversation correlation cannot select the physical default session", asyn
   expect(result.handle.target).not.toBe(fixture.sessionId);
 });
 
+// W5.2 S6: typed failures now render their carried cause, so each corruption
+// case surfaces its own refusal text; the kernel evidence seam the gateway
+// consults (`policyDecisionRuleIds`) still distinguishes them durably.
 test.each([
   {
     mutation: "json_set(intent, '$.matchedRuleIds', json_array(42))",
@@ -135,9 +141,12 @@ test.each([
 ])("corrupted persisted policy evidence is refused: %j", async ({ mutation, error }) => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  using db = new Database(fixture.dbPath);
+  using db = new Database(sessionDb(fixture, fixture.sessionId));
+  // Stash each decision's pre-corruption intent so the original inputHash
+  // stays addressable after the mutation removes or breaks it.
+  db.exec("CREATE TABLE corrupt_keep (id TEXT PRIMARY KEY, intent TEXT NOT NULL)");
   db.exec(
-    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
+    `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN INSERT INTO corrupt_keep VALUES (NEW.id, NEW.intent); UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
   );
   const result = await fixture.send({
     to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
@@ -146,6 +155,22 @@ test.each([
   });
   expect(result.isError).toBe(true);
   expect(result.output).toContain(error);
+  const stashed = db
+    .query("SELECT json_extract(intent, '$.inputHash') AS hash FROM corrupt_keep")
+    .all() as { hash: string }[];
+  expect(stashed.length).toBeGreaterThan(0);
+  const kernel = fixture.plane.openKernel(fixture.sessionId);
+  if (error === "invalid message decision rule identity") {
+    // The corrupted evidence is still addressable and refuses on read-back.
+    expect(() => kernel.policyDecisionRuleIds(fixture.sessionId, stashed[0]?.hash ?? "")).toThrow(
+      "invalid message decision rule identity",
+    );
+  } else {
+    // The evidence key is gone: every recorded decision is unaddressable,
+    // which is exactly the "message pre decision is missing" refusal.
+    for (const row of stashed)
+      expect(kernel.policyDecisionRuleIds(fixture.sessionId, row.hash)).toBeUndefined();
+  }
 });
 
 test("message observations carry the committed compiled policy rule identity", async () => {
@@ -166,7 +191,7 @@ test("message observations carry the committed compiled policy rule identity", a
       matchedRuleIds: ["message.worker.actor"],
     });
     expect(
-      sessionTree(fixture.sessionId).some(
+      tree(fixture.plane, fixture.sessionId).some(
         (action) => action.kind === "policy.decision",
       ),
     ).toBe(true);
@@ -188,8 +213,8 @@ test("an actor answer preserves platform correlation and wins its durable messag
     ],
   });
   directories.push(fixture.directory);
-  ActorRegistry.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+  fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
+  fixture.plane.stores.actors.registerEndpoint({
     id: "ws:alice",
     actorId: "alice",
     channel: "ws",
@@ -203,8 +228,13 @@ test("an actor answer preserves platform correlation and wins its durable messag
     deadline: 200,
   });
   expect(sent.isError).not.toBe(true);
-  expect(Storage.get().alarms?.due(199)).toHaveLength(0);
-  expect(Storage.get().alarms?.due(200)).toHaveLength(1);
+  // W5.2: the durable deadline fact is the open request's own bound; the
+  // alarm-row plane it once mirrored is gone.
+  const senderKernel = fixture.plane.openKernel(fixture.sessionId);
+  const armed = senderKernel
+    .requestRows(fixture.sessionId)
+    .filter((row) => row.state === "open" && row.deadline !== null && row.deadline <= 200);
+  expect(armed).toHaveLength(1);
   const reply = await runEffect(
     fixture.gateway.ingest(
       { kind: "external", surface: "ws", externalId: "alice" },
@@ -221,54 +251,50 @@ test("an actor answer preserves platform correlation and wins its durable messag
     ),
   );
   expect(reply.status).toBe("executed");
-  expect(SessionHandleStore.inboxRows(fixture.sessionId).at(-1)?.origin.value).toMatchObject({
+  expect(promptActions(fixture.plane, fixture.sessionId).at(-1)?.intent.value).toMatchObject({
     kind: "external_reply",
   });
-  for (const row of Storage.get().alarms?.due(200) ?? []) {
-    const request = SessionHandleStore.requestRows(fixture.sessionId).find(
-      (item) => `${item.requestId}:deadline` === row.id,
-    );
-    if (request === undefined) throw new Error("missing deadline request");
+  for (const request of senderKernel
+    .requestRows(fixture.sessionId)
+    .filter((row) => row.deadline !== null && row.deadline <= 200)) {
     fixture.requests.timeout(request.requestId, 200);
   }
-  expect(SessionHandleStore.requestRows(fixture.sessionId)[0]?.state).toBe("resolved");
+  expect(senderKernel.requestRows(fixture.sessionId)[0]?.state).toBe("resolved");
 });
 
 function materialize(
+  plane: AppLedgerPlane,
   id: string,
   parentId: string | null = null,
   role: "resident" | "worker" = "resident",
 ) {
-  Result.getOrThrowWith(
-    Effect.runSync(
-      Effect.result(
-        SessionHandleStore.materialize({
-          id,
-          parentId,
-          role,
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-          actionId: `${id}:config`,
-          at: 100,
-        }),
-      ),
-    ),
-    (error) => error,
+  const kernel = plane.openKernel(id);
+  Effect.runSync(
+    kernel.materialize({
+      id,
+      parentId,
+      role,
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${id}:config`,
+      at: 100,
+    }),
   );
+  plane.catalog.indexSession({ id, parentId, role, createdAt: 100 });
 }
 
 for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
   test(`real compiled B ${check} refuses the violating session request`, async () => {
     const f = messageFixture();
     directories.push(f.directory);
-    using db = new Database(f.dbPath);
+    using db = new Database(sessionDb(f, f.sessionId));
     let send: Gateway.SendMessage;
     if (check === "parent") {
-      materialize("unrelated");
+      materialize(f.plane, "unrelated");
       send = { to: { kind: "session", id: "unrelated" }, type: "message", content: "NO" };
     } else if (check === "fanout") {
-      for (let i = 0; i < 8; i++) materialize(`child-${i}`, f.sessionId, "worker");
+      for (let i = 0; i < 8; i++) materialize(f.plane, `child-${i}`, f.sessionId, "worker");
       send = {
         to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
         type: "message",
@@ -276,7 +302,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
       };
     } else if (check === "depth") {
       for (let i = 0; i < 4; i++)
-        materialize(`ancestor-${i}`, i === 0 ? null : `ancestor-${i - 1}`);
+        materialize(f.plane, `ancestor-${i}`, i === 0 ? null : `ancestor-${i - 1}`);
       db.query("UPDATE session SET parent_id = ? WHERE id = ?").run("ancestor-3", f.sessionId);
       send = {
         to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
@@ -284,9 +310,9 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         content: "NO",
       };
     } else {
-      materialize("parent");
+      materialize(f.plane, "parent");
       db.query("UPDATE session SET parent_id = ? WHERE id = ?").run("parent", f.sessionId);
-      const action = Storage.get().actions?.append(
+      const action = f.plane.sessionStore("parent").actions.append(
         {
           id: "parent:request",
           parentId: "parent:config",
@@ -304,7 +330,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
           ts: 100,
           irreversible: true,
         },
-        SessionHandleStore.row("parent").revision,
+        f.plane.openKernel("parent").row("parent").revision,
       );
       if (action === undefined) throw new Error("parent request intent missing");
       await runEffect(
@@ -320,31 +346,6 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
           at: 100,
         }),
       );
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            SessionHandleStore.commitInbox({
-              id: "bound-request",
-              sessionId: f.sessionId,
-              kind: "prompt",
-              content: "work",
-              createdAt: 100,
-              parentActionId: null,
-              origin: {
-                encodingVersion: 1,
-                value: {
-                  kind: "message",
-                  messageId: "bound-request",
-                  senderSessionId: "parent",
-                  sourceActionId: "parent:request",
-                  deadline: 150,
-                },
-              },
-            }),
-          ),
-        ),
-        (error) => error,
-      );
       send = {
         to: { kind: "session", id: "parent" },
         type: "message",
@@ -352,7 +353,32 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         deadline: 151,
       };
     }
-    const result = await f.send(send);
+    // W5.2: pre-turn backlog drains into the turn before the model runs, so
+    // the inherited deadline only binds a message still pending mid-turn. The
+    // bound request arrives inside the running turn (riding the live
+    // owner+fence — an out-of-band fence adoption would revoke the handle).
+    const midTurn =
+      check === "deadline"
+        ? commitReceivedMessage(f.plane.openKernel(f.sessionId), {
+            id: "bound-request",
+            sessionId: f.sessionId,
+            kind: "prompt",
+            content: "work",
+            createdAt: 100,
+            parentActionId: null,
+            origin: {
+              encodingVersion: 1,
+              value: {
+                kind: "message",
+                messageId: "bound-request",
+                senderSessionId: "parent",
+                sourceActionId: "parent:request",
+                deadline: 150,
+              },
+            },
+          }).pipe(Effect.asVoid, Effect.orDie)
+        : undefined;
+    const result = await f.send(send, midTurn);
     expect(result.isError).toBe(true);
     expect(result.output).toContain(`message.resident.${check}`);
   });
@@ -361,8 +387,8 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
 test("real compiled B worker cannot interrupt its parent", async () => {
   const f = messageFixture("worker");
   directories.push(f.directory);
-  materialize("parent");
-  using db = new Database(f.dbPath);
+  materialize(f.plane, "parent");
+  using db = new Database(sessionDb(f, f.sessionId));
   db.query("UPDATE session SET parent_id = ? WHERE id = ?").run("parent", f.sessionId);
   const result = await f.send({
     to: { kind: "session", id: "parent" },
@@ -371,7 +397,7 @@ test("real compiled B worker cannot interrupt its parent", async () => {
   });
   expect(result.isError).toBe(true);
   expect(result.output).toContain("message.worker.interrupt_parent");
-  expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
+  expect(promptActions(f.plane, "parent")).toEqual([]);
 });
 
 test("an external reply to an awaited message admits with the correlated reply origin", async () => {
@@ -387,8 +413,8 @@ test("an external reply to an awaited message admits with the correlated reply o
     ],
   });
   directories.push(fixture.directory);
-  ActorRegistry.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+  fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
+  fixture.plane.stores.actors.registerEndpoint({
     id: "ws:alice",
     actorId: "alice",
     channel: "ws",
@@ -402,7 +428,7 @@ test("an external reply to an awaited message admits with the correlated reply o
     deadline: 200,
   });
   expect(sent.isError).not.toBe(true);
-  const db = new Database(fixture.dbPath);
+  const db = new Database(sessionDb(fixture, fixture.sessionId));
   const correlated = db
     .query(
       `SELECT id, json_extract(intent, '$.value.messageId') AS messageId FROM action
@@ -413,8 +439,8 @@ test("an external reply to an awaited message admits with the correlated reply o
   db.close();
   if (correlated === null) throw new Error("missing correlatable message action");
   const messageId = correlated.messageId;
-  const prepare = prepareMessage((id, parentId, childRole, runner) =>
-    messageMaterialization({
+  const prepare = prepareMessage(fixture.plane, (id, parentId, childRole, runner) =>
+    messageMaterialization(() => fixture.plane.openKernel(id).currentPolicyGeneration())({
       id,
       parentId,
       role: childRole,

@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { ExecutionError } from "./errors";
@@ -34,10 +34,11 @@ export function attemptRouteChange(
  * own selection.
  */
 export function pinnedModelSelection(
+  kernel: SessionKernel,
   sessionId: string,
   turnId: string,
 ): Model.Ref | undefined {
-  const action = SessionHandleStore.priorModelAttempt(sessionId, turnId);
+  const action = kernel.priorModelAttempt(sessionId, turnId);
   const { provider, model } = record(record(action?.intent.value).value);
   return typeof provider === "string" && typeof model === "string" ? { provider, id: model } : undefined;
 }

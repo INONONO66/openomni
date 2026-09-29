@@ -1,3 +1,4 @@
+import { ledger, resetLedger } from "../helpers/ledger";
 import { Effect } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
@@ -5,27 +6,27 @@ import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort } from "../helpers/requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { ActorRegistry, Storage, SessionHandleStore } from "@openomni/ledger";
 import { type Gateway, type Inbox, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { IngressRoutingError } from "../../src/errors";
 
 beforeEach(() => {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
-  ActorRegistry.registerIdentity({
+  resetLedger();
+  ledger().stores.actors.registerIdentity({
     id: "responder",
     kind: "human",
     trustTier: "assigned_worker",
   });
-  ActorRegistry.registerEndpoint({
+  ledger().stores.actors.registerEndpoint({
     id: "telegram:seller",
     actorId: "responder",
     channel: "telegram",
     externalId: "seller",
   });
 });
-afterEach(() => Storage.reset());
+afterEach(() => {
+  resetLedger();
+});
 
 test.each([
   ["report_result", "report_result"],
@@ -45,6 +46,7 @@ test.each([
   const decisions: Ingress.RoutingDecisionPayload[] = [];
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
+    stores: ledger().stores,
     transaction: channelTransaction,
     sink: <T>(event: BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
@@ -116,8 +118,8 @@ test.each([
       handle: { target: "request-owner" },
     });
     expect(commits).toHaveLength(0);
-    expect(SessionHandleStore.inboxRows("request-owner")).toMatchObject([{ content: "answer" }]);
-    expect(SessionHandleStore.requestById("request-raw-action")?.state).toBe("resolved");
+    expect(ledger().kernel.pendingMessages("request-owner")).toMatchObject([{ content: "answer" }]);
+    expect(ledger().kernel.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
     const failure = await effectFailure(outcome);
     expect(failure).toBeInstanceOf(IngressRoutingError);
@@ -132,7 +134,7 @@ test.each([
       ],
     });
     expect(commits).toHaveLength(0);
-    expect(SessionHandleStore.requestById("request-raw-action")).toMatchObject({
+    expect(ledger().kernel.requestById("request-raw-action")).toMatchObject({
       state: "open",
       replies: [],
     });

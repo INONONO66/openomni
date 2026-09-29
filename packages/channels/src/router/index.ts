@@ -6,6 +6,7 @@ import { createReplyGrantInstances } from "./messaging/reply-grant";
 import { externalMessage } from "./external-message";
 import { answerOwnerRequest } from "./request/owner-answer";
 import type { GatewayRouter, GatewayRouterPorts } from "./message-ports";
+import { unconfiguredChannelStores } from "./stores.js";
 
 export type { ChannelDeliveryRoute, GatewayRouter, GatewayRouterPorts } from "./message-ports";
 
@@ -27,12 +28,14 @@ function ingestResult(
 
 export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   const clock = ports.clock ?? Date.now;
+  const stores = ports.stores ?? unconfiguredChannelStores();
   const observe =
     ports.observe ??
     ((_sender: Gateway.IngestSender, observation: Gateway.MessageObservation) =>
       ports.sink(Gateway.MessageObserved, observation));
   const messagingPorts = ports.messaging;
   const replyGrants = createReplyGrantInstances({
+    stores,
     rules: messagingPorts?.replyGrantRules ?? (() => []),
     publish: ports.sink,
   });
@@ -40,6 +43,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
     messagingPorts === undefined
       ? undefined
       : createExistingAgentMessaging({
+          stores,
           requests: ports.requests,
           transaction: ports.transaction,
           grants: () => [...messagingPorts.grants(), ...replyGrants.list(clock())],
@@ -127,11 +131,12 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
       const startedAt = clock();
       const sender = Gateway.IngestSender.parse(rawSender);
       if ("kind" in envelope && envelope.kind === "request_answer") {
-        return yield* answerOwnerRequest(ports, sender, envelope, startedAt);
+        return yield* answerOwnerRequest(stores, ports, sender, envelope, startedAt);
       }
       const external =
         sender.kind === "external"
           ? externalMessage(
+              stores,
               sender,
               Gateway.IngressFacts.parse(envelope),
               ports.sink,
@@ -160,6 +165,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         (intent) =>
           executeMessage(
             {
+              stores,
               sender,
               send,
               prepared,

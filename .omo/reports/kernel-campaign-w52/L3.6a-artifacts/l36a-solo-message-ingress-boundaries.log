@@ -1,0 +1,18 @@
+bun test v1.4.1 (4661e494f)
+
+test/message-ingress-boundaries.test.ts:
+(pass) complete reply chain selects ancestor through the compiled gateway [79.34ms]
+(pass) complete reply chain selects nearer through the compiled gateway [44.75ms]
+(pass) complete reply chain selects ambiguous through the compiled gateway [42.91ms]
+(pass) actor deadline and send admission commit before delivery [25.72ms]
+(pass) actor deadline and send admission roll back together [20.64ms]
+(pass) child admission observations see the deadline before the child's inbox commit [23.07ms]
+(pass) Table A projects live dnc budget without debiting ingress [14.99ms]
+(pass) Table A projects live zero budget without debiting ingress [15.96ms]
+(pass) Table A projects live spent budget without debiting ingress [17.68ms]
+(pass) Table A projects live allowed budget without debiting ingress [16.38ms]
+
+ 10 pass
+ 0 fail
+ 46 expect() calls
+Ran 10 tests across 1 file. [564.00ms]

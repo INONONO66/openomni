@@ -1,4 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionKernel } from "../cluster/kernel-registry";
 import {
   canonicalDigest,
   type LedgerAction,
@@ -14,6 +15,7 @@ import {
  * are reduced to identities, hashes, terminals and reasons.
  */
 function inspectActions(
+  kernel: SessionKernel,
   sessionId: string,
   parentId: string | null,
   headRevision: number,
@@ -27,7 +29,7 @@ function inspectActions(
   const restorations = new Map<string, string[]>();
   let cursor = 0;
   while (cursor < headRevision) {
-    const page = SessionHandleStore.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
+    const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
     for (const action of page.actions) {
       if (action.ordinal > headRevision) break;
       const turnId = ownTurnId(action) ?? turns.get(action.parentId ?? "") ?? null;
@@ -65,19 +67,20 @@ function inspectActions(
  * transition and never read.
  */
 export function inspectSession(
+  kernel: SessionKernel,
   sessionId: string,
   request: SessionHistory.InspectRequest = {},
 ): SessionHistory.Inspection {
   const { depth } = SessionHistory.InspectRequest.parse(request);
-  const rows = SessionHandleStore.listRows();
+  const rows = kernel.listRows();
   const visit = (id: string, remaining: number): SessionHistory.Inspection => {
-    const current = SessionHandleStore.row(id);
+    const current = kernel.row(id);
     const children =
       remaining === 0
         ? []
         : rows.filter((row) => row.parentId === id).map((row) => visit(row.id, remaining - 1));
     return {
-      ...inspectActions(id, current.parentId, current.revision),
+      ...inspectActions(kernel, id, current.parentId, current.revision),
       children,
     };
   };

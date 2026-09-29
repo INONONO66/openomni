@@ -1,36 +1,147 @@
 import { Effect } from "effect";
-import { ForeignFailure } from "@openomni/agent";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
-import { Inbox, Gateway, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
+import { ForeignFailure, type SessionEntity } from "@openomni/agent";
+import { SessionHandleStore } from "@openomni/ledger";
+import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
+import type { AppLedgerPlane } from "./cluster-runtime";
 import { outboundMessage } from "./terminal-message";
 
 type Ports = Parameters<typeof createGatewayRouter>[0];
 
-export function commitMessageInbox(
+/** The Session entity client resolved once at boot (host-scoped). */
+type SessionEntityClient = Effect.Success<typeof SessionEntity.client>;
+
+export interface MessageInboxDeps {
+  readonly plane: AppLedgerPlane;
+  readonly client: SessionEntityClient;
+  readonly clock: () => number;
+}
+
+/**
+ * Message delivery through the Session entity (W5.2 plan §1): the receiver's
+ * activation commits the received-message chain action and drains its backlog
+ * before the RPC acks, so "committed" here means the turn work is durable.
+ * Materialization and child admission limits are composition-side facts the
+ * gateway prepared; both are applied before the persisted send.
+ */
+/**
+ * Materializes the destination a prepared send declared (fanout-guarded),
+ * idempotently: an existing row is left untouched and only re-indexed.
+ */
+export function materializeInboxTarget(
+  plane: AppLedgerPlane,
   input: Inbox.Commit,
-): Effect.Effect<Inbox.Row, LedgerError | ForeignFailure> {
+  clock: () => number,
+): Effect.Effect<void, ForeignFailure> {
   return Effect.gen(function* () {
-    const outbound = yield* outboundMessage;
-    const message = outbound?.input.message;
-    if (
-      message !== undefined &&
-      (input.id !== message.messageId ||
-        input.sessionId !== message.destinationSessionId ||
-        input.content !== message.content)
-    ) {
-      return yield* new ForeignFailure({
-        operation: "message.commit",
-        cause: "outbound inbox binding mismatch",
-      });
+    const create = input.createSession;
+    if (create === undefined) return;
+    const kernel = plane.openKernel(input.sessionId);
+    const exists = (() => {
+      try {
+        kernel.row(input.sessionId);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (!exists) {
+      const limits = input.limits;
+      if (limits !== undefined && create.row.parentId !== null) {
+        const children = plane
+          .listSessions()
+          .filter((row) => row.parentId === create.row.parentId);
+        if (children.length >= limits.fanout)
+          return yield* new ForeignFailure({
+            operation: "message.commit",
+            cause: "child fanout limit exhausted",
+          });
+      }
+      const snapshot = SessionGeneration.ConfigureEffect.parse(
+        create.initialAction.effect.value,
+      ).snapshot;
+      yield* kernel
+        .materialize({
+          id: create.row.id,
+          parentId: create.row.parentId,
+          role: create.row.role,
+          tools: [...snapshot.tools],
+          bundles: snapshot.bundles,
+          system: { preset: snapshot.systemPreset, blocks: snapshot.systemBlocks },
+          policyGeneration: snapshot.policyGeneration,
+          actionId: create.initialAction.id,
+          at: clock(),
+        })
+        .pipe(
+          Effect.mapError(
+            (error) => new ForeignFailure({ operation: "message.materialize", cause: error._tag }),
+          ),
+        );
     }
-    const received = yield* SessionHandleStore.commitReceivedMessage(input);
-    if (outbound !== undefined) outbound.receipt = received.receipt;
-    return received.row;
+    plane.catalog.indexSession({
+      id: create.row.id,
+      parentId: create.row.parentId,
+      role: create.row.role,
+      createdAt: clock(),
+    });
   });
 }
 
-export function messageMaterialization(input: {
+export function createMessageInboxCommit(deps: MessageInboxDeps) {
+  return function commitMessageInbox(
+    input: Inbox.Commit,
+  ): Effect.Effect<Inbox.Row, ForeignFailure> {
+    return Effect.gen(function* () {
+      const outbound = yield* outboundMessage;
+      const message = outbound?.input.message;
+      if (
+        message !== undefined &&
+        (input.id !== message.messageId ||
+          input.sessionId !== message.destinationSessionId ||
+          input.content !== message.content)
+      ) {
+        return yield* new ForeignFailure({
+          operation: "message.commit",
+          cause: "outbound inbox binding mismatch",
+        });
+      }
+      yield* materializeInboxTarget(deps.plane, input, deps.clock);
+      const entity = deps.client(input.sessionId);
+      const payload = {
+        messageId: input.id,
+        content: input.content,
+        origin: JSON.stringify(input.origin.value),
+      };
+      const send =
+        input.kind === "interrupt"
+          ? entity.Interrupt(payload)
+          : input.kind === "resume"
+            ? entity.Resume(payload)
+            : entity.Prompt(payload);
+      const receipt = yield* send.pipe(
+        Effect.mapError(
+          (error) => new ForeignFailure({ operation: "message.deliver", cause: String(error) }),
+        ),
+      );
+      return {
+        id: input.id,
+        sessionId: input.sessionId,
+        kind: input.kind,
+        content: input.content,
+        origin: input.origin,
+        status: "pending",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: input.createdAt,
+        ordinal: receipt.ordinal,
+      };
+    });
+  };
+}
+
+export function messageMaterialization(
+  currentPolicyGeneration: () => number,
+): (input: {
   readonly id: string;
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;
@@ -39,47 +150,45 @@ export function messageMaterialization(input: {
   readonly preset: string;
   readonly runner: string;
   readonly at: number;
-}): LedgerSession.Materialize {
-  const snapshot = SessionHandleStore.generationSnapshot({
-    generation: 1,
-    revertTo: 0,
-    tools: input.tools,
-    bundles: input.bundles ?? [],
-    system: {
-      preset: input.preset,
-      blocks: [{ id: "runner", source: "app:runner", content: input.runner }],
-    },
-    policyGeneration: SessionHandleStore.currentPolicyGeneration(),
-  });
-  return {
-    row: {
-      id: input.id,
-      parentId: input.parentId,
-      role: input.role,
-      leaseOwner: null,
-      leaseFence: 0,
-      leaseExpiresAt: null,
-      revision: 0,
-      state: "idle",
-      toolsGeneration: snapshot.generation,
-      systemHash: snapshot.systemHash,
-      policyGeneration: snapshot.policyGeneration,
-    },
-    initialAction: SessionHandleStore.configureAction({
-      id: crypto.randomUUID(),
-      sessionId: input.id,
-      parentId: null,
-      operation: "create",
-      snapshot,
-      at: input.at,
-    }),
+}) => LedgerSession.Materialize {
+  return (input) => {
+    const snapshot = SessionHandleStore.generationSnapshot({
+      generation: 1,
+      revertTo: 0,
+      tools: input.tools,
+      bundles: input.bundles ?? [],
+      system: {
+        preset: input.preset,
+        blocks: [{ id: "runner", source: "app:runner", content: input.runner }],
+      },
+      policyGeneration: currentPolicyGeneration(),
+    });
+    return {
+      row: {
+        id: input.id,
+        parentId: input.parentId,
+        role: input.role,
+        leaseOwner: null,
+        leaseFence: 0,
+        revision: 0,
+        state: "idle",
+        toolsGeneration: snapshot.generation,
+        systemHash: snapshot.systemHash,
+        policyGeneration: snapshot.policyGeneration,
+      },
+      initialAction: SessionHandleStore.configureAction({
+        id: crypto.randomUUID(),
+        sessionId: input.id,
+        parentId: null,
+        operation: "create",
+        snapshot,
+        at: input.at,
+      }),
+    };
   };
 }
 
-function sessionDepth(
-  parentId: string | null,
-  rows: ReturnType<typeof SessionHandleStore.listRows>,
-) {
+function sessionDepth(parentId: string | null, rows: readonly LedgerSession.Row[]) {
   let depth = 1;
   let parent = parentId;
   while (parent !== null) {
@@ -90,8 +199,8 @@ function sessionDepth(
 }
 
 function recipientRelation(
-  source: ReturnType<typeof SessionHandleStore.row>,
-  recipient: ReturnType<typeof SessionHandleStore.row> | undefined,
+  source: LedgerSession.Row,
+  recipient: LedgerSession.Row | undefined,
   send: Parameters<Ports["prepare"]>[1],
 ) {
   return {
@@ -109,6 +218,7 @@ function recipientRelation(
 }
 
 function prepareExternal(
+  plane: AppLedgerPlane,
   materialize: (
     id: string,
     parentId: string | null,
@@ -119,10 +229,11 @@ function prepareExternal(
   target: string,
   messageId: string,
 ): Effect.Success<ReturnType<Ports["prepare"]>> {
-  const exists = SessionHandleStore.listRows().some((row) => row.id === target);
+  const exists = plane.listSessions().some((row) => row.id === target);
+  const kernel = exists ? plane.openKernel(target) : undefined;
   const source =
-    exists && send.replyTo !== undefined
-      ? SessionHandleStore.messageActionByPlatformId(target, send.replyTo)
+    kernel !== undefined && send.replyTo !== undefined
+      ? kernel.messageActionByPlatformId(target, send.replyTo)
       : undefined;
   return {
     target,
@@ -139,17 +250,17 @@ function prepareExternal(
     ...(!exists ? { createSession: materialize(target, null, "resident", "resident") } : {}),
     message: {
       sender: "external",
-      eventIdUnique:
-        !exists || !SessionHandleStore.inboxRows(target).some((row) => row.id === messageId),
+      eventIdUnique: kernel === undefined || kernel.actionById(messageId) === undefined,
     },
   };
 }
 
 function admissionBounds(
-  source: ReturnType<typeof SessionHandleStore.row>,
+  kernel: ReturnType<AppLedgerPlane["openKernel"]>,
+  source: LedgerSession.Row,
   send: Parameters<Ports["prepare"]>[1],
 ) {
-  return SessionHandleStore.policyRows(source.policyGeneration).flatMap((row) => {
+  return kernel.policyRows(source.policyGeneration).flatMap((row) => {
     const match = row.match.value;
     if (
       row.kind !== "message" ||
@@ -186,6 +297,7 @@ function withinDeadline(
 }
 
 export function prepareMessage(
+  plane: AppLedgerPlane,
   materialize: (
     id: string,
     parentId: string | null,
@@ -196,25 +308,28 @@ export function prepareMessage(
   return (sender, send, target, messageId) =>
     Effect.gen(function* () {
       if (sender.kind === "external") {
-        return prepareExternal(materialize, send, target, messageId);
+        return prepareExternal(plane, materialize, send, target, messageId);
       }
-      const source = SessionHandleStore.row(sender.id);
+      const kernel = plane.openKernel(sender.id);
+      const source = kernel.row(sender.id);
       if (source.leaseOwner === null)
         return yield* new SendAdmissionConflict({ message: "session sender has no active lease" });
-      const rows = SessionHandleStore.listRows();
-      const recipient = send.to.kind === "session" ? SessionHandleStore.row(target) : undefined;
-      const origins = SessionHandleStore.inboxRows(source.id).flatMap((row) => {
+      const rows = plane.listSessions();
+      const recipient =
+        send.to.kind === "session" ? plane.openKernel(target).row(target) : undefined;
+      const origins = kernel.pendingMessages(sender.id).flatMap((row) => {
         const parsed = Inbox.MessageOrigin.safeParse(row.origin.value);
         return parsed.success ? [parsed.data] : [];
       });
       const parentDeadline = origins.at(-1)?.deadline;
       const outbound = yield* outboundMessage;
-      const bounds = admissionBounds(source, send);
+      const bounds = admissionBounds(kernel, source, send);
       const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
       const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
       if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
         return yield* new SendAdmissionConflict({ message: "child admission bounds missing from pinned policy" });
       const depth = sessionDepth(source.parentId, rows);
+      const openChildren = rows.filter((row) => row.parentId === sender.id).length;
       return {
         target,
         ...(outbound === undefined
@@ -236,10 +351,10 @@ export function prepareMessage(
           targetKind: send.to.kind,
           ...recipientRelation(source, recipient, send),
           type: send.type,
-          fanout: SessionHandleStore.openChildCount(source.id),
+          fanout: openChildren,
           depth,
           // Mandatory terminal mail answers the original request. Its existing
-          // alarm/answer CAS owns the bound; a reply must not open another alarm.
+          // deadline/answer CAS owns the bound; a reply must not arm another.
           withinParentDeadline: withinDeadline(
             outbound !== undefined,
             parentDeadline,

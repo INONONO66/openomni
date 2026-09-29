@@ -1,3 +1,4 @@
+import { ledger } from "../helpers/ledger";
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
@@ -8,13 +9,6 @@ import { replaceDecisionFacts } from "../helpers/ledger";
 import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant";
 import { Channel, Ingress, type Gateway, type Inbox, type DecisionFact } from "@openomni/protocol";
 import { messageExecutionReceipt } from "../helpers/message-execution";
-import {
-  ActorRegistry,
-  ChannelGrantStore,
-  SessionHandleStore,
-  Storage,
-  SurfaceKey,
-} from "@openomni/ledger";
 import { Bus } from "../helpers/observation";
 import {
   commits,
@@ -38,7 +32,7 @@ test("records the channel-scoped decision before inbox commit", async () => {
   const router = makeRouter({
     inbox: {
       commit: (row: Inbox.Commit) => Effect.sync(() => {
-        observed.push(Storage.get().decisionFacts?.head(streamId()));
+        observed.push(ledger().sessions.decisionFacts?.head(streamId()));
         return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
       }),
     },
@@ -52,7 +46,7 @@ test("blocked decisions are durable before returning the receipt", async () => {
   expect(await runEffect(makeRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",
   });
-  expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toMatchObject({
     key: streamId(),
     type: "route.decided",
     data: { outcome: "block" },
@@ -64,13 +58,13 @@ test("equivalent redelivery uses one route fact and the same inbox id", async ()
   const mapped = createMappedOwnerSession();
   const router = makeRouter();
   await runEffect(router.ingest(ownerSender, ownerFacts));
-  const before = sessionTree(mapped.id);
-  const recorded = Storage.get().decisionFacts?.head(streamId());
+  const before = sessionTree(mapped.id, ledger().sessions.actions);
+  const recorded = ledger().sessions.decisionFacts?.head(streamId());
   await runEffect(router.ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
-  expect(sessionTree(mapped.id)).toEqual(before);
-  expect(SessionHandleStore.inboxRows(mapped.id)).toHaveLength(1);
-  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
+  expect(sessionTree(mapped.id, ledger().sessions.actions)).toEqual(before);
+  expect(ledger().kernel.pendingMessages(mapped.id)).toHaveLength(1);
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test("historical route facts upcast on redelivery without reconstructing another route", async () => {
@@ -78,11 +72,11 @@ test("historical route facts upcast on redelivery without reconstructing another
   const mapped = createMappedOwnerSession();
   await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   const modern = Ingress.Events.RoutingDecision.schema.parse(
-    Storage.get().decisionFacts?.head(streamId())?.data,
+    ledger().sessions.decisionFacts?.head(streamId())?.data,
   );
   resetRouterState();
   registerOwnerDm();
-  SurfaceKey.claim(
+  ledger().stores.surfaceKeys.claim(
     Channel.SurfaceKey.fromChannel({
       surface: "discord",
       namespace: "owner-workspace",
@@ -91,7 +85,7 @@ test("historical route facts upcast on redelivery without reconstructing another
     }),
     mapped.id,
   );
-  const recorded = Storage.get().decisionFacts?.record({
+  const recorded = ledger().sessions.decisionFacts?.record({
     key: streamId(),
     type: "route.decided",
     data: { ...modern, runId: "legacy", pendingInteractionId: "legacy" },
@@ -100,7 +94,7 @@ test("historical route facts upcast on redelivery without reconstructing another
   expect(recorded?.kind).toBe("recorded");
   await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
-  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded?.fact);
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toEqual(recorded?.fact);
 });
 
 test("a changed decision refuses redelivery before committing or observing", async () => {
@@ -109,13 +103,13 @@ test("a changed decision refuses redelivery before committing or observing", asy
   registerOwnerDm();
   createMappedOwnerSession();
   const count = routingDecisions().length;
-  const recorded = Storage.get().decisionFacts?.head(streamId());
+  const recorded = ledger().sessions.decisionFacts?.head(streamId());
   expect(await effectFailure(router.ingest(ownerSender, ownerFacts))).toMatchObject({
     code: "route_replay_divergent",
   });
   expect(commits).toEqual([]);
   expect(routingDecisions()).toHaveLength(count);
-  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test.each([
@@ -129,8 +123,8 @@ test.each([
   await runEffect(router.ingest(ownerSender, ownerFacts));
   const count = routingDecisions().length;
   if (field === "actorId") {
-    ActorRegistry.registerIdentity({ id: "replacement", kind: "human", trustTier: "owner" });
-    ActorRegistry.registerEndpoint({
+    ledger().stores.actors.registerIdentity({ id: "replacement", kind: "human", trustTier: "owner" });
+    ledger().stores.actors.registerEndpoint({
       id: "endpoint-owner-dm",
       actorId: "replacement",
       channel: ownerSender.surface,
@@ -138,9 +132,9 @@ test.each([
       workspace: ownerFacts.workspaceId,
     });
   } else if (field === "trustTier") {
-    ActorRegistry.registerIdentity({ id: "actor-owner", kind: "human", trustTier: "manager" });
+    ledger().stores.actors.registerIdentity({ id: "actor-owner", kind: "human", trustTier: "manager" });
   } else {
-    ChannelGrantStore.put({
+    ledger().stores.channelGrants.put({
       id: "grant-owner-dm",
       surface: "discord",
       workspace: "owner-workspace",
@@ -196,7 +190,7 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
   createMappedOwnerSession();
   const router = makeRouter();
   await runEffect(router.ingest(ownerSender, ownerFacts));
-  const fact = Storage.get().decisionFacts?.head(streamId());
+  const fact = ledger().sessions.decisionFacts?.head(streamId());
   if (fact === undefined) throw new Error("route fact missing");
   const original = Ingress.Events.RoutingDecision.schema.parse(fact.data);
   const priorEndpoint: readonly string[] = replyGrantEndpointFacts({
@@ -228,9 +222,9 @@ test("reply endpoint changes reject an otherwise equivalent route replay", async
 test("equivalent blocked redelivery returns a refusal without another route fact", async () => {
   const router = makeRouter();
   expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({ status: "blocked_pre" });
-  const recorded = Storage.get().decisionFacts?.head(streamId());
+  const recorded = ledger().sessions.decisionFacts?.head(streamId());
   expect(await runEffect(router.ingest(ownerSender, ownerFacts))).toMatchObject({ status: "blocked_pre" });
-  expect(Storage.get().decisionFacts?.head(streamId())).toEqual(recorded);
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toEqual(recorded);
 });
 
 test.each([
@@ -297,7 +291,7 @@ test("forged observations cannot choose a session", async () => {
   await runEffect(makeRouter().ingest(ownerSender, ownerFacts));
   expect(commits).toHaveLength(1);
   expect(commits[0]?.sessionId).toBe(mapped.id);
-  expect(Storage.get().decisionFacts?.head(streamId())).toMatchObject({
+  expect(ledger().sessions.decisionFacts?.head(streamId())).toMatchObject({
     key: streamId(),
     data: { sessionId: mapped.id },
   });

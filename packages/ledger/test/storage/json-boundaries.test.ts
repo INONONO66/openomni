@@ -4,9 +4,8 @@ import { runLedgerSync } from "../helpers/effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
 import { createSqliteActorRegistryAdapter } from "../../src/storage/sqlite-actor-registry-adapter";
-import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
 import { createSqliteDecisionFacts } from "../../src/storage/sqlite-decision-facts";
-import { openLedgerDatabase } from "../helpers/ledger";
+import { openCatalogDatabase, openLedgerDatabase, observedL0Adapters } from "../helpers/ledger";
 
 test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () => {
   using db = openLedgerDatabase();
@@ -24,7 +23,7 @@ test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () 
 });
 
 test("actor endpoint filters distinguish no filter from the empty workspace", () => {
-  using db = openLedgerDatabase();
+  using db = openCatalogDatabase();
   const store = createSqliteActorRegistryAdapter(db);
   for (const id of ["a", "b"]) store.setIdentity({ id, kind: "human", trustTier: "observer" });
   for (const [id, actorId, workspace] of [
@@ -55,9 +54,7 @@ test("actor endpoint filters distinguish no filter from the empty workspace", ()
 
 test("action reads validate scalar driver columns and JSON before replay", () => {
   using db = openLedgerDatabase();
-  const store = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
-    publish: () => undefined,
-  });
+  const { adapter: store } = observedL0Adapters(db);
   Result.getOrThrowWith(
     runLedgerSync(
       Effect.result(
@@ -68,7 +65,6 @@ test("action reads validate scalar driver columns and JSON before replay", () =>
             role: "resident",
             leaseOwner: null,
             leaseFence: 0,
-            leaseExpiresAt: null,
             revision: 0,
             state: "idle",
           }),

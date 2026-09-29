@@ -1,47 +1,55 @@
 import { Effect, Result } from "effect";
 import { type LedgerSession, type SessionGeneration, SessionTurn } from "@openomni/protocol";
-import { SessionHandleStore } from "../src/index";
+import type { SessionHandleStore } from "../src/index";
+import { runLedgerSync } from "../test/helpers/effect";
 import { materializeSession } from "../test/helpers/session";
 
 /** Populate two committed turn actions per turn through the fenced L0 commit. */
-export function seedTurnHistory(id: string, count = 10): void {
-  materializeSession(id);
-  const generation = SessionHandleStore.latestGenerationFor(id);
-  let parentId = SessionHandleStore.latestAction(id)?.id ?? null;
+export function seedTurnHistory(
+  kernel: SessionHandleStore.SessionKernel,
+  id: string,
+  count = 10,
+): void {
+  materializeSession(kernel, id);
+  const generation = kernel.latestGenerationFor(id);
+  let parentId = kernel.latestAction(id)?.id ?? null;
   for (let index = 0; index < count; index += 1) {
-    const request = prepareTurnCommit(id, index, parentId, generation);
-    Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.commit(request))), (error) => error);
+    const request = prepareTurnCommit(kernel, id, index, parentId, generation);
+    Result.getOrThrowWith(runLedgerSync(Effect.result(kernel.commit(request))), (error) => error);
     parentId = request.actions.at(-1)?.id ?? null;
   }
 }
 
-/** Lease acquisition and payload construction belong outside commit timing. */
+/** Fence adoption and payload construction belong outside commit timing. */
 export function prepareTurnCommit(
+  kernel: SessionHandleStore.SessionKernel,
   id: string,
   index: number,
   parentId: string | null,
   generation: SessionGeneration.Snapshot,
 ): LedgerSession.Commit {
-  const row = SessionHandleStore.row(id);
+  const row = kernel.row(id);
   const turnId = `${id}:turn:${index}`;
   const resultId = `${turnId}:result`;
   const now = index + 2;
-  const lease = Result.getOrThrowWith(Effect.runSync(Effect.result(SessionHandleStore.acquireLease({
-    sessionId: id,
-    owner: "bench",
-    expectedFence: row.leaseFence,
-    now,
-    expiresAt: now + 100,
-  }))), (error) => error);
+  const adopted =
+    row.leaseOwner === "bench"
+      ? { fence: row.leaseFence }
+      : Result.getOrThrowWith(
+          runLedgerSync(
+            Effect.result(
+              kernel.adoptFence({ sessionId: id, owner: "bench", fence: row.leaseFence + 1 }),
+            ),
+          ),
+          (error) => error,
+        );
   return {
     sessionId: id,
     owner: "bench",
-    fence: lease.fence,
+    fence: adopted.fence,
     now,
     expectedRevision: row.revision,
-    consumeInboxIds: [],
     state: "idle",
-    releaseLease: true,
     actions: [
       {
         id: turnId,

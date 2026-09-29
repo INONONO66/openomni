@@ -1,5 +1,6 @@
-import { SessionHandleStore, type CommitReceipt, type LedgerError } from "@openomni/ledger";
+import type { CommitReceipt, LedgerError } from "@openomni/ledger";
 import { Effect } from "effect";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import {
   canonicalDigest,
   PlainValueSchema,
@@ -18,13 +19,14 @@ import { foldCheckpointAction } from "./session-record";
 
 /** Synchronous decoration preserves durable admission's existing suspension schedule. */
 export function commitFoldBatch(
+  kernel: SessionKernel,
   input: LedgerSession.Commit,
 ): Effect.Effect<CommitReceipt, LedgerError> {
   return Effect.gen(function* () {
-    const checkpoint = readHistoryCheckpoint(input.sessionId, input.expectedRevision);
+    const checkpoint = readHistoryCheckpoint(kernel, input.sessionId, input.expectedRevision);
     const incoming = input.actions.filter((action) => action.kind !== "fold.checkpoint").length;
     if (checkpoint.nonCheckpointActions + incoming < 256 && !input.actions.some(needsProjection))
-      return yield* SessionHandleStore.commit(input);
+      return yield* kernel.commit(input);
     const hydrated = checkpoint.hydrate();
     let state = hydrated.state;
     let count = hydrated.nonCheckpointActions;
@@ -32,6 +34,7 @@ export function commitFoldBatch(
     for (const draft of input.actions) {
       const sourceRevision = input.expectedRevision + actions.length;
       const action = pinCompactionAction(
+        kernel,
         pinContext(draft, state, sourceRevision),
         state,
         sourceRevision,
@@ -70,7 +73,7 @@ export function commitFoldBatch(
         foldCheckpointAction({
           sessionId: input.sessionId,
           parentId:
-            SessionHandleStore.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
+            kernel.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
           revision: input.expectedRevision,
           at: input.now,
           reason: "interval",
@@ -78,7 +81,7 @@ export function commitFoldBatch(
         }),
       );
     }
-    return yield* SessionHandleStore.commit({ ...input, actions });
+    return yield* kernel.commit({ ...input, actions });
   });
 }
 

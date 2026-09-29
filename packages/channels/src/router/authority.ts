@@ -1,12 +1,12 @@
 import type { Actor, Gateway } from "@openomni/protocol";
-import type { ChannelGrantStore } from "@openomni/ledger";
+
 import { actorTrustTier, getActor } from "./authority-actor";
 import { effectiveTrustTier } from "./effective-tier.js";
 
 /** Project the resolved channel ceiling; message pre-policy owns admission. */
 export function applyChannelGrantTreatment(
   event: Gateway.DeliveredEvent,
-  grant: ChannelGrantStore.Grant,
+  grant: Actor.ChannelGrant,
   inboundTreatment: Actor.InboundTreatment,
 ): Gateway.DeliveredEvent {
   const actor = getActor(event);

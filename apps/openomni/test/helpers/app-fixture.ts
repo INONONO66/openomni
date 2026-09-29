@@ -16,7 +16,10 @@ export function appFixture(options: AppFixtureOptions) {
   const { llm, sessionRuntime, ...app } = options;
   const { clock, entropy, ...session } = sessionRuntime ?? {};
   const runtime = options.runtime ?? gatewayRuntime({
-    dbPath: options.config.dbPath, clock, entropy,
+    ...(options.config.catalogPath === undefined ? {} : { catalogPath: options.config.catalogPath }),
+    ...(options.config.sessionsDir === undefined ? {} : { sessionsDir: options.config.sessionsDir }),
+    ...(options.config.entityIdleMs === undefined ? {} : { entityIdleMs: options.config.entityIdleMs }),
+    clock, entropy,
     llm: Layer.succeed(Llm, { run, resolveModel: Provider.resolveModel, ...llm }),
   });
   return startOpenOmni({ ...app, runtime, sessionRuntime: session });

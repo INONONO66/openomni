@@ -1,10 +1,11 @@
+import { ledger } from "../../helpers/ledger";
 import { channelRequests } from "../../helpers/channel-requests";
 import { channelTransaction } from "../../helpers/channel-transaction";
 import { runEffect } from "../../helpers/effect";
 import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
-import { EgressBudgetStore } from "@openomni/ledger";
+
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
@@ -25,7 +26,7 @@ const ZERO_STATE: Gateway.EgressDebitState = {
 
 function inspectDebitState(senderId: string, targetActorId: string): Gateway.EgressDebitState {
   let observed: Gateway.EgressDebitState | undefined;
-  EgressBudgetStore.claim(
+  ledger().stores.egressBudgets.claim(
     {
       id: "test:inspection-never-recorded",
       senderId,
@@ -182,7 +183,8 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
       requests: channelRequests(seededRequests()),
-      transaction: channelTransaction,
+      stores: ledger().stores,
+    transaction: channelTransaction,
       deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };

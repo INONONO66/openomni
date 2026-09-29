@@ -1,3 +1,4 @@
+import { adoptLedgerFence, ledger, resetLedger } from "./helpers/ledger";
 import { sessionTree } from "../../ledger/test/helpers/session-tree";
 import { channelRequests } from "./helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -9,7 +10,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decideRequestTransition, requestBindingDigest } from "@openomni/agent";
-import { BlacklistStore, SessionHandleStore, Storage } from "@openomni/ledger";
 import {
   Gateway,
   PlainValueSchema,
@@ -38,20 +38,19 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "owner-answer-"));
   dbPath = join(directory, "ledger.sqlite");
   at = 10;
-  Storage.reset();
-  Storage.initialize({ dbPath });
+  resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: dbPath });
 });
 
 afterEach(async () => {
   for (const stop of stops.splice(0)) await stop();
-  Storage.reset();
+  resetLedger();
   rmSync(directory, { recursive: true, force: true });
 });
 
 async function approval() {
   originalAction("protected-call", "owner-session", { person: "alice", trustTier: "trusted" });
-  const row = SessionHandleStore.row("owner-session");
-  const generation = SessionHandleStore.latestGeneration(sessionTree(row.id));
+  const row = ledger().kernel.row("owner-session");
+  const generation = ledger().kernel.latestGenerationFor(row.id);
   const request = requestFixture({
     requestId: "protected-call",
     sessionId: row.id,
@@ -69,14 +68,7 @@ async function approval() {
     correlation: {},
   });
   request.bindingDigest = requestBindingDigest(request);
-  const lease = await runEffect(SessionHandleStore.acquireLease({
-    sessionId: row.id,
-    owner: "fixture",
-    expectedFence: row.leaseFence,
-    now: 2,
-    expiresAt: 100,
-  }));
-  if (!lease.ok) throw new Error("fixture lease refused");
+  const fence = adoptLedgerFence(row.id, "fixture");
   const decision = decideRequestTransition(
     {
       version: 1,
@@ -84,24 +76,21 @@ async function approval() {
       sessionId: row.id,
       at: 2,
       expectedRevision: row.revision,
-      authority: { owner: "fixture", fence: lease.fence },
+      authority: { owner: "fixture", fence },
       payload: { kind: "request.open", request },
     },
-    { row: SessionHandleStore.row(row.id), invocation: SessionHandleStore.actionById(request.requestId), inputRecord: SessionHandleStore.requestInputById(row.id, "open") },
+    { row: ledger().kernel.row(row.id), invocation: ledger().kernel.actionById(request.requestId), inputRecord: ledger().kernel.requestInputById(row.id, "open") },
   );
   expect(decision.resolution).toBe("opened");
-  const result = await runEffect(SessionHandleStore.commitRequestTransition({
+  await runEffect(ledger().kernel.commitRequestTransition({
     sessionId: row.id,
     owner: "fixture",
-    fence: lease.fence,
+    fence,
     now: 2,
     expectedRevision: row.revision,
     actions: [...decision.actions],
-    consumeInboxIds: [],
     state: row.state,
-    releaseLease: true,
   }));
-  if (!result.ok) throw new Error("fixture request refused");
   return request;
 }
 
@@ -227,10 +216,10 @@ test.each([
     },
   });
   expect(authenticated).toEqual([{ who: sender, proof: credential, requestId: request.requestId }]);
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe(
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe(
     decision === "approve" ? "resolved" : "refused",
   );
-  const actions = sessionTree(request.sessionId);
+  const actions = sessionTree(request.sessionId, ledger().sessions.actions);
   expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply")?.effect.value).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
@@ -238,7 +227,7 @@ test.each([
   expect(JSON.stringify(actions)).not.toContain("credential");
   expect(logs.join()).not.toContain(credential);
   expect(messages).toEqual([]);
-  expect(SessionHandleStore.inboxRows(request.sessionId)).toEqual([]);
+  expect(ledger().kernel.pendingMessages(request.sessionId)).toEqual([]);
 });
 
 test("same typed answer survives SQLite and gateway restart with a fresh owner clock", async () => {
@@ -247,16 +236,15 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   const answer = wireAnswer(request);
   const wire = { type: "request_answer", ...answer };
   expect(await frame(first.socket, wire)).toMatchObject({ result: { status: "executed" } });
-  const before = sessionTree(request.sessionId);
+  const before = sessionTree(request.sessionId, ledger().sessions.actions);
   await first.server.stop(true);
-  Storage.reset();
-  Storage.initialize({ dbPath });
+  resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: dbPath });
   at = 20;
   const second = await connect(router());
   expect(await frame(second.socket, wire)).toMatchObject({ result: { status: "executed" } });
-  expect(sessionTree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId, ledger().sessions.actions)).toEqual(before);
   expect(
-    sessionTree(request.sessionId).filter(
+    sessionTree(request.sessionId, ledger().sessions.actions).filter(
       (action: import("@openomni/protocol").LedgerAction.Node) => action.id === `${request.requestId}:resolution`,
     ),
   ).toHaveLength(1);
@@ -264,7 +252,7 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
 
 test("wrong frame credential is refused without recording or leaking it", async () => {
   const request = await approval();
-  const before = sessionTree(request.sessionId);
+  const before = sessionTree(request.sessionId, ledger().sessions.actions);
   const { socket } = await connect(router());
   const answer = wireAnswer(request);
   const result = await frame(socket, {
@@ -276,7 +264,7 @@ test("wrong frame credential is refused without recording or leaking it", async 
     result: { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" },
   });
   expect(JSON.stringify(result)).not.toContain("wrong-secret");
-  expect(sessionTree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId, ledger().sessions.actions)).toEqual(before);
 });
 
 test("session sender, malformed input, missing authenticator, and non-Owner evidence fail closed", async () => {
@@ -308,7 +296,7 @@ test("session sender, malformed input, missing authenticator, and non-Owner evid
     status: "blocked_pre",
     reasonCode: "request_answer.unauthenticated",
   });
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe("open");
 });
 
 test.each([
@@ -330,7 +318,7 @@ test.each([
     status: "blocked_pre",
     reasonCode: "request_answer.rejected",
   });
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe("open");
 });
 
 test("current domain revision and captured owner receipt time remain kernel gates", async () => {
@@ -344,7 +332,7 @@ test("current domain revision and captured owner receipt time remain kernel gate
     status: "blocked_pre",
     reasonCode: "request_answer.late_unknown",
   });
-  expect(SessionHandleStore.inboxRows(request.sessionId)).toEqual([]);
+  expect(ledger().kernel.pendingMessages(request.sessionId)).toEqual([]);
 });
 
 test("Owner authentication finishing at the deadline cannot approve into the past", async () => {
@@ -358,18 +346,18 @@ test("Owner authentication finishing at the deadline cannot approve into the pas
     status: "blocked_pre",
     reasonCode: "request_answer.late_unknown",
   });
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("expired");
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe("expired");
 });
 
 test("an authenticated Owner answer cannot bypass the absolute blacklist", async () => {
   const request = await approval();
-  BlacklistStore.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
-  const before = sessionTree(request.sessionId);
+  ledger().stores.blacklist.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
+  const before = sessionTree(request.sessionId, ledger().sessions.actions);
   expect(await runEffect(router().ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.blacklisted",
   });
-  expect(sessionTree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId, ledger().sessions.actions)).toEqual(before);
 });
 
 test("plain text preserves stable driver event ID and cannot enter Owner authentication", async () => {
@@ -399,7 +387,7 @@ test("plain text preserves stable driver event ID and cannot enter Owner authent
     },
   ]);
   expect(calls).toBe(0);
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe("open");
 });
 
 test("typed frames reject missing input identity and untrusted principal fields", async () => {
@@ -416,7 +404,7 @@ test("typed frames reject missing input identity and untrusted principal fields"
       reason: "InvalidInbound",
     });
   }
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("open");
+  expect(ledger().kernel.requestById(request.requestId)?.state).toBe("open");
 });
 
 test("actual WebSocket upgrade rejects the wrong transport token", async () => {

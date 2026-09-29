@@ -1,15 +1,10 @@
 import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
-import { afterEach, describe, expect, test } from "bun:test";
-import {
-  Alarm,
-  Inbox,
-  LedgerAction,
-  LedgerSession,
-  L0Observation,
-  type ObservationSink,
-} from "@openomni/protocol";
-import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
+import { describe, expect, test } from "bun:test";
+import { LedgerAction, LedgerSession, type ObservationSink } from "@openomni/protocol";
+import { createActions } from "../../src/storage/sqlite-l0-actions";
+import { runLedgerSync } from "../helpers/effect";
+import { openLedgerDatabase, observedL0Adapters } from "../helpers/ledger";
 
 const encoded = (value: string) => ({ encodingVersion: 1 as const, value: { value } });
 
@@ -20,7 +15,6 @@ function session(id: string): LedgerSession.Row {
     role: "resident",
     leaseOwner: null,
     leaseFence: 0,
-    leaseExpiresAt: null,
     revision: 0,
     state: "idle",
   });
@@ -39,26 +33,18 @@ function action(id: string, sessionId: string): LedgerAction.Append {
   });
 }
 
-const adapters: SqliteStorageAdapter[] = [];
-afterEach(() => {
-  for (const adapter of adapters.splice(0)) adapter.close();
-});
+function create(adapter: ReturnType<typeof observedL0Adapters>["adapter"], id: string) {
+  Result.getOrThrowWith(
+    runLedgerSync(Effect.result(adapter.sessions.create(session(id)))),
+    (error) => error,
+  );
+}
 
 describe("ledger-first observations", () => {
   test("publishes exactly one committed receipt after durable revision advances", () => {
-    const observations: L0Observation.ActionCommitted[] = [];
-    const sink: ObservationSink = {
-      publish(descriptor, data) {
-        if (descriptor.name !== L0Observation.ActionCommittedEvent.name) return;
-        observations.push(L0Observation.ActionCommitted.parse(data));
-      },
-    };
-    const adapter = new SqliteStorageAdapter(":memory:", sink);
-    adapters.push(adapter);
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(adapter.sessions.create(session("session-observed")))),
-      (error) => error,
-    );
+    using db = openLedgerDatabase();
+    const { adapter, observations } = observedL0Adapters(db);
+    create(adapter, "session-observed");
 
     const receipt = adapter.actions.append(action("action-observed", "session-observed"), 0);
 
@@ -69,85 +55,10 @@ describe("ledger-first observations", () => {
     ]);
   });
 
-  test("inbox commit and alarm arm each publish their committed action", () => {
-    const observations: L0Observation.ActionCommitted[] = [];
-    const sink: ObservationSink = {
-      publish(descriptor, data) {
-        if (descriptor.name === L0Observation.ActionCommittedEvent.name) {
-          observations.push(L0Observation.ActionCommitted.parse(data));
-        }
-      },
-    };
-    const adapter = new SqliteStorageAdapter(":memory:", sink);
-    adapters.push(adapter);
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(adapter.sessions.create(session("session-surfaces")))),
-      (error) => error,
-    );
-
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            adapter.inbox.commit(
-              Inbox.Commit.parse({
-                id: "inbox-observed",
-                sessionId: "session-surfaces",
-                kind: "prompt",
-                content: "go",
-                origin: encoded("owner"),
-                createdAt: 101,
-              }),
-            ),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toBeDefined();
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            adapter.alarms.arm(
-              Alarm.Arm.parse({
-                id: "alarm-observed",
-                sessionId: "session-surfaces",
-                kind: "at",
-                fireAt: 102,
-              }),
-            ),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toBeDefined();
-
-    expect(observations).toEqual([
-      { id: "inbox-observed", sessionId: "session-surfaces", revision: 1, kind: "prompt" },
-      { id: "alarm-observed", sessionId: "session-surfaces", revision: 2, kind: "alarm.arm" },
-    ]);
-    expect(adapter.sessions.get("session-surfaces")?.revision).toBe(2);
-    expect(sessionTree("session-surfaces", adapter.actions).map((node) => node.id)).toEqual([
-      "inbox-observed",
-      "alarm-observed",
-    ]);
-  });
-
   test("CAS refusal emits nothing", () => {
-    const observations: L0Observation.ActionCommitted[] = [];
-    const sink: ObservationSink = {
-      publish(descriptor, data) {
-        if (descriptor.name === L0Observation.ActionCommittedEvent.name) {
-          observations.push(L0Observation.ActionCommitted.parse(data));
-        }
-      },
-    };
-    const adapter = new SqliteStorageAdapter(":memory:", sink);
-    adapters.push(adapter);
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(adapter.sessions.create(session("session-refused")))),
-      (error) => error,
-    );
+    using db = openLedgerDatabase();
+    const { adapter, observations } = observedL0Adapters(db);
+    create(adapter, "session-refused");
 
     expect(adapter.actions.append(action("action-refused", "session-refused"), 1)).toBeUndefined();
     expect(adapter.sessions.get("session-refused")?.revision).toBe(0);
@@ -161,24 +72,29 @@ describe("ledger-first observations", () => {
         throw new Error("sink failed");
       },
     };
-    const throwingAdapter = new SqliteStorageAdapter(":memory:", throwing);
-    const noopAdapter = new SqliteStorageAdapter(":memory:", { publish: () => undefined });
-    adapters.push(throwingAdapter, noopAdapter);
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(throwingAdapter.sessions.create(session("session-parity")))),
-      (error) => error,
+    using throwingDb = openLedgerDatabase();
+    using noopDb = openLedgerDatabase();
+    const throwingActions = createActions(
+      throwingDb,
+      (operation) => throwingDb.transaction(operation).immediate(),
+      throwing,
     );
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(noopAdapter.sessions.create(session("session-parity")))),
-      (error) => error,
+    const noopActions = createActions(
+      noopDb,
+      (operation) => noopDb.transaction(operation).immediate(),
+      { publish: () => undefined },
     );
+    const { adapter: throwingSessions } = observedL0Adapters(throwingDb);
+    const { adapter: noopSessions } = observedL0Adapters(noopDb);
+    create(throwingSessions, "session-parity");
+    create(noopSessions, "session-parity");
 
-    const withThrow = throwingAdapter.actions.append(action("action-parity", "session-parity"), 0);
-    const withNoop = noopAdapter.actions.append(action("action-parity", "session-parity"), 0);
+    const withThrow = throwingActions.append(action("action-parity", "session-parity"), 0);
+    const withNoop = noopActions.append(action("action-parity", "session-parity"), 0);
 
     expect(withThrow).toEqual(withNoop);
-    expect(sessionTree("session-parity", throwingAdapter.actions)).toEqual(
-      sessionTree("session-parity", noopAdapter.actions),
+    expect(sessionTree("session-parity", throwingActions)).toEqual(
+      sessionTree("session-parity", noopActions),
     );
   });
 });

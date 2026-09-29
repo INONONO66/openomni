@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { PersonStore, Storage } from "@openomni/ledger";
+import { expect, test } from "bun:test";
 import type { PlainValue } from "@openomni/protocol";
 import { approvalRequest } from "./helpers/approval-request";
-import { requestDomainRevisions } from "../src/tools/core/request-domain-revisions";
+import { createRequestDomainRevisions } from "../src/tools/core/request-domain-revisions";
+import { testPlane } from "./helpers/ledger";
 
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
+const plane = testPlane();
+const requestDomainRevisions = createRequestDomainRevisions(plane.stores);
 
 const manifest = {
   id: "person:sunwoo",
@@ -20,7 +20,7 @@ test("contact_add reads back the live Person revision, absent as -1", () => {
     { [manifest.id]: -1 },
   );
   expect(requestDomainRevisions(declare)).toEqual({ [manifest.id]: -1 });
-  PersonStore.put({
+  plane.stores.persons.put({
     ...manifest,
     displayName: "Sunwoo",
     revision: 4,

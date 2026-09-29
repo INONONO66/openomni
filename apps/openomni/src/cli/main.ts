@@ -7,7 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { gatewayRuntime } from "../gateway";
-import { loadConfig } from "../config";
+import { loadConfig, resolveClusterStorage } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
@@ -92,7 +92,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     applyEnvFile(envPath, process.env);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
-    const runtime = gatewayRuntime({ dbPath: config.dbPath });
+    const runtime = gatewayRuntime(resolveClusterStorage(config, home));
     const app = await startOpenOmni({ config, runtime });
     installShutdownHandlers({
       stop: app.stop,

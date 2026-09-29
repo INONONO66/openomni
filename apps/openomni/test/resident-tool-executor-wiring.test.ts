@@ -1,24 +1,12 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { initialize, Storage } from "@openomni/ledger";
-import { seedKernelPolicyRows } from "../src/policy-seed";
+import { expect, test } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { allowConfigure } from "./helpers/generation-services";
-
-const directory = mkdtempSync(join(tmpdir(), "openomni-resident-tool-wiring-"));
-
-afterEach(() => {
-  Storage.reset();
-  rmSync(directory, { recursive: true, force: true });
-});
 
 function field(value: PlainValue, name: string): PlainValue | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -32,10 +20,6 @@ test("a resident tool call is executed and observed through the durable executor
       eventNames.push(event.name);
     },
   };
-  initialize({ dbPath: join(directory, "chat.db"), observationSink: observations });
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("policy rows unavailable");
-  seedKernelPolicyRows();
   const sessionId = "resident-tool-wiring";
   let bodyRuns = 0;
   const resident = createResident({
@@ -88,7 +72,7 @@ test("a resident tool call is executed and observed through the durable executor
 
   await resident.prompt(sessionId, "please answer");
 
-  const tree = sessionTree(sessionId);
+  const tree = sessionTree(sessionId, resident.plane.sessionStore(sessionId).actions);
   const prompt = tree.find((action) => action.kind === "prompt");
   const turn = tree.find((action) => action.kind === "turn" && action.id !== tree.at(-1)?.id);
   const toolIntent = tree.find(

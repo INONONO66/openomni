@@ -6,12 +6,13 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Bus, defineTool, eraseTool } from "@openomni/agent";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import { run, type Provider } from "@openomni/llm";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
+import { sessionFilePath } from "../../src/composition/cluster-runtime";
+import { planeOf } from "./ledger";
 import { nextResidentTurn } from "./resident-turn";
 
 import { messageStart, messageEnd } from "./anthropic-sse";
@@ -53,7 +54,8 @@ function response(tool: boolean): Response {
 }
 
 const directory = mkdtempSync(join(tmpdir(), "openomni-967-fact-tap-"));
-const dbPath = join(directory, "chat.db");
+const catalogPath = join(directory, "catalog.sqlite");
+const sessionsDir = join(directory, "sessions");
 let requests = 0;
 const provider = Bun.serve({
   hostname: "127.0.0.1",
@@ -101,7 +103,8 @@ try {
   // When: the production app calls the same real SDK through its configured transport.
   const app = await appFixture({
     config: {
-      dbPath,
+      catalogPath,
+      sessionsDir,
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: "fixture-token",
@@ -148,8 +151,9 @@ try {
   });
   stopApp = app.stop;
   appPort = app.port;
+  const plane = await planeOf(app.runtime);
   ws = await openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fixture-token"]);
-  const terminal = nextResidentTurn(5000);
+  const terminal = nextResidentTurn(plane, 5000);
   ws.send(JSON.stringify({ type: "message", text: "967 input" }));
   const reply = await terminal;
 
@@ -176,11 +180,11 @@ try {
     ["retained reply"],
   );
   console.log("967 provider", JSON.stringify({ requests, billed, calls, results, terminals }));
-  const rows = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
+  const rows = plane.listSessions().filter((row) => row.id !== "gateway-ingress");
   assert.equal(rows.length, 1);
   const row = rows[0];
   assert.ok(row);
-  const toolResults = sessionTree(row.id)
+  const toolResults = sessionTree(row.id, plane.sessionStore(row.id).actions)
     .filter((action) => action.kind === "tool")
     .flatMap((action) => {
       const parsed = z
@@ -195,14 +199,14 @@ try {
   assert.deepEqual(toolResults, [
     { phase: "result", callId: "paired", result: { status: "success", output: "42" } },
   ]);
-  const snapshot = SessionHandleStore.getSnapshot(row.id);
+  const snapshot = plane.openKernel(row.id).getSnapshot(row.id);
   assert.equal(snapshot.state, "idle");
   assert.deepEqual(snapshot.turns.at(-1)?.messages, [
     { role: "user", text: "967 input" },
     { role: "assistant", text: "retained reply" },
   ]);
   assert.equal(snapshot.turns.at(-1)?.terminal?.kind, "result");
-  const db = new Database(dbPath, { readonly: true });
+  const db = new Database(sessionFilePath(sessionsDir, row.id), { readonly: true });
   try {
     const actions = db
       .query<{ session_id: string; kind: string; ordinal: number }, []>(
@@ -220,7 +224,7 @@ try {
     );
     console.log(
       "967 app SQLite",
-      JSON.stringify({ reply, requests, appPort, dbPath, actions, turns: snapshot.turns }),
+      JSON.stringify({ reply, requests, appPort, catalogPath, actions, turns: snapshot.turns }),
     );
   } finally {
     db.close();
@@ -234,7 +238,6 @@ try {
       await stopApp?.();
     } finally {
       await provider.stop(true);
-      Storage.reset();
       rmSync(directory, { recursive: true, force: true });
       for (const port of [providerPort, appPort]) {
         if (port === undefined) continue;

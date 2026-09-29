@@ -4,7 +4,7 @@ import { catalogLayer } from "../../helpers/service-layers";
 import { expect, it } from "bun:test";
 import { PlainObjectSchema, type LedgerAction, type Message, type ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
+import { sessionTree as kernelSessionTree } from "../../helpers/session-tree";
 import { requestLedger } from "../../helpers/effect-g1";
 import { createTestAgent } from "../../helpers/effect-g2";
 import { runInput } from "../../helpers/run-input";
@@ -21,7 +21,10 @@ import { ForeignFailure } from "../../../src/errors";
 import { allowAllPolicy } from "../../helpers/compiled-policy";
 import { recordingLedger } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";
-import { isolated } from "../../helpers/isolated";
+import { isolated, isolatedLedger } from "../../helpers/isolated";
+
+/** Chain oracle over the active isolation's kernel. */
+const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 import { timedQueryTool, valueTool } from "../../helpers/query-tool";
 
 const request = { kind: "tool", op: "test", intent: {}, effect: {} };

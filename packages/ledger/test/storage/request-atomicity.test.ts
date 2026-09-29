@@ -1,80 +1,82 @@
 import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { L0Observation } from "@openomni/protocol";
-import { SessionHandleStore, Storage } from "../../src/index";
-import { tempDbPath, removeSqliteFiles } from "../helpers/sqlite";
+import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type BusEvent, L0Observation, type ObservationSink } from "@openomni/protocol";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/index";
+import { runLedgerSync } from "../helpers/effect";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
+import { useSqliteStores } from "../helpers/storage";
 
-let path: string;
-beforeEach(() => {
-  path = tempDbPath("request-atomicity");
-  Storage.initialize({ dbPath: path });
-});
-afterEach(() => {
-  Storage.reset();
-  removeSqliteFiles(path);
-});
+const stores = useSqliteStores("request-atomicity");
 
 test("failed request insert rolls back original action, revision and observation", () => {
-  const { request, original, commit } = requestFixture();
-  using raw = new Database(path);
+  const { request, original, commit } = requestFixture(stores.kernel);
+  using raw = new Database(stores.sessionPath);
   raw.run(`CREATE TRIGGER refuse_request BEFORE INSERT ON action WHEN NEW.kind = 'request'
     BEGIN SELECT RAISE(ABORT, 'request write failed'); END`);
-  const before = SessionHandleStore.row(request.sessionId);
-  const tree = sessionTree(request.sessionId);
+  const before = stores.kernel.row(request.sessionId);
+  const tree = sessionTree(request.sessionId, stores.session.actions);
   expect(() => commit([original, requestStateAction(request)])).toThrow(
     expect.objectContaining({ _tag: "ForeignFailure" }),
   );
-  expect(SessionHandleStore.row(request.sessionId)).toEqual(before);
-  expect(sessionTree(request.sessionId)).toEqual(tree);
-  expect(SessionHandleStore.requestRows()).toEqual([]);
+  expect(stores.kernel.row(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId, stores.session.actions)).toEqual(tree);
+  expect(stores.kernel.requestRows()).toEqual([]);
 });
 
-test("request commit requires the live lease rather than borrowing another owner's fence", () => {
-  const { request, original, commit } = requestFixture();
+test("request commit requires the adopted fence rather than borrowing another owner's fence", () => {
+  const { request, original, commit } = requestFixture(stores.kernel);
   expectCommitted(commit([original, requestStateAction(request)]));
-  const before = sessionTree(request.sessionId);
+  const before = sessionTree(request.sessionId, stores.session.actions);
   const result = () =>
     Result.getOrThrowWith(
-      Effect.runSync(
+      runLedgerSync(
         Effect.result(
-          SessionHandleStore.commitRequestTransition({
+          stores.kernel.commitRequestTransition({
             sessionId: request.sessionId,
             owner: "foreign",
             fence: 1,
             now: 5,
-            expectedRevision: SessionHandleStore.row(request.sessionId).revision,
+            expectedRevision: stores.kernel.row(request.sessionId).revision,
             actions: [requestStateAction(request, "foreign")],
-            consumeInboxIds: [],
             state: "idle",
-            releaseLease: false,
           }),
         ),
       ),
       (error) => error,
     );
   expect(result).toThrow(expect.objectContaining({ _tag: "CommitRefused", reason: "fence" }));
-  expect(sessionTree(request.sessionId)).toEqual(before);
+  expect(sessionTree(request.sessionId, stores.session.actions)).toEqual(before);
 });
 
 test("commit observations see durable request state after the complete batch", () => {
-  Storage.reset();
+  const directory = mkdtempSync(join(tmpdir(), "request-atomicity-observed-"));
   const seen: string[] = [];
-  Storage.initialize({
-    dbPath: path,
-    observationSink: {
-      publish(event, data) {
-        if (event.name !== L0Observation.ActionCommittedEvent.name) return;
-        const receipt = L0Observation.ActionCommitted.parse(data);
-        if (receipt.sessionId !== "request-session" || receipt.revision < 3) return;
-        expect(SessionHandleStore.requestById("original")?.state).toBe("open");
-        seen.push(receipt.sessionId);
-      },
+  let kernel: SessionHandleStore.SessionKernel | undefined;
+  const sink: ObservationSink = {
+    publish<T>(event: BusEvent.Descriptor<T>, data: T) {
+      if (event.name !== L0Observation.ActionCommittedEvent.name) return;
+      const receipt = L0Observation.ActionCommitted.parse(data);
+      if (receipt.sessionId !== "request-session" || receipt.revision < 3) return;
+      expect(kernel?.requestById("original")?.state).toBe("open");
+      seen.push(receipt.sessionId);
     },
-  });
-  const { request, original, commit } = requestFixture();
-  expectCommitted(commit([original, requestStateAction(request)]));
-  expect(seen.length).toBeGreaterThan(0);
+  };
+  const session = openSessionStore(join(directory, "session.sqlite"), sink);
+  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), sink);
+  try {
+    kernel = SessionHandleStore.createSessionKernel(session, catalog);
+    const { request, original, commit } = requestFixture(kernel);
+    expectCommitted(commit([original, requestStateAction(request)]));
+    expect(request.sessionId).toBe("request-session");
+    expect(seen.length).toBeGreaterThan(0);
+  } finally {
+    session.close();
+    catalog.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

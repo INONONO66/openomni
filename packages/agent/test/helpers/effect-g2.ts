@@ -1,4 +1,6 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./session-tree";
+import { commitReceivedMessage } from "./ingress";
+import { isolatedLedger } from "./isolated";
 import { testExecutor } from "./executor";
 import { catalogLayer } from "./service-layers";
 import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, prepareChatFixture } from "./chat-services";
@@ -15,7 +17,6 @@ import { createAssistantMessage } from "../../src/core/message-factory";
 import { foldSessionHistory } from "../../src/session-lifecycle/history";
 import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, PlainObject, PlainValue, SessionTransition } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { ChatAgentInput } from "../../src/core/types";
@@ -141,15 +142,17 @@ export function runTestOperation(
   );
 }
 export function receiveOutbound(message: SessionTransition.OutboundMessage, createdAt: number) {
-  return SessionHandleStore.commitReceivedMessage({
-    id: message.messageId,
-    sessionId: message.destinationSessionId,
-    kind: "prompt",
-    content: message.content,
-    origin: { encodingVersion: 1, value: message },
-    createdAt,
-    parentActionId: null,
-  }).pipe(
+  return Effect.suspend(() =>
+    commitReceivedMessage(isolatedLedger().kernel, {
+      id: message.messageId,
+      sessionId: message.destinationSessionId,
+      kind: "prompt",
+      content: message.content,
+      origin: { encodingVersion: 1, value: message },
+      createdAt,
+      parentActionId: null,
+    }),
+  ).pipe(
     Effect.mapError((error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error })),
   );
 }
@@ -157,13 +160,14 @@ export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>
   return Effect.gen(function* () {
     const running = yield* Effect.forkScoped(handle.prompt("perform original call"));
     yield* Effect.promise(() => suspended).pipe(Effect.timeout("5 seconds"));
-    const request = SessionHandleStore.requestRows(handle.id)[0];
+    const kernel = isolatedLedger().kernel;
+    const request = kernel.requestRows(handle.id)[0];
     if (request === undefined) throw new Error("missing request");
     return {
       running,
       settled: Fiber.await(running),
       request,
-      fence: SessionHandleStore.row(handle.id).leaseFence,
+      fence: kernel.row(handle.id).leaseFence,
     };
   });
 }
@@ -194,7 +198,7 @@ export function answerThenCompact(executor: DurableExecutor, input: SessionRunne
       { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
       () => Effect.sync(() => PlainValueSchema.parse(answer)),
     );
-    const prior = foldSessionHistory(input.sessionId, sessionTree(input.sessionId));
+    const prior = foldSessionHistory(input.sessionId, sessionTree(input.kernel, input.sessionId));
     const plan = createCompactionPlan(prior, [answer], 100);
     yield* executor.run(
       {

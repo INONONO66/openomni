@@ -1,18 +1,18 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./session-tree";
 import { testExecutor } from "./executor";
 import { appendFileSync, writeSync } from "node:fs";
-import { Storage } from "@openomni/ledger";
 import { Effect } from "effect";
 import { z } from "zod";
+import { openCrashStores } from "./crash-stores";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./native-executor";
 
 if (import.meta.main) {
   const [mode, dbPath, receipt] = z.tuple([
     z.enum(["execute", "recover"]), z.string(), z.enum(["absent", "present"]),
   ]).parse(process.argv.slice(2));
-  Storage.initialize({ dbPath });
+  const stores = openCrashStores(dbPath);
   await Effect.runPromise(Effect.gen(function* () {
-    const options = yield* nativeExecutorOptions(mode === "execute" ? 100 : 100_000);
+    const options = yield* nativeExecutorOptions(mode === "execute" ? 100 : 100_000, fiberSessionId, stores.kernel);
     const executor = testExecutor({
       ...options,
       ledger: { ...options.ledger, commit: (action) => {
@@ -25,12 +25,12 @@ if (import.meta.main) {
       } },
     });
     if (mode === "recover") {
-      const before = sessionTree(fiberSessionId);
+      const before = sessionTree(stores.kernel, fiberSessionId);
       yield* executor.recover();
-      const after = sessionTree(fiberSessionId);
+      const after = sessionTree(stores.kernel, fiberSessionId);
       yield* executor.recover();
       writeSync(1, JSON.stringify({
-        before, after, repeated: sessionTree(fiberSessionId),
+        before, after, repeated: sessionTree(stores.kernel, fiberSessionId),
         results: after.filter((action) => action.kind === "tool" && effectValue(action).phase === "result"),
       }));
       return;
@@ -43,5 +43,5 @@ if (import.meta.main) {
       return { status: "success", output: "written" };
     }));
   }));
-  Storage.reset();
+  stores.close();
 }

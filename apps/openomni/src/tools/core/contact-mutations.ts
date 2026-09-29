@@ -1,4 +1,4 @@
-import { ActorRegistry } from "@openomni/ledger";
+import type { ActorRegistry } from "@openomni/ledger";
 import { type Actor, canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -23,17 +23,20 @@ const digestKey = (kind: string, id: string, row: Actor.Identity | Actor.Endpoin
   `${kind}:${id}:${canonicalDigest(PlainValueSchema.parse(row ?? null))}`;
 
 /** Actor rows carry no monotonic revision, so every participating row binds by digest. */
-export function contactDomainRevisions(operation: ContactOperation): Record<string, number> {
+export function contactDomainRevisions(
+  actors: ActorRegistry,
+  operation: ContactOperation,
+): Record<string, number> {
   if (operation.op === "contact_promote") {
     const { actorId } = operation.args;
-    return { [digestKey("identity", actorId, ActorRegistry.getIdentity(actorId))]: 0 };
+    return { [digestKey("identity", actorId, actors.getIdentity(actorId))]: 0 };
   }
   const { endpointId, toActorId } = operation.args;
-  const endpoint = ActorRegistry.getEndpoint(endpointId);
-  const source = endpoint === undefined ? undefined : ActorRegistry.getIdentity(endpoint.actorId);
+  const endpoint = actors.getEndpoint(endpointId);
+  const source = endpoint === undefined ? undefined : actors.getIdentity(endpoint.actorId);
   return {
     [digestKey("endpoint", endpointId, endpoint)]: 0,
-    [digestKey("identity", toActorId, ActorRegistry.getIdentity(toActorId))]: 0,
+    [digestKey("identity", toActorId, actors.getIdentity(toActorId))]: 0,
     [digestKey("source", endpoint?.actorId ?? endpointId, source)]: 0,
   };
 }

@@ -1,21 +1,22 @@
 import { expect, test } from "bun:test";
 import { bundle, BundlesLive, ForeignFailure, GenerationLayers, ObservationSink, SessionLayer, session } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
 import { allowConfigure } from "./helpers/generation-services";
 import { configureAuthority } from "../src/composition/generation-layers";
+import { AppLedger } from "../src/composition/cluster-runtime";
 
 test("AppLive retains distinct same-number session generations", async () => {
-  const runtime = gatewayRuntime({ dbPath: ":memory:" });
+  const runtime = gatewayRuntime({});
   try {
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
-      const policyGeneration = seedKernelPolicyRows();
+      const plane = yield* AppLedger;
+      const policyGeneration = seedKernelPolicyRows(plane.catalog.policies);
       yield* generations.initialize({ resident: [], worker: [] });
-      for (const id of ["first", "second"]) yield* SessionHandleStore.materialize({
+      for (const id of ["first", "second"]) yield* plane.openKernel(id).materialize({
         id, parentId: null, role: "resident", tools: [], system: { preset: id, blocks: [] },
         policyGeneration, actionId: `${id}-create`, at: 1,
       });
@@ -34,12 +35,13 @@ test("AppLive retains distinct same-number session generations", async () => {
 });
 
 test("generation composition rejects use before initialization and duplicate initialization", async () => {
-  const runtime = gatewayRuntime({ dbPath: ":memory:" });
+  const runtime = gatewayRuntime({});
   try {
     await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
-      const policyGeneration = seedKernelPolicyRows();
-      yield* SessionHandleStore.materialize({ id: "init", parentId: null, role: "resident", tools: [],
+      const plane = yield* AppLedger;
+      const policyGeneration = seedKernelPolicyRows(plane.catalog.policies);
+      yield* plane.openKernel("init").materialize({ id: "init", parentId: null, role: "resident", tools: [],
         system: { preset: "", blocks: [] }, policyGeneration, actionId: "init-create", at: 1 });
       expect(yield* Effect.flip(generations.capture({ sessionId: "init", generation: 1 }))).toMatchObject({ operation: "generation.initialize", cause: "not_initialized" });
       yield* generations.initialize({ resident: [], worker: [] });
@@ -67,12 +69,13 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     if (fail) return yield* new ForeignFailure({ operation: "fixture.acquire", cause: String(id.id) });
   }));
   const definition = bundle({ name: "probe", requires: [ObservationSink], provides: [], layer: live, events: [{ ns: "probe.event", version: 1 }] });
-  const runtime = gatewayRuntime({ dbPath: ":memory:", bundles: BundlesLive([definition]) });
+  const runtime = gatewayRuntime({ bundles: BundlesLive([definition]) });
   try {
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
       yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
-      seedKernelPolicyRows();
-      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { authorizeConfigure: allowConfigure });
+      const plane = yield* AppLedger;
+      seedKernelPolicyRows(plane.catalog.policies);
+      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
     }));
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -88,10 +91,13 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     await expect(runAppEffect(runtime, handle.system.blocks.set([{ id: "two", source: "fixture", content: "candidate" }]))).rejects.toMatchObject({ _tag: "BundleError", code: "acquisition" });
     fail = false;
     expect(closed).toEqual([2]);
-    expect(SessionHandleStore.latestGenerationFor(handle.id).generation).toBe(1);
+    const generationOf = (id: string) =>
+      runAppEffect(runtime, Effect.map(AppLedger, (plane) => plane.openKernel(id).latestGenerationFor(id)));
+    expect((await generationOf(handle.id)).generation).toBe(1);
     await runAppEffect(runtime, Effect.gen(function* () {
       const generations = yield* GenerationLayers;
-      const before = SessionHandleStore.latestGenerationFor(handle.id);
+      const plane = yield* AppLedger;
+      const before = plane.openKernel(handle.id).latestGenerationFor(handle.id);
       const failure = new ForeignFailure({ operation: "fixture.commit", cause: "refused" });
       expect(yield* Effect.flip(generations.configure({ sessionId: handle.id, generation: 2 }, { ...before, generation: 2 }, Effect.fail(failure)))).toBe(failure);
       expect(yield* Effect.flip(generations.configure({ sessionId: handle.id, generation: 3 }, before, Effect.void))).toMatchObject({ operation: "generation.configure" });
@@ -106,21 +112,22 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
 
 for (const verdict of ["require_approval", "deny"] as const) {
   test(`configureAuthority refuses session.configure when the pinned pre-policy yields ${verdict}`, async () => {
-    const runtime = gatewayRuntime({ dbPath: ":memory:" });
+    const runtime = gatewayRuntime({});
     try {
       const decisions = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
         const generations = yield* GenerationLayers;
-        const policyGeneration = seedKernelPolicyRows([{
+        const plane = yield* AppLedger;
+        const policyGeneration = seedKernelPolicyRows(plane.catalog.policies, [{
           name: `configure-${verdict}`, kind: "session.configure", phase: "pre", priority: 1_000,
           match: { encodingVersion: 1, value: { sessionId: "guarded" } },
           verdict: { encodingVersion: 1, value: verdict === "deny" ? { type: "deny", reason: "pinned" } : { type: "require_approval", reason: "pinned" } },
         }]);
         yield* generations.initialize({ resident: [], worker: [] });
-        for (const id of ["guarded", "open"]) yield* SessionHandleStore.materialize({
+        for (const id of ["guarded", "open"]) yield* plane.openKernel(id).materialize({
           id, parentId: null, role: "resident", tools: [], system: { preset: id, blocks: [] },
           policyGeneration, actionId: `${id}-create`, at: 1,
         });
-        const authority = configureAuthority(generations);
+        const authority = configureAuthority(generations, plane.openKernel);
         return {
           guarded: yield* authority({ sessionId: "guarded", role: "resident", operation: "tools.add", generation: 1 }),
           open: yield* authority({ sessionId: "open", role: "resident", operation: "tools.add", generation: 1 }),

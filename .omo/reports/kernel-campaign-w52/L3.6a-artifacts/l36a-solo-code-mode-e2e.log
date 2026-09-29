@@ -1,0 +1,91 @@
+bun test v1.4.1 (4661e494f)
+
+test/code-mode-e2e.test.ts:
+967-U1 interpreter birth {"pid":28047,"parentPid":28044}
+967-U1 interpreter birth {"pid":28049,"parentPid":28044}
+967-U1 interpreter exit {"pid":28049,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28049,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28047,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28047,"code":null,"signal":"SIGKILL"}
+(pass) app root runs machine read write shell and code through one eval cell [207.78ms]
+967-U1 interpreter birth {"pid":28050,"parentPid":28044}
+967-U1 interpreter exit {"pid":28050,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28050,"code":null,"signal":"SIGKILL"}
+967-U1 code-mode cleanup {"pids":[28050],"socketPath":"/tmp/omo-app-28044-2.sock","socketExists":false,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-HQoF83/catalog.sqlite","directoryExists":false}
+(pass) a cell creates three child sessions through send_message [239.81ms]
+(pass) the catalog remains available while machine execution refuses without attachment [71.37ms]
+967-U1 interpreter birth {"pid":28052,"parentPid":28044}
+967-U1 interpreter birth {"pid":28053,"parentPid":28044}
+967-U1 interpreter exit {"pid":28052,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28052,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28053,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28053,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-4.sock","socketExists":false}
+(pass) a cell cannot present another cell's id when calling back [32.83ms]
+967-U1 interpreter birth {"pid":28054,"parentPid":28044}
+967-U1 interpreter birth {"pid":28055,"parentPid":28044}
+967-U1 interpreter exit {"pid":28055,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28055,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28054,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28054,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-5.sock","socketExists":false}
+967-U1 code-mode failure cleanup {"pids":[28054,28055],"socketPath":"/tmp/omo-app-28044-5.sock","socketExists":false,"directory":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-failure-9bcjK8","directoryExists":false}
+(pass) 967-U1 error cleanup owns the host and awaits every interpreter [66.68ms]
+967-U1 interpreter birth {"pid":28056,"parentPid":28044}
+967-U1 interpreter exit {"pid":28056,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28056,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-6.sock","socketExists":false}
+(pass) a detached eval cell admits nested calls after run returns and refuses them after stop [1039.22ms]
+967-U1 interpreter birth {"pid":28057,"parentPid":28044}
+967-U1 interpreter birth {"pid":28058,"parentPid":28044}
+967-U1 interpreter exit {"pid":28058,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28058,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":28057,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28057,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-7.sock","socketExists":false}
+(pass) cells from different sessions never share interpreter state [68.11ms]
+967-U1 interpreter birth {"pid":28059,"parentPid":28044}
+967-U1 interpreter exit {"pid":28059,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28059,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter birth {"pid":28073,"parentPid":28044}
+967-U1 interpreter exit {"pid":28073,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28073,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-8.sock","socketExists":false}
+(pass) eval background run and peek stay running; stop settles the typed cancelled state once [1073.34ms]
+967-U1 interpreter birth {"pid":28074,"parentPid":28044}
+967-U1 interpreter exit {"pid":28074,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28074,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-9.sock","socketExists":false}
+(pass) eval background peek and stop race spends the cell id and settles cancelled exactly once [1042.06ms]
+967-U1 interpreter birth {"pid":28143,"parentPid":28044}
+967-U1 interpreter exit {"pid":28143,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28143,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-10.sock","socketExists":false}
+(pass) eval peek and stop refuse another session's cell id and a forged one [35.40ms]
+967-U1 interpreter birth {"pid":28144,"parentPid":28044}
+967-U1 interpreter exit {"pid":28144,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28144,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-11.sock","socketExists":false}
+(pass) completion(prompt, model=, system=, schema=) reaches the port and decodes the validated JSON [32.25ms]
+967-U1 interpreter birth {"pid":28145,"parentPid":28044}
+967-U1 interpreter exit {"pid":28145,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28145,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-12.sock","socketExists":false}
+(pass) a cell rejects legacy batched completion input and serves one prompt [31.87ms]
+967-U1 interpreter birth {"pid":28146,"parentPid":28044}
+967-U1 interpreter exit {"pid":28146,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28146,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-13.sock","socketExists":false}
+(pass) a failing completion call raises ToolError inside the cell instead of returning failure text [32.69ms]
+967-U1 interpreter birth {"pid":28147,"parentPid":28044}
+967-U1 interpreter exit {"pid":28147,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":28147,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-14.sock","socketExists":false}
+(pass) parallel() runs independent tool calls concurrently and returns both results in input order [32.10ms]
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-28044-15.sock","socketExists":false}
+(pass) a machine offering more than it is enrolled for keeps only the intersection [0.96ms]
+
+ 15 pass
+ 0 fail
+ 91 expect() calls
+Ran 15 tests across 1 file. [4.28s]

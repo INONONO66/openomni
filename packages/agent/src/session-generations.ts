@@ -113,6 +113,19 @@ export function makeSessionGenerations(initial: GenerationBundle) {
       })));
     }
 
+    /**
+     * Awaits every entry's live owners without flipping `stopping` (W5.2 S4):
+     * shutdown interrupts live turns first, then settles here so the
+     * fail-fast `drain` observes zero owners. Loops because a detached turn
+     * unwinding may briefly hand its capture to a successor entry.
+     */
+    const settle: Effect.Effect<void> = Effect.suspend(() => {
+      const pending = [...entries.values()].filter((entry) => entry.owners.pending() > 0);
+      if (pending.length === 0) return Effect.void;
+      return Effect.forEach(pending, (entry) => entry.owners.awaitSettled, { discard: true }).pipe(
+        Effect.andThen(Effect.suspend(() => settle)),
+      );
+    });
     const drain = lock.withPermits(1)(Effect.gen(function* () {
       stopping = true;
       for (const entry of entries.values()) {
@@ -122,7 +135,7 @@ export function makeSessionGenerations(initial: GenerationBundle) {
       }
       yield* Effect.forEach(entries.values(), retire, { discard: true });
     }));
-    return { capture, configure, drain };
+    return { capture, configure, drain, settle };
   });
 }
 

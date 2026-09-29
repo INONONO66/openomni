@@ -1,6 +1,5 @@
 import { SEEDED_POLICY_ROWS } from "@openomni/agent";
-import { Storage } from "@openomni/ledger";
-import type { PolicyRow } from "@openomni/protocol";
+import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
 import { PROVISION_POLICY_ROWS } from "./tools/provision";
 
@@ -24,10 +23,11 @@ const KERNEL_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
   MONITOR_WAKE_BUDGET,
 ];
 
-/** Seeds the kernel's mandatory generation before any durable session is materialized. */
-export function seedKernelPolicyRows(bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = []): number {
-  const policies = Storage.get().policies;
-  if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
+/** Seeds the kernel's mandatory generation into the catalog's policy plane. */
+export function seedKernelPolicyRows(
+  policies: ProtocolStorage.PolicyRowSubAdapter,
+  bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = [],
+): number {
   return policies.appendGeneration((current) => {
     const next = new Map([...KERNEL_POLICY_ROWS, ...bundleRows].map((row) => [policyId(row), row]));
     // Preserve existing policy values and site-specific ids; fill missing mandatory ids.

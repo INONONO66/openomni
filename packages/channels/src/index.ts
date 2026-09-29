@@ -7,3 +7,9 @@ export { ChannelProviders } from "./provider/registry.js";
 export { createGatewayRouter } from "./router/index.js";
 export { resolveChannelGrant } from "./router/channel-grant.js";
 export type { ChannelDeliveryRoute, GatewayRouter } from "./router/index.js";
+export {
+  createChannelStores,
+  unconfiguredChannelStores,
+  type ChannelStoreSource,
+  type ChannelStores,
+} from "./router/stores.js";

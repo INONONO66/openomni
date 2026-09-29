@@ -1,6 +1,7 @@
+import { ledger } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
-import { ChannelGrantStore } from "@openomni/ledger";
+
 import { applyChannelGrantTreatment } from "../../src/router/authority";
 import {
   commits,
@@ -42,7 +43,7 @@ test("channel default tier is projected only for an actor without canonical stan
 });
 
 test("observer channel default is a routing fact, not authority to create top-level work", async () => {
-  ChannelGrantStore.put(grant);
+  ledger().stores.channelGrants.put(grant);
   expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toEqual({
     status: "blocked_pre",
     reasonCode: "message.external.grant_tier",

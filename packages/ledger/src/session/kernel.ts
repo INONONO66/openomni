@@ -1,7 +1,7 @@
 import {
   canonicalDigest,
+  Inbox,
   PlainObjectSchema,
-  type Inbox,
   type LedgerAction,
   type LedgerSession,
   L0Observation,
@@ -11,18 +11,38 @@ import {
   SessionTransition,
   SessionTurn,
   type ObservationSink,
+  type Storage as ProtocolStorage,
 } from "@openomni/protocol";
-import { Storage } from "../storage/storage.js";
 import { Effect } from "effect";
+import { z } from "zod";
 import { StorageUnavailable, type LedgerError } from "../errors";
-import type { CommitReceipt, LeaseReceipt } from "../services";
+import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "../services";
+import type { CatalogStore } from "../storage/catalog-store.js";
+import type { SessionStore } from "../storage/session-store.js";
 import { writeEffect } from "../storage/write-effect";
 
-export const LEASE_TTL_MS = 30_000;
-export const HEARTBEAT_INTERVAL_MS = 10_000;
 export const RESUME_BUDGET = 10;
 
-interface MaterializeInput {
+/** The storage capabilities one kernel handle reads and writes. */
+export interface SessionKernelStores {
+  transaction<T>(operation: () => T): T;
+  readonly sessions?: SessionWriteAdapter;
+  readonly actions?: ProtocolStorage.ActionSubAdapter;
+  readonly policies?: ProtocolStorage.PolicyRowSubAdapter;
+}
+
+/**
+ * Handle-scoped storage access (W5.2 review F1). `stores()` throws when
+ * storage is unreachable — read paths fail closed exactly like the previous
+ * process-global reads; `writable()` gates write paths, which refuse with a
+ * typed `StorageUnavailable` instead of throwing.
+ */
+export interface SessionKernelContext {
+  stores(): SessionKernelStores;
+  writable(): boolean;
+}
+
+export interface MaterializeInput {
   readonly id: string;
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;
@@ -44,7 +64,8 @@ export type ConfigureAuthority = (input: {
   readonly generation: number;
 }) => boolean | Promise<boolean>;
 
-export function materialize(
+function materializeIn(
+  context: SessionKernelContext,
   input: MaterializeInput,
 ): Effect.Effect<LedgerSession.MaterializeResult, LedgerError> {
   return writeEffect("session.generation", () =>
@@ -58,7 +79,7 @@ export function materialize(
     }),
   ).pipe(
     Effect.flatMap((snapshot) =>
-      sessionWrites().pipe(
+      sessionWritesIn(context).pipe(
         Effect.flatMap((sessions) =>
           sessions.materialize({
             row: {
@@ -67,7 +88,6 @@ export function materialize(
               role: input.role,
               leaseOwner: null,
               leaseFence: 0,
-              leaseExpiresAt: null,
               revision: 0,
               state: "idle",
               toolsGeneration: snapshot.generation,
@@ -89,107 +109,62 @@ export function materialize(
   );
 }
 
-export function acquireLease(
-  input: LedgerSession.AcquireLease,
-): Effect.Effect<LeaseReceipt, LedgerError> {
-  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.acquireLease(input)));
-}
-
-export function renewLease(input: LedgerSession.RenewLease): Effect.Effect<true, LedgerError> {
-  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.renewLease(input)));
-}
-
-export function commit(input: LedgerSession.Commit): Effect.Effect<CommitReceipt, LedgerError> {
-  return sessionWrites().pipe(Effect.flatMap((sessions) => sessions.commit(input)));
-}
-
-export function commitInbox(input: Inbox.Commit): Effect.Effect<Inbox.Row, LedgerError> {
-  return inboxWrites().pipe(Effect.flatMap((inbox) => inbox.commit(input)));
-}
-
-export function commitReceivedMessage(input: Inbox.Commit): Effect.Effect<
-  {
-    row: Inbox.Row;
-    receipt: LedgerAction.Receipt;
-  },
-  LedgerError
-> {
-  return inboxWrites().pipe(Effect.flatMap((inbox) => inbox.receive(input)));
-}
-
-export function pendingInbox(sessionId: string): Inbox.Row[] {
-  return requiredInbox().list(sessionId, "pending");
-}
-
-export function inboxRows(sessionId: string): Inbox.Row[] {
-  return requiredInbox().list(sessionId);
-}
-
-export function latestAction(
-  sessionId: string,
-  throughRevision = Number.MAX_SAFE_INTEGER,
-): LedgerAction.Node | undefined {
-  return requiredActions().latestAction(sessionId, throughRevision);
+function commitIn(
+  context: SessionKernelContext,
+  input: LedgerSession.Commit,
+): Effect.Effect<CommitReceipt, LedgerError> {
+  return sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.commit(input)));
 }
 
 /** The seed and its high-water mark belong to the same SQLite read snapshot. */
-export function latestFoldCheckpoint(sessionId: string, throughRevision?: number) {
-  return Storage.get().transaction(() => {
-    const revision = Math.min(row(sessionId).revision, throughRevision ?? Number.MAX_SAFE_INTEGER);
-    return { revision, checkpoint: requiredActions().latestFoldCheckpoint(sessionId, revision) };
+function latestFoldCheckpointIn(
+  context: SessionKernelContext,
+  sessionId: string,
+  throughRevision?: number,
+) {
+  return context.stores().transaction(() => {
+    const revision = Math.min(
+      rowIn(context, sessionId).revision,
+      throughRevision ?? Number.MAX_SAFE_INTEGER,
+    );
+    return {
+      revision,
+      checkpoint: requiredActionsIn(context).latestFoldCheckpoint(sessionId, revision),
+    };
   });
 }
 
-export function priorModelAttempt(sessionId: string, turnId: string) {
-  return requiredActions().priorModelAttempt(sessionId, turnId);
-}
-
-export function generationFor(
+function openTurnsPageIn(
+  context: SessionKernelContext,
   sessionId: string,
-  generation: number,
-): SessionGeneration.Snapshot | undefined {
-  return configurationSnapshot(requiredActions().generationFor(sessionId, generation));
-}
-
-export function turnTerminalFor(sessionId: string, turnId: string) {
-  return turnTerminal(requiredActions().turnTerminalFor(sessionId, turnId));
-}
-
-export function latestTurnTerminal(sessionId: string) {
-  const action = requiredActions().latestTurnTerminal(sessionId);
-  const effect = turnTerminal(action);
-  return action === undefined || effect === undefined ? undefined : { action, effect };
-}
-
-export function turnIntentsPage(sessionId: string, beforeRevision: number, limit = 256) {
-  return requiredActions().turnIntentsPage(sessionId, beforeRevision, limit);
-}
-
-export function openTurnsPage(sessionId: string, cursor = 0, limit = 256): OpenTurn[] {
-  const actions = requiredActions();
+  cursor = 0,
+  limit = 256,
+): OpenTurn[] {
+  const actions = requiredActionsIn(context);
   return actions.openTurnsPage(sessionId, cursor, limit).flatMap((intent) => {
     const update = actions.latestTurnUpdate(sessionId, intent.id);
     return openTurns(update === undefined ? [intent] : [intent, update]);
   });
 }
 
-export function latestOpenTurn(sessionId: string): OpenTurn | undefined {
+function latestOpenTurnIn(context: SessionKernelContext, sessionId: string): OpenTurn | undefined {
   let cursor = 0;
   let latest: OpenTurn | undefined;
   for (;;) {
-    const page = openTurnsPage(sessionId, cursor);
+    const page = openTurnsPageIn(context, sessionId, cursor);
     latest = page.at(-1) ?? latest;
     if (page.length < 256 || latest === undefined) return latest;
-    const intent = actionById(latest.turnId);
+    const intent = requiredActionsIn(context).actionById(latest.turnId);
     if (intent === undefined) throw new Error(`open turn intent missing: ${latest.turnId}`);
     cursor = intent.ordinal;
   }
 }
 
-export function resultFor(sessionId: string, parentId: string) {
-  const result = requiredActions().resultFor(sessionId, parentId);
+function resultForIn(context: SessionKernelContext, sessionId: string, parentId: string) {
+  const actions = requiredActionsIn(context);
+  const result = actions.resultFor(sessionId, parentId);
   if (result === undefined) return undefined;
-  const parent = actionById(parentId);
+  const parent = actions.actionById(parentId);
   const outcome = SessionHistory.Outcome.safeParse(
     PlainObjectSchema.parse(result.effect.value).terminal,
   );
@@ -204,35 +179,13 @@ export function resultFor(sessionId: string, parentId: string) {
   return result;
 }
 
-export function requestInputById(sessionId: string, inputId: string) {
-  return requiredActions().requestInputById(sessionId, inputId);
-}
-
-export function guardedOperationsPage(sessionId: string, turnId: string, cursor = 0, limit = 256) {
-  return requiredActions().guardedOperationsPage(sessionId, turnId, cursor, limit);
-}
-
-export function openOperationsPage(sessionId: string, turnId: string, cursor = 0, limit = 256) {
-  return requiredActions().openOperationsPage(sessionId, turnId, cursor, limit);
-}
-
-export function operationChildrenPage(
+function latestGenerationForIn(
+  context: SessionKernelContext,
   sessionId: string,
-  parentId: string,
-  cursor = 0,
-  limit = 256,
-) {
-  return requiredActions().operationChildrenPage(sessionId, parentId, cursor, limit);
-}
-
-export function actionById(id: string): LedgerAction.Node | undefined {
-  return requiredActions().actionById(id);
-}
-
-export function latestGenerationFor(sessionId: string): SessionGeneration.Snapshot {
+): SessionGeneration.Snapshot {
   let cursor = Number.MAX_SAFE_INTEGER;
   for (;;) {
-    const action = requiredActions().configurationActions(sessionId, cursor)[0];
+    const action = requiredActionsIn(context).configurationActions(sessionId, cursor)[0];
     if (action === undefined) throw new Error("session has no configured generation");
     const snapshot = configurationSnapshot(action);
     if (snapshot !== undefined) return snapshot;
@@ -240,42 +193,20 @@ export function latestGenerationFor(sessionId: string): SessionGeneration.Snapsh
   }
 }
 
-/** inputHash is an exact persisted key, not a policy evaluation or JSON-path query API. */
-export function policyDecisionRuleIds(sessionId: string, inputHash: string): string[] | undefined {
-  return requiredActions().policyDecisionRuleIds(sessionId, inputHash);
-}
-
-export function messageActionByPlatformId(
-  sessionId: string,
-  messageId: string,
-): LedgerAction.Node | undefined {
-  return requiredActions().messageActionByPlatformId(sessionId, messageId);
-}
-
-export function outboundReceipt(
-  destinationSessionId: string,
-  messageId: string,
-): LedgerAction.Receipt | undefined {
-  return requiredActions().outboundReceipt(destinationSessionId, messageId);
-}
-
-export function verifyChain(sessionId: string): LedgerAction.ChainVerdict {
-  return requiredActions().verifyChain(sessionId);
-}
-
 /**
  * Authoritative, bounded read of committed history after `afterRevision`. The
  * row revision and the slice come from one transaction, so a watcher that saw a
  * gap resynchronizes from its last revision without inventing or skipping events.
  */
-export function historyPage(
+function historyPageIn(
+  context: SessionKernelContext,
   sessionId: string,
   request: SessionHistory.PageRequest = {},
 ): SessionHistory.Page {
   const { afterRevision, limit } = SessionHistory.PageRequest.parse(request);
-  return Storage.get().transaction(() => {
-    const headRevision = row(sessionId).revision;
-    const actions = requiredActions().range(sessionId, afterRevision, limit);
+  return context.stores().transaction(() => {
+    const headRevision = rowIn(context, sessionId).revision;
+    const actions = requiredActionsIn(context).range(sessionId, afterRevision, limit);
     const last = actions.at(-1)?.ordinal ?? afterRevision;
     return SessionHistory.Page.parse({
       sessionId,
@@ -294,75 +225,94 @@ function stateEffect(action: LedgerAction.Node) {
   return effect;
 }
 
-export function requestStatesPage(sessionId?: string, cursor = "", limit = 256) {
-  return requiredActions()
+function requestStatesPageIn(
+  context: SessionKernelContext,
+  sessionId?: string,
+  cursor = "",
+  limit = 256,
+) {
+  return requiredActionsIn(context)
     .requestStatesPage(sessionId, cursor, limit)
     .map((action) => SessionTransition.Request.parse(stateEffect(action).request));
 }
 
-export function requestRows(sessionId?: string): SessionTransition.Request[] {
+function requestRowsIn(
+  context: SessionKernelContext,
+  sessionId?: string,
+): SessionTransition.Request[] {
   const requests: SessionTransition.Request[] = [];
   let cursor = "";
   for (;;) {
-    const page = requestStatesPage(sessionId, cursor);
+    const page = requestStatesPageIn(context, sessionId, cursor);
     requests.push(...page);
     if (page.length < 256) return requests;
     cursor = page.at(-1)?.requestId ?? cursor;
   }
 }
 
-export function outboundStatesPage(sessionId: string, cursor = "", limit = 256) {
-  return requiredActions()
+function outboundStatesPageIn(
+  context: SessionKernelContext,
+  sessionId: string,
+  cursor = "",
+  limit = 256,
+) {
+  return requiredActionsIn(context)
     .outboundStatesPage(sessionId, cursor, limit)
     .map((action) => SessionTransition.Outbound.parse(stateEffect(action).outbound));
 }
 
-export function outboundRows(sessionId: string): SessionTransition.Outbound[] {
+function outboundRowsIn(
+  context: SessionKernelContext,
+  sessionId: string,
+): SessionTransition.Outbound[] {
   const outbound: SessionTransition.Outbound[] = [];
   let cursor = "";
   for (;;) {
-    const page = outboundStatesPage(sessionId, cursor);
+    const page = outboundStatesPageIn(context, sessionId, cursor);
     outbound.push(...page);
     if (page.length < 256) return outbound;
     cursor = page.at(-1)?.message.messageId ?? cursor;
   }
 }
 
-export function requestById(requestId: string): SessionTransition.Request | undefined {
-  const action = requiredActions().requestStateById(requestId);
-  return action === undefined
-    ? undefined
-    : SessionTransition.Request.parse(stateEffect(action).request);
+/** The chain effect one received message committed; the pending fold reads it back. */
+const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
+
+/**
+ * Pending-message projection (W5.2): `prompt` actions carrying an inbox
+ * payload whose id no `inbox.deliver` action references yet, folded from the
+ * chain — there is no inbox table.
+ */
+function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+  return requiredActionsIn(context)
+    .pendingMessages(sessionId)
+    .map((action, index) => {
+      const effect = ReceivedEffect.parse(action.effect.value);
+      return Inbox.Row.parse({
+        id: action.id,
+        sessionId: action.sessionId,
+        kind: effect.inboxKind,
+        content: effect.content,
+        origin: action.intent,
+        status: "pending",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: action.ts,
+        ordinal: index + 1,
+      });
+    });
 }
 
-export function commitRequestTransition(
-  input: LedgerSession.Commit,
-): Effect.Effect<CommitReceipt, LedgerError> {
-  return commit(input);
-}
-
-export function row(sessionId: string): LedgerSession.Row {
-  const current = requiredSessions().get(sessionId);
+function rowIn(context: SessionKernelContext, sessionId: string): LedgerSession.Row {
+  const current = requiredSessionsIn(context).get(sessionId);
   if (current === undefined) throw new Error(`session not found: ${sessionId}`);
   return current;
 }
 
-export function listRows(): LedgerSession.Row[] {
-  return requiredSessions().list();
-}
-
-export function openChildCount(parentId: string): number {
-  return requiredSessions().openChildCount(parentId);
-}
-
-export function policyRows(generation?: number): PolicyRow.Row[] {
-  const policies = Storage.get().policies;
+function policyRowsIn(context: SessionKernelContext, generation?: number): PolicyRow.Row[] {
+  const policies = context.stores().policies;
   if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
   return policies.rows(generation);
-}
-
-export function currentPolicyGeneration(): number {
-  return policyRows().reduce((latest, policy) => Math.max(latest, policy.generation), 0);
 }
 
 export function latestGeneration(
@@ -555,15 +505,23 @@ export function openTurns(actions: readonly LedgerAction.Node[]): OpenTurn[] {
   return [...opened.values()];
 }
 
-export function getSnapshot(sessionId: string, turns = 1): SessionTurn.Snapshot {
+function getSnapshotIn(
+  context: SessionKernelContext,
+  sessionId: string,
+  turns = 1,
+): SessionTurn.Snapshot {
   if (!Number.isInteger(turns) || turns < 0) throw new Error("turn count must be non-negative");
-  return Storage.get().transaction(() => snapshotFor(row(sessionId), turns));
+  return context.stores().transaction(() => snapshotFor(context, rowIn(context, sessionId), turns));
 }
 
-function snapshotFor(current: LedgerSession.Row, turns: number): SessionTurn.Snapshot {
+function snapshotFor(
+  context: SessionKernelContext,
+  current: LedgerSession.Row,
+  turns: number,
+): SessionTurn.Snapshot {
   const sessionId = current.id;
-  void latestGenerationFor(sessionId);
-  const open = latestOpenTurn(sessionId);
+  void latestGenerationForIn(context, sessionId);
+  const open = latestOpenTurnIn(context, sessionId);
   return SessionTurn.Snapshot.parse({
     id: current.id,
     parentId: current.parentId,
@@ -573,17 +531,17 @@ function snapshotFor(current: LedgerSession.Row, turns: number): SessionTurn.Sna
     lease: {
       owner: current.leaseOwner,
       fence: current.leaseFence,
-      expiresAt: current.leaseExpiresAt,
     },
     toolsGeneration: current.toolsGeneration,
     systemHash: current.systemHash,
     policyGeneration: current.policyGeneration,
     ...(open === undefined ? {} : { openTurnId: open.turnId }),
-    turns: turnTails(sessionId, current.revision, turns),
+    turns: turnTails(context, sessionId, current.revision, turns),
   });
 }
 
-export function watchSnapshot(
+function watchSnapshotIn(
+  context: SessionKernelContext,
   sessionId: string,
   turns: number,
   observations: ObservationSink,
@@ -592,7 +550,7 @@ export function watchSnapshot(
   if (subscribeObservation === undefined) {
     throw new Error("session watch requires a subscribable observation sink");
   }
-  return Storage.get().transaction(() => {
+  return context.stores().transaction(() => {
     let revision = 0;
     let closed = false;
     const handlers = new Set<(observation: SessionTurn.Observation) => void>();
@@ -616,7 +574,7 @@ export function watchSnapshot(
     );
     let snapshot: SessionTurn.Snapshot | undefined;
     try {
-      snapshot = getSnapshot(sessionId, turns);
+      snapshot = getSnapshotIn(context, sessionId, turns);
     } finally {
       if (snapshot === undefined) stop();
     }
@@ -650,9 +608,14 @@ function configurationSnapshot(
  * The newest `count` turns: one ascending window opens after the intent preceding them, because
  * deliveries commit before their own turn intent. The window carries the intents themselves.
  */
-function turnTails(sessionId: string, revision: number, count: number): SessionTurn.Tail[] {
+function turnTails(
+  context: SessionKernelContext,
+  sessionId: string,
+  revision: number,
+  count: number,
+): SessionTurn.Tail[] {
   if (count === 0) return [];
-  const actions = requiredActions();
+  const actions = requiredActionsIn(context);
   const fold: TailWindow = { tails: new Map(), pending: new Map() };
   let cursor = actions.turnWindowStart(sessionId, revision + 1, count);
   for (;;) {
@@ -755,40 +718,138 @@ function assertUniqueBlocks(blocks: readonly SessionGeneration.SystemBlock[]): v
   }
 }
 
-function sessionWrites() {
+function sessionWritesIn(context: SessionKernelContext) {
   return writeEffect("storage.sessions", (refuse) => {
-    if (Storage.getInitializedDbPath() === null)
-      return refuse(new StorageUnavailable({ capability: "storage" }));
-    const sessions = Storage.get().sessions;
+    if (!context.writable()) return refuse(new StorageUnavailable({ capability: "storage" }));
+    const sessions = context.stores().sessions;
     if (sessions === undefined) return refuse(new StorageUnavailable({ capability: "sessions" }));
     return sessions;
   });
 }
 
-function inboxWrites() {
-  return writeEffect("storage.inbox", (refuse) => {
-    if (Storage.getInitializedDbPath() === null)
-      return refuse(new StorageUnavailable({ capability: "storage" }));
-    const inbox = Storage.get().inbox;
-    if (inbox === undefined) return refuse(new StorageUnavailable({ capability: "inbox" }));
-    return inbox;
-  });
-}
-
-function requiredSessions() {
-  const adapter = Storage.get().sessions;
+function requiredSessionsIn(context: SessionKernelContext) {
+  const adapter = context.stores().sessions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: sessions");
   return adapter;
 }
 
-function requiredActions() {
-  const adapter = Storage.get().actions;
+function requiredActionsIn(context: SessionKernelContext) {
+  const adapter = context.stores().actions;
   if (adapter === undefined) throw new Error("L0 storage capability is unavailable: actions");
   return adapter;
 }
 
-function requiredInbox() {
-  const adapter = Storage.get().inbox;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: inbox");
-  return adapter;
+function makeSessionKernel(context: SessionKernelContext) {
+  return {
+    materialize: (input: MaterializeInput) => materializeIn(context, input),
+    adoptFence: (input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError> =>
+      sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
+    commit: (input: LedgerSession.Commit) => commitIn(context, input),
+    commitRequestTransition: (input: LedgerSession.Commit) => commitIn(context, input),
+    pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
+    latestAction: (
+      sessionId: string,
+      throughRevision = Number.MAX_SAFE_INTEGER,
+    ): LedgerAction.Node | undefined =>
+      requiredActionsIn(context).latestAction(sessionId, throughRevision),
+    latestFoldCheckpoint: (sessionId: string, throughRevision?: number) =>
+      latestFoldCheckpointIn(context, sessionId, throughRevision),
+    priorModelAttempt: (sessionId: string, turnId: string) =>
+      requiredActionsIn(context).priorModelAttempt(sessionId, turnId),
+    generationFor: (
+      sessionId: string,
+      generation: number,
+    ): SessionGeneration.Snapshot | undefined =>
+      configurationSnapshot(requiredActionsIn(context).generationFor(sessionId, generation)),
+    turnTerminalFor: (sessionId: string, turnId: string) =>
+      turnTerminal(requiredActionsIn(context).turnTerminalFor(sessionId, turnId)),
+    latestTurnTerminal: (sessionId: string) => {
+      const action = requiredActionsIn(context).latestTurnTerminal(sessionId);
+      const effect = turnTerminal(action);
+      return action === undefined || effect === undefined ? undefined : { action, effect };
+    },
+    turnIntentsPage: (sessionId: string, beforeRevision: number, limit = 256) =>
+      requiredActionsIn(context).turnIntentsPage(sessionId, beforeRevision, limit),
+    openTurnsPage: (sessionId: string, cursor = 0, limit = 256): OpenTurn[] =>
+      openTurnsPageIn(context, sessionId, cursor, limit),
+    latestOpenTurn: (sessionId: string): OpenTurn | undefined =>
+      latestOpenTurnIn(context, sessionId),
+    resultFor: (sessionId: string, parentId: string) => resultForIn(context, sessionId, parentId),
+    requestInputById: (sessionId: string, inputId: string) =>
+      requiredActionsIn(context).requestInputById(sessionId, inputId),
+    guardedOperationsPage: (sessionId: string, turnId: string, cursor = 0, limit = 256) =>
+      requiredActionsIn(context).guardedOperationsPage(sessionId, turnId, cursor, limit),
+    openOperationsPage: (sessionId: string, turnId: string, cursor = 0, limit = 256) =>
+      requiredActionsIn(context).openOperationsPage(sessionId, turnId, cursor, limit),
+    operationChildrenPage: (sessionId: string, parentId: string, cursor = 0, limit = 256) =>
+      requiredActionsIn(context).operationChildrenPage(sessionId, parentId, cursor, limit),
+    actionById: (id: string): LedgerAction.Node | undefined =>
+      requiredActionsIn(context).actionById(id),
+    latestGenerationFor: (sessionId: string): SessionGeneration.Snapshot =>
+      latestGenerationForIn(context, sessionId),
+    /** inputHash is an exact persisted key, not a policy evaluation or JSON-path query API. */
+    policyDecisionRuleIds: (sessionId: string, inputHash: string): string[] | undefined =>
+      requiredActionsIn(context).policyDecisionRuleIds(sessionId, inputHash),
+    messageActionByPlatformId: (
+      sessionId: string,
+      messageId: string,
+    ): LedgerAction.Node | undefined =>
+      requiredActionsIn(context).messageActionByPlatformId(sessionId, messageId),
+    outboundReceipt: (
+      destinationSessionId: string,
+      messageId: string,
+    ): LedgerAction.Receipt | undefined =>
+      requiredActionsIn(context).outboundReceipt(destinationSessionId, messageId),
+    verifyChain: (sessionId: string): LedgerAction.ChainVerdict =>
+      requiredActionsIn(context).verifyChain(sessionId),
+    historyPage: (sessionId: string, request: SessionHistory.PageRequest = {}) =>
+      historyPageIn(context, sessionId, request),
+    requestStatesPage: (sessionId?: string, cursor = "", limit = 256) =>
+      requestStatesPageIn(context, sessionId, cursor, limit),
+    requestRows: (sessionId?: string): SessionTransition.Request[] =>
+      requestRowsIn(context, sessionId),
+    outboundStatesPage: (sessionId: string, cursor = "", limit = 256) =>
+      outboundStatesPageIn(context, sessionId, cursor, limit),
+    outboundRows: (sessionId: string): SessionTransition.Outbound[] =>
+      outboundRowsIn(context, sessionId),
+    requestById: (requestId: string): SessionTransition.Request | undefined => {
+      const action = requiredActionsIn(context).requestStateById(requestId);
+      return action === undefined
+        ? undefined
+        : SessionTransition.Request.parse(stateEffect(action).request);
+    },
+    row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
+    listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
+    policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
+    currentPolicyGeneration: (): number =>
+      policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
+    getSnapshot: (sessionId: string, turns = 1): SessionTurn.Snapshot =>
+      getSnapshotIn(context, sessionId, turns),
+    watchSnapshot: (
+      sessionId: string,
+      turns: number,
+      observations: ObservationSink,
+    ): SessionTurn.Watch => watchSnapshotIn(context, sessionId, turns, observations),
+  };
+}
+
+/** The kernel handle API — exactly the historical module-level surface. */
+export type SessionKernel = ReturnType<typeof makeSessionKernel>;
+
+/**
+ * Handle-scoped kernel factory (W5.2 review F1): session facts (row, chain,
+ * snapshots) come from one per-session store; policy rows come from the
+ * catalog. There is no inbox table — `pendingMessages` folds the pending
+ * projection straight from the action chain.
+ */
+export function createSessionKernel(session: SessionStore, catalog: CatalogStore): SessionKernel {
+  return makeSessionKernel({
+    stores: () => ({
+      transaction: session.transaction,
+      sessions: session.sessions,
+      actions: session.actions,
+      policies: catalog.policies,
+    }),
+    writable: () => true,
+  });
 }

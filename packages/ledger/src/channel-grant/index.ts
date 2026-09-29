@@ -1,34 +1,37 @@
-import { Actor } from "@openomni/protocol";
-import { Storage } from "../storage/storage";
+import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 
-function requireAdapter(): NonNullable<Storage.Adapter["channelGrant"]> {
-  return requireSubAdapter(
-    Storage.get().channelGrant,
-    "Storage adapter does not implement channel grants",
-  );
-}
+export type ChannelGrantStore = ReturnType<typeof createChannelGrantStore>;
 
-/** Raw channel-grant fact storage. Resolution and treatment belong to channels. */
-export namespace ChannelGrantStore {
-  export type Grant = Actor.ChannelGrant;
-
-  export function put(input: Grant): Grant {
-    const store = requireAdapter();
-    const grant = Actor.ChannelGrant.parse(withStoreTimestamps(input, store.get(input.id)));
-    store.set(grant);
-    return grant;
+/** Raw channel-grant fact storage over one catalog handle. Resolution and treatment belong to channels. */
+export function createChannelGrantStore(source: {
+  readonly channelGrant?: ProtocolStorage.ChannelGrantSubAdapter;
+}) {
+  function requireAdapter(): ProtocolStorage.ChannelGrantSubAdapter {
+    return requireSubAdapter(
+      source.channelGrant,
+      "Storage adapter does not implement channel grants",
+    );
   }
 
-  export function get(id: string): Grant | undefined {
-    return requireAdapter().get(id);
-  }
+  return {
+    put(input: Actor.ChannelGrant): Actor.ChannelGrant {
+      const store = requireAdapter();
+      const grant = Actor.ChannelGrant.parse(withStoreTimestamps(input, store.get(input.id)));
+      store.set(grant);
+      return grant;
+    },
 
-  export function list(): Grant[] {
-    return requireAdapter().list();
-  }
+    get(id: string): Actor.ChannelGrant | undefined {
+      return requireAdapter().get(id);
+    },
 
-  export function remove(id: string): boolean {
-    return requireAdapter().remove(id);
-  }
+    list(): Actor.ChannelGrant[] {
+      return requireAdapter().list();
+    },
+
+    remove(id: string): boolean {
+      return requireAdapter().remove(id);
+    },
+  };
 }

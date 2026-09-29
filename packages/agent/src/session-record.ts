@@ -1,12 +1,13 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "@openomni/ledger";
 import { Effect } from "effect";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import {
   canonicalDigest,
   FoldCheckpoint,
   PlainValueSchema,
   SessionGeneration,
   SessionTurn,
-  type Inbox,
+  Inbox,
   type LedgerAction,
   type LedgerSession,
   type PlainValue,
@@ -346,9 +347,10 @@ export function sessionRunnerResultFromValue(value: PlainValue): SessionRunnerRe
 }
 
 export function generationForOpen(
+  kernel: SessionKernel,
   open: SessionHandleStore.OpenTurn,
 ): Effect.Effect<SessionGeneration.Snapshot, GenerationUnavailable> {
-  const snapshot = SessionHandleStore.generationFor(open.action.sessionId, open.toolsGeneration);
+  const snapshot = kernel.generationFor(open.action.sessionId, open.toolsGeneration);
   if (
     snapshot === undefined ||
     snapshot.toolsHash !== open.toolsHash ||
@@ -358,4 +360,80 @@ export function generationForOpen(
     return Effect.fail(new GenerationUnavailable({ generation: open.toolsGeneration }));
   }
   return Effect.succeed(snapshot);
+}
+
+/** The chain effect one received message commits; the pending fold reads it back. */
+const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
+const DeliverIntent = z.object({ inboxId: z.string() });
+
+/** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
+export function receivedMessageAction(input: {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly kind: Inbox.Kind;
+  readonly content: string;
+  readonly origin: Inbox.Origin;
+  readonly parentActionId: string | null;
+  readonly at: number;
+}): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentActionId,
+    sessionId: input.sessionId,
+    kind: "prompt",
+    intent: input.origin,
+    effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
+    irreversible: true,
+    ts: input.at,
+  };
+}
+
+/**
+ * Chain fold over received-message actions (W5.2 F1): every `prompt` action
+ * carrying an inbox payload, projected to the historical inbox row shape.
+ * Entries whose `<id>` a later `inbox.deliver` intent references are consumed.
+ */
+export function receivedMessages(
+  kernel: SessionKernel,
+  sessionId: string,
+): { readonly rows: Inbox.Row[]; readonly delivered: ReadonlySet<string> } {
+  const received: { readonly action: LedgerAction.Node; readonly kind: Inbox.Kind; readonly content: string }[] = [];
+  const delivered = new Set<string>();
+  let afterRevision = 0;
+  for (;;) {
+    const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
+    for (const action of page.actions) {
+      if (action.kind === "prompt") {
+        const effect = ReceivedEffect.safeParse(action.effect.value);
+        if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
+      } else if (action.kind === "inbox.deliver") {
+        const intent = DeliverIntent.safeParse(action.intent.value);
+        if (intent.success) delivered.add(intent.data.inboxId);
+      }
+    }
+    if (page.nextRevision === null) break;
+    afterRevision = page.nextRevision;
+  }
+  return {
+    delivered,
+    rows: received.map((entry, index) =>
+      Inbox.Row.parse({
+        id: entry.action.id,
+        sessionId,
+        kind: entry.kind,
+        content: entry.content,
+        origin: entry.action.intent,
+        status: delivered.has(entry.action.id) ? "consumed" : "pending",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: entry.action.ts,
+        ordinal: index + 1,
+      }),
+    ),
+  };
+}
+
+/** Pending admission over a per-session file is the kernel's chain fold (plan F1). */
+export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
+  return kernel.pendingMessages(sessionId);
 }

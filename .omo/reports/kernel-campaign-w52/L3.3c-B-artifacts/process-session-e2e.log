@@ -1,0 +1,509 @@
+bun test v1.4.1 (4661e494f)
+
+apps/openomni/test/process-session-e2e.test.ts:
+(pass) process entry exits on empty stdin and closes its reply channel [2.20ms]
+117 |     expect((await fixture.send({
+118 |       to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+119 |       type: "message",
+120 |       content: "work",
+121 |       replyTo: "process-entry-original",
+122 |     })).isError).not.toBe(true);
+                           ^
+error: expect(received).not.toBe(expected)
+
+Expected: not true
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/test/process-session-e2e.test.ts:122:22)
+(fail) process entry logs committed sessions and disposes its runtime [95.03ms]
+189 |           content: "work",
+190 |           ...(toolSend ? {} : { deadline }),
+191 |           replyTo: "process-original",
+192 |         })
+193 |       ).isError,
+194 |     ).not.toBe(true);
+                ^
+error: expect(received).not.toBe(expected)
+
+Expected: not true
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/test/process-session-e2e.test.ts:194:11)
+(fail) process-session entry preserves deadline and parent with tool send %s [34.50ms]
+189 |           content: "work",
+190 |           ...(toolSend ? {} : { deadline }),
+191 |           replyTo: "process-original",
+192 |         })
+193 |       ).isError,
+194 |     ).not.toBe(true);
+                ^
+error: expect(received).not.toBe(expected)
+
+Expected: not true
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/test/process-session-e2e.test.ts:194:11)
+(fail) process-session entry preserves deadline and parent with tool send %s [36.70ms]
+307 |         return { type: "stop" as const };
+308 |       }),
+309 |     },
+310 |   });
+311 |   await ownerStart(app, "initial-process");
+312 |   expect(await received).toEqual({ ok: true });
+                               ^
+error: expect(received).toEqual(expected)
+
+  {
+-   "ok": true,
++   "error": [Error: process reply was not drained],
++   "ok": false,
+  }
+
+- Expected  - 1
++ Received  + 2
+
+      at <anonymous> (/Users/ino/Develop/openomni-w52/apps/openomni/test/process-session-e2e.test.ts:312:26)
+(fail) startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement [60027.63ms]
+--------------------------------------------------------------|---------|---------|-------------------
+File                                                          | % Funcs | % Lines | Uncovered Line #s
+--------------------------------------------------------------|---------|---------|-------------------
+All files                                                     |   47.78 |   60.29 |
+ apps/openomni/src/channels.ts                                |   12.50 |   15.60 | 40-55,86-96,100-113,117,127-134,144-151,175-184,189-212
+ apps/openomni/src/compaction/strategy.ts                     |  100.00 |  100.00 | 
+ apps/openomni/src/compaction/summarizer.ts                   |   37.50 |   25.00 | 12-14,33-35,39-55,59-61,70-94
+ apps/openomni/src/composition/boot.ts                        |  100.00 |  100.00 | 
+ apps/openomni/src/composition/chat-provider.ts               |  100.00 |  100.00 | 
+ apps/openomni/src/composition/cluster-crypto.ts              |    0.00 |   88.89 | 8
+ apps/openomni/src/composition/cluster-runtime.ts             |   70.83 |   66.93 | 168-169,202-209,218-262,293-296,299-302,305-309,312-316,347,349,351,353,461-462,464-467
+ apps/openomni/src/composition/codemode.ts                    |    0.00 |    6.41 | 10-55,59-85
+ apps/openomni/src/composition/completion.ts                  |   20.00 |    8.11 | 23-34,38-41,46-84,89-101
+ apps/openomni/src/composition/failure.ts                     |    0.00 |   14.29 | 8-13
+ apps/openomni/src/composition/generation-layers.ts           |   87.18 |   86.11 | 106-108,127-138
+ apps/openomni/src/composition/ingress-executor.ts            |   80.00 |  100.00 | 
+ apps/openomni/src/composition/message-decision.ts            |  100.00 |  100.00 | 
+ apps/openomni/src/composition/message-session.ts             |   82.76 |   90.24 | 51-58,102-106,196-197,211,243-249,321-322,338-340,366
+ apps/openomni/src/composition/process-replies.ts             |   50.00 |   40.82 | 18-19,22-34,44-57
+ apps/openomni/src/composition/process-session.ts             |   50.00 |   35.11 | 34-56,60-97
+ apps/openomni/src/composition/terminal-message.ts            |   66.67 |   14.55 | 22-67,69
+ apps/openomni/src/composition/watch-sources.ts               |   23.53 |   11.19 | 17-18,30-40,50-131,135-158,162-198,259-261,265-276,280-281,285-307,311-327,331-335,339-357,360
+ apps/openomni/src/config.ts                                  |   18.75 |   36.27 | 113-117,128-136,166-175,179-185,199-200,233-251,274-286,294,300,305-315,319,323-333,342-348,352-377
+ apps/openomni/src/gateway.ts                                 |   65.38 |   75.28 | 58-59,84-90,100-101,103-105,107,129-140,146-152,164-176,211-213,271,287-292,308-314,340,342
+ apps/openomni/src/index.ts                                   |   50.00 |   48.29 | 112-124,139-155,174-183,196-199,214-215,220-224,227,229-232,235-241,243-255,259-260,262-268,272-275,277-278,281,283-284,289,291-292,297,301,307-322,325-328,330-346,348-349,357,364-373,376-380,413-416,420-421,448-450,460,478,486,506-518,536-539,548-557,593-595,626-636,670-673,676-775,802-803,805,814-831
+ apps/openomni/src/message-policy.ts                          |  100.00 |  100.00 | 
+ apps/openomni/src/observation/component.ts                   |  100.00 |  100.00 | 
+ apps/openomni/src/observation/llm-failure.ts                 |    0.00 |    5.00 | 14-18,31-61,71-74,84-100
+ apps/openomni/src/policy-seed.ts                             |   80.00 |   97.14 | 37
+ apps/openomni/src/process-entry-path.ts                      |  100.00 |  100.00 | 
+ apps/openomni/src/process-entry.ts                           |   33.33 |   18.88 | 59-73,84-133,137-258,272-275,277-286,295
+ apps/openomni/src/prompt/build.ts                            |  100.00 |  100.00 | 
+ apps/openomni/src/prompt/roles.ts                            |  100.00 |  100.00 | 
+ apps/openomni/src/provisioning/channels.ts                   |   50.00 |   45.68 | 88,92-110,115-151,157-170,184-200
+ apps/openomni/src/provisioning/contacts.ts                   |   15.38 |   40.38 | 75-85,89,94-95,100-105,109-131,136-141,146-156,163-170,174-186,195-206
+ apps/openomni/src/provisioning/declared.ts                   |   37.50 |   45.07 | 27-36,58-59,67-78,96-110
+ apps/openomni/src/provisioning/execution.ts                  |   50.00 |   28.36 | 35-65,72-88
+ apps/openomni/src/provisioning/status.ts                     |   20.00 |   45.12 | 41-56,60-69,72-79,83-93
+ apps/openomni/src/provisioning/supervisor.ts                 |   58.33 |   31.68 | 90-116,120-142,155-159,163-167,170-175,183,194-195
+ apps/openomni/src/provisioning/vault-key.ts                  |   66.67 |   56.52 | 22-28,36,41-42
+ apps/openomni/src/resident.ts                                |   94.12 |   89.72 | 24-33,124
+ apps/openomni/src/runtime.ts                                 |   57.14 |   91.94 | 106-110
+ apps/openomni/src/shutdown.ts                                |  100.00 |  100.00 | 
+ apps/openomni/src/tools/bash.ts                              |   20.00 |   47.50 | 28-46,50-69,83-85
+ apps/openomni/src/tools/completion.ts                        |   50.00 |   56.41 | 36-52
+ apps/openomni/src/tools/core/catalog.ts                      |  100.00 |  100.00 | 
+ apps/openomni/src/tools/core/cell-output.ts                  |    0.00 |   16.67 | 6-7,11-18
+ apps/openomni/src/tools/core/completion-format.ts            |    0.00 |   14.81 | 5,10-11,16-31,36-39
+ apps/openomni/src/tools/core/contact-mutations.ts            |    0.00 |   48.39 | 22,26-40
+ apps/openomni/src/tools/core/filesystem.ts                   |    7.69 |   14.81 | 25-27,32-36,40-61,68-71,76-84,88-90,95-97,112-116,119-122,128-130,134-137,141-144
+ apps/openomni/src/tools/core/monitor-ports.ts                |   13.04 |    7.54 | 90,100,109-113,125-201,206-223,228-256,267-294,306-308,314-315,318-337,343-371,388-454,461-507,512-552
+ apps/openomni/src/tools/core/request-domain-revisions.ts     |   25.00 |    9.38 | 10-17,21-33,39-46
+ apps/openomni/src/tools/edit.ts                              |   25.00 |   46.15 | 8-22,36-41
+ apps/openomni/src/tools/eval.ts                              |   20.00 |   60.32 | 36-45,50-62,76-77
+ apps/openomni/src/tools/find.ts                              |   16.67 |   52.27 | 22-33,41,46-48,53-57
+ apps/openomni/src/tools/grep.ts                              |   14.29 |   49.30 | 27-31,36,41-48,62-73,81-90
+ apps/openomni/src/tools/locus.ts                             |    0.00 |   10.53 | 9-25
+ apps/openomni/src/tools/ls.ts                                |   33.33 |   81.48 | 21-25
+ apps/openomni/src/tools/monitor.ts                           |   25.00 |   62.16 | 29-46,66-75
+ apps/openomni/src/tools/provision.ts                         |   66.67 |  100.00 | 
+ apps/openomni/src/tools/read.ts                              |   25.00 |   64.86 | 14-17,30-38
+ apps/openomni/src/tools/send-message.ts                      |   80.00 |  100.00 | 
+ apps/openomni/src/tools/write.ts                             |   33.33 |   78.57 | 21-26
+ apps/openomni/test/helpers/anthropic-sse.ts                  |    0.00 |    7.89 | 1-13,17-24,28-37,41-44
+ apps/openomni/test/helpers/app-fixture.ts                    |  100.00 |  100.00 | 
+ apps/openomni/test/helpers/assistant-message.ts              |   75.00 |   91.40 | 106-113
+ apps/openomni/test/helpers/effect.ts                         |   62.50 |   70.00 | 16-18,23-25
+ apps/openomni/test/helpers/generation-services.ts            |   57.14 |   90.48 | 24-25
+ apps/openomni/test/helpers/ledger.ts                         |    0.00 |    6.67 | 26-28,33,38-52,61-114,121-131,140-181
+ apps/openomni/test/helpers/message-fixture.ts                |   81.25 |   97.32 | 83-85
+ apps/openomni/test/helpers/owner-start.ts                    |  100.00 |  100.00 | 
+ apps/openomni/test/helpers/protected-dispatch.ts             |    0.00 |   14.10 | 20-86
+ apps/openomni/test/helpers/resident-suite.ts                 |   87.50 |   85.29 | 49-53,74-78
+ apps/openomni/test/helpers/tool-ports.ts                     |    0.00 |  100.00 | 
+ apps/openomni/test/helpers/ws.ts                             |    0.00 |    8.45 | 12-33,38-49,54-66,72-89
+ packages/agent/src/bundle.ts                                 |   40.48 |   40.48 | 22-24,56,59,73-89,93-97,100-103,106-108,111,114,120,124-131,135-162,175-181,192-194,205-221
+ packages/agent/src/cluster/kernel-registry.ts                |   75.00 |  100.00 | 
+ packages/agent/src/cluster/messages.ts                       |    0.00 |   93.75 | 90-91,107-108,139-140
+ packages/agent/src/cluster/session-entity.ts                 |   60.00 |   57.56 | 79-83,98-103,159-172,191-192,197,220-270,275-282,315-319,322-326,328,330,332,334
+ packages/agent/src/cluster/timers.ts                         |    9.09 |   25.37 | 67-75,84-91,100-103,108-109,114,119-123,162-172,175-184
+ packages/agent/src/compaction/candidate.ts                   |    0.00 |    5.00 | 5-26,30-34,38,42-46,50-59,64-74,78-89,93-102
+ packages/agent/src/compaction/compact.ts                     |   33.33 |    7.83 | 18-22,41-141
+ packages/agent/src/compaction/contract.ts                    |  100.00 |  100.00 | 
+ packages/agent/src/compaction/cut.ts                         |    0.00 |    3.17 | 18-45,49-66,70-106,110-140,144-213,218-240,244-250
+ packages/agent/src/compaction/durable.ts                     |    0.00 |    3.57 | 27-69,73-83,87-105,109-116
+ packages/agent/src/compaction/estimate.ts                    |    0.00 |   10.53 | 10-20,28-32,36-38,42-51,55,59-88,92-99
+ packages/agent/src/compaction/execute-cut.ts                 |    0.00 |    6.45 | 23-24,30-85
+ packages/agent/src/compaction/geometry.ts                    |    0.00 |    0.00 | 21-65
+ packages/agent/src/compaction/index.ts                       |  100.00 |  100.00 | 
+ packages/agent/src/compaction/measure.ts                     |  100.00 |   66.67 | 26-27
+ packages/agent/src/compaction/reduce.ts                      |    0.00 |    0.00 | 41-69,73
+ packages/agent/src/compaction/restore.ts                     |    0.00 |   17.02 | 28-29,35-44,49-53,58-67,76-84,88-90
+ packages/agent/src/compaction/speculate.ts                   |   36.36 |   29.67 | 40-92,100-103,129-134,138
+ packages/agent/src/compaction/successor.ts                   |   16.67 |   27.36 | 36-40,44-53,57-68,72-80,84-115,127-135
+ packages/agent/src/compaction/summary.ts                     |    9.09 |    8.56 | 37-42,44,52-56,64,70-75,89-100,104-124,128-191,201-215,220,224-262
+ packages/agent/src/core/budget.ts                            |   88.89 |   53.50 | 87,115-131,134-146,149-160,165-194
+ packages/agent/src/core/execution/events.ts                  |  100.00 |  100.00 | 
+ packages/agent/src/core/execution/run-events.ts              |   57.14 |   52.21 | 53-69,73-93,126-141
+ packages/agent/src/core/execution/run.ts                     |   87.10 |   84.78 | 87-88,105-107,143-144,175-176,208-210,213-228,239-241,248-250,263
+ packages/agent/src/core/execution/state.ts                   |   57.89 |   60.68 | 10-33,69-74,216,241,252-255,267,279-283,287-290
+ packages/agent/src/core/execution/stop-chain.ts              |   77.78 |   96.08 | 34-35
+ packages/agent/src/core/execution/tool-wave.ts               |   90.00 |   74.03 | 40-52,75-81
+ packages/agent/src/core/execution/tools.ts                   |   60.00 |   58.93 | 17,23,52-59,65-73,87-90
+ packages/agent/src/core/execution/turn-assistant.ts          |   83.33 |  100.00 | 
+ packages/agent/src/core/execution/turn-compaction.ts         |   75.00 |   43.90 | 30-36,40-49,53,67-72,74-75,77-96
+ packages/agent/src/core/execution/turn.ts                    |   69.23 |   75.68 | 59-65,105-109,133-151,225-228,232-238,249-256,265,271-273
+ packages/agent/src/core/message-factory.ts                   |    0.00 |    2.78 | 3-20,24-46,50-66,71-82
+ packages/agent/src/core/policy/reason-codes.ts               |  100.00 |  100.00 | 
+ packages/agent/src/core/retry.ts                             |   20.00 |   62.16 | 23-25,35-38,43,79-84
+ packages/agent/src/errors.ts                                 |    0.00 |   82.35 | 1-5,63
+ packages/agent/src/executor-approval.ts                      |   25.00 |   14.56 | 25-27,30-35,41-77,81-116,122-127
+ packages/agent/src/executor-attempts.ts                      |   69.23 |   57.82 | 17-20,30-31,34,54-78,95-100,140-156,171-177
+ packages/agent/src/executor-context.ts                       |   40.74 |   87.06 | 31-32,49-51,55-58,63-64
+ packages/agent/src/executor-outcome.ts                       |  100.00 |   43.75 | 7-19,23-25,29-39
+ packages/agent/src/executor-raw.ts                           |   75.00 |  100.00 | 
+ packages/agent/src/executor-record.ts                        |   84.62 |   79.33 | 41-55,79-83,106,155-164
+ packages/agent/src/executor-recovery.ts                      |   41.18 |   25.64 | 36,48,53-58,63-72,81,85-121,126-129,134-159,165-181,191-197,205-208,221-222
+ packages/agent/src/executor-stop.ts                          |   88.89 |   90.00 | 42-46,73
+ packages/agent/src/executor.ts                               |   81.82 |   70.77 | 52,95-96,120-136,165-180,190-198,218-226,253-256,292-293,301-303,321-329,339-345,354-357,378-401,414,445-449,466-467,470-472,496-498
+ packages/agent/src/index.ts                                  |  100.00 |  100.00 | 
+ packages/agent/src/layers.ts                                 |  100.00 |  100.00 | 
+ packages/agent/src/model-selection.ts                        |   62.50 |   50.98 | 17-26,61,63-75,77
+ packages/agent/src/observation/bus.ts                        |   66.67 |   66.44 | 25-30,62,75-78,86,88,120-122,130,144-148,153-167,172-176,197,205,209-213,217
+ packages/agent/src/services.ts                               |    0.00 |   38.71 | 8-26
+ packages/agent/src/session-admission.ts                      |   72.97 |   63.55 | 63-71,139-140,164-177,219-226,239-243,246-251,259-260,271-288,292-311,315-331,335-339,349-351
+ packages/agent/src/session-chat-runner.ts                    |  100.00 |   94.59 | 53-54
+ packages/agent/src/session-configuration.ts                  |   66.67 |   49.23 | 45-77
+ packages/agent/src/session-contract.ts                       |   80.00 |   90.00 | 230-231
+ packages/agent/src/session-controller.ts                     |   61.11 |   62.91 | 66,71-75,78-82,87-90,94-96,99-100,103-105,116-117,120,128,135-136,139-140,143-144,151-164,225-228,252-254,273-297,304-311,315-322,326-340,373,376
+ packages/agent/src/session-fold-commit.ts                    |  100.00 |   79.82 | 59-69,72-82
+ packages/agent/src/session-generations.ts                    |   87.50 |   83.50 | 80-82,100-112,120
+ packages/agent/src/session-handle.ts                         |   86.36 |   85.26 | 75-80,114-121
+ packages/agent/src/session-lifecycle/history.ts              |   70.59 |   63.39 | 53,81-83,87-88,92-94,106-119,121-122,146-174,284-285,289-294,302-304,311,321-322,326-336,341-355,370-376,382-402,425
+ packages/agent/src/session-lifecycle/inspect.ts              |    0.00 |    8.18 | 17-59,69-86,91,95,100,104-125,129-134,144,148-149,153-157,161-167,171-177,181-183,187-191,195,199-208,213-220,224-226,244,248-252,256-264,268-290,296-312,316-321,325-329,333-336,340-347,351-356,360,364-379,383,387
+ packages/agent/src/session-message-observation.ts            |  100.00 |  100.00 | 
+ packages/agent/src/session-outbound.ts                       |    0.00 |    4.63 | 14-35,39-45,49-86,91-126
+ packages/agent/src/session-parent-reply.ts                   |   33.33 |   37.50 | 20-34
+ packages/agent/src/session-record.ts                         |   70.00 |   69.33 | 25-66,70,78-79,149-166,280,283-287,295-309,344-345,349-361,415
+ packages/agent/src/session-request.ts                        |   46.00 |   38.72 | 36-39,43-78,120-121,133-136,139-143,147-157,171-174,178-184,195-203,243-260,277-280,284-306,317,322,332-333,413-431,435-438,442-452,456-461,465-482,486-500,504-515,519-522,526-531,535-551,555-559,563-573,577-579,584-596,600-608,615-616,619-620
+ packages/agent/src/session-requests.ts                       |   68.42 |   64.94 | 63-64,107-122,125-129,135-145,195-210,213-223
+ packages/agent/src/session-stop-evidence.ts                  |   77.78 |   98.33 | 37
+ packages/agent/src/session-turn.ts                           |   72.50 |   93.41 | 63-65,142-145,147-148,160-161,226
+ packages/agent/src/tool-body.ts                              |   66.67 |   78.67 | 57-58,73,78-90
+ packages/agent/src/tool-dispatcher.ts                        |   80.33 |   93.03 | 45-46,128-134,415,424,467-473,629-641
+ packages/agent/test/helpers/bounded.ts                       |   60.00 |   93.75 | 21
+ packages/agent/test/helpers/chat-services.ts                 |    0.00 |   38.46 | 12-15,20-23
+ packages/agent/test/helpers/compiled-policy.ts               |   16.67 |   41.89 | 35-43,51-56,61,66-80,85-96
+ packages/agent/test/helpers/effect-g1.ts                     |    0.00 |   22.06 | 18-33,36-46,49-52,55-73,77-79
+ packages/agent/test/helpers/effect-g2.ts                     |    0.00 |   16.09 | 38-53,57-78,82-94,98-125,128,131,134-141,144-156,159-171,174-191,194-214,218-248,252,257-263
+ packages/agent/test/helpers/execution-reads.ts               |    0.00 |    2.15 | 7-14,19-101
+ packages/agent/test/helpers/executor.ts                      |    0.00 |   33.33 | 7-12,17,21-22,27
+ packages/agent/test/helpers/fenced-writer.ts                 |    0.00 |    2.90 | 19-85
+ packages/agent/test/helpers/generation-layer.ts              |    0.00 |   33.33 | 12-15
+ packages/agent/test/helpers/ingress.ts                       |    0.00 |    4.76 | 23-62
+ packages/agent/test/helpers/isolated.ts                      |    0.00 |   15.15 | 27-42,50-51,64-83,88,99-115
+ packages/agent/test/helpers/observation-collector.ts         |    0.00 |    0.00 | 10-20
+ packages/agent/test/helpers/request-ledger.ts                |    0.00 |    9.35 | 16-112
+ packages/agent/test/helpers/run-input.ts                     |    0.00 |    9.09 | 13-22
+ packages/agent/test/helpers/service-layers.ts                |    0.00 |   32.00 | 13-23,27-33,38-44,48,54-61
+ packages/agent/test/helpers/session-services.ts              |    0.00 |   23.19 | 25,30,37-86,90
+ packages/agent/test/helpers/session-tree.ts                  |    0.00 |    0.00 | 5-12
+ packages/channels/src/authn/decision.ts                      |    0.00 |    5.36 | 5-44,48-60
+ packages/channels/src/authn/github.ts                        |    0.00 |    6.38 | 19-26,30-43,47-68
+ packages/channels/src/authn/websocket.ts                     |    0.00 |    5.26 | 25-36,41-44,48-92,96-124
+ packages/channels/src/errors.ts                              |   50.00 |   92.86 | 64-68
+ packages/channels/src/index.ts                               |  100.00 |  100.00 | 
+ packages/channels/src/provider/discord/client.ts             |    0.00 |   10.10 | 19-107
+ packages/channels/src/provider/discord/format.ts             |  100.00 |  100.00 | 
+ packages/channels/src/provider/discord/gateway.ts            |    0.00 |   10.78 | 35-47,61-79,83-84,88-91,95-100,104-140,145-209,214-261,265-276,280
+ packages/channels/src/provider/discord/heartbeat.ts          |    0.00 |   25.93 | 1-2,11-13,16-25,29,33-36
+ packages/channels/src/provider/discord/normalizer.ts         |    0.00 |    7.14 | 6-31
+ packages/channels/src/provider/discord/provider.ts           |    0.00 |   72.73 | 28-33
+ packages/channels/src/provider/discord/surface.ts            |    0.00 |   15.57 | 26-64,68-77,81-87,96-111,115-145
+ packages/channels/src/provider/discord/types.ts              |  100.00 |  100.00 | 
+ packages/channels/src/provider/github/client.ts              |    0.00 |    5.79 | 12-125
+ packages/channels/src/provider/github/provider.ts            |    0.00 |   80.00 | 36-41
+ packages/channels/src/provider/github/surface.ts             |    0.00 |    9.31 | 29-33,45-46,51-61,65-85,107-143,147-157,161-186,190-201,205-303
+ packages/channels/src/provider/github/types.ts               |  100.00 |  100.00 | 
+ packages/channels/src/provider/github/webhook.ts             |    0.00 |    4.76 | 3-22
+ packages/channels/src/provider/registry.ts                   |  100.00 |  100.00 | 
+ packages/channels/src/provider/slack/client.ts               |    0.00 |   11.50 | 27-126
+ packages/channels/src/provider/slack/format.ts               |    0.00 |  100.00 | 
+ packages/channels/src/provider/slack/normalizer.ts           |    0.00 |   10.00 | 14-40
+ packages/channels/src/provider/slack/provider.ts             |    0.00 |   79.31 | 40-45
+ packages/channels/src/provider/slack/socket.ts               |    0.00 |   18.10 | 32-44,48,58,62-88,92-104,108-138
+ packages/channels/src/provider/slack/surface.ts              |    0.00 |   14.78 | 25-34,38-62,66-106,110-112,116-134
+ packages/channels/src/provider/slack/types.ts                |  100.00 |  100.00 | 
+ packages/channels/src/provider/telegram/client.ts            |    0.00 |   14.29 | 32-145
+ packages/channels/src/provider/telegram/format.ts            |  100.00 |  100.00 | 
+ packages/channels/src/provider/telegram/normalizer.ts        |    0.00 |    9.76 | 13-49
+ packages/channels/src/provider/telegram/poller.ts            |    0.00 |   13.43 | 19-23,26-28,32-81
+ packages/channels/src/provider/telegram/provider.ts          |    0.00 |   68.42 | 20-25
+ packages/channels/src/provider/telegram/surface.ts           |    0.00 |   17.14 | 26-30,34-75,79-85,94-126
+ packages/channels/src/provider/telegram/types.ts             |    0.00 |   75.76 | 36-43
+ packages/channels/src/router/actor-resolver.ts               |   60.00 |   43.00 | 10-14,29-80
+ packages/channels/src/router/authority-actor.ts              |  100.00 |   77.78 | 34-37
+ packages/channels/src/router/authority.ts                    |  100.00 |  100.00 | 
+ packages/channels/src/router/blacklist.ts                    |   20.00 |   23.33 | 11,15-29,33-39
+ packages/channels/src/router/channel-grant.ts                |   62.50 |   68.57 | 19-20,32-33,38,70,78-93
+ packages/channels/src/router/effective-tier.ts               |  100.00 |  100.00 | 
+ packages/channels/src/router/external-message.ts             |   42.86 |   94.44 | 36-41
+ packages/channels/src/router/index.ts                        |   73.33 |   88.44 | 18-22,34,52-55,72-77,134,196-201
+ packages/channels/src/router/message-execution.ts            |   83.33 |   84.96 | 102-107,139-152
+ packages/channels/src/router/messaging/admission.ts          |    0.00 |    8.87 | 28-36,40,44-54,58-73,77-99,103-112,116-121,126-162
+ packages/channels/src/router/messaging/authorize.ts          |    0.00 |    2.15 | 18-23,27-72,77-115
+ packages/channels/src/router/messaging/grant.ts              |   16.67 |   20.51 | 28-32,37-39,62-71,83-86,96-104
+ packages/channels/src/router/messaging/reply-grant.ts        |   66.67 |   66.32 | 31-46,111-125,148
+ packages/channels/src/router/messaging/send.ts               |   14.29 |    9.33 | 50-70,75-113,117-157,163-179,183-198,203-204
+ packages/channels/src/router/messaging/social-budget.ts      |    0.00 |    2.38 | 23-26,35-41,50-79
+ packages/channels/src/router/request/correlation.ts          |   25.00 |   70.73 | 28,32-40,45-46
+ packages/channels/src/router/request/matcher.ts              |    0.00 |    4.84 | 26-34,38-45,50-73,89-106
+ packages/channels/src/router/request/native.ts               |   85.71 |   61.76 | 22-26,28-48
+ packages/channels/src/router/request/owner-answer.ts         |    0.00 |    5.56 | 9-76
+ packages/channels/src/router/resolve-route.ts                |   66.67 |   44.44 | 92-105,115-126,128-129,132-160,171-177,181-194,210-216
+ packages/channels/src/router/route-record.ts                 |  100.00 |   28.57 | 14-18,23-27,31-36,38-48,50-55,57-63
+ packages/channels/src/router/routing-execution.ts            |   50.00 |   19.63 | 17-48,54-55,59-68,74-76,91-129
+ packages/channels/src/router/routing-resolution.ts           |   91.67 |   79.65 | 56-71,85-87,89-92,104-108,111-118,145,147,156,182-186,272-273
+ packages/channels/src/router/stores.ts                       |   33.33 |   92.31 | 49
+ packages/channels/src/support/dedupe.ts                      |    0.00 |   17.65 | 9-10,14,18-33,37-45
+ packages/channels/src/support/deliver.ts                     |    0.00 |   23.26 | 29-40,44-49,60-64,69-111
+ packages/channels/src/support/fetch-retry.ts                 |    0.00 |    6.56 | 6,12-67
+ packages/channels/src/support/format/chunk.ts                |    0.00 |    2.13 | 11-102
+ packages/channels/src/support/format/discord.ts              |    0.00 |   50.00 | 10
+ packages/channels/src/support/format/table.ts                |    0.00 |    6.67 | 12,17-19,24-27,32-37,41-44,53-76
+ packages/channels/src/support/format/telegram.ts             |    0.00 |   43.18 | 22,29-30,35-39,45-47,51-52,60-71
+ packages/channels/src/support/handler-frame.ts               |    0.00 |    0.00 | 3-11
+ packages/channels/src/support/inbound-handoff.ts             |    0.00 |    4.35 | 6-27
+ packages/channels/src/support/reconnect-backoff.ts           |    0.00 |    0.00 | 8-10
+ packages/channels/src/support/send-text.ts                   |    0.00 |    5.77 | 5-12,18-58
+ packages/channels/src/support/socket-shell.ts                |    0.00 |    9.09 | 45-54,58-59,64,69-82,87-160,170-202,207,212,217-224,229-234
+ packages/channels/src/support/trace.ts                       |  100.00 |  100.00 | 
+ packages/channels/src/websocket.ts                           |   18.18 |   22.40 | 48-52,66-69,94-107,114-121,124-134,140-181,185-230,235-253
+ packages/codemode/src/errors.ts                              |    0.00 |   84.62 | 1,5
+ packages/codemode/src/failure.ts                             |    0.00 |   33.33 | 4-7
+ packages/codemode/src/index.ts                               |    0.00 |    6.39 | 41-245
+ packages/codemode/src/kernel.ts                              |    0.00 |   30.22 | 293-309,313,317-321,325-355,359-371,375,379-398,402-410
+ packages/ipc/src/callbacks.ts                                |    0.00 |   22.22 | 5-11
+ packages/ipc/src/client.ts                                   |    0.00 |    9.09 | 21-90
+ packages/ipc/src/errors.ts                                   |    0.00 |   84.62 | 1,5
+ packages/ipc/src/failure.ts                                  |    0.00 |   28.57 | 4-8
+ packages/ipc/src/frame-schema.ts                             |    0.00 |    6.45 | 9-12,16-27,31-38,42-46
+ packages/ipc/src/framing.ts                                  |    0.00 |   29.82 | 13,27-29,33-43,47-48,63-84,88
+ packages/ipc/src/index.ts                                    |  100.00 |  100.00 | 
+ packages/ipc/src/peer-request-table.ts                       |    0.00 |   24.29 | 15-21,50,53-62,65-66,69-72,76,80-85,88-101,104-106,109-113
+ packages/ipc/src/server.ts                                   |    0.00 |    5.38 | 13,55-61,65-296,303,308-312
+ packages/ipc/src/typed-call.ts                               |    0.00 |    0.00 | 17-22
+ packages/ledger/src/actor/index.ts                           |   42.86 |   64.37 | 30,40,48-50,65,71,75,85-91,96,105-110,119-127
+ packages/ledger/src/actor/schema.ts                          |  100.00 |  100.00 | 
+ packages/ledger/src/blacklist/index.ts                       |   50.00 |   68.42 | 15-18,22,30
+ packages/ledger/src/channel-grant/index.ts                   |   66.67 |   90.91 | 25,33
+ packages/ledger/src/egress/index.ts                          |   25.00 |   29.63 | 21-24,30,39-52
+ packages/ledger/src/errors.ts                                |    0.00 |   77.78 | 1-2,45-48
+ packages/ledger/src/index.ts                                 |  100.00 |  100.00 | 
+ packages/ledger/src/layers.ts                                |    0.00 |   22.58 | 15-37,42
+ packages/ledger/src/provisioning/index.ts                    |   37.50 |   47.62 | 19-22,36-51,55,63,72-74,78,86,95-97,101,105,109
+ packages/ledger/src/provisioning/vault.ts                    |    6.67 |   12.04 | 1-59,94,98,102,106,110-114,120-127,131-136,140-152
+ packages/ledger/src/reply-grant/index.ts                     |   75.00 |   90.91 | 18
+ packages/ledger/src/services.ts                              |    0.00 |    9.38 | 1-29
+ packages/ledger/src/session/kernel.ts                        |   70.53 |   55.84 | 144-145,157-160,163-178,192-193,221-224,249-250,274,318-324,328-335,410-414,418-422,452-504,508-513,517-539,543-595,611-629,646-666,670-691,699-702,712-715,771,773,784,793-796,798-801,803,807,811,826,828-831
+ packages/ledger/src/storage/atomic-file.ts                   |    0.00 |    9.38 | 18-46
+ packages/ledger/src/storage/catalog-store.ts                 |   77.78 |   88.16 | 35-39,90-93
+ packages/ledger/src/storage/counted-window-claim.ts          |    0.00 |    0.00 | 8-20
+ packages/ledger/src/storage/decision-fact-port.ts            |   66.67 |  100.00 | 
+ packages/ledger/src/storage/index.ts                         |  100.00 |  100.00 | 
+ packages/ledger/src/storage/l0-hash.ts                       |  100.00 |  100.00 | 
+ packages/ledger/src/storage/schema-catalog.ts                |  100.00 |  100.00 | 
+ packages/ledger/src/storage/schema-session-file.ts           |  100.00 |  100.00 | 
+ packages/ledger/src/storage/session-store.ts                 |   88.89 |  100.00 | 
+ packages/ledger/src/storage/sqlite-action-reads.ts           |   71.43 |   68.21 | 88-95,98-105,108-116,119-126,143-150,244-250
+ packages/ledger/src/storage/sqlite-actor-registry-adapter.ts |   63.64 |   70.73 | 42,87-95,98,101-113
+ packages/ledger/src/storage/sqlite-blacklist-adapter.ts      |   40.00 |   34.21 | 9-12,15-34,42
+ packages/ledger/src/storage/sqlite-channel-grant-adapter.ts  |   80.00 |   96.97 | 46
+ packages/ledger/src/storage/sqlite-decision-facts.ts         |   80.00 |   95.45 | 26-27
+ packages/ledger/src/storage/sqlite-egress-budget-adapter.ts  |   33.33 |   28.57 | 29-48,53-92
+ packages/ledger/src/storage/sqlite-json-data.ts              |  100.00 |  100.00 | 
+ packages/ledger/src/storage/sqlite-l0-actions.ts             |   53.85 |   56.94 | 22-25,84-92,95-115,118,140-141,147-171
+ packages/ledger/src/storage/sqlite-l0-observation.ts         |   66.67 |   43.59 | 27,39-50,61-67,70-93
+ packages/ledger/src/storage/sqlite-l0-policies.ts            |   71.43 |   98.15 | 21
+ packages/ledger/src/storage/sqlite-l0-rows.ts                |  100.00 |  100.00 | 
+ packages/ledger/src/storage/sqlite-l0-sessions.ts            |   81.25 |   82.69 | 35-38,49-55,68,87-88,103-106
+ packages/ledger/src/storage/sqlite-l0-write.ts               |   90.91 |   88.00 | 165,168,173-174,193-194,226-243
+ packages/ledger/src/storage/sqlite-provisioning-adapter.ts   |   21.43 |   31.15 | 26-34,42-44,48-57,65,68-71,75-93,101,104-111,114-131,134-143,146
+ packages/ledger/src/storage/sqlite-reply-grant-adapter.ts    |   60.00 |   58.33 | 8-9,53-80
+ packages/ledger/src/storage/sqlite-surface-key-adapter.ts    |   80.00 |   68.75 | 16-17,20,36,50-55
+ packages/ledger/src/storage/timestamped-store.ts             |  100.00 |  100.00 | 
+ packages/ledger/src/storage/write-effect.ts                  |  100.00 |  100.00 | 
+ packages/ledger/src/surface-key/index.ts                     |   80.00 |   94.44 | 37
+ packages/ledger/test/helpers/session-tree.ts                 |    0.00 |    0.00 | 4-15
+ packages/llm/src/auth/index.ts                               |  100.00 |  100.00 | 
+ packages/llm/src/auth/storage.ts                             |   12.50 |   33.33 | 14-15,18-32,41-50,54-55,59,62,66-78
+ packages/llm/src/error.ts                                    |    0.00 |   60.00 | 10,13,16-20,33-35,44-49
+ packages/llm/src/errors.ts                                   |    0.00 |   95.74 | 1,5
+ packages/llm/src/index.ts                                    |  100.00 |  100.00 | 
+ packages/llm/src/layers.ts                                   |  100.00 |  100.00 | 
+ packages/llm/src/message/index.ts                            |    0.00 |    2.86 | 24-34,38-51,55-65,80-86,91-100,106-123,127-145,149-154,158-163
+ packages/llm/src/model/index.ts                              |  100.00 |  100.00 | 
+ packages/llm/src/model/loader.ts                             |   25.00 |   28.21 | 10,13-36,43-45
+ packages/llm/src/model/schema.ts                             |    0.00 |   77.78 | 23-26,46-51
+ packages/llm/src/model/select.ts                             |   50.00 |  100.00 | 
+ packages/llm/src/processor/event-schema.ts                   |    0.00 |  100.00 | 
+ packages/llm/src/processor/index.ts                          |   14.29 |    6.10 | 26-167,171-184,188-218,221-225,228-233,236-237
+ packages/llm/src/processor/normalize.ts                      |    0.00 |    0.00 | 5-11,15-34,39-58
+ packages/llm/src/processor/stream-events.ts                  |    0.00 |    2.53 | 61-67,79-89,94-100,104-172,178-192,196-203,207-221,225-233,237-255,264-268,272-349,363-389
+ packages/llm/src/processor/tool-events.ts                    |    0.00 |    6.80 | 9,13-18,22-32,36-62,66-125,129-141,155-173
+ packages/llm/src/provider/identity.ts                        |    0.00 |   80.00 | 22
+ packages/llm/src/provider/index.ts                           |   25.00 |   34.83 | 35-48,52-58,65-101
+ packages/llm/src/provider/proxy-models.ts                    |    0.00 |   14.93 | 20-22,26-28,35-72,76-88
+ packages/llm/src/provider/sdk.ts                             |    0.00 |   15.97 | 65-71,76-83,92,100-106,110-114,118-145,149-157,161-171,175-191,195-199,203-212,216-228
+ packages/llm/src/provider/stream.ts                          |    0.00 |   14.08 | 19-30,36-42,46-79,88-95
+ packages/llm/src/provider/transform.ts                       |    7.69 |   11.38 | 10-14,18,22-58,75-89,99-102,106-110,114-118,122,136,140-158,162-171,176-181
+ packages/llm/src/retry/delay.ts                              |    0.00 |    7.69 | 6-9,13-14,18-20,24-25,29-33,37-40,46-49
+ packages/llm/src/retry/index.ts                              |    3.33 |   38.40 | 34-37,42-45,49-53,61-70,94-96,101,127-132,143-156,161-168,174-179,183-192,196-211,222-226,231,240,244-250,254-255,259-261,265-269,279-280,298-304,322-327,331,335-336,340-343,347,351-355,360-363,368-370
+ packages/llm/src/retry/telemetry.ts                          |    0.00 |    2.44 | 5-44
+ packages/llm/src/run.ts                                      |    0.00 |    5.58 | 118-134,145-153,157-163,167-336
+ packages/llm/src/services.ts                                 |    0.00 |   28.57 | 1-5
+ packages/llm/src/token/index.ts                              |   33.33 |   17.39 | 13-14,31-77,82,87-93
+ packages/llm/src/token/schema.ts                             |    0.00 |   85.71 | 22-29
+ packages/machines/src/daemon.ts                              |    0.00 |    7.46 | 32-38,43-159
+ packages/machines/src/errors.ts                              |    0.00 |   96.00 | 6
+ packages/machines/src/exec.ts                                |    0.00 |   14.58 | 11-51
+ packages/machines/src/failure.ts                             |    0.00 |   28.57 | 4-8
+ packages/machines/src/fs.ts                                  |    0.00 |    7.51 | 72,88,92-98,102-109,113,117,121,125,129-131,135-156,160-166,170-171,175-180,184-187,193-225,229-236,240-314,318-319,331-414,418-443,447-463,473,477-490,494-513,517-526,530-539,543-608
+ packages/machines/src/host.ts                                |    0.00 |    4.49 | 47-195
+ packages/machines/src/index.ts                               |  100.00 |  100.00 | 
+ packages/policy/src/index.ts                                 |  100.00 |  100.00 | 
+ packages/policy/src/message-match.ts                         |  100.00 |   97.67 | 77
+ packages/policy/src/named-registry.ts                        |   75.00 |   53.52 | 54-86
+ packages/policy/src/permission-evaluate.ts                   |    0.00 |    3.75 | 10-12,16-23,29-41,45-52,56-79,83-109,113-134,138-153,157-189
+ packages/policy/src/plain.ts                                 |  100.00 |  100.00 | 
+ packages/policy/src/row-compiler.ts                          |   72.22 |   64.42 | 57,61-76,81-95,208-214,217-223,227-233,242-249,264-270,288-299,303-309,361-365,404-406,409-411,414-417,427-430,495-499,515-536,546-581
+ packages/protocol/dist/actor/index.js                        |   20.00 |   99.29 | 151
+ packages/protocol/dist/app-connector/definition.js           |  100.00 |  100.00 | 
+ packages/protocol/dist/app-connector/index.js                |  100.00 |  100.00 | 
+ packages/protocol/dist/app-connector/installation.js         |    0.00 |  100.00 | 
+ packages/protocol/dist/bus/index.js                          |  100.00 |  100.00 | 
+ packages/protocol/dist/channel/index.js                      |   83.33 |   54.55 | 44,57,71,76-97
+ packages/protocol/dist/deadline/index.js                     |   33.33 |   77.78 | 13,18
+ packages/protocol/dist/error/index.js                        |   28.57 |   49.15 | 19-20,30-46,49-54,57,60-63
+ packages/protocol/dist/event/component.js                    |  100.00 |  100.00 | 
+ packages/protocol/dist/event/ingress.js                      |   50.00 |   91.78 | 75-80
+ packages/protocol/dist/event/llm.js                          |  100.00 |  100.00 | 
+ packages/protocol/dist/event/mcp.js                          |  100.00 |  100.00 | 
+ packages/protocol/dist/event/operational.js                  |   66.67 |   96.15 | 17
+ packages/protocol/dist/event/policy.js                       |  100.00 |  100.00 | 
+ packages/protocol/dist/event/tool.js                         |  100.00 |  100.00 | 
+ packages/protocol/dist/gateway/events.js                     |  100.00 |  100.00 | 
+ packages/protocol/dist/gateway/index.js                      |  100.00 |  100.00 | 
+ packages/protocol/dist/gateway/message.js                    |  100.00 |  100.00 | 
+ packages/protocol/dist/gateway/schema.js                     |   66.67 |   80.25 | 143-147,150-154,156-162,311-341
+ packages/protocol/dist/index.js                              |  100.00 |  100.00 | 
+ packages/protocol/dist/ingress/index.js                      |   60.00 |   85.62 | 50-63,204-206,223-228
+ packages/protocol/dist/ingress/route-record.js               |   57.14 |   55.00 | 29,33,42-48
+ packages/protocol/dist/ipc/index.js                          |   20.00 |   94.29 | 84,88,92,96
+ packages/protocol/dist/json.js                               |   75.00 |   77.67 | 52-56,78,86-87,106,116,126-138
+ packages/protocol/dist/ledger/index.js                       |  100.00 |  100.00 | 
+ packages/protocol/dist/ledger/l0.js                          |   62.50 |   94.34 | 343-358,493-494,528-541,566
+ packages/protocol/dist/ledger/schema.js                      |  100.00 |  100.00 | 
+ packages/protocol/dist/ledger/session-history.js             |   33.33 |   87.43 | 24-44
+ packages/protocol/dist/ledger/session-transition.js          |   66.67 |   94.62 | 80-84,94-98
+ packages/protocol/dist/ledger/streams.js                     |  100.00 |  100.00 | 
+ packages/protocol/dist/machine/events.js                     |  100.00 |  100.00 | 
+ packages/protocol/dist/machine/fold.js                       |    0.00 |    7.14 | 1-2,10-21,30-41
+ packages/protocol/dist/machine/index.js                      |  100.00 |  100.00 | 
+ packages/protocol/dist/machine/schema.js                     |    0.00 |   96.96 | 56-58,62-64,101,263
+ packages/protocol/dist/mcp/index.js                          |  100.00 |  100.00 | 
+ packages/protocol/dist/message/index.js                      |  100.00 |  100.00 | 
+ packages/protocol/dist/model/index.js                        |  100.00 |  100.00 | 
+ packages/protocol/dist/policy/definition.js                  |  100.00 |  100.00 | 
+ packages/protocol/dist/policy/effects.js                     |   33.33 |  100.00 | 
+ packages/protocol/dist/policy/index.js                       |   33.33 |   78.26 | 50-59,62,66,70,74,78
+ packages/protocol/dist/policy/permission.js                  |   20.00 |    5.45 | 4-107
+ packages/protocol/dist/policy/policy-point.js                |   50.00 |  100.00 | 
+ packages/protocol/dist/policy/resource.js                    |   50.00 |   62.88 | 86-134
+ packages/protocol/dist/policy/row-verdict.js                 |   33.33 |   83.87 | 43-48,58-61
+ packages/protocol/dist/provisioning/index.js                 |  100.00 |  100.00 | 
+ packages/protocol/dist/provisioning/schema.js                |  100.00 |  100.00 | 
+ packages/protocol/dist/storage/index.js                      |  100.00 |  100.00 | 
+ packages/protocol/dist/time.js                               |  100.00 |  100.00 | 
+ packages/protocol/dist/token/index.js                        |  100.00 |  100.00 | 
+ packages/protocol/dist/tool/index.js                         |   25.00 |   89.80 | 19-23,29-31,133-134
+ packages/protocol/dist/tool/result.js                        |  100.00 |  100.00 | 
+ packages/protocol/dist/trace/index.js                        |  100.00 |  100.00 | 
+ packages/protocol/dist/transcript/fold.js                    |    0.00 |    4.62 | 44,48,51-113,122-130,135-144,158-215,226-248
+ packages/protocol/dist/transcript/index.js                   |  100.00 |  100.00 | 
+ packages/protocol/dist/transcript/schema.js                  |  100.00 |  100.00 | 
+ packages/protocol/src/actor/index.ts                         |   20.00 |   82.76 | 158-182
+ packages/protocol/src/app-connector/definition.ts            |  100.00 |  100.00 | 
+ packages/protocol/src/app-connector/index.ts                 |  100.00 |  100.00 | 
+ packages/protocol/src/app-connector/installation.ts          |    0.00 |  100.00 | 
+ packages/protocol/src/bus/index.ts                           |  100.00 |  100.00 | 
+ packages/protocol/src/channel/index.ts                       |   50.00 |   28.85 | 84-86,97-101,112-116,120-143
+ packages/protocol/src/deadline/index.ts                      |   33.33 |   60.00 | 12,17
+ packages/protocol/src/error/index.ts                         |   28.57 |   44.64 | 23-24,41-59,63-67,71,75-78
+ packages/protocol/src/event/component.ts                     |  100.00 |  100.00 | 
+ packages/protocol/src/event/ingress.ts                       |   50.00 |   93.24 | 86-90
+ packages/protocol/src/event/llm.ts                           |  100.00 |  100.00 | 
+ packages/protocol/src/event/mcp.ts                           |  100.00 |  100.00 | 
+ packages/protocol/src/event/operational.ts                   |   66.67 |   85.71 | 29-32
+ packages/protocol/src/event/policy.ts                        |  100.00 |  100.00 | 
+ packages/protocol/src/event/tool.ts                          |  100.00 |  100.00 | 
+ packages/protocol/src/gateway/events.ts                      |  100.00 |  100.00 | 
+ packages/protocol/src/gateway/index.ts                       |  100.00 |  100.00 | 
+ packages/protocol/src/gateway/message.ts                     |  100.00 |  100.00 | 
+ packages/protocol/src/gateway/schema.ts                      |   33.33 |   77.18 | 150-173,330-360
+ packages/protocol/src/index.ts                               |  100.00 |  100.00 | 
+ packages/protocol/src/ingress/index.ts                       |   20.00 |   78.18 | 57-69,268-273,277-281,299-310
+ packages/protocol/src/ingress/route-record.ts                |    0.00 |    8.33 | 24-50,60,65-69,79-89
+ packages/protocol/src/ipc/index.ts                           |   20.00 |   71.79 | 93-114
+ packages/protocol/src/json.ts                                |   75.00 |   76.47 | 25,67-70,93,104-105,121,131,142-151
+ packages/protocol/src/ledger/index.ts                        |  100.00 |  100.00 | 
+ packages/protocol/src/ledger/l0.ts                           |   68.75 |   95.00 | 428-433,438-443,607-609,650-662,693
+ packages/protocol/src/ledger/schema.ts                       |  100.00 |  100.00 | 
+ packages/protocol/src/ledger/session-history.ts              |   66.67 |   93.37 | 29-34,41-45
+ packages/protocol/src/ledger/session-transition.ts           |   33.33 |   82.80 | 79-110
+ packages/protocol/src/ledger/streams.ts                      |  100.00 |  100.00 | 
+ packages/protocol/src/machine/events.ts                      |  100.00 |  100.00 | 
+ packages/protocol/src/machine/fold.ts                        |    0.00 |    6.45 | 3-4,28-39,63-77
+ packages/protocol/src/machine/index.ts                       |  100.00 |  100.00 | 
+ packages/protocol/src/machine/schema.ts                      |    0.00 |   95.64 | 69-71,76-78,118-121,303-304
+ packages/protocol/src/mcp/index.ts                           |  100.00 |  100.00 | 
+ packages/protocol/src/message/index.ts                       |  100.00 |  100.00 | 
+ packages/protocol/src/model/index.ts                         |  100.00 |  100.00 | 
+ packages/protocol/src/policy/definition.ts                   |  100.00 |  100.00 | 
+ packages/protocol/src/policy/effects.ts                      |   33.33 |   99.20 | 6
+ packages/protocol/src/policy/index.ts                        |   33.33 |   68.18 | 87-99,103,107,111,115,119-122
+ packages/protocol/src/policy/permission.ts                   |   20.00 |    2.29 | 4-131
+ packages/protocol/src/policy/policy-point.ts                 |   50.00 |  100.00 | 
+ packages/protocol/src/policy/resource.ts                     |   50.00 |   59.12 | 89-144
+ packages/protocol/src/policy/row-verdict.ts                  |   33.33 |   84.85 | 50-55,65-68
+ packages/protocol/src/provisioning/index.ts                  |  100.00 |  100.00 | 
+ packages/protocol/src/provisioning/schema.ts                 |  100.00 |  100.00 | 
+ packages/protocol/src/storage/index.ts                       |  100.00 |  100.00 | 
+ packages/protocol/src/time.ts                                |  100.00 |  100.00 | 
+ packages/protocol/src/token/index.ts                         |  100.00 |  100.00 | 
+ packages/protocol/src/tool/index.ts                          |   25.00 |   88.17 | 53-58,65-67,204-205
+ packages/protocol/src/tool/result.ts                         |  100.00 |  100.00 | 
+ packages/protocol/src/trace/index.ts                         |    0.00 |    0.00 | 5
+ packages/protocol/src/transcript/fold.ts                     |    0.00 |    4.40 | 54,59,63-125,135-143,149-161,176-236,248-273
+ packages/protocol/src/transcript/index.ts                    |  100.00 |  100.00 | 
+ packages/protocol/src/transcript/schema.ts                   |  100.00 |  100.00 | 
+--------------------------------------------------------------|---------|---------|-------------------
+
+ 1 pass
+ 4 fail
+ 11 expect() calls
+Ran 5 tests across 1 file. [60.57s]

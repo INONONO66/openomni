@@ -1,10 +1,9 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { Effect } from "effect";
 import { expect, spyOn, test } from "bun:test";
-import { isolated } from "./helpers/isolated";
-import { allowConfigure } from "./helpers/session-services";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+import { allowConfigure, isolatedRuntime } from "./helpers/session-services";
 import { openRequest } from "./helpers/open-request";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
 import type { SessionTransition } from "@openomni/protocol";
 import { commitSessionRequest } from "../src/session-admission";
 
@@ -45,12 +44,13 @@ function pending(id: string) {
 
 function open(request: SessionTransition.Request) {
   return commitSessionRequest(
+    isolatedLedger().kernel,
     request.sessionId,
     { owner: `${request.sessionId}:owner`, fence: 1 },
     { kind: "request.open", request },
     `${request.requestId}:open`,
     100,
-    { authorizeConfigure: allowConfigure },
+    { authorizeConfigure: allowConfigure, ...isolatedRuntime() },
   );
 }
 
@@ -59,8 +59,8 @@ test("admission carries its observed count into the real SQLite transaction", ()
     Effect.gen(function* () {
       const first = yield* pending("first");
       const second = yield* pending("second");
-      const sessions = Storage.get().sessions;
-      if (sessions === undefined) throw new Error("missing session adapter");
+      const kernel = isolatedLedger().kernel;
+      const sessions = isolatedLedger().session.sessions;
       const commit = sessions.commit;
       let interleaved = false;
       const intercepted = spyOn(sessions, "commit").mockImplementation(
@@ -74,16 +74,16 @@ test("admission carries its observed count into the real SQLite transaction", ()
           }),
       );
       try {
-        const before = SessionHandleStore.row(first.sessionId);
-        const actions = sessionTree(first.sessionId);
+        const before = kernel.row(first.sessionId);
+        const actions = sessionTree(kernel, first.sessionId);
         expect(yield* Effect.flip(open(first))).toMatchObject({
           _tag: "CommitFailed",
           error: { _tag: "CommitRefused" },
         });
-        expect(SessionHandleStore.row(first.sessionId)).toEqual(before);
-        expect(sessionTree(first.sessionId)).toEqual(actions);
+        expect(kernel.row(first.sessionId)).toEqual(before);
+        expect(sessionTree(kernel, first.sessionId)).toEqual(actions);
         expect(
-          SessionHandleStore.requestRows().map(
+          kernel.requestRows().map(
             (request: SessionTransition.Request) => request.requestId,
           ),
         ).toEqual([second.requestId]);

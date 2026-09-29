@@ -1,25 +1,78 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
-import { isolated } from "./helpers/isolated";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
-import { session, closeSessions, sweepSessions, wakeSession, type SessionRunner } from "../src/session-handle";
-import { canonicalDigest, type LedgerSession } from "@openomni/protocol";
+import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { session, closeSessions, type SessionRunner } from "../src/session-handle";
+import { resolveSessionRuntime } from "../src/session-contract";
+import { createController } from "../src/session-controller";
+import { createObservationBus } from "../src/observation/bus";
+import { canonicalDigest } from "@openomni/protocol";
 import { createSessionRequests } from "../src/session-requests";
 import { fileRequest, planeAnswer } from "./helpers/session-request-plane";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+/**
+ * File-backed isolation (W5.2): the Storage singleton is gone, so reopen is a
+ * store close + fresh open over the same SQLite files, behind the isolation's
+ * lazy `isolatedLedger()` pointer.
+ */
+function reopenableLedger(): IsolatedLedgerHandle & { readonly reopen: () => void } {
+  const directory = mkdtempSync(join(tmpdir(), "outbound-restart-"));
+  const bus = createObservationBus();
+  const open = () => {
+    const sessionStore = openSessionStore(join(directory, "ledger.sqlite"), bus);
+    const catalog = openCatalogStore(join(directory, "catalog.sqlite"), bus);
+    return { sessionStore, catalog, kernel: SessionHandleStore.createSessionKernel(sessionStore, catalog) };
+  };
+  let current = open();
+  return {
+    get kernel() { return current.kernel; },
+    openKernel: () => current.kernel,
+    listSessions: () => current.kernel.listRows(),
+    get session() { return current.sessionStore; },
+    get catalog() { return current.catalog; },
+    bus,
+    reopen: () => {
+      current.sessionStore.close();
+      current.catalog.close();
+      current = open();
+    },
+    close: () => {
+      current.sessionStore.close();
+      current.catalog.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * The deleted Storage-era wake/sweep equivalent (W5.2): recovery is a
+ * fresh activation over the isolation's kernel driving its reconcile.
+ */
+function wake(id: string, runner: SessionRunner, fixture: SessionFixture) {
+  return withSessionServices(Effect.gen(function* () {
+    const resolved = yield* resolveSessionRuntime(fixture);
+    const scope = yield* Effect.scope;
+    const controller = yield* createController(
+      isolatedLedger().kernel, id, runner, resolved,
+      { reactivate: () => Effect.die(new Error("no reactivation in outbound tests")), release: () => undefined },
+      scope,
+    );
+    yield* controller.reconcile();
+  }), fixture);
+}
+
 /** The parent's pending commission answered by the child's outbound reply. */
 function appendCommission(): void {
-  const actions = Storage.get().actions;
-  if (actions === undefined) throw new Error("missing action adapter");
-  actions.append(
+  const { session: store, kernel } = isolatedLedger();
+  const receipt = store.actions.append(
     {
       id: "commission-action",
       parentId: null,
@@ -33,8 +86,9 @@ function appendCommission(): void {
       ts: 100,
       irreversible: true,
     },
-    SessionHandleStore.row("parent").revision,
+    kernel.row("parent").revision,
   );
+  if (receipt === undefined) throw new Error("commission append refused");
 }
 const origin = {
   encodingVersion: 1 as const,
@@ -66,28 +120,30 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
           observations: { publish: () => undefined },
           authorizeConfigure: allowConfigure,
           clock: () => 100,
+          ...isolatedRuntime(),
           dispatchOutbound: () => Effect.fail(foreign("receiver", "unavailable")),
         };
         seedPolicy();
         yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
         yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
         const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "child", parentId: "parent", role: "worker", runner: childRunner }, fixture), fixture); });
-        const before = sessionTree("parent");
+        const kernel = isolatedLedger().kernel;
+        const before = sessionTree(kernel, "parent");
         expect(yield* failure(child.prompt("work", origin))).toMatchObject({
           _tag: "ForeignFailure",
           operation: "receiver",
           cause: "unavailable",
         });
-        expect(sessionTree("parent")).toEqual(before);
-        expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
-        const source = sessionTree("child");
+        expect(sessionTree(kernel, "parent")).toEqual(before);
+        expect(kernel.pendingMessages("parent")).toEqual([]);
+        const source = sessionTree(kernel, "child");
         expect(
           source.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
               SessionHandleStore.turnTerminal(action) !== undefined,
           ),
         ).toHaveLength(1);
-        const obligations = SessionHandleStore.outboundRows("child");
+        const obligations = kernel.outboundRows("child");
         expect(obligations).toHaveLength(1);
         expect(obligations[0]?.state).toBe("pending");
         expect(obligations[0]?.message.content).toBe("child answer");
@@ -95,16 +151,14 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
     ),
   ));
 
-test("restart after receiving commit reconciles exact bytes without dispatch or receiver execution", () =>
-  isolated(
+test("restart after receiving commit reconciles exact bytes without dispatch or receiver execution", () => {
+  const ledger = reopenableLedger();
+  return isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        Storage.reset();
-        const directory = mkdtempSync(join(tmpdir(), "source-obligation-"));
-        const dbPath = join(directory, "ledger.sqlite");
-        Storage.initialize({ dbPath });
         seedPolicy();
         const scope = yield* Effect.scope;
+        const kernel = () => isolatedLedger().kernel;
         let consumed = 0;
         const receive: SessionRunner = () =>
           Effect.sync(() => {
@@ -112,18 +166,21 @@ test("restart after receiving commit reconciles exact bytes without dispatch or 
             return { kind: "result" as const, text: "received" };
           });
         const sent: string[] = [];
+        const messageIds: string[] = [];
         function runtime(at: number, loseAck: boolean): SessionRuntime {
           const value: SessionRuntime = {
             observations: { publish: () => undefined },
             authorizeConfigure: allowConfigure,
             clock: () => at,
+            ...isolatedRuntime(),
             dispatchOutbound: ({
               message,
             }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
               Effect.gen(function* () {
                 sent.push(JSON.stringify(message));
+                messageIds.push(message.messageId);
                 const received = yield* receiveOutbound(message, at);
-                yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(wakeSession(message.destinationSessionId, receive, fixture), fixture); }).pipe(
+                yield* wake(message.destinationSessionId, receive, value).pipe(
                   Effect.provideService(Scope.Scope, scope),
                   Effect.orDie,
                 );
@@ -134,42 +191,46 @@ test("restart after receiving commit reconciles exact bytes without dispatch or 
           return value;
         }
         let current = runtime(100, true);
-        try {
-          yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: receive }, fixture), fixture); });
-          appendCommission();
-          const child = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({
-              id: "child",
-              parentId: "parent",
-              role: "worker",
-              runner: () => Effect.succeed({ kind: "result", text: "exact answer" }),
-            }, fixture), fixture); });
-          expect(yield* failure(child.prompt("work", origin))).toMatchObject({
-            _tag: "ForeignFailure",
-            operation: "source.ack",
-            cause: "lost",
-          });
-          expect(consumed).toBe(1);
-          const parentBefore = sessionTree("parent");
-          expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("pending");
-          yield* closeSessions(current);
-          Storage.reset();
-          Storage.initialize({ dbPath });
-          current = runtime(200, false);
-          yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(sweepSessions((row: LedgerSession.Row) =>
-              row.id === "parent" ? receive : () => Effect.die(new Error("sealed child replayed")), fixture), fixture); });
-          expect(sent).toHaveLength(1);
-          expect(consumed).toBe(1);
-          expect(sessionTree("parent")).toEqual(parentBefore);
-          expect(SessionHandleStore.inboxRows("parent")).toHaveLength(1);
-          expect(SessionHandleStore.outboundRows("child")[0]?.state).toBe("delivered");
-        } finally {
-          yield* closeSessions(current);
-          Storage.reset();
-          rmSync(directory, { recursive: true, force: true });
-        }
+        // The parent is durable only: a live parent handle would hold the fence
+        // the recovery activation must adopt.
+        yield* kernel().materialize({
+          id: "parent", parentId: null, role: "resident", tools: [],
+          system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "parent-init", at: 100,
+        });
+        appendCommission();
+        const child = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({
+            id: "child",
+            parentId: "parent",
+            role: "worker",
+            runner: () => Effect.succeed({ kind: "result", text: "exact answer" }),
+          }, fixture), fixture); });
+        expect(yield* failure(child.prompt("work", origin))).toMatchObject({
+          _tag: "ForeignFailure",
+          operation: "source.ack",
+          cause: "lost",
+        });
+        expect(consumed).toBe(1);
+        const parentBefore = sessionTree(kernel(), "parent");
+        expect(kernel().outboundRows("child")[0]?.state).toBe("pending");
+        yield* closeSessions(current);
+        ledger.reopen();
+        current = runtime(200, false);
+        // The startup sweep is gone with the Storage singleton: recovery is a
+        // fresh activation over the reopened kernel driving its reconcile. The
+        // receiver's durable commit is the proof; a sealed child never replays.
+        yield* wake("child", () => Effect.die(new Error("sealed child replayed")), current);
+        expect(sent).toHaveLength(1);
+        expect(consumed).toBe(1);
+        expect(sessionTree(kernel(), "parent")).toEqual(parentBefore);
+        // Delivered exactly once: the message is one chain action in the parent.
+        expect(sessionTree(kernel(), "parent").filter(({ id }) => id === messageIds[0])).toHaveLength(1);
+        expect(kernel().outboundRows("child")[0]?.state).toBe("delivered");
+        yield* closeSessions(current);
       }),
     ),
-  ));
+    () => ledger,
+  );
+});
 
 test("a destination receipt for different bytes is refused and the obligation stays pending", () =>
   isolated(
@@ -179,6 +240,7 @@ test("a destination receipt for different bytes is refused and the obligation st
           observations: { publish: () => undefined },
           authorizeConfigure: allowConfigure,
           clock: () => 100,
+          ...isolatedRuntime(),
           dispatchOutbound: ({
             message,
           }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
@@ -190,9 +252,10 @@ test("a destination receipt for different bytes is refused and the obligation st
             ),
         });
         expect(yield* failure(prompted)).toBeInstanceOf(Error);
-        expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+        const kernel = isolatedLedger().kernel;
+        expect(kernel.outboundRows("child")).toMatchObject([{ state: "pending" }]);
         expect(
-          SessionHandleStore.inboxRows("parent").map(
+          kernel.pendingMessages("parent").map(
             (row: import("@openomni/protocol").Inbox.Row) => row.content,
           ),
         ).toEqual(["tampered answer"]);
@@ -200,7 +263,9 @@ test("a destination receipt for different bytes is refused and the obligation st
     ),
   ));
 
-test("a lease stolen during dispatch preserves both the ack failure and the release defect", () =>
+// W5.2: the lease-release plane is gone, so a steal surfaces exactly one
+// stale-fence refusal (the ack commit); there is no release defect anymore.
+test("a fence stolen during dispatch surfaces the ack refusal and never marks delivery", () =>
   isolated(
     Effect.scoped(
       Effect.gen(function* () {
@@ -208,16 +273,18 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
           observations: { publish: () => undefined },
           authorizeConfigure: allowConfigure,
           clock: () => 100,
+          ...isolatedRuntime(),
           dispatchOutbound: ({
             message,
           }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
             Effect.gen(function* () {
-              yield* SessionHandleStore.acquireLease({
+              // W5.2: the lease-TTL plane is gone; a foreign adoption of a
+              // strictly newer fence is the steal.
+              const kernel = isolatedLedger().kernel;
+              yield* kernel.adoptFence({
                 sessionId: message.sourceSessionId,
                 owner: "other-runtime",
-                expectedFence: SessionHandleStore.row(message.sourceSessionId).leaseFence,
-                now: 100 + SessionHandleStore.LEASE_TTL_MS,
-                expiresAt: 100 + 2 * SessionHandleStore.LEASE_TTL_MS,
+                fence: kernel.row(message.sourceSessionId).leaseFence + 1,
               }).pipe(Effect.orDie);
               return (yield* receiveOutbound(message, 100)).receipt;
             }),
@@ -233,13 +300,10 @@ test("a lease stolen during dispatch preserves both the ack failure and the rele
             _tag: "CommitFailed",
             error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
           },
-          {
-            _tag: "CommitFailed",
-            error: { _tag: "CommitRefused", reason: "fence", sessionId: "child" },
-          },
         ]);
-        expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "pending" }]);
-        expect(SessionHandleStore.row("child").leaseOwner).toBe("other-runtime");
+        const kernel = isolatedLedger().kernel;
+        expect(kernel.outboundRows("child")).toMatchObject([{ state: "pending" }]);
+        expect(kernel.row("child").leaseOwner).toBe("other-runtime");
       }),
     ),
   ));
@@ -250,64 +314,84 @@ test("outbound insert failure rolls back the source terminal in the same SQLite 
     BEGIN SELECT RAISE(ABORT, 'test outbound fault'); END`);
   const runtime: SessionFixture = {
     authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => 100,
+    ...isolatedRuntime(),
     dispatchOutbound: () => Effect.die("dispatch before durable obligation"),
   };
   expect(yield* Effect.flip(commissionedChild(runtime))).toMatchObject({ _tag: "CommitFailed", error: { _tag: "ForeignFailure" } });
-  expect(sessionTree("child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toEqual([]);
-  expect(SessionHandleStore.outboundRows("child")).toEqual([]);
-  expect(SessionHandleStore.inboxRows("parent")).toEqual([]);
-  expect(SessionHandleStore.latestOpenTurn("child")).toBeDefined();
+  const kernel = isolatedLedger().kernel;
+  expect(sessionTree(kernel, "child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toEqual([]);
+  expect(kernel.outboundRows("child")).toEqual([]);
+  expect(kernel.pendingMessages("parent")).toEqual([]);
+  expect(kernel.latestOpenTurn("child")).toBeDefined();
   yield* closeSessions(runtime);
 })));
 
-test("a child answers the original request once and reconciles a lost ACK after SQLite reopen", () => fileRequest((dbPath) => Effect.gen(function* () {
-  seedPolicy();
-  let received = 0;
-  let sends = 0;
-  let childBodies = 0;
-  const scope = yield* Effect.scope;
-  const receive: SessionRunner = () => Effect.sync(() => {
-    received += 1;
-    return { kind: "result" as const, text: "received" };
-  });
-  const runtime: SessionFixture = {
-    authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => 100,
-    dispatchOutbound: ({ message }) => Effect.gen(function* () {
-      sends += 1;
-      const request = SessionHandleStore.requestById(message.requestId);
-      if (request === undefined) throw new Error("request missing");
-      const port = yield* withSessionServices(createSessionRequests(runtime), runtime);
-      expect(yield* port.answer({ ...planeAnswer(request, "child", message.messageId), content: message.content, outbound: message })).toBe("resolved");
-      yield* withSessionServices(wakeSession("parent", receive, runtime), runtime).pipe(Effect.orDie);
-      return yield* foreign("source.ack", "lost");
-    }).pipe(Effect.provideService(Scope.Scope, scope)),
-  };
-  yield* withSessionServices(session({ id: "parent", role: "resident", runner: receive }, runtime), runtime);
-  appendCommission();
-  const port = yield* withSessionServices(createSessionRequests(runtime), runtime);
-  const request = yield* port.open({
-    requestId: "commission-action", sessionId: "parent", expectedResponders: ["child"], correlation: {},
-    allowedActions: ["report_result"], resolution: "first", threshold: 1, deadline: 1000, at: 100,
-  });
-  const child = yield* withSessionServices(session({
-    id: "child", parentId: "parent", role: "worker", runner: () => Effect.sync(() => {
-      childBodies += 1;
-      return { kind: "result" as const, text: "original answer" };
-    }),
-  }, runtime), runtime);
-  expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({ _tag: "ForeignFailure", operation: "source.ack" });
-  expect(SessionHandleStore.requestById(request.requestId)?.state).toBe("resolved");
-  expect(SessionHandleStore.pendingInbox("parent")).toEqual([]);
-  const terminals = sessionTree("child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
-  const parentBefore = sessionTree("parent");
-  yield* closeSessions(runtime);
-  Storage.reset(); Storage.initialize({ dbPath });
-  // No receiver is available on restart: the committed receipt must suffice.
-  const recovered: SessionFixture = { authorizeConfigure: allowConfigure, observations: runtime.observations, clock: () => 200 };
-  yield* withSessionServices(wakeSession("child", () => Effect.die("child replayed"), recovered), recovered);
-  expect({ received, sends, childBodies }).toEqual({ received: 1, sends: 1, childBodies: 1 });
-  expect(sessionTree("parent")).toEqual(parentBefore);
-  expect(sessionTree("child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toEqual(terminals);
-  expect(SessionHandleStore.outboundRows("child")).toMatchObject([{ state: "delivered" }]);
-  yield* closeSessions(recovered);
-})));
+test("a child answers the original request once and reconciles a lost ACK after SQLite reopen", () => {
+  const ledger = reopenableLedger();
+  return isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        seedPolicy();
+        let received = 0;
+        let sends = 0;
+        let childBodies = 0;
+        const scope = yield* Effect.scope;
+        const kernel = () => isolatedLedger().kernel;
+        const receive: SessionRunner = () => Effect.sync(() => {
+          received += 1;
+          return { kind: "result" as const, text: "received" };
+        });
+        const runtime: SessionFixture = {
+          authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => 100,
+          ...isolatedRuntime(),
+          dispatchOutbound: ({ message }) => Effect.gen(function* () {
+            sends += 1;
+            const request = kernel().requestById(message.requestId);
+            if (request === undefined) throw new Error("request missing");
+            const port = yield* withSessionServices(createSessionRequests(runtime), runtime);
+            expect(yield* port.answer({ ...planeAnswer(request, "child", message.messageId), content: message.content, outbound: message })).toBe("resolved");
+            yield* wake("parent", receive, runtime).pipe(Effect.orDie);
+            return yield* foreign("source.ack", "lost");
+          }).pipe(Effect.provideService(Scope.Scope, scope)),
+        };
+        // The parent is durable only (no live handle): the reply intake and its
+        // consuming wake own the parent fence in turn.
+        yield* kernel().materialize({
+          id: "parent", parentId: null, role: "resident", tools: [],
+          system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "parent-init", at: 100,
+        });
+        appendCommission();
+        const port = yield* withSessionServices(createSessionRequests(runtime), runtime);
+        const request = yield* port.open({
+          requestId: "commission-action", sessionId: "parent", expectedResponders: ["child"], correlation: {},
+          allowedActions: ["report_result"], resolution: "first", threshold: 1, deadline: 1000, at: 100,
+        });
+        const child = yield* withSessionServices(session({
+          id: "child", parentId: "parent", role: "worker", runner: () => Effect.sync(() => {
+            childBodies += 1;
+            return { kind: "result" as const, text: "original answer" };
+          }),
+        }, runtime), runtime);
+        expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({ _tag: "ForeignFailure", operation: "source.ack" });
+        expect(kernel().requestById(request.requestId)?.state).toBe("resolved");
+        expect(kernel().pendingMessages("parent")).toEqual([]);
+        const terminals = sessionTree(kernel(), "child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined);
+        const parentBefore = sessionTree(kernel(), "parent");
+        yield* closeSessions(runtime);
+        ledger.reopen();
+        // No receiver is available on restart: the committed receipt must suffice.
+        const recovered: SessionFixture = {
+          authorizeConfigure: allowConfigure, observations: runtime.observations, clock: () => 200,
+          ...isolatedRuntime(),
+        };
+        yield* wake("child", () => Effect.die("child replayed"), recovered);
+        expect({ received, sends, childBodies }).toEqual({ received: 1, sends: 1, childBodies: 1 });
+        expect(sessionTree(kernel(), "parent")).toEqual(parentBefore);
+        expect(sessionTree(kernel(), "child").filter((action) => SessionHandleStore.turnTerminal(action) !== undefined)).toEqual(terminals);
+        expect(kernel().outboundRows("child")).toMatchObject([{ state: "delivered" }]);
+        yield* closeSessions(recovered);
+      }),
+    ),
+    () => ledger,
+  );
+});

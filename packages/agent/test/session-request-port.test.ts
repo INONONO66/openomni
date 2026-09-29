@@ -1,14 +1,14 @@
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
-import { allowConfigure, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { isolated } from "./helpers/isolated";
+import { sessionTree } from "./helpers/session-tree";
+import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
 import { createSessionRequests } from "../src/session-requests";
 
 const setup = Effect.gen(function* () {
-  (yield* SessionHandleStore.materialize({
+  (yield* isolatedLedger().kernel.materialize({
           id: "source",
           parentId: null,
           role: "resident",
@@ -18,8 +18,7 @@ const setup = Effect.gen(function* () {
           actionId: "configure",
           at: 1,
         }));
-  const actions = Storage.get().actions;
-  if (actions === undefined) throw new Error("missing action adapter");
+  const actions = isolatedLedger().session.actions;
   for (const id of ["first", "second"]) {
     actions.append(
       {
@@ -35,7 +34,7 @@ const setup = Effect.gen(function* () {
         irreversible: true,
         ts: 1,
       },
-      SessionHandleStore.row("source").revision,
+      isolatedLedger().kernel.row("source").revision,
     );
   }
 });
@@ -53,15 +52,17 @@ const opening = (requestId: string) => ({
   at: 100,
 });
 
-test("gateway request port commits physical bindings and receiving intake under a released owner lease", () => isolated(Effect.gen(function* () {
+test("gateway request port commits physical bindings and receiving intake without a live controller", () => isolated(Effect.gen(function* () {
   yield* setup;
   const received: string[] = [];
   const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = {
     clock: () => 100,
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
+    ...isolatedRuntime(),
     onInboxCommitted: (ids) => {
-      expect(SessionHandleStore.row("source").leaseOwner).toBeNull();
+      // No release plane: the gateway's fenced intake leaves its adopted owner durable.
+      expect(isolatedLedger().kernel.row("source").leaseOwner).not.toBeNull();
       received.push(...ids);
     },
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
@@ -94,11 +95,11 @@ test("gateway request port commits physical bindings and receiving intake under 
     content: "answer",
   };
   expect(yield* port.answer(input)).toBe("resolved");
-  const before = sessionTree("source");
+  const before = sessionTree(isolatedLedger().kernel, "source");
   expect(yield* port.answer({ ...input, receivedAt: 150 })).toBe("resolved");
-  expect(sessionTree("source")).toEqual(before);
+  expect(sessionTree(isolatedLedger().kernel, "source")).toEqual(before);
   expect(received).toEqual(["source"]);
-  expect(SessionHandleStore.inboxRows("source")).toHaveLength(1);
+  expect(isolatedLedger().kernel.pendingMessages("source")).toHaveLength(1);
   expect(port.list()[0]?.state).toBe("resolved");
 })));
 
@@ -109,6 +110,7 @@ test("gateway timeout resolves the original action without creating conversation
     clock: () => now,
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
+    ...isolatedRuntime(),
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   yield* port.open(opening("first"));
   yield* port.timeout("first", 199);
@@ -116,18 +118,18 @@ test("gateway timeout resolves the original action without creating conversation
   now = 200;
   yield* port.timeout("first", now);
   expect(port.list()[0]?.state).toBe("expired");
-  expect(SessionHandleStore.inboxRows("source")).toEqual([]);
-  const before = sessionTree("source");
+  expect(isolatedLedger().kernel.pendingMessages("source")).toEqual([]);
+  const before = sessionTree(isolatedLedger().kernel, "source");
   yield* port.timeout("first", now);
-  expect(sessionTree("source")).toEqual(before);
+  expect(sessionTree(isolatedLedger().kernel, "source")).toEqual(before);
 })));
 
 test("request opening uses its original turn generation, never a later catalog", () => isolated(Effect.gen(function* () {
   yield* setup;
-  const generation = SessionHandleStore.latestGeneration(sessionTree("source"));
+  const generation = SessionHandleStore.latestGeneration(sessionTree(isolatedLedger().kernel, "source"));
   const append = (action: LedgerAction.Append) => {
     if (
-      Storage.get().actions?.append(action, SessionHandleStore.row("source").revision) === undefined
+      isolatedLedger().session.actions.append(action, isolatedLedger().kernel.row("source").revision) === undefined
     )
       throw new Error("fixture append failed");
   };
@@ -178,6 +180,7 @@ test("request opening uses its original turn generation, never a later catalog",
     clock: () => 100,
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
+    ...isolatedRuntime(),
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(yield* port.open(opening("pinned"))).toMatchObject({
     turnId: "turn",
@@ -185,43 +188,36 @@ test("request opening uses its original turn generation, never a later catalog",
     toolsGeneration: 1,
   });
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing-turn"))))).toBe(true);
-  const row = SessionHandleStore.row("source");
-  const lease = (yield* SessionHandleStore.acquireLease({
-          sessionId: "source",
-          owner: "configure",
-          expectedFence: row.leaseFence,
-          now: 100,
-          expiresAt: 200,
-        }));
-  if (!lease.ok) throw new Error("configuration lease refused");
+  const row = isolatedLedger().kernel.row("source");
+  const lease = yield* isolatedLedger().kernel.adoptFence({
+    sessionId: "source",
+    owner: "configure",
+    fence: row.leaseFence + 1,
+  });
   const next = { ...generation, generation: 2, revertTo: 1 };
-  expect(
-    (yield* SessionHandleStore.commit({
-            sessionId: "source",
-            owner: "configure",
-            fence: lease.fence,
-            now: 100,
-            expectedRevision: row.revision,
-            actions: [
-              SessionHandleStore.configureAction({
-                id: "next",
-                sessionId: "source",
-                parentId: "configure",
-                operation: "tools.add",
-                snapshot: next,
-                at: 100,
-              }),
-            ],
-            consumeInboxIds: [],
-            state: "idle",
-            releaseLease: true,
-            generation: {
-              toolsGeneration: 2,
-              systemHash: next.systemHash,
-              policyGeneration: next.policyGeneration,
-            },
-          })).ok,
-  ).toBe(true);
+  yield* isolatedLedger().kernel.commit({
+    sessionId: "source",
+    owner: "configure",
+    fence: lease.fence,
+    now: 100,
+    expectedRevision: row.revision,
+    actions: [
+      SessionHandleStore.configureAction({
+        id: "next",
+        sessionId: "source",
+        parentId: "configure",
+        operation: "tools.add",
+        snapshot: next,
+        at: 100,
+      }),
+    ],
+    state: "idle",
+    generation: {
+      toolsGeneration: 2,
+      systemHash: next.systemHash,
+      policyGeneration: next.policyGeneration,
+    },
+  });
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("stale"))))).toBe(true);
 })));
 
@@ -231,10 +227,11 @@ test("gateway port refuses missing original actions and mismatched physical rece
     clock: () => 100,
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
+    ...isolatedRuntime(),
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
   expect(Exit.isFailure(yield* Effect.exit(port.open(opening("missing"))))).toBe(true);
   yield* port.open(opening("first"));
-  const before = sessionTree("source");
+  const before = sessionTree(isolatedLedger().kernel, "source");
   const refused = yield* Effect.exit(port.receipt({
       inputId: "bad",
       requestId: "first",
@@ -244,5 +241,5 @@ test("gateway port refuses missing original actions and mismatched physical rece
       at: 100,
     }));
   expect(Exit.isFailure(refused)).toBe(true);
-  expect(sessionTree("source")).toEqual(before);
+  expect(sessionTree(isolatedLedger().kernel, "source")).toEqual(before);
 })));

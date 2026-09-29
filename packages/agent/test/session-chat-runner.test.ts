@@ -1,19 +1,19 @@
 import { runAgentSync } from "./helpers/executor";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { allowConfigure, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect } from "effect";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
-import { isolated } from "./helpers/isolated";
+import { isolated, isolatedLedger } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
 import { describe, expect, it, spyOn } from "bun:test";
-import { SessionHandleStore, Storage } from "@openomni/ledger";
+
 import { Retry as LlmRetry } from "@openomni/llm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
-import type { LedgerAction, Model } from "@openomni/protocol";
+import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { Bus, closeSessions, createSessionChatRunner, createTurnDispatcher, type Executor } from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { turnExecutor, nullRetryAlarm, failure, foreign } from "./helpers/effect-g2";
@@ -41,22 +41,23 @@ function input(
   boundary: SessionRunnerInput["boundary"],
   messages: SessionRunnerInput["messages"] = [{ role: "user", text: "initial" }],
 ): SessionRunnerInput {
-  const seeded = runAgentSync(SessionHandleStore.materialize({
+  const kernel = isolatedLedger().kernel;
+  const seeded = runAgentSync(kernel.materialize({
     id: "session-1", parentId: null, role: "resident", tools: [], system: { preset: "system", blocks: [] },
     policyGeneration: 0, actionId: "fixture-configure", at: 1,
   }));
   if (seeded.created) {
-    const actions = Storage.get().actions;
-    if (actions === undefined) throw new Error("missing fixture actions");
+    const actions = isolatedLedger().session.actions;
     for (const [index, message] of messages.entries()) actions.append({
       id: `fixture-delivery-${index}`, sessionId: "session-1", parentId: null, kind: "inbox.deliver",
       intent: { encodingVersion: 1, value: {} },
       effect: { encodingVersion: 1, value: { phase: "delivery", turnId: "turn-1", inboxId: message.id ?? `fixture-message-${index}`, kind: "prompt", content: message.text, origin: { encodingVersion: 1, value: {} }, boundary: "before_llm" } },
       ts: 1, irreversible: true,
-    }, SessionHandleStore.row("session-1").revision);
+    }, kernel.row("session-1").revision);
   }
   return {
     sessionId: "session-1",
+    kernel,
     role: "resident",
     turnId: "turn-1",
     actionId: "action-1",
@@ -141,10 +142,9 @@ function runDurably(
       clock: () => 1_000,
       entropy: () => `boundary-id-${++nextId}`,
       processId: "boundary-test",
-      scheduleHeartbeat: () => () => undefined,
       retryAlarm: nullRetryAlarm,
+      ...isolatedRuntime(),
     };
-    Storage.initialize({ dbPath: ":memory:", observationSink: Bus });
     seedPolicy();
     const chatRunner = createSessionChatRunner({
       prepare: (input: import("../src/session-handle").SessionRunnerInput) => Effect.gen(function* () {
@@ -158,11 +158,14 @@ function runDurably(
 
     try {
       yield* promptTurns(handle, prompts);
+      // W5.2: the inbox table is gone; the turn intent's durable `inboxIds`
+      // name the consumed received-message chain actions.
+      const actions = sessionTree(isolatedLedger().kernel, handle.id);
       return {
-        actions: sessionTree(handle.id),
-        inboxIds: SessionHandleStore.inboxRows(handle.id).map(
-          (row: import("@openomni/protocol").Inbox.Row) => row.id,
-        ),
+        actions,
+        inboxIds: actions
+          .filter((action: LedgerAction.Node) => action.kind === "turn" && actionPhase(action) === "intent")
+          .flatMap((action: LedgerAction.Node) => SessionTurn.DecodeIntent.parse(action.intent.value).inboxIds),
       };
     } finally {
       yield* closeSessions(runtime);

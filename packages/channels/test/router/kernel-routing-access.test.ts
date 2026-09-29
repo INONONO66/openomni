@@ -1,6 +1,7 @@
+import { ledger } from "../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
-import { ActorRegistry } from "@openomni/ledger";
+
 import { registerChannelGrant } from "../helpers/channel-grant";
 import {
   commits,
@@ -40,7 +41,7 @@ describe("GatewayRouter access routing", () => {
     });
     expect(commits).toHaveLength(1);
     expect(
-      ActorRegistry.resolveEndpoint(
+      ledger().stores.actors.resolveEndpoint(
         ownerSender.surface,
         ownerSender.externalId,
         ownerFacts.workspaceId,

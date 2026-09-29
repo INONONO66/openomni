@@ -1,22 +1,23 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { wakeSession, type SessionRunner } from "@openomni/agent";
+import type { SessionRunner } from "@openomni/agent";
 import { decodeChannelFailure } from "@openomni/channels";
 import type { RunInput, Sink } from "@openomni/llm";
-import { ChannelGrantStore, SessionHandleStore, Storage, SurfaceKey } from "@openomni/ledger";
+import { createSurfaceKeyStore } from "@openomni/ledger";
 import type { Tool } from "@openomni/protocol";
+import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { createResidentGateway } from "../src/gateway";
 import { refuseEvidenceOnly } from "../src/resident";
-import { commitMessageInbox, prepareMessage } from "../src/composition/message-session";
+import { prepareMessage } from "../src/composition/message-session";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { residentRunner } from "./helpers/resident-runner";
-import { acquireEffect, runEffect, runSyncEffect } from "./helpers/scoped-effect";
+import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
+import { effectScope } from "./helpers/effect-scope";
+import { drainSession, localInbox, resolvedRuntimeFor } from "./helpers/ledger";
 import { fakeProviderModel } from "./helpers/resident-suite";
 import { provisionPort } from "./helpers/provision-port";
 
 type RunnerInput = Parameters<SessionRunner>[0];
-beforeEach(() => Storage.initialize({ dbPath: ":memory:" }));
-afterEach(() => Storage.reset());
 
 for (const scenario of [
   { authority: "evidence_only", content: "evidence" },
@@ -41,30 +42,46 @@ for (const scenario of [
       },
     });
     const gateway = runSyncEffect(createResidentGateway({
-      inbox: { commit: (input: Parameters<typeof commitMessageInbox>[0]) =>
-        commitMessageInbox(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-      prepare: prepareMessage(resident.materialize),
+      inbox: { commit: (input) =>
+        localInbox(resident.plane, "authority-gateway", Date.now)(input).pipe(
+          Effect.mapError(decodeChannelFailure("inbox.commit")),
+        ) },
+      prepare: prepareMessage(resident.plane, resident.materialize),
     }).pipe(Effect.provide(resident.services)));
-    ChannelGrantStore.put({
+    resident.plane.stores.channelGrants.put({
       id: "openomni-resident-ws", surface: "ws", defaultTier: "owner", createdBy: "owner",
       kind: scenario.authority === "evidence_only" ? "broadcast_channel" : "trusted_channel",
     });
-    SurfaceKey.claim("ws:ws:dm:authority", "authority-session");
+    createSurfaceKeyStore(resident.plane.catalog).claim("ws:ws:dm:authority", "authority-session");
     const admission = await runEffect(gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
       { eventId: "input", surface: "ws", channelId: "authority", addressees: [], dm: true,
         payload: {}, render: scenario.content },
     ));
     expect(admission.status).toBe("executed");
-    const row = SessionHandleStore.row("authority-session");
+    const row = resident.plane.openKernel("authority-session").row("authority-session");
     const run = resident.runnerFor(row);
     const inputs: RunnerInput[] = [];
-    await acquireEffect(wakeSession(row.id, (input: RunnerInput) => {
-      inputs.push(input);
-      return run(input);
-    }, resident.runtime).pipe(Effect.provide(resident.services)));
+    const scope = effectScope();
+    try {
+      await scope.run(drainSession({
+        plane: resident.plane,
+        sessionId: row.id,
+        runner: (input: RunnerInput) => {
+          inputs.push(input);
+          return run(input);
+        },
+        runtime: resolvedRuntimeFor(resident.runtime, resident.services),
+        scope: scope.scope,
+      }).pipe(Effect.provide(resident.services)));
+    } finally {
+      await scope.close();
+    }
     expect(inputs[0]?.authority).toBe(scenario.authority);
-    expect(SessionHandleStore.inboxRows(row.id)[0]?.content).toBe(scenario.content);
+    const prompts = sessionTree(row.id, resident.plane.sessionStore(row.id).actions)
+      .filter((action) => action.kind === "prompt")
+      .map((action) => (action.effect.value as { content?: string }).content);
+    expect(prompts[0]).toBe(scenario.content);
     expect(calls.length).toBeGreaterThan(0);
     const offered = resident.definitions.resident
       .filter((tool: (typeof resident.definitions.resident)[number]) => tool.visibility.model.includes("resident"))

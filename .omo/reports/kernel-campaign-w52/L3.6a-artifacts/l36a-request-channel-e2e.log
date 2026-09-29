@@ -1,0 +1,10 @@
+bun test v1.4.1 (4661e494f)
+
+test/request-channel-e2e.test.ts:
+(fail) real external WebSocket reply wakes its original idle request owner without legacy writes [5018.97ms]
+  ^ this test timed out after 5000ms.
+
+ 0 pass
+ 1 fail
+ 5 expect() calls
+Ran 1 test across 1 file. [5.31s]

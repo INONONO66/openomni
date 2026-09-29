@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PolicyRow } from "@openomni/protocol";
-import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage";
+import { openCatalogStore } from "../../src/storage/catalog-store";
 
 const first: Omit<PolicyRow.Row, "generation"> = {
   name: "first",
@@ -14,8 +14,7 @@ const second = { ...first, name: "second" };
 
 for (const backend of ["SQLite"] as const) {
   test(`${backend}: policy generations select, copy and append atomically`, () => {
-    const sqlite = new SqliteStorageAdapter(":memory:");
-    const storage = sqlite;
+    const storage = openCatalogStore(":memory:");
     const policies = storage.policies;
     try {
       expect(
@@ -69,7 +68,7 @@ for (const backend of ["SQLite"] as const) {
       ).toThrow("outer refusal");
       expect(policies.rows()).toEqual(complete);
     } finally {
-      sqlite.close();
+      storage.close();
     }
   });
 }

@@ -1,26 +1,49 @@
 import { Database } from "bun:sqlite";
-import { L0Observation } from "@openomni/protocol";
-import { createSqliteL0Adapters } from "../../src/storage/sqlite-l0-adapter";
-import { initializeSqliteDatabase } from "../../src/storage/sqlite-schema-lifecycle";
+import { L0Observation, type ObservationSink, type Storage } from "@openomni/protocol";
+import { bootstrapStoreDatabase } from "../../src/storage";
+import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
+import { SESSION_FILE_SCHEMA } from "../../src/storage/schema-session-file";
+import { createActions } from "../../src/storage/sqlite-l0-actions";
+import { createSessions } from "../../src/storage/sqlite-l0-sessions";
+import type { SessionWriteAdapter } from "../../src/services";
 
-/** In-memory database initialized through the production migration runner. */
+/** In-memory database on the fresh session-file schema. */
 export function openLedgerDatabase(): Database {
   const db = new Database(":memory:");
-  initializeSqliteDatabase(db);
+  bootstrapStoreDatabase(db, SESSION_FILE_SCHEMA);
   return db;
 }
 
-/** L0 adapters over one connection plus a capture of every committed action. */
+/** In-memory database on the fresh catalog schema. */
+export function openCatalogDatabase(): Database {
+  const db = new Database(":memory:");
+  bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+  return db;
+}
+
+export interface L0Adapters {
+  readonly sessions: SessionWriteAdapter;
+  readonly actions: Storage.ActionSubAdapter;
+}
+
+/** Session-file adapters over one connection plus a capture of every committed action. */
 export function observedL0Adapters(db: Database): {
-  adapter: ReturnType<typeof createSqliteL0Adapters>;
+  adapter: L0Adapters;
   observations: L0Observation.ActionCommitted[];
 } {
   const observations: L0Observation.ActionCommitted[] = [];
-  const adapter = createSqliteL0Adapters(db, (operation) => db.transaction(operation).immediate(), {
+  const transaction = <T>(operation: () => T): T => db.transaction(operation).immediate();
+  const sink: ObservationSink = {
     publish(event, payload) {
       if (event.name === L0Observation.ActionCommittedEvent.name)
         observations.push(L0Observation.ActionCommitted.parse(payload));
     },
-  });
-  return { adapter, observations };
+  };
+  return {
+    adapter: {
+      sessions: createSessions(db, transaction, sink),
+      actions: createActions(db, transaction, sink),
+    },
+    observations,
+  };
 }

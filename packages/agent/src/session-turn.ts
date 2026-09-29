@@ -1,14 +1,15 @@
-import { Cause, Effect, Exit, Fiber, Option, type Scope } from "effect";
+import { Cause, Effect, Exit, Option, type Scope } from "effect";
 import { z } from "zod";
-import { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type PlainValue, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
 import { hydrateSessionHistory } from "./session-lifecycle/history";
 import { commitFoldBatch } from "./session-fold-commit";
 import { sessionStopEvidence } from "./session-stop-evidence";
+import type { SessionKernel } from "./cluster/kernel-registry";
 import type { SessionPolicyRefusal, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionActionCommitPort, SessionBoundaryResult } from "./session-contract";
-import { turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue } from "./session-record";
+import { turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { GenerationOwnership, ObservationSink, type RunnerServices } from "./services";
 import { parentReply } from "./session-parent-reply";
@@ -40,6 +41,7 @@ interface TurnInput {
 }
 
 export function createSessionTurn(
+  kernel: SessionKernel,
   sessionId: string,
   runner: SessionRunner,
   runtime: ResolvedSessionRuntime,
@@ -47,33 +49,14 @@ export function createSessionTurn(
   owner: string,
   clock: () => number,
   entropy: () => string,
-  scheduleHeartbeat: (callback: () => void, intervalMs: number) => () => void,
   scope: Scope.Scope,
   ports: {
     readonly createExecutionLedger: (turnId?: string) => SessionActionCommitPort;
     readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices>;
-    readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[], releaseLease: boolean) => Effect.Effect<void, ExecutionError>;
-    readonly releaseHeldLease: () => Effect.Effect<void, ExecutionError>;
+    readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
   },
 ) {
-  function heartbeat(controller: AbortController) {
-    const tick = Effect.callback<void>((resume) => {
-      const cancel = scheduleHeartbeat(() => resume(Effect.void), SessionHandleStore.HEARTBEAT_INTERVAL_MS);
-      return Effect.sync(cancel);
-    });
-    return Effect.forever(tick.pipe(Effect.andThen(() => {
-      const now = clock();
-      return SessionHandleStore.renewLease({ sessionId, owner, fence: state.fence, now, expiresAt: now + SessionHandleStore.LEASE_TTL_MS });
-    }))).pipe(Effect.tapError(() => Effect.sync(() => controller.abort())));
-  }
-
-  const stopHeartbeat = () => Effect.suspend(() => {
-    const fiber = state.heartbeat;
-    state.heartbeat = undefined;
-    return fiber === undefined ? Effect.void : Fiber.interrupt(fiber).pipe(Effect.asVoid);
-  });
-
   function runTurn(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError> {
     return Effect.scoped(Effect.gen(function* () {
       const captured = yield* runtime.generations.capture({ sessionId, generation: input.generation.generation });
@@ -89,11 +72,9 @@ export function createSessionTurn(
   function runCaptured(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError, RunnerServices> {
     return Effect.gen(function* () {
       const services = yield* Effect.context<RunnerServices>();
-      const row = SessionHandleStore.row(sessionId);
+      const row = kernel.row(sessionId);
       const controller = new AbortController();
       state.controller = controller;
-      // v4 forkIn defers the child to the dispatcher; the lease heartbeat must be armed before the runner enters.
-      state.heartbeat = yield* Effect.forkIn(heartbeat(controller), scope, { startImmediately: true });
       let parentActionId = input.parentActionId;
       let boundaryActionId = input.boundaryActionId;
       const ledger = ports.createExecutionLedger(input.turnId);
@@ -117,14 +98,14 @@ export function createSessionTurn(
       let runnerResult: SessionRunnerResult = policyRefusalResult("invalid_output");
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
-        const hydrated = hydrateSessionHistory(sessionId);
+        const hydrated = hydrateSessionHistory(kernel, sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
-        const origin = SessionHandleStore.inboxRows(sessionId).find((item) => item.id === promptId)?.origin;
+        const origin = receivedMessages(kernel, sessionId).rows.find((item) => item.id === promptId)?.origin;
         runnerResult = yield* runner({
           authority: inboundAuthority(origin?.value),
-          sessionId, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
+          sessionId, kernel, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
-          stopEvidence: sessionStopEvidence(sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
+          stopEvidence: sessionStopEvidence(kernel, sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
           resultId: input.resultId, parentActionId, boundaryActionId,
           messages: hydrated.messages,
           history: hydrated.history,
@@ -145,31 +126,24 @@ export function createSessionTurn(
       const exit = yield* Effect.exit(work);
       const result = resultOf(exit, runnerResult);
       if (state.controller === controller) state.controller = undefined;
-      // A raw slot, unlike its fiber, can outlive interruption. Its renewal and
-      // generation remain owned by the app Scope until actual raw settlement.
+      // A raw slot, unlike its fiber, can outlive interruption. Its generation
+      // remains owned by the app Scope until actual raw settlement.
       const retained = state.rawSlots.pending() > 0;
-      if (!retained) yield* stopHeartbeat();
       if (!state.terminalFrozen) {
-        const latestAction = SessionHandleStore.latestAction(sessionId);
+        const latestAction = kernel.latestAction(sessionId);
         if (latestAction === undefined) return yield* Effect.die(new Error(`session tree is empty: ${sessionId}`));
         yield* seal({
           turnId: input.turnId, resultId: input.resultId, resumeCount: input.resumeCount, boundaryActionId,
           toolsGeneration: input.generation.generation, toolsHash: input.generation.toolsHash,
           systemHash: input.generation.systemHash, policyGeneration: input.generation.policyGeneration, action: latestAction,
-        }, result, !retained);
-      } else if (!retained) {
-        // Shutdown may seal while the raw callback settles. No retained waiter
-        // exists in that ordering, so this turn must release its own fence.
-        yield* ports.releaseHeldLease();
+        }, result);
       }
       if (retained) {
         state.retainedRunner = yield* Effect.forkIn(state.rawSlots.awaitSettled.pipe(
-          Effect.andThen(stopHeartbeat),
-          Effect.andThen(ports.releaseHeldLease),
           Effect.tapError((error) => Effect.sync(() => { state.retainedFailure = error; })),
           Effect.onExit(() => Effect.gen(function* () {
             state.retainedRunner = undefined;
-            yield* ports.hibernate(SessionHandleStore.row(sessionId)).pipe(Effect.orDie);
+            yield* ports.hibernate(kernel.row(sessionId)).pipe(Effect.orDie);
           })),
         ), scope);
       }
@@ -180,10 +154,10 @@ export function createSessionTurn(
   function drainBoundary(input: TurnInput, boundary: SessionTurn.Boundary, parentActionId: string) {
     return Effect.gen(function* () {
       const observations = yield* ObservationSink;
-      const pending = SessionHandleStore.pendingInbox(sessionId);
+      const pending = pendingBacklog(kernel, sessionId);
       const refusal = yield* ports.evaluatePromptPolicies(pending);
       if (refusal !== undefined) {
-        yield* ports.consumePolicyBlockedInbox(pending, false);
+        yield* ports.consumePolicyBlockedInbox(pending);
         return yield* new ForeignFailure({ operation: "session.prompt", cause: refusal.reason });
       }
       const checkpointId = entropy();
@@ -192,11 +166,11 @@ export function createSessionTurn(
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary, at: clock(),
       });
-      const current = SessionHandleStore.row(sessionId);
-      yield* commitFoldBatch({
+      const current = kernel.row(sessionId);
+      yield* commitFoldBatch(kernel, {
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
-        actions: [checkpoint, ...deliveries], consumeInboxIds: pending.map((item) => item.id),
-        state: current.state === "interrupted" ? "interrupted" : "running", releaseLease: false,
+        actions: [checkpoint, ...deliveries],
+        state: current.state === "interrupted" ? "interrupted" : "running",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(pending, input.turnId, boundary, clock(), observations);
       return {
@@ -207,25 +181,24 @@ export function createSessionTurn(
     });
   }
 
-  function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult, releaseLease: boolean): Effect.Effect<void, SessionError> {
+  function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult): Effect.Effect<void, SessionError> {
     return Effect.gen(function* () {
-      const current = SessionHandleStore.row(sessionId);
-      const latest = SessionHandleStore.latestAction(sessionId);
-      const interrupts = result.kind === "interrupted" ? SessionHandleStore.pendingInbox(sessionId).filter((item) => item.kind === "interrupt") : [];
+      const current = kernel.row(sessionId);
+      const latest = kernel.latestAction(sessionId);
+      const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt") : [];
       const deliveries = deliveryActions(interrupts, open.turnId, "before_llm", latest?.id ?? open.action.id);
       const terminal = turnTerminalAction({
         id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
         sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),
       });
-      const reply = parentReply(current, terminal, result);
-      yield* commitFoldBatch({
+      const reply = parentReply(kernel, current, terminal, result);
+      yield* commitFoldBatch(kernel, {
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
-        consumeInboxIds: interrupts.map((item) => item.id), state: result.kind === "interrupted" ? "interrupted" : "idle",
-        releaseLease: reply === undefined && releaseLease,
+        state: result.kind === "interrupted" ? "interrupted" : "idle",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
-      if (reply !== undefined) yield* dispatchSessionOutbound(sessionId, runtime, owner, state.fence, clock, releaseLease);
+      if (reply !== undefined) yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
     });
   }
   return { runTurn, seal };

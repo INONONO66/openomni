@@ -9,7 +9,9 @@ import type {
 import { compiledPolicy } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { bounded } from "../../../../packages/agent/test/helpers/request-ledger";
 import { requestLedger } from "../../../../packages/agent/test/helpers/effect-g1";
-import { requestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import { createRequestDomainRevisions } from "../../src/tools/core/request-domain-revisions";
+import type { AppLedgerPlane, SessionKernel } from "../../src/composition/cluster-runtime";
+import { testPlane } from "./ledger";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
 import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { runEffect, runSyncEffect } from "./effect";
@@ -19,13 +21,21 @@ export function protectedDispatch(
   definition: AnyToolDefinition,
   input: Record<string, PlainValue>,
   observations: ObservationSink = { publish: () => undefined },
+  options: {
+    readonly plane?: AppLedgerPlane;
+    readonly kernel?: SessionKernel;
+  } = {},
 ) {
   const opened = Promise.withResolvers<SessionTransition.Request>();
-  let now = 100;
+  const clockRef = { now: 100 };
+  const plane = options.plane ?? testPlane();
+  const sessionId = crypto.randomUUID();
+  const kernel: SessionKernel = options.kernel ?? plane.openKernel(sessionId);
   const recording = runSyncEffect(requestLedger({
-    id: crypto.randomUUID(),
-    clock: () => now,
-    domainRevisions: requestDomainRevisions,
+    id: sessionId,
+    clock: () => clockRef.now,
+    domainRevisions: createRequestDomainRevisions(plane.stores),
+    kernel,
     onRequest(request) {
       if (request.state === "open") opened.resolve(request);
     },
@@ -51,6 +61,9 @@ export function protectedDispatch(
   });
   return {
     outcome,
+    plane,
+    // TS2742 guard: name the kernel through the app's portable alias.
+    kernel: kernel as SessionKernel,
     ...recording,
     executor,
     running,
@@ -65,7 +78,7 @@ export function protectedDispatch(
       return bounded(running);
     },
     setClock(at: number) {
-      now = at;
+      clockRef.now = at;
     },
     async close() {
       controller.abort();

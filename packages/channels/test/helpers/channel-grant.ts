@@ -1,12 +1,12 @@
-import { ChannelGrantStore, Storage } from "@openomni/ledger";
+import type { Actor } from "@openomni/protocol";
+import { ledger, resetLedger } from "./ledger";
 
 export function resetGrantStore(): void {
-  Storage.reset();
-  Storage.initialize({ dbPath: ":memory:" });
+  resetLedger();
 }
 
-export function registerChannelGrant(overrides: Partial<ChannelGrantStore.Grant> = {}): void {
-  ChannelGrantStore.put({
+export function registerChannelGrant(overrides: Partial<Actor.ChannelGrant> = {}): void {
+  ledger().stores.channelGrants.put({
     id: "grant",
     surface: "discord",
     kind: "trusted_channel",

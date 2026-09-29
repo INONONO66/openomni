@@ -1,16 +1,17 @@
 import { executionReads } from "./execution-reads";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
 import { testExecutor } from "./executor";
-import { allowConfigure, type SessionFixture as SessionRuntime } from "./session-services";
+import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Cause, Effect, Exit } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
+import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutorOptions, ExecutionLedger } from "../../src/executor-contract";
 import type {} from "../../src/session-contract";
 import { commitSessionRequest } from "../../src/session-admission";
 import { ForeignFailure } from "../../src/errors";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
+import { fencedTurnFixture } from "./fenced-writer";
+import { isolatedLedger } from "./isolated";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 export { createTestAgent, runTestAgent, runChatAttempts } from "./effect-g2";
 export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = { arm: () => Effect.void, wait: () => Effect.void, settle: () => Effect.void };
@@ -51,30 +52,23 @@ export function failure<A, E, R>(program: Effect.Effect<A, E, R>) {
     return Cause.squash(exit.cause);
   }));
 }
-export function requestLedger(input: { id?: string; clock?: () => number; onRequest?: (request: SessionTransition.Request) => void; domainRevisions?: SessionRuntime["requestDomainRevisions"] } = {}) {
+export function requestLedger(input: { id?: string; clock?: () => number; onRequest?: (request: SessionTransition.Request) => void; domainRevisions?: SessionRuntime["requestDomainRevisions"]; kernel?: SessionKernel } = {}) {
   return Effect.gen(function* () {
+    const kernel = input.kernel ?? isolatedLedger().kernel;
     const id = input.id ?? "request-session";
     const clock = input.clock ?? (() => 100);
-    const created = yield* SessionHandleStore.materialize({ id, role: "resident", parentId: null, policyGeneration: 1, tools: [], system: { preset: "", blocks: [] }, actionId: `${id}:configure`, at: clock() });
-    const owner = `${id}:owner`;
-    const lease = yield* SessionHandleStore.acquireLease({ sessionId: id, owner, expectedFence: created.row.leaseFence, now: clock(), expiresAt: clock() + 30_000 });
-    const generation = SessionHandleStore.latestGeneration(sessionTree(id));
-    const turnId = `${id}:turn`;
-    if (!sessionTree(id).some((action: LedgerAction.Node) => action.id === turnId)) yield* SessionHandleStore.commit({
-      sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: SessionHandleStore.row(id).revision, consumeInboxIds: [], state: "running", releaseLease: false,
-      actions: [{ id: turnId, sessionId: id, parentId: `${id}:configure`, kind: "turn", intent: { encodingVersion: 1, value: { phase: "intent", resultId: `${id}:result`, inboxIds: [], resumeCount: 0, boundaryActionId: null, toolsGeneration: generation.generation, toolsHash: generation.toolsHash, systemHash: generation.systemHash, policyGeneration: 1 } }, effect: { encodingVersion: 1, value: { phase: "pending" } }, ts: clock(), irreversible: true }],
-    });
-    const runtime: SessionRuntime = { clock, observations: { publish: () => undefined }, requestDomainRevisions: input.domainRevisions, authorizeConfigure: allowConfigure };
+    const { owner, fence, generation, turnId } = yield* fencedTurnFixture(kernel, { id, clock });
+    const runtime: SessionRuntime = { clock, observations: { publish: () => undefined }, requestDomainRevisions: input.domainRevisions, authorizeConfigure: allowConfigure, ...kernelRuntime(() => kernel) };
     const ledger: ExecutionLedger = {
-      ...executionReads(id),
+      ...executionReads(kernel, id),
       commit: (action: LedgerAction.Append) => Effect.gen(function* () {
-        const row = SessionHandleStore.row(id);
-        const committed = yield* SessionHandleStore.commit({ sessionId: id, owner, fence: lease.fence, now: clock(), expectedRevision: row.revision, actions: [action], consumeInboxIds: [], state: row.state, releaseLease: false });
+        const row = kernel.row(id);
+        const committed = yield* kernel.commit({ sessionId: id, owner, fence, now: clock(), expectedRevision: row.revision, actions: [action], state: row.state });
         const receipt = committed.receipts[0];
         if (receipt === undefined) throw new Error("test receipt missing");
         return receipt;
       }),
-      transition: (payload: SessionTransition.Payload, inputId: string, at: number) => commitSessionRequest(id, { owner, fence: lease.fence }, payload, inputId, at, runtime).pipe(Effect.tap((decision) => Effect.sync(() => { if (decision.request !== undefined) input.onRequest?.(decision.request); }))),
+      transition: (payload: SessionTransition.Payload, inputId: string, at: number) => commitSessionRequest(kernel, id, { owner, fence }, payload, inputId, at, runtime).pipe(Effect.tap((decision) => Effect.sync(() => { if (decision.request !== undefined) input.onRequest?.(decision.request); }))),
     };
     return { ledger, identity: { sessionId: id, role: "resident" as const, parentActionId: turnId, turnId, toolsGeneration: generation.generation, toolsHash: generation.toolsHash, systemHash: generation.systemHash }, entropy: () => crypto.randomUUID(), clock };
   });

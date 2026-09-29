@@ -1,0 +1,12 @@
+bun test v1.4.1 (4661e494f)
+
+test/send-message-e2e.test.ts:
+(pass) an external turn never dispatches an unsolicited reply for connection ?actor=owner [110.83ms]
+(pass) an external turn never dispatches an unsolicited reply for connection  [64.85ms]
+(pass) an explicit model send_message routes through MessagePort.ingest to the external surface [79.28ms]
+(pass) a child session terminal commits exactly one parent reply with the original reply binding [173.47ms]
+
+ 4 pass
+ 0 fail
+ 20 expect() calls
+Ran 4 tests across 1 file. [683.00ms]

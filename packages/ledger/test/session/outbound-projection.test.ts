@@ -1,15 +1,16 @@
 import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type SessionTransition } from "@openomni/protocol";
-import { SessionHandleStore, Storage } from "../../src/index";
+import { runLedgerSync } from "../helpers/effect";
+import { useMemoryStores } from "../helpers/storage";
 
+const stores = useMemoryStores();
 beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
   Result.getOrThrowWith(
-    Effect.runSync(
+    runLedgerSync(
       Effect.result(
-        SessionHandleStore.materialize({
+        stores.kernel.materialize({
           id: "source",
           parentId: null,
           role: "resident",
@@ -24,10 +25,9 @@ beforeEach(() => {
     (error) => error,
   );
 });
-afterEach(() => Storage.reset());
 
 function append(action: LedgerAction.Append) {
-  const receipt = Storage.get().actions?.append(action, SessionHandleStore.row("source").revision);
+  const receipt = stores.session.actions.append(action, stores.kernel.row("source").revision);
   if (receipt === undefined) throw new Error("projection fixture commit failed");
 }
 
@@ -59,7 +59,7 @@ test("outbound projection folds a verified acknowledgement without erasing its p
       value: { outbound: { message, state: "pending", destinationReceipt: null } },
     },
   });
-  expect(SessionHandleStore.outboundRows("source")).toEqual([
+  expect(stores.kernel.outboundRows("source")).toEqual([
     { message, state: "pending", destinationReceipt: null },
   ]);
   append({
@@ -81,10 +81,10 @@ test("outbound projection folds a verified acknowledgement without erasing its p
       },
     },
   });
-  expect(SessionHandleStore.outboundRows("source")).toEqual([
+  expect(stores.kernel.outboundRows("source")).toEqual([
     { message, state: "delivered", destinationReceipt: { id: "received", revision: 2 } },
   ]);
-  expect(sessionTree("source").map((action) => action.id)).toEqual([
+  expect(sessionTree("source", stores.session.actions).map((action) => action.id)).toEqual([
     "configure",
     "pending",
     "ack",
@@ -102,5 +102,5 @@ test("corrupt outbound evidence cannot silently disappear from recovery", () => 
     intent: { encodingVersion: 1, value: { op: "open" } },
     effect: { encodingVersion: 1, value: null },
   });
-  expect(() => SessionHandleStore.outboundRows("source")).toThrow("invalid outbound action effect");
+  expect(() => stores.kernel.outboundRows("source")).toThrow("invalid outbound action effect");
 });

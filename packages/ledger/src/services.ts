@@ -1,47 +1,29 @@
-import { Context, type Effect } from "effect";
-import type {
-  Alarm,
-  Inbox,
-  LedgerAction,
-  LedgerSession,
-  Storage as ProtocolStorage,
-} from "@openomni/protocol";
+import type { Effect } from "effect";
+import type { LedgerSession, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { LedgerError } from "./errors";
+import type { CatalogStore } from "./storage/catalog-store.js";
+import type { SessionStore } from "./storage/session-store.js";
 
 export type CommitReceipt = Extract<LedgerSession.CommitResult, { readonly ok: true }>;
-export type LeaseReceipt = Extract<LedgerSession.LeaseResult, { readonly ok: true }>;
+export type AdoptReceipt = { readonly ok: true; readonly fence: number };
 
 export interface SessionWriteAdapter
-  extends Pick<ProtocolStorage.SessionSubAdapter, "get" | "list" | "openChildCount"> {
+  extends Pick<ProtocolStorage.SessionSubAdapter, "get" | "list"> {
   create(row: LedgerSession.Row): Effect.Effect<boolean, LedgerError>;
   materialize(
     input: LedgerSession.Materialize,
   ): Effect.Effect<LedgerSession.MaterializeResult, LedgerError>;
-  acquireLease(input: LedgerSession.AcquireLease): Effect.Effect<LeaseReceipt, LedgerError>;
-  renewLease(input: LedgerSession.RenewLease): Effect.Effect<true, LedgerError>;
+  adoptFence(input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError>;
   commit(input: LedgerSession.Commit): Effect.Effect<CommitReceipt, LedgerError>;
 }
 
-export interface InboxWriteAdapter extends Pick<ProtocolStorage.InboxSubAdapter, "list"> {
-  commit(input: Inbox.Commit): Effect.Effect<Inbox.Row, LedgerError>;
-  receive(
-    input: Inbox.Commit,
-  ): Effect.Effect<{ row: Inbox.Row; receipt: LedgerAction.Receipt }, LedgerError>;
+/**
+ * The handle plane one process composes over (W5.2 F1): the shared catalog
+ * store plus an opener for per-session ledger files. Entity activations own
+ * the lifecycle of the stores they open.
+ */
+export interface LedgerHandles {
+  readonly catalog: CatalogStore;
+  readonly openSession: (sessionId: string) => SessionStore;
 }
 
-export interface AlarmWriteAdapter extends Pick<ProtocolStorage.AlarmSubAdapter, "get" | "due"> {
-  arm(input: Alarm.Arm): Effect.Effect<Alarm.Row, LedgerError>;
-  cancel(id: string, sessionId: string, at: number): Effect.Effect<Alarm.Row, LedgerError>;
-  rearm(id: string, sessionId: string, at: number): Effect.Effect<Alarm.Row, LedgerError>;
-  acquire(id: string, expectedFence: number): Effect.Effect<Alarm.Row, LedgerError>;
-  fire(input: Alarm.Fire): Effect.Effect<Alarm.Fired, LedgerError>;
-}
-
-export class LedgerWrites extends Context.Service<
-  LedgerWrites,
-  {
-    readonly sessions: SessionWriteAdapter;
-    readonly inbox: InboxWriteAdapter;
-    readonly alarms: AlarmWriteAdapter;
-  }
->()("@openomni/ledger/LedgerWrites") {}

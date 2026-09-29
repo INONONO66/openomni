@@ -4,9 +4,10 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { SessionHandleStore } from "@openomni/ledger";
 import type { Provider } from "@openomni/llm";
 import { z } from "zod";
+import { sessionFilePath } from "../src/composition/cluster-runtime";
+import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
@@ -63,20 +64,21 @@ test("real app SSE compaction commits reversible evidence through the session ex
     limit: { context: 10000 },
   };
   const app = await suite.boot({ config, llm: { resolveModel: () => Effect.succeed(model) } });
+  const plane = await planeOf(app.runtime);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fixture-token"]);
   expect(socket.protocol).toBe("auth");
   // When: enough completed turns cross the actual compaction threshold.
   for (let index = 0; index < 4; index += 1) {
-    const received = nextResidentTurn(5000);
+    const received = nextResidentTurn(plane, 5000);
     socket.send(JSON.stringify({ type: "message", text: `input-${index}` }));
     expect((await received).text).toBe("retained evidence ".repeat(160).trimEnd());
   }
   // Then: the real durable action has content-addressed original evidence.
-  const rows = SessionHandleStore.listRows().filter((row) => row.id !== "gateway-ingress");
+  const rows = plane.listSessions().filter((row) => row.id !== "gateway-ingress");
   expect(rows).toHaveLength(1);
   const row = rows[0];
   if (row === undefined) throw new Error("missing session");
-  const actions = sessionTree(row.id);
+  const actions = sessionTree(row.id, plane.sessionStore(row.id).actions);
   const compacted = actions.filter((action) => action.kind === "compaction" && "revert" in action);
   expect(compacted.length).toBeGreaterThan(0);
   for (const action of compacted) {
@@ -85,7 +87,9 @@ test("real app SSE compaction commits reversible evidence through the session ex
     expect(action.effect.value).toHaveProperty("result.revert.removedEntries");
   }
   expect(summaries).toBeGreaterThan(0);
-  const db = new Database(config.dbPath, { readonly: true });
+  const sessionsDir = config.sessionsDir;
+  if (sessionsDir === undefined) throw new Error("suite config is missing sessionsDir");
+  const db = new Database(sessionFilePath(sessionsDir, row.id), { readonly: true });
   try {
     const persisted = db
       .query<{ count: number }, []>(
@@ -107,7 +111,7 @@ test("real app SSE compaction commits reversible evidence through the session ex
     db.close();
   }
   await suite.cleanup();
-  expect(existsSync(dirname(config.dbPath))).toBe(false);
+  expect(existsSync(dirname(sessionsDir))).toBe(false);
   expect(socket.readyState).toBe(WebSocket.CLOSED);
   for (const port of [providerPort, app.port]) {
     const probe = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response() });

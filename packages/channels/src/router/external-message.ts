@@ -1,4 +1,4 @@
-import { ActorRegistry, EgressBudgetStore, SurfaceKey } from "@openomni/ledger";
+import type { ChannelStores } from "./stores.js";
 import type { PolicyEvaluationInput } from "@openomni/policy";
 import { Channel, type Gateway } from "@openomni/protocol";
 import { newTraceId } from "../support/trace";
@@ -9,16 +9,19 @@ import { resolveAndRecordRoute } from "./routing-resolution";
 import type { GatewayRouterPorts } from "./message-ports";
 import { evaluateSocialBudget } from "./messaging/social-budget";
 
-function admitWebSocketOwner(sender: Extract<Gateway.IngestSender, { kind: "external" }>): void {
+function admitWebSocketOwner(
+  stores: ChannelStores,
+  sender: Extract<Gateway.IngestSender, { kind: "external" }>,
+): void {
   if (
     sender.surface !== "ws" ||
-    ActorRegistry.resolveEndpoint("ws", sender.externalId) !== undefined ||
-    resolveChannelGrant({ surface: "ws", sender: sender.externalId })?.grant.defaultTier !== "owner"
+    stores.actors.resolveEndpoint("ws", sender.externalId) !== undefined ||
+    resolveChannelGrant(stores, { surface: "ws", sender: sender.externalId })?.grant.defaultTier !== "owner"
   )
     return;
   const actorId = `ws:owner:${sender.externalId}`;
-  ActorRegistry.registerIdentity({ id: actorId, kind: "human", trustTier: "owner" });
-  ActorRegistry.registerEndpoint({
+  stores.actors.registerIdentity({ id: actorId, kind: "human", trustTier: "owner" });
+  stores.actors.registerEndpoint({
     id: `ws:${sender.externalId}`,
     actorId,
     channel: "ws",
@@ -26,9 +29,12 @@ function admitWebSocketOwner(sender: Extract<Gateway.IngestSender, { kind: "exte
   });
 }
 
-function resolveAddressee(facts: Gateway.IngressFacts): "bot" | "owner" | "ambient" {
+function resolveAddressee(
+  stores: ChannelStores,
+  facts: Gateway.IngressFacts,
+): "bot" | "owner" | "ambient" {
   const identities = facts.addressees.flatMap((addressee) => {
-    const resolved = ActorRegistry.resolveEndpoint(
+    const resolved = stores.actors.resolveEndpoint(
       facts.surface,
       addressee.externalId,
       facts.workspaceId,
@@ -41,6 +47,7 @@ function resolveAddressee(facts: Gateway.IngressFacts): "bot" | "owner" | "ambie
 
 /** Only raw driver facts enter this projection; every authority field is resolved here. */
 export function externalMessage(
+  stores: ChannelStores,
   sender: Extract<Gateway.IngestSender, { kind: "external" }>,
   facts: Gateway.IngressFacts,
   sink: GatewayRouterPorts["sink"],
@@ -57,8 +64,8 @@ export function externalMessage(
     ...(facts.reply?.threadId === undefined ? {} : { threadId: facts.reply.threadId }),
   });
   const reply = facts.reply ?? { chain: [] };
-  admitWebSocketOwner(sender);
-  const event = resolveIngressActor({
+  admitWebSocketOwner(stores, sender);
+  const event = resolveIngressActor(stores, {
     id: [facts.surface, facts.workspaceId ?? "", facts.channelId, facts.eventId]
       .map(encodeURIComponent)
       .join(":"),
@@ -74,16 +81,16 @@ export function externalMessage(
       correlation: {
         ...reply,
         endpointId:
-          ActorRegistry.resolveEndpoint(sender.surface, sender.externalId, facts.workspaceId)
+          stores.actors.resolveEndpoint(sender.surface, sender.externalId, facts.workspaceId)
             ?.endpoint.id ?? `${sender.surface}:${sender.externalId}`,
         channelId: facts.channelId,
         externalConversationId: reply.externalConversationId ?? surfaceKey,
       },
     },
   });
-  const route = resolveAndRecordRoute(event, surfaceKey, event.traceId, sink, requests, at);
-  const addressee = resolveAddressee(facts);
-  const target = route.decision.sessionId ?? SurfaceKey.lookup(surfaceKey) ?? crypto.randomUUID();
+  const route = resolveAndRecordRoute(stores, event, surfaceKey, event.traceId, sink, requests, at);
+  const addressee = resolveAddressee(stores, facts);
+  const target = route.decision.sessionId ?? stores.surfaceKeys.lookup(surfaceKey) ?? crypto.randomUUID();
   const actorId = event.meta?.actor?.actorId;
   const budget = budgets.find((candidate) => candidate.targetActorId === actorId);
   // Table A applies declared peer restrictions to unrelated ingress, without
@@ -93,7 +100,7 @@ export function externalMessage(
     budget === undefined ||
     evaluateSocialBudget(
       budget,
-      EgressBudgetStore.read(target, budget.targetActorId, at - budget.windowMs),
+      stores.egressBudgets.read(target, budget.targetActorId, at - budget.windowMs),
       {
         class: "converse",
         at,

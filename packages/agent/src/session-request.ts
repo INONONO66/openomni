@@ -164,7 +164,6 @@ function ownsRequestRevision(command: SessionTransition.Command, row: LedgerSess
     row.id === command.sessionId,
     row.leaseOwner === command.authority.owner,
     row.leaseFence === command.authority.fence,
-    row.leaseExpiresAt !== null && row.leaseExpiresAt > command.at,
     row.revision === command.expectedRevision,
   );
 }

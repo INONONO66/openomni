@@ -4,16 +4,17 @@ import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type BusEvent,
-  type Inbox,
   type LedgerAction,
+  type LedgerSession,
   L0Observation,
-  type ObservationSink,
   type SessionGeneration,
   SessionTurn,
 } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
-import { SessionHandleStore, Storage } from "../../src/index";
-import { bareStorageAdapter } from "../helpers/session";
+import { SessionHandleStore } from "../../src/index";
+import type { ObservationSink } from "@openomni/protocol";
+import { useMemoryStores } from "../helpers/storage";
+import { adoptWriter } from "../helpers/session";
 
 const SIGNAL_TIMEOUT_MS = 1_000;
 
@@ -67,17 +68,15 @@ class DroppingObservationSink implements ObservationSink {
   }
 }
 
-let sink: DroppingObservationSink;
+const sink = new DroppingObservationSink();
+const stores = useMemoryStores(sink);
 
 beforeEach(() => {
   Bus.reset();
-  Storage.reset();
-  sink = new DroppingObservationSink();
-  Storage.initialize({ dbPath: ":memory:", observationSink: sink });
+  sink.dropNextCommit = false;
 });
 
 afterEach(() => {
-  Storage.reset();
   Bus.reset();
 });
 
@@ -85,7 +84,7 @@ function materialize(id: string) {
   return Result.getOrThrowWith(
     runLedgerSync(
       Effect.result(
-        SessionHandleStore.materialize({
+        stores.kernel.materialize({
           id,
           parentId: null,
           role: "resident",
@@ -266,21 +265,48 @@ function delivery(input: {
   };
 }
 
+/** A received message on the chain: a `prompt` action carrying the inbox payload. */
 function prompt(
   id: string,
   sessionId: string,
   content: string,
   parentActionId: string,
-): Inbox.Commit {
+): LedgerAction.Append {
   return {
     id,
+    parentId: parentActionId,
     sessionId,
     kind: "prompt",
-    content,
-    origin: { encodingVersion: 1, value: { source: "test" } },
-    createdAt: 5,
-    parentActionId,
+    intent: { encodingVersion: 1, value: { source: "test" } },
+    effect: { encodingVersion: 1, value: { inboxKind: "prompt", content } },
+    irreversible: true,
+    ts: 5,
   };
+}
+
+/** One fenced single-action commit; returns the committed receipt. */
+function commitOne(
+  authority: { sessionId: string; owner: string; fence: number },
+  action: LedgerAction.Append,
+  state: LedgerSession.Row["state"] = "idle",
+) {
+  const kernel = stores.kernel;
+  return Result.getOrThrowWith(
+    runLedgerSync(
+      Effect.result(
+        kernel.commit({
+          sessionId: authority.sessionId,
+          owner: authority.owner,
+          fence: authority.fence,
+          now: 12,
+          expectedRevision: kernel.row(authority.sessionId).revision,
+          actions: [action],
+          state,
+        }),
+      ),
+    ),
+    (error) => error,
+  );
 }
 
 describe("session kernel folds", () => {
@@ -413,62 +439,26 @@ describe("session kernel folds", () => {
   });
 
   test("reads authoritative open and terminal tails from committed session actions", () => {
+    const kernel = stores.kernel;
     const sessionId = "snapshot-session";
-    const created = materialize(sessionId);
-    const generation = SessionHandleStore.latestGeneration(sessionTree(sessionId));
-    const first = Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(
-            prompt("prompt-1", sessionId, "first", "snapshot-session:configure"),
-          ),
-        ),
-      ),
-      (error) => error,
+    materialize(sessionId);
+    const generation = SessionHandleStore.latestGeneration(
+      sessionTree(sessionId, stores.session.actions),
     );
-    const second = Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("prompt-2", sessionId, "second", first.id)),
-        ),
-      ),
-      (error) => error,
-    );
-    expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([first, second]);
-    expect(SessionHandleStore.inboxRows(sessionId)).toEqual([first, second]);
+    const authority = adoptWriter(kernel, sessionId, "owner");
+    expect(authority).toEqual({ sessionId, owner: "owner", fence: 1 });
 
-    const lease = Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.acquireLease({
-            sessionId,
-            owner: "owner",
-            expectedFence: created.row.leaseFence,
-            now: 10,
-            expiresAt: 1_000,
-          }),
-        ),
-      ),
-      (error) => error,
-    );
-    expect(lease).toEqual({ ok: true, fence: 1 });
-    if (!lease.ok) throw new Error("lease acquisition failed");
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            SessionHandleStore.renewLease({
-              sessionId,
-              owner: "owner",
-              fence: lease.fence,
-              now: 11,
-              expiresAt: 2_000,
-            }),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toBe(true);
+    const first = commitOne(
+      authority,
+      prompt("prompt-1", sessionId, "first", `${sessionId}:configure`),
+    ).receipts[0]?.action;
+    const second = commitOne(authority, prompt("prompt-2", sessionId, "second", "prompt-1"))
+      .receipts[0]?.action;
+    if (first === undefined || second === undefined) throw new Error("prompt commits failed");
+    expect(kernel.pendingMessages(sessionId)).toMatchObject([
+      { id: "prompt-1", content: "first", kind: "prompt", status: "pending", ordinal: 1 },
+      { id: "prompt-2", content: "second", kind: "prompt", status: "pending", ordinal: 2 },
+    ]);
 
     const deliveredFirst = delivery({
       id: "prompt-1:delivery",
@@ -476,7 +466,7 @@ describe("session kernel folds", () => {
       parentId: second.id,
       turnId: "turn-1",
       inboxId: first.id,
-      content: first.content,
+      content: "first",
     });
     const deliveredSecond = delivery({
       id: "prompt-2:delivery",
@@ -484,7 +474,7 @@ describe("session kernel folds", () => {
       parentId: deliveredFirst.id,
       turnId: "turn-1",
       inboxId: second.id,
-      content: second.content,
+      content: "second",
     });
     const intent = turnIntent({
       id: "turn-1",
@@ -494,47 +484,43 @@ describe("session kernel folds", () => {
       resultId: "result-1",
     });
     const running = Result.getOrThrowWith(
-      Effect.runSync(
+      runLedgerSync(
         Effect.result(
-          SessionHandleStore.commit({
+          kernel.commit({
             sessionId,
             owner: "owner",
-            fence: lease.fence,
+            fence: authority.fence,
             now: 12,
-            expectedRevision: SessionHandleStore.row(sessionId).revision,
+            expectedRevision: kernel.row(sessionId).revision,
             actions: [deliveredFirst, deliveredSecond, intent],
-            consumeInboxIds: [first.id, second.id],
             state: "running",
-            releaseLease: false,
           }),
         ),
       ),
       (error) => error,
     );
     expect(running.ok).toBe(true);
-    expect(SessionHandleStore.pendingInbox(sessionId)).toEqual([]);
-    expect(SessionHandleStore.getSnapshot(sessionId)).toMatchObject({
+    expect(kernel.pendingMessages(sessionId)).toEqual([]);
+    expect(kernel.getSnapshot(sessionId)).toMatchObject({
       id: sessionId,
       state: "running",
       openTurnId: "turn-1",
       turns: [{ state: "running", messages: [{ text: "first" }, { text: "second" }] }],
     });
 
-    const continuation = Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("prompt-3", sessionId, "third", "turn-1")),
-        ),
-      ),
-      (error) => error,
-    );
+    const continuation = commitOne(
+      authority,
+      prompt("prompt-3", sessionId, "third", "turn-1"),
+      "running",
+    ).receipts[0]?.action;
+    if (continuation === undefined) throw new Error("continuation commit failed");
     const deliveredThird = delivery({
       id: "prompt-3:delivery",
       sessionId,
       parentId: continuation.id,
       turnId: "turn-1",
       inboxId: continuation.id,
-      content: continuation.content,
+      content: "third",
     });
     const checked = checkpoint({
       id: "checkpoint-1",
@@ -545,18 +531,16 @@ describe("session kernel folds", () => {
     });
     expect(
       Result.getOrThrowWith(
-        Effect.runSync(
+        runLedgerSync(
           Effect.result(
-            SessionHandleStore.commit({
+            kernel.commit({
               sessionId,
               owner: "owner",
-              fence: lease.fence,
+              fence: authority.fence,
               now: 13,
-              expectedRevision: SessionHandleStore.row(sessionId).revision,
+              expectedRevision: kernel.row(sessionId).revision,
               actions: [deliveredThird, checked],
-              consumeInboxIds: [continuation.id],
               state: "running",
-              releaseLease: false,
             }),
           ),
         ),
@@ -571,28 +555,9 @@ describe("session kernel folds", () => {
       kind: "result",
       text: "answer",
     });
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            SessionHandleStore.commit({
-              sessionId,
-              owner: "owner",
-              fence: lease.fence,
-              now: 14,
-              expectedRevision: SessionHandleStore.row(sessionId).revision,
-              actions: [result],
-              consumeInboxIds: [],
-              state: "idle",
-              releaseLease: true,
-            }),
-          ),
-        ),
-        (error) => error,
-      ).ok,
-    ).toBe(true);
+    expect(commitOne(authority, result, "idle").ok).toBe(true);
 
-    expect(SessionHandleStore.getSnapshot(sessionId)).toMatchObject({
+    expect(kernel.getSnapshot(sessionId)).toMatchObject({
       state: "idle",
       turns: [
         {
@@ -608,16 +573,16 @@ describe("session kernel folds", () => {
         },
       ],
     });
-    expect(SessionHandleStore.getSnapshot(sessionId, 0).turns).toEqual([]);
-    expect(() => SessionHandleStore.getSnapshot(sessionId, -1)).toThrow(
-      "turn count must be non-negative",
-    );
-    expect(SessionHandleStore.listRows().map((row) => row.id)).toEqual([sessionId]);
+    expect(kernel.getSnapshot(sessionId, 0).turns).toEqual([]);
+    expect(() => kernel.getSnapshot(sessionId, -1)).toThrow("turn count must be non-negative");
+    expect(kernel.listRows().map((row) => row.id)).toEqual([sessionId]);
   });
 
   test("watch emits revisions and gaps, then releases all subscribers", async () => {
+    const kernel = stores.kernel;
     materialize("watched");
-    const watch = SessionHandleStore.watchSnapshot("watched", 1, sink);
+    const authority = adoptWriter(kernel, "watched", "owner");
+    const watch = kernel.watchSnapshot("watched", 1, sink);
     const seen: SessionTurn.Observation[] = [];
     let resolveObservations: () => void = () => undefined;
     const observations = new Promise<void>((resolve) => {
@@ -628,38 +593,17 @@ describe("session kernel folds", () => {
       if (seen.length === 2) resolveObservations();
     });
 
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("watch-1", "watched", "one", "watched:configure")),
-        ),
-      ),
-      (error) => error,
-    );
+    commitOne(authority, prompt("watch-1", "watched", "one", "watched:configure"));
     sink.dropNextCommit = true;
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("watch-2", "watched", "two", "watch-1")),
-        ),
-      ),
-      (error) => error,
-    );
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("watch-3", "watched", "three", "watch-2")),
-        ),
-      ),
-      (error) => error,
-    );
+    commitOne(authority, prompt("watch-2", "watched", "two", "watch-1"));
+    commitOne(authority, prompt("watch-3", "watched", "three", "watch-2"));
     await bounded(observations, "watch observations");
 
     expect(seen).toEqual([
       expect.objectContaining({ kind: "revision", sessionId: "watched", revision: 2 }),
       { kind: "gap", sessionId: "watched", from: 2, to: 4 },
     ]);
-    expect(SessionHandleStore.getSnapshot("watched").revision).toBe(4);
+    expect(kernel.getSnapshot("watched").revision).toBe(4);
     stopHandler();
     watch.unsubscribe();
     watch.unsubscribe();
@@ -667,8 +611,10 @@ describe("session kernel folds", () => {
   });
 
   test("a dropped notification resynchronizes from the last revision through bounded pages without inventing events", async () => {
+    const kernel = stores.kernel;
     materialize("resync");
-    const watch = SessionHandleStore.watchSnapshot("resync", 1, sink);
+    const authority = adoptWriter(kernel, "resync", "owner");
+    const watch = kernel.watchSnapshot("resync", 1, sink);
     const seen: LedgerAction.Node[] = [];
     const gap = new Promise<SessionTurn.Observation>((resolve) => {
       watch.subscribe((observation) => {
@@ -676,47 +622,19 @@ describe("session kernel folds", () => {
       });
     });
 
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("resync-1", "resync", "one", "resync:configure")),
-        ),
-      ),
-      (error) => error,
-    );
+    commitOne(authority, prompt("resync-1", "resync", "one", "resync:configure"));
     sink.dropNextCommit = true;
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("resync-2", "resync", "two", "resync-1")),
-        ),
-      ),
-      (error) => error,
-    );
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("resync-3", "resync", "three", "resync-2")),
-        ),
-      ),
-      (error) => error,
-    );
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          SessionHandleStore.commitInbox(prompt("resync-4", "resync", "four", "resync-3")),
-        ),
-      ),
-      (error) => error,
-    );
+    commitOne(authority, prompt("resync-2", "resync", "two", "resync-1"));
+    commitOne(authority, prompt("resync-3", "resync", "three", "resync-2"));
+    commitOne(authority, prompt("resync-4", "resync", "four", "resync-3"));
     const observed = await bounded(gap, "gap observation");
     expect(observed).toEqual({ kind: "gap", sessionId: "resync", from: 2, to: 4 });
     if (observed.kind !== "gap") throw new Error("gap expected");
 
-    let page = SessionHandleStore.historyPage("resync", { afterRevision: observed.from, limit: 2 });
+    let page = kernel.historyPage("resync", { afterRevision: observed.from, limit: 2 });
     expect(page).toMatchObject({ afterRevision: 2, headRevision: 5, nextRevision: 4 });
     seen.push(...page.actions);
-    page = SessionHandleStore.historyPage("resync", {
+    page = kernel.historyPage("resync", {
       afterRevision: page.nextRevision ?? 0,
       limit: 2,
     });
@@ -727,16 +645,16 @@ describe("session kernel folds", () => {
       ["resync-3", 4],
       ["resync-4", 5],
     ]);
-    expect(seen).toEqual(sessionTree("resync").slice(2));
-    expect(SessionHandleStore.historyPage("resync", { afterRevision: 5 })).toEqual({
+    expect(seen).toEqual(sessionTree("resync", stores.session.actions).slice(2));
+    expect(kernel.historyPage("resync", { afterRevision: 5 })).toEqual({
       sessionId: "resync",
       afterRevision: 5,
       headRevision: 5,
       actions: [],
       nextRevision: null,
     });
-    expect(() => SessionHandleStore.historyPage("resync", { limit: 0 })).toThrow();
-    expect(() => SessionHandleStore.historyPage("missing")).toThrow("session not found");
+    expect(() => kernel.historyPage("resync", { limit: 0 })).toThrow();
+    expect(() => kernel.historyPage("missing")).toThrow("session not found");
     watch.unsubscribe();
   });
 
@@ -752,66 +670,44 @@ describe("session kernel folds", () => {
       },
     };
 
-    expect(() => SessionHandleStore.watchSnapshot("missing", 1, observations)).toThrow(
+    expect(() => stores.kernel.watchSnapshot("missing", 1, observations)).toThrow(
       "session not found",
     );
     expect(subscriptions).toBe(0);
   });
 
-  test("wrapper failures stay loud when rows or required capabilities are absent", () => {
-    expect(() => SessionHandleStore.row("missing")).toThrow("session not found");
+  test("wrapper failures stay loud when rows or authority are absent", () => {
+    const kernel = stores.kernel;
+    expect(() => kernel.row("missing")).toThrow("session not found");
     expect(() =>
       Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            SessionHandleStore.acquireLease({
-              sessionId: "missing",
-              owner: "owner",
-              expectedFence: 0,
-              now: 1,
-              expiresAt: 2,
-            }),
-          ),
+        runLedgerSync(
+          Effect.result(kernel.adoptFence({ sessionId: "missing", owner: "owner", fence: 1 })),
         ),
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "SessionNotFound" }));
     expect(() =>
       Result.getOrThrowWith(
-        Effect.runSync(
+        runLedgerSync(
           Effect.result(
-            SessionHandleStore.commit({
+            kernel.commit({
               sessionId: "missing",
               owner: "owner",
               fence: 1,
               now: 1,
               expectedRevision: 0,
               actions: [],
-              consumeInboxIds: [],
               state: "idle",
-              releaseLease: true,
             }),
           ),
         ),
         (error) => error,
       ),
     ).toThrow(expect.objectContaining({ _tag: "SessionNotFound" }));
-    expect(() =>
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            SessionHandleStore.commitInbox(
-              prompt("missing-prompt", "missing", "missing", "missing-parent"),
-            ),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
 
-    const policies = Storage.get().policies;
-    if (policies === undefined) throw new Error("policy adapter is unavailable");
-    expect(SessionHandleStore.currentPolicyGeneration()).toBe(0);
+    const policies = stores.catalog.policies;
+    expect(kernel.currentPolicyGeneration()).toBe(0);
     expect(
       policies.append({
         name: "configure",
@@ -823,19 +719,11 @@ describe("session kernel folds", () => {
         generation: 4,
       }),
     ).toBe(true);
-    expect(SessionHandleStore.currentPolicyGeneration()).toBe(4);
+    expect(kernel.currentPolicyGeneration()).toBe(4);
+    expect(kernel.policyRows(4)).toHaveLength(1);
 
-    Storage.configure(bareStorageAdapter());
-    expect(() => SessionHandleStore.row("missing")).toThrow("capability is unavailable: sessions");
-    expect(() => sessionTree("missing")).toThrow("capability is unavailable: actions");
-    expect(() => SessionHandleStore.pendingInbox("missing")).toThrow(
-      "capability is unavailable: inbox",
+    expect(() => kernel.watchSnapshot("missing", 1, { publish: () => undefined })).toThrow(
+      "requires a subscribable observation sink",
     );
-    expect(() => SessionHandleStore.currentPolicyGeneration()).toThrow(
-      "capability is unavailable: policies",
-    );
-    expect(() =>
-      SessionHandleStore.watchSnapshot("missing", 1, { publish: () => undefined }),
-    ).toThrow("requires a subscribable observation sink");
   });
 });

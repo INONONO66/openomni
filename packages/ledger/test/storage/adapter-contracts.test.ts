@@ -2,33 +2,18 @@ import { sessionTree } from "../helpers/session-tree";
 import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import {
-  Alarm,
-  Inbox,
-  LedgerAction,
-  LedgerSession,
-  PolicyRow,
-  type Storage as ProtocolStorage,
-} from "@openomni/protocol";
-import { Migration } from "../../src/storage/migration-runner.js";
-import { SqliteStorageAdapter } from "../../src/storage/sqlite-storage.js";
-import { Storage } from "../../src/storage/storage.js";
+import { LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
+import { runLedgerSync } from "../helpers/effect";
+import { useSqliteStores } from "../helpers/storage";
 
-const directories: string[] = [];
-let adapter: SqliteStorageAdapter;
+const stores = useSqliteStores("ledger-contract");
 let inspection: Database;
-
-interface L0Adapter {
-  transaction<T>(operation: () => T): T;
-  sessions: NonNullable<Storage.Adapter["sessions"]>;
-  actions: ProtocolStorage.ActionSubAdapter;
-  inbox: NonNullable<Storage.Adapter["inbox"]>;
-  alarms: NonNullable<Storage.Adapter["alarms"]>;
-  policies: ProtocolStorage.PolicyRowSubAdapter;
-}
+beforeEach(() => {
+  inspection = new Database(stores.sessionPath);
+});
+afterEach(() => {
+  inspection.close();
+});
 
 const encoded = (value: string) => ({ encodingVersion: 1 as const, value: { value } });
 
@@ -39,337 +24,131 @@ function sessionRow(id: string): LedgerSession.Row {
     role: "resident",
     leaseOwner: null,
     leaseFence: 0,
-    leaseExpiresAt: null,
     revision: 0,
     state: "idle",
   });
 }
 
-function exerciseL0Contracts(storage: L0Adapter) {
-  const session = sessionRow("session-l0");
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(storage.sessions.create(session))),
-      (error) => error,
-    ),
-  ).toBe(true);
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(storage.sessions.create(session))),
-      (error) => error,
-    ),
-  ).toBe(false);
-
-  const root = storage.actions.append(
-    LedgerAction.Append.parse({
-      id: "action-root",
-      parentId: null,
-      sessionId: session.id,
-      kind: "turn",
-      intent: encoded("intent"),
-      effect: encoded("result"),
-      irreversible: true,
-      ts: 100,
-    }),
-    0,
+function create(row: LedgerSession.Row): boolean {
+  return Result.getOrThrowWith(
+    runLedgerSync(Effect.result(stores.session.sessions.create(row))),
+    (error) => error,
   );
-  expect(root?.revision).toBe(1);
+}
 
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(storage.sessions.create(sessionRow("session-other")))),
-      (error) => error,
-    ),
-  ).toBe(true);
-  expect(
-    storage.actions.append(
+describe("L0 adapter contracts", () => {
+  test("session, action and policy planes hold their append contracts", () => {
+    const session = sessionRow("session-l0");
+    expect(create(session)).toBe(true);
+    expect(create(session)).toBe(false);
+
+    const root = stores.session.actions.append(
       LedgerAction.Append.parse({
-        id: "action-foreign-parent",
-        parentId: "action-root",
-        sessionId: "session-other",
-        kind: "tool",
-        intent: encoded("foreign"),
-        effect: encoded("foreign"),
+        id: "action-root",
+        parentId: null,
+        sessionId: session.id,
+        kind: "turn",
+        intent: encoded("intent"),
+        effect: encoded("result"),
         irreversible: true,
         ts: 100,
       }),
       0,
-    ),
-  ).toBeUndefined();
-  expect(storage.sessions.get("session-other")?.revision).toBe(0);
+    );
+    expect(root?.revision).toBe(1);
 
-  const stale = storage.actions.append(
-    LedgerAction.Append.parse({
-      id: "action-stale",
-      parentId: "action-root",
-      sessionId: session.id,
-      kind: "tool",
-      intent: encoded("stale"),
-      effect: encoded("stale"),
-      irreversible: true,
-      ts: 101,
-    }),
-    0,
-  );
-  expect(stale).toBeUndefined();
-
-  const reverted = storage.actions.append(
-    LedgerAction.Append.parse({
-      id: "action-revert",
-      parentId: "action-root",
-      sessionId: session.id,
-      kind: "tool",
-      intent: encoded("undo"),
-      effect: encoded("undone"),
-      revert: encoded("action-root"),
-      ts: 102,
-    }),
-    1,
-  );
-  expect(reverted?.revision).toBe(2);
-
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          storage.inbox.commit(
-            Inbox.Commit.parse({
-              id: "inbox-2",
-              sessionId: session.id,
-              kind: "interrupt",
-              content: "stop",
-              origin: encoded("owner"),
-              createdAt: 201,
-            }),
-          ),
-        ),
-      ),
-      (error) => error,
-    ),
-  ).toMatchObject({ ordinal: 1, status: "pending" });
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          storage.inbox.commit(
-            Inbox.Commit.parse({
-              id: "inbox-1",
-              sessionId: session.id,
-              kind: "prompt",
-              content: "go",
-              origin: encoded("owner"),
-              createdAt: 200,
-            }),
-          ),
-        ),
-      ),
-      (error) => error,
-    ),
-  ).toMatchObject({ ordinal: 2, status: "pending" });
-  expect(storage.inbox.list(session.id, "pending").map((row) => row.id)).toEqual([
-    "inbox-2",
-    "inbox-1",
-  ]);
-
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          storage.alarms.arm(
-            Alarm.Arm.parse({
-              id: "alarm-later",
-              sessionId: session.id,
-              kind: "watch",
-              fireAt: 500,
-            }),
-          ),
-        ),
-      ),
-      (error) => error,
-    ),
-  ).toMatchObject({ status: "armed" });
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(
-        Effect.result(
-          storage.alarms.arm(
-            Alarm.Arm.parse({
-              id: "alarm-now",
-              sessionId: session.id,
-              kind: "watch",
-              fireAt: 400,
-              spec: encoded("watch"),
-            }),
-          ),
-        ),
-      ),
-      (error) => error,
-    ),
-  ).toMatchObject({ status: "armed" });
-  expect(
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(storage.alarms.cancel("alarm-later", session.id, 450))),
-      (error) => error,
-    ),
-  ).toMatchObject({
-    status: "cancelled",
-  });
-  expect(storage.alarms.due(450).map((row) => row.id)).toEqual(["alarm-now"]);
-  expect(storage.sessions.get(session.id)?.revision).toBe(7);
-
-  const policy = PolicyRow.Row.parse({
-    name: "allow-tool",
-    kind: "tool",
-    phase: "pre",
-    match: encoded("all"),
-    verdict: encoded("allow"),
-    priority: 10,
-    generation: 1,
-  });
-  expect(storage.policies.append(policy)).toBe(true);
-  expect(storage.policies.append(policy)).toBe(false);
-  expect(storage.policies.rows()).toEqual([policy]);
-  expect(storage.sessions.get(session.id)?.revision).toBe(7);
-  const whole = sessionTree(session.id, storage.actions);
-  expect(storage.actions.range(session.id, 0, 3)).toEqual(whole.slice(0, 3));
-  expect(storage.actions.range(session.id, 3, 100)).toEqual(whole.slice(3));
-  expect(storage.actions.range(session.id, whole.length, 1)).toEqual([]);
-
-  return {
-    session: storage.sessions.get(session.id),
-    tree: sessionTree(session.id, storage.actions),
-    inbox: storage.inbox.list(session.id),
-    alarms: storage.alarms.due(1000),
-    policies: storage.policies.rows(),
-  };
-}
-
-function database(): Database {
-  return inspection;
-}
-
-beforeEach(() => {
-  Storage.reset();
-  const directory = mkdtempSync(join(tmpdir(), "ledger-contract-"));
-  directories.push(directory);
-  const path = join(directory, "ledger.db");
-  adapter = new SqliteStorageAdapter(path);
-  inspection = new Database(path);
-  Storage.configure(adapter);
-});
-
-afterEach(() => {
-  inspection.close();
-  Storage.reset();
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-describe("L0 adapter contracts", () => {
-  function sqliteAdapter(): L0Adapter {
-    return {
-      transaction: (operation) => adapter.transaction(operation),
-      sessions: adapter.sessions,
-      actions: adapter.actions,
-      inbox: adapter.inbox,
-      alarms: adapter.alarms,
-      policies: adapter.policies,
-    };
-  }
-
-  test("memory and SQLite produce identical action/session/inbox/alarm/policy state", () => {
-    exerciseL0Contracts(sqliteAdapter());
-  });
-
-  test("SQLite refuses orphan alarms and inbox/action id collisions without mutation", () => {
-    const create = sqliteAdapter;
-    const storage = create();
-    const row = sessionRow("session-boundary");
+    expect(create(sessionRow("session-other"))).toBe(true);
     expect(
-      Result.getOrThrowWith(
-        Effect.runSync(Effect.result(storage.sessions.create(row))),
-        (error) => error,
-      ),
-    ).toBe(true);
-    expect(() =>
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            storage.alarms.arm(
-              Alarm.Arm.parse({ id: "orphan", sessionId: "missing", kind: "at", fireAt: 10 }),
-            ),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toThrow(expect.objectContaining({ _tag: "AlarmRefused" }));
-    expect(
-      storage.actions.append(
+      stores.session.actions.append(
         LedgerAction.Append.parse({
-          id: "collision",
-          parentId: null,
-          sessionId: row.id,
-          kind: "turn",
-          intent: encoded("intent"),
-          effect: encoded("effect"),
+          id: "action-foreign-parent",
+          parentId: "action-root",
+          sessionId: "session-other",
+          kind: "tool",
+          intent: encoded("foreign"),
+          effect: encoded("foreign"),
           irreversible: true,
-          ts: 10,
+          ts: 100,
         }),
         0,
       ),
-    ).toBeDefined();
-    expect(() =>
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            storage.inbox.commit(
-              Inbox.Commit.parse({
-                id: "collision",
-                sessionId: row.id,
-                kind: "prompt",
-                content: "content",
-                origin: encoded("origin"),
-                createdAt: 11,
-              }),
-            ),
-          ),
-        ),
-        (error) => error,
+    ).toBeUndefined();
+    expect(stores.session.sessions.get("session-other")?.revision).toBe(0);
+
+    expect(
+      stores.session.actions.append(
+        LedgerAction.Append.parse({
+          id: "action-stale",
+          parentId: "action-root",
+          sessionId: session.id,
+          kind: "tool",
+          intent: encoded("stale"),
+          effect: encoded("stale"),
+          irreversible: true,
+          ts: 101,
+        }),
+        0,
       ),
-    ).toThrow(expect.objectContaining({ _tag: "InboxCommitRefused" }));
-    expect(storage.sessions.get(row.id)?.revision).toBe(1);
-    expect(sessionTree(row.id, storage.actions).map((action) => action.kind)).toEqual(["turn"]);
-    expect(storage.inbox.list(row.id)).toEqual([]);
+    ).toBeUndefined();
+
+    const reverted = stores.session.actions.append(
+      LedgerAction.Append.parse({
+        id: "action-revert",
+        parentId: "action-root",
+        sessionId: session.id,
+        kind: "tool",
+        intent: encoded("undo"),
+        effect: encoded("undone"),
+        revert: encoded("action-root"),
+        ts: 102,
+      }),
+      1,
+    );
+    expect(reverted?.revision).toBe(2);
+    expect(stores.session.sessions.get(session.id)?.revision).toBe(2);
+
+    const policy = PolicyRow.Row.parse({
+      name: "allow-tool",
+      kind: "tool",
+      phase: "pre",
+      match: encoded("all"),
+      verdict: encoded("allow"),
+      priority: 10,
+      generation: 1,
+    });
+    expect(stores.catalog.policies.append(policy)).toBe(true);
+    expect(stores.catalog.policies.append(policy)).toBe(false);
+    expect(stores.catalog.policies.rows()).toEqual([policy]);
+    expect(stores.session.sessions.get(session.id)?.revision).toBe(2);
+
+    const whole = sessionTree(session.id, stores.session.actions);
+    expect(stores.session.actions.range(session.id, 0, 1)).toEqual(whole.slice(0, 1));
+    expect(stores.session.actions.range(session.id, 1, 100)).toEqual(whole.slice(1));
+    expect(stores.session.actions.range(session.id, whole.length, 1)).toEqual([]);
   });
 });
 
 describe("SQLite adapter contract guards", () => {
-  test("fresh schemas omit retired lifecycle tables", () => {
-    const rows = database()
+  test("fresh session files omit retired lifecycle tables", () => {
+    const rows = inspection
       .query(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('conversation', 'lease', 'engagement') ORDER BY name",
+        `SELECT name FROM sqlite_master WHERE type = 'table'
+         AND name IN ('conversation', 'lease', 'engagement', 'inbox', 'alarm', 'watch_source', '_migrations')
+         ORDER BY name`,
       )
       .all();
-
     expect(rows).toEqual([]);
   });
 
   test("action revision rolls back when the append insert fails", () => {
     const row = sessionRow("session-action-rollback");
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(Effect.result(adapter.sessions.create(row))),
-        (error) => error,
-      ),
-    ).toBe(true);
-    database().exec(`
+    expect(create(row)).toBe(true);
+    inspection.exec(`
       CREATE TRIGGER refuse_action BEFORE INSERT ON action
       BEGIN SELECT RAISE(ABORT, 'refuse action'); END
     `);
-
     expect(() =>
-      adapter.actions.append(
+      stores.session.actions.append(
         LedgerAction.Append.parse({
           id: "action-rollback",
           parentId: null,
@@ -383,51 +162,12 @@ describe("SQLite adapter contract guards", () => {
         0,
       ),
     ).toThrow("refuse action");
-    expect(adapter.sessions.get(row.id)?.revision).toBe(0);
-    expect(sessionTree(row.id, adapter.actions)).toEqual([]);
-  });
-
-  test("inbox action and row roll back together when the row insert fails", () => {
-    const row = sessionRow("session-rollback");
-    expect(
-      Result.getOrThrowWith(
-        Effect.runSync(Effect.result(adapter.sessions.create(row))),
-        (error) => error,
-      ),
-    ).toBe(true);
-    database().exec(`
-      CREATE TRIGGER refuse_inbox BEFORE INSERT ON inbox
-      BEGIN SELECT RAISE(ABORT, 'refuse inbox'); END
-    `);
-
-    expect(() =>
-      Result.getOrThrowWith(
-        Effect.runSync(
-          Effect.result(
-            adapter.inbox.commit(
-              Inbox.Commit.parse({
-                id: "inbox-rollback",
-                sessionId: row.id,
-                kind: "prompt",
-                content: "content",
-                origin: encoded("origin"),
-                createdAt: 12,
-              }),
-            ),
-          ),
-        ),
-        (error) => error,
-      ),
-    ).toThrow(expect.objectContaining({ _tag: "ForeignFailure" }));
-    expect(adapter.sessions.get(row.id)?.revision).toBe(0);
-    expect(sessionTree(row.id, adapter.actions)).toEqual([]);
+    expect(stores.session.sessions.get(row.id)?.revision).toBe(0);
+    expect(sessionTree(row.id, stores.session.actions)).toEqual([]);
   });
 
   test("request action compare-and-set rejects foreign parent and stale revision", () => {
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(adapter.sessions.create(sessionRow("request-owner")))),
-      (error) => error,
-    );
+    expect(create(sessionRow("request-owner"))).toBe(true);
     const action = LedgerAction.Append.parse({
       id: "request",
       parentId: "missing",
@@ -438,50 +178,17 @@ describe("SQLite adapter contract guards", () => {
       irreversible: true,
       ts: 1,
     });
-    expect(adapter.actions.append(action, 0)).toBeUndefined();
-    expect(adapter.actions.append({ ...action, parentId: null }, 1)).toBeUndefined();
-    expect(adapter.sessions.get("request-owner")?.revision).toBe(0);
-    expect(sessionTree("request-owner", adapter.actions)).toEqual([]);
+    expect(stores.session.actions.append(action, 0)).toBeUndefined();
+    expect(stores.session.actions.append({ ...action, parentId: null }, 1)).toBeUndefined();
+    expect(stores.session.sessions.get("request-owner")?.revision).toBe(0);
+    expect(sessionTree("request-owner", stores.session.actions)).toEqual([]);
   });
 
   test("canonical session reads cannot mutate a later snapshot", () => {
-    Result.getOrThrowWith(
-      Effect.runSync(Effect.result(adapter.sessions.create(sessionRow("session-isolated")))),
-      (error) => error,
-    );
-    const first = adapter.sessions.get("session-isolated");
+    expect(create(sessionRow("session-isolated"))).toBe(true);
+    const first = stores.session.sessions.get("session-isolated");
     if (first === undefined) throw new Error("missing session");
     first.revision = 99;
-    expect(adapter.sessions.get(first.id)?.revision).toBe(0);
-  });
-});
-
-describe("migration rollback preservation", () => {
-  test("surfaces both the migration failure and failed rollback", () => {
-    const directory = mkdtempSync(join(tmpdir(), "ledger-migration-rollback-"));
-    directories.push(directory);
-    // ON CONFLICT ROLLBACK ends SQLite's transaction before the runner's cleanup.
-    writeFileSync(
-      join(directory, "broken.sql"),
-      `
-      CREATE TABLE broken (id TEXT UNIQUE ON CONFLICT ROLLBACK);
-      INSERT INTO broken VALUES ('duplicate');
-      INSERT INTO broken VALUES ('duplicate');
-    `,
-    );
-    using db = new Database(":memory:");
-    const rollbackMessage: object = expect.stringContaining("no transaction is active");
-    const migrationMessage: object = expect.stringContaining("UNIQUE constraint failed");
-    const rollbackFailure: object = expect.objectContaining({ message: rollbackMessage });
-    const migrationFailure: object = expect.objectContaining({ message: migrationMessage });
-    expect(() => Migration.applyOrdered(db, directory, [{ name: "broken.sql" }])).toThrow(
-      expect.objectContaining({
-        name: "SuppressedError",
-        error: rollbackFailure,
-        suppressed: migrationFailure,
-      }),
-    );
-    expect(db.query("SELECT name FROM _migrations").all()).toEqual([]);
-    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'broken'").get()).toBeNull();
+    expect(stores.session.sessions.get(first.id)?.revision).toBe(0);
   });
 });

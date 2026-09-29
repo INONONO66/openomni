@@ -1,0 +1,368 @@
+bun test v1.4.1 (4661e494f)
+
+bench/session-bench.test.ts:
+(pass) session benchmark fixtures > default seed preserves ten complete turns [13.59ms]
+(pass) session benchmark fixtures > 500 turns seed exactly twice as many committed turn actions [90.32ms]
+(pass) session benchmark fixtures > 5000 turns seed exactly twice as many committed turn actions [668.45ms]
+(pass) session benchmark fixtures > preparing a warm-session commit leaves history unchanged until one action is committed [3.71ms]
+
+session-hydration
+┌───┬──────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name    │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼──────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ get-session  │ 1448.1 ± 15.77%  │ 1167.0 ± 42.00   │ 799994 ± 0.38%         │ 856898 ± 31991         │ 6906    │
+│ 1 │ get-messages │ 231709 ± 17.24%  │ 199228 ± 8333.5  │ 4723 ± 5.51%           │ 5019 ± 208             │ 44      │
+└───┴──────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+bus-fanout
+┌───┬────────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name      │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼────────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 10-subscribers │ 584.30 ± 17.44%  │ 458.00 ± 41.00   │ 2122951 ± 0.29%        │ 2183406 ± 214675       │ 17115   │
+└───┴────────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+bus-fanout
+┌───┬────────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name      │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼────────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 50-subscribers │ 673.43 ± 9.53%   │ 583.00 ± 41.00   │ 1660554 ± 0.28%        │ 1715266 ± 129753       │ 14850   │
+└───┴────────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+bus-fanout
+┌───┬─────────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name       │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼─────────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 100-subscribers │ 894.15 ± 11.44%  │ 750.00 ± 42.00   │ 1249755 ± 0.29%        │ 1333333 ± 70707        │ 11184   │
+└───┴─────────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+message-serialization
+┌───┬───────────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name         │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼───────────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ stringify-message │ 339.88 ± 2.19%   │ 292.00 ± 1.00    │ 3357013 ± 0.18%        │ 3424658 ± 11769        │ 29423   │
+│ 1 │ parse-message     │ 666.35 ± 1.09%   │ 625.00 ± 0.00    │ 1576490 ± 0.18%        │ 1600000 ± 0            │ 15008   │
+└───┴───────────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+storage-session-list
+┌───┬─────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name   │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼─────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 10-sessions │ 8335.1 ± 9.80%   │ 7416.0 ± 334.00  │ 130052 ± 0.78%         │ 134844 ± 6340          │ 1200    │
+└───┴─────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+storage-session-list
+┌───┬──────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name    │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼──────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 100-sessions │ 78555 ± 9.25%    │ 72417 ± 2708.5   │ 13435 ± 2.22%          │ 13809 ± 532            │ 128     │
+└───┴──────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+storage-session-list
+┌───┬──────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name    │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼──────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 500-sessions │ 385152 ± 13.89%  │ 356396 ± 4978.5  │ 2717 ± 5.50%           │ 2806 ± 40              │ 26      │
+└───┴──────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+session-tree
+┌───┬─────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name   │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼─────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ 1k-actions  │ 797458 ± 1.62%   │ 797750 ± 14958   │ 1255 ± 1.58%           │ 1254 ± 24              │ 13      │
+│ 1 │ 10k-actions │ 7353438 ± 18.40% │ 7353438 ± 106480 │ 136 ± 18.40%           │ 136 ± 2                │ 2       │
+└───┴─────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+session-history
+┌───┬───────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼───────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ page      │ 364781 ± 16.74%  │ 328417 ± 18667   │ 2933 ± 6.53%           │ 3045 ± 175             │ 28      │
+└───┴───────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+
+session-commit
+┌───┬───────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼───────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ action    │ 76056 ± 18.96%   │ 66146 ± 3708.0   │ 14693 ± 2.40%          │ 15118 ± 869            │ 132     │
+└───┴───────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+(pass) benchmark entry point emits the ten existing ledger metrics and four new session metrics [1185.76ms]
+
+test/surface-key.test.ts:
+(pass) ledger error contracts are runtime values [0.07ms]
+(pass) SurfaceKey > claim and lookup > claims and looks up a surfaceKey [1.35ms]
+(pass) SurfaceKey > claim and lookup > returns undefined for unregistered key [0.81ms]
+(pass) SurfaceKey > claim and lookup > throws error on invalid format during claim [0.82ms]
+(pass) SurfaceKey > N:1 mapping (multiple keys → same session) > allows multiple keys to map to same session [1.03ms]
+(pass) SurfaceKey > N:1 mapping (multiple keys → same session) > lists all keys for a session [0.91ms]
+(pass) SurfaceKey > N:1 mapping (multiple keys → same session) > returns empty array for session with no keys [0.72ms]
+(pass) SurfaceKey > collision handling > handles key reassignment from one session to another [0.95ms]
+(pass) SurfaceKey > collision handling > claim returns existing owner without overwriting it [0.94ms]
+(pass) SurfaceKey > collision handling > claim can replace an expected owner [0.91ms]
+(pass) SurfaceKey > codec-built keys route independently > routes DM and group to different sessions [0.96ms]
+(pass) SurfaceKey > codec-built keys route independently > routes thread separately from parent channel [1.21ms]
+(pass) SurfaceKey > codec-built keys route independently > existing keys without explicit kind still claim/lookup [0.99ms]
+(pass) SurfaceKey > fail-closed > every operation throws when the surfaceKey sub-adapter is absent [0.77ms]
+(pass) SurfaceKey > fail-closed > claim never fabricates a successful claim without persistence [0.71ms]
+
+test/egress/egress-budget-store.test.ts:
+(pass) EgressBudgetStore > an empty ledger presents a zero state to the first claim [1.68ms]
+(pass) EgressBudgetStore > claims fold per-class window counts and a window-independent lastSendAt [0.98ms]
+(pass) EgressBudgetStore > claims are isolated per (sender, target) pair [0.82ms]
+(pass) EgressBudgetStore > read-only applicability sees committed window counts without charging ingress [0.81ms]
+(pass) EgressBudgetStore > two contenders for the last SQLite window slot produce exactly one claim [0.79ms]
+(pass) EgressBudgetStore > retrying a recorded claim is idempotent and never charges the window twice [0.88ms]
+(pass) EgressBudgetStore > retrying an id with different fields is refused as a conflicting claim [0.76ms]
+(pass) EgressBudgetStore > the claim holds one write transaction across read and append [10.73ms]
+(pass) EgressBudgetStore > fails closed when the sub-adapter is absent [0.92ms]
+
+test/integration/observability.test.ts:
+(pass) ledger-first observations > publishes exactly one committed receipt after durable revision advances [0.89ms]
+(pass) ledger-first observations > CAS refusal emits nothing [0.46ms]
+post-commit observation failed: action-parity
+(pass) ledger-first observations > throwing and noop sinks preserve the committed product result [1.13ms]
+
+test/provisioning/provisioning.test.ts:
+(pass) provisioning stores > Person roundtrips, lists, and removes [10.49ms]
+(pass) provisioning stores > sole-owner invariant: a second owner Person is a typed owner_exists refusal [7.99ms]
+(pass) provisioning stores > the reigning owner Person may be re-declared and other tiers coexist [10.28ms]
+(pass) provisioning stores > ChannelInstance roundtrips with settings and credentialRef intact [17.47ms]
+(pass) provisioning stores > Secret BLOB envelope roundtrips byte-exact through SQLite [9.81ms]
+(pass) provisioning stores > §8.2: the database file never contains credential plaintext [8.55ms]
+(pass) provisioning stores > a storage adapter without the provisioning seam fails closed with adapter_absent [8.19ms]
+(pass) Vault envelope crypto > kekOf refuses non-32-byte keys with a typed vault_locked error [0.03ms]
+(pass) Vault envelope crypto > kek ids are stable fingerprints of the key bytes [0.02ms]
+(pass) Vault envelope crypto > seal produces ciphertext that shares no bytes with the plaintext [0.12ms]
+(pass) Vault envelope crypto > open under the wrong KEK id is a typed kek_mismatch [0.03ms]
+(pass) Vault envelope crypto > a tampered ciphertext fails authentication as a typed unopenable [0.07ms]
+(pass) Vault envelope crypto > authentication failures preserve the exact native error as cause [0.26ms]
+(pass) Vault envelope crypto > a truncated packed blob is a typed unopenable, not a crash [0.02ms]
+(pass) Vault envelope crypto > §8.3: every accidental serialization of a revealed secret prints [redacted] [0.22ms]
+
+test/storage/catalog-store.test.ts:
+(pass) openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog tables [4.91ms]
+(pass) F9: catalog bootstrap applies busy_timeout before any schema statement [0.41ms]
+(pass) session index registers at fence 0, rotates monotonically and refuses unknown sessions [5.74ms]
+(pass) concurrent rotateFence from two processes yields distinct consecutive fences [164.38ms]
+(pass) catalog sub-adapters operate on the fresh catalog tables [7.21ms]
+
+test/storage/json-boundaries.test.ts:
+(pass) raw recorded facts reject malformed JSON and non-finite JSON numbers [1.20ms]
+(pass) actor endpoint filters distinguish no filter from the empty workspace [1.28ms]
+(pass) action reads validate scalar driver columns and JSON before replay [1.10ms]
+
+test/storage/adapter-contracts.test.ts:
+(pass) L0 adapter contracts > session, action and policy planes hold their append contracts [10.04ms]
+(pass) SQLite adapter contract guards > fresh session files omit retired lifecycle tables [9.02ms]
+(pass) SQLite adapter contract guards > action revision rolls back when the append insert fails [9.04ms]
+(pass) SQLite adapter contract guards > request action compare-and-set rejects foreign parent and stale revision [9.02ms]
+(pass) SQLite adapter contract guards > canonical session reads cannot mutate a later snapshot [7.82ms]
+
+test/storage/action-hash-chain.test.ts:
+(pass) empty action chain has no head [0.49ms]
+(pass) three committed actions bind every stored field and expose their hashes [1.29ms]
+(pass) effect tampering breaks at ordinal two [1.00ms]
+(pass) swapping ordinals two and three breaks the chain [0.70ms]
+(pass) rewriting a row hash cannot conceal a broken link to its successor [0.62ms]
+(pass) the fresh schema refuses a null prev_hash outright [0.51ms]
+(pass) blob-typed prev_hash fails verification without throwing [0.56ms]
+(pass) the fresh schema refuses a null action_hash outright [0.51ms]
+(pass) blob-typed action_hash fails verification without throwing [0.54ms]
+(pass) epoch instant 10.5 round-trips through append, tree and verification [0.71ms]
+(pass) epoch instant 9007199254740992 round-trips through append, tree and verification [0.70ms]
+(pass) append uses the actual head hash rather than revision minus one [0.56ms]
+(pass) revertible rows hash the stored revert bytes [0.62ms]
+
+test/storage/effect-write-ports.test.ts:
+(pass) commit refusal is tagged with revision and fence and leaves no partial SQL or observation [0.87ms]
+(pass) a late commit CAS refusal rolls back actions already appended in the same transaction [0.69ms]
+(pass) fence adoption races and SQL CAS loss preserve holder and fence in typed refusals [0.52ms]
+(pass) a superseded fence commits in the typed channel after a successor adoption [0.44ms]
+(pass) successful writes return the existing adapter receipt and row values [0.68ms]
+
+test/storage/policy-generation.test.ts:
+(pass) SQLite: policy generations select, copy and append atomically [1.20ms]
+
+test/storage/atomic-file.test.ts:
+(pass) replaceFileAtomically > publishes exact bytes and removes its temporary file after replacement failure [1.08ms]
+
+test/storage/sqlite-busy.test.ts:
+(pass) SQLite write contention surfaces the driver error without committing the contender [3.77ms]
+
+test/storage/storage-boundaries.test.ts:
+(pass) decision fact port shares rollback and subsequent commit boundaries [8.09ms]
+(pass) removing an endpoint preserves its identity and removes address lookup [8.88ms]
+(pass) fence adoption reports a refused SQL compare-and-set without advancing its fence [7.98ms]
+(pass) materialization refuses a mismatched initial action before creating any row [8.43ms]
+(pass) session commit savepoints roll back every refused write unit [7.99ms]
+
+test/storage/request-atomicity.test.ts:
+(pass) failed request insert rolls back original action, revision and observation [10.69ms]
+(pass) request commit requires the adopted fence rather than borrowing another owner's fence [8.62ms]
+(pass) commit observations see durable request state after the complete batch [16.73ms]
+
+test/storage/reply-grant.test.ts:
+(pass) durable reply-grant current projection > independent connections racing for one slot admit exactly one grant [238.18ms]
+(pass) durable reply-grant current projection > a failed insert rolls expiry pruning back and never projects the failed grant [0.82ms]
+(pass) durable reply-grant current projection > live queries use the expiry index and exclude expired or malformed historical payloads [0.57ms]
+(pass) durable reply-grant current projection > malformed live rows fail closed at the persisted-data boundary [0.47ms]
+(pass) durable reply-grant current projection > incoherent indexed authority fails closed: UPDATE reply_grant SET data = json_remove(data, '$.ruleId', '$.replyScope') [0.53ms]
+(pass) durable reply-grant current projection > incoherent indexed authority fails closed: UPDATE reply_grant SET data = json_set(data, '$.expiresAt', 200) [0.49ms]
+(pass) durable reply-grant current projection > incoherent indexed authority fails closed: UPDATE reply_grant SET data = json_set(data, '$.replyScope.surfaceKey', 'telegram:elsewhere') [0.47ms]
+(pass) durable reply-grant current projection > repeat contact preserves expiry while a later first contact reuses expired capacity [0.58ms]
+(pass) reply-grant store factory > delegates claim and listLive to the catalog sub-adapter [0.48ms]
+(pass) reply-grant store factory > fails closed when the reply-grant sub-adapter is absent [0.04ms]
+
+test/storage/decision-fact-schema.test.ts:
+(pass) decision-fact drizzle view reads and writes the migrated decision_fact table [1.39ms]
+
+test/storage/session-bundles.test.ts:
+(pass) new session creation persists canonical bundle selection across reopen [11.31ms]
+(pass) historic configure bytes and hashes survive default empty bundle decoding and reopen [11.70ms]
+
+test/storage/read-validation.test.ts:
+(pass) canonical SQLite reads fail closed > corrupt action payload { rejects tree and snapshot reads [8.78ms]
+(pass) canonical SQLite reads fail closed > corrupt action payload undefined rejects tree and snapshot reads [9.27ms]
+(pass) canonical SQLite reads fail closed > corrupt action payload  rejects tree and snapshot reads [8.82ms]
+(pass) canonical SQLite reads fail closed > invalid canonical session counter %s rejects get and list reads [8.98ms]
+(pass) canonical SQLite reads fail closed > invalid canonical session counter not-a-number rejects get and list reads [8.56ms]
+(pass) canonical SQLite reads fail closed > session reads validate the canonical row exactly once per returned record [8.57ms]
+
+test/storage/decision-fact.test.ts:
+(pass) first writer wins and every outcome carries the exact recorded fact [1.12ms]
+(pass) decision facts share the store transaction and roll back with it [0.82ms]
+(pass) decision facts keep fractional epoch instants without rounding [0.73ms]
+
+test/storage/request-count-cas.test.ts:
+(pass) SQLite global request count CAS > another session opening invalidates a proposal without changing its local revision [11.07ms]
+(pass) SQLite global request count CAS > counts latest request and reply snapshots, not historical opens or boundary entries [11.13ms]
+
+test/storage/session-store.test.ts:
+(pass) openSessionStore bootstraps a fresh session file: exactly the three session tables, WAL [4.29ms]
+(pass) F9: session-file bootstrap applies busy_timeout before any schema statement [0.41ms]
+(pass) openSessionStore rejects a corrupt payload instead of returning a handle [0.32ms]
+(pass) createSessionKernel serves session facts from the session file and policy rows from the catalog [9.95ms]
+
+test/blacklist/persistence.test.ts:
+(pass) BlacklistStore SQLite persistence > round-trips raw blacklist facts across storage reconfiguration [9.86ms]
+(pass) BlacklistStore SQLite persistence > removes exactly one stored fact [7.83ms]
+(pass) BlacklistStore SQLite persistence > raw reads fail closed when the blacklist sub-adapter is absent [7.34ms]
+
+test/actor/json-metadata.test.ts:
+(pass) identity and endpoint JSON metadata survive reopening without shape loss [9.43ms]
+(pass) non-JSON metadata fails before identity or endpoint persistence [21.82ms]
+
+test/actor/persistence.test.ts:
+(pass) ActorRegistry SQLite persistence > resolves registered endpoints across storage re-init [8.64ms]
+(pass) ActorRegistry SQLite persistence > returns undefined for unregistered endpoints [8.53ms]
+(pass) ActorRegistry SQLite persistence > preserves createdAt when re-registering an identity [8.14ms]
+(pass) ActorRegistry SQLite persistence > rejects endpoints for unknown actor identities [7.85ms]
+(pass) ActorRegistry SQLite persistence > rejects duplicate endpoint addresses with different endpoint ids [8.20ms]
+(pass) ActorRegistry SQLite persistence > allows the same endpoint address in different workspaces [9.61ms]
+(pass) ActorRegistry SQLite persistence > an old-format row whose data blob carries relationship parses and round-trips (#498 A1) [10.94ms]
+(pass) ActorRegistry SQLite persistence > filters endpoint lists by actor and workspace [8.31ms]
+(pass) ActorRegistry SQLite persistence > removing an identity removes its endpoints through SQLite cascade [10.05ms]
+
+test/actor/provisional.test.ts:
+(pass) ActorRegistry provisional lifecycle (#P3) > mintProvisional lands identity and endpoint together, standing provisional [1.26ms]
+(pass) ActorRegistry provisional lifecycle (#P3) > mintProvisional refuses a registered-standing mint [0.81ms]
+(pass) ActorRegistry provisional lifecycle (#P3) > countProvisionalMints counts only this channel's provisional rows in the window (§8.12) [1.04ms]
+(pass) ActorRegistry provisional lifecycle (#P3) > promote flips provisional to registered and is idempotent [0.93ms]
+(pass) ActorRegistry provisional lifecycle (#P3) > mergeEndpoint moves the endpoint onto the target identity (§8.4) [0.87ms]
+
+test/helpers/observation.test.ts:
+(pass) fanout validates and transforms once before matching and delivery [0.46ms]
+(pass) invalid publications reject synchronously without poisoning delivery [0.11ms]
+(pass) reset cancels queued delivery and stale unsubscribe preserves the new generation [0.04ms]
+(pass) queued publication retains its subscriber snapshot [0.01ms]
+
+test/helpers/sqlite.test.ts:
+(pass) cleanup reports a non-file database path instead of silently leaving it behind [0.61ms]
+(pass) cleanup removes database sidecars and tolerates already absent files [0.53ms]
+
+test/surface-key/persistence.test.ts:
+(pass) SurfaceKey SQLite persistence > persists across Storage re-init [10.04ms]
+(pass) SurfaceKey SQLite persistence > re-claim with expected owner updates session in SQLite [9.92ms]
+(pass) SurfaceKey SQLite persistence > claim throws loudly when the row is missing after INSERT OR IGNORE [7.51ms]
+
+test/channel-grant/persistence.test.ts:
+(pass) ChannelGrantStore SQLite persistence > persists grant fields without resolution-derived normalization [11.08ms]
+(pass) ChannelGrantStore SQLite persistence > round-trips raw grant facts across adapter reconfiguration [9.46ms]
+(pass) ChannelGrantStore SQLite persistence > removes exactly one stored fact [8.32ms]
+(pass) ChannelGrantStore SQLite persistence > raw reads fail closed when the channelGrant sub-adapter is absent [8.27ms]
+
+test/session/fence-rotation.test.ts:
+(pass) activation rotates and adopts the fence; every superseded writer is refused stale [11.84ms]
+(pass) concurrent activations from two processes: one winner, stale loser refused [181.23ms]
+(pass) R8: kill inside the commit transaction leaves no partial action row [158.34ms]
+
+test/session/outbound-projection.test.ts:
+(pass) outbound projection folds a verified acknowledgement without erasing its pending history [2.50ms]
+(pass) corrupt outbound evidence cannot silently disappear from recovery [1.28ms]
+
+test/session/commit-fencing.test.ts:
+(pass) a stale fence is rejected at commit time with no partial row, even under the same owner name [1.36ms]
+
+test/session/events.test.ts:
+(pass) canonical commit observation sees the already durable row and action [1.17ms]
+
+test/session/lineage.test.ts:
+(pass) canonical session lineage > children and grandchildren retain distinct direct parents [1.47ms]
+(pass) canonical session lineage > external parent identity is retained without inventing a parent row [0.89ms]
+
+test/session/request-storage.test.ts:
+(pass) reply retains original invocation and request snapshots across restart [11.22ms]
+(pass) approval retains original invocation and request snapshots across restart [11.28ms]
+(pass) reply snapshots advance current state without changing original history [10.76ms]
+(pass) duplicate terminal identities and stale revisions leave the entire action tree unchanged [10.00ms]
+
+test/session/materialize.test.ts:
+(pass) L0 session materialization > repeat declaration preserves the existing row and generation [8.41ms]
+(pass) L0 session materialization > reopens a parent-linked worker with identical generations, revision and tree [10.33ms]
+(pass) L0 session materialization > configuration failure rolls back both the session row and initial action [7.98ms]
+
+test/session/write-discipline.test.ts:
+(pass) fenced session write discipline > SQLite rejects a stale fence after a successor adoption under another owner [1.25ms]
+(pass) fenced session write discipline > SQLite consumes one ordered boundary batch with its actions [1.80ms]
+(pass) canonical batch rollback > a refused later action rolls back earlier actions, revision and pending projection [1.19ms]
+
+test/session/kernel.test.ts:
+(pass) session kernel folds > canonicalizes generations and decodes every turn action shape [2.83ms]
+(pass) session kernel folds > reads authoritative open and terminal tails from committed session actions [3.14ms]
+(pass) session kernel folds > watch emits revisions and gaps, then releases all subscribers [1.83ms]
+(pass) session kernel folds > a dropped notification resynchronizes from the last revision through bounded pages without inventing events [2.05ms]
+(pass) session kernel folds > a failed initial watch snapshot releases its observation subscription [0.77ms]
+(pass) session kernel folds > wrapper failures stay loud when rows or authority are absent [0.93ms]
+
+test/session/bounded-reads.test.ts:
+(pass) latest action, checkpoint and generation reads respect persisted revisions [1.83ms]
+(pass) open turns page by original ordinal even when their latest update is beyond the page [220.52ms]
+(pass) a terminal row without a turnId does not hide every open turn [1.84ms]
+(pass) snapshot pages retain all deliveries for the selected turn without loading unrelated actions [19.03ms]
+(pass) turnWindowStart opens after the intent preceding the newest count turns, else at zero [1.68ms]
+(pass) snapshot tails fold deliveries committed before their turn intent and stay per turn [1.93ms]
+(pass) operation reads exclude administrative checkpoints and reject mismatched result identities [1.68ms]
+(pass) guarded wave pages retain settled members until their last sibling settles [2.26ms]
+(pass) request state pages select the latest identity and cross page boundaries [28.13ms]
+(pass) outbound pages deduplicate acknowledgements without dropping the next page [20.98ms]
+
+test/session/public-surface.test.ts:
+(pass) 967 exports expose only canonical session authority [0.44ms]
+(pass) L0Write commits a fenced action chained from the genesis hash [0.59ms]
+
+test/session/read-ports.test.ts:
+(pass) actionById returns the exact committed node globally or absence [1.31ms]
+(pass) latestGenerationFor folds only ordered configure rows and skips malformed snapshots [1.28ms]
+(pass) policyDecisionRuleIds selects the latest exact session/hash/kind and preserves order [1.50ms]
+(pass) policyDecisionRuleIds rejects malformed identities: null [1.15ms]
+(pass) policyDecisionRuleIds rejects malformed identities: 42 [1.14ms]
+(pass) policyDecisionRuleIds rejects malformed identities: "rule" [1.04ms]
+(pass) policyDecisionRuleIds rejects absent identities rather than falling back [0.96ms]
+(pass) messageActionByPlatformId returns the first exact platform-message match [1.15ms]
+(pass) outboundReceipt returns prompt by id scoped to destination [1.31ms]
+(pass) outboundReceipt decodes matching replies and skips invalid answers before a valid receipt [2.05ms]
+(pass) outboundReceipt preserves ordinal precedence across both SQL arms [1.20ms]
+
+ 197 pass
+ 0 fail
+ 11759 expect() calls
+Ran 197 tests across 42 files. [3.94s]

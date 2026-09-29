@@ -8,14 +8,21 @@ import { createResident } from "../src/resident";
 import type { CatalogSelection, GenerationDefinitions } from "../src/composition/generation-layers";
 import { testToolPorts } from "./helpers/tool-ports";
 import { allowConfigure } from "./helpers/generation-services";
+import { planeOf } from "./helpers/ledger";
 
 test("two turns retain one catalog Layer; configure acquires a fresh generation catalog", async () => {
   const layers: Layer.Layer<ToolCatalog>[] = [];
   const turns: (readonly AnyToolDefinition[])[] = [];
-  const runtime = gatewayRuntime({ dbPath: ":memory:" });
+  const runtime = gatewayRuntime({});
+  const plane = await planeOf(runtime);
   const resident = createResident({
     model: { provider: "test", id: "test" }, apiKey: "test", tools: testToolPorts,
-    sessionRuntime: { authorizeConfigure: allowConfigure },
+    sessionRuntime: {
+      authorizeConfigure: allowConfigure,
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
+    },
+    policyGeneration: () => plane.openKernel("catalog-once").currentPolicyGeneration(),
   });
   const schema = resident.definitions.resident;
   const definitions: GenerationDefinitions = {
@@ -30,7 +37,7 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
   };
   try {
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
-      seedKernelPolicyRows();
+      seedKernelPolicyRows(plane.catalog.policies);
       yield* (yield* GenerationLayers).initialize(definitions);
       return yield* session({
         id: "catalog-once", role: "resident", tools: schema.map(sessionTool),
@@ -38,7 +45,11 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
           turns.push((yield* ToolCatalog).definitions);
           return { kind: "result" as const, text: "done" };
         }),
-      }, { authorizeConfigure: allowConfigure });
+      }, {
+        authorizeConfigure: allowConfigure,
+        openKernel: plane.openKernel,
+        listSessions: plane.listSessions,
+      });
     }));
     await runAppEffect(runtime, handle.prompt("first"));
     await runAppEffect(runtime, handle.prompt("second"));

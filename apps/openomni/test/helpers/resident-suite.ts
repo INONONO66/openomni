@@ -3,7 +3,6 @@ import { afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Storage } from "@openomni/ledger";
 import type { OpenOmniConfig } from "../../src/config";
 import { appFixture } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
@@ -61,7 +60,6 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
     const stopApp = stop;
     stop = undefined;
     await attempt(() => stopApp?.());
-    await attempt(() => Storage.reset());
     for (const directory of directories.splice(0)) {
       await attempt(() => rmSync(directory, { recursive: true, force: true }));
     }
@@ -88,7 +86,8 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
     config(prefix, overrides = {}) {
       const directory = this.tempDir(prefix);
       return {
-        dbPath: join(directory, "chat.db"),
+        catalogPath: join(directory, "catalog.sqlite"),
+        sessionsDir: join(directory, "sessions"),
         host: "127.0.0.1",
         wsPort: 0,
         model: { provider: "fake", id: "resident-test", apiKey: "test-key" },

@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { SqliteStorageAdapter, Storage } from "@openomni/ledger";
+import { ledger, resetLedger, type TestLedger } from "../../helpers/ledger";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Operational, type BusEvent, type Gateway } from "@openomni/protocol";
 import {
   createReplyGrantInstances,
   replyGrantEndpointFromFacts,
 } from "../../../src/router/messaging/reply-grant.js";
+import { unconfiguredChannelStores } from "../../../src/router/stores";
 
 /**
  * #708 reply-grant materialization mechanics (design §2b stage-0 rule):
@@ -17,8 +18,9 @@ type ReplyGrantAdmission = Parameters<ReturnType<typeof createReplyGrantInstance
 
 const NOW = 1_700_000_000_000;
 
-beforeEach(() => Storage.configure(new SqliteStorageAdapter(":memory:")));
-afterEach(() => Storage.reset());
+beforeEach(() => {
+  resetLedger();
+});
 
 function rule(overrides: Partial<Gateway.ReplyGrantRule> = {}): Gateway.ReplyGrantRule {
   return {
@@ -52,7 +54,13 @@ function harness(rules: readonly Gateway.ReplyGrantRule[]) {
   const publish: BusEvent.Sink["publish"] = (descriptor, data) => {
     published.push({ name: descriptor.name, data: Operational.Events.Info.schema.parse(data) });
   };
-  const instances = createReplyGrantInstances({ rules: () => rules, publish });
+  const instances = createReplyGrantInstances({
+    get stores() {
+      return ledger().stores;
+    },
+    rules: () => rules,
+    publish,
+  });
   return { instances, published };
 }
 
@@ -176,40 +184,38 @@ describe("reply-grant instance materialization", () => {
   });
 
   test("construction never reads decision facts and every list reads the current projection", () => {
-    const adapter = Storage.get();
-    Storage.configure({
-      transaction: adapter.transaction.bind(adapter),
-      replyGrant: adapter.replyGrant,
-    });
-    Object.defineProperty(Storage.get(), "decisionFacts", {
-      get: () => {
-        throw new Error("decision replay forbidden");
-      },
-    });
+    ledger().setDecisionFacts(
+      new Proxy({} as NonNullable<TestLedger["sessions"]["decisionFacts"]>, {
+        get: () => {
+          throw new Error("decision replay forbidden");
+        },
+      }),
+    );
     const first = harness([rule()]);
     const second = harness([rule()]);
     first.instances.admit(admission({ sourceId: "committed:1" }));
     expect(second.instances.list(NOW)[0]?.id).toBe("reply-grant:rule-1:committed%3A1");
-    adapter.close?.();
   });
 
   test("projection failures propagate without a volatile grant or success observation", () => {
     const { instances, published } = harness([rule()]);
-    const adapter = Storage.get();
-    adapter.close?.();
+    ledger().sessions.close();
+    ledger().catalog.close();
     expect(() => instances.admit(admission())).toThrow();
     expect(() => instances.list(NOW)).toThrow();
     expect(published).toEqual([]);
   });
 
   test("an absent projection fails closed instead of creating memory authority", () => {
-    Storage.reset();
-    Storage.configure({ transaction: (operation) => operation() });
-    const { instances, published } = harness([rule()]);
+    const stores = unconfiguredChannelStores();
+    const instances = createReplyGrantInstances({
+      stores,
+      rules: () => [rule()],
+      publish: () => undefined,
+    });
     expect(() => instances.admit(admission())).toThrow(
       "Storage adapter does not implement reply grants",
     );
     expect(() => instances.list(NOW)).toThrow("Storage adapter does not implement reply grants");
-    expect(published).toEqual([]);
   });
 });

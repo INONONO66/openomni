@@ -12,7 +12,7 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
-import type { RetryAlarmPort } from "./executor-retry-alarm";
+import type { RetryTimerPort } from "./cluster/timers";
 import type { WaveControl } from "./core/execution/tool-wave";
 
 interface ExecutionKindRegistration {
@@ -213,8 +213,8 @@ export interface DurableExecutor extends Executor {
 }
 
 export interface ExecutorOptions {
-  /** Durable retry schedule port; the default commits through the single alarm owner. */
-  readonly retryAlarm?: RetryAlarmPort;
+  /** Durable retry schedule port; the default commits the `retry.scheduled` chain action through the ledger (cluster/timers). */
+  readonly retryAlarm?: RetryTimerPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly closeGraceMs?: number;

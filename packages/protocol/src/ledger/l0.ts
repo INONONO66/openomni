@@ -140,18 +140,6 @@ export namespace FoldCheckpoint {
     .strict();
 }
 
-const InboxAdmission = z
-  .object({
-    id: Identifier,
-    sessionId: Identifier,
-    kind: z.enum(["prompt", "interrupt", "resume"]),
-    content: z.string(),
-    origin: EncodedPayload,
-    createdAt: EpochMs,
-    parentActionId: NullableIdentifier.default(null),
-  })
-  .strict();
-
 export namespace LedgerSession {
   export const Role = z.enum(["resident", "worker"]);
   export type Role = z.infer<typeof Role>;
@@ -175,7 +163,6 @@ export namespace LedgerSession {
       role: Role,
       leaseOwner: NullableIdentifier,
       leaseFence: z.number().int().nonnegative(),
-      leaseExpiresAt: EpochMs.nullable(),
       revision: z.number().int().nonnegative(),
       state: State,
       toolsGeneration: z.number().int().nonnegative().default(0),
@@ -199,55 +186,19 @@ export namespace LedgerSession {
   ]);
   export type MaterializeResult = z.infer<typeof MaterializeResult>;
 
-  export const AcquireLease = z
-    .object({
-      sessionId: Identifier,
-      owner: Identifier,
-      expectedFence: z.number().int().nonnegative(),
-      now: EpochMs,
-      expiresAt: EpochMs,
-    })
-    .strict()
-    .refine((input) => input.expiresAt > input.now, {
-      message: "lease expiry must be after acquisition time",
-      path: ["expiresAt"],
-    });
-  export type AcquireLease = z.infer<typeof AcquireLease>;
-
-  export const LeaseResult = z.discriminatedUnion("ok", [
-    z.object({ ok: z.literal(true), fence: z.number().int().positive() }).strict(),
-    z
-      .object({
-        ok: z.literal(false),
-        reason: z.literal("held"),
-        holder: Identifier,
-        expiresAt: EpochMs,
-      })
-      .strict(),
-    z
-      .object({
-        ok: z.literal(false),
-        reason: z.literal("stale"),
-        currentFence: z.number().int().nonnegative(),
-      })
-      .strict(),
-  ]);
-  export type LeaseResult = z.infer<typeof LeaseResult>;
-
-  export const RenewLease = z
+  /**
+   * Fence adoption (W5.2 F5): writes the catalog-rotated runner-generation
+   * fence into the session file's single row. Only a strictly newer fence may
+   * adopt; a file fence at or beyond the target means a later activation won.
+   */
+  export const AdoptFence = z
     .object({
       sessionId: Identifier,
       owner: Identifier,
       fence: z.number().int().positive(),
-      now: EpochMs,
-      expiresAt: EpochMs,
     })
-    .strict()
-    .refine((input) => input.expiresAt > input.now, {
-      message: "lease expiry must be after heartbeat time",
-      path: ["expiresAt"],
-    });
-  export type RenewLease = z.infer<typeof RenewLease>;
+    .strict();
+  export type AdoptFence = z.infer<typeof AdoptFence>;
 
   export const Commit = z
     .object({
@@ -257,16 +208,12 @@ export namespace LedgerSession {
       now: EpochMs,
       expectedRevision: z.number().int().nonnegative(),
       actions: z.array(LedgerAction.Append),
-      consumeInboxIds: z.array(Identifier),
       state: State,
       generation: GenerationPointers.optional(),
       requestCount: z
         .object({ since: z.number().int(), count: z.number().int().nonnegative() })
         .strict()
         .optional(),
-      releaseLease: z.boolean(),
-      receive: InboxAdmission.optional(),
-      admit: z.lazy(() => Inbox.Commit).optional(),
     })
     .strict();
   export type Commit = z.infer<typeof Commit>;
@@ -276,7 +223,7 @@ export namespace LedgerSession {
     z
       .object({
         ok: z.literal(false),
-        reason: z.enum(["stale", "revision", "inbox"]),
+        reason: z.enum(["stale", "revision"]),
         currentFence: z.number().int().nonnegative(),
         currentRevision: z.number().int().nonnegative(),
       })
@@ -547,7 +494,6 @@ export namespace SessionTurn {
         .object({
           owner: NullableIdentifier,
           fence: z.number().int().nonnegative(),
-          expiresAt: EpochMs.nullable(),
         })
         .strict(),
       toolsGeneration: z.number().int().nonnegative(),
@@ -727,14 +673,6 @@ export namespace Alarm {
     .strict();
   export type WatchSpec = z.infer<typeof WatchSpec>;
 
-  export const RequestDeadline = z
-    .object({
-      kind: z.literal("request_deadline"),
-      requestId: Identifier,
-    })
-    .strict();
-  export type RequestDeadline = z.infer<typeof RequestDeadline>;
-
   /**
    * Durable retry schedule carried by a kind `at` alarm. The `alarm.arm`
    * action committing this spec IS the retry.scheduled fact: boot recovery
@@ -751,72 +689,9 @@ export namespace Alarm {
     .strict();
   export type RetrySchedule = z.infer<typeof RetrySchedule>;
 
-  export const Kind = z.enum(["at", "watch"]);
-  export type Kind = z.infer<typeof Kind>;
-
-  export const Status = z.enum(["armed", "cancelled", "fired", "paused"]);
-  export type Status = z.infer<typeof Status>;
-
-  export const Row = z
-    .object({
-      id: Identifier,
-      sessionId: Identifier,
-      kind: Kind,
-      fireAt: EpochMs,
-      spec: EncodedPayload.optional(),
-      status: Status,
-      epoch: z.number().int().positive().default(1),
-      fence: z.number().int().nonnegative().default(0),
-      lastBatch: z.string().nullable().default(null),
-      notifications: z.number().int().nonnegative().default(0),
-      createdAt: EpochMs,
-      updatedAt: EpochMs,
-    })
-    .strict();
-  export type Row = z.infer<typeof Row>;
-
-  export const Arm = Row.omit({
-    status: true,
-    createdAt: true,
-    updatedAt: true,
-    epoch: true,
-    fence: true,
-    lastBatch: true,
-    notifications: true,
-  });
-  export type Arm = z.infer<typeof Arm>;
-
-  /**
-   * One evaluator delivery. `id` is the stable alarm/control identity, `fence`
-   * the evaluator authority, and `sourceKey` the transport occurrence captured
-   * at the source (timer slot, PTY line slot, path stat identity). The ledger
-   * derives the committed occurrence identity from (id, epoch, sourceKey), so
-   * redelivering the same occurrence commits nothing; budget and deadline are
-   * read from the persisted spec, never supplied by the evaluator.
-   */
-  export const Fire = z
-    .object({
-      id: Identifier,
-      epoch: z.number().int().positive(),
-      fence: z.number().int().nonnegative(),
-      sourceKey: z.string().min(1),
-      at: EpochMs,
-      content: z.string(),
-      batchHash: z.string().optional(),
-      terminal: z.boolean(),
-    })
-    .strict();
-  export type Fire = z.infer<typeof Fire>;
-
   /** Deterministic committed occurrence identity for one transport delivery. */
   export function occurrenceId(id: string, epoch: number, sourceKey: string): string {
     return canonicalDigest(["alarm.occurrence", id, epoch, sourceKey]);
-  }
-
-  export interface Fired {
-    readonly row: Row;
-    readonly inbox: Inbox.Row;
-    readonly receipts: readonly LedgerAction.Receipt[];
   }
 }
 

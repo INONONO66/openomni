@@ -1,10 +1,6 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { initialize } from "@openomni/ledger";
 import type { RunInput } from "@openomni/llm";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
@@ -12,10 +8,6 @@ import { residentRunner as createResident } from "./helpers/resident-runner";
 import { completionFixture } from "./helpers/completion-fixture";
 import { assistantMessage } from "./helpers/assistant-message";
 import { admittedEffect } from "./helpers/admitted-effect";
-
-import { storageDirectories } from "./helpers/storage-directories";
-
-const directories = storageDirectories();
 
 const OPERATOR_TRANSPORT = {
   baseUrl: "https://gateway.internal/v1",
@@ -61,9 +53,6 @@ describe("modelTransport", () => {
 
 describe("operator transport reaches every model caller", () => {
   it("the Resident forwards it to the llm call", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "openomni-model-transport-"));
-    directories.push(directory);
-    initialize({ dbPath: join(directory, "chat.db") });
     let seen: RunInput | undefined;
 
     const resident = createResident({
@@ -108,7 +97,9 @@ describe("operator transport reaches every model caller", () => {
   it("the process worker wire carries it across the process boundary", () => {
     const request = ProcessSessionRequest.parse({
       sessionId: "worker-session",
-      dbPath: "test.sqlite",
+      catalogPath: "test-catalog.sqlite",
+      sessionsDir: "test-sessions",
+      entityIdleMs: 60_000,
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
@@ -120,7 +111,9 @@ describe("operator transport reaches every model caller", () => {
   it("the process worker wire rejects an unknown transport field", () => {
     const parsed = ProcessSessionRequest.safeParse({
       sessionId: "worker-session",
-      dbPath: "test.sqlite",
+      catalogPath: "test-catalog.sqlite",
+      sessionsDir: "test-sessions",
+      entityIdleMs: 60_000,
       model: { provider: "fake", id: "worker-test" },
       apiKey: "test-key",
       transport: { baseUrl: "https://gw/v1", insecure: true },

@@ -13,14 +13,15 @@ import {
 } from "./helpers/request-owner-process";
 import { closeSocket, nextFrame, openSocket } from "./helpers/ws";
 
-function child(dbPath: string, at: number, recovering = false) {
+function child(catalogPath: string, sessionsDir: string, at: number, recovering = false) {
   const events: OwnerProcessEvent[] = [];
   const listeners = new Set<(event: OwnerProcessEvent) => void>();
   const process = Bun.spawn(
     [
       execPath,
       join(import.meta.dir, "helpers/request-owner-process.ts"),
-      dbPath,
+      catalogPath,
+      sessionsDir,
       String(at),
       recovering ? "recover" : "initial",
     ],
@@ -126,8 +127,6 @@ function requestOf(snapshot: OwnerSnapshot) {
 function noLegacy(snapshot: OwnerSnapshot) {
   expect(snapshot.tables).not.toContain("wait");
   expect(snapshot.tables).not.toContain("approval");
-  expect(snapshot.adapterKeys).not.toContain("wait");
-  expect(snapshot.adapterKeys).not.toContain("approval");
   const actions = snapshot.sessions.flatMap((session) => session.actions);
   expect(actions.filter((action) => /^(wait|approval)\./.test(action.kind))).toEqual([]);
 }
@@ -150,11 +149,12 @@ async function answer(
 
 test("authenticated Owner executes the captured Person invocation once across SIGKILL and two restarts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "request-owner-e2e-"));
-  const dbPath = join(directory, "owner.sqlite");
+  const catalogPath = join(directory, "catalog.sqlite");
+  const sessionsDir = join(directory, "sessions");
   const processes: ReturnType<typeof child>[] = [];
   const sockets: WebSocket[] = [];
   const boot = (at: number, recovering = false) => {
-    const process = child(dbPath, at, recovering);
+    const process = child(catalogPath, sessionsDir, at, recovering);
     processes.push(process);
     return process;
   };
@@ -178,7 +178,7 @@ test("authenticated Owner executes the captured Person invocation once across SI
     expect(before.person).toBeNull();
     expect(before.modelCalls).toBe(1);
     const captured = before.sessions.find((session) => session.row.id === request.sessionId);
-    if (captured?.row.leaseExpiresAt === null || captured === undefined)
+    if (captured === undefined || captured.row.leaseOwner === null)
       throw new Error("missing crash lease");
     expect(captured.actions.find((action) => action.id === request.requestId)?.kind).toBe("tool");
     expect(request.toolsHash).toBe(captured.generation.toolsHash);
@@ -197,10 +197,16 @@ test("authenticated Owner executes the captured Person invocation once across SI
     const rejected = await first.inspect();
     expect(rejected.person).toBeNull();
     expect(requestOf(rejected).state).toBe("open");
-    expect(rejected.sessions[0]?.actions).toEqual(captured.actions);
+    // W5.2: the catalog also lists the boot-created gateway-ingress session,
+    // so select the request's session by id instead of assuming order.
+    expect(
+      rejected.sessions.find((session) => session.row.id === request.sessionId)?.actions,
+    ).toEqual(captured.actions);
 
     await first.crash();
-    const restartedAt = captured.row.leaseExpiresAt + 1;
+    // W5.2: leases are fence-based, not time-based; restart wall-clock time
+    // only needs to precede the request deadline.
+    const restartedAt = Date.now() + 1;
     expect(restartedAt).toBeLessThan(request.deadline);
     const second = boot(restartedAt, true);
     expect(second.pid).not.toBe(first.pid);
@@ -217,7 +223,10 @@ test("authenticated Owner executes the captured Person invocation once across SI
     expect(requestOf(recovered.snapshot)).toEqual(request);
     expect(recovered.snapshot.person).toBeNull();
     expect(recovered.snapshot.modelCalls).toBe(0);
-    expect(recovered.snapshot.sessions[0]?.generation).toEqual(captured.generation);
+    expect(
+      recovered.snapshot.sessions.find((session) => session.row.id === request.sessionId)
+        ?.generation,
+    ).toEqual(captured.generation);
     const ownerSocket = await connect(recovered.port);
     const applied = second.next("applied");
     const settled = second.next("settled");
@@ -279,7 +288,7 @@ test("authenticated Owner executes the captured Person invocation once across SI
 
 test("real Owner socket cannot apply an original Person invocation against a changed domain revision", async () => {
   const directory = mkdtempSync(join(tmpdir(), "request-owner-stale-"));
-  const process = child(join(directory, "owner.sqlite"), Date.now());
+  const process = child(join(directory, "catalog.sqlite"), join(directory, "sessions"), Date.now());
   let socket: WebSocket | undefined;
   try {
     const ready = await process.next("ready");
@@ -299,9 +308,12 @@ test("real Owner socket cannot apply an original Person invocation against a cha
     const after = await process.inspect();
     expect(after.person).toEqual(drifted.person);
     expect(requestOf(after).state).toBe("open");
-    const previous = drifted.sessions[0]?.actions ?? [];
-    expect(after.sessions[0]?.actions.slice(0, previous.length)).toEqual(previous);
-    expect(after.sessions[0]?.actions.slice(previous.length)).toMatchObject([
+    // W5.2: select the request's session by id (catalog also lists gateway-ingress).
+    const sessionActions = (snapshot: OwnerSnapshot) =>
+      snapshot.sessions.find((session) => session.row.id === request.sessionId)?.actions ?? [];
+    const previous = sessionActions(drifted);
+    expect(sessionActions(after).slice(0, previous.length)).toEqual(previous);
+    expect(sessionActions(after).slice(previous.length)).toMatchObject([
       { kind: "reply", effect: { value: { resolution: "rejected" } } },
     ]);
     expect(after.modelCalls).toBe(1);

@@ -1,15 +1,17 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { SessionHandleStore as kernel, Storage } from "../../src";
+import { SessionHandleStore } from "../../src";
 import { materializeSession } from "../helpers/session";
 import { requestFixture } from "../helpers/request";
 import { sessionTree } from "../helpers/session-tree";
+import { useMemoryStores } from "../helpers/storage";
 
+const stores = useMemoryStores();
+let kernel: SessionHandleStore.SessionKernel;
 beforeEach(() => {
-  Storage.initialize({ dbPath: ":memory:" });
-  materializeSession("bounded");
+  kernel = stores.kernel;
+  materializeSession(kernel, "bounded");
 });
-afterEach(() => Storage.reset());
 
 function append(
   id: string,
@@ -18,7 +20,7 @@ function append(
   effect: PlainValue = { phase: "pending" },
   parentId = "bounded:configure",
 ) {
-  const receipt = Storage.get().actions?.append(
+  const receipt = stores.session.actions.append(
     {
       id,
       kind,
@@ -116,17 +118,19 @@ test("open turns page by original ordinal even when their latest update is beyon
   expect(page.at(-1)?.action).toEqual(update);
   expect(kernel.latestOpenTurn("bounded")?.turnId).toBe("turn-256");
   const closed = terminal("turn-256");
-  expect(kernel.turnTerminalFor("bounded", "turn-256")).toEqual(kernel.turnTerminal(closed));
-  const effect = kernel.turnTerminal(closed);
+  expect(kernel.turnTerminalFor("bounded", "turn-256")).toEqual(
+    SessionHandleStore.turnTerminal(closed),
+  );
+  const effect = SessionHandleStore.turnTerminal(closed);
   if (effect === undefined) throw new Error("missing turn terminal");
   expect(kernel.latestTurnTerminal("bounded")).toEqual({ action: closed, effect });
   expect(kernel.latestOpenTurn("bounded")?.turnId).toBe("turn-255");
   expect(kernel.openTurnsPage("bounded", 0, 1).map((entry) => entry.turnId)).toEqual(["turn-0"]);
   const tailIntent = kernel.openTurnsPage("bounded", 0, 255).at(-1)?.action;
   if (tailIntent === undefined) throw new Error("missing open turn");
-  expect(
-    kernel.openTurnsPage("bounded", tailIntent.ordinal).map((entry) => entry.turnId),
-  ).toEqual(["turn-255"]);
+  expect(kernel.openTurnsPage("bounded", tailIntent.ordinal).map((entry) => entry.turnId)).toEqual([
+    "turn-255",
+  ]);
   expect(kernel.openTurnsPage("missing")).toEqual([]);
   expect(kernel.latestTurnTerminal("missing")).toBeUndefined();
   expect(() => kernel.openTurnsPage("bounded", 0, 257)).toThrow();
@@ -182,8 +186,7 @@ test("snapshot pages retain all deliveries for the selected turn without loading
 });
 
 test("turnWindowStart opens after the intent preceding the newest count turns, else at zero", () => {
-  const actions = Storage.get().actions;
-  if (actions === undefined) throw new Error("actions adapter missing");
+  const actions = stores.session.actions;
   const first = turn("first");
   terminal("first");
   const second = turn("second");
@@ -324,7 +327,7 @@ test("guarded wave pages retain settled members until their last sibling settles
 });
 
 test("request state pages select the latest identity and cross page boundaries", () => {
-  const { request } = requestFixture();
+  const { request } = requestFixture(kernel);
   for (let index = 0; index < 257; index += 1) {
     const requestId = `r${String(index).padStart(3, "0")}`;
     append(
@@ -400,5 +403,5 @@ test("outbound pages deduplicate acknowledgements without dropping the next page
     kernel.outboundStatesPage("bounded", "m255").map((value) => value.message.messageId),
   ).toEqual(["m256"]);
   expect(kernel.outboundRows("bounded")).toHaveLength(257);
-  expect(sessionTree("bounded")).toHaveLength(259);
+  expect(sessionTree("bounded", stores.session.actions)).toHaveLength(259);
 });
