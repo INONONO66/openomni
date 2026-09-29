@@ -1,0 +1,14 @@
+bun test v1.4.1 (4661e494f)
+
+test/durable-reconstruction.test.ts:
+(pass) fresh-process checkpoint plus bounded suffix equals independent full replay [1931.56ms]
+(pass) fresh-process refuses tampered checkpoint state before writes [800.31ms]
+(pass) fresh-process refuses tampered checkpoint stateHash before writes [711.22ms]
+(pass) fresh-process refuses tampered checkpoint foldVersion before writes [718.40ms]
+(pass) fresh-process refuses tampered checkpoint revision before writes [715.08ms]
+(pass) in-process reconstruction uses capped suffix reads and rejects a stale seed hash on an intact row chain [361.79ms]
+
+ 6 pass
+ 0 fail
+ 92 expect() calls
+Ran 6 tests across 1 file. [5.46s]

@@ -1,0 +1,23 @@
+bun test v1.4.1 (4661e494f)
+
+test/durable-reconstruction.test.ts:
+176 |           ).run(value, cut.checkpoint.id);
+177 |         } finally {
+178 |           db.close();
+179 |         }
+180 |         const refused = await child("wake", dbPath);
+181 |         expect(refused.code).toBe(1);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 0
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/test/durable-reconstruction.test.ts:181:30)
+(fail) fresh-process refuses tampered checkpoint foldVersion before writes [1149.69ms]
+
+ 0 pass
+ 5 filtered out
+ 1 fail
+ 6 expect() calls
+Ran 1 test across 1 file. [1.76s]
