@@ -15,6 +15,7 @@ export const CATALOG_SCHEMA: readonly string[] = [
     fence INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
     created_at INTEGER NOT NULL
   )`,
+  "CREATE INDEX IF NOT EXISTS idx_session_index_parent ON session_index(parent_id, id)",
   `CREATE TABLE IF NOT EXISTS actor_identity (
     id TEXT PRIMARY KEY,
     data TEXT NOT NULL,

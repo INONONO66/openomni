@@ -10,7 +10,7 @@ import {
   type WsConnection,
 } from "@openomni/channels";
 import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
-import type { ChannelGrantStore } from "@openomni/ledger";
+import type { ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
 import {
   Bus,
@@ -20,8 +20,10 @@ import {
   currentExecutor,
   ForeignFailure,
   scopeObservation,
+  attemptUsage,
+  toolWallMs,
 } from "@openomni/agent";
-import { Gateway as GatewayProtocol } from "@openomni/protocol";
+import { Gateway as GatewayProtocol, L0Observation, SessionRead } from "@openomni/protocol";
 import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -157,16 +159,126 @@ export function toolPorts(
   };
 }
 
-export function webSocketCallbacks(runtime: AppRuntime, handler: WebSocketHandler) {
+/**
+ * The history page is one transactional revision snapshot. Session action rows
+ * are retained from genesis, so a valid old cursor is always repairable by
+ * paging; an epoch change or a cursor ahead of the durable head is a typed gap.
+ */
+export function readSessionCursor(
+  kernel: SessionHandleStore.SessionKernel,
+  input: SessionRead.Request,
+): SessionRead.Response {
+  const frame = SessionRead.Request.parse(input);
+  const before = kernel.row(frame.sessionId);
+  const afterRevision = frame.cursor?.revision ?? 0;
+  if (frame.cursor !== undefined &&
+      (frame.cursor.epoch !== before.leaseFence || afterRevision > before.revision)) {
+    return {
+      type: "session_gap" as const,
+      sessionId: frame.sessionId,
+      epoch: before.leaseFence,
+      headRevision: before.revision,
+      oldestRevision: 0,
+    };
+  }
+  const page = kernel.historyPage(frame.sessionId, { afterRevision, limit: frame.limit });
+  const terminal = kernel.latestTurnTerminal(frame.sessionId);
+  const latest = kernel.latestAction(frame.sessionId);
+  const after = kernel.row(frame.sessionId);
+  if (before.leaseFence !== after.leaseFence || before.revision !== page.headRevision ||
+      after.revision !== page.headRevision ||
+      (page.actions[0] !== undefined && page.actions[0].ordinal !== afterRevision + 1)) {
+    return {
+      type: "session_gap" as const,
+      sessionId: frame.sessionId,
+      epoch: after.leaseFence,
+      headRevision: after.revision,
+      oldestRevision: 0,
+    };
+  }
+  const phase = after.state !== "idle" ? after.state : terminal?.effect.kind === "result"
+    ? "completed" : terminal?.effect.kind === "error" ? "failed"
+    : terminal?.effect.kind === "waiting" ? "waiting_input" : "idle";
+  return SessionRead.Page.parse({
+    type: frame.cursor === undefined ? "session_snapshot" as const : "session_page" as const,
+    sessionId: frame.sessionId,
+    state: after.state,
+    phase,
+    phaseSince: terminal?.action.ts ?? latest?.ts ?? 0,
+    epoch: after.leaseFence,
+    afterRevision,
+    headRevision: page.headRevision,
+    nextRevision: page.nextRevision,
+    actions: page.actions.map((action) => ({
+      revision: action.ordinal,
+      actionId: action.id,
+      kind: action.kind,
+      at: action.ts,
+    })),
+    usage: attemptUsage(page.actions),
+    toolWallMs: toolWallMs(page.actions.flatMap((action) => {
+      if (action.kind !== "tool" || action.parentId === null) return [];
+      const effect = action.effect.value;
+      if (effect === null || typeof effect !== "object" || Array.isArray(effect) ||
+          effect.phase !== "result") return [];
+      const intent = kernel.actionById(action.parentId);
+      return intent?.kind === "tool" ? [{ start: intent.ts, end: action.ts }] : [];
+    })),
+  });
+}
+
+export function webSocketCallbacks(
+  runtime: AppRuntime,
+  handler: WebSocketHandler,
+  openSession?: (sessionId: string) => SessionHandleStore.SessionKernel | undefined,
+) {
   const inflight = new Set<Promise<void>>();
+  const readers = new Map<WsConnection, Map<string, () => void>>();
+  function read(ws: WsConnection, request: SessionRead.Request): void {
+    const subscriptions = readers.get(ws) ?? new Map<string, () => void>();
+    readers.set(ws, subscriptions);
+    subscriptions.get(request.sessionId)?.();
+    let cursor = request.cursor;
+    let sentRevision = cursor?.revision ?? 0;
+    const send = () => {
+      try {
+        const kernel = openSession?.(request.sessionId);
+        if (kernel === undefined) {
+          ws.send(JSON.stringify({ type: "error", reason: "session_not_found", sessionId: request.sessionId }));
+          return;
+        }
+        const response = readSessionCursor(kernel, { ...request, cursor });
+        if (response.type !== "session_gap") {
+          sentRevision = response.actions.at(-1)?.revision ?? response.afterRevision;
+          cursor = { revision: sentRevision, epoch: response.epoch };
+        }
+        ws.send(JSON.stringify(response));
+      } catch {
+        ws.send(JSON.stringify({ type: "error", reason: "session_read_failed", sessionId: request.sessionId }));
+      }
+    };
+    // Register before capture; notifications only hint at authoritative reads.
+    subscriptions.set(request.sessionId, Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+      if (event.revision > sentRevision) send();
+    }, { match: { sessionId: request.sessionId } }));
+    send();
+  }
   return {
     callbacks: {
       ...handler.ws,
+      close(ws: WsConnection): void {
+        for (const stop of readers.get(ws)?.values() ?? []) stop();
+        readers.delete(ws);
+        handler.ws.close(ws);
+      },
       message(ws: WsConnection, data: string | Buffer): Promise<void> {
         const settled = runtime.runPromise(
           handler.handleFrame(ws.data, data).pipe(
             Effect.match({
-              onSuccess: (outcome) => ws.send(JSON.stringify(outcome)),
+              onSuccess: (outcome) => {
+                if (outcome.type === "session_read") read(ws, outcome);
+                else ws.send(JSON.stringify(outcome));
+              },
               onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
             }),
           ),

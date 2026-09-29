@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "../src/renderer/app";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
+import type { Session } from "../src/renderer/state/store";
+import { cacheSession } from "./helpers/session";
 
 /** Install `replacements` as browser globals; the returned function restores the originals. */
 export function installGlobals(replacements: Record<string, object | boolean>): () => void {
@@ -20,8 +22,9 @@ export function installGlobals(replacements: Record<string, object | boolean>): 
 }
 
 /** The shell's static markup with the endpoint query already answered, or still in flight. */
-export function renderShell(endpoint: "pending" | null = null): string {
+export function renderShell(endpoint: "pending" | null = null, sessions: readonly Session[] = []): string {
   const client = new QueryClient();
+  for (const session of sessions) cacheSession(client, session);
   if (endpoint !== "pending") client.setQueryData(queryKeys.gatewayEndpoint, endpoint);
   return renderToStaticMarkup(
     <StateProvider client={client}>

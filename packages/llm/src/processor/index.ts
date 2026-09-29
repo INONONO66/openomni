@@ -20,6 +20,7 @@ import {
   settleAttempt,
   type StreamEvent,
   type StreamEventContext,
+  type StreamEventState,
 } from "./stream-events.js";
 
 export namespace Processor {
@@ -51,6 +52,7 @@ export namespace Processor {
   interface ProcessorInfo {
     message: Message.AssistantMessage;
     usageTotals: Transcript.Usage;
+    usageProvenance: StreamEventState["usageProvenance"];
     visibleOutput: boolean;
     process(streamInput: StreamInput): Effect.Effect<void, LlmError>;
   }
@@ -160,6 +162,9 @@ export namespace Processor {
       },
       get usageTotals() {
         return { ...eventState.usage, cache: { ...eventState.usage.cache } };
+      },
+      get usageProvenance() {
+        return eventState.usageProvenance;
       },
       get visibleOutput() {
         return eventState.visibleOutput;

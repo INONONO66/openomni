@@ -193,7 +193,7 @@ describe("closing and reopening", () => {
     expect(consoleStore.state.drafts).toBe(before.drafts);
     expect(consoleStore.state.closedTabs).toEqual([{ tab, index: 0 }]);
     reopenClosedTab();
-    navigate({ kind: "route", route: "memory" });
+    navigate({ kind: "route", route: "automations" });
     expect(tab.history.entries).toEqual([sessionPlace(id)]);
     expect(before.tabs).toEqual([tab]);
   });
@@ -364,10 +364,10 @@ describe("history menu selector", () => {
   test("history titles resolve live metadata, not visit-time snapshots", () => {
     const id = createSession(1);
     openSession(id);
-    navigate({ kind: "route", route: "memory" });
+    navigate({ kind: "route", route: "automations" });
     setSessionTitleIfPlaceholder(id, "earned");
     expect(historyMenuEntries()).toEqual([
-      { id: "1", title: "Memory" },
+      { id: "1", title: "Automations" },
       { id: "0", title: "earned" },
     ]);
   });

@@ -40,6 +40,7 @@ export interface SessionKernelStores {
 export interface SessionKernelContext {
   stores(): SessionKernelStores;
   writable(): boolean;
+  readonly childSessionsPage: CatalogStore["childSessionsPage"];
 }
 
 export interface MaterializeInput {
@@ -820,6 +821,8 @@ function makeSessionKernel(context: SessionKernelContext) {
     },
     row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
     listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
+    childSessionsPage: (sessionId: string, afterId: string, limit: number): { readonly id: string }[] =>
+      context.childSessionsPage(sessionId, afterId, limit),
     policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
     currentPolicyGeneration: (): number =>
       policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
@@ -851,5 +854,6 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       policies: catalog.policies,
     }),
     writable: () => true,
+    childSessionsPage: (parentId, afterId, limit) => catalog.childSessionsPage(parentId, afterId, limit),
   });
 }

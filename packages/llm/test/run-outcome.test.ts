@@ -49,6 +49,7 @@ test("stop and aborted are produced by the real attempt entry", async () => {
   expect(stop).toEqual({
     type: "stop",
     evidence: {
+      usageProvenance: "unknown",
       usage: {
         inputTokens: 0,
         outputTokens: 0,

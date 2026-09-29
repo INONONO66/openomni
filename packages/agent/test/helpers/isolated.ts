@@ -29,6 +29,11 @@ function makeIsolatedLedger(): IsolatedLedgerHandle {
   const session = openSessionStore(":memory:", bus);
   const catalog = openCatalogStore(":memory:", bus);
   const kernel = SessionHandleStore.createSessionKernel(session, catalog);
+  const materialize = kernel.materialize;
+  // Match the app composition's catalog registration for this shared-file fixture.
+  kernel.materialize = (input) => materialize(input).pipe(Effect.tap(() => Effect.sync(() => {
+    catalog.indexSession({ id: input.id, parentId: input.parentId, role: input.role, createdAt: input.at });
+  })));
   return {
     kernel,
     openKernel: () => kernel,

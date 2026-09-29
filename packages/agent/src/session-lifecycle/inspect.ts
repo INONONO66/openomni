@@ -8,6 +8,20 @@ import {
   SessionHistory,
   SessionTransition,
 } from "@openomni/protocol";
+import { z } from "zod";
+
+export const InspectRequest = SessionHistory.InspectRequest.extend({
+  limit: z.number().int().positive().max(256).default(100),
+  cursor: z.number().int().nonnegative().default(0),
+  childrenCursor: z.string().default(""),
+}).strict();
+export type InspectRequest = z.input<typeof InspectRequest>;
+
+export interface InspectionPage extends SessionHistory.Inspection {
+  readonly nextCursor: number | null;
+  readonly nextChildrenCursor: string | null;
+  readonly children: readonly InspectionPage[];
+}
 
 /**
  * Diagnostic projection of one session's committed actions. Pure over the
@@ -15,7 +29,7 @@ import {
  * are reduced to identities, hashes, terminals and reasons.
  */
 function inspectActions(
-  kernel: SessionKernel,
+  actions: readonly LedgerAction.Node[],
   sessionId: string,
   parentId: string | null,
   headRevision: number,
@@ -27,24 +41,18 @@ function inspectActions(
   const requests = new Map<string, SessionHistory.Request>();
   const compactions: SessionHistory.Compaction[] = [];
   const restorations = new Map<string, string[]>();
-  let cursor = 0;
-  while (cursor < headRevision) {
-    const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
-    for (const action of page.actions) {
-      if (action.ordinal > headRevision) break;
-      const turnId = ownTurnId(action) ?? turns.get(action.parentId ?? "") ?? null;
-      turns.set(action.id, turnId);
-      transitions.push(transitionOf(action, turnId));
-      policy.push(...policyDecisionOf(action, turnId));
-      const request = requestRecord(action, turnOf);
-      if (request !== undefined) requests.set(request.requestId, request);
-      const compaction = compactionRecord(action, turnOf, restorations);
-      if (compaction !== undefined) compactions.push(compaction);
-      const target = restorationTarget(action);
-      if (target !== undefined)
-        restorations.set(target, [...(restorations.get(target) ?? []), action.id]);
-      cursor = action.ordinal;
-    }
+  for (const action of actions) {
+    const turnId = ownTurnId(action) ?? turns.get(action.parentId ?? "") ?? null;
+    turns.set(action.id, turnId);
+    transitions.push(transitionOf(action, turnId));
+    policy.push(...policyDecisionOf(action, turnId));
+    const request = requestRecord(action, turnOf);
+    if (request !== undefined) requests.set(request.requestId, request);
+    const compaction = compactionRecord(action, turnOf, restorations);
+    if (compaction !== undefined) compactions.push(compaction);
+    const target = restorationTarget(action);
+    if (target !== undefined)
+      restorations.set(target, [...(restorations.get(target) ?? []), action.id]);
   }
   return {
     sessionId,
@@ -64,27 +72,46 @@ function inspectActions(
  * Authoritative inspection of a stored session and, to `depth`, the sessions it
  * commissioned. Traversal follows the ledger's own `parentId` authority only; a
  * session reachable merely as an outbound destination is named by its id in the
- * transition and never read.
+ * transition and never read. The limit bounds the aggregate action count and
+ * visited sessions. Resume root history with nextCursor; when children remain,
+ * use cursor=headRevision plus nextChildrenCursor, or page a returned child by id.
  */
 export function inspectSession(
   kernel: SessionKernel,
   sessionId: string,
-  request: SessionHistory.InspectRequest = {},
-): SessionHistory.Inspection {
-  const { depth } = SessionHistory.InspectRequest.parse(request);
-  const rows = kernel.listRows();
-  const visit = (id: string, remaining: number): SessionHistory.Inspection => {
-    const current = kernel.row(id);
-    const children =
-      remaining === 0
-        ? []
-        : rows.filter((row) => row.parentId === id).map((row) => visit(row.id, remaining - 1));
+  request: InspectRequest = {},
+  openKernel: (id: string) => SessionKernel = () => kernel,
+): InspectionPage {
+  const { depth, cursor, limit, childrenCursor } = InspectRequest.parse(request);
+  let budget = limit;
+  let nodes = limit;
+  const visit = (id: string, remaining: number, afterRevision: number, afterChild: string): InspectionPage => {
+    const reader = id === sessionId ? kernel : openKernel(id);
+    const current = reader.row(id);
+    const page = reader.historyPage(id, { afterRevision, limit: budget });
+    budget -= page.actions.length;
+    nodes -= 1;
+    const children: InspectionPage[] = [];
+    const childRows = remaining === 0 ? [] : reader.childSessionsPage(id, afterChild, limit);
+    let nextChildrenCursor: string | null = null;
+    let lastChild = afterChild;
+    for (const child of childRows) {
+      if (budget === 0 || nodes === 0) {
+        nextChildrenCursor = lastChild;
+        break;
+      }
+      children.push(visit(child.id, remaining - 1, 0, ""));
+      lastChild = child.id;
+    }
+    if (childRows.length === limit) nextChildrenCursor ??= lastChild;
     return {
-      ...inspectActions(kernel, id, current.parentId, current.revision),
+      ...inspectActions(page.actions, id, current.parentId, page.headRevision),
+      nextCursor: page.nextRevision,
+      nextChildrenCursor,
       children,
     };
   };
-  return SessionHistory.Inspection.parse(visit(sessionId, depth));
+  return visit(sessionId, depth, cursor, childrenCursor);
 }
 
 /** Policy decisions narrowed by generation, matched rule and verdict. */

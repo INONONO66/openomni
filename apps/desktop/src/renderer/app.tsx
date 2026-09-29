@@ -7,6 +7,8 @@ import {
   type WindowPlatform,
 } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
+import { useQueryClient } from "@tanstack/react-query";
+import type { SessionRead } from "@openomni/protocol";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ShellCommand } from "../preload/api";
 import { applyAtBoundary, orderByAttention } from "./attention";
@@ -21,7 +23,7 @@ import { sessionGlyphProps } from "./shell/session-glyph";
 import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { desktopBridge } from "./state/desktop-bridge";
-import { useGatewayEndpoint } from "./state/queries";
+import { queryKeys, sessionReadModel, useGatewayEndpoint, useSessionReadModels } from "./state/queries";
 import { historyMenuEntries, listedSessions, placeTitle, sessionIndex } from "./state/selectors";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -48,12 +50,14 @@ import {
 export function App({ platform, storage }: AppEnvironment) {
   const state = useStore(consoleStore);
   const now = Date.now();
-  const { sessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
+  const { sessions: localSessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
+  const { transport, notice } = useChatEndpoint();
+  const sessions = useSessionReadModels(localSessions, transport);
+  const queryClient = useQueryClient();
   const tab = activeTab(state);
   const place = tab?.place ?? null;
   const byId = sessionIndex(sessions);
   const listed = useMemo(() => listedSessions(sessions), [sessions]);
-  const { transport, notice } = useChatEndpoint();
   const search = useRef({ searching: false, invokingTabId: state.activeTabId });
   const focusRecovery = useRef<"panel" | "tab" | null>(null);
   const [held, setHeld] = useState<Held>(() => ({
@@ -69,12 +73,15 @@ export function App({ platform, storage }: AppEnvironment) {
     setHeld((previous) =>
       applyAtBoundary(
         previous,
-        orderByAttention(listedSessions(consoleStore.state.sessions), Date.now()),
+        orderByAttention(listedSessions(consoleStore.state.sessions).map((local) =>
+          sessionReadModel(local, queryClient.getQueryData<SessionRead.Page>(
+            queryKeys.session(local.durableSessionId ?? ""),
+          ))), Date.now()),
         searching ? null : boundary,
       ),
     );
     if (!searching) setSidebarFloating(false);
-  }, []);
+  }, [queryClient]);
 
   // A session's first prompt earns its title and its place in the list: that
   // appearance is a boundary, not a reorder held for the next navigation.
@@ -177,7 +184,7 @@ export function App({ platform, storage }: AppEnvironment) {
       icon:
         entry.place.kind === "session" ? (
           <StatusGlyph
-            {...sessionGlyphProps(byId.get(entry.place.sessionId)?.phase ?? "idle")}
+            {...sessionGlyphProps(byId.get(entry.place.sessionId)?.phase ?? null)}
             size="compact"
           />
         ) : (
@@ -325,5 +332,4 @@ function isEditing(target: EventTarget | null): boolean {
 const ROUTE_EMPTY = {
   inbox: "Nothing in the inbox.",
   automations: "No automations yet.",
-  memory: "Nothing remembered yet.",
 } as const satisfies Record<Exclude<Route, "sessions">, string>;

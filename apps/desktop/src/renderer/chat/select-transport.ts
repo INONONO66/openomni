@@ -1,6 +1,6 @@
-import type { ChatTransport, UIMessage } from "ai";
 import type { GatewayEndpoint } from "../../preload/api";
-import { createGatewayChatTransport } from "./gateway-transport";
+import { bindDurableSession } from "../state/session-actions";
+import { createGatewayChatTransport, type GatewayChatTransport } from "./gateway-transport";
 
 /**
  * The gateway endpoint, turned into the wire the renderer speaks — or refused.
@@ -13,7 +13,7 @@ import { createGatewayChatTransport } from "./gateway-transport";
 type SelectedTransport =
   | {
       readonly kind: "gateway";
-      readonly transport: ChatTransport<UIMessage>;
+      readonly transport: GatewayChatTransport;
       readonly protocols?: readonly string[];
     }
   | { readonly kind: "misconfigured"; readonly transport: null; readonly problem: string };
@@ -44,7 +44,7 @@ export function selectChatTransport(endpoint: GatewayEndpoint): SelectedTranspor
   // gateway with no configured token has nothing to match an `auth` pair
   // against, and answers the attempt with a 401.
   if (endpoint.token === undefined || endpoint.token.length === 0) {
-    return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url }) };
+    return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url, onSessionBound: bindDurableSession }) };
   }
 
   if (!HTTP_TOKEN.test(endpoint.token)) {
@@ -61,7 +61,7 @@ export function selectChatTransport(endpoint: GatewayEndpoint): SelectedTranspor
   const protocols = ["auth", endpoint.token];
   return {
     kind: "gateway",
-    transport: createGatewayChatTransport({ url: endpoint.url, protocols }),
+    transport: createGatewayChatTransport({ url: endpoint.url, protocols, onSessionBound: bindDurableSession }),
     protocols,
   };
 }

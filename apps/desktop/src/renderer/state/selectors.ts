@@ -4,23 +4,16 @@ import {
   consoleStore,
   type Place,
   ROUTE_LABEL,
-  type Session,
+  type LocalSession,
   type SessionId,
 } from "./store";
 
-// Session arrays are immutable store snapshots; derived indexes must not own state or a clock.
-const indexes = new WeakMap<readonly Session[], ReadonlyMap<SessionId, Session>>();
-
-export function sessionIndex(sessions: readonly Session[]): ReadonlyMap<SessionId, Session> {
-  const existing = indexes.get(sessions);
-  if (existing) return existing;
-  const index = new Map(sessions.map((session) => [session.id, session]));
-  indexes.set(sessions, index);
-  return index;
+export function sessionIndex<T extends LocalSession>(sessions: readonly T[]): ReadonlyMap<SessionId, T> {
+  return new Map(sessions.map((session) => [session.id, session]));
 }
 
 /** Sidebar/Sessions list membership: a session is listed once its first prompt earned a title. */
-export function listedSessions(sessions: readonly Session[]): readonly Session[] {
+export function listedSessions<T extends LocalSession>(sessions: readonly T[]): readonly T[] {
   return sessions.filter((session) => session.titleSource === "prompt");
 }
 

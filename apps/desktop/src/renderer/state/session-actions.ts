@@ -1,23 +1,10 @@
-import { consoleStore, type Session, type SessionId, type SessionPhase } from "./store";
+import { consoleStore, type SessionId } from "./store";
 
-export function setSessionPhase(id: SessionId, phase: SessionPhase, now: number): void {
+export function bindDurableSession(id: SessionId, durableSessionId: string): void {
   consoleStore.setState((state) => ({
     ...state,
     sessions: state.sessions.map((session) =>
-      session.id === id && session.phase !== phase
-        ? { ...session, phase, phaseSince: now, lastActivityAt: now }
-        : session,
-    ),
-  }));
-}
-
-export function setSessionAttention(
-  id: SessionId,
-  changes: Partial<Pick<Session, "unread" | "pinned" | "snoozedUntil" | "lastActivityAt">>,
-): void {
-  consoleStore.setState((state) => ({
-    ...state,
-    sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+      session.id === id ? { ...session, durableSessionId } : session),
   }));
 }
 

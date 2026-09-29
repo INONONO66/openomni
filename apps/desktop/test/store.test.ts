@@ -8,7 +8,6 @@ import {
   canGoForward,
   consoleStore,
   createSession,
-  DEFAULT_PROJECT_ID,
   forward,
   INITIAL_CLIENT_STATE,
   jumpTo,
@@ -35,18 +34,16 @@ function currentTab() {
 }
 
 describe("session creation and titles", () => {
-  test("creates a placeholder record in the default project without opening a view", () => {
+  test("creates a placeholder record without fabricating a project or opening a view", () => {
     const id = createSession(100);
     expect(consoleStore.state.sessions).toEqual([
       {
         id,
         title: "New Session",
         titleSource: "placeholder",
-        projectId: DEFAULT_PROJECT_ID,
+        projectId: null,
         createdAt: 100,
-        phase: "idle",
         lastActivityAt: 100,
-        phaseSince: 100,
         unread: false,
         pinned: false,
         snoozedUntil: null,
@@ -159,10 +156,10 @@ describe("tab history has browser semantics", () => {
     openTab({ kind: "route", route: "sessions" });
     navigate({ kind: "route", route: "inbox" });
     back();
-    navigate({ kind: "route", route: "memory" });
+    navigate({ kind: "route", route: "automations" });
     expect(currentTab().history.entries).toEqual([
       { kind: "route", route: "sessions" },
-      { kind: "route", route: "memory" },
+      { kind: "route", route: "automations" },
     ]);
     expect(canGoForward(currentTab().history)).toBe(false);
   });

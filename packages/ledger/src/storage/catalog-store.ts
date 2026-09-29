@@ -94,6 +94,13 @@ export class CatalogStore {
     return row === null ? undefined : row;
   }
 
+  childSessionsPage(parentId: string, afterId: string, limit: number): SessionIndexRow[] {
+    const size = z.number().int().positive().max(256).parse(limit);
+    return z.array(SessionIndexSqlRow).parse(this.db.query(
+      "SELECT * FROM session_index WHERE parent_id = ? AND id > ? ORDER BY id LIMIT ?",
+    ).all(parentId, afterId, size));
+  }
+
   /**
    * Runner-generation fence CAS (W5.2 review F5): one atomic increment under
    * BEGIN IMMEDIATE per entity activation. The winner writes the returned

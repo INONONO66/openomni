@@ -35,6 +35,12 @@ function retryDelay(recover: boolean, decision: ReturnType<typeof Retry.decide>)
   return !recover && decision.retry ? decision.delayMs : 0;
 }
 
+function usageProvenance(evidence: PlainValue, failure: ExecutionError | undefined) {
+  const record = evidence !== null && typeof evidence === "object" && !Array.isArray(evidence)
+    ? evidence : {};
+  const origin = failure?._tag === "LlmRunFailure" ? failure.usageProvenance : record.usageProvenance;
+  return origin === "reported" || origin === "estimated" ? origin : "unknown";
+}
 
 /**
  * Default durable retry port over the timer plane (W5.2 plan D8): `arm`
@@ -129,11 +135,16 @@ export function createAttemptRunner(
   function executeAttempt<T extends PlainValue>(prepared: Prepared<T>, attempts: LlmAttempts<T>, intent: LedgerAction.Receipt) {
     return Effect.uninterruptibleMask((restore) =>
       Effect.exit(restore(prepared.body())).pipe(
-        Effect.flatMap((exit) => record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
-          phase: "result", effect: prepared.request.effect,
-          terminal: Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause) ? "interrupted" : "executed",
-          evidence: Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause),
-        }).pipe(Effect.as(exit))),
+        Effect.flatMap((exit) => {
+          const evidence = Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause);
+          const failure = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
+          return record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+            phase: "result", effect: prepared.request.effect,
+            terminal: Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause) ? "interrupted" : "executed",
+            usageProvenance: usageProvenance(evidence, failure),
+            evidence,
+          }).pipe(Effect.as(exit));
+        }),
       ),
     );
   }

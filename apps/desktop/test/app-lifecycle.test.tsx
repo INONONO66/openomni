@@ -168,7 +168,7 @@ test("App restores and persists shell preferences, scopes bracket shortcuts and 
 
 test("pointer navigation, local history and list selection keep one frame and preserve tab identities", async () => {
   const { first, firstTab, secondTab, unopened } = seed();
-  navigate({ kind: "route", route: "memory" });
+  navigate({ kind: "route", route: "automations" });
   // Base UI's portal is SSR-disabled when an earlier test imports it without a DOM.
   // Observe App's generic callback while retaining the real Console and controls.
   const RealConsole = ui.Console;
@@ -187,7 +187,7 @@ test("pointer navigation, local history and list selection keep one frame and pr
   await act(() => back.click());
   expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "session", sessionId: first });
   await act(() => forward.click());
-  expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "route", route: "memory" });
+  expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "route", route: "automations" });
   await act(() => strip?.history.onJump("0"));
   expect(activeTab(consoleStore.state)?.history.cursor).toBe(0);
   expect(consoleStore.state.activeTabId).toBe(firstTab);

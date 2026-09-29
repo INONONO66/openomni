@@ -22,7 +22,10 @@ export namespace SessionRead {
     type: z.enum(["session_snapshot", "session_page"]),
     sessionId: Id,
     state: LedgerSession.State,
-    phase: z.enum(["idle", "running", "interrupted", "completed", "failed", "waiting_input"]),
+    phase: z.enum([
+      "queued", "running", "waiting_approval", "waiting_input", "interrupted",
+      "completed", "failed", "idle", "archived",
+    ]),
     phaseSince: z.number().nonnegative(),
     epoch: Revision,
     afterRevision: Revision,

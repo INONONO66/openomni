@@ -1,4 +1,5 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+import { SessionRead } from "@openomni/protocol";
 import { z } from "zod";
 
 /** The subset of `WebSocket` this transport uses, so a test can serve its own. */
@@ -25,13 +26,19 @@ interface GatewayChatTransportOptions {
   readonly protocols?: string | readonly string[];
   /** Injected in tests. Defaults to the platform `WebSocket`. */
   readonly WebSocketImpl?: SocketConstructor;
+  readonly onSessionBound?: (chatId: string, sessionId: string) => void;
 }
 
-/** The three frames the gateway sends, once parsed. */
-const serverFrameSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("receipt"), status: z.literal("accepted") }),
+const serverFrameSchema = z.union([
+  SessionRead.Response,
+  SessionRead.Receipt,
   z.object({ type: z.literal("message"), messageId: z.string(), text: z.string() }),
-  z.object({ type: z.literal("error"), message: z.string() }),
+  z.object({
+    type: z.literal("error"),
+    message: z.string().optional(),
+    reason: z.string().optional(),
+    sessionId: z.string().optional(),
+  }),
 ]);
 
 type ServerFrame = z.infer<typeof serverFrameSchema>;
@@ -73,6 +80,11 @@ interface SocketConnection {
   readonly opened: Promise<SocketLike>;
 }
 
+export interface GatewayChatTransport extends ChatTransport<UIMessage> {
+  readSession(sessionId: string, cursor?: SessionRead.Cursor): Promise<SessionRead.Page>;
+  subscribeSession(listener: (page: SessionRead.Page) => void): () => void;
+}
+
 function emptyStream(): ReadableStream<UIMessageChunk> {
   return new ReadableStream({
     start(controller) {
@@ -83,15 +95,74 @@ function emptyStream(): ReadableStream<UIMessageChunk> {
 
 export function createGatewayChatTransport(
   options: GatewayChatTransportOptions,
-): ChatTransport<UIMessage> {
+): GatewayChatTransport {
   
   const pending: Turn[] = [];
   
   const outstanding = new Map<string, OutstandingMessage>();
   const lastChatId = new WeakMap<SocketLike, string>();
+  const durableIds = new Map<string, string>();
+  const reads = new Map<string, {
+    readonly socket: SocketLike;
+    readonly resolve: (page: SessionRead.Page) => void;
+    readonly reject: (error: Error) => void;
+  }>();
+  const listeners = new Set<(page: SessionRead.Page) => void>();
+
+  function settleRead(source: SocketLike, frame: SessionRead.Response): void {
+    const pendingRead = reads.get(frame.sessionId);
+    if (pendingRead !== undefined && pendingRead.socket !== source) return;
+    if (frame.type === "session_gap") {
+      source.send(JSON.stringify({ type: "session_read", sessionId: frame.sessionId, limit: 256 }));
+      return;
+    }
+    for (const listener of listeners) listener(frame);
+    if (frame.nextRevision !== null) {
+      source.send(JSON.stringify({
+        type: "session_read", sessionId: frame.sessionId, limit: 256,
+        cursor: { revision: frame.nextRevision, epoch: frame.epoch },
+      }));
+      return;
+    }
+    reads.delete(frame.sessionId);
+    pendingRead?.resolve(frame);
+    if (frame.phase === "completed" || frame.phase === "failed" || frame.phase === "interrupted") {
+      for (let index = pending.length - 1; index >= 0; index -= 1) {
+        const turn = pending[index];
+        if (turn?.socket !== source || durableIds.get(turn.chatId) !== frame.sessionId) continue;
+        pending.splice(index, 1);
+        turn.emit({ type: "finish" });
+        turn.close();
+      }
+    }
+  }
+
+  function bindSession(source: SocketLike, frame: z.infer<typeof SessionRead.Receipt>): void {
+    const chatId = pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
+    const result = frame.result;
+    if (chatId === undefined || result === undefined || result.status === "blocked_pre") return;
+    durableIds.set(chatId, result.handle.target);
+    options.onSessionBound?.(chatId, result.handle.target);
+  }
 
   function settle(source: SocketLike, frame: ServerFrame): void {
-    if (frame.type === "receipt") return;
+    if (frame.type === "session_snapshot" || frame.type === "session_page" || frame.type === "session_gap") {
+      settleRead(source, frame);
+      return;
+    }
+    if (frame.type === "receipt") {
+      bindSession(source, frame);
+      return;
+    }
+    if (frame.type === "error" && frame.sessionId !== undefined) {
+      reads.get(frame.sessionId)?.reject(new Error(frame.reason ?? frame.message ?? "session read failed"));
+      reads.delete(frame.sessionId);
+      return;
+    }
+    if (frame.type === "message" || frame.type === "error") settleChat(source, frame);
+  }
+
+  function settleChat(source: SocketLike, frame: Extract<ServerFrame, { type: "message" | "error" }>): void {
     if (frame.type === "message") {
       const chatId =
         pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
@@ -104,7 +175,7 @@ export function createGatewayChatTransport(
     const [turn] = pending.splice(index, 1);
     if (turn === undefined) return;
     if (frame.type === "error") {
-      turn.emit({ type: "error", errorText: frame.message });
+      turn.emit({ type: "error", errorText: frame.message ?? frame.reason ?? "gateway error" });
       turn.close();
       return;
     }
@@ -119,6 +190,11 @@ export function createGatewayChatTransport(
 
   /** Every in-flight turn on one socket ends when that socket does. */
   function drain(source: SocketLike, errorText?: string): void {
+    for (const [id, pendingRead] of reads) {
+      if (pendingRead.socket !== source) continue;
+      reads.delete(id);
+      pendingRead.reject(new Error(errorText ?? "gateway socket closed"));
+    }
     for (let index = pending.length - 1; index >= 0; index -= 1) {
       const turn = pending[index];
       if (turn?.socket !== source) continue;
@@ -134,6 +210,25 @@ export function createGatewayChatTransport(
   const { closeSocket, connectUntilAborted } = createConnection(options, settle, drain);
 
   return {
+    async readSession(sessionId, cursor) {
+      const live = await connectUntilAborted(undefined);
+      if (live === undefined) throw new Error("gateway socket unavailable");
+      return new Promise<SessionRead.Page>((resolve, reject) => {
+        reads.set(sessionId, { socket: live, resolve, reject });
+        try {
+          live.send(JSON.stringify(SessionRead.Request.parse({
+            type: "session_read", sessionId, limit: 256, cursor,
+          })));
+        } catch (error) {
+          reads.delete(sessionId);
+          reject(error);
+        }
+      });
+    },
+    subscribeSession(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     async sendMessages({ trigger, chatId, messages, abortSignal }) {
       if (trigger === "regenerate-message") {
         throw new Error("gateway transport does not support regeneration");

@@ -147,7 +147,7 @@ export function createController(
       get: (options = {}) => kernel.getSnapshot(sessionId, options.turns ?? 1),
       watch: (options = {}) => kernel.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
       history: (request = {}) => kernel.historyPage(sessionId, request),
-      inspect: (request = {}) => inspectSession(kernel, sessionId, request),
+      inspect: (request = {}) => inspectSession(kernel, sessionId, request, runtime.openKernel),
       close: () => Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
         if (state.closed) return;
         if (state.released) return yield* releasedClose();

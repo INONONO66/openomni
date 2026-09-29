@@ -137,7 +137,7 @@ test("every attempt pins its ordinal, cap and retry reason; the settled one pins
     return projected !== null && typeof projected === "object" && !Array.isArray(projected) && projected.usage !== undefined;
   });
   expect(executed.map((a: LedgerAction.Append) => a.effect.value)).toEqual([
-    { phase: "result", terminal: "executed", effect: {}, evidence },
+    { phase: "result", terminal: "executed", usageProvenance: "unknown", effect: {}, evidence },
   ]);
 }))));
 

@@ -12,6 +12,7 @@ export function formatRelative(now: number, at: number): string {
  */
 export function hasActiveState(session: Pick<Session, "phase" | "unread">): boolean {
   switch (session.phase) {
+    case null:
     case "idle":
     case "archived":
       return false;
@@ -25,6 +26,8 @@ export function hasActiveState(session: Pick<Session, "phase" | "unread">): bool
 
 export function sessionReason(session: Session, now: number): string {
   switch (session.phase) {
+    case null:
+      return "not connected";
     case "waiting_approval":
       return `waiting for approval · ${formatRelative(now, session.phaseSince)}`;
     case "waiting_input":

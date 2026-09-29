@@ -27,7 +27,7 @@ function renderRows(session: Session): Document {
   consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
   openTab({ kind: "route", route: "sessions" });
   const document = new Window().document;
-  document.body.innerHTML = renderShell();
+  document.body.innerHTML = renderShell(null, [session]);
   return document as unknown as Document;
 }
 

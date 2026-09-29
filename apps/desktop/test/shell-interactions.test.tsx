@@ -64,21 +64,21 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     // A plain click moves the current tab (the empty column materializes exactly one); it never grows the strip.
     const tabsBefore = consoleStore.state.tabs.length;
     expect(tabsBefore).toBe(1);
-    await click('[data-ui="Sidebar.Nav"] button:nth-child(4)');
+    await click('[data-ui="Sidebar.Nav"] button:nth-child(3)');
     expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
       kind: "route",
-      route: "memory",
+      route: "automations",
     });
     expect(consoleStore.state.tabs.length).toBe(tabsBefore);
     await act(() =>
       window.document
-        .querySelector('[data-ui="Sidebar.Nav"] button:nth-child(3)')
+        .querySelector('[data-ui="Sidebar.Nav"] button:nth-child(2)')
         ?.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true })),
     );
     expect(consoleStore.state.tabs.length).toBe(tabsBefore + 1);
     expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
       kind: "route",
-      route: "automations",
+      route: "inbox",
     });
     await act(() => key("["));
     expect(consoleStore.state.sidebarOpen).toBe(false);

@@ -13,7 +13,7 @@ beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
 
 test("captured history jumps reject a changed active tab and changed history, but accept live cursors", () => {
   openTab({ kind: "route", route: "sessions" });
-  navigate({ kind: "route", route: "memory" });
+  navigate({ kind: "route", route: "automations" });
   const captured = activeTab(consoleStore.state);
   if (captured === null) throw new Error("Missing tab");
   const onJump = (cursor: string) => jumpFrom(captured, cursor);

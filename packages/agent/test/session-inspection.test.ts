@@ -4,7 +4,7 @@ import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
 import { OutcomeUnknown, CommitFailed } from "../src/errors";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -285,6 +285,46 @@ function lifecycle() {
 }
 
 describe("action-based history and diagnostic projections", () => {
+  test("inspection pages more than 256 actions without enumerating session rows", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const parent = yield* lifecycle();
+          const kernel = isolatedLedger().kernel;
+          const firstRevision = kernel.row("parent").revision;
+          const adopted = yield* kernel.adoptFence({
+            sessionId: "parent", owner: "inspection-page", fence: kernel.row("parent").leaseFence + 1,
+          });
+          yield* kernel.commit({
+            sessionId: "parent", owner: "inspection-page", fence: adopted.fence, now: 1_000,
+            expectedRevision: firstRevision, state: kernel.row("parent").state,
+            actions: Array.from({ length: 300 }, (_, index) => ({
+              id: `inspection-page-${index}`, sessionId: "parent", parentId: null,
+              kind: "alarm.arm" as const,
+              intent: { encodingVersion: 1 as const, value: { alarmId: `inspect-${index}` } },
+              effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+              ts: 1_000, irreversible: true,
+            })),
+          });
+          const listRows = spyOn(kernel, "listRows");
+          try {
+            const first = parent.inspect({ depth: 1, cursor: firstRevision, limit: 256 });
+            expect(first.transitions).toHaveLength(256);
+            expect(first.nextCursor).toBe(firstRevision + 256);
+            expect(first.nextChildrenCursor).toBe("");
+            const second = parent.inspect({ depth: 1, cursor: first.nextCursor ?? 0, limit: 256 });
+            expect(second.transitions).toHaveLength(44);
+            expect(second.nextCursor).toBeNull();
+            expect(second.transitions[0]?.revision).toBe(firstRevision + 257);
+            expect(second.children.map((child) => child.sessionId)).toEqual(["child"]);
+            expect(listRows).toHaveBeenCalledTimes(0);
+          } finally {
+            listRows.mockRestore();
+          }
+        }),
+      ),
+    ));
+
   test("every transition of a request spanning child, retry, refusal, approval, wake and compaction traces to a committed cause", () =>
     isolated(
       Effect.scoped(

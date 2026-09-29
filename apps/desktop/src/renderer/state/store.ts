@@ -1,5 +1,6 @@
 import { clampSidebarWidth, SIDEBAR_WIDTH } from "@openomni/ui";
 import { Store } from "@tanstack/store";
+import type { SessionRead } from "@openomni/protocol";
 
 /**
  * Window-lifetime client state. Server state belongs in queries.ts; sessions
@@ -9,21 +10,9 @@ import { Store } from "@tanstack/store";
 export type ProjectId = string;
 export type SessionId = string;
 
-/** The project every new session lands in until projects are real. */
-export const DEFAULT_PROJECT_ID: ProjectId = "default";
+export type SessionPhase = SessionRead.Page["phase"];
 
-export type SessionPhase =
-  | "queued"
-  | "running"
-  | "waiting_approval"
-  | "waiting_input"
-  | "interrupted"
-  | "completed"
-  | "failed"
-  | "idle"
-  | "archived";
-
-export interface Session {
+export interface LocalSession {
   readonly id: SessionId;
   readonly title: string;
   readonly titleSource: "placeholder" | "prompt";
@@ -34,19 +23,23 @@ export interface Session {
    * has not landed; the field is the row's contract for it.
    */
   readonly surfaceKey?: string;
+  readonly durableSessionId?: string;
   readonly projectId: ProjectId | null;
-  readonly phase: SessionPhase;
   readonly createdAt: number;
   readonly lastActivityAt: number;
-  readonly phaseSince: number;
   readonly unread: boolean;
   readonly pinned: boolean;
   readonly snoozedUntil: number | null;
 }
 
-export type Route = "sessions" | "inbox" | "automations" | "memory";
+export interface Session extends LocalSession {
+  readonly phase: SessionPhase | null;
+  readonly phaseSince: number;
+}
 
-export const ROUTES: readonly Route[] = ["sessions", "inbox", "automations", "memory"];
+export type Route = "sessions" | "inbox" | "automations";
+
+export const ROUTES: readonly Route[] = ["sessions", "inbox", "automations"];
 
 export type Place =
   | { readonly kind: "session"; readonly sessionId: SessionId }
@@ -69,7 +62,7 @@ interface ClosedTab {
 }
 
 export interface ClientState {
-  readonly sessions: readonly Session[];
+  readonly sessions: readonly LocalSession[];
   readonly tabs: readonly Tab[];
   readonly activeTabId: string | null;
   readonly closedTabs: readonly ClosedTab[];
@@ -109,11 +102,9 @@ export function createSession(now: number = Date.now()): SessionId {
         id,
         title: "New Session",
         titleSource: "placeholder",
-        projectId: DEFAULT_PROJECT_ID,
-        phase: "idle",
+        projectId: null,
         createdAt: now,
         lastActivityAt: now,
-        phaseSince: now,
         unread: false,
         pinned: false,
         snoozedUntil: null,
@@ -290,7 +281,6 @@ export const ROUTE_LABEL: Record<Route, string> = {
   sessions: "Sessions",
   inbox: "Inbox",
   automations: "Automations",
-  memory: "Memory",
 };
 
 export function toggleProject(id: ProjectId | null): void {
