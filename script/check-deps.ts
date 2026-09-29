@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { z } from "zod";
+import { runScriptMain } from "./main-runner";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
@@ -1133,12 +1134,4 @@ export async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-if (import.meta.main) {
-  try {
-    await main();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`ERROR: ${message}`);
-    process.exit(1);
-  }
-}
+if (import.meta.main) await runScriptMain(main);

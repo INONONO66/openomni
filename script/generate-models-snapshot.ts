@@ -26,7 +26,7 @@ const SourceProvider = z.object({
 });
 const SourceCatalog = z.record(z.string(), z.json());
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const response = await fetch(MODELS_URL, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
     console.error(`[generate-models-snapshot] ${MODELS_URL} → ${response.status}`);
@@ -76,6 +76,4 @@ function projectModel(model: SourceModel): PlainObject {
   };
 }
 
-if (import.meta.main) {
-  await main();
-}
+if (import.meta.main) await main();

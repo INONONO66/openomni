@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { runScriptMain } from "./main-runner";
 
 type SideEffectRuleId = "processor-projected-sink";
 
@@ -103,10 +104,4 @@ function isProjectedBinding(declaration: ts.Declaration, emissionStart: number):
   );
 }
 
-if (import.meta.main) {
-  main().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
-    process.exit(1);
-  });
-}
+if (import.meta.main) await runScriptMain(main);

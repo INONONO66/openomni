@@ -26,6 +26,7 @@ function fixture(): string {
     "check-import-cycles.ts",
     "lint-side-effects.ts",
     "lint-tools.test.ts",
+    "main-runner.ts",
   ]) {
     copyFileSync(join(import.meta.dir, name), join(root, "script", name));
   }

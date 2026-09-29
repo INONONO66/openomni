@@ -27,6 +27,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runScriptMain } from "./main-runner";
 import { toolSpec } from "../packages/agent/src/index.js";
 import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
 import type { Tool, AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
@@ -742,8 +743,8 @@ export function selfTest(): void {
 // main
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
-  const args = new Set(process.argv.slice(2));
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const args = new Set(argv);
 
   if (args.has("--self-test")) {
     selfTest();
@@ -790,12 +791,4 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-if (import.meta.main) {
-  try {
-    await main();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
-    process.exit(1);
-  }
-}
+if (import.meta.main) await runScriptMain(() => main());

@@ -42,3 +42,8 @@ Patch coverage (b2-patch-root.log; root lcov re-keyed to absolute SF paths becau
 ancestor): 71 changed executable lines uncovered across 12 files (script 43, apps/openomni/gateway.ts 14,
 desktop gateway-transport.ts 12, agent inspect.ts 1, desktop attention/reason.ts 1). Wave C lanes C1/C2/C3 close them
 with CI-shaped per-workspace LCOV; the authoritative gate is the CI patch-coverage job on PR #1240.
+
+## Wave B re-run after C1/C2/docs commits (HEAD 10aec492, C3 script edits uncommitted in tree)
+Root gates, all exit 0: build, check-types, lint, lint:tools, lint:docs, check-topology, check-deps, check-import-cycles, check-dead-exports, verify-tsconfig-inheritance, check-effect-boundaries, check-written-types (logs /tmp/w53-gate-*.log).
+Package suites with coverage, all exit 0: protocol 502/0, policy 72/0, ledger 197/0, llm 409/0, ipc 90/0, machines 68/0, codemode 28/0, channels 577/0, ui 206/0 (logs /tmp/w53-pkg-*.log). apps/openomni 557/0 and packages/agent 850/0 (C1 verify), apps/desktop 437/0 (C2 verify).
+Script lanes: owned by C3 (serial, shared script/coverage/lcov.info); patch-coverage final run after C3 lands.

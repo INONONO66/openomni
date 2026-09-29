@@ -1,4 +1,5 @@
 import { Policy } from "../packages/protocol/src/index";
+import { runScriptMain } from "./main-runner";
 
 type GuardRuleId =
   | "ad-hoc-list-membership"
@@ -116,7 +117,7 @@ async function verifyPinnedFilesExist(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   await verifyPinnedFilesExist();
   const files = await collectSourceFiles();
   const violations: GuardViolation[] = [];
@@ -333,10 +334,4 @@ function lineNumberForOffset(source: string, offset: number): number {
   return line;
 }
 
-if (import.meta.main) {
-  main().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
-    process.exit(1);
-  });
-}
+if (import.meta.main) await runScriptMain(main);

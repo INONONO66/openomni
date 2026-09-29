@@ -46,11 +46,11 @@ export function writtenTypes(root: string = ROOT): WrittenTypeFinding[] {
   );
 }
 
-if (import.meta.main) {
-  const root = process.argv[2] === "--root" ? process.argv[3] : ROOT;
+/** CLI shell around `writtenTypes`: prints findings and returns the exit code. */
+export function checkWrittenTypes(root: string | undefined): number {
   if (root === undefined || !existsSync(root)) {
     process.stderr.write("ERROR: --root requires an existing directory\n");
-    process.exit(1);
+    return 1;
   }
   const findings = writtenTypes(root);
   for (const finding of findings) {
@@ -58,6 +58,10 @@ if (import.meta.main) {
       `VIOLATION [written-types] ${finding.file}:${finding.line} ${finding.kind}\n`,
     );
   }
-  if (findings.length > 0) process.exit(1);
+  if (findings.length > 0) return 1;
   process.stdout.write("OK: written any/unknown types: 0\n");
+  return 0;
 }
+
+const cliRoot = process.argv[2] === "--root" ? process.argv[3] : ROOT;
+if (import.meta.main) process.exitCode = checkWrittenTypes(cliRoot);

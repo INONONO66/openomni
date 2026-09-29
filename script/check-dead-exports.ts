@@ -22,6 +22,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
+import { runScriptMain } from "./main-runner";
 import type { PlainValue } from "../packages/protocol/src/json.js";
 import { knipWorkspaces } from "./topology";
 
@@ -262,7 +263,7 @@ export function productionConsumerFindings(rows: readonly {
   ).map(({ path, line, symbol }) => ({ path, line, symbol, class: "export" }));
 }
 
-function readBaseline(): DeadExportBaseline {
+export function readBaseline(): DeadExportBaseline {
   // Tolerate a missing key: `--update` always writes the `grandfathered`
   // array (empty or not), but a hand-minimized `{}` baseline is still valid.
   const parsed = DeadExportBaselineSchema.parse(JSON.parse(readFileSync(BASELINE_PATH, "utf8")));
@@ -392,12 +393,4 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-if (import.meta.main) {
-  try {
-    await main();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`ERROR: ${message}\n`);
-    process.exit(1);
-  }
-}
+if (import.meta.main) await runScriptMain(main);

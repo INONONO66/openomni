@@ -1,7 +1,8 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { checkWrittenTypes, writtenTypes } from "./check-written-types";
 
 const checker = join(import.meta.dir, "check-written-types.ts");
 const roots: string[] = [];
@@ -63,5 +64,59 @@ test("accepts keyword words outside type syntax and ignores tests", () => {
     code: 0,
     stdout: "OK: written any/unknown types: 0\n",
     stderr: "",
+  });
+});
+
+function runInProcess(root: string | undefined) {
+  const output: string[] = [];
+  const error: string[] = [];
+  const wroteOut = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    output.push(String(chunk));
+    return true;
+  });
+  const wroteErr = spyOn(process.stderr, "write").mockImplementation((chunk) => {
+    error.push(String(chunk));
+    return true;
+  });
+  try {
+    const code = checkWrittenTypes(root);
+    return { code, stdout: output.join(""), stderr: error.join("") };
+  } finally {
+    wroteOut.mockRestore();
+    wroteErr.mockRestore();
+  }
+}
+
+test("in-process findings and CLI shell agree on a violating root", () => {
+  const root = fixture(
+    "packages/ipc/src/fixture.ts",
+    "type Value = any;\nconst input: unknown = 1;\n",
+  );
+
+  expect(writtenTypes(root)).toEqual([
+    { file: "packages/ipc/src/fixture.ts", line: 1, kind: "any" },
+    { file: "packages/ipc/src/fixture.ts", line: 2, kind: "unknown" },
+  ]);
+  expect(runInProcess(root)).toEqual({
+    code: 1,
+    stdout: "",
+    stderr:
+      "VIOLATION [written-types] packages/ipc/src/fixture.ts:1 any\n" +
+      "VIOLATION [written-types] packages/ipc/src/fixture.ts:2 unknown\n",
+  });
+});
+
+test("in-process CLI shell passes a clean root and refuses a missing one", () => {
+  const root = fixture("packages/ipc/src/fixture.ts", "const value: string = \"clean\";\n");
+
+  expect(runInProcess(root)).toEqual({
+    code: 0,
+    stdout: "OK: written any/unknown types: 0\n",
+    stderr: "",
+  });
+  expect(runInProcess(join(root, "does-not-exist"))).toEqual({
+    code: 1,
+    stdout: "",
+    stderr: "ERROR: --root requires an existing directory\n",
   });
 });

@@ -212,6 +212,21 @@ const metricFixture = measureTypescriptFunctions(
 )[0];
 if (!metricFixture) throw new Error("metric fixture did not produce a function");
 
+test("TypeScript function names resolve across declaration shapes", () => {
+  const source = [
+    "class Widget {",
+    "  constructor() { this.size = 1; }",
+    "  handler = function () { return 1; };",
+    "}",
+    "const arrow = () => 1;",
+    "const literal = { nested: function () { return 2; } };",
+    "[1].map(function () { return 3; });",
+  ].join("\n");
+  expect(
+    measureTypescriptFunctions("src/names.ts", source, []).map((metric) => metric.symbol),
+  ).toEqual(["constructor", "handler", "arrow", "nested", "<function@7>"]);
+});
+
 test("TypeScript AST cyclomatic metric matches the hand-computed fixture", () => {
   expect(metricFixture.cyclomatic).toBe(2);
 });
