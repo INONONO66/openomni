@@ -32,12 +32,7 @@ export {
   toolSpec,
 } from "./tool-dispatcher";
 // W5.2 #1197 cluster surface (plan F6): the Session entity and its composition seams.
-export {
-  SessionEntity,
-  SessionEntityContext,
-  SessionEntityLive,
-  type SessionEntityEnv,
-} from "./cluster/session-entity";
+export { SessionEntity, SessionEntityContext, SessionEntityLive } from "./cluster/session-entity";
 export {
   deadlineDelivery,
   retryDelivery,
