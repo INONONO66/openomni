@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   canonicalDigest,
   canonicalKey,
-  isPlainValue,
   PlainObjectSchema,
   PlainValueSchema,
 } from "../src/index.js";
@@ -15,7 +14,6 @@ describe("plain JSON owner", () => {
   });
 
   test("one grammar rejects non-JSON values for live boundaries and typed keys", () => {
-    expect(isPlainValue({ gap: undefined })).toBe(false);
     expect(PlainValueSchema.safeParse({ gap: undefined }).success).toBe(false);
     expect(() => canonicalKey({ gap: undefined } as never)).toThrow(
       "canonical key accepts plain JSON values only",

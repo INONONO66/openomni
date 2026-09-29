@@ -26,7 +26,7 @@ const strictPlainKey: PlainKeyPolicy = (key) =>
   key !== "__proto__" && key !== "constructor" && key !== "prototype";
 const persistedPlainKey: PlainKeyPolicy = () => true;
 
-function isPlainValueUnsafe(value: unknown, keyPolicy: PlainKeyPolicy): value is PlainValue {
+function isPlainValueUnsafe<Input>(value: Input, keyPolicy: PlainKeyPolicy): value is Input & PlainValue {
   if (value === null || typeof value === "boolean" || typeof value === "string") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
   if (Array.isArray(value)) return isPlainArray(value, keyPolicy);
@@ -34,7 +34,7 @@ function isPlainValueUnsafe(value: unknown, keyPolicy: PlainKeyPolicy): value is
   return isPlainObject(value, keyPolicy);
 }
 
-function isPlainArray(value: readonly unknown[], keyPolicy: PlainKeyPolicy): value is PlainValue[] {
+function isPlainArray<Entry>(value: readonly Entry[], keyPolicy: PlainKeyPolicy): value is Entry[] & PlainValue[] {
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   // Named own properties make key count exceed length; holes surface as
   // absent index descriptors below — together this refuses sparse arrays,
@@ -64,7 +64,7 @@ function isPlainObject(value: object, keyPolicy: PlainKeyPolicy): value is Plain
  * constructor, or prototype are refused outright — hostile input never gets
  * to look like plain data.
  */
-export function isPlainValue(value: unknown): value is PlainValue {
+export function isPlainValue<Input>(value: Input): value is Input & PlainValue {
   try {
     return isPlainValueUnsafe(value, strictPlainKey);
   } catch {
@@ -106,7 +106,7 @@ export const PlainObjectSchema: z.ZodType<PlainObject, PlainValue> = PlainValueS
   },
 );
 
-function renderCanonical(value: unknown): string {
+function renderCanonical(value: PlainValue | object | undefined): string {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
@@ -157,6 +157,6 @@ export function canonicalKey(value: PlainValue): string {
  * whitespace, finite numbers, plain data only — undefined and non-JSON
  * values fail loudly — hashed with sha256 under the `sha256:` prefix.
  */
-export function canonicalDigest(value: unknown): string {
+export function canonicalDigest(value: PlainValue | object | undefined): string {
   return `sha256:${createHash("sha256").update(renderCanonical(value)).digest("hex")}`;
 }

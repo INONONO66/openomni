@@ -12,16 +12,10 @@ import {
 // sibling folded into the namespace as Policy.Resource, and the test-only
 // PolicyPoint.MigrationMapping compat surface was deleted.
 const expectedPolicyKeys = [
-  "LabelEntry",
-  "InputRule",
   "Permission",
   "EvaluationRequest",
   "EvaluationResult",
   "Timing",
-  "Scope",
-  "FailPolicy",
-  "Definition",
-  "PolicyEffectType",
   "PolicyEffect",
   "PolicyObligation",
   "PolicyDecision",
@@ -32,7 +26,7 @@ const expectedPolicyKeys = [
   "Events",
 ];
 
-const expectedPolicyDecisionKeys = ["allow", "deny", "pending", "isBlocking", "reason"];
+const expectedPolicyDecisionKeys = ["allow", "deny", "pending", "reason"];
 
 const expectedPolicyPointStaticKeys = [
   "version",
@@ -43,7 +37,7 @@ const expectedPolicyPointStaticKeys = [
   "InputSchemas",
 ];
 
-const expectedResourceKeys = ["Source", "Descriptor"];
+const expectedResourceKeys = ["Descriptor"];
 
 const acceptsRootDecision = (decision: Policy.PolicyDecision): PolicyIndex.PolicyDecision =>
   decision;

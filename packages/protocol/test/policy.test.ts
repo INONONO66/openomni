@@ -7,7 +7,7 @@ const it = test;
 describe("Policy schemas", () => {
   describe("InputRule", () => {
     it("parses a basic rule", () => {
-      const result = Policy.InputRule.parse({
+      const result = Policy.Permission.shape.inputRules.unwrap().element.parse({
         toolPattern: "bash",
         field: "command",
         pattern: "rm",
@@ -19,7 +19,7 @@ describe("Policy schemas", () => {
     });
 
     it("parses a rule with reason and priority", () => {
-      const result = Policy.InputRule.parse({
+      const result = Policy.Permission.shape.inputRules.unwrap().element.parse({
         toolPattern: "bash",
         field: "command",
         pattern: "rm",
@@ -103,7 +103,7 @@ describe("Policy schemas", () => {
         "^.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a.*a$",
       ]) {
         expect(() =>
-          Policy.InputRule.parse({
+          Policy.Permission.shape.inputRules.unwrap().element.parse({
             toolPattern: "bash",
             field: "command",
             pattern,
@@ -122,7 +122,7 @@ describe("Policy schemas", () => {
         String.raw`[a\\]*`,
       ]) {
         expect(
-          Policy.InputRule.safeParse({
+          Policy.Permission.shape.inputRules.unwrap().element.safeParse({
             toolPattern: "bash",
             field: "command",
             pattern,
@@ -217,7 +217,6 @@ describe("Policy schemas", () => {
         effects: [],
         reasonCodes: [],
       });
-      expect(PolicyDecision.isBlocking(result)).toBe(false);
     });
 
     it("creates deny and pending decisions as blocking", () => {
@@ -229,66 +228,8 @@ describe("Policy schemas", () => {
 
       expect(deny.verdict).toBe("deny");
       expect(pending.verdict).toBe("pending");
-      expect(PolicyDecision.isBlocking(deny)).toBe(true);
-      expect(PolicyDecision.isBlocking(pending)).toBe(true);
       expect(PolicyDecision.reason(deny)).toBe("denied");
       expect(PolicyDecision.reason(pending)).toBe("needs_approval");
-    });
-  });
-
-  describe("Policy.Definition", () => {
-    it("parses canonical definition metadata", () => {
-      const result = Policy.Definition.parse({
-        name: "test-policy",
-        priority: 100,
-      });
-      expect(result.name).toBe("test-policy");
-      expect(result.priority).toBe(100);
-    });
-
-    it("strips the removed timing field instead of carrying it (#498 W4)", () => {
-      const result = Policy.Definition.parse({
-        name: "test-policy",
-        timing: "turn.start",
-        priority: 100,
-      });
-      expect("timing" in result).toBe(false);
-    });
-
-    it("parses definition with scope", () => {
-      const result = Policy.Definition.parse({
-        name: "test-policy",
-        priority: 100,
-        scope: { agentType: ["worker"] },
-      });
-      expect(result.scope?.agentType).toEqual(["worker"]);
-    });
-
-    it("parses definition with failPolicy", () => {
-      const result = Policy.Definition.parse({
-        name: "test-policy",
-        priority: 100,
-        failPolicy: "fail-closed",
-      });
-      expect(result.failPolicy).toBe("fail-closed");
-    });
-
-    it("rejects definition with empty name", () => {
-      expect(
-        Policy.Definition.safeParse({
-          name: "",
-          priority: 100,
-        }).success,
-      ).toBe(false);
-    });
-
-    it("rejects definition with negative priority", () => {
-      expect(
-        Policy.Definition.safeParse({
-          name: "test",
-          priority: -1,
-        }).success,
-      ).toBe(false);
     });
   });
 

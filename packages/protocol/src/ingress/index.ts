@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { Actor } from "../actor/index.js";
-import { Channel } from "../channel/index.js";
 import {
   Events as EventDescriptors,
   recordedRoutingDecision as recordedRoutingDecisionReader,
@@ -149,7 +148,6 @@ export namespace Ingress {
   export const WorkerLifecycle = WorkerLifecycleSchema;
   export type WorkerLifecycle = z.infer<typeof WorkerLifecycleSchema>;
 
-  export type ActivationMetadata = z.infer<typeof ActivationMetadataSchemaImpl>;
 
   /**
    * The zod half of a delivered agent config; only the in-process callback
@@ -213,28 +211,6 @@ export namespace Ingress {
   export type InboundEvent = DirectEvent | InternalEvent;
   export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
-  type DirectResult = {
-    output: string;
-    finishReason: string;
-  };
-
-  export type ExecutedIngressResult = {
-    kind?: "executed";
-    mode: "direct" | "internal";
-    target: Target;
-    sessionId: string;
-    result: DirectResult;
-  };
-
-  export type DroppedIngressResult = {
-    kind: "dropped";
-    mode: "direct" | "internal";
-    target: Target;
-    reason: string;
-  };
-
-  export type IngressResult = ExecutedIngressResult | DroppedIngressResult;
-
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;
   export const recordedRoutingDecision = recordedRoutingDecisionReader;
@@ -246,7 +222,6 @@ export namespace Ingress {
    * so the two once byte-identical recorders can no longer drift. Each arm
    * still owns its record (its own scoped `DecisionFacts.port()` + typed error).
    */
-  export type RouteStreamScope = RouteRecord.RouteStreamScope;
   export const ROUTE_DECIDED_FACT_TYPE = RouteRecord.ROUTE_DECIDED_FACT_TYPE;
   export const routeStreamId = RouteRecord.routeStreamId;
   export const routeDecidedFact = RouteRecord.routeDecidedFact;
@@ -280,33 +255,4 @@ export function targetKey(target: Ingress.Target): string {
   }
   if (target.sessionId) return `worker-session:${target.sessionId}`;
   return target.workerId ? `worker:${target.workerId}` : "worker";
-}
-
-/**
- * THE surface-key map key for an inbound event (#707 stage-2 hoist from the
- * kernel session resolver). Pure fold over protocol vocabulary — both the
- * gateway router (external claim, record-before-act) and the brain (internal
- * cron/dispatch surface sessions) derive the SAME byte-frozen key from the
- * same event shape, so the persisted surface↔session rows can never fork by
- * copy drift.
- *
- * Format: "surface:workspace:channel" for legacy events. Explicit
- * NON-resident ADR-008 targets append `target:<target-key>` so worker
- * sessions do not collide; resident targets keep the bare key (the resident
- * is the default target, so appending would fork existing resident
- * surface↔session rows).
- */
-export function extractSurfaceKey(event: {
-  surface: string;
-  workspace?: string;
-  channel?: string;
-  target?: Ingress.Target;
-  meta?: Ingress.Meta;
-}): string {
-  const parts = [event.surface, event.workspace ?? "", event.channel ?? ""];
-  const target = event.target || event.meta?.target ? resolveTarget(event) : undefined;
-  if (target && target.kind !== "resident") {
-    parts.push("target", targetKey(target));
-  }
-  return Channel.SurfaceKey.create(parts);
 }

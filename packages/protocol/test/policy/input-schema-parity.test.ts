@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { Policy, Tool } from "../../src/index.js";
+import { Policy, Tool, type PlainValue } from "../../src/index.js";
 
 interface Validator {
-  readonly safeParse: (input: unknown) => { readonly success: boolean };
+  readonly safeParse: (input: PlainValue | undefined) => { readonly success: boolean };
 }
 
 interface ParityCase {
   readonly name: string;
   readonly canonical: Validator;
   readonly policy: Validator;
-  readonly embed: (candidate: unknown) => unknown;
-  readonly candidates: readonly unknown[];
+  readonly embed: (candidate: PlainValue) => PlainValue;
+  readonly candidates: readonly PlainValue[];
 }
 
 const parityCases: readonly ParityCase[] = [

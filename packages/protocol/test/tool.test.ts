@@ -27,15 +27,6 @@ describe("Tool shared contracts", () => {
     expect(Tool.Config.safeParse({ workspaceRoot: 42 }).success).toBe(false);
   });
 
-  test("parses canonical tool source and risk tier contracts", () => {
-    expect(Tool.Source.parse("system")).toBe("system");
-    expect(Tool.Source.parse("server")).toBe("server");
-    expect(Tool.RiskTier.parse(0)).toBe(0);
-    expect(Tool.RiskTier.parse(3)).toBe(3);
-
-    expect(Tool.Source.safeParse("custom").success).toBe(false);
-    expect(Tool.RiskTier.safeParse(4).success).toBe(false);
-  });
 });
 
 describe("Tool.StatePending", () => {
@@ -66,7 +57,6 @@ describe("Tool.StatePending", () => {
     ).toThrow(ZodError);
   });
 });
-
 describe("Tool.StateRunning", () => {
   test("refuses a negative start time — timestamps share the EpochMs contract", () => {
     const negative = Tool.State.safeParse({
@@ -386,77 +376,5 @@ describe("Tool.Spec", () => {
         name: "search",
       }),
     ).toThrow(ZodError);
-  });
-});
-
-describe("Tool source label grammar", () => {
-  test("parses every Source value from its catalog label", () => {
-    for (const source of Tool.Source.options) {
-      expect(Tool.sourceFromLabels([`risk:tier-1`, `source:${source}`])).toBe(source);
-    }
-  });
-
-  test("rejects the retired dot separator and values outside the vocabulary", () => {
-    // The two ends of this grammar drifted apart once (`source.mcp` vs
-    // `source:system`); the closed parser is the fix, so its rejections are
-    // pinned as literally as its acceptances.
-    expect(Tool.sourceFromLabels(["source.mcp", "mcp.fixture"])).toBeUndefined();
-  });
-
-  test("parses a server id from its catalog label", () => {
-    expect(Tool.mcpServerFromLabels(["source:mcp", "mcp.github"])).toBe("github");
-  });
-
-  test("yields no server id from a bare or absent mcp label", () => {
-    expect(Tool.mcpServerFromLabels(["mcp."])).toBeUndefined();
-    expect(Tool.mcpServerFromLabels(["source:mcp"])).toBeUndefined();
-    expect(Tool.mcpServerFromLabels(undefined)).toBeUndefined();
-    expect(Tool.sourceFromLabels(["source:skill-mcp"])).toBeUndefined();
-    expect(Tool.sourceFromLabels(["source:"])).toBeUndefined();
-    expect(Tool.sourceFromLabels(undefined)).toBeUndefined();
-    expect(Tool.sourceFromLabels([])).toBeUndefined();
-  });
-});
-
-// #500 C4: folded in from the deleted src/tool-selection/tool-selection.test.ts —
-// the vocabulary now lives on the Tool namespace.
-describe("Tool.Category", () => {
-  test("rejects unknown categories", () => {
-    expect(() => Tool.Category.parse("invalid")).toThrow(ZodError);
-    expect(() => Tool.Category.parse("filesystem2")).toThrow(ZodError);
-  });
-});
-
-describe("Tool.Selection", () => {
-  test("parses an all-selection", () => {
-    const parsed = Tool.Selection.parse({ all: true });
-    expect(parsed.all).toBe(true);
-  });
-
-  test("parses category and allow/deny lists", () => {
-    const parsed = Tool.Selection.parse({
-      categories: ["filesystem", "mcp"],
-      allow: ["read"],
-      deny: ["write"],
-    });
-    expect(parsed.categories).toEqual(["filesystem", "mcp"]);
-    expect(parsed.allow).toEqual(["read"]);
-    expect(parsed.deny).toEqual(["write"]);
-  });
-
-  test("round-trips through JSON", () => {
-    const original = Tool.Selection.parse({ all: false, categories: ["execution"] });
-    const reparsed = Tool.Selection.parse(JSON.parse(JSON.stringify(original)));
-    expect(reparsed).toEqual(original);
-  });
-
-  test("rejects invalid categories inside the selection", () => {
-    expect(() => Tool.Selection.parse({ categories: ["invalid"] })).toThrow(ZodError);
-  });
-
-  test("parses the empty selection", () => {
-    const parsed = Tool.Selection.parse({});
-    expect(parsed.all).toBeUndefined();
-    expect(parsed.categories).toBeUndefined();
   });
 });

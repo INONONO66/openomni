@@ -106,7 +106,10 @@ function applyAll(facts: Transcript.Fact[]): Message.WithParts {
   return state;
 }
 
-function expectRejected(outcome: Transcript.FoldOutcome, reason: Transcript.RejectReason): void {
+function expectRejected(
+  outcome: ReturnType<typeof Transcript.fold>,
+  reason: Extract<ReturnType<typeof Transcript.fold>, { rejected: true }>["reason"],
+): void {
   if (!("rejected" in outcome)) throw new Error("expected rejected");
   expect(outcome.reason).toBe(reason);
 }
