@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790592406420,
+  "lastUpdate": 1790663240048,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75615,6 +75615,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 114940,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7e369844eff01cf1a53a915bb0c48bbd68e49f4",
+          "message": "W5.3: #1113 campaign closure — read models, literal-zero census, W4 disposition (#1240)\n\n* W5.3 #1113: closure plan (worktree openomni-w53)\n\n* W5.3 #1113: A1 runner-site owners (allowlist 48 -> 0) + A6 W4 disposition, deps perimeter, nits, H10/H18/H19\n\n* W5.3 #1113: A2 protocol census (53 export identities deleted), written any/unknown 16 -> 0 by grep, vocab ratchet -2\n\n* W5.3 #1113: A3 written any/unknown AST gate (check-written-types) + script/app sites -> 0\n\n* W5.3 #1113: A2b protocol Record<string, unknown> sites -> PlainValue/schema types; drop obsolete Retry.sleep spies\n\n* W5.3 #1113: A4 read models — one session_read gateway surface (plain-data DTOs), usage provenance, bounded inspect, desktop query; fix stale noop delivery assertions\n\n* W5.3 #1113: A1/A3 stragglers — machines helper via package owner, four written unknown sites typed\n\n* W5.3 #1113: format regenerated schema snapshot (inline short arrays)\n\n* W5.3 #1113: review r1 findings 5/7 — script entry try/catch (no inferred any), exact one-delivery resume assertion; receipt whitespace\n\n* W5.3 #1113: narrow resume delivery before exact assertion (agent check-types)\n\n* W5.3 #1113: A5 mutation baseline fix, root-file candidate ownership, typescript metrics; execution-copy deletion mirror scoped to git roots; shared formatDiagnostic\n\n* W5.3 #1113: review r1 findings 3/4 — descendant budget independent of root, paged turn ancestry via indexed reads\n\n* W5.3 #1113: review r1 findings 1/2/6 — chats never settle on session pages, empty same-head continuation keeps the page, phaseSince from the phase-establishing transition\n\n* W5.3 #1113: C2 desktop patch coverage — session read pagination, error/drain/send-failure rejections, null-phase reason\n\n* W5.3 #1113: docs sync — closure receipt, kernel references, SLOP rows E4/H12/H16/H17, AGENTS stamps, ipc/llm package docs refreshed\n\n* W5.3 #1113: C1 patch coverage — interrupted phaseSince, torn-snapshot session_gap, toolWallMs fold, session_read_failed frame, multi-hop turn attribution\n\n* W5.3 #1113: C3 script patch coverage — runScriptMain shared tail, injectable main(argv), in-process gate tests; patch coverage gate green across the PR\n\n* W5.3 #1113: review r2 (NO-GO: 1 STOP, 5 majors, 1 minor) + fix-lane briefs F1–F6\n\n* W5.3 #1113: F3-r2 quality-audit decodes version-1 summary history (review r2 finding 3)\n\n* W5.3 #1113: F4-r2 desktop transport keeps every session_read waiter (review r2 finding 4)\n\n* W5.3 #1113: F1-r2 receipt frame restored to base shape; durable binding in additive session_bound frame (review r2 finding 1, Owner decision)\n\n* W5.3 #1113: F1-r2 QA matrix and artifacts\n\n* W5.3 #1113: F6-r2 durable-reconstruction child-exit deadline sized for cold CI runners (hosted Test (agent) failure)\n\n* W5.3 #1113: F5-r2 bounded ancestry windows in inspect; gateway phase facts captured before the fence check (review r2 findings 5, 7)\n\n* W5.3 #1113: F2-r2 one root-file diagnostic ownership rule for the mutation baseline and candidate compilers (review r2 findings 2, 6); r2 findings 2-7 recorded in implementation-status\n\n* W5.3 #1113: docs sync after review r2 — HEAD, session_bound frame in kernel references and AGENTS stamp, post-r2 gate line (4671/0, patch coverage 0 uncovered)\n\n* W5.3 #1113: review r3 receipt (GO-WITH-CONDITIONS / APPROVE, no blockers)",
+          "timestamp": "2026-09-29T06:24:27Z",
+          "tree_id": "c3312befde687c7fe0f1eec6f87d5fb18e96fe61",
+          "url": "https://github.com/INONONO66/openomni/commit/f7e369844eff01cf1a53a915bb0c48bbd68e49f4"
+        },
+        "date": 1790663239608,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1907,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1334,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1527732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 361909,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6415333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1081,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 146849,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 736825,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 419565,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11598185,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1387720,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 16997,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 161058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 851639,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 232655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 13331508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 89,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 147628,
             "unit": "ns/op"
           }
         ]
