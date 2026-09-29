@@ -20,7 +20,13 @@ function audit(findings: Finding[] = []): Audit {
     generatedAt: "2026-09-20T00:00:00.000Z",
     complete: true,
     missingLanes: [],
-    tools: { coverage: "bun", complexity: "biome", clones: "jscpd", types: "census" },
+    tools: {
+      coverage: "bun",
+      complexity: "biome",
+      typescriptMetrics: "typescript",
+      clones: "jscpd",
+      types: "census",
+    },
     mutation: "see quality-mutation.yml",
     coverage: [],
     findings,
@@ -129,7 +135,15 @@ test("regression detection is per kind, including when the total sum shrinks", (
   const previous = {
     version: 1 as const,
     head: "a".repeat(40),
-    totals: { coverage: 100, complexity: 0, clones: 0, types: 0 },
+    totals: {
+      coverage: 100,
+      complexity: 0,
+      cyclomatic: 0,
+      halstead: 0,
+      crap: 0,
+      clones: 0,
+      types: 0,
+    },
   };
   expect(regressions(previous, audit([finding()]))).toEqual(["types"]);
   expect(regressions(previous, audit())).toEqual([]);
@@ -173,7 +187,16 @@ test("fake gh first run creates labels and only one issue via JSON", async () =>
   const result = await publishAudit(audit([finding()]), fake.run, "owner/repo");
   expect(result.firstRun).toBe(true);
   expect(fake.calls.filter((call) => call.args[0] === "label").map((call) => call.args[2])).toEqual(
-    ["quality-debt", "quality:coverage", "quality:complexity", "quality:clones", "quality:types"],
+    [
+      "quality-debt",
+      "quality:coverage",
+      "quality:complexity",
+      "quality:cyclomatic",
+      "quality:halstead",
+      "quality:crap",
+      "quality:clones",
+      "quality:types",
+    ],
   );
   expect(fake.calls.filter((call) => call.input)).toHaveLength(1);
   const body = z

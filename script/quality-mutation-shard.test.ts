@@ -57,9 +57,12 @@ test("shard slices resume append-only progress and join into the single full rec
     "support/assertion.ts":
       'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>{expect(run(2)).toBe(true);expect(run(0)).toBe(false);});',
   });
+  cpSync(join(input.root, "src/tsconfig.json"), join(input.root, "packages/demo/tsconfig.json"));
   const contractPath = join(input.root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
-  writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
+  writeFileSync(contractPath, JSON.stringify({
+    ...contract, roots: ["src", "packages"], projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
+  }));
   const regenerated = await execute([process.execPath, tool, "--root", input.root, "--contract", contractPath], input.root, 15000);
   expect(regenerated.exitCode).toBe(0);
   writeFileSync(input.inventory, JSON.stringify(decodeJson(regenerated.stdout)));
@@ -266,9 +269,12 @@ test("an all-invalid slice completes per shard while the join enforces campaign 
     "support/assertion.ts":
       'import {test,expect} from "bun:test";import {value} from "../packages/demo/src/main";test("behavior",()=>{expect(value).toBe(true);});',
   });
+  cpSync(join(input.root, "src/tsconfig.json"), join(input.root, "packages/demo/tsconfig.json"));
   const contractPath = join(input.root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
-  writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
+  writeFileSync(contractPath, JSON.stringify({
+    ...contract, roots: ["src", "packages"], projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
+  }));
   cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
   cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   const progress = join(input.root, "progress", "shard-0.jsonl");

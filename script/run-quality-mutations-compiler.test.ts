@@ -5,7 +5,7 @@ import { join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
+import { analyze, programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
 import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler, stdioCompilerPort } from "./quality-mutation-compiler";
 
 type CompilerResponse = Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0];
@@ -406,8 +406,48 @@ test("compiler fallback stays inside the frozen root and Python command names re
   }
 });
 
+test("baseline diagnostics use project roots instead of transitive importer options", () => {
+  const root = mkdtempSync(join(tmpdir(), "mutation-transitive-project-"));
+  try {
+    mkdirSync(join(root, "a"));
+    mkdirSync(join(root, "b"));
+    writeFileSync(
+      join(root, "a/tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          lib: ["ES2022"],
+          baseUrl: ".",
+          paths: { b: ["../b/value.ts"] },
+        },
+        include: ["index.ts"],
+      }),
+    );
+    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export { value };');
+    writeFileSync(
+      join(root, "b/tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, lib: ["ES2022", "DOM"] },
+        include: ["value.ts"],
+      }),
+    );
+    writeFileSync(join(root, "b/value.ts"), "export const value = document.title;");
+    const contract = {
+      version: 1 as const,
+      typescript: "5.9.2" as const,
+      roots: ["a", "b"],
+      projects: ["a/tsconfig.json", "b/tsconfig.json"],
+      topology: false,
+    };
+    expect(analyze(root, contract, buildInventory(root, contract), []).sourceDiagnostics).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("real mutation contract has no baseline compiler diagnostics", () => {
   const root = resolve(import.meta.dir, "..");
   const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
-  expect(diagnostics(programs(root, contract, buildInventory(root, contract)))).toEqual([]);
+  expect(analyze(root, contract, buildInventory(root, contract), []).sourceDiagnostics).toEqual([]);
 }, 300_000);

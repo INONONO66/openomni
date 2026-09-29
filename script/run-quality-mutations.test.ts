@@ -672,7 +672,7 @@ test("sequential compiler analysis preserves first-owner candidates and complete
 	const expected = enumerate(input.root, inventory, operators, eager);
 	const actual = analyze(input.root, contract, inventory, operators);
 	expect(actual.enumerated).toEqual(expected);
-	expect(actual.sourceDiagnostics).toEqual(diagnostics(eager));
+	expect(actual.sourceDiagnostics).toEqual(diagnostics(eager, realpathSync(input.root)));
 	expect(actual.enumerated.candidates.length).toBeGreaterThan(0);
 }, 90000);
 
@@ -728,16 +728,22 @@ test("execution worktrees retain Git history, dirty inputs, dependencies and iso
 		writeFileSync(join(source, "tracked.ts"), "export const value = true;");
 		fixtureGit(source, "add", ".");
 		fixtureGit(source, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture");
-		const head = fixtureGit(source, "rev-parse", "HEAD");
 		writeFileSync(join(source, "tracked.ts"), "export const value = false;");
+		writeFileSync(join(source, "deleted.ts"), "export const deleted = true;");
+		fixtureGit(source, "add", "deleted.ts");
+		fixtureGit(source, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "tracked deletion fixture");
+		const head = fixtureGit(source, "rev-parse", "HEAD");
+		rmSync(join(source, "deleted.ts"));
 		mkdirSync(join(source, "node_modules/dep/dist"), { recursive: true });
 		writeFileSync(join(source, "node_modules/dep/dist/index.js"), "export const value = 1;");
 		copyExecution(source, copy);
 		copyExecution(copy, nested);
 		expect(fixtureGit(nested, "rev-parse", "HEAD")).toBe(head);
-		expect(fixtureGit(nested, "log", "-1", "--format=%s")).toBe("fixture");
-		expect(fixtureGit(nested, "ls-files")).toBe("tracked.ts");
+		expect(fixtureGit(nested, "log", "-1", "--format=%s")).toBe("tracked deletion fixture");
+		expect(fixtureGit(nested, "ls-files")).toBe("deleted.ts\ntracked.ts");
 		expect(readFileSync(join(nested, "tracked.ts"), "utf8")).toBe("export const value = false;");
+		expect(existsSync(join(copy, "deleted.ts"))).toBe(false);
+		expect(existsSync(join(nested, "deleted.ts"))).toBe(false);
 		expect(readFileSync(join(nested, "node_modules/dep/dist/index.js"), "utf8")).toBe("export const value = 1;");
 		const hash = executionTreeHash(copy);
 		writeFileSync(join(nested, "tracked.ts"), "mutant");

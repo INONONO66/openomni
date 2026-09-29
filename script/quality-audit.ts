@@ -7,6 +7,11 @@ import { planChanges } from "./ci-plan";
 import { census } from "./check-types-census";
 import { buildInventory, readContract } from "./quality-inventory";
 import { mergeNativeLines, type NativeLines, parseNativeLcov } from "./quality-native-lcov";
+import {
+  measureTypescriptFunctions,
+  type FunctionMetrics,
+  type TypescriptMetricContract,
+} from "./quality-typescript-metrics";
 
 const ROOT = resolve(import.meta.dir, "..");
 const count = z.number().int().nonnegative();
@@ -14,7 +19,15 @@ const repoPath = z
   .string()
   .min(1)
   .refine((path) => !isAbsolute(path) && !path.split("/").includes("..") && !path.includes("\\"));
-export const findingKinds = ["coverage", "complexity", "clones", "types"] as const;
+export const findingKinds = [
+  "coverage",
+  "complexity",
+  "cyclomatic",
+  "halstead",
+  "crap",
+  "clones",
+  "types",
+] as const;
 
 /** Owned-origin any/unknown sites only: a foreign row is reached solely through
  * declarations outside the campaign (zod internals, lib.d.ts) and is not our
@@ -44,6 +57,9 @@ export type Finding = z.infer<typeof findingSchema>;
 export const totalsSchema = z.object({
   coverage: count,
   complexity: count,
+  cyclomatic: count,
+  halstead: count,
+  crap: count,
   clones: count,
   types: count,
 });
@@ -58,6 +74,7 @@ export const auditSchema = z
     tools: z.object({
       coverage: z.string(),
       complexity: z.string(),
+      typescriptMetrics: z.string(),
       clones: z.string(),
       types: z.string(),
     }),
@@ -80,9 +97,51 @@ export const auditSchema = z
 export type Audit = z.infer<typeof auditSchema>;
 
 export function findingTotals(findings: readonly Finding[]) {
-  const totals = { coverage: 0, complexity: 0, clones: 0, types: 0 };
+  const totals = {
+    coverage: 0,
+    complexity: 0,
+    cyclomatic: 0,
+    halstead: 0,
+    crap: 0,
+    clones: 0,
+    types: 0,
+  };
   for (const finding of findings) totals[finding.kind] += finding.count;
   return totals;
+}
+
+export function typescriptMetricFindings(
+  metrics: readonly FunctionMetrics[],
+  contract: TypescriptMetricContract,
+): Finding[] {
+  return metrics.flatMap((row) => {
+    const findings: Finding[] = [];
+    if (row.cyclomatic >= contract.cyclomaticExclusiveMax)
+      findings.push({
+        path: row.path,
+        kind: "cyclomatic",
+        line: row.line,
+        count: 1,
+        message: `${row.symbol} cyclomatic ${row.cyclomatic} >= ${contract.cyclomaticExclusiveMax}`,
+      });
+    if (row.halsteadDifficulty >= contract.halsteadDifficultyExclusiveMax)
+      findings.push({
+        path: row.path,
+        kind: "halstead",
+        line: row.line,
+        count: 1,
+        message: `${row.symbol} Halstead difficulty ${row.halsteadDifficulty.toFixed(3)} >= ${contract.halsteadDifficultyExclusiveMax}`,
+      });
+    if (row.crap >= contract.crapExclusiveMax)
+      findings.push({
+        path: row.path,
+        kind: "crap",
+        line: row.line,
+        count: 1,
+        message: `${row.symbol} CRAP ${row.crap.toFixed(3)} >= ${contract.crapExclusiveMax}`,
+      });
+    return findings;
+  });
 }
 
 export function aggregateFiles(findings: readonly Finding[]) {
@@ -219,7 +278,7 @@ function readCoverage(directory: string) {
 export function collectTypes(root = ROOT) {
   const contract = readContract(join(root, "script/conformance/quality-contract.json"));
   const inventory = buildInventory(root, contract);
-  return { inventory, types: census(root, contract, inventory) };
+  return { root, contract, inventory, types: census(root, contract, inventory) };
 }
 
 export async function measure(
@@ -258,7 +317,7 @@ export async function measure(
       ...cloneFindings(await Bun.file(join(output, "jscpd-report.json")).text(), scope),
     );
   }
-  const { inventory, types } = readTypes();
+  const { root, contract, inventory, types } = readTypes();
   if (!types.complete) throw new Error(`Incomplete type census: ${JSON.stringify(types.errors)}`);
   findings.push(...typeFindings(types.violations));
   const evidence = readCoverage(directory);
@@ -272,6 +331,18 @@ export async function measure(
     .map((file) => file.path);
   const coverage = coverageFindings(evidence.records, sources);
   findings.push(...coverage.findings);
+  if (!contract.metrics) throw new Error("Quality contract has no TypeScript metric contract");
+  const coverageByPath = new Map(
+    mergeNativeLines(evidence.records).map((record) => [record.path, record.lines]),
+  );
+  const functionMetrics = sources.flatMap((path) =>
+    measureTypescriptFunctions(
+      path,
+      readFileSync(join(root, path), "utf8"),
+      coverageByPath.get(path) ?? [],
+    ),
+  );
+  findings.push(...typescriptMetricFindings(functionMetrics, contract.metrics));
   const repository = env.GITHUB_REPOSITORY ?? "INONONO66/openomni";
   const runUrl = env.GITHUB_RUN_ID
     ? `https://github.com/${repository}/actions/runs/${env.GITHUB_RUN_ID}`
@@ -287,6 +358,9 @@ export async function measure(
       coverage: "bun test --coverage --coverage-reporter=lcov (CI lanes)",
       complexity:
         "biome@2.4.16 noExcessiveCognitiveComplexity >21 (including configured overrides)",
+      typescriptMetrics:
+        `${contract.metrics.tool}@${contract.metrics.version} ${contract.metrics.algorithm}; ` +
+        `${contract.metrics.coverage}`,
       clones: "jscpd@5.3.0, production/test separately, minLines=5 minTokens=50",
       types: "check-types-census.ts (owned origin only)",
     },

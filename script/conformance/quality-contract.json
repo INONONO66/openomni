@@ -1,6 +1,15 @@
 {
   "version": 1,
   "typescript": "5.9.2",
+  "metrics": {
+    "algorithm": "openomni-typescript-function-metrics-v1",
+    "tool": "typescript",
+    "version": "5.9.2",
+    "coverage": "lcov-da-line-fraction-v1",
+    "cyclomaticExclusiveMax": 22,
+    "halsteadDifficultyExclusiveMax": 80,
+    "crapExclusiveMax": 25
+  },
   "roots": ["apps", "packages", "script"],
   "topology": true,
   "projects": [

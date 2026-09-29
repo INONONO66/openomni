@@ -23,9 +23,11 @@ export const scriptsLanes = {
   ],
   "scripts-tooling": [
     "bundle-type-contract.test.ts",
+    "census-consumer-contract.test.ts",
     "check-deps.test.ts",
     "check-quality-python.test.ts",
     "check-types-census.test.ts",
+    "check-written-types.test.ts",
     "conformance/summarize-benchmark-runs.test.ts",
     "quality-audit.test.ts",
     "quality-audit-issues.test.ts",
@@ -56,7 +58,9 @@ export const scriptPartitions = [
 // suites, check-types-census ~48s) so both shards stay far below the timeout.
 export const scriptToolingPartitions = {
   "scripts-tooling-1": [
+    "census-consumer-contract.test.ts",
     "check-deps.test.ts",
+    "check-written-types.test.ts",
     "run-quality-mutations.test.ts",
     "quality-mutation-workflow.test.ts",
     "quality-source.test.ts",

@@ -61,13 +61,15 @@ export function* programs(directory: string, contract: Contract, inventory: Inve
     yield ts.createProgram(remaining, options, host);
   }
 }
-export function diagnostics(items: Iterable<ts.Program>): string[] {
+export function formatDiagnostic(diagnostic: ts.Diagnostic, cwd: string): string {
+  return ts.formatDiagnostics([diagnostic], {
+    getCanonicalFileName: (name) => name, getCurrentDirectory: () => cwd, getNewLine: () => "\n",
+  });
+}
+export function diagnostics(items: Iterable<ts.Program>, cwd = process.cwd()): string[] {
   const errors: string[] = [];
   for (const program of items)
-    for (const diagnostic of ts.getPreEmitDiagnostics(program))
-      errors.push(ts.formatDiagnostics([diagnostic], {
-        getCanonicalFileName: (name) => name, getCurrentDirectory: () => process.cwd(), getNewLine: () => "\n",
-      }));
+    for (const diagnostic of ts.getPreEmitDiagnostics(program)) errors.push(formatDiagnostic(diagnostic, cwd));
   return errors;
 }
 function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {

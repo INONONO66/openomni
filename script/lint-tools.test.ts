@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
+import type { PlainValue } from "../packages/protocol/src/json";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
 import {
   checkEarned,
@@ -94,7 +95,7 @@ describe("tool surface lint (#949 sealed catalog grammar)", () => {
   });
   test("seven public fields is the sealed budget; an eighth is over", () => {
     const surface = (count: number) => {
-      const properties: Record<string, object> = {};
+      const properties: Record<string, PlainValue> = {};
       for (let index = 0; index < count; index++) properties[`f${index}`] = {};
       return lintToolSurface({
         name: "grep",
