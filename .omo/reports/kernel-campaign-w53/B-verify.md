@@ -32,7 +32,13 @@ Absolute coverage/CRAP require the scheduled quality-audit.yml LCOV lanes; the l
 reports all 15 lanes missing. Mutation: quality-mutation.yml baseline-compiler rejection fixed by A5
 (root-file ownership; pilot receipts under A5-pilot*/), full campaign stays scheduled (never on this Mac).
 
-## Pending (filled below as they complete)
+## B2 full suite (b2-tests.log, HEAD 10c26e80 after F1)
 
-- B2: full test suite with coverage + patch coverage vs origin/main (after F1 lands)
-- F1 (findings 1/2/6) parent verification
+`bun test --timeout 15000 --coverage` at root: **4635 pass / 0 fail**, TESTS_EXIT=0 (the two "(fail)" lines in the
+log are fixture child-process output inside passing script/cleanup-oracle tests). durable-reconstruction.test.ts
+passed (the A4b 5000 ms timeout did not reproduce).
+
+Patch coverage (b2-patch-root.log; root lcov re-keyed to absolute SF paths because the checker requires a workspace
+ancestor): 71 changed executable lines uncovered across 12 files (script 43, apps/openomni/gateway.ts 14,
+desktop gateway-transport.ts 12, agent inspect.ts 1, desktop attention/reason.ts 1). Wave C lanes C1/C2/C3 close them
+with CI-shaped per-workspace LCOV; the authoritative gate is the CI patch-coverage job on PR #1240.

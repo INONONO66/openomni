@@ -116,3 +116,7 @@ test("a session started here, or on a surface without a mark, carries none", () 
     }
   });
 });
+
+test("a session with no durable page yet reads as not connected", () => {
+  expect(sessionReason(makeSession({ phase: null }), now)).toBe("not connected");
+});

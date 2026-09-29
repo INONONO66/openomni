@@ -1,4 +1,5 @@
 import { Chat } from "@ai-sdk/react";
+import { SessionRead } from "@openomni/protocol";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ServerWebSocket, Server } from "bun";
 import type { UIMessage, UIMessageChunk } from "ai";
@@ -665,5 +666,145 @@ describe("createGatewayChatTransport", () => {
     expect(last.parts.map((part) => (part.type === "text" ? part.text : "")).join("")).toBe(
       "two files touched",
     );
+  });
+});
+
+describe("session reads over the gateway socket", () => {
+  const head = {
+    sessionId: "durable",
+    state: "idle",
+    phase: "completed",
+    phaseSince: 100,
+    epoch: 2,
+    headRevision: 3,
+    usage: [],
+    toolWallMs: 0,
+  } as const;
+
+  test("a page pointing at a next revision is followed with a cursor until the read drains", async () => {
+    const cursors: (SessionRead.Cursor | undefined)[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
+          const request = SessionRead.Request.parse(JSON.parse(String(raw)));
+          cursors.push(request.cursor);
+          ws.send(
+            JSON.stringify(
+              request.cursor === undefined
+                ? {
+                    ...head,
+                    type: "session_snapshot",
+                    afterRevision: 0,
+                    nextRevision: 2,
+                    actions: [
+                      { revision: 1, actionId: "action-1", kind: "turn", at: 100 },
+                      { revision: 2, actionId: "action-2", kind: "turn", at: 101 },
+                    ],
+                  }
+                : {
+                    ...head,
+                    type: "session_page",
+                    afterRevision: request.cursor.revision,
+                    nextRevision: null,
+                    actions: [{ revision: 3, actionId: "action-3", kind: "turn", at: 102 }],
+                  },
+            ),
+          );
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const seen: (number | null)[] = [];
+    const stop = transport.subscribeSession((page) => seen.push(page.nextRevision));
+
+    const final = await transport.readSession("durable");
+    stop();
+
+    expect(cursors).toEqual([undefined, { revision: 2, epoch: 2 }]);
+    expect(seen).toEqual([2, null]);
+    expect(final).toMatchObject({ type: "session_page", afterRevision: 2, nextRevision: null });
+    expect(final.actions.map((action) => action.revision)).toEqual([3]);
+  });
+
+  test("a session-scoped error frame rejects that session's pending read", async () => {
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>) {
+          ws.send(JSON.stringify({ type: "error", sessionId: "durable", reason: "session evicted" }));
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+
+    await expect(transport.readSession("durable")).rejects.toThrow("session evicted");
+  });
+
+  test("a socket that closes mid-read rejects the pending read", async () => {
+    let sawRead: (() => void) | undefined;
+    const readSeen = new Promise<void>((resolve) => {
+      sawRead = resolve;
+    });
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message() {
+          sawRead?.();
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+
+    const read = transport.readSession("durable");
+    const rejection = read.then(
+      () => {
+        throw new Error("read unexpectedly resolved");
+      },
+      (error: Error) => error,
+    );
+    await readSeen;
+    server.stop(true);
+
+    expect((await rejection).message).toBe("gateway socket closed unexpectedly");
+  });
+
+  test("a send failure during a session read rejects instead of hanging", async () => {
+    class ReadFailingSocket extends ControlledSocket {
+      override send(data: string): void {
+        if (data.includes("session_read")) throw new Error("session read send failed");
+        super.send(data);
+      }
+    }
+    ControlledSocket.instances.length = 0;
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ReadFailingSocket,
+    });
+
+    const read = transport.readSession("durable");
+    const rejection = read.then(
+      () => {
+        throw new Error("read unexpectedly resolved");
+      },
+      (error: Error) => error,
+    );
+    const socket = ControlledSocket.instances[0];
+    if (socket === undefined) throw new Error("socket was not constructed");
+    socket.open();
+
+    expect((await rejection).message).toBe("session read send failed");
   });
 });
