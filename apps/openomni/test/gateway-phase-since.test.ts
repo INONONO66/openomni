@@ -158,3 +158,40 @@ test("an interrupted session reports interrupted since the sealing terminal", ()
     plane.close();
   }
 });
+
+// Review r2 finding 7: the torn-page regression's LATER interleaving. The
+// before/page/after consistency check already protected history, terminal and
+// latest-action capture, but phase facts were read after it, so a commit
+// injected during the phase read could pair the old page and head with the
+// new turn's phase timestamp. Phase facts are now captured before the final
+// check, so this interleaving surfaces as the promised typed gap - never as
+// a session_snapshot mixing an old head with phaseSince 900.
+test("a commit interleaved during the phase read yields a typed gap, never an old page with a new phase timestamp", () => {
+  const { plane, kernel, commit } = phaseFixture();
+  try {
+    commit([turnIntentAction(kernel, "turn-1", 10)], "running");
+    const headBefore = kernel.row(SESSION).revision;
+    let interleaved = false;
+    const torn: SessionKernel = {
+      ...kernel,
+      latestOpenTurn: (sessionId) => {
+        if (!interleaved) {
+          interleaved = true;
+          commit([turnTerminalAction("turn-1", 60, "result")], "idle");
+          commit([turnIntentAction(kernel, "turn-2", 900)], "running");
+        }
+        return kernel.latestOpenTurn(sessionId);
+      },
+    };
+    const response = readSessionCursor(torn, { type: "session_read", sessionId: SESSION, limit: 256 });
+    expect(response).toEqual({
+      type: "session_gap",
+      sessionId: SESSION,
+      epoch: kernel.row(SESSION).leaseFence,
+      headRevision: headBefore + 2,
+      oldestRevision: 0,
+    });
+  } finally {
+    plane.close();
+  }
+});

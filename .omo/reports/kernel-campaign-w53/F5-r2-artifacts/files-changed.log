@@ -1,0 +1,5 @@
+ apps/openomni/src/gateway.ts                    | 49 +++++++++-----
+ apps/openomni/test/gateway-phase-since.test.ts  | 37 +++++++++++
+ packages/agent/src/session-lifecycle/inspect.ts | 47 +++++++++----
+ packages/agent/test/session-inspection.test.ts  | 88 +++++++++++++++++++++++++
+ 4 files changed, 190 insertions(+), 31 deletions(-)

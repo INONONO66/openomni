@@ -704,4 +704,92 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         expect(paged.transitions[0]?.turnId).toBe("turn-1");
       }),
     ));
+
+  // Review r2 F5: a one-action page must never trigger an unbounded ancestor
+  // scan. Ancestry is resolved through bounded descending history windows, so
+  // a 300-link turn-less chain costs a handful of page reads and zero
+  // per-ancestor point reads while the attribution stays exact (null because
+  // the walk reached the root, not because anything was truncated).
+  test("a one-action page over a 300-link turn-less chain resolves null attribution in bounded window reads", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        yield* kernel.materialize({
+          id: "long-chain", parentId: null, role: "resident", tools: [],
+          system: { preset: "", blocks: [] }, policyGeneration: 1,
+          actionId: "long-chain:configure", at: 1_000,
+        });
+        const adopted = yield* kernel.adoptFence({
+          sessionId: "long-chain", owner: "chain-writer",
+          fence: kernel.row("long-chain").leaseFence + 1,
+        });
+        yield* kernel.commit({
+          sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence, now: 1_000,
+          expectedRevision: kernel.row("long-chain").revision, state: kernel.row("long-chain").state,
+          actions: Array.from({ length: 300 }, (_, index) => ({
+            id: `link-${index}`, sessionId: "long-chain",
+            parentId: index === 0 ? "long-chain:configure" : `link-${index - 1}`,
+            kind: "message" as const,
+            intent: { encodingVersion: 1 as const, value: {} },
+            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          })),
+        });
+        const head = kernel.row("long-chain").revision;
+        const pointReads = spyOn(kernel, "actionById");
+        const pageReads = spyOn(kernel, "historyPage");
+        try {
+          const page = inspectSession(kernel, "long-chain", { depth: 0, cursor: head - 1, limit: 1 });
+          expect(page.transitions).toHaveLength(1);
+          expect(page.transitions[0]?.actionId).toBe("link-299");
+          expect(page.transitions[0]?.turnId).toBeNull();
+          expect(pointReads).toHaveBeenCalledTimes(0);
+          // The page itself plus at most ceil(301/256) = 2 ancestry windows.
+          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
+        } finally {
+          pointReads.mockRestore();
+          pageReads.mockRestore();
+        }
+      }),
+    ));
+
+  // The same bounded lookup must still attribute correctly when the long
+  // chain DOES descend from a turn: the null above is a derived fact, not a
+  // budget truncation (that would reintroduce the r1 attribution bug).
+  test("a one-action page over a 300-link chain under a turn attributes the turn in bounded window reads", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "long-turn-chain", clock: () => 1_000, turnId: "turn-1",
+        });
+        yield* kernel.commit({
+          sessionId: "long-turn-chain", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+          expectedRevision: kernel.row("long-turn-chain").revision,
+          state: kernel.row("long-turn-chain").state,
+          actions: Array.from({ length: 300 }, (_, index) => ({
+            id: `link-${index}`, sessionId: "long-turn-chain",
+            parentId: index === 0 ? "turn-1" : `link-${index - 1}`,
+            kind: "message" as const,
+            intent: { encodingVersion: 1 as const, value: {} },
+            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          })),
+        });
+        const head = kernel.row("long-turn-chain").revision;
+        const pointReads = spyOn(kernel, "actionById");
+        const pageReads = spyOn(kernel, "historyPage");
+        try {
+          const page = inspectSession(kernel, "long-turn-chain", { depth: 0, cursor: head - 1, limit: 1 });
+          expect(page.transitions).toHaveLength(1);
+          expect(page.transitions[0]?.actionId).toBe("link-299");
+          expect(page.transitions[0]?.turnId).toBe("turn-1");
+          expect(pointReads).toHaveBeenCalledTimes(0);
+          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
+        } finally {
+          pointReads.mockRestore();
+          pageReads.mockRestore();
+        }
+      }),
+    ));
 });

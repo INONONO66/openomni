@@ -33,30 +33,51 @@ function inspectActions(
   sessionId: string,
   parentId: string | null,
   headRevision: number,
-  resolveAction: (id: string) => LedgerAction.Node | undefined,
+  ancestorWindow: (afterRevision: number) => readonly LedgerAction.Node[],
 ): Omit<SessionHistory.Inspection, "children"> {
   const turns = new Map<string, string | null>();
-  // Review F4: a slice's first actions may descend from turns committed on
-  // earlier pages. Walk only the needed ancestors through the indexed by-id
-  // read (never a loop-to-head scan) and memoize the trail for this page.
-  const ancestralTurnId = (parent: string | null): string | null => {
+  // Review F4 (r1): a slice's first actions may descend from turns committed
+  // on earlier pages, so ancestry is resolved outside the page and memoized.
+  // Review F5 (r2): that resolution is bounded. Ancestors are read through
+  // descending 256-action history windows (one indexed range read per 256
+  // chain links), never one point read per link, so a one-action page over a
+  // long preceding chain costs O(chain/256) page reads instead of O(chain)
+  // point reads - and attribution stays exact: a turn-less chain reports null
+  // because the walk reached the root, never because a budget truncated it
+  // (truncation would reintroduce the r1 attribution bug).
+  const ancestralTurnId = (child: LedgerAction.Node): string | null => {
     const trail: string[] = [];
     let turnId: string | null = null;
-    let current = parent;
+    let current = child.parentId;
+    // Every ancestor lives at an ordinal in (0, child.ordinal): parents commit
+    // strictly before children and never cross sessions (chain law), so the
+    // windows below `low` cover the whole remaining chain.
+    const window = new Map<string, LedgerAction.Node>();
+    let low = child.ordinal - 1;
+    const ancestor = (id: string): LedgerAction.Node | undefined => {
+      for (;;) {
+        const known = window.get(id);
+        if (known !== undefined) return known;
+        if (low <= 0) return undefined;
+        const after = Math.max(0, low - 256);
+        for (const node of ancestorWindow(after)) window.set(node.id, node);
+        low = after;
+      }
+    };
     while (current !== null) {
       if (turns.has(current)) {
         turnId = turns.get(current) ?? null;
         break;
       }
-      const ancestor = resolveAction(current);
-      if (ancestor === undefined) break;
+      const node = ancestor(current);
+      if (node === undefined) break;
       trail.push(current);
-      const own = ownTurnId(ancestor);
+      const own = ownTurnId(node);
       if (own !== undefined) {
         turnId = own;
         break;
       }
-      current = ancestor.parentId;
+      current = node.parentId;
     }
     for (const visited of trail) turns.set(visited, turnId);
     return turnId;
@@ -68,7 +89,7 @@ function inspectActions(
   const compactions: SessionHistory.Compaction[] = [];
   const restorations = new Map<string, string[]>();
   for (const action of actions) {
-    const turnId = ownTurnId(action) ?? ancestralTurnId(action.parentId);
+    const turnId = ownTurnId(action) ?? ancestralTurnId(action);
     turns.set(action.id, turnId);
     transitions.push(transitionOf(action, turnId));
     policy.push(...policyDecisionOf(action, turnId));
@@ -135,8 +156,8 @@ export function inspectSession(
     }
     if (childRows.length === limit) nextChildrenCursor ??= lastChild;
     return {
-      ...inspectActions(page.actions, id, current.parentId, page.headRevision, (actionId) =>
-        reader.actionById(actionId),
+      ...inspectActions(page.actions, id, current.parentId, page.headRevision, (afterRevision) =>
+        reader.historyPage(id, { afterRevision, limit: 256 }).actions,
       ),
       nextCursor: page.nextRevision,
       nextChildrenCursor,

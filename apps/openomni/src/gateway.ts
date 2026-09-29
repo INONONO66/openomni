@@ -159,37 +159,43 @@ export function toolPorts(
   };
 }
 
+/** Phase inputs captured from the kernel BEFORE the final consistency check. */
+interface PhaseSources {
+  readonly terminal: ReturnType<SessionHandleStore.SessionKernel["latestTurnTerminal"]>;
+  readonly latest: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>;
+  readonly openTurnIntent: ReturnType<SessionHandleStore.SessionKernel["actionById"]>;
+  readonly genesis: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>;
+}
+
 /**
  * The emitted phase and when it began. phaseSince is the durable transition
  * that ESTABLISHED the phase: the current open turn's intent for running, the
  * terminal that recorded the interruption or sealed the turn for
  * terminal-derived phases, and genesis for a bare idle session. Never the
  * latest activity or a previous turn's terminal, which would move within one
- * phase or predate the current turn (review r1 finding 6).
+ * phase or predate the current turn (review r1 finding 6). Pure over facts
+ * captured before the final fence/revision consistency check: a fresh kernel
+ * read here could pair an old page with a NEWER turn's phase timestamp
+ * (review r2 finding 7), so this function reads no kernel at all.
  */
 function phaseFacts(
-  kernel: SessionHandleStore.SessionKernel,
-  sessionId: string,
   state: SessionRead.Page["state"],
-  terminal: ReturnType<SessionHandleStore.SessionKernel["latestTurnTerminal"]>,
-  latest: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>,
+  sources: PhaseSources,
 ): { phase: SessionRead.Page["phase"]; phaseSince: number } {
-  if (state === "running") {
-    const openTurn = kernel.latestOpenTurn(sessionId);
-    const openIntent = openTurn === undefined ? undefined : kernel.actionById(openTurn.turnId);
-    return { phase: state, phaseSince: openIntent?.ts ?? latest?.ts ?? 0 };
-  }
+  if (state === "running")
+    return { phase: state, phaseSince: sources.openTurnIntent?.ts ?? sources.latest?.ts ?? 0 };
   if (state === "interrupted") {
+    const terminal = sources.terminal;
     const sealed = terminal?.effect.kind === "interrupted" ? terminal.action.ts : undefined;
-    return { phase: state, phaseSince: sealed ?? latest?.ts ?? 0 };
+    return { phase: state, phaseSince: sealed ?? sources.latest?.ts ?? 0 };
   }
-  if (terminal !== undefined) {
-    const phase = terminal.effect.kind === "result" ? "completed"
-      : terminal.effect.kind === "error" ? "failed"
-      : terminal.effect.kind === "waiting" ? "waiting_input" : "idle";
-    return { phase, phaseSince: terminal.action.ts };
+  if (sources.terminal !== undefined) {
+    const phase = sources.terminal.effect.kind === "result" ? "completed"
+      : sources.terminal.effect.kind === "error" ? "failed"
+      : sources.terminal.effect.kind === "waiting" ? "waiting_input" : "idle";
+    return { phase, phaseSince: sources.terminal.action.ts };
   }
-  return { phase: "idle", phaseSince: kernel.latestAction(sessionId, 1)?.ts ?? 0 };
+  return { phase: "idle", phaseSince: sources.genesis?.ts ?? 0 };
 }
 
 /**
@@ -217,6 +223,13 @@ export function readSessionCursor(
   const page = kernel.historyPage(frame.sessionId, { afterRevision, limit: frame.limit });
   const terminal = kernel.latestTurnTerminal(frame.sessionId);
   const latest = kernel.latestAction(frame.sessionId);
+  // Review r2 finding 7: capture every phase fact BEFORE the final
+  // consistency check below. A commit that lands during these reads moves the
+  // after-row revision and surfaces as the typed gap; a commit that lands
+  // after the check can no longer leak a newer turn's timestamp into this page.
+  const openTurn = kernel.latestOpenTurn(frame.sessionId);
+  const openTurnIntent = openTurn === undefined ? undefined : kernel.actionById(openTurn.turnId);
+  const genesis = kernel.latestAction(frame.sessionId, 1);
   const after = kernel.row(frame.sessionId);
   if (before.leaseFence !== after.leaseFence || before.revision !== page.headRevision ||
       after.revision !== page.headRevision ||
@@ -229,7 +242,7 @@ export function readSessionCursor(
       oldestRevision: 0,
     };
   }
-  const { phase, phaseSince } = phaseFacts(kernel, frame.sessionId, after.state, terminal, latest);
+  const { phase, phaseSince } = phaseFacts(after.state, { terminal, latest, openTurnIntent, genesis });
   return SessionRead.Page.parse({
     type: frame.cursor === undefined ? "session_snapshot" as const : "session_page" as const,
     sessionId: frame.sessionId,
