@@ -107,6 +107,28 @@ test("lcov union takes the maximum hits across shards", () => {
   }
 });
 
+test("lcov union merges a cross-workspace relative SF path with the owner lane", () => {
+  // apps/openomni's lane records the agent module it loaded as
+  // `SF:../../packages/agent/src/x.ts`; that record must merge with the
+  // agent lane's `SF:src/x.ts`, not survive as a separate unnormalized key.
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-cross-"));
+  try {
+    mkdirSync(join(dir, "packages/agent/coverage"), { recursive: true });
+    mkdirSync(join(dir, "apps/openomni/coverage"), { recursive: true });
+    writeFileSync(join(dir, "packages/agent/coverage/lcov.info"), "SF:src/x.ts\nDA:1,0\nDA:2,4\n");
+    writeFileSync(join(dir, "apps/openomni/coverage/lcov.info"), "SF:../../packages/agent/src/x.ts\nDA:1,9\nDA:2,0\n");
+    const union = lcovUnion(
+      [join(dir, "packages/agent/coverage/lcov.info"), join(dir, "apps/openomni/coverage/lcov.info")],
+      dir,
+    );
+    expect([...union.keys()]).toEqual(["packages/agent/src/x.ts"]);
+    expect(union.get("packages/agent/src/x.ts")?.get(1)).toBe(9);
+    expect(union.get("packages/agent/src/x.ts")?.get(2)).toBe(4);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("lcov union drops a line only an unexecuted lane reports as zero", () => {
   // Bun emits DA:n,0 for every line of a never-run function (braces, comments);
   // the lane that ran it reports only executable lines. Line 3 exists solely

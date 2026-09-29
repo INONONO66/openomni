@@ -17,7 +17,7 @@
  */
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
 // Only modules the transpiler can read are gated; stylesheets and other
@@ -57,7 +57,10 @@ function mergeLcov(union: Map<string, Merged>, file: string, root: string): void
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (line.startsWith("SF:")) {
       const raw = line.slice(3).trim();
-      const source = isAbsolute(raw) ? relative(root, raw) : `${prefix}/${raw}`;
+      // A lane that loads another workspace's module records it relative to
+      // its own root (`SF:../../packages/agent/src/x.ts` from apps/openomni);
+      // normalize so it merges with that workspace's own lane record.
+      const source = isAbsolute(raw) ? relative(root, raw) : posix.normalize(`${prefix}/${raw}`);
       entry = union.get(source) ?? { hits: new Map(), reports: 0, seen: new Map() };
       entry.reports += 1;
       union.set(source, entry);
