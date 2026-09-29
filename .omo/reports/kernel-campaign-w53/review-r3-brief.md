@@ -1,4 +1,6 @@
-# Review r3 brief — PR #1240 (W5.3 #1113)
+# Review r3 brief — PR #1240 (W5.3 #1113), HEAD 75914062
+
+All six r2 fix lanes are committed (F6 7a587bec, F5 bc1ddda1, F2 03f70089, F1/F3/F4 earlier) plus docs sync 75914062. Local chain at 03f70089: 12 gates exit 0, root tests 4671/0, script lanes 253/81/336, patch coverage exit 0 with the per-lane script lcov union (B-verify.md).
 
 Worktree /Users/ino/Develop/openomni-w53, branch kernel/1113-w5-closure-20260929, base origin/main 8390912c. Bun: `/opt/homebrew/bin/mise exec bun@1.4.1 -- bun`; strip /opt/homebrew/bin from PATH for coverage-collector tests; D945_PYTHON=/Users/ino/.local/share/mise/installs/python/3.12.12/bin/python. Never run a mutation campaign; never commit.
 
