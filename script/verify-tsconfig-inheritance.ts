@@ -26,6 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import ts from "typescript";
+import { z } from "zod";
 import { assertTopologyComplete, tsconfigWorkspaces } from "./topology";
 
 export type ProblemCode =
@@ -116,7 +117,7 @@ export function extendsChainOf(configPath: string, projectLabel: string): ChainR
         },
       };
     }
-    const extendsValue = (read.config as { extends?: unknown }).extends;
+    const extendsValue = z.object({ extends: z.json().optional() }).parse(read.config).extends;
     if (extendsValue === undefined) return { chain, problem: null };
     if (typeof extendsValue !== "string" || !extendsValue.startsWith(".")) {
       return {

@@ -334,7 +334,7 @@ function lineNumberForOffset(source: string, offset: number): number {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
+  main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`ERROR: ${message}\n`);
     process.exit(1);

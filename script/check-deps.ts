@@ -2,6 +2,7 @@ import { Glob } from "bun";
 import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { z } from "zod";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
@@ -43,6 +44,8 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
+const JsonObject = z.record(z.string(), z.json());
+type JsonObject = z.infer<typeof JsonObject>;
 
 /** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
 function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
@@ -66,7 +69,7 @@ function isAllowedDep(rule: PackageRule, dep: string): boolean {
   return rule.allowedDeps.has(dep);
 }
 
-async function readJson(path: string): Promise<Record<string, unknown>> {
+async function readJson(path: string): Promise<JsonObject> {
   const file = Bun.file(path);
   const exists = await file.exists();
 
@@ -75,10 +78,10 @@ async function readJson(path: string): Promise<Record<string, unknown>> {
   }
 
   const text = await file.text();
-  return JSON.parse(text) as Record<string, unknown>;
+  return JsonObject.parse(JSON.parse(text));
 }
 
-function collectOpenOmniDeps(pkg: Record<string, unknown>): string[] {
+function collectOpenOmniDeps(pkg: JsonObject): string[] {
   const deps = new Set<string>();
 
   for (const field of DEP_FIELDS) {
@@ -88,7 +91,7 @@ function collectOpenOmniDeps(pkg: Record<string, unknown>): string[] {
       continue;
     }
 
-    for (const depName of Object.keys(value as Record<string, string>)) {
+    for (const depName of Object.keys(value)) {
       if (depName.startsWith("@openomni/")) {
         deps.add(depName);
       }
@@ -1131,9 +1134,11 @@ export async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
+  try {
+    await main();
+  } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`ERROR: ${message}`);
     process.exit(1);
-  });
+  }
 }

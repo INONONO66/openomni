@@ -13,6 +13,7 @@
     "ci:test": "bun run script/ci.ts test",
     "ci:check-types": "bun run script/ci.ts check-types",
     "check-effect-boundaries": "bun run script/check-effect-boundaries.ts",
+    "check-written-types": "bun run script/check-written-types.ts",
     "dev": "turbo run dev",
     "prepare": "lefthook install",
     "lint": "bun run lint:guards && bun run lint:side-effects && bun run lint:docs && bunx ultracite check --formatter-enabled=false .",

@@ -21,15 +21,19 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { z } from "zod";
+import type { PlainValue } from "../packages/protocol/src/json.js";
 import { knipWorkspaces } from "./topology";
 
 const BASELINE_PATH = "script/conformance/knip-baseline.json";
 const KNIP_CMD = ["bunx", "knip", "--reporter", "json", "--no-exit-code"];
 
-export interface KnipFileRecord {
-  readonly file: string;
-  readonly [issueType: string]: unknown;
-}
+const KnipFileRecordSchema = z.object({ file: z.string() }).catchall(z.json());
+const KnipReportSchema = z.object({ issues: z.array(KnipFileRecordSchema) });
+const DeadExportBaselineSchema = z.object({ grandfathered: z.array(z.string()).optional() });
+const KnipConfigSchema = z.object({ workspaces: z.record(z.string(), z.json()).optional() });
+
+export type KnipFileRecord = z.infer<typeof KnipFileRecordSchema>;
 
 export interface KnipReport {
   readonly issues: readonly KnipFileRecord[];
@@ -44,9 +48,9 @@ export interface DeadExportComparison {
   readonly resolved: readonly string[];
 }
 
-function entryName(entry: unknown): string {
+function entryName(entry: PlainValue): string {
   if (typeof entry === "object" && entry !== null && "name" in entry) {
-    return String((entry as { name: unknown }).name);
+    return String(entry.name);
   }
   return String(entry);
 }
@@ -55,7 +59,7 @@ function collectEntry(
   keys: Set<string>,
   issueType: string,
   file: string,
-  entry: unknown,
+  entry: PlainValue,
   parent: string | undefined,
 ): void {
   if (Array.isArray(entry)) {
@@ -77,7 +81,7 @@ function collectMemberEntries(
   keys: Set<string>,
   issueType: string,
   file: string,
-  members: object,
+  members: { readonly [parent: string]: PlainValue },
 ): void {
   // enumMembers / namespaceMembers: { ParentName: [entry, ...] }
   for (const [parent, entries] of Object.entries(members)) {
@@ -92,7 +96,7 @@ function collectIssueValue(
   keys: Set<string>,
   issueType: string,
   file: string,
-  value: unknown,
+  value: PlainValue,
 ): void {
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -130,9 +134,7 @@ export function compareDeadExports(
 }
 
 function verifyKnipWorkspaceInventory(): void {
-  const config = JSON.parse(readFileSync("knip.json", "utf8")) as {
-    workspaces?: Record<string, unknown>;
-  };
+  const config = KnipConfigSchema.parse(JSON.parse(readFileSync("knip.json", "utf8")));
   const actual = Object.keys(config.workspaces ?? {}).sort();
   const expected = [".", ...knipWorkspaces().map((workspace) => workspace.dir)].sort();
   if (actual.join("\n") !== expected.join("\n")) {
@@ -162,7 +164,7 @@ export async function runKnip(
     throw new Error(`knip exited with code ${exitCode}: ${stderr.trim() || stdout.trim()}`);
   }
   try {
-    return JSON.parse(stdout) as KnipReport;
+    return KnipReportSchema.parse(JSON.parse(stdout));
   } catch {
     throw new Error(`knip did not emit parseable JSON: ${stdout.slice(0, 200)}`);
   }
@@ -191,22 +193,79 @@ export function runProductionKnip(options: {
   return { ok: true, stdout: result.stdout.toString() };
 }
 
-/** Join Knip's public surface with the shared invocation graph. Knip's lexical
- * use is not production consumption (registration/internal use may keep an
- * export in its graph). This owner emits the missing-consumer policy finding;
- * unresolved graph edges remain separate analyzer errors in the caller. */
+type CensusClass = "publisher" | "export" | "store";
+type ConsumerRole = "publish" | "production" | "test" | "barrel" | "register" | "read";
+type CensusDefinition = { readonly path: string; readonly line: number; readonly symbol: string };
+export type CensusConsumerRow = {
+  readonly class: CensusClass;
+  readonly definition: CensusDefinition;
+  readonly aliases?: readonly string[];
+  readonly consumers: readonly { readonly role?: ConsumerRole }[];
+};
+export type CensusConsumerFinding = CensusDefinition & {
+  readonly class: CensusClass;
+  readonly message: string;
+};
+
+function consumerSatisfies(row: CensusConsumerRow): boolean {
+  return row.consumers.some((consumer) => {
+    if (consumer.role === undefined) return row.class === "export";
+    if (row.class === "publisher") return consumer.role === "publish";
+    if (row.class === "store") return consumer.role === "read";
+    return consumer.role === "production";
+  });
+}
+
+/** Join public definitions with the shared invocation graph. Lexical use is
+ * intentionally insufficient: tests, barrels and registration can retain a
+ * symbol without proving a production publisher, invocation or store read. */
+export function censusConsumerFindings(
+  rows: readonly CensusConsumerRow[],
+): CensusConsumerFinding[] {
+  const aliases = new Map<string, CensusDefinition>();
+  for (const row of rows) {
+    for (const alias of row.aliases ?? []) {
+      const prior = aliases.get(alias);
+      if (
+        prior &&
+        (prior.path !== row.definition.path ||
+          prior.line !== row.definition.line ||
+          prior.symbol !== row.definition.symbol)
+      ) {
+        throw new Error(
+          `CENSUS_ALIAS_COLLISION ${alias}: ${prior.path}:${prior.line} ${prior.symbol} <> ` +
+            `${row.definition.path}:${row.definition.line} ${row.definition.symbol}`,
+        );
+      }
+      aliases.set(alias, row.definition);
+    }
+  }
+  return rows.filter((row) => !consumerSatisfies(row)).map((row) => ({
+    ...row.definition,
+    class: row.class,
+    message:
+      row.class === "publisher"
+        ? "event has no production publisher"
+        : row.class === "store"
+          ? "store is registered but never read in production"
+          : "export has no production consumer; tests and barrels do not count",
+  }));
+}
+
+/** Backward-compatible export-only projection used by the dead-export owner. */
 export function productionConsumerFindings(rows: readonly {
-  readonly definition: { readonly path: string; readonly line: number; readonly symbol: string };
-  readonly consumers: readonly object[];
+  readonly definition: CensusDefinition;
+  readonly consumers: readonly { readonly role?: ConsumerRole }[];
 }[]): { path: string; line: number; symbol: string; class: "export" }[] {
-  return rows.filter((row) => row.consumers.length === 0)
-    .map((row) => ({ ...row.definition, class: "export" }));
+  return censusConsumerFindings(
+    rows.map((row) => ({ ...row, class: "export" as const })),
+  ).map(({ path, line, symbol }) => ({ path, line, symbol, class: "export" }));
 }
 
 function readBaseline(): DeadExportBaseline {
   // Tolerate a missing key: `--update` always writes the `grandfathered`
   // array (empty or not), but a hand-minimized `{}` baseline is still valid.
-  const parsed = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Partial<DeadExportBaseline>;
+  const parsed = DeadExportBaselineSchema.parse(JSON.parse(readFileSync(BASELINE_PATH, "utf8")));
   return { grandfathered: parsed.grandfathered ?? [] };
 }
 
@@ -334,7 +393,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
+  main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`ERROR: ${message}\n`);
     process.exit(1);

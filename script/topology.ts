@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 export type DependencyBand = "none" | "any-except-self" | readonly string[];
 
@@ -198,9 +199,9 @@ export function topologyInventoryDrift(
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
   root = REPO_ROOT,
 ): WorkspaceInventoryDrift {
-  const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
-    workspaces?: unknown;
-  };
+  const rootManifest = z.object({ workspaces: z.json().optional() }).parse(
+    JSON.parse(readFileSync(join(root, "package.json"), "utf8")),
+  );
   if (
     !Array.isArray(rootManifest.workspaces) ||
     !rootManifest.workspaces.every((workspace) => typeof workspace === "string")
