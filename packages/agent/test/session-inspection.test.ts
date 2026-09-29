@@ -667,4 +667,41 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         expect(boundary?.digest).toBe(full?.digest ?? "");
       }),
     ));
+  // Review F4 continuation: a page whose first action sits two hops below its
+  // turn (result -> tool intent -> turn) must walk THROUGH the intermediate
+  // ancestor that carries no turn id of its own to reach the turn.
+  test("a page opening below a tool's result attributes the turn across multi-hop ancestry", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "deep-attribution", clock: () => 1_000, turnId: "turn-1",
+        });
+        const commitTool = (id: string, parentId: string, phase: "intent" | "result") =>
+          kernel.commit({
+            sessionId: "deep-attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+            expectedRevision: kernel.row("deep-attribution").revision,
+            state: kernel.row("deep-attribution").state,
+            actions: [{
+              id, sessionId: "deep-attribution", parentId, kind: "tool",
+              intent: { encodingVersion: 1, value: { phase, op: "write" } },
+              effect: {
+                encodingVersion: 1,
+                value: phase === "intent"
+                  ? { phase: "pending" }
+                  : { phase: "result", terminal: "executed" },
+              },
+              ts: 1_000, irreversible: true,
+            }],
+          });
+        yield* commitTool("tool-1", "turn-1", "intent");
+        yield* commitTool("tool-1:result", "tool-1", "result");
+        // The page holds only the result (revision 4): tool-1 carries no own
+        // turn id, so attribution must continue up its parent chain to turn-1.
+        const paged = inspectSession(kernel, "deep-attribution", { depth: 0, cursor: 3, limit: 1 });
+        expect(paged.transitions).toHaveLength(1);
+        expect(paged.transitions[0]?.actionId).toBe("tool-1:result");
+        expect(paged.transitions[0]?.turnId).toBe("turn-1");
+      }),
+    ));
 });

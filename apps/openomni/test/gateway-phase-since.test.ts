@@ -53,7 +53,7 @@ function turnIntentAction(kernel: SessionKernel, id: string, ts: number): Ledger
 function turnTerminalAction(
   turnId: string,
   ts: number,
-  kind: "result" | "waiting",
+  kind: "result" | "waiting" | "interrupted",
 ): LedgerAction.Append {
   return {
     id: `${turnId}:result`,
@@ -91,26 +91,30 @@ function noteAction(id: string, ts: number): LedgerAction.Append {
   };
 }
 
+function phaseFixture() {
+  const plane = testPlane();
+  const kernel = plane.openKernel(SESSION);
+  materializeSession(kernel, SESSION);
+  const authority = adoptWriter(kernel, SESSION, "phase-writer");
+  const commit = (actions: readonly LedgerAction.Append[], state: LedgerSession.State) =>
+    runSyncEffect(kernel.commit({
+      sessionId: SESSION,
+      owner: authority.owner,
+      fence: authority.fence,
+      now: actions[actions.length - 1]?.ts ?? 0,
+      expectedRevision: kernel.row(SESSION).revision,
+      actions: [...actions],
+      state,
+    }));
+  return { plane, kernel, commit };
+}
+
 // Review r1 finding 6: phaseSince must be the durable transition that
 // established the emitted phase — not a previous turn's terminal and not the
 // latest activity, which moves on unrelated commits within one phase.
 test("phaseSince derives from the transition that established the emitted phase", () => {
-  const plane = testPlane();
+  const { plane, kernel, commit } = phaseFixture();
   try {
-    const kernel = plane.openKernel(SESSION);
-    materializeSession(kernel, SESSION);
-    const authority = adoptWriter(kernel, SESSION, "phase-writer");
-    const commit = (actions: readonly LedgerAction.Append[], state: LedgerSession.State) =>
-      runSyncEffect(kernel.commit({
-        sessionId: SESSION,
-        owner: authority.owner,
-        fence: authority.fence,
-        now: actions[actions.length - 1]?.ts ?? 0,
-        expectedRevision: kernel.row(SESSION).revision,
-        actions: [...actions],
-        state,
-      }));
-
     // Genesis: idle since materialization (configure at ts 1).
     expect(readPhase(kernel)).toEqual({ phase: "idle", phaseSince: 1 });
 
@@ -133,6 +137,23 @@ test("phaseSince derives from the transition that established the emitted phase"
     expect(readPhase(kernel)).toEqual({ phase: "waiting_input", phaseSince: 1000 });
     commit([noteAction("note-2", 1500)], "idle");
     expect(readPhase(kernel)).toEqual({ phase: "waiting_input", phaseSince: 1000 });
+  } finally {
+    plane.close();
+  }
+});
+
+// An interruption is established by the terminal that recorded it: phaseSince
+// is the interrupted terminal's ts and never moves on later unrelated commits.
+test("an interrupted session reports interrupted since the sealing terminal", () => {
+  const { plane, kernel, commit } = phaseFixture();
+  try {
+    commit([turnIntentAction(kernel, "turn-1", 10)], "running");
+    commit([turnTerminalAction("turn-1", 40, "interrupted")], "interrupted");
+    expect(readPhase(kernel)).toEqual({ phase: "interrupted", phaseSince: 40 });
+
+    // Later activity within the interrupted phase must not move phaseSince.
+    commit([noteAction("note-1", 90)], "interrupted");
+    expect(readPhase(kernel)).toEqual({ phase: "interrupted", phaseSince: 40 });
   } finally {
     plane.close();
   }
