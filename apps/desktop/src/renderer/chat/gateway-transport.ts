@@ -32,6 +32,7 @@ interface GatewayChatTransportOptions {
 const serverFrameSchema = z.union([
   SessionRead.Response,
   SessionRead.Receipt,
+  SessionRead.Bound,
   z.object({ type: z.literal("message"), messageId: z.string(), text: z.string() }),
   z.object({
     type: z.literal("error"),
@@ -80,6 +81,26 @@ interface SocketConnection {
   readonly opened: Promise<SocketLike>;
 }
 
+/** Reject every waiter coalesced onto one in-flight session read. */
+function rejectWaiters(
+  waiters: readonly { readonly reject: (error: Error) => void }[],
+  failure: Error,
+): void {
+  for (const waiter of waiters) waiter.reject(failure);
+}
+
+/**
+ * A `readSession` was refused because another read for the same session is
+ * already in flight with a different cursor. The in-flight read keeps its
+ * waiters and still settles; the refused caller must retry after it drains.
+ */
+export class SessionReadSupersessionError extends Error {
+  override readonly name = "SessionReadSupersessionError";
+  constructor(sessionId: string) {
+    super(`a session read for "${sessionId}" is already in flight with a different cursor`);
+  }
+}
+
 export interface GatewayChatTransport extends ChatTransport<UIMessage> {
   readSession(sessionId: string, cursor?: SessionRead.Cursor): Promise<SessionRead.Page>;
   subscribeSession(listener: (page: SessionRead.Page) => void): () => void;
@@ -103,8 +124,11 @@ export function createGatewayChatTransport(
   const lastChatId = new WeakMap<SocketLike, string>();
   const reads = new Map<string, {
     readonly socket: SocketLike;
-    readonly resolve: (page: SessionRead.Page) => void;
-    readonly reject: (error: Error) => void;
+    readonly cursorKey: string;
+    readonly waiters: {
+      readonly resolve: (page: SessionRead.Page) => void;
+      readonly reject: (error: Error) => void;
+    }[];
   }>();
   const listeners = new Set<(page: SessionRead.Page) => void>();
 
@@ -124,17 +148,19 @@ export function createGatewayChatTransport(
       return;
     }
     reads.delete(frame.sessionId);
-    pendingRead?.resolve(frame);
+    if (pendingRead !== undefined) {
+      for (const waiter of pendingRead.waiters) waiter.resolve(frame);
+    }
     // A terminal phase on a session-level page is not chat-stream completion:
     // it may describe a previous turn, and the current turn's message frame can
     // arrive after it. Pending chats settle only on their own message/error
     // frames (or socket drain), never on a session read.
   }
 
-  function bindSession(source: SocketLike, frame: z.infer<typeof SessionRead.Receipt>): void {
+  function bindSession(source: SocketLike, frame: SessionRead.Bound): void {
     const chatId = pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
     const result = frame.result;
-    if (chatId === undefined || result === undefined || result.status === "blocked_pre") return;
+    if (chatId === undefined || result.status === "blocked_pre") return;
     options.onSessionBound?.(chatId, result.handle.target);
   }
 
@@ -143,13 +169,19 @@ export function createGatewayChatTransport(
       settleRead(source, frame);
       return;
     }
-    if (frame.type === "receipt") {
+    if (frame.type === "session_bound") {
       bindSession(source, frame);
       return;
     }
+    // A receipt is only the frozen acceptance ack; session_bound binds.
+    if (frame.type === "receipt") return;
     if (frame.type === "error" && frame.sessionId !== undefined) {
-      reads.get(frame.sessionId)?.reject(new Error(frame.reason ?? frame.message ?? "session read failed"));
-      reads.delete(frame.sessionId);
+      const entry = reads.get(frame.sessionId);
+      if (entry !== undefined) {
+        reads.delete(frame.sessionId);
+        const failure = new Error(frame.reason ?? frame.message ?? "session read failed");
+        for (const waiter of entry.waiters) waiter.reject(failure);
+      }
       return;
     }
     if (frame.type === "message" || frame.type === "error") settleChat(source, frame);
@@ -186,7 +218,7 @@ export function createGatewayChatTransport(
     for (const [id, pendingRead] of reads) {
       if (pendingRead.socket !== source) continue;
       reads.delete(id);
-      pendingRead.reject(new Error(errorText ?? "gateway socket closed"));
+      rejectWaiters(pendingRead.waiters, new Error(errorText ?? "gateway socket closed"));
     }
     for (let index = pending.length - 1; index >= 0; index -= 1) {
       const turn = pending[index];
@@ -206,8 +238,18 @@ export function createGatewayChatTransport(
     async readSession(sessionId, cursor) {
       const live = await connectUntilAborted(undefined);
       if (live === undefined) throw new Error("gateway socket unavailable");
+      const cursorKey = cursor === undefined ? "" : `${cursor.revision}:${cursor.epoch}`;
+      const inFlight = reads.get(sessionId);
+      if (inFlight !== undefined) {
+        if (inFlight.cursorKey !== cursorKey) {
+          throw new SessionReadSupersessionError(sessionId);
+        }
+        return new Promise<SessionRead.Page>((resolve, reject) => {
+          inFlight.waiters.push({ resolve, reject });
+        });
+      }
       return new Promise<SessionRead.Page>((resolve, reject) => {
-        reads.set(sessionId, { socket: live, resolve, reject });
+        reads.set(sessionId, { socket: live, cursorKey, waiters: [{ resolve, reject }] });
         try {
           live.send(JSON.stringify(SessionRead.Request.parse({
             type: "session_read", sessionId, limit: 256, cursor,
