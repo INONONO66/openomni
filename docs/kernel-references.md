@@ -19,7 +19,10 @@ W5.3 (#1113) closure runs on `kernel/1113-w5-closure-20260929` (draft PR
 #1240, ⏳ pending merge): the app-owned `session_read` read model lives in
 `packages/protocol/src/gateway/session-read.ts` (plain-data wire DTOs),
 `apps/openomni/src/gateway.ts` (the single read surface), and
-`packages/agent/src/session-lifecycle/inspect.ts` (bounded inspection);
+`packages/agent/src/session-lifecycle/inspect.ts` (bounded inspection,
+ancestry through 256-action history windows); the accepted receipt keeps its
+frozen base shape and the durable binding travels in the additive
+`session_bound` frame (`SessionRead.Bound`, review r2 Owner decision);
 lane receipts are under `.omo/reports/kernel-campaign-w53/`. W5.2 (#1197)
 merged as `8390912c` (PR #1239).
 

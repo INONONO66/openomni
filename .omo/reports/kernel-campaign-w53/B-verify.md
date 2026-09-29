@@ -47,3 +47,10 @@ with CI-shaped per-workspace LCOV; the authoritative gate is the CI patch-covera
 Root gates, all exit 0: build, check-types, lint, lint:tools, lint:docs, check-topology, check-deps, check-import-cycles, check-dead-exports, verify-tsconfig-inheritance, check-effect-boundaries, check-written-types (logs /tmp/w53-gate-*.log).
 Package suites with coverage, all exit 0: protocol 502/0, policy 72/0, ledger 197/0, llm 409/0, ipc 90/0, machines 68/0, codemode 28/0, channels 577/0, ui 206/0 (logs /tmp/w53-pkg-*.log). apps/openomni 557/0 and packages/agent 850/0 (C1 verify), apps/desktop 437/0 (C2 verify).
 Script lanes: owned by C3 (serial, shared script/coverage/lcov.info); patch-coverage final run after C3 lands.
+
+## Wave B re-run after the r2 fix lanes (HEAD 03f70089, docs edits uncommitted)
+Root gates, all exit 0 (/tmp/w53-chain.log): build, check-types, lint, lint:tools, lint:docs, check-topology, check-deps, check-import-cycles, check-dead-exports, verify-tsconfig-inheritance, check-effect-boundaries (allowlist `[]`), check-written-types (0).
+Root `bun test --timeout 15000 --coverage`: exit 0, **4671 pass / 0 fail** (/tmp/w53-test.log); durable-reconstruction passed inside the root run.
+Script lanes serially (bash_437): scripts-tooling-1 253/0, scripts-tooling-2 81/0, scripts-contracts 336/0, all exit 0.
+Patch coverage first pass (script lcov = last lane only): 21 lines in script/quality-typescript-metrics.ts and script/run-quality-mutations.ts reported "no coverage record" because the three script lanes overwrite one script/coverage/lcov.info; second pass with the per-lane lcov union recorded below.
+Patch coverage second pass (per-lane script lcov union, /tmp/w53-patch2.log): exit 0, "all changed executable lines are covered" (3 AST-skipped lines in script/topology.ts and script/verify-tsconfig-inheritance.ts).

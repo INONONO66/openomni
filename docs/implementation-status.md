@@ -2,7 +2,7 @@
 
 ## W5.3 #1113 closure receipt (2026-09-29, ⏳ pending merge)
 
-W5.3 on `kernel/1113-w5-closure-20260929` (draft PR #1240, HEAD `10c26e80`,
+W5.3 on `kernel/1113-w5-closure-20260929` (draft PR #1240, HEAD `03f70089` plus this docs commit,
 base `8390912c`) closes the W5 absolute-quality lanes. Lane receipts live
 under `.omo/reports/kernel-campaign-w53/`.
 
@@ -92,7 +92,8 @@ check-types 0, lint 0, lint:tools 0, lint:docs 0, check-topology 0,
 check-deps 0, check-import-cycles 0, check-dead-exports 0,
 verify-tsconfig-inheritance 0, check-effect-boundaries 0,
 check-written-types 0; root `bun test --timeout 15000 --coverage`:
-**4635 pass / 0 fail**.
+**4671 pass / 0 fail** after the r2 fix lanes (4635 before them); script
+lanes serially 253/81/336 pass, 0 fail.
 
 Honest audit deltas (`quality-audit --dry-run`; no local LCOV lanes, so
 `complete: false`):
