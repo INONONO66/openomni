@@ -1,7 +1,7 @@
 # W4 #1112 — duplicate retry/abort owner audit
 
-Date: 2026-09-29  
-Lane: A6  
+Date: 2026-09-29
+Lane: A6
 Base: `8390912c`
 
 ## Measured owner census

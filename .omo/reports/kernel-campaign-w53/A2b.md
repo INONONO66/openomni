@@ -1,9 +1,9 @@
 # W5.3 lane A2b receipt
 
-Date: 2026-09-29  
-Worktree: `/Users/ino/Develop/openomni-w53`  
-Branch: `kernel/1113-w5-closure-20260929`  
-Base: `8390912c`  
+Date: 2026-09-29
+Worktree: `/Users/ino/Develop/openomni-w53`
+Branch: `kernel/1113-w5-closure-20260929`
+Base: `8390912c`
 Commit/push: none
 
 ## Outcomes

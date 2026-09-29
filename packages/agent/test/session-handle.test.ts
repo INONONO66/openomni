@@ -2100,9 +2100,15 @@ describe("session crash recovery and observation", () => {
         expect(runs).toEqual([]);
         expect(handle.get().state).toBe("interrupted");
         expect(pendingInbox(handle.id)).toEqual([]);
-        expect(deliveries(handle.id).map((delivery) => delivery.turnId)).toEqual(
-          deliveries(handle.id).map((delivery) => delivery.inboxId),
-        );
+        // Exactly one delivery: the consumed resume, bound to its own inbox
+        // identity rather than to any turn.
+        const [delivery, ...rest] = deliveries(handle.id);
+        expect(rest).toEqual([]);
+        expect(delivery).toMatchObject({ kind: "resume", boundary: "before_llm" });
+        expect(delivery?.turnId).toBe(delivery?.inboxId ?? "");
+        expect(inboxRows(handle.id).map((row) => ({ id: row.id, status: row.status }))).toEqual([
+          { id: delivery?.inboxId, status: "consumed" },
+        ]);
       }),
     ));
 

@@ -791,9 +791,11 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  try {
+    await main();
+  } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`ERROR: ${message}\n`);
     process.exit(1);
-  });
+  }
 }
