@@ -108,7 +108,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 
   function sendFromEnvelope(
     external: ReturnType<typeof externalMessage> | undefined,
-    envelope: unknown,
+    envelope: Parameters<GatewayRouter["ingest"]>[1],
   ): Gateway.SendMessage {
     if (external === undefined) return Gateway.SendMessage.parse(envelope);
     return {
