@@ -17,6 +17,8 @@ import { resolveSessionRuntime } from "../src/session-contract";
 import { createController } from "../src/session-controller";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { inspectSession } from "../src/session-lifecycle/inspect";
+import { fencedTurnFixture } from "./helpers/fenced-writer";
 import { session } from "../src/session-handle";
 
 const SECRET = "sk-live-credential-never-shown";
@@ -584,5 +586,85 @@ describe("action-based history and diagnostic projections", () => {
           );
         }),
       ),
+    ));
+});
+
+describe("bounded inspection pages keep advancing and keep causal attribution (review F3/F4)", () => {
+  test("limits 1 and 2 advance children from an empty root page and every continuation advances or terminates", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const materialize = (id: string, parentId: string | null) =>
+          kernel.materialize({
+            id, parentId, role: "resident", tools: [], system: { preset: "", blocks: [] },
+            policyGeneration: 1, actionId: `${id}:configure`, at: 1_000,
+          });
+        yield* materialize("root", null);
+        yield* materialize("child-a", "root");
+        yield* materialize("child-b", "root");
+        const head = kernel.row("root").revision;
+        // limit 1: the mandatory root response must not consume the descendant budget.
+        const first = inspectSession(kernel, "root", { depth: 1, cursor: head, limit: 1 });
+        expect(first.transitions).toEqual([]);
+        expect(first.nextCursor).toBeNull();
+        expect(first.children.map((child) => child.sessionId)).toEqual(["child-a"]);
+        expect(first.children[0]?.transitions.map((entry) => entry.actionId)).toEqual([
+          "child-a:configure",
+        ]);
+        expect(first.nextChildrenCursor).toBe("child-a");
+        const second = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 1, childrenCursor: first.nextChildrenCursor ?? "",
+        });
+        expect(second.children.map((child) => child.sessionId)).toEqual(["child-b"]);
+        expect(second.nextChildrenCursor).toBe("child-b");
+        const third = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 1, childrenCursor: second.nextChildrenCursor ?? "",
+        });
+        expect(third.children).toEqual([]);
+        expect(third.nextChildrenCursor).toBeNull();
+        // limit 2: both children fit; the advertised continuation then terminates.
+        const wide = inspectSession(kernel, "root", { depth: 1, cursor: head, limit: 2 });
+        expect(wide.children.map((child) => child.sessionId)).toEqual(["child-a", "child-b"]);
+        expect(wide.nextChildrenCursor).toBe("child-b");
+        const done = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 2, childrenCursor: wide.nextChildrenCursor ?? "",
+        });
+        expect(done.children).toEqual([]);
+        expect(done.nextChildrenCursor).toBeNull();
+      }),
+    ));
+
+  test("a page boundary between a turn and its tool intent preserves the tool's turn attribution", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "attribution", clock: () => 1_000, turnId: "turn-1",
+        });
+        yield* kernel.commit({
+          sessionId: "attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+          expectedRevision: kernel.row("attribution").revision, state: kernel.row("attribution").state,
+          actions: [{
+            id: "tool-1", sessionId: "attribution", parentId: "turn-1", kind: "tool",
+            intent: {
+              encodingVersion: 1,
+              value: { phase: "intent", op: "write", value: { path: "approved.txt" } },
+            },
+            effect: { encodingVersion: 1, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          }],
+        });
+        const complete = inspectSession(kernel, "attribution");
+        const full = complete.transitions.find((entry) => entry.actionId === "tool-1");
+        expect(full?.turnId).toBe("turn-1");
+        // The boundary falls between turn-1 (revision 2) and tool-1 (revision 3).
+        const paged = inspectSession(kernel, "attribution", { depth: 0, cursor: 2, limit: 1 });
+        expect(paged.transitions).toHaveLength(1);
+        const boundary = paged.transitions[0];
+        expect(boundary?.actionId).toBe("tool-1");
+        expect(boundary?.turnId).toBe("turn-1");
+        expect(boundary?.revision).toBe(full?.revision ?? -1);
+        expect(boundary?.digest).toBe(full?.digest ?? "");
+      }),
     ));
 });

@@ -33,8 +33,34 @@ function inspectActions(
   sessionId: string,
   parentId: string | null,
   headRevision: number,
+  resolveAction: (id: string) => LedgerAction.Node | undefined,
 ): Omit<SessionHistory.Inspection, "children"> {
   const turns = new Map<string, string | null>();
+  // Review F4: a slice's first actions may descend from turns committed on
+  // earlier pages. Walk only the needed ancestors through the indexed by-id
+  // read (never a loop-to-head scan) and memoize the trail for this page.
+  const ancestralTurnId = (parent: string | null): string | null => {
+    const trail: string[] = [];
+    let turnId: string | null = null;
+    let current = parent;
+    while (current !== null) {
+      if (turns.has(current)) {
+        turnId = turns.get(current) ?? null;
+        break;
+      }
+      const ancestor = resolveAction(current);
+      if (ancestor === undefined) break;
+      trail.push(current);
+      const own = ownTurnId(ancestor);
+      if (own !== undefined) {
+        turnId = own;
+        break;
+      }
+      current = ancestor.parentId;
+    }
+    for (const visited of trail) turns.set(visited, turnId);
+    return turnId;
+  };
   const turnOf: TurnOf = (action) => (action === undefined ? null : (turns.get(action.id) ?? null));
   const transitions: SessionHistory.Transition[] = [];
   const policy: SessionHistory.PolicyDecision[] = [];
@@ -42,7 +68,7 @@ function inspectActions(
   const compactions: SessionHistory.Compaction[] = [];
   const restorations = new Map<string, string[]>();
   for (const action of actions) {
-    const turnId = ownTurnId(action) ?? turns.get(action.parentId ?? "") ?? null;
+    const turnId = ownTurnId(action) ?? ancestralTurnId(action.parentId);
     turns.set(action.id, turnId);
     transitions.push(transitionOf(action, turnId));
     policy.push(...policyDecisionOf(action, turnId));
@@ -72,8 +98,10 @@ function inspectActions(
  * Authoritative inspection of a stored session and, to `depth`, the sessions it
  * commissioned. Traversal follows the ledger's own `parentId` authority only; a
  * session reachable merely as an outbound destination is named by its id in the
- * transition and never read. The limit bounds the aggregate action count and
- * visited sessions. Resume root history with nextCursor; when children remain,
+ * transition and never read. The limit bounds the aggregate action count and,
+ * independently, the descendant visits: the mandatory root response never
+ * consumes the descendant budget, so a limit of 1 still advances one child
+ * when the root page is empty. Resume root history with nextCursor; when children remain,
  * use cursor=headRevision plus nextChildrenCursor, or page a returned child by id.
  */
 export function inspectSession(
@@ -84,28 +112,32 @@ export function inspectSession(
 ): InspectionPage {
   const { depth, cursor, limit, childrenCursor } = InspectRequest.parse(request);
   let budget = limit;
-  let nodes = limit;
+  // Review F3: the descendant visit budget is independent of the mandatory
+  // root visit, so every advertised children continuation advances.
+  let descendants = limit;
   const visit = (id: string, remaining: number, afterRevision: number, afterChild: string): InspectionPage => {
     const reader = id === sessionId ? kernel : openKernel(id);
     const current = reader.row(id);
     const page = reader.historyPage(id, { afterRevision, limit: budget });
     budget -= page.actions.length;
-    nodes -= 1;
     const children: InspectionPage[] = [];
     const childRows = remaining === 0 ? [] : reader.childSessionsPage(id, afterChild, limit);
     let nextChildrenCursor: string | null = null;
     let lastChild = afterChild;
     for (const child of childRows) {
-      if (budget === 0 || nodes === 0) {
+      if (budget === 0 || descendants === 0) {
         nextChildrenCursor = lastChild;
         break;
       }
+      descendants -= 1;
       children.push(visit(child.id, remaining - 1, 0, ""));
       lastChild = child.id;
     }
     if (childRows.length === limit) nextChildrenCursor ??= lastChild;
     return {
-      ...inspectActions(page.actions, id, current.parentId, page.headRevision),
+      ...inspectActions(page.actions, id, current.parentId, page.headRevision, (actionId) =>
+        reader.actionById(actionId),
+      ),
       nextCursor: page.nextRevision,
       nextChildrenCursor,
       children,
