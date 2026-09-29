@@ -9,10 +9,19 @@ const issueSchema = z.object({
   labels: z.array(z.object({ name: z.string() })),
 });
 type Issue = z.infer<typeof issueSchema>;
+/** Historical summaries can predate the cyclomatic/Halstead/CRAP dimensions.
+ * Decoding accepts version-1 totals without them: an absent dimension means
+ * "not previously measured", never an invented historical zero. Current-output
+ * validation stays on the full totalsSchema in quality-audit.ts. */
+const previousTotalsSchema = totalsSchema.partial({
+  cyclomatic: true,
+  halstead: true,
+  crap: true,
+});
 const previousSchema = z.object({
   version: z.literal(1),
   head: z.string().regex(/^[a-f0-9]{40}$/),
-  totals: totalsSchema,
+  totals: previousTotalsSchema,
 });
 type Previous = z.infer<typeof previousSchema>;
 const SUMMARY = "quality: audit summary";
@@ -33,7 +42,12 @@ export function previousAudit(body: string): Previous {
 }
 
 export function regressions(previous: Previous, audit: Audit) {
-  return findingKinds.filter((kind) => audit.totals[kind] > previous.totals[kind]);
+  return findingKinds.flatMap((kind) => {
+    const measured = previous.totals[kind];
+    return measured !== undefined && audit.totals[kind] > measured
+      ? [{ kind, previous: measured, current: audit.totals[kind] }]
+      : [];
+  });
 }
 
 function cell(text: string) {
@@ -183,9 +197,7 @@ export function planIssues(audit: Audit, issues: readonly Issue[]) {
             "",
             "| Kind | Previous | Current |",
             "| --- | ---: | ---: |",
-            ...increased.map(
-              (kind) => `| ${kind} | ${previous.totals[kind]} | ${audit.totals[kind]} |`,
-            ),
+            ...increased.map((row) => `| ${row.kind} | ${row.previous} | ${row.current} |`),
           ].join("\n"),
           ["quality-debt"],
           issues,

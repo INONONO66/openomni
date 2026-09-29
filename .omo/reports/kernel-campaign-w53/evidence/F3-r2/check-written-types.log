@@ -1,0 +1,3 @@
+$ bun run script/check-written-types.ts
+OK: written any/unknown types: 0
+CWT_EXIT=0
