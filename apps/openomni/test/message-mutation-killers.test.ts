@@ -269,7 +269,7 @@ function materialize(
   role: "resident" | "worker" = "resident",
 ) {
   const kernel = plane.openKernel(id);
-  Effect.runSync(
+  runSyncEffect(
     kernel.materialize({
       id,
       parentId,

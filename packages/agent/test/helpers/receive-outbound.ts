@@ -2,6 +2,7 @@ import { Effect, Result } from "effect";
 import type { SessionTransition } from "@openomni/protocol";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import { commitReceivedMessage } from "./ingress";
+import { runTestSync } from "./isolated";
 
 /** Lands an outbound message in the destination's chain exactly as a live dispatcher would. */
 export function receiveOutbound(
@@ -10,7 +11,7 @@ export function receiveOutbound(
   createdAt: number,
 ) {
   return Result.getOrThrowWith(
-    Effect.runSync(
+    runTestSync(
       Effect.result(
         commitReceivedMessage(kernel, {
           id: message.messageId,

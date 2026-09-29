@@ -3,21 +3,22 @@ import { Machine } from "@openomni/protocol";
 import { Effect, Fiber, Cause, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { execute as nativeExecute } from "../src/exec";
+import { exit as runExit, fork, run } from "./helpers/effect";
 
 const request = { cmd: "while :; do :; done", cwd: "/" };
 
 test("aborting a shell interrupts and waits for its process group to close", async () => {
   const controller = new AbortController();
-  const fiber = Effect.runFork(nativeExecute(request, controller.signal));
+  const fiber = fork(nativeExecute(request, controller.signal));
   controller.abort();
-  const exit = await Effect.runPromise(Fiber.await(fiber));
+  const exit = await run(Fiber.await(fiber));
   expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-  const preAborted = await Effect.runPromiseExit(nativeExecute(request, controller.signal));
+  const preAborted = await runExit(nativeExecute(request, controller.signal));
   expect(Exit.isFailure(preAborted) && Cause.hasInterrupts(preAborted.cause)).toBe(true);
 });
 
 test("the execution deadline kills the real shell and settles timed_out", async () => {
-  const result = await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+  const result = await run(Effect.scoped(Effect.gen(function* () {
     const fiber = yield* Effect.forkScoped(nativeExecute(request, new AbortController().signal));
     yield* TestClock.adjust(Machine.EXEC_TIMEOUT_MS);
     return yield* Fiber.join(fiber);
@@ -27,7 +28,6 @@ test("the execution deadline kills the real shell and settles timed_out", async 
 
 // Preserve the line-pinned runner sites above without growing the boundary allowlist.
 import * as childProcess from "node:child_process";
-import { run } from "../../ipc/test/helpers/effects";
 import { within } from "../../ipc/test/helpers/signal";
 
 test.each(["ESRCH", "EPERM", "EINVAL"])("aborted exec handles group kill failure %s", async (code: string) => {

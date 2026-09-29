@@ -9,6 +9,19 @@ const allowlistPath = "script/conformance/effect-runner-sites.json";
 const boundaryPath = "script/conformance/effect-boundary-sites.json";
 const boundaryCodes = new Set(["R4_TAG_PREFIX", "R5_RACE_ALL", "R6_GEN_FINALLY", "R7_UNSCOPED_FORK", "R8_GLOBAL_LET", "R9_UNUSED_TAG", "R10_RESOURCE_SUCCEED"]);
 const approvedEdges = new Set(["apps/openomni/src/cli/main.ts", "apps/openomni/src/gateway.ts"]);
+// Test runners have exactly one owner per package. Bench programs are executable
+// entrypoints, like the app edges, rather than reusable test runner helpers.
+const RUNNER_OWNERS = new Set([
+  "apps/openomni/test/helpers/effect.ts",
+  "packages/agent/test/helpers/isolated.ts",
+  "packages/channels/test/helpers/effect.ts",
+  "packages/ipc/test/helpers/effects.ts",
+  "packages/ledger/test/helpers/effect.ts",
+  "packages/llm/test/helpers/native.ts",
+  "packages/machines/test/helpers/effect.ts",
+  "packages/agent/bench/turns.ts",
+  "packages/ledger/bench/index.ts",
+]);
 const runnerNames = new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]);
 
 export type BoundaryFinding = {
@@ -242,7 +255,7 @@ function valueReference(node: ts.Node): boolean {
 }
 function runnerSites(source: ts.SourceFile, file: string, provenance: Provenance, functions: readonly DeclaredFunction[]): RunnerSite[] {
   const result: RunnerSite[] = [];
-  if (approvedEdges.has(file)) return result;
+  if (approvedEdges.has(file) || RUNNER_OWNERS.has(file)) return result;
   const names = new Map<ts.Node, string>(functions.map((entry: DeclaredFunction) => [entry.node, entry.exportedName]));
   const visit = (node: ts.Node, enclosing?: string): void => {
     if (nonExecutable(node)) return;

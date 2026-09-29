@@ -13,6 +13,14 @@ export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   if (Option.isSome(failure)) throw failure.value;
   throw Cause.squash(exit.cause);
 }
+
+export function runSyncEffect<A, E>(effect: Effect.Effect<A, E>): A {
+  return Effect.runSync(effect);
+}
+
+export function runEffectExit<A, E>(effect: Effect.Effect<A, E>): Promise<Exit.Exit<A, E>> {
+  return Effect.runPromiseExit(effect);
+}
 export namespace Processor {
   type StreamInput = Parameters<NativeProcessor.ProcessorOptions["createStream"]>[0];
   type Stream = Effect.Success<ReturnType<NativeProcessor.ProcessorOptions["createStream"]>>;

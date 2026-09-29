@@ -33,6 +33,8 @@ import { BunCrypto } from "./cluster-crypto";
 
 /** Timer ack vocabulary (agent `SessionTimerOutcome`, structurally identical). */
 type SessionTimerOutcome = "applied" | "noop";
+/** effect/cluster's entity reaper never scans more frequently than five seconds. */
+const ENTITY_REAPER_INTERVAL_MS = 5_000;
 
 /**
  * Cluster plane composition (W5.2 #1197 plan §1): a single-node SingleRunner
@@ -57,7 +59,9 @@ export function clusterHostLayer(options: ClusterHostOptions) {
   return SingleRunner.layer({
     runnerStorage: "sql",
     shardingConfig: {
-      entityMaxIdleTime: Duration.millis(options.entityIdleMs),
+      entityMaxIdleTime: Duration.millis(
+        Math.max(options.entityIdleMs, ENTITY_REAPER_INTERVAL_MS),
+      ),
       entityMessagePollInterval: Duration.millis(100),
       entityReplyPollInterval: Duration.millis(100),
     },

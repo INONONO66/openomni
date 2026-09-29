@@ -1,6 +1,6 @@
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
 import type { LedgerSession } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { createObservationBus } from "../../src/observation/bus";
 import type { RunnerServices } from "../../src/services";
 import { runnerTestLayer } from "./service-layers";
@@ -53,6 +53,31 @@ export function isolatedLedger(): IsolatedLedger {
 }
 
 type IsolatedProgram<A, E> = Effect.Effect<A, E, import("effect").Scope.Scope | RunnerServices>;
+
+/** Execute a provided synchronous test program without changing its failure channel. */
+export function runTestSync<A, E>(program: Effect.Effect<A, E>): A {
+  return Effect.runSync(program);
+}
+
+function settled<A, E>(exit: Exit.Exit<A, E>): A {
+  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+  return exit.value;
+}
+
+/** Execute a synchronous test program with a squashed failure cause. */
+export function runAgentSync<A, E>(program: Effect.Effect<A, E>): A {
+  return settled(Effect.runSyncExit(program));
+}
+
+/** Execute an asynchronous test program with a squashed failure cause. */
+export async function runAgent<A, E>(program: Effect.Effect<A, E>): Promise<A> {
+  return settled(await Effect.runPromiseExit(program));
+}
+
+/** Execute an asynchronous test program with its original runner failure semantics. */
+export function runTestPromise<A, E>(program: Effect.Effect<A, E>): Promise<A> {
+  return Effect.runPromise(program);
+}
 
 /**
  * Runs one scoped Effect program against a fresh handle-scoped ledger; the

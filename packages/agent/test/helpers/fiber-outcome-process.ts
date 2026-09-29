@@ -5,13 +5,14 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { openCrashStores } from "./crash-stores";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./native-executor";
+import { runTestPromise } from "./isolated";
 
 if (import.meta.main) {
   const [mode, dbPath, receipt] = z.tuple([
     z.enum(["execute", "recover"]), z.string(), z.enum(["absent", "present"]),
   ]).parse(process.argv.slice(2));
   const stores = openCrashStores(dbPath);
-  await Effect.runPromise(Effect.gen(function* () {
+  await runTestPromise(Effect.gen(function* () {
     const options = yield* nativeExecutorOptions(mode === "execute" ? 100 : 100_000, fiberSessionId, stores.kernel);
     const executor = testExecutor({
       ...options,

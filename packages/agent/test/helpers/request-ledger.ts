@@ -1,7 +1,7 @@
 import { runAgentSync } from "./executor";
 import { executionReads } from "./execution-reads";
 import { fencedTurnFixture } from "./fenced-writer";
-import { isolatedLedger } from "./isolated";
+import { isolatedLedger, runTestSync } from "./isolated";
 import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime } from "./session-services";
 import { Effect, Result } from "effect";
 import type { LedgerError } from "@openomni/ledger";
@@ -33,7 +33,7 @@ export function requestLedger(
       ? kernel.commit
       : (batch: LedgerSession.Commit) => commitFoldBatch(kernel, batch);
   const opened = Result.getOrThrowWith(
-    Effect.runSync(
+    runTestSync(
       Effect.result(
         fencedTurnFixture(kernel, {
           id,

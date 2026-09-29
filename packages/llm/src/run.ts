@@ -39,7 +39,6 @@ export interface RunInput {
   toolChoice?: "auto" | "required" | "none";
   /** Maximum generated tokens for this call; absent leaves the provider default. */
   maxTokens?: number;
-  maxSteps?: number;
   /**
    * Step-boundary yield: stop the step loop once the last finished step's
    * input tokens (the ai SDK's cache-inclusive prompt total) reach this.
@@ -90,6 +89,7 @@ export namespace Run {
   /** Billed usage, the visible-output boundary and the credential handle of one provider attempt. */
   export interface AttemptEvidence {
     readonly usage: LlmRunFailure["usage"];
+    readonly usageProvenance?: LlmRunFailure["usageProvenance"];
     readonly visibleOutput: boolean;
     readonly finishReason: string;
     readonly credential: ReturnType<typeof Auth.reference> | null;
@@ -288,6 +288,7 @@ export function run(
       type: "stop",
       evidence: {
         usage: attemptUsage(finalTokens),
+        usageProvenance: processor.usageProvenance,
         visibleOutput: processor.visibleOutput,
         finishReason,
         credential: credential ?? null,
@@ -309,6 +310,7 @@ export function run(
         responseHeaders: apiError?.responseHeaders,
         responseBody: apiError?.responseBody,
         usage: attemptUsage(processor.usageTotals),
+        usageProvenance: processor.usageProvenance,
         aborted,
         contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
         visibleOutput: processor.visibleOutput,

@@ -1,5 +1,5 @@
 import { testToolPorts } from "./tool-ports";
-import { Effect } from "effect";
+import { Effect, Scope } from "effect";
 import { Provider, run } from "@openomni/llm";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
@@ -9,7 +9,7 @@ import { afterEach } from "bun:test";
 import { Bus, closeSessions, type SessionRuntime } from "@openomni/agent";
 import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
-import { runEffect } from "./effect";
+import { runEffect, runSyncEffect } from "./effect";
 import { effectScope } from "./effect-scope";
 import { drainSession, localInbox, resolvedRuntimeFor, testPlane } from "./ledger";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
@@ -52,12 +52,12 @@ export function residentRunner(
     policyGeneration: () => plane.openKernel("policy-probe").currentPolicyGeneration(),
   });
   const fixture = options.sessionRuntime;
-  const context = scope.runSync(generationServices({
+  const context = runSyncEffect(Scope.provide(generationServices({
     clock: fixture?.clock, entropy: fixture?.entropy,
     observations: fixture?.observations === undefined ? Bus : observationService(fixture.observations),
     definitions: resident.definitions, llm: { run, resolveModel: Provider.resolveModel, ...options.llm },
     plane,
-  }));
+  }), scope.scope));
   cleanups.push(async () => {
     await runEffect(closeSessions(runtime).pipe(Effect.provide(context)));
     await scope.close();

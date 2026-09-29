@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { WebSocketHandler, type WsConnection } from "../../src/websocket";
+import { runEffect } from "./effect";
 
 type ConnectionData = Parameters<WebSocketHandler["ws"]["open"]>[0]["data"];
 
@@ -7,7 +8,7 @@ export function websocketCallbacks(handler: WebSocketHandler) {
   return {
     ...handler.ws,
     message(ws: WsConnection, data: string | Buffer): Promise<void> {
-      return Effect.runPromise(handler.handleFrame(ws.data, data).pipe(Effect.match({
+      return runEffect(handler.handleFrame(ws.data, data).pipe(Effect.match({
         onSuccess: (outcome) => outcome,
         onFailure: (error) => ({ type: "error" as const, reason: error._tag }),
       }))).then((outcome) => { ws.send(JSON.stringify(outcome)); });

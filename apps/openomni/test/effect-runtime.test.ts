@@ -7,7 +7,7 @@ import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
 import { startOpenOmni } from "../src/index";
 import { Clock, Entropy } from "@openomni/agent";
 import { AppLifecycleFailure } from "../src/runtime";
-import { runEffect } from "./helpers/effect";
+import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
 
 const config = {
   host: "127.0.0.1",
@@ -52,7 +52,7 @@ test("the server edge consumes the shared gateway runtime and its injected servi
     expect(first.runtime).toBe(runtime);
     expect(gatewayRuntime({})).toBe(runtime);
     expect(
-      await runtime.runPromise(
+      await runRuntimeEffect(runtime,
         Effect.gen(function* () {
           return [(yield* Clock).now(), (yield* Entropy).next()];
         }),
@@ -149,7 +149,7 @@ test("scope finalizers all run and aggregate failures in reverse release order",
       }
     }),
   );
-  const exit = await runtime.runPromise(Effect.exit(runtime.disposeEffect));
+  const exit = await runRuntimeExit(runtime, runtime.disposeEffect);
   expect(order).toEqual(["second.close", "first.close"]);
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([second, first]);

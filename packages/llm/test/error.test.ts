@@ -4,12 +4,13 @@ import { Effect, Result } from "effect";
 import { APIError, coerceApiError, decodeLlmFailure } from "../src/error";
 import { ForeignFailure } from "../src/errors";
 import { sdkError } from "./helpers/retry";
+import { runSyncEffect } from "./helpers/native";
 
 describe("provider failure decoder", () => {
   test("passes through a tagged provider failure", () => {
     const error = new APIError({ message: "boom", isRetryable: true });
     expect(coerceApiError(error)).toBe(error);
-    expect(Effect.runSync(Effect.result(error))).toEqual(Result.fail(error));
+    expect(runSyncEffect(Effect.result(error))).toEqual(Result.fail(error));
   });
   test("decodes SDK fields and lowercases response headers", () => {
     const failure = sdkError({ message: "sdk fixture", isRetryable: true, statusCode: 529, responseHeaders: { "Retry-After-Ms": "1200" }, responseBody: '{"type":"error"}' });

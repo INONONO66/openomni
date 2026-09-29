@@ -1,6 +1,6 @@
-import { runEffect } from "./helpers/effect";
+import { runEffect, runSyncEffect } from "./helpers/effect";
 import { decodeChannelFailure } from "@openomni/channels";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Bus } from "@openomni/agent";
 import type { SessionTransition } from "@openomni/protocol";
@@ -17,23 +17,16 @@ afterEach(() => {
 
 function materialize(id: string) {
   const kernel = plane.openKernel(id);
-  Result.getOrThrowWith(
-    Effect.runSync(
-      Effect.result(
-        kernel.materialize({
-          id,
-          parentId: null,
-          role: "resident",
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: kernel.currentPolicyGeneration(),
-          actionId: `${id}:config`,
-          at: 100,
-        }),
-      ),
-    ),
-    (error) => error,
-  );
+  runSyncEffect(kernel.materialize({
+    id,
+    parentId: null,
+    role: "resident",
+    tools: [],
+    system: { preset: "", blocks: [] },
+    policyGeneration: kernel.currentPolicyGeneration(),
+    actionId: `${id}:config`,
+    at: 100,
+  }));
 }
 
 const message: SessionTransition.OutboundMessage = {

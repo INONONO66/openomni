@@ -272,20 +272,6 @@ describe("ChatAgent loop controls", () => {
     expect(typeof agent(async () => createStopOutcome()).run).toBe("function");
   });
 
-  it("passes the remaining tool-call budget as the model step cap", async () => {
-    let maxSteps: number | undefined;
-    await isolated(createTestAgent({
-      events: Bus,
-      model,
-      budget: { maxToolCalls: 7 },
-      llm: mockLlm(async (input, sink) => {
-        maxSteps = input.maxSteps;
-        return completeModel(input, sink);
-      }),
-    }).run(runInput([{ role: "user", content: "hello" }])));
-    expect(maxSteps).toBe(7);
-  });
-
   it("honors an already-aborted signal before provider execution", async () => {
     const controller = new AbortController();
     controller.abort();

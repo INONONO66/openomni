@@ -534,20 +534,27 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
  */
 const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ActorRegistry",
+  // packages/channels/src/router/stores.ts:2,35
   "createActorRegistry",
   "BlacklistStore",
+  // packages/channels/src/router/stores.ts:3,36
   "createBlacklistStore",
   "ChannelGrantStore",
+  // packages/channels/src/router/stores.ts:4,37
   "createChannelGrantStore",
   "ReplyGrantStore",
+  // packages/channels/src/router/stores.ts:7,38
   "createReplyGrantStore",
   "SurfaceKey",
+  // packages/channels/src/router/stores.ts:8,40
   "createSurfaceKeyStore",
   "DecisionFacts",
+  // packages/channels/src/router/stores.ts:5,41
   "createDecisionFactPort",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
   // router's send kernel (brain never reaches the perimeter debit store).
   "EgressBudgetStore",
+  // packages/channels/src/router/stores.ts:6,39
   "createEgressBudgetStore",
 ]);
 

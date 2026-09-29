@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
 import { ForeignFailure } from "../src/errors";
 import { websocketCallbacks } from "./helpers/websocket-server";
+import { runEffect } from "./helpers/effect";
 import type { Channel } from "@openomni/protocol";
 import { z } from "zod";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
@@ -144,7 +145,7 @@ describe("WebSocketHandler ingress and receipts", () => {
   ])("rejects malformed frame %s before entering the handler", async (raw, reason) => {
     let entries = 0;
     const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish);
-    const result = await Effect.runPromise(Effect.result(handler.handleFrame({
+    const result = await runEffect(Effect.result(handler.handleFrame({
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, raw)));
     expect(result).toMatchObject({
@@ -163,7 +164,7 @@ describe("WebSocketHandler ingress and receipts", () => {
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, Buffer.from(JSON.stringify({ text: "fixture", eventId: "event" })));
     expect(entries).toBe(0);
-    expect(await Effect.runPromise(effect)).toEqual({ type: "receipt", status: "accepted" });
+    expect(await runEffect(effect)).toEqual({ type: "receipt", status: "accepted" });
     expect(entries).toBe(1);
   });
 
@@ -175,7 +176,7 @@ describe("WebSocketHandler ingress and receipts", () => {
     });
     await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "fixture" }));
     expect(sent).toEqual([JSON.stringify({ type: "error", reason: "ForeignFailure" })]);
-    expect(await Effect.runPromise(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture"}')))).toBe(failure);
+    expect(await runEffect(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture"}')))).toBe(failure);
   });
 
   it("push returns an accepted receipt with a stable external message id", () => {

@@ -249,7 +249,7 @@ for (const change of ["replacement", "delivered-tail"] as const) {
         fixture.recording.commitBatch(
           deliveryActions(
             [row],
-            fixture.recording.identity.turnId,
+            { kind: "turn", turnId: fixture.recording.identity.turnId },
             "after_tools",
             incoming.receipt.action.id,
           ),

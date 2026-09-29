@@ -6,7 +6,7 @@ import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/pr
 import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/ledger";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
-import { runEffect } from "./effect";
+import { runEffect, runSyncResult } from "./effect";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import type { ResidentSuite } from "./resident-suite";
 
@@ -90,7 +90,7 @@ export function adoptAtFence(
   owner: string,
   fence: number,
 ): Result.Result<AdoptReceipt, LedgerError> {
-  return Effect.runSync(Effect.result(plane.openKernel(sessionId).adoptFence({ sessionId, owner, fence })));
+  return runSyncResult(plane.openKernel(sessionId).adoptFence({ sessionId, owner, fence }));
 }
 
 /**

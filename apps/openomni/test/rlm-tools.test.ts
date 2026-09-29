@@ -276,7 +276,7 @@ describe("the completion port", () => {
     expect(await port("summarize")).toBe("the answer");
     const seen = input();
     expect(seen.tools).toEqual([]);
-    expect(seen.maxSteps).toBe(1);
+    expect(seen.toolChoice).toBe("none");
     expect(seen.auth).toEqual({ type: "api", key: "port-key" });
     expect(seen.model).toMatchObject({ id: "port-test", providerID: "fake" });
     // A nested run must never borrow the turn's identity: the trace is its own.
