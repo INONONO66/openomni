@@ -11,7 +11,7 @@ import { session, closeSessions } from "../src/session-handle";
 import { createTurnDispatcher, eraseTool, sessionTool } from "../src/tool-dispatcher";
 import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/session-requests";
-import { suspendedRequest, failure } from "./helpers/effect-g2";
+import { suspendedRequest, } from "./helpers/effect-g2";
 
 // W5.2: the TTL-expiry test ("does not reacquire an expired lease under a still-live
 // suspended runner") is deleted with the lease plane — takeover is a fence adoption now,

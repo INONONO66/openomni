@@ -9,7 +9,6 @@ import {
   SessionEntityLive,
   watchFiredDelivery,
   watchTimeoutDelivery,
-  type SessionEntityEnv,
   type SessionEntityPorts,
   type SessionEntityTimerContext,
   type TimerChainReads,

@@ -256,7 +256,8 @@ test("compaction projection and lossless revert survive SQLite reopen without de
                         action.kind === "prompt" &&
                         String(object(action.effect.value)?.content ?? "").startsWith("during-"),
                     ).length;
-                    if (during > 0 && (count += during) >= 2) admitted.resolve();
+                    count += during;
+                    if (during > 0 && count >= 2) admitted.resolve();
                   }),
                 ),
               ),

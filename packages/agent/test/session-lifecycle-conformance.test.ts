@@ -8,7 +8,6 @@ import { Cause, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound } from "./helpers/effect-g2";
-import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

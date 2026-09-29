@@ -1,4 +1,4 @@
-import { Cause, Effect, Scope } from "effect";
+import { Effect } from "effect";
 import { bootResource } from "./composition/boot";
 import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
@@ -21,7 +21,7 @@ import {
   ForeignFailure as AgentFailure,
   ExecutionApprovalError,
 } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { CommitRefused, SessionHandleStore } from "@openomni/ledger";
 import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
@@ -742,26 +742,33 @@ export async function startOpenOmni(options: StartOptions = {}) {
           Effect.gen(function* () {
             const entry = liveTurns.get(id);
             if (entry === undefined) return;
-            const { kernel, row, owner, fence } = borrowedAuthority(id);
             // The durable interrupt row first (cancellation is chain evidence),
             // then the turn's own boundary drain consumes it and aborts the wave.
-            const received: LedgerAction.Append = {
-              id: services.entropy.next(),
-              parentId: kernel.latestAction(id)?.id ?? null,
-              sessionId: id,
-              kind: "prompt",
-              intent: { encodingVersion: 1, value: { kind: "session", id } },
-              effect: { encodingVersion: 1, value: { inboxKind: "interrupt", content: "" } },
-              irreversible: true,
-              ts: services.clock.now(),
-            };
-            yield* kernel
-              .commit({
+            const attempt = () => Effect.suspend(() => {
+              const { kernel, row, owner, fence } = borrowedAuthority(id);
+              const received: LedgerAction.Append = {
+                id: services.entropy.next(),
+                parentId: kernel.latestAction(id)?.id ?? null,
+                sessionId: id,
+                kind: "prompt",
+                intent: { encodingVersion: 1, value: { kind: "session", id } },
+                effect: { encodingVersion: 1, value: { inboxKind: "interrupt", content: "" } },
+                irreversible: true,
+                ts: services.clock.now(),
+              };
+              return kernel.commit({
                 sessionId: id, owner, fence, now: services.clock.now(),
                 expectedRevision: row.revision, actions: [received],
                 state: row.state === "running" ? "interrupted" : row.state,
-              })
-              .pipe(Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.interrupt")));
+              });
+            });
+            yield* attempt().pipe(
+              Effect.catchIf(
+                (error) => error instanceof CommitRefused && error.reason === "revision",
+                () => attempt(),
+              ),
+              Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.interrupt")),
+            );
             yield* entry.boundary("before_llm");
           }),
         tools: {

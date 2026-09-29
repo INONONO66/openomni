@@ -1,17 +1,20 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CommitRefused,
   openCatalogStore,
   openSessionStore,
   SessionHandleStore,
+  StorageUnavailable,
 } from "@openomni/ledger";
 import { Effect } from "effect";
 import { SessionEntity } from "../../src/cluster/session-entity";
 import {
   readChain,
   runCluster,
+  sendPrompt,
   sessionFileFor,
 } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
@@ -140,5 +143,76 @@ test("a stale activation yields until a later fence can adopt the session", asyn
     expect(catalog.sessionIndex(sessionId)?.fence).toBe(3);
   } finally {
     catalog.close();
+  }
+});
+
+test("a failed detached turn re-drains an acknowledged prompt", async () => {
+  const sessionId = "failed-detached-turn";
+  const entered = Promise.withResolvers<void>();
+  const fail = Promise.withResolvers<void>();
+  const delivered = Promise.withResolvers<void>();
+  let calls = 0;
+  await runCluster(
+    {
+      ...options,
+      detachTurns: true,
+      runner: () =>
+        Effect.gen(function* () {
+          calls += 1;
+          if (calls === 1) {
+            entered.resolve();
+            yield* Effect.promise(() => fail.promise);
+            return yield* Effect.fail(new StorageUnavailable({ capability: "actions" }));
+          }
+          if (calls === 3) delivered.resolve();
+          return { kind: "result" as const, text: "delivered" };
+        }),
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, "failed-first", "first");
+      yield* Effect.promise(() => entered.promise);
+      yield* sendPrompt(sessionId, "failed-backlog", "second");
+      fail.resolve();
+      yield* Effect.promise(() => delivered.promise).pipe(Effect.timeout("10 seconds"));
+    }),
+  );
+  const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  expect(chain.some((row) => row.id === "failed-backlog:delivery")).toBe(true);
+  expect(calls).toBe(3);
+}, 60_000);
+
+test("a received prompt retries exactly one revision refusal", async () => {
+  const sessionId = "received-revision-race";
+  const create = SessionHandleStore.createSessionKernel;
+  let commits = 0;
+  const spy = spyOn(SessionHandleStore, "createSessionKernel").mockImplementation((store, catalog) => {
+    const kernel = create(store, catalog);
+    return new Proxy(kernel, {
+      get(target, property, receiver) {
+        if (property !== "commit") return Reflect.get(target, property, receiver);
+        const commit: typeof kernel.commit = (input) => {
+          if (input.actions[0]?.id !== "received-race") return target.commit(input);
+          commits += 1;
+          if (commits === 1) {
+            const row = target.row(input.sessionId);
+            return Effect.fail(new CommitRefused({
+              sessionId: input.sessionId, reason: "revision",
+              expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
+              fence: input.fence, currentFence: row.leaseFence,
+            }));
+          }
+          return target.commit(input);
+        };
+        return commit;
+      },
+    });
+  });
+  try {
+    const receipt = await runCluster(options, sendPrompt(sessionId, "received-race", "retry"));
+    expect(receipt.deduped).toBe(false);
+    expect(commits).toBe(2);
+    expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).filter((row) => row.id === "received-race")).toHaveLength(1);
+  } finally {
+    spy.mockRestore();
   }
 });

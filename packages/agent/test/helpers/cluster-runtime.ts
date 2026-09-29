@@ -43,6 +43,7 @@ import type {
   SessionEntityTimerContext,
   SessionEntityTurnInput,
 } from "../../src/session-contract";
+import type { SessionError } from "../../src/errors";
 import {
   deliveryActions,
   turnIntentAction,
@@ -58,6 +59,8 @@ export interface TestClusterOptions {
   readonly idleMs?: number;
   /** Turn execution port; defaults to a runner resolving one text result. */
   readonly runner?: TestTurnRunner;
+  /** Exercise the production post-boundary fork instead of running the body inline. */
+  readonly detachTurns?: boolean;
 }
 
 /** What the test turn port hands the pluggable runner for one admitted turn. */
@@ -72,11 +75,19 @@ interface TestTurnResult {
   readonly text: string;
 }
 
-export type TestTurnRunner = (input: TestTurnInput) => Effect.Effect<TestTurnResult>;
+export type TestTurnRunner = (input: TestTurnInput) => Effect.Effect<TestTurnResult, SessionError>;
 
 /** A runner that resolves immediately with one text result. */
 export function resolvedRunner(text: string): TestTurnRunner {
   return () => Effect.succeed({ kind: "result", text });
+}
+
+function runTurnBody(
+  input: SessionEntityTurnInput,
+  body: Effect.Effect<void, SessionError>,
+  detachTurns: boolean,
+): Effect.Effect<void, SessionError> {
+  return detachTurns ? input.detach(body) : body;
 }
 
 /**
@@ -113,7 +124,7 @@ const BunTestCrypto = Layer.succeed(
  * pluggable runner, then commits the terminal (state -> idle/interrupted).
  * Every commit rides the activation's catalog fence.
  */
-function makeTurnPort(runner: TestTurnRunner): SessionEntityPorts["runTurn"] {
+function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntityPorts["runTurn"] {
   return (input: SessionEntityTurnInput) =>
     Effect.gen(function* () {
       const { kernel, authority, decision, snapshot } = input;
@@ -156,12 +167,15 @@ function makeTurnPort(runner: TestTurnRunner): SessionEntityPorts["runTurn"] {
 
       if (decision.kind === "recover") {
         const open = decision.open;
-        const result = yield* runner({
-          turnId: open.turnId,
-          resumeCount: open.resumeCount,
-          items: [],
+        const body = Effect.gen(function* () {
+          const result = yield* runner({
+            turnId: open.turnId,
+            resumeCount: open.resumeCount,
+            items: [],
+          });
+          yield* seal(open.turnId, open.resultId, open.turnId, open.resumeCount, result);
         });
-        yield* seal(open.turnId, open.resultId, open.turnId, open.resumeCount, result);
+        yield* runTurnBody(input, body, detachTurns);
         return;
       }
 
@@ -190,8 +204,11 @@ function makeTurnPort(runner: TestTurnRunner): SessionEntityPorts["runTurn"] {
           ],
           "running",
         );
-        const result = yield* runner({ turnId, resumeCount, items: [item] });
-        yield* seal(turnId, resultId, resumeId, resumeCount, result);
+        const body = Effect.gen(function* () {
+          const result = yield* runner({ turnId, resumeCount, items: [item] });
+          yield* seal(turnId, resultId, resumeId, resumeCount, result);
+        });
+        yield* runTurnBody(input, body, detachTurns);
         return;
       }
 
@@ -217,8 +234,11 @@ function makeTurnPort(runner: TestTurnRunner): SessionEntityPorts["runTurn"] {
         ],
         "running",
       );
-      const result = yield* runner({ turnId, resumeCount: 0, items: [item] });
-      yield* seal(turnId, resultId, turnId, 0, result);
+      const body = Effect.gen(function* () {
+        const result = yield* runner({ turnId, resumeCount: 0, items: [item] });
+        yield* seal(turnId, resultId, turnId, 0, result);
+      });
+      yield* runTurnBody(input, body, detachTurns);
     }).pipe(Effect.orDie);
 }
 
@@ -258,7 +278,7 @@ function entityEnvLayer(options: TestClusterOptions) {
           openSession: (sessionId) =>
             openSessionStore(sessionFileFor(options.sessionsDir, sessionId)),
           ports: {
-            runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok")),
+            runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok"), options.detachTurns),
             timers: makeTimerPort(),
           },
         }),

@@ -7,6 +7,7 @@ import {
   type ExecutionApprovalRequest,
 } from "@openomni/agent";
 import { Effect } from "effect";
+import { CommitRefused } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src/index";
 import {
@@ -22,6 +23,71 @@ import { waveTool } from "./helpers/session-wave";
 import { nextFrame } from "./helpers/ws";
 
 const suite = residentSuite();
+
+test.each(["revision", "fence"] as const)(
+  "facade interrupt handles a %s commit refusal",
+  async (reason) => {
+    const entered = Promise.withResolvers<string>();
+    const release = Promise.withResolvers<void>();
+    const app = await suite.boot({
+      config: suite.config(`index-interrupt-${reason}-`, { wsToken: "interrupt-token" }),
+      llm: {
+        resolveModel: fakeProviderModel,
+        run: (input) => Effect.gen(function* () {
+          entered.resolve(input.trace.sessionId);
+          yield* Effect.promise(() => release.promise);
+          return { type: "stop" as const };
+        }),
+      },
+    });
+    const plane = await planeOf(app.runtime);
+    const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "interrupt-token"]);
+    socket.send(JSON.stringify({ type: "message", text: "interrupt this turn" }));
+    const sessionId = await bounded(entered.promise);
+    const handle = app.sessions.get(sessionId);
+    if (handle === undefined) throw new Error("live turn missing");
+    const original = plane.openKernel;
+    let commits = 0;
+    const spy = spyOn(plane, "openKernel").mockImplementation((id) => {
+      const kernel = original(id);
+      if (id !== sessionId) return kernel;
+      return new Proxy(kernel, {
+        get(target, property, receiver) {
+          if (property !== "commit") return Reflect.get(target, property, receiver);
+          const commit: typeof kernel.commit = (input) => {
+            const effect = input.actions[0]?.effect.value;
+            if (
+              effect === null || typeof effect !== "object" ||
+              Array.isArray(effect) || effect.inboxKind !== "interrupt"
+            ) return target.commit(input);
+            commits += 1;
+            if (commits > 1) return target.commit(input);
+            const row = target.row(id);
+            return Effect.fail(new CommitRefused({
+              sessionId: id, reason,
+              expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
+              fence: input.fence, currentFence: row.leaseFence,
+            }));
+          };
+          return commit;
+        },
+      });
+    });
+    try {
+      if (reason === "revision") {
+        await bounded(runEffect(handle.interrupt()));
+        expect(commits).toBe(2);
+      } else {
+        const failure = await bounded(runEffect(Effect.flip(handle.interrupt())));
+        expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "session.interrupt" });
+        expect(commits).toBe(1);
+      }
+    } finally {
+      spy.mockRestore();
+      release.resolve();
+    }
+  },
+);
 
 test("live approval readiness notifies the facade and arms its deadline", async () => {
   const modelEntered = Promise.withResolvers<string>();
