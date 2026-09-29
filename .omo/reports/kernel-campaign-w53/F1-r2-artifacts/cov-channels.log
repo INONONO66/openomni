@@ -1,0 +1,736 @@
+bun test v1.4.1 (4661e494f)
+
+test/delivery-receipts.test.ts:
+(pass) discord classifies forbidden at its real HTTP delivery boundary [2.24ms]
+(pass) discord classifies partial at its real HTTP delivery boundary [0.32ms]
+(pass) discord classifies network at its real HTTP delivery boundary [0.43ms]
+(pass) discord classifies server at its real HTTP delivery boundary [0.07ms]
+(pass) discord classifies malformed at its real HTTP delivery boundary [0.06ms]
+(pass) discord classifies missing_id at its real HTTP delivery boundary [0.04ms]
+(pass) discord classifies accepted at its real HTTP delivery boundary [0.05ms]
+(pass) slack classifies forbidden at its real HTTP delivery boundary [1.15ms]
+(pass) slack classifies partial at its real HTTP delivery boundary [0.17ms]
+(pass) slack classifies network at its real HTTP delivery boundary [0.06ms]
+(pass) slack classifies server at its real HTTP delivery boundary [0.05ms]
+(pass) slack classifies malformed at its real HTTP delivery boundary [0.05ms]
+(pass) slack classifies missing_id at its real HTTP delivery boundary [0.05ms]
+(pass) slack classifies accepted at its real HTTP delivery boundary [0.05ms]
+(pass) telegram classifies forbidden at its real HTTP delivery boundary [0.43ms]
+(pass) telegram classifies partial at its real HTTP delivery boundary [0.37ms]
+(pass) telegram classifies network at its real HTTP delivery boundary [0.04ms]
+(pass) telegram classifies server at its real HTTP delivery boundary [0.04ms]
+(pass) telegram classifies malformed at its real HTTP delivery boundary [0.04ms]
+(pass) telegram classifies missing_id at its real HTTP delivery boundary [0.05ms]
+(pass) telegram classifies accepted at its real HTTP delivery boundary [0.04ms]
+(pass) invalid Slack destination throws before any HTTP request or external receipt [0.10ms]
+
+test/telegram-poller.test.ts:
+(pass) TelegramPoller checkpoints > resumes at a failed handoff without skipping later updates [0.29ms]
+
+test/telegram-dedupe.test.ts:
+(pass) TelegramAdapter dedupe (D1) > delivers same message_id from two different chats (no cross-chat collision) [1.78ms]
+(pass) outbound adapter delivery dedupe capability > Telegram reuses one outbound result when an idempotency key is supplied [0.16ms]
+(pass) outbound adapter delivery dedupe capability > Discord reuses one outbound result when an idempotency key is supplied [0.10ms]
+(pass) outbound adapter delivery dedupe capability > Telegram delivers independently for distinct idempotency keys [0.15ms]
+(pass) outbound adapter delivery dedupe capability > Discord delivers independently for distinct idempotency keys [0.08ms]
+(pass) outbound adapter delivery dedupe capability > Discord returns the final chunk id as the reply correlation [0.07ms]
+(pass) outbound adapter delivery dedupe capability > only a proven not-sent delivery releases custody for retry [0.05ms]
+(pass) outbound adapter delivery dedupe capability > the inbound dedupe bound evicts oldest ids rather than dropping new work [0.13ms]
+(pass) outbound adapter delivery dedupe capability > a stale release cannot remove a newer generation after expiry [0.05ms]
+(pass) outbound adapter delivery dedupe capability > a stale release cannot remove a newer generation after capacity eviction [0.07ms]
+
+test/barrel.test.ts:
+(pass) channels barrel exposes only its runtime public surface [0.12ms]
+
+test/websocket-upgrade.test.ts:
+(pass) negotiates exactly one auth response header for auth, secret-token [10.29ms]
+(pass) negotiates exactly one auth response header for other, auth, secret-token [1.53ms]
+
+test/slack-client.test.ts:
+(pass) SlackClient > opens the Socket Mode URL with the app token — the only app-token call [0.56ms]
+(pass) SlackClient > throws a typed error when apps.connections.open returns no url [0.42ms]
+(pass) SlackClient > surfaces slack's in-body refusal (`ok:false`) as a typed error [0.26ms]
+(pass) SlackClient > surfaces an HTTP-level failure as a typed error [0.10ms]
+(pass) SlackClient > authTest returns the bot user id and team, on the bot token [0.31ms]
+(pass) SlackClient > throws a typed error when auth.test omits identity fields [0.28ms]
+(pass) SlackClient > send posts to the channel and returns the message ts [0.28ms]
+(pass) SlackClient > send returns undefined when slack omits the ts [0.15ms]
+(pass) SlackClient > sendInThread anchors the post to the thread root [0.39ms]
+(pass) SlackClient > sendInThread returns undefined when slack omits the ts [0.16ms]
+(pass) SlackClient > openDm opens a conversation and returns its channel id [0.34ms]
+(pass) SlackClient > throws a typed error when conversations.open returns no channel id [0.35ms]
+
+test/github-retry.test.ts:
+(pass) GitHubAdapter retryable delivery failures > returns 5xx when the message handler throws [4.50ms]
+
+test/telegram-markdown-send.test.ts:
+(pass) TelegramClient.sendMarkdown > sends with MarkdownV2 parse mode and returns the message id [0.28ms]
+(pass) TelegramClient.sendMarkdown > resends the same text as plain on an entity-parse rejection and warns [0.20ms]
+(pass) TelegramClient.sendMarkdown > rethrows non-parse failures without a plain resend [0.07ms]
+(pass) TelegramClient.sendMarkdown > send keeps the plain path free of parse mode [0.32ms]
+
+test/telegram-mentions.test.ts:
+(pass) Telegram addressees preserve explicit users and resolve the configured bot mention [0.24ms]
+
+test/delivery-chunks.test.ts:
+(pass) discord logical delivery preserves missing-first chunk evidence [0.90ms]
+(pass) discord logical delivery preserves missing-final chunk evidence [0.14ms]
+(pass) discord logical delivery preserves missing-middle chunk evidence [0.20ms]
+(pass) discord logical delivery preserves all-missing chunk evidence [0.11ms]
+(pass) discord logical delivery preserves accepted chunk evidence [0.08ms]
+(pass) discord logical delivery preserves first-forbidden chunk evidence [0.06ms]
+(pass) discord logical delivery preserves partial-forbidden chunk evidence [0.11ms]
+(pass) discord logical delivery preserves uncertain-forbidden chunk evidence [0.07ms]
+(pass) discord logical delivery preserves partial-network chunk evidence [0.07ms]
+(pass) discord logical delivery preserves partial-server chunk evidence [0.07ms]
+(pass) discord logical delivery preserves rate-limit-exhausted chunk evidence [0.94ms]
+(pass) discord logical delivery preserves partial-rate-limit chunk evidence [0.23ms]
+(pass) discord logical delivery preserves network-not-refusal chunk evidence [0.09ms]
+(pass) slack logical delivery preserves missing-first chunk evidence [0.15ms]
+(pass) slack logical delivery preserves missing-final chunk evidence [0.09ms]
+(pass) slack logical delivery preserves missing-middle chunk evidence [0.10ms]
+(pass) slack logical delivery preserves all-missing chunk evidence [0.07ms]
+(pass) slack logical delivery preserves accepted chunk evidence [0.09ms]
+(pass) slack logical delivery preserves first-forbidden chunk evidence [0.05ms]
+(pass) slack logical delivery preserves partial-forbidden chunk evidence [0.09ms]
+(pass) slack logical delivery preserves uncertain-forbidden chunk evidence [0.07ms]
+(pass) slack logical delivery preserves partial-network chunk evidence [0.06ms]
+(pass) slack logical delivery preserves partial-server chunk evidence [0.06ms]
+(pass) slack logical delivery preserves rate-limit-exhausted chunk evidence [0.11ms]
+(pass) slack logical delivery preserves partial-rate-limit chunk evidence [0.12ms]
+(pass) slack logical delivery preserves network-not-refusal chunk evidence [0.07ms]
+(pass) telegram logical delivery preserves missing-first chunk evidence [0.12ms]
+(pass) telegram logical delivery preserves missing-final chunk evidence [0.26ms]
+(pass) telegram logical delivery preserves missing-middle chunk evidence [0.22ms]
+(pass) telegram logical delivery preserves all-missing chunk evidence [0.07ms]
+(pass) telegram logical delivery preserves accepted chunk evidence [0.06ms]
+(pass) telegram logical delivery preserves first-forbidden chunk evidence [0.06ms]
+(pass) telegram logical delivery preserves partial-forbidden chunk evidence [0.08ms]
+(pass) telegram logical delivery preserves uncertain-forbidden chunk evidence [0.06ms]
+(pass) telegram logical delivery preserves partial-network chunk evidence [0.06ms]
+(pass) telegram logical delivery preserves partial-server chunk evidence [0.08ms]
+(pass) telegram logical delivery preserves rate-limit-exhausted chunk evidence [0.53ms]
+(pass) telegram logical delivery preserves partial-rate-limit chunk evidence [0.23ms]
+(pass) telegram logical delivery preserves network-not-refusal chunk evidence [0.07ms]
+
+test/provider-golden.test.ts:
+(pass) provider ingress facts > telegram preserves event identity, sender, reply chain, and render text [0.12ms]
+(pass) provider ingress facts > discord preserves DM identity and content [0.06ms]
+(pass) provider ingress facts > slack carries workspace, thread, and addressee facts [0.14ms]
+
+test/websocket.test.ts:
+(pass) WebSocketHandler authentication > accepts the canonical protocol and records authentication [0.21ms]
+(pass) WebSocketHandler authentication > rejects missing websocket auth before upgrade [0.09ms]
+(pass) WebSocketHandler authentication > does not bind an actor on tokenless bootstrap [0.06ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers "frame-7" before emitting facts [2.77ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers "" before emitting facts [0.28ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers 0 before emitting facts [0.17ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers null before emitting facts [0.13ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame { before entering the handler [0.45ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame [] before entering the handler [0.14ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame {} before entering the handler [0.26ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame {"type":"request_answer","text":"must not become a message"} before entering the handler [0.24ms]
+(pass) WebSocketHandler ingress and receipts > defers ingress until execution and accepts binary frames exactly once [0.25ms]
+(pass) WebSocketHandler ingress and receipts > emits the frozen two-key receipt first, then session_bound carrying the admission [0.29ms]
+(pass) WebSocketHandler ingress and receipts > sends only the typed failure tag and never a receipt or private cause on handler refusal [0.39ms]
+(pass) WebSocketHandler ingress and receipts > push returns an accepted receipt with a stable external message id [0.24ms]
+(pass) WebSocketHandler ingress and receipts > reconnects without losing the current delivery target [0.03ms]
+
+test/slack-surface.test.ts:
+(pass) SlackAdapter > refuses to start without a handler [0.19ms]
+(pass) SlackAdapter > delivers a channel event as ingress facts [4.17ms]
+(pass) SlackAdapter > releases failed ingress for platform redelivery [1.90ms]
+(pass) SlackAdapter > reports a delivery receipt and rejects an unscoped endpoint [1.27ms]
+
+test/discord-heartbeat.test.ts:
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.30ms]
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.03ms]
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.01ms]
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.01ms]
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.01ms]
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog
+(pass) heartbeat interval %s is bounded to %s and ACK controls the watchdog [0.01ms]
+
+test/format.test.ts:
+(pass) tablesToBullets > passes text without pipes through byte-for-byte [0.01ms]
+(pass) tablesToBullets > passes pipe text without a separator row through
+(pass) tablesToBullets > rewrites a GFM table into bold-heading bullet groups [0.24ms]
+(pass) tablesToBullets > fills missing trailing cells with empty values [0.02ms]
+(pass) tablesToBullets > renders a single-column table as bold rows without bullets [0.02ms]
+(pass) tablesToBullets > renders a header-only table as bold header names [0.02ms]
+(pass) tablesToBullets > leaves tables inside code fences untouched [0.01ms]
+(pass) tablesToBullets > preserves a terminal %s-column header without a separator [0.03ms]
+(pass) tablesToBullets > preserves a terminal %s-column header without a separator
+(pass) tablesToBullets > preserves a terminal %s-column header without a separator
+(pass) tablesToBullets > keeps surrounding prose and converts only the table lines [0.01ms]
+(pass) chunkMarkdown > refuses budgets too small for fence bookkeeping [0.04ms]
+(pass) chunkMarkdown > returns short text as a single chunk
+(pass) chunkMarkdown > splits at line boundaries and keeps every chunk within budget [0.08ms]
+(pass) chunkMarkdown > preserves fenced code across a %s-character chunk boundary [0.10ms]
+(pass) chunkMarkdown > preserves fenced code across a %s-character chunk boundary [0.03ms]
+(pass) chunkMarkdown > preserves fenced code across a %s-character chunk boundary [0.03ms]
+(pass) chunkMarkdown > preserves fenced code across a %s-character chunk boundary [0.03ms]
+(pass) chunkMarkdown > does not close a fence on a tilde line inside a backtick fence [0.05ms]
+(pass) chunkMarkdown > hard-splits a single line longer than the budget [0.03ms]
+(pass) chunkMarkdown > hard-splits an overlong line inside a fence and keeps fences balanced [0.03ms]
+(pass) renderTelegramMarkdown > converts headers to bold and strips redundant bold inside them [0.09ms]
+(pass) renderTelegramMarkdown > converts bold, italic, and strikethrough to MarkdownV2 entities [0.03ms]
+(pass) renderTelegramMarkdown > escapes every MarkdownV2 special in plain text
+(pass) renderTelegramMarkdown > escapes specials inside styled bodies [0.01ms]
+(pass) renderTelegramMarkdown > converts links, escaping the label and the url per spec [0.05ms]
+(pass) renderTelegramMarkdown > keeps bold styling around a link via nested placeholder restore [0.02ms]
+(pass) renderTelegramMarkdown > protects inline code bodies and escapes backslashes inside them [0.04ms]
+(pass) renderTelegramMarkdown > protects fenced code and escapes backticks and backslashes in the body [0.04ms]
+(pass) renderTelegramMarkdown > protects a single-line fenced span from styling and escape passes [0.01ms]
+(pass) renderTelegramMarkdown > rewrites tables before conversion so groups render as bold [0.02ms]
+(pass) renderTelegramMarkdown > strips the sentinel character so placeholder framing cannot be forged
+(pass) renderDiscordMarkdown > rewrites tables and passes every other construct through [0.02ms]
+
+test/websocket-query-auth.test.ts:
+(pass) query credentials cannot replace missing or invalid subprotocol auth () [2.09ms]
+(pass) query credentials cannot replace missing or invalid subprotocol auth (auth) [1.14ms]
+(pass) query credentials cannot replace missing or invalid subprotocol auth (auth, wrong-token) [1.22ms]
+
+test/provider-contract.test.ts:
+(pass) provider conformance > registry keys equal provider ids [0.03ms]
+(pass) provider conformance > every registry entry has a conformance case [0.03ms]
+(pass) provider conformance > telegram > runtime seams match declared capabilities [0.06ms]
+(pass) provider conformance > telegram > credentials schema admits the conformance credential and refuses junk [0.28ms]
+(pass) provider conformance > telegram > settings schema — no shipped knobs: empty accepted, any key refused [0.08ms]
+(pass) provider conformance > telegram > render policy uses the platform dialect and delivery limit [0.03ms]
+(pass) provider conformance > telegram > preconditions are a verbatim operator checklist [0.01ms]
+(pass) provider conformance > telegram > construction is pure — nothing published before start [0.02ms]
+(pass) provider conformance > discord > runtime seams match declared capabilities [0.04ms]
+(pass) provider conformance > discord > credentials schema admits the conformance credential and refuses junk [0.08ms]
+(pass) provider conformance > discord > settings schema — no shipped knobs: empty accepted, any key refused [0.02ms]
+(pass) provider conformance > discord > render policy uses the platform dialect and delivery limit
+(pass) provider conformance > discord > preconditions are a verbatim operator checklist
+(pass) provider conformance > discord > construction is pure — nothing published before start
+(pass) provider conformance > github > runtime seams match declared capabilities [0.04ms]
+(pass) provider conformance > github > credentials schema admits the conformance credential and refuses junk [0.18ms]
+(pass) provider conformance > github > settings schema — no shipped knobs: empty accepted, any key refused [0.01ms]
+(pass) provider conformance > github > render policy uses the platform dialect and delivery limit
+(pass) provider conformance > github > preconditions are a verbatim operator checklist
+(pass) provider conformance > github > construction is pure — nothing published before start
+(pass) provider conformance > slack > runtime seams match declared capabilities [0.03ms]
+(pass) provider conformance > slack > credentials schema admits the conformance credential and refuses junk [0.15ms]
+(pass) provider conformance > slack > settings schema — no shipped knobs: empty accepted, any key refused [0.01ms]
+(pass) provider conformance > slack > render policy uses the platform dialect and delivery limit
+(pass) provider conformance > slack > preconditions are a verbatim operator checklist
+(pass) provider conformance > slack > construction is pure — nothing published before start
+
+test/native-reconnect.test.ts:
+(pass) slack: callbacks on a retired real socket cannot dispatch or schedule reconnect [2.43ms]
+(pass) discord: callbacks on a retired real socket cannot dispatch or schedule reconnect [2.52ms]
+(pass) a retired reconnect sleeper cannot replace a new real socket [1.85ms]
+(pass) reconnect has a floor, exponential cap, and jitter [0.06ms]
+(pass) Telegram ignores a retired HTTP response even when cancellation arrives too late [2.08ms]
+(pass) Telegram reconnect uses jittered backoff and its retired sleeper cannot poll again [1.63ms]
+
+test/fetch-retry.test.ts:
+(pass) retry exhaustion preserves refused evidence after earlier refusals [0.52ms]
+(pass) retry exhaustion preserves network evidence after earlier refusals [0.05ms]
+(pass) retry exhaustion preserves server evidence after earlier refusals [0.04ms]
+(pass) retry exhaustion preserves accepted evidence after earlier refusals [0.02ms]
+
+test/github-authn.test.ts:
+(pass) GitHub valid HMAC produces 200 and allow [0.45ms]
+(pass) GitHub invalid HMAC produces 401 and deny [0.17ms]
+(pass) GitHub missing HMAC produces 401 and deny [0.05ms]
+
+test/slack-socket.test.ts:
+(pass) SlackSocket > resolves start on hello, acks every events_api envelope, then dispatches it [2.73ms]
+(pass) SlackSocket > disconnect frame closes the socket and a new connection comes up [2.37ms]
+(pass) SlackSocket > retries the socket-url fetch during reconnect until it succeeds [2.34ms]
+(pass) SlackSocket > drops a malformed frame with a warning and keeps the connection serving [1.74ms]
+(pass) SlackSocket > publishes a dispatch error when the event callback throws [1.80ms]
+(pass) SlackSocket > stop() closes cleanly and never reconnects [1.51ms]
+(pass) SlackSocket > rejects start when the server closes before hello, without reconnecting [1.46ms]
+
+test/github-client.test.ts:
+(pass) GitHubClient > reconciles encoded delivery markers across comment pages without prefix collisions [1.55ms]
+(pass) GitHubClient > records a warn instead of silently skipping a reply without a token (#606) [0.35ms]
+(pass) GitHubClient > exhausts rate-limit retries with one trace and a typed failure [4.07ms]
+
+test/delivery-reconciliation.test.ts:
+(pass) discord: lost ACK never repeats a physical send at a non-deduplicating destination [2.29ms]
+(pass) discord: proof of no connection permits retry, sent then remains terminal [1.52ms]
+(pass) slack: lost ACK never repeats a physical send at a non-deduplicating destination [1.33ms]
+(pass) slack: proof of no connection permits retry, sent then remains terminal [1.22ms]
+(pass) telegram: lost ACK never repeats a physical send at a non-deduplicating destination [1.21ms]
+(pass) telegram: proof of no connection permits retry, sent then remains terminal [1.10ms]
+(pass) uncertain reconciliation custody does not expire with an inbound dedupe window [0.15ms]
+(pass) proven sends age out of custody in send order while uncertain keys stay forever [0.15ms]
+(pass) GitHub uncertainty is terminal even when comment read-back would show no marker [1.64ms]
+(pass) discord: a failed preflight is not_sent and can retry without resending a message [0.32ms]
+(pass) slack: a failed preflight is not_sent and can retry without resending a message [0.11ms]
+(pass) github: a failed preflight is not_sent and can retry without resending a message [0.16ms]
+(pass) Telegram never retries a transport failure whose prose resembles a parse refusal [0.15ms]
+
+test/surface-lifecycle.test.ts:
+(pass) GitHubAdapter lifecycle > refuses to start without a message handler [0.09ms]
+(pass) GitHubAdapter lifecycle > starts after a handler is registered and publishes readiness [0.16ms]
+(pass) DiscordAdapter lifecycle > stop publishes shutdown and is safe before start [0.07ms]
+(pass) TelegramClient send result normalization > returns the message id when Telegram provides one [0.14ms]
+(pass) TelegramClient send result normalization > returns undefined when Telegram omits the message id [0.08ms]
+
+test/discord-facts-startup.test.ts:
+(pass) Discord READY binds the facts-only handler on a real gateway connection [3.15ms]
+
+test/socket-shell.test.ts:
+(pass) reconnect completion includes terminal failure reporting on the initiating trace [0.44ms]
+
+test/github-payload.test.ts:
+(pass) signed non-event payload { returns 400 without dispatch [0.41ms]
+(pass) signed non-event payload  returns 400 without dispatch [0.21ms]
+(pass) signed non-event payload not json returns 400 without dispatch [0.20ms]
+(pass) signed non-event payload null returns 200 without dispatch [0.26ms]
+(pass) signed non-event payload [] returns 200 without dispatch [0.16ms]
+(pass) signed non-event payload 42 returns 200 without dispatch [0.13ms]
+(pass) signed non-event payload "text" returns 200 without dispatch [0.18ms]
+
+test/discord-gateway.test.ts:
+(pass) discord gateway state machine (#520) > identifies with the real token and survives many heartbeat intervals when acked [507.03ms]
+(pass) discord gateway state machine (#520) > closes a zombied connection with a resume-safe non-1000 code on missed ack [203.18ms]
+(pass) discord gateway state machine (#520) > resumes with the real token, session id, and sequence after a server-requested reconnect [2.91ms]
+(pass) discord gateway state machine (#520) > re-enters the reconnect backoff when fetchGatewayUrl rejects, instead of dying (#540) [1.97ms]
+(pass) discord gateway state machine (#520) > does NOT schedule another attempt after stop() when fetchGatewayUrl keeps rejecting (#540) [1.47ms]
+(pass) discord gateway state machine (#520) > re-identifies (never resumes) after a non-resumable INVALID_SESSION [1.57ms]
+(pass) discord gateway state machine (#520) > does not leave a server-close waiter after a pre-ready start failure [1.23ms]
+
+test/channel-normalizer.test.ts:
+(pass) channel normalizers > maps Discord messages into ingress facts [0.07ms]
+(pass) channel normalizers > maps Telegram replies into ingress facts [0.09ms]
+
+test/github-facts.test.ts:
+(pass) GitHub authenticated webhook preserves platform facts: ambient event [1.10ms]
+(pass) GitHub authenticated webhook preserves platform facts: @owner review @bot [0.44ms]
+(pass) GitHub authenticated webhook preserves platform facts: @bot [0.24ms]
+(pass) GitHub actor delivery reports sent through its real client [0.25ms]
+(pass) GitHub actor delivery reports not_sent through its real client [0.03ms]
+(pass) GitHub actor delivery reports unknown through its real client [0.04ms]
+(pass) GitHub refuses malformed destinations and missing credentials before effects [0.11ms]
+
+test/owner-answer.test.ts:
+(pass) real authenticated WebSocket approve reaches only canonical request actions [60.24ms]
+(pass) real authenticated WebSocket refuse reaches only canonical request actions [15.97ms]
+(pass) same typed answer survives SQLite and gateway restart with a fresh owner clock [22.92ms]
+(pass) wrong frame credential is refused without recording or leaking it [15.59ms]
+(pass) session sender, malformed input, missing authenticator, and non-Owner evidence fail closed [12.67ms]
+(pass) canonical kernel rejects altered inputHash [11.66ms]
+(pass) canonical kernel rejects altered bindingDigest [13.77ms]
+(pass) canonical kernel rejects altered generation [13.01ms]
+(pass) canonical kernel rejects altered domainRevisions [13.49ms]
+(pass) current domain revision and captured owner receipt time remain kernel gates [24.13ms]
+(pass) Owner authentication finishing at the deadline cannot approve into the past [14.73ms]
+(pass) an authenticated Owner answer cannot bypass the absolute blacklist [12.31ms]
+(pass) plain text preserves stable driver event ID and cannot enter Owner authentication [15.27ms]
+(pass) typed frames reject missing input identity and untrusted principal fields [15.04ms]
+(pass) actual WebSocket upgrade rejects the wrong transport token [12.38ms]
+(pass) typed public schema rejects caller-supplied trust or receipt time [9.46ms]
+
+test/discord-audit.test.ts:
+(pass) Discord audit regressions > releases a rejected ingress attempt for platform redelivery [0.18ms]
+(pass) Discord audit regressions > throws a typed error when the gateway URL request fails [0.09ms]
+(pass) Discord audit regressions > throws a typed error when a Discord API request fails [0.08ms]
+(pass) Discord audit regressions > throws a typed error when start has no message handler [0.06ms]
+
+test/github-unsupported.test.ts:
+(pass) GitHub pull_request.opened is an explicit observed refusal, not an inbound message [0.43ms]
+(pass) GitHub pull_request_review.submitted is an explicit observed refusal, not an inbound message [0.16ms]
+(pass) GitHub issues.closed is an explicit observed refusal, not an inbound message [0.15ms]
+(pass) GitHub issue_comment.edited is an explicit observed refusal, not an inbound message [0.13ms]
+(pass) GitHub issues.opened is an explicit observed refusal, not an inbound message [0.31ms]
+(pass) GitHub ping.undefined is an explicit observed refusal, not an inbound message [0.12ms]
+(pass) GitHub non-object JSON is also observed rather than silently dropped [0.18ms]
+
+test/prg-coverage.test.ts:
+(pass) provider retry and receipt paths > retries Discord rate limits and returns the platform id [0.21ms]
+(pass) provider retry and receipt paths > retries Telegram rate limits and returns the platform id [0.07ms]
+(pass) provider retry and receipt paths > provider delivery routes return accepted receipts [0.28ms]
+(pass) Discord gateway surface > drops malformed message payloads with an operational warning [0.07ms]
+
+test/effect-errors.test.ts:
+(pass) every channel error export is a unique yieldable tagged failure in the closed union [0.11ms]
+(pass) foreign channel diagnostics have a string cause [0.07ms]
+(pass) foreign channel diagnostics have a string cause [0.03ms]
+(pass) foreign channel diagnostics have a string cause [0.02ms]
+(pass) foreign channel diagnostics have a string cause [0.02ms]
+(pass) foreign channel diagnostics have a string cause [0.02ms]
+
+test/channel-band-boundary.test.ts:
+(pass) channels band import boundary > keeps the real source tree on its package allowlist [49.78ms]
+(pass) channels band import boundary > rejects arbitrary external packages [0.06ms]
+(pass) channels band import boundary > rejects non-literal dynamic imports [0.08ms]
+(pass) channels band import boundary > rejects import-equals require from a driver [0.12ms]
+
+test/inbound-handoff.test.ts:
+(pass) failed handoff releases its claim; propagate=%s [0.37ms]
+(pass) failed handoff releases its claim; propagate=%s [0.07ms]
+(pass) an in-flight or completed handoff is not delivered again [0.11ms]
+
+test/router/request-matcher.test.ts:
+(pass) request matcher — ingress evidence > a matching bearer and direct userId cannot replace a resolved actor [1.26ms]
+(pass) request matcher — ingress evidence > rejects a claimed endpoint that contradicts the expected one [0.85ms]
+(pass) request matcher — ingress evidence > requires resolved-actor endpoint evidence for a pinned target actor [0.83ms]
+(pass) request matcher — ingress evidence > pins the delivery endpoint only on the delivery-target responder [1.75ms]
+(pass) request matcher — ingress evidence > fails closed when the delivery endpoint resolves to no actor [0.86ms]
+(pass) request matcher — ingress evidence > returns every credited expected responder of a request row and never decides [0.77ms]
+
+test/router/request-correlation.test.ts:
+(pass) injected action-derived requests retain terminals instead of falling into surface routing [0.14ms]
+(pass) direct reply then ordered chain beats broad thread matches [0.04ms]
+(pass) same-tier ambiguity is sorted and deduplicated without mutation [0.04ms]
+(pass) absent correlation evidence cannot claim a request: 
+(pass) absent correlation evidence cannot claim a request: {}
+(pass) threadId correlation remains available below reply precedence [0.02ms]
+(pass) tokenHash correlation remains available below reply precedence
+(pass) externalConversationId correlation remains available below reply precedence
+(pass) scoped endpoint fallback is used only without a conversation id [0.02ms]
+(pass) channel mismatch excludes a %s-responder request [0.01ms]
+(pass) channel mismatch excludes a %s-responder request
+(pass) delivery endpoint pin constrains a single responder but not other quorum responders [0.05ms]
+(pass) open requests stay visible for kernel late and duplicate decisions [0.02ms]
+(pass) resolved requests stay visible for kernel late and duplicate decisions
+(pass) expired requests stay visible for kernel late and duplicate decisions
+(pass) cancelled requests stay visible for kernel late and duplicate decisions
+(pass) refused requests stay visible for kernel late and duplicate decisions
+
+test/router/routing-precedence.test.ts:
+(pass) resolveRoute precedence > the rejection fixture refuses a fulfilled operation [0.09ms]
+(pass) resolveRoute precedence > blacklist before request correlation [0.48ms]
+(pass) resolveRoute precedence > request correlation before channel ceiling [0.34ms]
+(pass) resolveRoute precedence > channel ceiling before actor identity [0.54ms]
+(pass) resolveRoute precedence > actor identity before surface default [0.12ms]
+(pass) resolveRoute precedence > surface default after all earlier stages pass [0.12ms]
+(pass) resolveRoute precedence > preserves fail-closed ambiguity from the winning request-correlation level [0.10ms]
+(pass) resolveRoute precedence > does not produce an execution target for blocked or missing channel grants [0.08ms]
+(pass) resolveRoute precedence > refuses blacklist, block and ambiguity before the inbox body [0.28ms]
+(pass) resolveRoute precedence > classifies a blocked channel through the typed routing error [0.11ms]
+(pass) resolveRoute precedence > classifies an actor-identity block through the typed routing error [0.05ms]
+(pass) resolveRoute precedence > preserves evidence_only treatment while routing a broadcast channel [0.06ms]
+(pass) resolveRoute precedence > blocks an unknown actor when the channel supplies no default tier [0.05ms]
+
+test/router/blacklist.test.ts:
+(pass) blacklisted actor is refused before inbox commit [4.70ms]
+(pass) blacklisted channel is refused before inbox commit [1.96ms]
+
+test/router/kernel-routing-access.test.ts:
+(pass) GatewayRouter access routing > missing channel grant refuses before inbox commit [1.51ms]
+(pass) GatewayRouter access routing > unknown actor on a trusted channel without a default tier is refused [1.46ms]
+(pass) GatewayRouter access routing > default-tier admission never registers a new endpoint [3.89ms]
+(pass) GatewayRouter access routing > broadcast treatment %s remains evidence-only [2.09ms]
+(pass) GatewayRouter access routing > broadcast treatment full_access remains evidence-only [1.86ms]
+(pass) GatewayRouter access routing > blocked channel refuses before inbox commit [1.35ms]
+
+test/router/routing-resolution.test.ts:
+(pass) records the channel-scoped decision before inbox commit [2.71ms]
+(pass) blocked decisions are durable before returning the receipt [1.60ms]
+(pass) equivalent redelivery uses one route fact and the same inbox id [5.06ms]
+(pass) historical route facts upcast on redelivery without reconstructing another route [4.75ms]
+(pass) a changed decision refuses redelivery before committing or observing [2.13ms]
+(pass) mutated actorId authority refuses redelivery without leaking the authority [2.72ms]
+(pass) mutated trustTier authority refuses redelivery without leaking the authority [2.46ms]
+(pass) mutated inboundTreatment authority refuses redelivery without leaking the authority [2.93ms]
+(pass) a post-commit reply-grant failure retains commit progress for the executor receipt [10.95ms]
+(pass) reply endpoint changes reject an otherwise equivalent route replay [3.82ms]
+(pass) equivalent blocked redelivery returns a refusal without another route fact [2.02ms]
+(pass) decision facts record_failure refuses before inbox commit or projection [1.70ms]
+(pass) decision facts absent refuses before inbox commit or projection [1.34ms]
+(pass) decision facts wrong_type refuses before inbox commit or projection [1.35ms]
+(pass) decision facts corrupt_fact refuses before inbox commit or projection [1.46ms]
+(pass) unconfigured actor delivery refuses without inbox commit [1.48ms]
+(pass) forged observations cannot choose a session [2.08ms]
+
+test/router/ingest-sanitization.test.ts:
+(pass) facts-only ingest rejects reserved fields: {"activation":{"durableSessionId":"attacker-session"}} [4.01ms]
+(pass) facts-only ingest rejects reserved fields: {"meta":{"channelGrantId":"spoof-grant","channelGrantKind":"trusted_channel"}} [1.23ms]
+(pass) facts-only ingest rejects reserved fields: {"inboundTreatment":"evidence_only"} [1.06ms]
+(pass) facts-only ingest rejects reserved fields: {"senderTier":"owner"} [1.01ms]
+(pass) facts-only ingest rejects reserved fields: {"addressee":"bot"} [1.01ms]
+(pass) authenticated surface must match the facts surface [1.04ms]
+
+test/router/kernel-routing.test.ts:
+(pass) GatewayRouter kernel routing > mapped Owner DM commits once and returns a session receipt [2.51ms]
+(pass) GatewayRouter kernel routing > publishes one canonical route decision [2.06ms]
+(pass) GatewayRouter kernel routing > routing publication failure does not invoke inbox commit [1.48ms]
+(pass) GatewayRouter kernel routing > reads blacklist and channel facts once [1.94ms]
+(pass) GatewayRouter kernel routing > first admission claims the physical surface for the next event [2.81ms]
+
+test/router/request-state.test.ts:
+(pass) first resolves only at its distinct-responder threshold [3.89ms]
+(pass) quorum resolves only at its distinct-responder threshold [3.26ms]
+(pass) all resolves only at its distinct-responder threshold [3.63ms]
+(pass) same reply and same responder never advance the request twice [3.16ms]
+(pass) unknown responder is rejected without attaching [1.96ms]
+(pass) timeout keeps %s partial replies in original action history [2.33ms]
+(pass) timeout keeps %s partial replies in original action history [2.57ms]
+(pass) cancellation preserves partial replies and cannot be reversed by late input [3.87ms]
+(pass) answer at %s cannot cross the deadline [2.46ms]
+(pass) answer at %s cannot cross the deadline [2.17ms]
+(pass) resolved request cannot reopen for supplementary replies [2.63ms]
+(pass) physical accepted receipt preserves its value in request action history [2.83ms]
+(pass) physical rejected receipt preserves its value in request action history [2.83ms]
+(pass) physical unknown receipt preserves its value in request action history [2.62ms]
+(pass) request schema rejects incoherent bounds or terminal state 0 [1.03ms]
+(pass) request schema rejects incoherent bounds or terminal state 1 [0.81ms]
+(pass) request schema rejects incoherent bounds or terminal state 2 [0.75ms]
+(pass) request schema rejects incoherent bounds or terminal state 3 [0.71ms]
+(pass) request schema rejects incoherent bounds or terminal state 4 [0.70ms]
+
+test/router/blacklist-matching.test.ts:
+(pass) blacklist perimeter matching > matches active actor and endpoint facts [0.91ms]
+(pass) blacklist perimeter matching > matches wildcard pattern facts without crossing unmatched segments [0.87ms]
+(pass) blacklist perimeter matching > matches channel facts against the canonical channel and candidates [0.76ms]
+
+test/router/actor-resolver-sanitization.test.ts:
+(pass) internal actor projection sanitization > unregistered endpoints cannot supply canonical authority [1.18ms]
+(pass) internal actor projection sanitization > legacy actor id is not an authenticated external id [1.03ms]
+(pass) internal actor projection sanitization > same external id on another surface has no canonical identity [0.93ms]
+(pass) internal actor projection sanitization > missing registry cannot preserve claimed authority [0.81ms]
+
+test/router/message-ingest.test.ts:
+(pass) session ingest commits once through the injected inbox without a channel driver [2.13ms]
+(pass) pre transform of content is applied or refused before inbox commit [1.91ms]
+(pass) pre transform of target is applied or refused before inbox commit [1.54ms]
+(pass) interrupted preserves the handle without committing an inbox [1.46ms]
+(pass) outcome_unknown preserves the handle without committing an inbox [1.37ms]
+(pass) post-execution denial retains the delivery handle and committed effect [1.51ms]
+
+test/router/actor-resolver.test.ts:
+(pass) internal ingress actor projection > registered endpoint replaces claimed authority with canonical actor fields [1.61ms]
+(pass) internal ingress actor projection > workspace guild-a cannot resolve a guild endpoint [0.97ms]
+(pass) internal ingress actor projection > workspace %s cannot resolve a guild endpoint [0.88ms]
+(pass) internal ingress actor projection > workspace match resolves the canonical endpoint [0.85ms]
+
+test/router/raw-request-action.test.ts:
+(pass) raw request reply projects "report_result" as report_result [5.08ms]
+(pass) raw request reply projects "ask_clarification" as ask_clarification [3.17ms]
+(pass) raw request reply projects "invalid" as invalid [3.07ms]
+(pass) raw request reply projects null as invalid [3.04ms]
+(pass) raw request reply projects 0 as invalid [2.88ms]
+(pass) raw request reply projects {"unexpected":true} as invalid [3.02ms]
+
+test/router/channel-grant.test.ts:
+(pass) registered Owner still needs a channel grant [1.82ms]
+(pass) blocked channel overrides registered Owner authority [1.46ms]
+(pass) broadcast channel floors the Owner to evidence-only content [1.91ms]
+
+test/router/message-projections.test.ts:
+(pass) perimeter resolves bot addressee independently from sender standing [1.90ms]
+(pass) perimeter resolves owner addressee independently from sender standing [1.55ms]
+(pass) perimeter resolves ambient addressee independently from sender standing [1.35ms]
+(pass) session deadline is part of the inbox commit, never a second alarm write [2.80ms]
+
+test/router/authority-validation.test.ts:
+(pass) channel default tier is projected only for an actor without canonical standing [1.20ms]
+(pass) observer channel default is a routing fact, not authority to create top-level work [1.55ms]
+
+test/router/request-driver.test.ts:
+(pass) router opens the immutable original message action before real Telegram delivery [5.73ms]
+(pass) real Telegram delivery and normalized replies preserve all request ownership and pins [7.89ms]
+(pass) real Telegram delivery and normalized replies preserve quorum request ownership and pins [5.88ms]
+(pass) unknown receipt with external id never becomes accepted on retry [3.69ms]
+(pass) rejected receipt with external id never becomes accepted on retry [3.40ms]
+
+test/router/channel-grant-allowlist.test.ts:
+(pass) channel-grant sender allowlist > an allowlisted grant matches only the listed sender [0.97ms]
+(pass) channel-grant sender allowlist > a grant without an allowlist keeps the open posture [0.82ms]
+(pass) channel-grant sender allowlist > a stranger falls through to a less restricted grant on the same surface [0.88ms]
+
+test/router/provisional-mint.test.ts:
+(pass) provisional contact mint > opted-in trusted channel mints evidence, never authority [1.80ms]
+(pass) provisional contact mint > redelivery resolves the same contact without a second mint [1.07ms]
+(pass) provisional contact mint > no policy means no mint [0.85ms]
+(pass) provisional contact mint > window bound leaves additional senders without a canonical actor [0.94ms]
+(pass) provisional contact mint > blacklisted channel cannot mint [0.88ms]
+(pass) provisional contact mint > broadcast channel cannot mint [0.79ms]
+
+test/router/deliver-contract.test.ts:
+(pass) inbox receipt target equals the durable route decision [2.58ms]
+(pass) Request correlation selects the owner inbox instead of the default session [3.98ms]
+
+test/router/effective-tier.test.ts:
+(pass) effectiveTrustTier > keeps the actor trust tier over the channel default [0.01ms]
+(pass) effectiveTrustTier > uses the channel default when the actor has no trust tier
+(pass) effectiveTrustTier > refuses to resolve a tier when both are absent
+
+test/router/channel-grant-resolution.test.ts:
+(pass) channel grant authority > chooses the most specific matching grant [1.01ms]
+(pass) channel grant authority > equal-specificity conflicts choose the restrictive grant regardless of insertion order [2.31ms]
+(pass) channel grant authority > equal-treatment conflicts fall through tier, kind, then id tie-breaks [5.12ms]
+(pass) channel grant authority > normalizes an explicit treatment against the grant kind exactly once [0.71ms]
+(pass) channel grant authority > returns no resolution when no raw fact matches [0.72ms]
+
+test/router/native-request.test.ts:
+(pass) native reply reaches the canonical receiving inbox once and retains its original binding [4.92ms]
+(pass) native reply rejects an altered authenticated sender, content, or destination binding [2.19ms]
+(pass) a late native answer records the timeout winner without manufacturing new conversational input [2.29ms]
+
+test/router/integration.test.ts:
+(pass) GatewayRouter conversation isolation > same physical surface routes later messages to the same session [2.93ms]
+(pass) GatewayRouter conversation isolation > different workspaceId isolates the target session [2.17ms]
+(pass) GatewayRouter conversation isolation > different channelId isolates the target session [1.90ms]
+(pass) GatewayRouter conversation isolation > allowlist refuses strangers while admitting the authenticated listed sender [1.68ms]
+(pass) GatewayRouter conversation isolation > invalid facts fail schema validation before routing [0.99ms]
+
+test/router/kernel-routing-requests.test.ts:
+(pass) correlated reply resolves the request and commits only to its owner [4.19ms]
+(pass) first quorum reply commits input but leaves the request open [3.10ms]
+(pass) duplicate unresolved reply reuses its receipt without another durable input [4.29ms]
+(pass) late reply lazily expires the request while retaining partial progress [4.75ms]
+(pass) resolved reply redelivery preserves the original request revision [3.99ms]
+(pass) reply redelivery repairs a crash before the owner inbox commit without another input [4.10ms]
+(pass) reply redelivery repairs a crash after the owner inbox commit without another input [4.50ms]
+(pass) unexpected responder is refused with an authoritative route correction [2.37ms]
+(pass) same-precedence ambiguity is denied before inbox commit [2.87ms]
+(pass) route correction throw fails closed [2.40ms]
+(pass) route correction wrong_type fails closed [2.15ms]
+(pass) missing decision-fact storage refuses a route correction [2.21ms]
+(pass) recorded rejection correction is idempotent [4.19ms]
+(pass) disallowed request action ask_clarification never falls through to the surface [2.48ms]
+(pass) disallowed request action invalid never falls through to the surface [2.03ms]
+(pass) awaited send resolves quorum from distinct authenticated responder endpoints [4.46ms]
+(pass) blacklist takes precedence over reply correlation [2.16ms]
+
+test/router/middleware-integration.test.ts:
+(pass) canonical owner has top-level standing [0.04ms]
+(pass) canonical co_owner has top-level standing
+(pass) canonical manager has top-level standing
+(pass) canonical observer cannot acquire authority from privileged legacy role [0.03ms]
+(pass) canonical collaborator cannot acquire authority from privileged legacy role
+(pass) canonical assigned_worker cannot acquire authority from privileged legacy role
+(pass) untiered claims confer no top-level authority: {} [0.03ms]
+(pass) untiered claims confer no top-level authority: {"role":"user"}
+(pass) untiered claims confer no top-level authority: {"role":"worker"}
+(pass) untiered claims confer no top-level authority: {"role":"sub_persona"}
+(pass) untiered claims confer no top-level authority: {"role":"manager","trusted":false}
+(pass) untiered claims confer no top-level authority: {"role":"manager","trusted":true}
+(pass) collaborator evidence may reach a resident, never a worker [3.64ms]
+(pass) observer evidence may reach a resident, never a worker [0.03ms]
+(pass) missing actor fails closed [0.01ms]
+
+test/router/routing-pipeline.test.ts:
+(pass) resolveRoute > returns one surface route for a registered Owner DM [0.21ms]
+(pass) resolveRoute > routes trusted first contact to a new surface session candidate [0.14ms]
+
+test/router/messaging/reply-scope-guard.test.ts:
+(pass) resolveSenderTargetGrant — replyScope containment guard > a scope-carrying (rule-materialized) instance is NOT resolvable here [0.02ms]
+(pass) resolveSenderTargetGrant — replyScope containment guard > a standing grant without replyScope still resolves [0.01ms]
+
+test/router/messaging/send-fractional-at.test.ts:
+(pass) send admits a valid Gateway.SendInput whose instant is at=1 [2.74ms]
+(pass) send admits a valid Gateway.SendInput whose instant is at=1.5 [1.78ms]
+
+test/router/messaging/composition.test.ts:
+(pass) ungranted actor send is refused before transport [1.65ms]
+(pass) admitted first contact grants a scoped reply through the same ingest [5.06ms]
+(pass) a granted endpoint without a channel delivery owner fails closed [3.50ms]
+(pass) restart reads the durable live-grant projection, never route history [3.83ms]
+(pass) historical route facts cannot reconstruct authority on restart [1.28ms]
+(pass) endpoint rebinding invalidates a durable reply grant [2.14ms]
+(pass) actor accepted receipt survives the composed router [3.53ms]
+(pass) actor rejected receipt survives the composed router [3.65ms]
+(pass) actor unknown receipt survives the composed router [3.31ms]
+
+test/router/messaging/actor-receipt.test.ts:
+(pass) actor transport preserves the accepted receipt under a stable idempotency key [4.84ms]
+(pass) actor transport preserves the rejected receipt under a stable idempotency key [1.76ms]
+(pass) actor transport preserves the unknown receipt under a stable idempotency key [1.76ms]
+
+test/router/messaging/send.test.ts:
+(pass) preflight reads authority without debiting, opening requests, or delivering [2.65ms]
+(pass) receipt assertions reject wrong discriminants and denial codes [2.07ms]
+(pass) sender-target grant (policy plane) > send without any covering grant is denied ungranted and delivers nothing [1.80ms]
+(pass) sender-target grant (policy plane) > a grant bounds the operation: fire_and_forget-only grant denies awaited delivery [1.74ms]
+(pass) sender-target grant (policy plane) > an expired grant is not active — time is an input, denial is ungranted [1.61ms]
+(pass) explicit target resolution (fail closed) > grant evaluation precedes target resolution: an ungranted sender learns nothing from the registry [1.62ms]
+(pass) explicit target resolution (fail closed) > granted but unregistered target actor is denied target_missing [1.73ms]
+(pass) explicit target resolution (fail closed) > actor without any allocated endpoint is denied target_stale [1.72ms]
+(pass) explicit target resolution (fail closed) > pinned endpoint that no longer exists is denied target_stale [1.63ms]
+(pass) explicit target resolution (fail closed) > pinned endpoint re-bound to another actor is denied target_stale [1.61ms]
+(pass) explicit target resolution (fail closed) > multi-endpoint actor without a pin is denied target_ambiguous; a pin resolves it [1.83ms]
+(pass) fire-and-forget delivery > records one sent audit and creates NO Request [2.14ms]
+(pass) fire-and-forget delivery > fire_and_forget carrying a requestSpec is a schema violation, not a silent Request [1.68ms]
+(pass) awaited delivery > appends exactly one owner-correct Request with correlation, responders, policy, and deadline [3.30ms]
+(pass) awaited delivery > a second awaited send for the same message is denied request_duplicate with an audit event [3.11ms]
+(pass) awaited delivery > awaited without a requestSpec is a schema violation owned by the SendInput refinement [1.85ms]
+(pass) delivery receipt > a platform message id from the owner re-keys the request correlation to it [3.78ms]
+(pass) delivery receipt > no receipt from the owner leaves the internal-id correlation unchanged [3.32ms]
+(pass) delivery receipt > a fire-and-forget receipt records nothing — there is no request to re-key [2.00ms]
+(pass) durable send admission faults > fails closed on an unexpected type [1.89ms]
+(pass) durable send admission faults > fails closed on an corrupt payload [1.83ms]
+(pass) durable send admission faults > fails closed when a budget callback replaces the active adapter before admission [2.09ms]
+(pass) durable send admission faults > fails closed when decision facts disappear before admission lookup [1.84ms]
+(pass) durable send admission faults > fails closed when a concurrent record returns a corrupt winner [1.80ms]
+(pass) durable send admission faults > an incompatible concurrent admission still rejects an awaited send [1.89ms]
+(pass) durable send admission faults > uses the matching admission that won a concurrent record race [1.75ms]
+(pass) durable send admission faults > propagates an unexpected request-store failure before delivery [1.76ms]
+(pass) durable send admission faults > reusing a fire-and-forget message id with different bytes throws before delivery [1.86ms]
+(pass) durable send admission faults > a Request id owned by another message is denied before a second delivery [4.49ms]
+(pass) gateway send crash reconciliation transition table > after_debit resumes with one debit and one external effect [2.96ms]
+(pass) gateway send crash reconciliation transition table > after_wait resumes with one debit and one external effect [4.91ms]
+(pass) gateway send crash reconciliation transition table > after_effect resumes with one debit and one external effect [4.30ms]
+(pass) gateway send crash reconciliation transition table > after_receipt_cas resumes with one debit and one external effect [4.07ms]
+
+test/router/messaging/existing-agent-message-driver.test.ts:
+(pass) existing-agent-message-driver > restart-quorum resolves a persisted 2-of-3 request for the original owner without allocation [21.92ms]
+(pass) existing-agent-message-driver > duplicate-ambiguous observes both typed denials with unchanged quorum and no Worker [18.25ms]
+(pass) existing-agent-message-driver > scenario runs are deterministic — identical receipts on repeat invocation [35.26ms]
+(pass) existing-agent-message-driver > help exits successfully without running a scenario [0.08ms]
+(pass) existing-agent-message-driver > converts an unexpected %s into the driver error receipt [0.39ms]
+(pass) existing-agent-message-driver > converts an unexpected serialization fault into the driver error receipt [0.10ms]
+(pass) existing-agent-message-driver > invalid arguments exit nonzero with the typed invalid_arguments result [0.09ms]
+
+test/router/messaging/scoped-grant.test.ts:
+(pass) scope-aware grant evaluation (pure) > deliverySurfaceKey derives channel:externalId — the facts both sides share [0.02ms]
+(pass) scope-aware grant evaluation (pure) > a scoped instance resolves only for its own surface key [0.05ms]
+(pass) scope-aware grant evaluation (pure) > a scope-less standing grant is never resolved by the scoped arm [0.02ms]
+(pass) scope-aware grant evaluation (pure) > expiry and operation bounds hold on the scoped arm too [0.02ms]
+(pass) scope-aware grant evaluation (pure) > candidate check matches scope-carrying instances only, scope unchecked [0.02ms]
+(pass) send kernel over reply-scoped instances > a send into the initiating container is granted by the scoped instance [1.34ms]
+(pass) send kernel over reply-scoped instances > cross-surface use of the instance is refused ungranted — containment is pinned [0.99ms]
+(pass) send kernel over reply-scoped instances > with only a scoped candidate, an unresolvable target still yields its typed target denial [0.89ms]
+(pass) send kernel over reply-scoped instances > no candidate at all keeps the ungranted denial ahead of any registry lookup [0.89ms]
+
+test/router/messaging/social-budget.test.ts:
+(pass) evaluateSocialBudget (pure fold, #219) > fail-safe default: no Owner-declared budget suppresses cold proactive at zero [0.02ms]
+(pass) evaluateSocialBudget (pure fold, #219) > do-not-contact is a hard kill switch, ahead of any count [0.03ms]
+(pass) evaluateSocialBudget (pure fold, #219) > a lapsed allowance re-applies the fail-safe (suppressed, not admitted) [0.01ms]
+(pass) evaluateSocialBudget (pure fold, #219) > window cap: at the cap, the next send is budget_exhausted [0.02ms]
+(pass) evaluateSocialBudget (pure fold, #219) > cooldown: a send within cooldownMs of the last is cooldown_suppressed [0.02ms]
+(pass) evaluateSocialBudget (pure fold, #219) > class caps bound one class without capping the other [0.02ms]
+(pass) evaluateSocialBudget (pure fold, #219) > quiet hours blackout suppresses; same-day and overnight-wrap windows both hold [0.05ms]
+(pass) send kernel active-egress gate (#219 seam) > backward-compat: with NO budget source injected, a cold proactive send is unaffected [1.38ms]
+(pass) send kernel active-egress gate (#219 seam) > fail-safe default: gate wired but no budget entry → cold proactive denied budget_exhausted [1.02ms]
+(pass) send kernel active-egress gate (#219 seam) > an admitted send records a debit (record-before-act) [1.09ms]
+(pass) send kernel active-egress gate (#219 seam) > split-evasion: the cap survives across separate send calls (debit is durable) [1.14ms]
+(pass) send kernel active-egress gate (#219 seam) > cooldown-block: a second send within cooldownMs is cooldown_suppressed [1.25ms]
+(pass) send kernel active-egress gate (#219 seam) > DNC-deny: a do-not-contact target is denied dnc_denied with nothing delivered [0.94ms]
+(pass) send kernel active-egress gate (#219 seam) > reply-not-throttled: a reply-scoped grant bypasses the gate even under do-not-contact [0.96ms]
+
+test/router/messaging/reply-grant.test.ts:
+(pass) reply-grant instance materialization > malformed or ambiguous route facts never reconstruct endpoint authority [3.47ms]
+(pass) reply-grant instance materialization > an admitted first-contact actor on a covered surface materializes one bounded instance [1.28ms]
+(pass) reply-grant instance materialization > expiry is inclusive and removes authority without another admission [0.88ms]
+(pass) reply-grant instance materialization > repeat contact is NOT first contact: no second instance, no expiry refresh [0.97ms]
+(pass) reply-grant instance materialization > maxLiveInstances caps grant farming: at capacity no instance lands and the refusal is audited [0.89ms]
+(pass) reply-grant instance materialization > expired instances free capacity — the cap counts LIVE instances [0.85ms]
+(pass) reply-grant instance materialization > rule scope pins: wrong surface, wrong workspace, and the persona itself materialize nothing [0.81ms]
+(pass) reply-grant instance materialization > the same actor in a second container is a new first contact (per-container scope) [0.88ms]
+(pass) reply-grant instance materialization > construction never reads decision facts and every list reads the current projection [0.79ms]
+(pass) reply-grant instance materialization > projection failures propagate without a volatile grant or success observation [0.80ms]
+(pass) reply-grant instance materialization > an absent projection fails closed instead of creating memory authority [0.92ms]
+
+test/router/messaging/reply-grant-durable.test.ts:
+(pass) committed scoped reply authority survives closing storage and constructing a new router source [10.94ms]
+
+test/router/conformance/no-bypass.test.ts:
+(pass) unauthorized external sender cannot reach inbox commit [1.70ms]
+
+ 578 pass
+ 0 fail
+ 2116 expect() calls
+Ran 578 tests across 76 files. [2.57s]

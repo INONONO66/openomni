@@ -1,0 +1,43 @@
+bun test v1.4.1 (4661e494f)
+
+packages/channels/test/websocket.test.ts:
+180 |     });
+181 |     handler.ws.open(ws);
+182 | 
+183 |     await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "bind me" }));
+184 | 
+185 |     expect(sent.map((frame) => JSON.parse(frame))).toEqual([
+                                                         ^
+error: expect(received).toEqual(expected)
+
+  [
+    {
+-     "status": "accepted",
+-     "type": "receipt",
+-   },
+-   {
+      "result": {
+        "delivery": {
+          "kind": "session",
+        },
+        "handle": {
+          "messageId": "in-1",
+          "target": "durable-1",
+        },
+        "status": "executed",
+      },
+      "type": "session_bound",
+    },
+  ]
+
+- Expected  - 4
++ Received  + 0
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/packages/channels/test/websocket.test.ts:185:52)
+(fail) WebSocketHandler ingress and receipts > emits the frozen two-key receipt first, then session_bound carrying the admission [2.57ms]
+
+ 0 pass
+ 15 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [274.00ms]
