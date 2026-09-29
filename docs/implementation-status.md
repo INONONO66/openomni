@@ -66,6 +66,26 @@ under `.omo/reports/kernel-campaign-w53/`.
   moved to the additive `session_bound` frame (`SessionRead.Bound`), sent
   immediately after the receipt on the same socket; desktop binds from
   `session_bound` and ignores receipts.
+- **Review r2 findings 2–7 (F2-r2..F6-r2):** (2, 6) the mutation baseline
+  and candidate compilers share one root-file diagnostic ownership rule
+  (`projectRootPaths`/`ownsDiagnostic` in `script/quality-mutation-input.ts`)
+  and the generator's covered set is canonical root ownership, so
+  transitive-only inventoried files enter the fallback deterministically;
+  (3) the scheduled audit decodes the persisted version-1 summary footer
+  (`previousTotalsSchema`) and skips regression rows for dimensions the
+  footer never measured instead of comparing against invented zeros; (4)
+  overlapping desktop `readSession` calls keep every waiter — same cursor
+  coalesces onto the in-flight read, a differing cursor is rejected with the
+  typed `SessionReadSupersessionError`, and close/error/session-scoped error
+  frames reject all waiters;
+  (5) paged turn ancestry resolves through descending 256-action history
+  windows (zero point reads; a one-action page over a 300-link chain costs at
+  most three window reads, attribution exact); (7) `readSessionCursor`
+  captures every phase fact before the fence/revision check, so an
+  interleaved commit surfaces as a typed `session_gap` instead of an old page
+  with a newer turn's `phaseSince`; F6 sizes the durable-reconstruction
+  child-exit deadline (60 s, exact exit signal) for cold hosted runners. Each
+  fix carries a mutant-killed regression.
 
 Wave-B gate line (`B-verify.md`, run locally at branch HEAD): build 0,
 check-types 0, lint 0, lint:tools 0, lint:docs 0, check-topology 0,

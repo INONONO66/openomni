@@ -48,12 +48,13 @@ export function* programs(directory: string, contract: Contract, inventory: Inve
   const covered = new Set<string>();
   for (const path of contract.projects) {
     const program = projectProgram(root, path);
-    for (const source of program.getSourceFiles()) covered.add(source.fileName);
+    // Canonical root ownership: a native project covers only its root files, in
+    // contract order, so transitive-only inventory members enter the fallback.
+    for (const name of program.getRootFileNames()) covered.add(realpathSync(name));
     yield program;
   }
-  // Native coverage first; only canonical remaining members enter fallback.
   const remaining = inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
-    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(path));
+    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(realpathSync(path)));
   if (remaining.length) {
     const options = inventoryCompilerOptions(root);
     const host = ts.createCompilerHost(options);
@@ -66,10 +67,25 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic, cwd: string): string
     getCanonicalFileName: (name) => name, getCurrentDirectory: () => cwd, getNewLine: () => "\n",
   });
 }
+// The one diagnostic ownership rule shared by baseline and candidate checks:
+// a project owns file-less diagnostics and diagnostics attributed to its own
+// root files. Diagnostics on transitive members belong to the project (or the
+// inventory fallback) that lists them as roots.
+export function projectRootPaths(rootNames: Iterable<string>): Set<string> {
+  const roots = new Set<string>();
+  for (const name of rootNames) roots.add(realpathSync(name));
+  return roots;
+}
+export function ownsDiagnostic(roots: ReadonlySet<string>, diagnostic: ts.Diagnostic): boolean {
+  return diagnostic.file === undefined || roots.has(realpathSync(diagnostic.file.fileName));
+}
 export function diagnostics(items: Iterable<ts.Program>, cwd = process.cwd()): string[] {
   const errors: string[] = [];
-  for (const program of items)
-    for (const diagnostic of ts.getPreEmitDiagnostics(program)) errors.push(formatDiagnostic(diagnostic, cwd));
+  for (const program of items) {
+    const roots = projectRootPaths(program.getRootFileNames());
+    for (const diagnostic of ts.getPreEmitDiagnostics(program))
+      if (ownsDiagnostic(roots, diagnostic)) errors.push(formatDiagnostic(diagnostic, cwd));
+  }
   return errors;
 }
 function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {

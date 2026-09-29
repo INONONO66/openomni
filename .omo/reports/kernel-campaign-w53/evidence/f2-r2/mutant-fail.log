@@ -1,0 +1,45 @@
+bun test v1.4.1 (4661e494f)
+
+script/run-quality-mutations-compiler.test.ts:
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+447 |     const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
+448 |     const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+449 |     expect(unchanged.diagnostics).toEqual([]);
+450 |     expect(unchanged.valid).toBe(true);
+451 |     const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value: number = document.title;"));
+452 |     expect(invalid.valid).toBe(false);
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/script/run-quality-mutations-compiler.test.ts:452:27)
+(fail) baseline diagnostics use project roots instead of transitive importer options [1291.85ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+493 |     const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+494 |     expect(unchanged.valid).toBe(true);
+495 |     expect(unchanged.diagnostics).toEqual([]);
+496 |     expect(unchanged.projects.map((project) => project.project)).toEqual(["a/tsconfig.json", "inventory-fallback"]);
+497 |     const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", 'export const value: number = "shared";'));
+498 |     expect(invalid.valid).toBe(false);
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/script/run-quality-mutations-compiler.test.ts:498:27)
+(fail) transitive-only inventory files enter the fallback beside native roots and unreferenced files [548.55ms]
+
+ 0 pass
+ 13 filtered out
+ 2 fail
+ 12 expect() calls
+Ran 2 tests across 1 file. [1.91s]
+MUTANT_RUN=1

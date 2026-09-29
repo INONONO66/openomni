@@ -1,0 +1,49 @@
+{
+ "changed": [
+  [
+   "script/quality-mutation-compiler.ts",
+   [
+    6,
+    121,
+    127,
+    162,
+    167
+   ]
+  ],
+  [
+   "script/quality-mutation-input.ts",
+   [
+    51,
+    52,
+    53,
+    57,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    84,
+    85,
+    86,
+    87,
+    88
+   ]
+  ],
+  [
+   "script/run-quality-mutations.ts",
+   [
+    1,
+    781,
+    791
+   ]
+  ]
+ ],
+ "uncovered": []
+}

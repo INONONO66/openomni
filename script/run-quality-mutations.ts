@@ -1,4 +1,4 @@
-import { diagnostics, executionTreeHash, fail, formatDiagnostic, mutationFailure, MutationError, pathIn, programs, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
+import { diagnostics, executionTreeHash, fail, formatDiagnostic, mutationFailure, MutationError, ownsDiagnostic, pathIn, programs, projectRootPaths, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
 export { diagnostics, executionTreeHash, programs, sha256 } from "./quality-mutation-input";
 import { decodeJson as sharedJson } from "./quality-inventory";
 import { spawnSync } from "node:child_process";
@@ -778,7 +778,7 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
 	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
 	const sourceDiagnostics: string[] = [];
 	for (const program of programs(root, contract, inventory)) {
-		const projectRoots = new Set(program.getRootFileNames().map((path) => realpathSync(path)));
+		const projectRoots = projectRootPaths(program.getRootFileNames());
 		const files = [...pending.values()].filter((file) =>
 			["typescript", "javascript"].includes(file.language) &&
 			projectRoots.has(realpathSync(pathIn(root, file.path))),
@@ -788,9 +788,7 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
 		result.census.push(...part.census.filter((row) => row.language !== "python"));
 		result.errors.push(...part.errors);
 		sourceDiagnostics.push(...ts.getPreEmitDiagnostics(program)
-			.filter((diagnostic) =>
-				diagnostic.file === undefined ||
-				projectRoots.has(realpathSync(String(diagnostic.file.fileName))))
+			.filter((diagnostic) => ownsDiagnostic(projectRoots, diagnostic))
 			.map((diagnostic) => formatDiagnostic(diagnostic, root)));
 		for (const file of files) pending.delete(file.path);
 	}

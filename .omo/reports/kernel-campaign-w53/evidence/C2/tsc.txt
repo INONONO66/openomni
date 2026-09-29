@@ -1,0 +1,2 @@
+$ bunx tsc --noEmit (apps/desktop)
+exit=0

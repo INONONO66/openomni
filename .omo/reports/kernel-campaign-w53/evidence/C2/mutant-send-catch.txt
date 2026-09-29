@@ -1,0 +1,23 @@
+bun test v1.4.1 (4661e494f)
+
+test/gateway-transport.test.ts:
+803 |     );
+804 |     const socket = ControlledSocket.instances[0];
+805 |     if (socket === undefined) throw new Error("socket was not constructed");
+806 |     socket.open();
+807 | 
+808 |     expect((await rejection).message).toBe("session read send failed");
+                                            ^
+error: expect(received).toBe(expected)
+
+Expected: "session read send failed"
+Received: "gateway send failed"
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/desktop/test/gateway-transport.test.ts:808:39)
+(fail) session reads over the gateway socket > a send failure during a session read rejects instead of hanging [1.22ms]
+
+ 0 pass
+ 23 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [77.00ms]
