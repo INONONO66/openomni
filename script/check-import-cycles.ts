@@ -204,9 +204,8 @@ export function selfTest(): void {
 }
 
 /** Check the shipped tree; exits 1 with every cycle printed when one exists. */
-export async function main(): Promise<void> {
+export async function main(graph: Map<string, readonly string[]> = buildGraph()): Promise<void> {
   assertTopologyComplete();
-  const graph = buildGraph();
   const cycles = findCycles(graph);
   if (cycles.length > 0) {
     for (const cycle of cycles) {
@@ -220,7 +219,4 @@ export async function main(): Promise<void> {
   console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
 }
 
-if (import.meta.main) {
-  if (process.argv.includes("--self-test")) selfTest();
-  else await runScriptMain(main);
-}
+if (import.meta.main) { if (process.argv.includes("--self-test")) selfTest(); else await runScriptMain(main); }

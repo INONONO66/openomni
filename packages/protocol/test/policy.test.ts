@@ -277,6 +277,17 @@ describe("Policy schemas", () => {
       });
     });
 
+    it("parses run.replace_messages carrying a JSON-plain array", () => {
+      const result = Policy.PolicyEffect.parse({
+        type: "run.replace_messages",
+        messages: [{ role: "user", content: "rewritten" }, "plain"],
+      });
+      expect(result).toMatchObject({
+        type: "run.replace_messages",
+        messages: [{ role: "user", content: "rewritten" }, "plain"],
+      });
+    });
+
     it("parses model.override effect (#753) — connection-scoped model routing", () => {
       const result = Policy.PolicyEffect.parse({
         type: "model.override",

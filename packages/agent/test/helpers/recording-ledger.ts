@@ -1,4 +1,4 @@
-import { LedgerAction } from "@openomni/protocol";
+import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import { fixtureHashes } from "./compiled-policy";
 
@@ -13,10 +13,11 @@ export function recordingLedger(committed: LedgerAction.Append[] = []) {
         Effect.sync(() => {
           committed.push(action);
           ordinal += 1;
-          return {
-            action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
-            revision: ordinal,
-          };
+          // An Append plus the chain fields is a Node by construction; the type
+          // annotation keeps that guarantee without a per-commit runtime parse,
+          // which the paired benchmark gate measures inside the commit hot path.
+          const node: LedgerAction.Node = { ...action, ordinal, ...fixtureHashes(ordinal) };
+          return { action: node, revision: ordinal };
         }),
     },
   };

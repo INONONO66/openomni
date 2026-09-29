@@ -744,6 +744,13 @@ describe("cli dispatch", () => {
     expect(err[0]).toContain("usage: openomni daemon");
   });
 
+  test("a successful daemon verb prints the handler's message with exit 0", async () => {
+    const { deps: cli, out, err } = deps();
+    expect(await runCli(["daemon", "status"], cli)).toBe(0);
+    expect(out).toEqual(["not installed"]);
+    expect(err).toEqual([]);
+  });
+
   test("daemon verb errors become stderr + exit 1, not a crash", async () => {
     const { deps: cli, err } = deps();
     expect(await runCli(["daemon", "start"], cli)).toBe(1);

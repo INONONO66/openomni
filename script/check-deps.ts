@@ -1074,10 +1074,8 @@ function selfTest(): number {
   ];
 
   const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
-  if (failed.length > 0) {
-    for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
-    return 1;
-  }
+  for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
+  if (failed.length > 0) return 1;
   console.log(`OK: check-deps self-test — ${cases.length} layer discriminations hold`);
   return 0;
 }

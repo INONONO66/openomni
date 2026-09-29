@@ -323,12 +323,8 @@ function selfTest(): number {
     failures.push("a resolved baseline entry failed the check (shrink must be --update-only)");
   }
 
-  if (failures.length > 0) {
-    for (const failure of failures) {
-      process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
-    }
-    return 1;
-  }
+  for (const failure of failures) process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
+  if (failures.length > 0) return 1;
   process.stdout.write(
     "OK: dead-exports self-test — new issues discriminate, stale baseline entries pass at check time\n",
   );
@@ -339,10 +335,7 @@ function selfTest(): number {
 // main
 // ---------------------------------------------------------------------------
 
-export async function main(
-  loadReports: () => Promise<readonly [KnipReport, KnipReport]> = () =>
-    Promise.all([runKnip(), runKnip(".", true, true)]),
-): Promise<number> {
+export async function main(loadReports: () => Promise<readonly [KnipReport, KnipReport]> = () => Promise.all([runKnip(), runKnip(".", true, true)])): Promise<number> {
   const args = new Set(process.argv.slice(2));
 
   if (args.has("--self-test")) {
@@ -390,6 +383,4 @@ export async function main(
   return 1;
 }
 
-if (import.meta.main) await runScriptMain(async () => {
-  process.exitCode = await main();
-});
+if (import.meta.main) await runScriptMain(async () => { process.exitCode = await main(); });

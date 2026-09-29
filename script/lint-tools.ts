@@ -659,18 +659,10 @@ function definitionSelfTest(failures: string[]): void {
     [invalidDefinition],
     [{ definition: invalidDefinition, filePath: "apps/openomni/src/tools/.ts" }],
   ).map(({ message }) => message);
-  if (!invalidMessages.some((message) => message.startsWith("[tool-name]"))
-    || !invalidMessages.some((message) => message.startsWith("[tool-description]"))) {
-    failures.push("definition invariants missed empty name or description");
-  }
+  if (!invalidMessages.some((message) => message.startsWith("[tool-name]")) || !invalidMessages.some((message) => message.startsWith("[tool-description]"))) failures.push("definition invariants missed empty name or description");
   const unknownCategory: AnyToolDefinition = { ...exemplar };
   Object.defineProperty(unknownCategory, "category", { value: "unregistered" });
-  if (!definitionInvariantViolations(
-    [unknownCategory],
-    [{ definition: unknownCategory, filePath: `apps/openomni/src/tools/${unknownCategory.name.replaceAll("_", "-")}.ts` }],
-  ).some(({ message }) => message.startsWith("[tool-category]"))) {
-    failures.push("definition invariants missed an unregistered tool category");
-  }
+  if (!definitionInvariantViolations([unknownCategory], [{ definition: unknownCategory, filePath: `apps/openomni/src/tools/${unknownCategory.name.replaceAll("_", "-")}.ts` }]).some(({ message }) => message.startsWith("[tool-category]"))) failures.push("definition invariants missed an unregistered tool category");
 }
 
 export function selfTest(): void {
@@ -733,10 +725,7 @@ export function selfTest(): void {
     properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {} },
     $ref: "#/$defs/common~1fields",
   };
-  if (lintToolSurface({ name: "read", description: "ok", inputSchema: recursiveSchema })
-    .map((failure) => failure.rule).join() !== "tool-max-fields") {
-    failures.push("tool field budget walker lost escaped recursive reference fields");
-  }
+  if (lintToolSurface({ name: "read", description: "ok", inputSchema: recursiveSchema }).map((failure) => failure.rule).join() !== "tool-max-fields") failures.push("tool field budget walker lost escaped recursive reference fields");
 
   const snapshotViolations = diffSnapshots(
     { "Tool.Call": ["id", "input", "tool"] },
@@ -745,9 +734,7 @@ export function selfTest(): void {
   if (snapshotViolations.length !== 1 || !snapshotViolations[0]?.message.includes("input")) {
     failures.push("schema-snapshot did not flag a field rename");
   }
-  if (diffSnapshots({ "Tool.Call": ["id"] }, {}).map((violation) => violation.subject).join() !== "Tool.Call") {
-    failures.push("schema-snapshot did not flag a removed type");
-  }
+  if (diffSnapshots({ "Tool.Call": ["id"] }, {}).map((violation) => violation.subject).join() !== "Tool.Call") failures.push("schema-snapshot did not flag a removed type");
   if (diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }).length !== 0) {
     failures.push("schema-snapshot flagged an additive change");
   }
