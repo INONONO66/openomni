@@ -7,12 +7,13 @@ import {
   createRevealIntent,
   type RevealTimers,
   SIDEBAR_REVEAL,
-  Sidebar,
 } from "../src/sidebar";
 import { SectionHeader } from "../src/sidebar-nav";
 import { TabStrip, type WindowPlatform } from "../src/tab-strip";
 import { TreeRow } from "../src/tree-row";
+import { Sidebar } from "../src/sidebar";
 import { STRIP } from "./fixture";
+import { SidebarFrame } from "./sidebar-frame";
 
 /**
  * The frame's class-state contract, asserted on static markup: which classes
@@ -27,24 +28,9 @@ function frame(
   floating = false,
 ) {
   return renderToStaticMarkup(
-    <Sidebar
-      floating={floating}
-      onFloatingChange={() => undefined}
-      onToggle={() => undefined}
-      onWidthCommit={() => undefined}
-      open={open}
-      width={240}
-    >
-      <TabStrip
-        {...STRIP}
-        createLabel="New"
-        history={STRIP.history}
-        onCreate={() => undefined}
-        platform={platform}
-      />
-      <Sidebar.Gap />
+    <SidebarFrame floating={floating} open={open} platform={platform}>
       <Sidebar.Container>{children}</Sidebar.Container>
-    </Sidebar>,
+    </SidebarFrame>,
   );
 }
 

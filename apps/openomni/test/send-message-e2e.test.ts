@@ -9,8 +9,14 @@ import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster
 import { planeOf } from "./helpers/ledger";
 import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { receivedMessages } from "./helpers/received-messages";
 import { nextFrame } from "./helpers/ws";
 import { nextResidentTurn } from "./helpers/resident-turn";
+
+/** expect.objectContaining, typed as the value the partial shape matches. */
+function containing<T extends object>(shape: Partial<T> & object): T {
+  return expect.objectContaining(shape) as T;
+}
 
 const suite = residentSuite();
 
@@ -88,6 +94,7 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
   const plane = await planeOf(app.runtime);
   const ingest = spyOn(app.gateway, "ingest");
   suite.defer(() => ingest.mockRestore());
+  type IngestCall = Parameters<typeof app.gateway.ingest>;
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "token"]);
   const delivered = nextFrame(ws, (frame) => frame.type === "message");
   const terminal = nextResidentTurn(plane);
@@ -95,7 +102,7 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
   expect(await delivered).toMatchObject({ text: "EXPLICIT_SENTINEL" });
   expect((await terminal).text).toBe("LOCAL_ONLY_SENTINEL");
   expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([
-    [expect.objectContaining({ kind: "session" }), expect.objectContaining({
+    [containing<IngestCall[0]>({ kind: "session" }), containing<IngestCall[1]>({
       to: { kind: "actor", actorId: "owner" }, content: "EXPLICIT_SENTINEL",
     })],
   ]);
@@ -182,13 +189,7 @@ test("a child session terminal commits exactly one parent reply with the origina
   if (child?.parentId === null || child?.parentId === undefined)
     throw new Error("child parent missing");
   const parentTree = sessionTree(child.parentId, plane.sessionStore(child.parentId).actions);
-  const rows = parentTree
-    .filter((action) => action.kind === "prompt")
-    .map((action) => ({
-      id: action.id,
-      content: (action.effect.value as { content?: string }).content ?? "",
-      origin: { value: action.intent.value },
-    }))
+  const rows = receivedMessages(plane, child.parentId)
     .filter((row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success);
   expect(rows).toHaveLength(1);
   expect(rows[0]?.origin.value).toMatchObject({

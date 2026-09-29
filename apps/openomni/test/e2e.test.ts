@@ -7,7 +7,7 @@ import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import type { Sink } from "@openomni/llm";
 import { createSurfaceKeyStore } from "@openomni/ledger";
-import { ConfigurationError, loadConfig, type OpenOmniConfig } from "../src/config";
+import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
 import { assistantMessage } from "./helpers/assistant-message";
@@ -23,6 +23,11 @@ function statePath(value: string | undefined): string {
   return value;
 }
 const WS_TOKEN = "e2e-upgrade-token";
+/** expect.objectContaining, typed as the value the partial shape matches. */
+function containing<T extends object>(shape: Partial<T> & object): T {
+  return expect.objectContaining(shape) as T;
+}
+
 const suite = residentSuite();
 
 /** A valid raw upgrade that exposes 101 as well as refusal, without fetch's 101 restriction. */
@@ -159,7 +164,9 @@ describe("OpenOmni Resident WebSocket", () => {
     try {
       const refusal = await upgradeResponse(app.port, `/ws?token=${WS_TOKEN}`);
       const before = db
-        .query("SELECT COUNT(*) AS count FROM session_index WHERE id != 'gateway-ingress'")
+        .query<{ count: number }, []>(
+          "SELECT COUNT(*) AS count FROM session_index WHERE id != 'gateway-ingress'",
+        )
         .get();
       console.log(
         "967-U1 HTTP",
@@ -198,10 +205,14 @@ describe("OpenOmni Resident WebSocket", () => {
         { readonly: true },
       );
       const sessions = sessionDb
-        .query("SELECT id, role, state, revision FROM session WHERE id != 'gateway-ingress'")
+        .query<{ id: string; role: string; state: string; revision: number }, []>(
+          "SELECT id, role, state, revision FROM session WHERE id != 'gateway-ingress'",
+        )
         .all();
       const actions = sessionDb
-        .query("SELECT session_id, kind, ordinal FROM action ORDER BY ordinal")
+        .query<{ session_id: string; kind: string; ordinal: number }, []>(
+          "SELECT session_id, kind, ordinal FROM action ORDER BY ordinal",
+        )
         .all();
       expect(sessions).toHaveLength(1);
       expect(actions.length).toBeGreaterThan(0);
@@ -241,9 +252,8 @@ describe("OpenOmni Resident WebSocket", () => {
       operator: "strictEqual",
     });
     try {
-      throw failure;
-    } catch (error) {
-      expect(error).toBe(failure);
+      // The simulated assertion failure keeps its identity through the rejection path.
+      await expect(Promise.reject(failure)).rejects.toBe(failure);
     } finally {
       // Outside any rejection matcher: a cleanup rejection must fail this test.
       await suite.cleanup();
@@ -305,14 +315,15 @@ describe("OpenOmni Resident WebSocket", () => {
       GITHUB_WEBHOOK_SECRET: "github-webhook-secret",
     };
     await withConfigEnv(env, async () => {
-      try {
-        loadConfig();
-        throw new Error("legacy channel credential accepted");
-      } catch (error) {
-        if (!ConfigurationError.isInstance(error)) throw error;
-        expect(error.data.code).toBe("legacy_channel_credentials");
-        expect(error.data.replacement).toEqual({ tool: "provision", op: "channel_add" });
-      }
+      expect(loadConfig).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({
+            code: "legacy_channel_credentials",
+            replacement: { tool: "provision", op: "channel_add" },
+          }),
+        }),
+      );
     });
   });
 

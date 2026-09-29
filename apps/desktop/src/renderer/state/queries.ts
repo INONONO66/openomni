@@ -103,7 +103,7 @@ export function useGatewayEndpoint() {
   });
 }
 
-async function fetchGatewayEndpoint(): Promise<GatewayEndpoint | null> {
+export async function fetchGatewayEndpoint(): Promise<GatewayEndpoint | null> {
   const bridge = desktopBridge();
   if (bridge === undefined) return null;
   return gatewayEndpointSchema.parse(await bridge.gateway()) ?? null;

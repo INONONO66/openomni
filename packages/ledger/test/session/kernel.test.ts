@@ -113,6 +113,25 @@ function pinned(generation: SessionGeneration.Snapshot) {
   };
 }
 
+function pendingTurnAction(input: {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly intent: LedgerAction.Append["intent"];
+  readonly ts: number;
+}): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    kind: "turn",
+    intent: input.intent,
+    effect: { encodingVersion: 1, value: SessionTurn.Pending.parse({ phase: "pending" }) },
+    irreversible: true,
+    ts: input.ts,
+  };
+}
+
 function turnIntent(input: {
   readonly id: string;
   readonly sessionId: string;
@@ -120,11 +139,8 @@ function turnIntent(input: {
   readonly generation: SessionGeneration.Snapshot;
   readonly resultId: string;
 }): LedgerAction.Append {
-  return {
-    id: input.id,
-    parentId: input.parentId,
-    sessionId: input.sessionId,
-    kind: "turn",
+  return pendingTurnAction({
+    ...input,
     intent: {
       encodingVersion: 1,
       value: SessionTurn.HistoricalIntent.parse({
@@ -136,10 +152,8 @@ function turnIntent(input: {
         boundaryActionId: null,
       }),
     },
-    effect: { encodingVersion: 1, value: SessionTurn.Pending.parse({ phase: "pending" }) },
-    irreversible: true,
     ts: 10,
-  };
+  });
 }
 
 function turnResume(input: {
@@ -150,11 +164,8 @@ function turnResume(input: {
   readonly generation: SessionGeneration.Snapshot;
   readonly resultId: string;
 }): LedgerAction.Append {
-  return {
-    id: input.id,
-    parentId: input.parentId,
-    sessionId: input.sessionId,
-    kind: "turn",
+  return pendingTurnAction({
+    ...input,
     intent: {
       encodingVersion: 1,
       value: SessionTurn.HistoricalResume.parse({
@@ -166,10 +177,8 @@ function turnResume(input: {
         boundaryActionId: null,
       }),
     },
-    effect: { encodingVersion: 1, value: SessionTurn.Pending.parse({ phase: "pending" }) },
-    irreversible: true,
     ts: 11,
-  };
+  });
 }
 
 function checkpoint(input: {
@@ -307,6 +316,14 @@ function commitOne(
     ),
     (error) => error,
   );
+}
+
+function commitWithDroppedMiddle(authority: { sessionId: string; owner: string; fence: number }): void {
+  const { sessionId } = authority;
+  commitOne(authority, prompt(`${sessionId}-1`, sessionId, "one", `${sessionId}:configure`));
+  sink.dropNextCommit = true;
+  commitOne(authority, prompt(`${sessionId}-2`, sessionId, "two", `${sessionId}-1`));
+  commitOne(authority, prompt(`${sessionId}-3`, sessionId, "three", `${sessionId}-2`));
 }
 
 describe("session kernel folds", () => {
@@ -593,10 +610,7 @@ describe("session kernel folds", () => {
       if (seen.length === 2) resolveObservations();
     });
 
-    commitOne(authority, prompt("watch-1", "watched", "one", "watched:configure"));
-    sink.dropNextCommit = true;
-    commitOne(authority, prompt("watch-2", "watched", "two", "watch-1"));
-    commitOne(authority, prompt("watch-3", "watched", "three", "watch-2"));
+    commitWithDroppedMiddle(authority);
     await bounded(observations, "watch observations");
 
     expect(seen).toEqual([
@@ -622,10 +636,7 @@ describe("session kernel folds", () => {
       });
     });
 
-    commitOne(authority, prompt("resync-1", "resync", "one", "resync:configure"));
-    sink.dropNextCommit = true;
-    commitOne(authority, prompt("resync-2", "resync", "two", "resync-1"));
-    commitOne(authority, prompt("resync-3", "resync", "three", "resync-2"));
+    commitWithDroppedMiddle(authority);
     commitOne(authority, prompt("resync-4", "resync", "four", "resync-3"));
     const observed = await bounded(gap, "gap observation");
     expect(observed).toEqual({ kind: "gap", sessionId: "resync", from: 2, to: 4 });

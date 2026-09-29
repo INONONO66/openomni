@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { runLedgerSync } from "../helpers/effect";
 import { SessionGeneration } from "@openomni/protocol";
 import { useSqliteStores } from "../helpers/storage";
+import { z } from "zod";
 
 const stores = useSqliteStores("ledger-bundles");
 
@@ -71,7 +72,9 @@ test("historic configure bytes and hashes survive default empty bundle decoding 
   );
   const readStoredAction = () => {
     using raw = new Database(stores.sessionPath);
-    return raw.query("SELECT effect, action_hash FROM action").get();
+    return z
+      .object({ effect: z.string(), action_hash: z.string() })
+      .parse(raw.query("SELECT effect, action_hash FROM action").get());
   };
   const before = readStoredAction();
   const actions = sessionTree("historic", stores.session.actions);

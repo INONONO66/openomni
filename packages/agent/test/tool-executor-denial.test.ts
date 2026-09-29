@@ -23,11 +23,6 @@ function deniedDispatcher(executions: { count: number }) { return runAgentSync(c
 const call = { id: "call-1", tool: "echo", input: { value: "secret" } };
 const context = { sessionId: "session-1", turnId: "turn-1" };
 
-function failureOf(exit: Exit.Exit<unknown, unknown>): unknown {
-  if (Exit.isSuccess(exit)) throw new Error("expected failure");
-  return Cause.squash(exit.cause);
-}
-
 describe("compiled tool.pre denial", () => {
   it("normalizes noncanonical numeric tool results without rejecting", async () => isolated(Effect.gen(function* () {
     const result = yield* durableExecutor(allowAll).run({ kind: "tool", op: "number", intent: {}, effect: {} }, () => Effect.succeed(Number.POSITIVE_INFINITY));
@@ -42,8 +37,9 @@ describe("compiled tool.pre denial", () => {
   it("throws through the cell door without running the body", async () => isolated(Effect.gen(function* () {
     const executions = { count: 0 };
     const exit = yield* Effect.exit(deniedDispatcher(executions).executeCell(call, context));
-    const error = failureOf(exit);
-    expect(error).toMatchObject({ name: "ToolRefused", errorKind: "precondition_failed" });
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit))
+      expect(Cause.squash(exit.cause)).toMatchObject({ name: "ToolRefused", errorKind: "precondition_failed" });
     expect(executions.count).toBe(0);
   })));
 });
@@ -67,6 +63,8 @@ describe("cell-door executor propagation", () => {
   })));
   it("refuses a cell tool that has no enclosing executor at all", async () => isolated(Effect.gen(function* () {
     const exit = yield* Effect.exit(runAgentSync(createDispatcher().pipe(Effect.provide(catalogLayer([echoTool(() => undefined)])))).executeCell({ id: "call-orphan", tool: "echo", input: { value: "x" } }, context));
-    expect(failureOf(exit)).toMatchObject({ name: "ExecutorContextError", code: "executor_context_missing" });
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit))
+      expect(Cause.squash(exit.cause)).toMatchObject({ name: "ExecutorContextError", code: "executor_context_missing" });
   })));
 });

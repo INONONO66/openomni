@@ -421,6 +421,24 @@ test("a truncated remote read without progress is refused instead of looping", a
   });
 });
 
+test("a truncated remote listing is refused rather than presented as complete", async () => {
+  await fixture(true, async ({ machine, path, model }) => {
+    const list = spyOn(machine.fs, "list").mockReturnValue(Effect.succeed({
+      op: "list",
+      entries: [{ name: "first", kind: "file" }],
+      truncated: true,
+    }));
+    try {
+      const result = await model("ls", { path: path(".") });
+      expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+      expect(result.output).toContain("directory exceeds daemon entry limit");
+      expect(list).toHaveBeenCalledTimes(1);
+    } finally {
+      list.mockRestore();
+    }
+  });
+});
+
 test("daemon authority refuses writes and exec independently of the catalog", async () => {
   await fixture(
     true,

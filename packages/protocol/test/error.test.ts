@@ -60,7 +60,7 @@ describe("NamedError.create", () => {
     const cause = new Error("cause");
     const error = new MyError({ message: "boom", detail: 1 }, { cause });
 
-    expect((error as Error & { cause?: unknown }).cause).toBe(cause);
+    expect(Reflect.get(error, "cause")).toBe(cause);
   });
 
   test.each([null, false, 0, ""])("retains an explicitly provided falsy cause: %p", (cause) => {
@@ -149,19 +149,10 @@ describe("NamedError.Unknown", () => {
 // #500 C3: the APIError suite moved to packages/llm/test/error.test.ts with the
 // schema — llm is its home now.
 
-describe("NamedError.create with non-object data", () => {
-  test("falls back to the class name for string payloads", () => {
-    const StrError = NamedError.create("StrError", z.string());
-    const error = new StrError("just a string");
-
-    expect(error.message).toBe("StrError");
-    expect(error.data).toBe("just a string");
-    expect(error.toObject()).toEqual({
-      name: "StrError",
-      data: "just a string",
-    });
-  });
-});
+// NamedError payloads are object-shaped by contract: NamedError.create rejects
+// non-object schemas at the type level (Data extends z.ZodType<object, object>),
+// so the former string-payload fallback suite is unrepresentable. The
+// name-fallback behavior itself is covered by the NoMessageError test above.
 
 test("emits a concrete cross-package guard type", () => {
   const fixtureDirectory = join(import.meta.dir, ".named-error-declaration-fixture");

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { describe, expect, it } from "bun:test";
-import type { Sink } from "@openomni/llm";
+import type { Run, RunInput, Sink } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/effect-g3";
 import { collector } from "../../helpers/observation-collector";
@@ -40,6 +40,13 @@ function assistantWithReasons(reasons: readonly string[], inputTokens = 900): Me
     inputTokens,
     1,
   );
+}
+
+function steeringLlm(run: (input: RunInput, sink: Sink) => Effect.Effect<Run.Outcome>) {
+  return {
+    resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
+    run,
+  };
 }
 
 describe("window and steering yield", () => {
@@ -163,17 +170,14 @@ describe("window and steering yield", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       steeringPending: () => pending,
-      llm: {
-        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
-        run: (input, sink: Sink) => Effect.promise(async () => {
+      llm: steeringLlm((input, sink) => Effect.promise(async () => {
           calls += 1;
           if (calls !== 1) return completeModel(input, sink);
           input.shouldYield?.();
           pending = false;
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        }),
-      },
+        })),
     }));
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
@@ -184,15 +188,12 @@ describe("window and steering yield", () => {
     const result = await isolated(failure(runTestAgent(runInput([{ role: "user", content: "go" }]), {
       ...toolBudgetConfig(1),
       steeringPending: () => true,
-      llm: {
-        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
-        run: (input, sink: Sink) => Effect.promise(async () => {
+      llm: steeringLlm((input, sink) => Effect.promise(async () => {
           calls += 1;
           input.shouldYield?.();
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        }),
-      },
+        })),
     })));
     expect(calls).toBe(1);
     expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
@@ -240,13 +241,10 @@ describe("window and steering yield", () => {
       events: collector(),
       model: { provider: "provider", id: "model" },
       budget: { maxToolCalls: 1 },
-      llm: {
-        resolveModel: () => Effect.promise(async () => ({ id: "model", name: "model", providerID: "provider" })),
-        run: (_input, sink: Sink) => Effect.promise(async () => {
+      llm: steeringLlm((_input, sink) => Effect.promise(async () => {
           sink.onMessage(assistant("tool-calls"));
           return { type: "stop" };
-        }),
-      },
+        })),
     })));
     expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
   });

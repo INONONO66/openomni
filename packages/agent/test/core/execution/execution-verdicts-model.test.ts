@@ -40,7 +40,8 @@ const mandatory: PolicyRow.Row = {
 function harness(rows: readonly PolicyRow.Row[]) {
   const { committed: actions, ledger } = recordingLedger();
   const executor = testExecutor({
-    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+    policy: compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       rows: [mandatory, ...rows],
       mandatory: ["compaction"],
@@ -55,6 +56,39 @@ function harness(rows: readonly PolicyRow.Row[]) {
     })(),
   });
   return { actions, executor };
+}
+
+/** Body double returning the canonical success payload; call counts stay assertable. */
+function okBody() {
+  return mock(() =>
+    Effect.sync(() => {
+      return { ok: true };
+    }),
+  );
+}
+
+/** Reverter double recording invocations for post-deny dispositions. */
+function revertBody() {
+  return mock(() =>
+    Effect.sync(() => {
+      return undefined;
+    }),
+  );
+}
+
+/** The compiled snapshot holding only the mandatory compaction row. */
+function mandatoryOnlyPolicy() {
+  return compilePolicySnapshot({
+    registry: KERNEL_POLICY_REGISTRY,
+    generation: 1,
+    rows: [mandatory],
+    mandatory: ["compaction"],
+  });
+}
+
+/** Harness whose only extra row post-denies the given kind. */
+function postDenyHarness(kind: (typeof kinds)[number], name = `deny-${kind}-post`) {
+  return harness([row(name, kind, "post", { type: "deny", reason: "post blocked" })]);
 }
 
 type Executor = ReturnType<typeof harness>["executor"];
@@ -92,11 +126,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const { actions, executor } = harness([]);
-          const body = mock(() =>
-            Effect.sync(() => {
-              return { ok: true };
-            }),
-          );
+          const body = okBody();
 
           const refused = executor.run(
             { kind: "channel.send", op: "test", intent: {}, effect: {} },
@@ -120,11 +150,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
           const actions: LedgerAction.Append[] = [];
           let revision = 0;
           const executor = testExecutor({
-            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
-              generation: 1,
-              rows: [mandatory],
-              mandatory: ["compaction"],
-            }),
+            policy: mandatoryOnlyPolicy(),
             ledger: {
               commit(action: import("@openomni/protocol").LedgerAction.Append) {
                 return Effect.sync(() => {
@@ -186,11 +212,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             }),
           );
           const executor = testExecutor({
-            policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
-              generation: 1,
-              rows: [mandatory],
-              mandatory: ["compaction"],
-            }),
+            policy: mandatoryOnlyPolicy(),
             ledger: {
               commit(action: import("@openomni/protocol").LedgerAction.Append) {
                 return Effect.gen(function* () {
@@ -318,11 +340,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             const { actions, executor } = harness([
               row(`deny-${kind}-pre`, kind, "pre", { type: "deny", reason: "pre blocked" }),
             ]);
-            const body = mock(() =>
-              Effect.sync(() => {
-                return { ok: true };
-              }),
-            );
+            const body = okBody();
 
             const result = yield* runTestOperation(executor, kind, body);
 
@@ -343,11 +361,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
         Effect.scoped(
           Effect.gen(function* () {
             const { actions, executor } = harness([]);
-            const body = mock(() =>
-              Effect.sync(() => {
-                return { ok: true };
-              }),
-            );
+            const body = okBody();
 
             const result = yield* runTestOperation(executor, kind, body);
 
@@ -369,14 +383,8 @@ describe("the single L2 executor's four-kind verdict model", () => {
       isolated(
         Effect.scoped(
           Effect.gen(function* () {
-            const { actions, executor } = harness([
-              row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
-            ]);
-            const revert = mock(() =>
-              Effect.sync(() => {
-                return undefined;
-              }),
-            );
+            const { actions, executor } = postDenyHarness(kind);
+            const revert = revertBody();
 
             const result = yield* runTestSuccess(executor, kind, { revert });
 
@@ -401,9 +409,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
       isolated(
         Effect.scoped(
           Effect.gen(function* () {
-            const { actions, executor } = harness([
-              row(`deny-${kind}-post`, kind, "post", { type: "deny", reason: "post blocked" }),
-            ]);
+            const { actions, executor } = postDenyHarness(kind);
 
             const result = yield* runTestSuccess(executor, kind);
 
@@ -459,14 +465,8 @@ describe("the durable boundary child action commits only for executed outcomes",
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const { actions, executor } = harness([
-            row("deny-boundary-post", "tool", "post", { type: "deny", reason: "post blocked" }),
-          ]);
-          const revert = mock(() =>
-            Effect.sync(() => {
-              return undefined;
-            }),
-          );
+          const { actions, executor } = postDenyHarness("tool", "deny-boundary-post");
+          const revert = revertBody();
 
           const result = yield* runTestSuccess(executor, "tool", { boundary: true, revert });
 

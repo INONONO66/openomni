@@ -214,6 +214,61 @@ const parentRunner: SessionRunner = (input: import("../src/session-handle").Sess
   );
 
 /** Parent turn, commissioned child whose answer wakes the parent, then a monitor wake. */
+/** One single-action commit on "parent" under the monitor-writer fence at t=1000. */
+function monitorCommit(
+  kernel: ReturnType<typeof isolatedLedger>["kernel"],
+  fence: number,
+  action: Parameters<typeof kernel.commit>[0]["actions"][number],
+) {
+  return kernel.commit({
+    sessionId: "parent", owner: "monitor-writer", fence, now: 1_000,
+    expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
+    actions: [action],
+  });
+}
+
+/** A 300-link message chain rooted at `rootParent`, committed in one batch. */
+function commitLongChain(
+  kernel: ReturnType<typeof isolatedLedger>["kernel"],
+  input: { readonly sessionId: string; readonly owner: string; readonly fence: number; readonly rootParent: string },
+) {
+  return kernel.commit({
+    sessionId: input.sessionId, owner: input.owner, fence: input.fence, now: 1_000,
+    expectedRevision: kernel.row(input.sessionId).revision, state: kernel.row(input.sessionId).state,
+    actions: Array.from({ length: 300 }, (_, index) => ({
+      id: `link-${index}`, sessionId: input.sessionId,
+      parentId: index === 0 ? input.rootParent : `link-${index - 1}`,
+      kind: "message" as const,
+      intent: { encodingVersion: 1 as const, value: {} },
+      effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+      ts: 1_000, irreversible: true,
+    })),
+  });
+}
+
+/** A one-action tail page must attribute exactly and stay within bounded window reads. */
+function expectBoundedTailPage(
+  kernel: ReturnType<typeof isolatedLedger>["kernel"],
+  sessionId: string,
+  turnId: string | null,
+): void {
+  const head = kernel.row(sessionId).revision;
+  const pointReads = spyOn(kernel, "actionById");
+  const pageReads = spyOn(kernel, "historyPage");
+  try {
+    const page = inspectSession(kernel, sessionId, { depth: 0, cursor: head - 1, limit: 1 });
+    expect(page.transitions).toHaveLength(1);
+    expect(page.transitions[0]?.actionId).toBe("link-299");
+    expect(page.transitions[0]?.turnId).toBe(turnId);
+    expect(pointReads).toHaveBeenCalledTimes(0);
+    // The page itself plus at most ceil(301/256) = 2 ancestry windows.
+    expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
+  } finally {
+    pointReads.mockRestore();
+    pageReads.mockRestore();
+  }
+}
+
 function lifecycle() {
   return Effect.gen(function* () {
     nextId = 0;
@@ -253,27 +308,19 @@ function lifecycle() {
     const monitorWriter = yield* kernel.adoptFence({
       sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").leaseFence + 1,
     });
-    yield* kernel.commit({
-      sessionId: "parent", owner: "monitor-writer", fence: monitorWriter.fence, now: 1_000,
-      expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
-      actions: [{
-        id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
-        intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: 1_000, irreversible: true,
-      }],
+    yield* monitorCommit(kernel, monitorWriter.fence, {
+      id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
+      intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
+      effect: { encodingVersion: 1, value: { phase: "pending" } },
+      ts: 1_000, irreversible: true,
     });
     const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
     const woke = committed("parent", "turn");
-    yield* kernel.commit({
-      sessionId: "parent", owner: "monitor-writer", fence: monitorWriter.fence, now: 1_000,
-      expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
-      actions: [{
-        id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm.fired",
-        intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
-        effect: { encodingVersion: 1, value: { terminal: "executed" } },
-        ts: 1_000, irreversible: true,
-      }],
+    yield* monitorCommit(kernel, monitorWriter.fence, {
+      id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm.fired",
+      intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
+      effect: { encodingVersion: 1, value: { terminal: "executed" } },
+      ts: 1_000, irreversible: true,
     });
     yield* commitReceivedMessage(kernel, {
       id: "monitor-woke", sessionId: "parent", kind: "prompt", content: "monitor woke",
@@ -723,33 +770,11 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
           sessionId: "long-chain", owner: "chain-writer",
           fence: kernel.row("long-chain").leaseFence + 1,
         });
-        yield* kernel.commit({
-          sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence, now: 1_000,
-          expectedRevision: kernel.row("long-chain").revision, state: kernel.row("long-chain").state,
-          actions: Array.from({ length: 300 }, (_, index) => ({
-            id: `link-${index}`, sessionId: "long-chain",
-            parentId: index === 0 ? "long-chain:configure" : `link-${index - 1}`,
-            kind: "message" as const,
-            intent: { encodingVersion: 1 as const, value: {} },
-            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
-            ts: 1_000, irreversible: true,
-          })),
+        yield* commitLongChain(kernel, {
+          sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence,
+          rootParent: "long-chain:configure",
         });
-        const head = kernel.row("long-chain").revision;
-        const pointReads = spyOn(kernel, "actionById");
-        const pageReads = spyOn(kernel, "historyPage");
-        try {
-          const page = inspectSession(kernel, "long-chain", { depth: 0, cursor: head - 1, limit: 1 });
-          expect(page.transitions).toHaveLength(1);
-          expect(page.transitions[0]?.actionId).toBe("link-299");
-          expect(page.transitions[0]?.turnId).toBeNull();
-          expect(pointReads).toHaveBeenCalledTimes(0);
-          // The page itself plus at most ceil(301/256) = 2 ancestry windows.
-          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
-        } finally {
-          pointReads.mockRestore();
-          pageReads.mockRestore();
-        }
+        expectBoundedTailPage(kernel, "long-chain", null);
       }),
     ));
 
@@ -763,33 +788,11 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         const fixture = yield* fencedTurnFixture(kernel, {
           id: "long-turn-chain", clock: () => 1_000, turnId: "turn-1",
         });
-        yield* kernel.commit({
-          sessionId: "long-turn-chain", owner: fixture.owner, fence: fixture.fence, now: 1_000,
-          expectedRevision: kernel.row("long-turn-chain").revision,
-          state: kernel.row("long-turn-chain").state,
-          actions: Array.from({ length: 300 }, (_, index) => ({
-            id: `link-${index}`, sessionId: "long-turn-chain",
-            parentId: index === 0 ? "turn-1" : `link-${index - 1}`,
-            kind: "message" as const,
-            intent: { encodingVersion: 1 as const, value: {} },
-            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
-            ts: 1_000, irreversible: true,
-          })),
+        yield* commitLongChain(kernel, {
+          sessionId: "long-turn-chain", owner: fixture.owner, fence: fixture.fence,
+          rootParent: "turn-1",
         });
-        const head = kernel.row("long-turn-chain").revision;
-        const pointReads = spyOn(kernel, "actionById");
-        const pageReads = spyOn(kernel, "historyPage");
-        try {
-          const page = inspectSession(kernel, "long-turn-chain", { depth: 0, cursor: head - 1, limit: 1 });
-          expect(page.transitions).toHaveLength(1);
-          expect(page.transitions[0]?.actionId).toBe("link-299");
-          expect(page.transitions[0]?.turnId).toBe("turn-1");
-          expect(pointReads).toHaveBeenCalledTimes(0);
-          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
-        } finally {
-          pointReads.mockRestore();
-          pageReads.mockRestore();
-        }
+        expectBoundedTailPage(kernel, "long-turn-chain", "turn-1");
       }),
     ));
 });

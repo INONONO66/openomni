@@ -58,17 +58,15 @@ function routeRequestState(resolution: RequestResolution): RouteState["request"]
         kind: "ambiguous",
         candidateInteractionIds: resolution.candidates.map((candidate) => candidate.key),
       };
-    case "match": {
-      const record = resolution.candidate.request;
+    case "match":
       return {
         kind: "match",
         backing: "request",
         key: resolution.candidate.key,
-        recordId: record.requestId,
-        sessionId: record.sessionId,
-        allowed: record.allowedActions,
+        recordId: resolution.candidate.request.requestId,
+        sessionId: resolution.candidate.request.sessionId,
+        allowed: resolution.candidate.request.allowedActions,
       };
-    }
   }
 }
 

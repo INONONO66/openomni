@@ -49,14 +49,14 @@ async function provisionSession(
     const kernel = SessionHandleStore.createSessionKernel(store, catalog);
     await runEffect(
       kernel.materialize({
-        id: sessionId,
-        parentId: null,
-        role: "resident",
-        tools: [],
-        system: { preset: "", blocks: [] },
-        policyGeneration: 1,
         actionId: `${sessionId}:materialize`,
         at: Date.now(),
+        id: sessionId,
+        parentId: null,
+        policyGeneration: 1,
+        role: "resident",
+        system: { preset: "", blocks: [] },
+        tools: [],
       }),
     );
     catalog.indexSession({

@@ -1,10 +1,11 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { SessionIndexInsert, SessionIndexRow } from "../../src/storage/catalog-store";
-import { bootstrapStoreDatabase, CATALOG_SCHEMA, openCatalogStore } from "../../src/storage/index";
+import { CATALOG_SCHEMA, openCatalogStore } from "../../src/storage/index";
+import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
 
@@ -50,19 +51,7 @@ test("openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog ta
 // connection-local, so seeing 5000 after the NOTADB throw proves it ran before
 // any file-touching schema statement.
 test("F9: catalog bootstrap applies busy_timeout before any schema statement", () => {
-  const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
-  const path = join(directory, "notadb.sqlite");
-  writeFileSync(path, "this file is deliberately not a sqlite database");
-  const db = new Database(path);
-  try {
-    expect(() => bootstrapStoreDatabase(db, CATALOG_SCHEMA)).toThrow(
-      expect.objectContaining({ code: "SQLITE_NOTADB", errno: 26 }),
-    );
-    expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
-  } finally {
-    db.close();
-    rmSync(directory, { recursive: true });
-  }
+  expectBusyBeforeSchema(CATALOG_SCHEMA);
 });
 
 test("session index registers at fence 0, rotates monotonically and refuses unknown sessions", () => {
@@ -98,6 +87,21 @@ test("session index registers at fence 0, rotates monotonically and refuses unkn
   } finally {
     store.close();
     rmSync(directory, { recursive: true });
+  }
+});
+
+test("child session pages preserve id order and enforce a bounded page size", () => {
+  const store = openCatalogStore(":memory:");
+  try {
+    for (const [id, parentId] of [["b", "root"], ["a", "root"], ["c", "root"], ["else", "other"]] as const) {
+      store.indexSession({ id, parentId, role: "worker", createdAt: 1 });
+    }
+    expect(store.childSessionsPage("root", "", 2).map((row) => row.id)).toEqual(["a", "b"]);
+    expect(store.childSessionsPage("root", "b", 2).map((row) => row.id)).toEqual(["c"]);
+    expect(() => store.childSessionsPage("root", "", 0)).toThrow();
+    expect(() => store.childSessionsPage("root", "", 257)).toThrow();
+  } finally {
+    store.close();
   }
 });
 
@@ -151,18 +155,9 @@ test("catalog sub-adapters operate on the fresh catalog tables", () => {
     expect(store.surfaceKey.claim("surface:main", "s1")).toBe("s1");
     expect(store.surfaceKey.lookup("surface:main")).toBe("s1");
     expect(store.surfaceKey.listBySession("s1")).toEqual(["surface:main"]);
-    const policy = {
-      name: "allow-turn",
-      kind: "turn",
-      phase: "pre",
-      match: { encodingVersion: 1, value: {} },
-      verdict: { encodingVersion: 1, value: { kind: "allow" } },
-      priority: 0,
-      generation: 1,
-    } as const;
-    expect(store.policies.append(policy)).toBe(true);
-    expect(store.policies.append(policy)).toBe(false);
-    expect(store.policies.rows()).toEqual([policy]);
+    expect(store.policies.append(policyFixture)).toBe(true);
+    expect(store.policies.append(policyFixture)).toBe(false);
+    expect(store.policies.rows()).toEqual([policyFixture]);
   } finally {
     store.close();
     rmSync(directory, { recursive: true });

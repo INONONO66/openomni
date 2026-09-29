@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { Tool } from "../src/tool/index.js";
 import type { PlainValue } from "../src/json.js";
 
-function expectInvalidState(state: unknown): void {
+function expectInvalidState<State>(state: State): void {
   expect(() => Tool.State.parse(state)).toThrow(ZodError);
 }
 

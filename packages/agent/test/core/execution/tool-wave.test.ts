@@ -53,6 +53,22 @@ function toolResults(actions: readonly LedgerAction.Append[]) {
   });
 }
 
+function fallbackTurn(
+  config: ObservedChatAgentConfig,
+  onToolResult: (result: { toolCallId: string }) => void = () => undefined,
+) {
+  const input = runInput([]);
+  const state = createRunState(input);
+  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
+    onMessage: () => undefined, onToolCall: () => undefined, onToolResult,
+  });
+  if (built.type !== "ready") throw new Error("turn unavailable");
+  const turn = built.turn;
+  const message = pendingAssistant(["A", "B"]);
+  turn.turnAssistant.message = message;
+  return { state, turn };
+}
+
 for (const door of ["cell", "wave"] as const) {
   for (const owner of ["bound", "generation"] as const) {
     it(`fulfills ${owner} ownership after timed ${door} rejection`, () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -394,44 +410,32 @@ it("settles a defective fallback slot without interrupting its sibling or losing
   const siblingEntered = yield* Deferred.make<void>();
   const failed = yield* Deferred.make<void>();
   const published: string[] = [];
-  const input = runInput([]);
-  const state = createRunState(input);
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
     toolExecutor: (call) => call.id === "A"
       ? Deferred.await(siblingEntered).pipe(Effect.andThen(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
       : Deferred.succeed(siblingEntered, undefined).pipe(Effect.andThen(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
   };
-  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
-    onMessage: () => undefined, onToolCall: () => undefined, onToolResult: (result) => { published.push(result.toolCallId); },
-  });
-  if (built.type !== "ready") throw new Error("turn unavailable");
-  built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
-  expect(yield* settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds"))).toBe(2);
+  const { state, turn } = fallbackTurn(config, (result) => { published.push(result.toolCallId); });
+  expect(yield* settleModelTools(turn, config, state).pipe(Effect.timeout("5 seconds"))).toBe(2);
   expect(published).toEqual(["A", "B"]);
-  expect(built.turn.turnAssistant.message.parts).toMatchObject([
+  expect(turn.turnAssistant.message?.parts).toMatchObject([
     { callID: "A", state: { status: "error" } },
     { callID: "B", state: { status: "completed", output: "survived" } },
   ]);
 })));
 
 it("propagates a fallback body's interruption instead of settling the slot as an error", () => isolated(Effect.gen(function* () {
-  const input = runInput([]);
-  const state = createRunState(input);
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
     toolExecutor: (call) => call.id === "A"
       ? Effect.interrupt
       : Effect.succeed({ id: call.id, toolCallId: call.id, output: "settled" }),
   };
-  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
-    onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined,
-  });
-  if (built.type !== "ready") throw new Error("turn unavailable");
-  built.turn.turnAssistant.message = pendingAssistant(["A", "B"]);
-  const exit = yield* Effect.exit(settleModelTools(built.turn, config, state).pipe(Effect.timeout("5 seconds")));
+  const { state, turn } = fallbackTurn(config);
+  const exit = yield* Effect.exit(settleModelTools(turn, config, state).pipe(Effect.timeout("5 seconds")));
   expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-  expect(built.turn.turnAssistant.message.parts).toMatchObject([
+  expect(turn.turnAssistant.message?.parts).toMatchObject([
     { callID: "A", state: { status: "pending" } },
     { callID: "B", state: { status: "pending" } },
   ]);

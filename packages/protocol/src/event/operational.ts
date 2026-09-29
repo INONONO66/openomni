@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
-import type { PlainValue } from "../json.js";
+import { type PlainValue, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 
 const Base = z.object({
@@ -12,7 +12,7 @@ const LogBase = Base.extend({
   sessionId: z.string().optional(),
   component: z.string(),
   msg: z.string(),
-  context: z.record(z.string(), z.unknown()).optional(),
+  context: z.record(z.string(), PlainValueSchema.optional()).optional(),
 });
 
 export namespace Operational {
@@ -22,7 +22,7 @@ export namespace Operational {
     readonly component: string;
     readonly msg: string;
     readonly sessionId?: string;
-    readonly context?: Readonly<Record<string, PlainValue>>;
+    readonly context?: Readonly<Record<string, PlainValue | undefined>>;
     readonly error?: string;
   }
 

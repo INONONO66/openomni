@@ -4,7 +4,7 @@ import { act } from "react";
 import { InteractiveTabs } from "./interactive-tabs";
 import { createRoot, type Root } from "react-dom/client";
 import { Console, ConsoleContent } from "../src/console";
-import { SHELL, STRIP } from "./fixture";
+import { SHELL, stripWithActions } from "./fixture";
 
 const browser = globalThis;
 let host: HTMLElement;
@@ -91,15 +91,14 @@ test("activation, auxiliary close and close-button actions remain distinct", asy
       <Console
         shell={SHELL}
         sidebar={null}
-        strip={{
-          ...STRIP,
-          tabs: records,
-          onActivate: (id) => activated.push(id),
-          onClose: (id) => closed.push(id),
-          onCreate: () => {
-            created += 1;
+        strip={stripWithActions(
+          records,
+          (id) => activated.push(id),
+          (id) => closed.push(id),
+          () => {
+          created += 1;
           },
-        }}
+        )}
       />,
     ),
   );

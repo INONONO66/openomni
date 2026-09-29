@@ -86,12 +86,11 @@ function createWindow(): void {
   });
   persistBounds(window);
   const devUrl = process.env.ELECTRON_RENDERER_URL;
+  const target = devUrl ?? join(import.meta.dirname, "../renderer/index.html");
   if (devUrl) {
     attachRendererDebugging(window);
-    void window.loadURL(devUrl);
-  } else {
-    void window.loadFile(join(import.meta.dirname, "../renderer/index.html"));
   }
+  void (devUrl ? window.loadURL(target) : window.loadFile(target));
 }
 
 /** The last bounds win, once the window has been still for half a second. */

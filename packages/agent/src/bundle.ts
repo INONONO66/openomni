@@ -153,7 +153,7 @@ export function bundle<const P extends readonly TagIdentity[], const R extends r
       },
       acquire: (context: Context.Context<never>): Effect.Effect<Acquired, BundleError, Scope.Scope> => Effect.gen(function* () {
         if (!contains<I>(context, requires)) return yield* new BundleError({ code: "requirement", bundle: name, detail: "missing input" });
-        const built = yield* Layer.build(layer).pipe(Effect.provide(context), Effect.mapError((error) => new BundleError({ code: "acquisition", bundle: name, detail: String(error) })));
+        const built = yield* Layer.build(layer).pipe(Effect.provide(context), Effect.mapError((error: E) => new BundleError({ code: "acquisition", bundle: name, detail: String(error) })));
         if (!contains<O>(built, provides)) return yield* new BundleError({ code: "missing_output", bundle: name, detail: outputKeys.join(",") });
         const policy = yield* Effect.try({ try: () => policyFrom(name, provides, built), catch: (error) => new BundleError({ code: "policy", bundle: name, detail: String(error) }) });
         return { context: built, policy };

@@ -3,8 +3,7 @@ import { Effect } from "effect";
 import { Inbox, type SessionTransition } from "@openomni/protocol";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime } from "./helpers/session-services";
-import { openRequest } from "./helpers/open-request";
-import { requestLedger } from "./helpers/g0-request-ledger";
+import { pendingRequest } from "./helpers/open-request";
 import { commitSessionRequest, requestAuthorityKernel } from "../src/session-admission";
 import { adoptSessionAuthority } from "../src/session-configuration";
 import { sessionTree } from "./helpers/session-tree";
@@ -21,36 +20,47 @@ function runtime() {
 
 /** One recorded tool invocation the request reopens (mirrors request-count-admission). */
 function pending(id: string) {
-  return Effect.gen(function* () {
-    const fixture = yield* requestLedger({ id });
-    const { identity } = fixture;
-    const request = openRequest({
-      requestId: `${id}:original`,
-      sessionId: id,
-      turnId: identity.turnId,
-      callId: `${id}:call`,
-      parsedInput: { path: id },
-      toolsGeneration: identity.toolsGeneration,
-      toolsHash: identity.toolsHash,
-      systemHash: identity.systemHash,
-      deadline: 1000,
+  return pendingRequest(id);
+}
+
+/** Opens `request` on the sender's fenced batch with `admission` riding it. */
+function openWithAdmission(
+  id: string,
+  request: SessionTransition.Request,
+  admission: { readonly id: string; readonly sessionId: string; readonly content: string },
+) {
+  const kernel = isolatedLedger().kernel;
+  return commitSessionRequest(
+    kernel,
+    id,
+    { owner: `${id}:owner`, fence: 1 },
+    { kind: "request.open", request },
+    `${request.requestId}:open`,
+    100,
+    runtime(),
+    Inbox.Commit.parse({
+      id: admission.id,
+      sessionId: admission.sessionId,
+      kind: "prompt",
+      content: admission.content,
+      origin: { encodingVersion: 1, value: { kind: "session", sessionId: id } },
       createdAt: 100,
-    });
-    yield* fixture.ledger.commit({
-      id: request.requestId,
-      parentId: identity.parentActionId,
-      sessionId: id,
-      kind: "tool",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "intent", value: request.parsedInput, effectHash: request.effectHash },
-      },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      irreversible: true,
-      ts: 100,
-    });
-    return request;
-  });
+      parentActionId: null,
+    }),
+  );
+}
+
+/** The decision opened exactly this request and nothing else. */
+function expectOpenedRows(
+  kernel: ReturnType<typeof isolatedLedger>["kernel"],
+  id: string,
+  request: SessionTransition.Request,
+  decision: { readonly resolution: string },
+): void {
+  expect(decision.resolution).toBe("opened");
+  expect(kernel.requestRows(id).map((row: SessionTransition.Request) => row.requestId)).toEqual([
+    request.requestId,
+  ]);
 }
 
 // S1: the borrowed-fence caller's decision must run under the true live owner.
@@ -77,10 +87,7 @@ test("a borrowed-fence caller opens a request mid-turn under the live owner", ()
         100,
         runtime(),
       );
-      expect(decision.resolution).toBe("opened");
-      expect(
-        kernel.requestRows(id).map((row: SessionTransition.Request) => row.requestId),
-      ).toEqual([request.requestId]);
+      expectOpenedRows(kernel, id, request, decision);
       // The durable row still belongs to the live activation.
       expect(kernel.row(id)).toMatchObject({ leaseOwner: liveOwner, leaseFence: 1 });
     }),
@@ -140,30 +147,13 @@ test("a foreign-session admission does not ride the sender's batch", () =>
       const id = "sender-session";
       const request = yield* pending(id);
       const kernel = isolatedLedger().kernel;
-      const admission = Inbox.Commit.parse({
+      const decision = yield* openWithAdmission(id, request, {
         id: "child:msg-1",
         sessionId: "child-session",
-        kind: "prompt",
         content: "work",
-        origin: { encodingVersion: 1, value: { kind: "session", sessionId: id } },
-        createdAt: 100,
-        parentActionId: null,
       });
-      const decision = yield* commitSessionRequest(
-        kernel,
-        id,
-        { owner: `${id}:owner`, fence: 1 },
-        { kind: "request.open", request },
-        `${request.requestId}:open`,
-        100,
-        runtime(),
-        admission,
-      );
       // Before the fix the whole batch was refused (CommitRefused "revision").
-      expect(decision.resolution).toBe("opened");
-      expect(
-        kernel.requestRows(id).map((row: SessionTransition.Request) => row.requestId),
-      ).toEqual([request.requestId]);
+      expectOpenedRows(kernel, id, request, decision);
       // The child's admission is not in the sender's chain: its own entity commits it.
       expect(kernel.actionById("child:msg-1")).toBeUndefined();
     }),
@@ -176,25 +166,11 @@ test("a same-session admission still rides the sender's batch", () =>
       const id = "sender-local";
       const request = yield* pending(id);
       const kernel = isolatedLedger().kernel;
-      const admission = Inbox.Commit.parse({
+      const decision = yield* openWithAdmission(id, request, {
         id: `${id}:msg-1`,
         sessionId: id,
-        kind: "prompt",
         content: "local intake",
-        origin: { encodingVersion: 1, value: { kind: "session", sessionId: id } },
-        createdAt: 100,
-        parentActionId: null,
       });
-      const decision = yield* commitSessionRequest(
-        kernel,
-        id,
-        { owner: `${id}:owner`, fence: 1 },
-        { kind: "request.open", request },
-        `${request.requestId}:open`,
-        100,
-        runtime(),
-        admission,
-      );
       expect(decision.resolution).toBe("opened");
       const intake = kernel.actionById(`${id}:msg-1`);
       expect(intake).toMatchObject({ sessionId: id, kind: "prompt" });

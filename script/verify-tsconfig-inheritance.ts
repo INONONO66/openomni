@@ -411,7 +411,7 @@ export function loadFixtureManifest(manifestPath: string): Manifest {
   return { ...raw, root: resolve(dirname(manifestPath), raw.root) };
 }
 
-function main(): void {
+export function main(): void {
   const args = process.argv.slice(2);
   const json = args.includes("--json");
   const fixtureIndex = args.indexOf("--fixture");

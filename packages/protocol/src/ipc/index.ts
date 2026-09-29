@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JsonShapedValueSchema } from "../json.js";
 import { Machine } from "../machine/index.js";
 
 const baseMessage = z.object({
@@ -10,18 +11,18 @@ const requestSchema = baseMessage.extend({
   type: z.literal("request"),
   id: z.string(),
   method: z.string(),
-  params: z.record(z.string(), z.unknown()).optional(),
+  params: z.record(z.string(), JsonShapedValueSchema).optional(),
 });
 
 const responseSchema = baseMessage.extend({
   type: z.literal("response"),
   id: z.string(),
-  result: z.unknown().optional(),
+  result: JsonShapedValueSchema.optional(),
   error: z
     .object({
       code: z.number(),
       message: z.string(),
-      data: z.unknown().optional(),
+      data: JsonShapedValueSchema.optional(),
     })
     .optional(),
 });
@@ -29,7 +30,7 @@ const responseSchema = baseMessage.extend({
 const notificationSchema = baseMessage.extend({
   type: z.literal("notification"),
   method: z.string(),
-  params: z.record(z.string(), z.unknown()).optional(),
+  params: z.record(z.string(), JsonShapedValueSchema).optional(),
 });
 
 /**

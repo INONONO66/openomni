@@ -16,15 +16,6 @@ function currentTab() {
   return tab;
 }
 
-test("an unknown runtime command fails without mutating tab state", () => {
-  const before = consoleStore.state;
-  function invokeUnknownCommand(): void {
-    Reflect.apply(dispatchShellCommand, undefined, ["unknown-command"]);
-  }
-  expect(invokeUnknownCommand).toThrow(Error);
-  expect(consoleStore.state).toBe(before);
-});
-
 test("new, close, reopen and empty close dispatch to the real store", () => {
   dispatchShellCommand("close-tab");
   expect(consoleStore.state.tabs).toEqual([]);

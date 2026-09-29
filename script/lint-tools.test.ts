@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { captureOutput } from "./capture-output.test-helper";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
 import type { PlainValue } from "../packages/protocol/src/json";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
@@ -12,6 +13,7 @@ import {
   checkToolLint,
   checkVocabRatchet,
   definitionInvariantViolations,
+  diffSnapshots,
   diffToolSchemaSnapshots,
   lintToolSurface,
   main as lintToolsMain,
@@ -107,6 +109,27 @@ describe("tool surface lint (#949 sealed catalog grammar)", () => {
     expect(surface(7)).toEqual([]);
     expect(surface(8)).toEqual(["tool-max-fields"]);
   });
+
+  test("unresolved references and invalid union members cannot inflate the field budget", () => {
+    const inputSchema: PlainValue = {
+      type: "object",
+      properties: { a: {} },
+      allOf: [{ $ref: "#/$defs/missing" }],
+      anyOf: [null, { properties: { b: {} } }],
+      oneOf: [false, { properties: { c: {} } }],
+    };
+    expect(lintToolSurface({ name: "grep", description: "x", inputSchema })).toEqual([]);
+  });
+
+  test("local references count decoded property names toward the budget", () => {
+    const inputSchema: PlainValue = {
+      $defs: { "common/fields": { properties: { h: {} } } },
+      properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {} },
+      $ref: "#/$defs/common~1fields",
+    };
+    expect(lintToolSurface({ name: "grep", description: "x", inputSchema })
+      .map(({ rule }) => rule)).toEqual(["tool-max-fields"]);
+  });
 });
 
 describe("deleted surface census", () => {
@@ -189,6 +212,38 @@ describe("lint-tools definition invariants", () => {
       { check: "tool-schema-snapshot", subject: "catalogDefinitions" },
     ]);
   });
+
+  test("removed protocol types and fields fail while additive fields pass", () => {
+    expect(diffSnapshots({ "Tool.Call": ["id"] }, {})).toMatchObject([
+      { check: "schema-snapshot", subject: "Tool.Call" },
+    ]);
+    expect(diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["payload"] })[0]?.message)
+      .toContain("id");
+    expect(diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }))
+      .toEqual([]);
+  });
+});
+
+test("the vocab ratchet reports newly unmapped and stale grandfathered namespaces", async () => {
+  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  const newViolation = await checkVocabRatchet({
+    ...baseline,
+    vocab: { unmappedNamespaces: baseline.vocab.unmappedNamespaces.filter((name) => name !== "bus") },
+  });
+  expect(newViolation).toMatchObject([{ check: "vocab-ratchet", subject: "bus" }]);
+
+  const staleViolation = await checkVocabRatchet({
+    ...baseline,
+    vocab: { unmappedNamespaces: [...baseline.vocab.unmappedNamespaces, "actor"] },
+  });
+  expect(staleViolation).toMatchObject([{ check: "vocab-ratchet", subject: "actor" }]);
+});
+
+test("the naming ratchet reports an ungrandfathered protocol export", async () => {
+  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  expect(await checkNaming({ ...baseline, naming: { grandfathered: [] } })).toMatchObject([
+    { check: "naming", subject: "packages/protocol/src/policy/policy-point.ts:PolicyPointModule" },
+  ]);
 });
 
 test("the shipped catalog passes tool lint and earned-definition checks in-process", async () => {
@@ -210,18 +265,11 @@ test("the protocol tree passes the vocab ratchet and naming checks in-process re
 });
 
 test("the full conformance gate passes in-process against the shipped tree", async () => {
-  const lines: string[] = [];
-  const write = spyOn(process.stdout, "write").mockImplementation((chunk) => {
-    lines.push(String(chunk));
-    return true;
-  });
-  try {
+  const output = await captureOutput(async () => {
     // main exits the process on any violation, so returning is the verdict.
     await expect(lintToolsMain([])).resolves.toBeUndefined();
-  } finally {
-    write.mockRestore();
-  }
-  expect(lines.join("")).toStartWith("OK: conformance lint");
+  });
+  expect(output).toStartWith("OK: conformance lint");
 });
 
 test("the self-test discriminates on its known-bad fixtures in-process", () => {

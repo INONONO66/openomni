@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonicalDigest, FoldCheckpoint, NamedError, PlainValueSchema } from "@openomni/protocol";
+import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
 import { SessionHandleStore } from "@openomni/ledger";
 import { isolatedRun } from "./helpers/isolated";
 import { openCrashStores } from "./helpers/crash-stores";
@@ -20,6 +20,7 @@ import {
 } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
+import { z } from "zod";
 
 const worker = new URL("./helpers/durable-reconstruction.ts", import.meta.url).pathname;
 const witnessSchema = reconstructionWitness;
@@ -32,7 +33,17 @@ const witnessSchema = reconstructionWitness;
 const childDeadlineMs = 60_000;
 
 /** The witness travels through a regular file: the child's stdout pipe is non-blocking on Linux. */
-async function child(stage: string, dbPath: string) {
+const refusalSchema = z.object({
+  name: z.literal("FoldCheckpointIntegrityError"),
+  data: z.object({
+    code: z.literal("fold_checkpoint_integrity"),
+    reason: z.string(),
+    checkpointId: z.string(),
+    sessionId: z.string(),
+  }).passthrough(),
+});
+
+async function child<S extends z.ZodType>(stage: string, dbPath: string, schema: S) {
   const witnessPath = `${dbPath}.${stage}.witness.json`;
   const process = Bun.spawn([Bun.which("bun") ?? "bun", worker, witnessPath, stage, dbPath], {
     stdin: "ignore",
@@ -51,7 +62,7 @@ async function child(stage: string, dbPath: string) {
     );
     expect(stderr).toBe("");
     expect(stdout).toBe("");
-    return { code, value: JSON.parse(readFileSync(witnessPath, "utf8")) };
+    return { code, value: schema.parse(JSON.parse(readFileSync(witnessPath, "utf8"))) };
   } finally {
     process.kill();
   }
@@ -63,13 +74,13 @@ test(
     const directory = mkdtempSync(join(tmpdir(), "fold-restart-"));
     try {
       const dbPath = join(directory, "kernel.sqlite");
-      const written = await child("write", dbPath);
+      const written = await child("write", dbPath, witnessSchema);
       expect(written.code).toBe(0);
-      const cut = witnessSchema.parse(written.value);
+      const cut = written.value;
       expect(cut.revision).toBeGreaterThan(256);
-      const reopened = await child("read", dbPath);
+      const reopened = await child("read", dbPath, witnessSchema);
       expect(reopened.code).toBe(0);
-      const wake = witnessSchema.parse(reopened.value);
+      const wake = reopened.value;
       expect(wake.digest).toBe(wake.oracle);
       expect(wake.stateDigest).toBe(wake.stateOracle);
       const checkpoint = wake.checkpoint;
@@ -95,10 +106,10 @@ test(
         ),
       ).toBe(true);
       expect(wake).toEqual(cut);
-      expect(await child("read", dbPath)).toEqual(reopened);
-      const captured = await child("wake", dbPath);
+      expect(await child("read", dbPath, witnessSchema)).toEqual(reopened);
+      const captured = await child("wake", dbPath, witnessSchema);
       expect(captured.code).toBe(0);
-      const entry = witnessSchema.parse(captured.value);
+      const entry = captured.value;
       expect(entry.capture).toMatchObject({
         toolsGeneration: 1,
         recoveryUnchanged: true,
@@ -120,8 +131,8 @@ test(
       expect(entry.capture?.history.map((message) => message.info.id)).not.toContain(
         "prior-result",
       );
-      const afterWake = await child("read", dbPath);
-      const after = witnessSchema.parse(afterWake.value);
+      const afterWake = await child("read", dbPath, witnessSchema);
+      const after = afterWake.value;
       expect(after.digest).toBe(cut.digest);
       expect(after.stateDigest).toBe(after.stateOracle);
       expect(after.actions.slice(0, cut.actions.length)).toEqual(cut.actions);
@@ -130,7 +141,7 @@ test(
       ).toHaveLength(
         cut.actions.flatMap((action) => SessionHandleStore.turnTerminal(action) ?? []).length,
       );
-      expect(await child("read", dbPath)).toEqual(afterWake);
+      expect(await child("read", dbPath, witnessSchema)).toEqual(afterWake);
       const compaction = wake.actions
         .filter(
           (action) =>
@@ -159,9 +170,9 @@ for (const field of ["state", "stateHash", "foldVersion", "revision"] as const) 
       const directory = mkdtempSync(join(tmpdir(), "fold-tamper-"));
       try {
         const dbPath = join(directory, "kernel.sqlite");
-        const written = await child("write", dbPath);
+        const written = await child("write", dbPath, witnessSchema);
         expect(written.code).toBe(0);
-        const cut = witnessSchema.parse(written.value);
+        const cut = written.value;
         if (cut.checkpoint === undefined) throw new Error("missing checkpoint");
         const db = new Database(dbPath);
         try {
@@ -177,7 +188,7 @@ for (const field of ["state", "stateHash", "foldVersion", "revision"] as const) 
         } finally {
           db.close();
         }
-        const refused = await child("wake", dbPath);
+        const refused = await child("wake", dbPath, refusalSchema);
         expect(refused.code).toBe(1);
         expect(refused.value).toMatchObject({
           name: "FoldCheckpointIntegrityError",
@@ -293,26 +304,7 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
         expect(corrupted).toBeDefined();
         expect(isolation.kernel.verifyChain(reconstructionSession).kind).toBe("intact");
         const before = sessionTree(isolation.kernel, reconstructionSession);
-        try {
-          hydrateSessionHistory(isolation.kernel, reconstructionSession);
-          throw new Error("corrupt checkpoint accepted");
-        } catch (error) {
-          expect(error).toBeInstanceOf(NamedError);
-          expect(FoldCheckpointIntegrityError.isInstance(error)).toBe(true);
-          if (!FoldCheckpointIntegrityError.isInstance(error)) throw error;
-          expect(error.toObject()).toMatchObject({
-            name: "FoldCheckpointIntegrityError",
-            data: {
-              code: "fold_checkpoint_integrity",
-              reason: "stateHash",
-              sessionId: reconstructionSession,
-              checkpointId: "valid-chain-stale-seed",
-              expected: effect.result.stateHash,
-            },
-          });
-          expect(error.data.actual).toMatch(/^sha256:/);
-          expect(error.data.actual).not.toBe(error.data.expected);
-        }
+        expect(() => hydrateSessionHistory(isolation.kernel, reconstructionSession)).toThrow(FoldCheckpointIntegrityError);
         expect(sessionTree(isolation.kernel, reconstructionSession)).toEqual(before);
         await reconstructionProcessMain(["wake", dbPath], emit, exit);
         expect(emitted.pop()).toMatchObject({

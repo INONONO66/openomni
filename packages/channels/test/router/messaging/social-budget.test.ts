@@ -1,12 +1,8 @@
 import { ledger } from "../../helpers/ledger";
-import { channelRequests } from "../../helpers/channel-requests";
-import { channelTransaction } from "../../helpers/channel-transaction";
 import { runEffect } from "../../helpers/effect";
-import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 
-import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
 import {
@@ -14,9 +10,9 @@ import {
   buildGrant,
   buildSendInput,
   messagingNow,
-  registerAgentFixture,
 } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
+import { registerSenderAndTarget, sendPorts } from "./_send-fixture";
 
 const ZERO_STATE: Gateway.EgressDebitState = {
   countInWindow: 0,
@@ -182,16 +178,13 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
-      requests: channelRequests(seededRequests()),
-      stores: ledger().stores,
-    transaction: channelTransaction,
+      ...sendPorts(),
       deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };
       },
       grants: () => grants,
       ...(withGate ? { budgets: () => budgets } : {}),
-      publish: Bus.publish,
     });
   }
 
@@ -200,8 +193,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
     deliveries = [];
     grants = [buildGrant("grant:sender->target")];
     budgets = [];
-    registerAgentFixture("actor:sender");
-    registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
+    registerSenderAndTarget();
   });
 
   test("backward-compat: with NO budget source injected, a cold proactive send is unaffected", async () => {

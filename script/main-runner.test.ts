@@ -47,3 +47,16 @@ test("a non-Error rejection is stringified, not swallowed", async () => {
   expect(io.exits).toEqual([1]);
   expect(io.stderr).toEqual(["ERROR: plain reason\n"]);
 });
+
+test("a synchronously throwing main is caught like a rejection", async () => {
+  const io = capture();
+  try {
+    await runScriptMain(() => {
+      throw new Error("sync gate broke");
+    }, io.exit);
+  } finally {
+    io.restore();
+  }
+  expect(io.exits).toEqual([1]);
+  expect(io.stderr).toEqual(["ERROR: sync gate broke\n"]);
+});

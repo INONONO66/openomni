@@ -58,6 +58,16 @@ function makeRouter(routes?: ReadonlyMap<string, ChannelDeliveryRoute>) {
   });
 }
 
+type Router = ReturnType<typeof makeRouter>;
+
+function admitFirstContact(router: Router) {
+  return runEffect(router.ingest(sender, facts));
+}
+
+function sendActorReply(router: Router) {
+  return runEffect(router.ingest({ kind: "session", id: "persona-owner" }, reply));
+}
+
 beforeEach(() => {
   resetRouterState();
   delivered.length = 0;
@@ -89,8 +99,8 @@ test("ungranted actor send is refused before transport", async () => {
 
 test("admitted first contact grants a scoped reply through the same ingest", async () => {
   const router = makeRouter();
-  expect((await runEffect(router.ingest(sender, facts))).status).toBe("executed");
-  const sent = await runEffect(router.ingest({ kind: "session", id: "persona-owner" }, reply));
+  expect((await admitFirstContact(router)).status).toBe("executed");
+  const sent = await sendActorReply(router);
   expect(sent).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
@@ -107,13 +117,13 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
 
 test("a granted endpoint without a channel delivery owner fails closed", async () => {
   const router = makeRouter(new Map());
-  await runEffect(router.ingest(sender, facts));
+  await admitFirstContact(router);
   expect(await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({ _tag: "ForeignFailure", operation: "message.deliver" });
   expect(delivered).toEqual([]);
 });
 
 test("restart reads the durable live-grant projection, never route history", async () => {
-  await runEffect(makeRouter().ingest(sender, facts));
+  await admitFirstContact(makeRouter());
   replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
     ...facts,
     head: (key: string) => {
@@ -122,7 +132,7 @@ test("restart reads the durable live-grant projection, never route history", asy
     },
   }));
   const restarted = makeRouter();
-  expect(await runEffect(restarted.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
+  expect(await sendActorReply(restarted)).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
   });
@@ -135,14 +145,14 @@ test("historical route facts cannot reconstruct authority on restart", async () 
     data: { outcome: "route", actorId: "actor-buyer" },
     timeCreated: 1,
   });
-  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
+  expect(await sendActorReply(makeRouter())).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
 });
 
 test("endpoint rebinding invalidates a durable reply grant", async () => {
-  await runEffect(makeRouter().ingest(sender, facts));
+  await admitFirstContact(makeRouter());
   ledger().stores.actors.registerEndpoint({
     id: "ep-buyer",
     actorId: "actor-buyer",
@@ -150,7 +160,7 @@ test("endpoint rebinding invalidates a durable reply grant", async () => {
     externalId: "other-container",
     workspace: "shop-ws",
   });
-  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
+  expect(await sendActorReply(makeRouter())).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
@@ -162,8 +172,8 @@ test.each([
   "unknown",
 ] as const)("actor %s receipt survives the composed router", async (value: "accepted" | "rejected" | "unknown") => {
   const router = makeRouter(new Map([["discord", async () => ({ value })]]));
-  await runEffect(router.ingest(sender, facts));
-  expect(await runEffect(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
+  await admitFirstContact(router);
+  expect(await sendActorReply(router)).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value },
   });

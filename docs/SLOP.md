@@ -467,3 +467,51 @@ deleted the ratchet stack in one PR:
   on every complete join. The campaign now records `current.json` only. The
   candidate universe drops test/fixture/benchmark files (61% of the 182,404
   candidates in run 35512259166) and suite-timeout hangs count as kills.
+
+## §J 2026-09-29 quality-debt sweep (branch `quality/1237-sweep-20260929`, base `f7e36984`)
+
+Fixes every still-applicable finding of Quality Audit run 36416999469 (issues
+#1126..#1237, summary #1119) in one PR. Per-lane worklists and QA matrices were
+produced under the ignored `.omo/quality-sweep/` directory and are not shipped.
+
+- **Types**: written `any`/`unknown` stay 0 (`check-written-types`); owned
+  transitive `unknown`/implicit-any sites in `script/` 13 -> 0, `packages/protocol`
+  754 -> 93 (`JsonShapedValue` exported; remaining 93 are Zod `z.unknown`
+  boundary parses documented in the protocol QA matrix). Prod clones in
+  `apps/openomni` (`adoptWriterAuthority`, received-message action) now consume
+  the agent exports `adoptSessionAuthority` and `receivedMessageAction`;
+  `apps/openomni/src/composition/adopt-authority.ts` deleted. The agent
+  `ForeignFailure` class is a re-export of the ledger one (was a duplicate).
+- **Clones**: test clones in agent 48 -> 0, openomni 10 -> 0; `script/` 0
+  (`expectExitViolation`/`captureConsole` in `capture-output.test-helper.ts`;
+  `generate-models-snapshot.ts` extends the llm `CatalogModel`). jscpd reports
+  0 duplicates in both the production and the test scope.
+- **CRAP**: the six `script/check-import-cycles.ts` functions with no LCOV
+  reach are now covered by `script/check-import-cycles.test.ts` (lane
+  `scripts-contracts`); `main()`, `buildGraph()` and `selfTest()` are exported
+  for that. CRAP findings 6 -> 0.
+- **Complexity**: `noExcessiveCognitiveComplexity` findings in the audit's
+  `script/`, `agent`, `channels`, `ledger` and `protocol` files resolved by
+  extraction; no suppressions added.
+- **Coverage**: lane LCOV now feeds the measure (12 workspace lanes plus the
+  three serial script lanes). The remaining uncovered lines are CLI
+  `main()`/violation-print paths in `script/` (~260 lines across 14 files) and
+  the race-guard/pagination tails listed in the agent QA matrix.
+- **Behavior changes** (intended, reviewed): `buildInventory` in
+  `script/quality-inventory.ts` skips git-tracked paths absent from the working
+  tree; `packages/policy` `pin()` keeps folding `PolicyCompileError` into the
+  `failedSnapshot` (deny verdict with `error` code) rather than throwing; the
+  `scripts-tooling-2` lane now lists `lint-side-effects.test.ts`.
+- **Test hygiene**: deleted `packages/machines/test/helpers/socket-path.test.ts`
+  (a 14-line clone of `apps/openomni/test/helpers/socket-path.test.ts`; the
+  machines helper stays exercised by `attach`, `fs-wire` and `native-lifecycle`
+  tests) and the ui composer
+  keyboard/edit DOM test that only passed when `packages/ui` ran before
+  `apps/desktop` in the same `bun test` process (React's event plugins bind to
+  the first registered document; the composer's key/edit logic remains covered
+  by `composer.test.tsx` and `composer-dom.fixture.tsx`). The pre-existing
+  `967-U1` cleanup-oracle child-process echo is unchanged.
+- **Issues whose file no longer exists** at HEAD (deleted by W5.2/W5.3) close
+  as obsolete: #1140, #1202, #1205, #1230.
+- Measured totals (`quality-audit --dry-run` with local LCOV): see the
+  "Honest audit deltas" table in `docs/implementation-status.md`.

@@ -3,7 +3,7 @@ import { decodeLlmFailure } from "../error";
 import type { LlmError } from "../errors";
 import type { Message, Transcript } from "@openomni/protocol";
 import { OutputPayload, ProviderEvent } from "./event-schema";
-import { stringifyToolOutput } from "../message";
+import { stringifyToolOutput, type SDKToolValue } from "../message";
 import type { StreamEvent, StreamEventState, StreamEventContext } from "./stream-events";
 
 function resolveToolName(wireName: string, context: StreamEventContext): string {
@@ -127,7 +127,7 @@ export function handleToolResult(
 }
 
 function normalizeOutputPayload(event: ProviderEvent): { output: string; isError: boolean } {
-  const raw = event.output;
+  const raw: SDKToolValue | undefined = event.output;
   if (typeof raw === "object" && raw !== null && "output" in raw) {
     const payload = OutputPayload.parse(raw);
     return {

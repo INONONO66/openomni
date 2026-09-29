@@ -23,12 +23,12 @@ for (const [elapsed, expected] of [
 }
 
 /** Both surfaces (sidebar tree, Sessions list) rendered against one frozen clock. */
-function renderRows(session: Session): Document {
+function renderRows(session: Session) {
   consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
   openTab({ kind: "route", route: "sessions" });
   const document = new Window().document;
   document.body.innerHTML = renderShell(null, [session]);
-  return document as unknown as Document;
+  return document;
 }
 
 function withClock<T>(run: () => T): T {

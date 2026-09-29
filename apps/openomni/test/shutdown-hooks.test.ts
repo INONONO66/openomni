@@ -41,9 +41,9 @@ describe("entry-point shutdown handlers", () => {
   test("handler exits non-zero when stop() rejects", async () => {
     const handlers = new Map<string, () => void>();
     const exits: number[] = [];
-    let rejectStop!: (error: unknown) => void;
+    let rejectStop!: () => void;
     const stopPromise = new Promise<void>((_resolve, reject) => {
-      rejectStop = reject;
+      rejectStop = () => reject(new Error("flush failed"));
     });
 
     installShutdownHandlers({
@@ -57,7 +57,7 @@ describe("entry-point shutdown handlers", () => {
 
     sigterm();
     expect(exits).toEqual([]);
-    rejectStop(new Error("flush failed"));
+    rejectStop();
     await stopPromise.catch(() => undefined);
     expect(exits).toEqual([1]);
   });

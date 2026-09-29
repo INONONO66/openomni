@@ -51,18 +51,19 @@ export function reduce(
       return { state: { ...state, activeId: next }, effects: [] };
     }
 
-    case "commit": {
-      const target = state.activeId ?? sequence[0];
-      if (target === undefined) return { state, effects: [] };
-      return {
-        state: { ...state, activeId: target },
-        effects: [{ kind: "select", id: target }, { kind: "focusField" }],
-      };
-    }
+    case "commit":
+      return commit(state, sequence);
 
-    default:
-      return unreachable(intent);
   }
+}
+
+function commit(state: SearchState, sequence: readonly SessionId[]): Transition {
+  const target = state.activeId ?? sequence[0];
+  if (target === undefined) return { state, effects: [] };
+  return {
+    state: { ...state, activeId: target },
+    effects: [{ kind: "select", id: target }, { kind: "focusField" }],
+  };
 }
 
 function step(
@@ -97,8 +98,4 @@ export function intentFor(key: string, modifier: boolean): Intent | null {
     default:
       return null;
   }
-}
-
-function unreachable(value: never): never {
-  throw new Error(`unhandled search intent: ${JSON.stringify(value)}`);
 }

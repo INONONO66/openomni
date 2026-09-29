@@ -1,10 +1,10 @@
 import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
-import { createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, ForeignFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
-import { CorruptRecord, type LedgerError } from "@openomni/ledger";
+import { adoptSessionAuthority, createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, ForeignFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
+import { CorruptRecord } from "@openomni/ledger";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
-import type { AppLedgerPlane, SessionKernel } from "./cluster-runtime";
+import type { AppLedgerPlane } from "./cluster-runtime";
 
 type ExecutionResult = Effect.Success<ReturnType<Effect.Success<ReturnType<typeof createExecutor>>["run"]>>;
 type Run = Parameters<typeof createGatewayRouter>[0]["run"];
@@ -12,28 +12,6 @@ type NativeRun = (sender: Parameters<Run>[0], request: Parameters<Run>[1], body:
 
 /** The fixed perimeter session every external decision is recorded against. */
 export const GATEWAY_INGRESS_SESSION = "gateway-ingress";
-
-/**
- * Fence adoption for one out-of-turn writer (W5.2 F5): a strictly-newer CAS
- * on the session file; a lost single-increment race re-reads and re-decides.
- */
-function adoptIngressAuthority(
-  kernel: SessionKernel,
-  sessionId: string,
-  owner: string,
-): Effect.Effect<number, LedgerError> {
-  const attempt: Effect.Effect<number, LedgerError> = Effect.suspend(() => {
-    const current = kernel.row(sessionId);
-    if (current.leaseOwner === owner) return Effect.succeed(current.leaseFence);
-    return kernel
-      .adoptFence({ sessionId, owner, fence: current.leaseFence + 1 })
-      .pipe(
-        Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => attempt),
-      );
-  });
-  return attempt;
-}
 
 /** External authentication has no active model turn; its message actions have one fenced owner. */
 export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<NativeRun, ExecutionError, SessionEntryServices | BundleDefinitions> {
@@ -55,7 +33,7 @@ export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<Nati
       const row = kernel.row(id);
       const owner = next();
       const captured = yield* generations.capture({ sessionId: id, generation: row.toolsGeneration }).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "ingress.capture", cause: String(error) })));
-      const fence = yield* adoptIngressAuthority(kernel, id, owner).pipe(
+      const fence = yield* adoptSessionAuthority(kernel, id, owner).pipe(
         Effect.mapError((error) => new CommitFailed({ error })),
       );
       const commit = (actions: readonly LedgerAction.Append[]) => Effect.suspend(() => kernel.commit({

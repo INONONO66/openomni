@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PlainValue } from "../json.js";
+import { type JsonShapedValue, JsonShapedValueSchema, PlainValueSchema } from "../json.js";
 import { toolResultSchema } from "../tool/result.js";
 import { PolicyDefinition, policyKernelVersion } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
@@ -251,9 +251,9 @@ const PolicyPointRegistry = Object.freeze({
 } satisfies Record<RegisteredPolicyPointId, PolicyPointContractSnapshot>);
 
 const id = z.string().min(1);
-const requiredValue = z.unknown().refine((value) => value !== undefined, {
-  message: "Required",
-});
+// Policy point inputs are JSON-plain by contract; PlainValueSchema also
+// rejects undefined, preserving the required-presence semantics.
+const requiredValue = PlainValueSchema;
 
 // Policy authority owns these equivalents so public schema mutation cannot change validation by reference.
 const dispatchActor = z
@@ -320,7 +320,7 @@ const lifecycleRunOutcome = z.discriminatedUnion("type", [
 const toolSpec = z.object({
   name: z.string(),
   description: z.string().optional(),
-  inputSchema: z.record(z.string(), z.unknown()),
+  inputSchema: z.record(z.string(), JsonShapedValueSchema),
   safe: z.boolean().optional(),
   labels: z.array(z.string()).optional(),
   prompt: z.string().optional(),
@@ -333,12 +333,12 @@ const toolResult = toolResultSchema();
 function validator<Schema extends z.ZodTypeAny>(
   schema: Schema,
 ): {
-  readonly parse: (input: PlainValue | undefined) => z.infer<Schema>;
-  readonly safeParse: (input: PlainValue | undefined) => z.ZodSafeParseResult<z.infer<Schema>>;
+  readonly parse: (input: JsonShapedValue) => z.infer<Schema>;
+  readonly safeParse: (input: JsonShapedValue) => z.ZodSafeParseResult<z.infer<Schema>>;
 } {
   return Object.freeze({
-    parse: (input: PlainValue | undefined) => schema.parse(input),
-    safeParse: (input: PlainValue | undefined) => schema.safeParse(input),
+    parse: (input: JsonShapedValue) => schema.parse(input),
+    safeParse: (input: JsonShapedValue) => schema.safeParse(input),
   });
 }
 
@@ -353,20 +353,20 @@ const policyPointInputSchemas = Object.freeze({
         sessionId: id.optional(),
         runId: id.optional(),
       })
-      .passthrough(),
+      .catchall(JsonShapedValueSchema),
   ),
-  "run.lifecycle.pre": validator(z.object({ actorId: id, sessionId: id, runId: id }).passthrough()),
+  "run.lifecycle.pre": validator(z.object({ actorId: id, sessionId: id, runId: id }).catchall(JsonShapedValueSchema)),
   "run.turn.pre": validator(
-    z.object({ sessionId: id, runId: id, turnIndex: z.number().int().min(0) }).passthrough(),
+    z.object({ sessionId: id, runId: id, turnIndex: z.number().int().min(0) }).catchall(JsonShapedValueSchema),
   ),
   "prompt.context.pre": validator(
-    z.object({ sessionId: id, runId: id, turnIndex: z.number().int().min(0) }).passthrough(),
+    z.object({ sessionId: id, runId: id, turnIndex: z.number().int().min(0) }).catchall(JsonShapedValueSchema),
   ),
   "tool.catalog.pre": validator(
-    z.object({ sessionId: id, runId: id, availableTools: z.array(toolSpec) }).passthrough(),
+    z.object({ sessionId: id, runId: id, availableTools: z.array(toolSpec) }).catchall(JsonShapedValueSchema),
   ),
   "connection.llm.pre": validator(
-    z.object({ sessionId: id, runId: id, modelId: id }).passthrough(),
+    z.object({ sessionId: id, runId: id, modelId: id }).catchall(JsonShapedValueSchema),
   ),
   "connection.llm.post": validator(
     z
@@ -376,7 +376,7 @@ const policyPointInputSchemas = Object.freeze({
         modelId: id,
         responseTokens: z.number().int().min(0),
       })
-      .passthrough(),
+      .catchall(JsonShapedValueSchema),
   ),
   "tool.native.pre": validator(
     z
@@ -384,9 +384,9 @@ const policyPointInputSchemas = Object.freeze({
         sessionId: id,
         runId: id,
         toolId: id,
-        toolInput: z.record(z.string(), z.unknown()),
+        toolInput: z.record(z.string(), JsonShapedValueSchema),
       })
-      .passthrough(),
+      .catchall(JsonShapedValueSchema),
   ),
   "tool.mcp.pre": validator(
     z
@@ -395,15 +395,15 @@ const policyPointInputSchemas = Object.freeze({
         runId: id,
         toolId: id,
         mcpServerId: id,
-        toolInput: z.record(z.string(), z.unknown()),
+        toolInput: z.record(z.string(), JsonShapedValueSchema),
       })
-      .passthrough(),
+      .catchall(JsonShapedValueSchema),
   ),
   "tool.native.post": validator(
-    z.object({ sessionId: id, runId: id, toolId: id, toolResult }).passthrough(),
+    z.object({ sessionId: id, runId: id, toolId: id, toolResult }).catchall(JsonShapedValueSchema),
   ),
   "tool.mcp.post": validator(
-    z.object({ sessionId: id, runId: id, toolId: id, mcpServerId: id, toolResult }).passthrough(),
+    z.object({ sessionId: id, runId: id, toolId: id, mcpServerId: id, toolResult }).catchall(JsonShapedValueSchema),
   ),
   "run.turn.post": validator(
     z
@@ -413,22 +413,22 @@ const policyPointInputSchemas = Object.freeze({
         turnIndex: z.number().int().min(0),
         turnResult: requiredValue,
       })
-      .passthrough(),
+      .catchall(JsonShapedValueSchema),
   ),
   "run.completion.pre": validator(
-    z.object({ sessionId: id, runId: id, completionCandidate: requiredValue }).passthrough(),
+    z.object({ sessionId: id, runId: id, completionCandidate: requiredValue }).catchall(JsonShapedValueSchema),
   ),
   "run.lifecycle.post": validator(
-    z.object({ sessionId: id, runId: id, runOutcome: lifecycleRunOutcome }).passthrough(),
+    z.object({ sessionId: id, runId: id, runOutcome: lifecycleRunOutcome }).catchall(JsonShapedValueSchema),
   ),
   "run.error.error": validator(
-    z.object({ sessionId: id, runId: id, errorCode: id, errorPhase: id }).passthrough(),
+    z.object({ sessionId: id, runId: id, errorCode: id, errorPhase: id }).catchall(JsonShapedValueSchema),
   ),
 } satisfies Record<
   RegisteredPolicyPointId,
   Readonly<{
-    parse: (input: PlainValue | undefined) => object;
-    safeParse: (input: PlainValue | undefined) => z.ZodSafeParseResult<object>;
+    parse: (input: JsonShapedValue) => object;
+    safeParse: (input: JsonShapedValue) => z.ZodSafeParseResult<object>;
   }>
 >);
 

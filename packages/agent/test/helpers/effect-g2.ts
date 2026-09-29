@@ -1,14 +1,21 @@
 import { sessionTree } from "./session-tree";
+import { runChatAttempts } from "./chat-attempts";
+import { seededTestAgent } from "./seeded-test-agent";
+import { recordingLedger } from "./recording-ledger";
 import { commitReceivedMessage } from "./ingress";
 import { isolatedLedger } from "./isolated";
 import { testExecutor } from "./executor";
-import { catalogLayer } from "./service-layers";
-import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, prepareChatFixture } from "./chat-services";
+import { catalogLayer, dispatcherToolPorts } from "./service-layers";
+import {
+  type ChatFixture as ChatAgentConfig,
+  fixtureConfigHead,
+  fixtureTraceContext,
+  prepareChatFixture,
+} from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
-import type { AnyToolDefinition, Tool } from "@openomni/protocol";
+import type { AnyToolDefinition } from "@openomni/protocol";
 import type { Run, RunInput } from "@openomni/llm";
 import type {} from "../../src/session-contract";
 import { PlainValueSchema } from "@openomni/protocol";
@@ -17,16 +24,14 @@ import { createAssistantMessage } from "../../src/core/message-factory";
 import { foldSessionHistory } from "../../src/session-lifecycle/history";
 import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import type { LedgerAction, PlainObject, PlainValue, SessionTransition } from "@openomni/protocol";
+import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "@openomni/llm";
-import type { ExecutorOptions, DurableExecutor, LlmAttempts } from "../../src/executor-contract";
+import type { ExecutorOptions, DurableExecutor } from "../../src/executor-contract";
 import type { SessionHandle } from "../../src/session-handle";
-import { runAgent } from "../../src/core/execution/run";
-import { ForeignFailure, CommitFailed, type ExecutionError } from "../../src/errors";
-import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { ForeignFailure, CommitFailed } from "../../src/errors";
+import { allowAllPolicy } from "./compiled-policy";
 import { runInput } from "./run-input";
 
 export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = {
@@ -35,24 +40,7 @@ export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = {
   settle: () => Effect.void,
 };
 
-export function recordingLedger(committed: LedgerAction.Append[] = []) {
-  let ordinal = 0;
-  return {
-    committed,
-    entropy: () => `action-${ordinal + 1}`,
-    ledger: {
-      commit: (action: LedgerAction.Append) =>
-        Effect.sync(() => {
-          committed.push(action);
-          ordinal += 1;
-          return {
-            action: { ...action, ordinal, ...fixtureHashes(ordinal) },
-            revision: ordinal,
-          };
-        }),
-    },
-  };
-}
+export { recordingLedger };
 
 export function recordingExecutor(
   options: { readonly onCommit?: (action: LedgerAction.Append) => void | Promise<void> } = {},
@@ -64,10 +52,12 @@ export function recordingExecutor(
     ledger: {
       commit: (action: LedgerAction.Append) =>
         record.ledger.commit(action).pipe(
-          Effect.tap(() => options.onCommit === undefined ? Effect.void :
-            Effect.promise(async () => {
-              await options.onCommit?.(action);
-            }),
+          Effect.tap(() =>
+            options.onCommit === undefined
+              ? Effect.void
+              : Effect.promise(async () => {
+                  await options.onCommit?.(action);
+                }),
           ),
         ),
     },
@@ -95,36 +85,7 @@ export function turnExecutor(policy: CompiledPolicySnapshot) {
   };
 }
 
-export function createTestAgent(config: ChatAgentConfig) {
-  return {
-    run(input: ChatAgentInput, sink?: Sink) {
-      const record = recordingLedger();
-      const executor = testExecutor({
-        policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
-          generation: 1,
-          rows: SEEDED_POLICY_ROWS.map(
-            (row: Omit<import("@openomni/protocol").PolicyRow.Row, "generation">) => ({
-              ...row,
-              generation: 1,
-            }),
-          ),
-        }),
-        ledger: record.ledger,
-        observations: config.events,
-        signal: config.signal,
-        clock: () => Date.now(),
-        entropy: record.entropy,
-        retryAlarm: nullRetryAlarm,
-        identity: {
-          sessionId: input.traceContext?.sessionId ?? "session",
-          role: "resident",
-          parentActionId: null,
-        },
-      });
-      return Effect.gen(function* () { const fixture: ChatFixture = { executor, execution: executor, ...config }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
-    },
-  };
-}
+export const createTestAgent = seededTestAgent(nullRetryAlarm);
 export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sink?: Sink) {
   return createTestAgent(config).run(input, sink);
 }
@@ -171,26 +132,7 @@ export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>
     };
   });
 }
-export function runChatAttempts<T extends PlainValue>(
-  executor: Pick<DurableExecutor, "run" | "runAttempts">,
-  body: (attempt: number) => Effect.Effect<T, ExecutionError>,
-  evidence?: LlmAttempts<T>["evidence"],
-  intent?: PlainObject,
-) {
-  return executor.run(
-    { kind: "llm", op: "chat", intent: {}, effect: {} },
-    (parent: LedgerAction.Receipt) =>
-      executor.runAttempts(parent, {
-        prepare: (attempt: number) =>
-          Effect.succeed({
-            request: { op: "chat", intent: intent ?? { attempt }, effect: {} },
-            admit: () => Effect.void,
-            body: () => body(attempt),
-          }),
-        ...(evidence === undefined ? {} : { evidence }),
-      }),
-  );
-}
+export { runChatAttempts };
 export function answerThenCompact(executor: DurableExecutor, input: SessionRunnerInput) {
   return Effect.gen(function* () {
     const answer = createAssistantMessage("answer", "", input.sessionId);
@@ -221,31 +163,24 @@ export function dispatchingRunner(
   model: (request: RunInput, sink: Sink, input: SessionRunnerInput) => Promise<Run.Outcome>,
 ) {
   return createSessionChatRunner({
-    prepare: (input: SessionRunnerInput) => Effect.gen(function* () {
-      const dispatcher = (yield* createTurnDispatcher(input, runtime()).pipe(Effect.provide(catalogLayer(definitions))));
-      return prepareChatFixture({
-        traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
-        config: {
-          events: { publish: () => undefined },
-          executor: dispatcher.executor,
-          model: { provider: "test", id: "test" },
-          tools: [...dispatcher.specs],
-          toolWave: (calls: readonly Tool.Call[], signal?: AbortSignal) =>
-            dispatcher.executeWave(calls, {
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              signal,
-            }),
-          toolExecutor: (call: Tool.Call) =>
-            dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
-          llm: {
-            resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
-            run: (request: RunInput, sink: Sink) =>
-              Effect.promise(() => model(request, sink, input)),
+    prepare: (input: SessionRunnerInput) =>
+      Effect.gen(function* () {
+        const dispatcher = yield* createTurnDispatcher(input, runtime()).pipe(
+          Effect.provide(catalogLayer(definitions)),
+        );
+        return prepareChatFixture({
+          traceContext: fixtureTraceContext(input),
+          config: {
+            ...fixtureConfigHead(dispatcher.executor),
+            ...dispatcherToolPorts(dispatcher, input),
+            llm: {
+              resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
+              run: (request: RunInput, sink: Sink) =>
+                Effect.promise(() => model(request, sink, input)),
+            },
           },
-        },
-      });
-    }),
+        });
+      }),
   });
 }
 

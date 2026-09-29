@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 import type { Sink } from "../src";
 import { Llm } from "../src/services";
-import { APIError, ForeignFailure } from "../src/errors";
+import { APIError, ForeignFailure, InvalidProviderData } from "../src/errors";
 import { Context } from "effect";
 
 test("LLM service and error values retain their machine tags", () => {
@@ -11,6 +11,13 @@ test("LLM service and error values retain their machine tags", () => {
   expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
   expect(new APIError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
   expect(new ForeignFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
+  expect(
+    new InvalidProviderData({
+      operation: "provider.data",
+      cause: "invalid",
+      message: "invalid provider data",
+    })._tag,
+  ).toBe("InvalidProviderData");
 });
 
 describe("@openomni/llm root public surface", () => {

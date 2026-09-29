@@ -20,13 +20,10 @@ test("967-U1 cleanup attempts every disposer and propagates every rejection", as
   });
 
   // When cleanup runs, both errors remain observable, in disposal order.
-  let failure: AggregateError | undefined;
-  try {
-    await suite.cleanup();
-  } catch (error) {
-    if (!(error instanceof AggregateError)) throw error;
-    failure = error;
-  }
+  const failure = await suite.cleanup().then(
+    () => undefined,
+    (error: AggregateError) => error,
+  );
   // Then no failed disposer prevents another owner from being released.
   expect(failure).toBeInstanceOf(AggregateError);
   expect(failure?.errors).toEqual([second, first]);

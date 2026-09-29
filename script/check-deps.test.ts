@@ -2,7 +2,8 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkBundleImports, main } from "./check-deps";
+import { checkBundleImports, checkDocFreshness, main } from "./check-deps";
+import { checkPython } from "./check-quality-python";
 import { TOPOLOGY } from "./topology";
 
 const roots: string[] = [];
@@ -186,6 +187,16 @@ test("manifest layer order: allowed @openomni deps pass, inverted deps fail", as
   );
 });
 
+test("rejects malformed dependency maps instead of treating them as empty", async () => {
+  const root = fixture({
+    "packages/protocol/package.json": JSON.stringify({
+      name: "@openomni/protocol",
+      dependencies: ["@openomni/agent"],
+    }),
+  });
+  await expect(runInProcess(root)).rejects.toThrow();
+});
+
 test("accepts a clean repository with no dependency or doc warnings", async () => {
   // Nested in the existing worktree so git can establish that these new docs have no history.
   // No index, commit or git configuration is changed.
@@ -331,4 +342,208 @@ test("refuses unresolved aliases instead of treating them as external dependenci
   expect(await checkBundleImports(root)).toEqual([
     { code: "BUNDLE_UNRESOLVED_IMPORT", file: audit, line: 1 },
   ]);
+});
+
+test.each([
+  [
+    "source dependency",
+    "packages/protocol/src/illegal.ts",
+    'import { Session } from "@openomni/agent";',
+    "not allowed by layer order",
+  ],
+  [
+    "channels driver dependency",
+    "packages/channels/src/provider/driver.ts",
+    'import { DecisionFacts } from "@openomni/ledger";',
+    "S8 banding",
+  ],
+  [
+    "channels driver router edge",
+    "packages/channels/src/provider/driver.ts",
+    'import { route } from "../router/index.js";',
+    "drivers may not reach into src/router/",
+  ],
+  [
+    "channels brain store access",
+    "packages/channels/src/router/illegal.ts",
+    'import { Session } from "@openomni/ledger";',
+    "names ledger surface Session",
+  ],
+  [
+    "deep package import",
+    "packages/agent/src/illegal.ts",
+    'import { Session } from "@openomni/ledger/src/session";',
+    "use package barrel instead",
+  ],
+  [
+    "deep relative import",
+    "packages/agent/src/illegal.ts",
+    'import { value } from "../../../packages/protocol/src/index";',
+    "deep relative import",
+  ],
+  [
+    "type suppression",
+    "packages/agent/src/illegal.ts",
+    "// @ts-ignore",
+    "type suppression directive",
+  ],
+  [
+    "empty catch",
+    "packages/agent/src/illegal.ts",
+    "try { value() } catch {}",
+    "empty catch block",
+  ],
+])("refuses %s through the real dependency gate", async (_name, path, source, message) => {
+  const root = fixture({ [path]: source });
+  const result = await run(root);
+  expect(result.code).toBe(1);
+  expect(result.error).toContain(message);
+});
+
+test("ignores test and untracked research sources in dependency scans", async () => {
+  const root = fixture({
+    "packages/protocol/test/illegal.test.ts": 'import "@openomni/agent/src/index";',
+    "tmp/illegal.ts": 'import "@openomni/agent/src/index";',
+    ".claude/illegal.ts": 'import "@openomni/agent/src/index";',
+  });
+  expect((await run(root)).code).toBe(0);
+});
+
+test("dependency self-test discriminates its source and perimeter bands", () => {
+  const result = Bun.spawnSync([process.execPath, checker, "--self-test"], {
+    cwd: join(import.meta.dir, ".."),
+    timeout: 15_000,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain("layer discriminations hold");
+});
+
+test("in-process self-test exercises the dependency and perimeter rules", async () => {
+  const cwd = process.cwd();
+  const code = process.exitCode;
+  const messages: string[] = [];
+  const log = spyOn(console, "log").mockImplementation((message: string) => {
+    messages.push(message);
+  });
+  process.chdir(join(import.meta.dir, ".."));
+  Bun.argv.push("--self-test");
+  try {
+    await main();
+    expect(process.exitCode).toBe(0);
+    expect(messages.join("")).toContain("layer discriminations hold");
+  } finally {
+    Bun.argv.pop();
+    process.chdir(cwd);
+    process.exitCode = code ?? 0;
+    log.mockRestore();
+  }
+});
+
+test("missing package manifest fails closed before source scanning", async () => {
+  const root = fixture({});
+  rmSync(join(root, "packages/protocol/package.json"));
+  await expect(runInProcess(root)).rejects.toThrow("Missing required file: packages/protocol/package.json");
+});
+
+test("deep-import fix suggestions retain the package barrel identity", async () => {
+  const root = fixture({
+    "packages/agent/src/illegal.ts": 'import "@openomni/ledger/src/session";',
+  });
+  Bun.argv.push("--fix-suggestions");
+  try {
+    const result = await runInProcess(root);
+    expect(result.code).toBe(1);
+    expect(result.error).toContain("suggestion: @openomni/ledger");
+  } finally {
+    Bun.argv.pop();
+  }
+});
+
+test("rejects self-root imports, unsafe casts, and catch-all source filenames", async () => {
+  const root = fixture({
+    "packages/agent/src/utils.ts": 'import { value } from "../../src/core";\nconst result = value as any;',
+  });
+  const result = await runInProcess(root);
+  expect(result.code).toBe(1);
+  expect(result.error).toContain("self-root relative import");
+  expect(result.error).toContain("`as any` detected");
+  expect(result.error).toContain("catch-all filename detected");
+});
+
+test("missing tracked docs emit a warning without failing the dependency check", async () => {
+  const result = await runInProcess(fixture({}));
+  expect(result.code).toBe(0);
+  expect(result.error).toContain("WARNING: tracked doc missing: AGENTS.md");
+  expect(result.output).toContain("no violations, but");
+});
+
+test("doc freshness distinguishes new, stale, and unreadable history without git writes", async () => {
+  const root = fixture({
+    "AGENTS.md": "",
+    "packages/protocol/AGENTS.md": "",
+    "packages/ipc/AGENTS.md": "",
+  });
+  const cwd = process.cwd();
+  process.chdir(root);
+  try {
+    const warnings = await checkDocFreshness(async (args) => {
+      if (args[0] === "log") {
+        if (args[4] === "AGENTS.md") return "";
+        if (args[4] === "packages/protocol/AGENTS.md") return "abc";
+        throw new Error("git unavailable");
+      }
+      return "50";
+    });
+    expect(warnings).toContain(
+      "STALE: packages/protocol/AGENTS.md — last updated 50 commits ago (threshold: 50)",
+    );
+    expect(warnings).toContain("WARNING: doc freshness unavailable for packages/ipc/AGENTS.md");
+    expect(warnings).toContain("WARNING: tracked doc missing: packages/ledger/AGENTS.md");
+    expect(warnings).not.toContain("WARNING: doc freshness unavailable for AGENTS.md");
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("doc freshness reports unavailable git history outside a repository", async () => {
+  const root = fixture({ "AGENTS.md": "" });
+  const cwd = process.cwd();
+  process.chdir(root);
+  try {
+    expect(await checkDocFreshness()).toContain(
+      "WARNING: doc freshness unavailable for AGENTS.md",
+    );
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("in-process Python gate rejects warning diagnostics and accepts clean source", () => {
+  const root = fixture({
+    "clean.py": "def identity(value: int) -> int:\n    return value\n",
+    "warning.py": "def identity(value):\n    return value\n",
+  });
+  expect(checkPython(["--file", join(root, "clean.py")])).toBe(0);
+  expect(checkPython(["--file", join(root, "warning.py")])).toBe(1);
+});
+
+test("in-process Python gate rejects checker version drift and invalid flags", () => {
+  const root = fixture({ "checker": "#!/bin/sh\nprintf 'basedpyright 0.0.0\\n'\n" });
+  const executable = join(root, "checker");
+  chmodSync(executable, 0o700);
+  const previous = process.env.BASEDPYRIGHT;
+  const errors: string[] = [];
+  const error = spyOn(console, "error").mockImplementation((message: string) => {
+    errors.push(message);
+  });
+  process.env.BASEDPYRIGHT = executable;
+  try {
+    expect(checkPython([])).toBe(2);
+    expect(errors).toContain("basedpyright 1.39.10 is required");
+    expect(() => checkPython(["--update"])).toThrow();
+  } finally {
+    error.mockRestore();
+    if (previous === undefined) delete process.env.BASEDPYRIGHT;
+    else process.env.BASEDPYRIGHT = previous;
+  }
 });

@@ -9,6 +9,7 @@ import {
   type WorkspaceTopology,
 } from "./topology";
 import { z } from "zod";
+import { PlainValueSchema } from "../packages/protocol/src/json.js";
 
 export type TopologyConsumer =
   | "dependency-bands"
@@ -29,9 +30,9 @@ const CONSUMERS: readonly TopologyConsumer[] = [
   "tsconfig",
 ];
 
-const JsonObject = z.record(z.string(), z.json());
+const JsonObject = z.record(z.string(), PlainValueSchema);
 const KnipConfig = z.object({
-  workspaces: z.record(z.string(), z.json()).optional(),
+  workspaces: z.record(z.string(), PlainValueSchema).optional(),
 });
 
 function json(path: string): z.infer<typeof JsonObject> {
@@ -121,7 +122,7 @@ function checkAllowedDependencies(
   problems: TopologyProblems,
 ): void {
   for (const workspace of topology) {
-    if (!Array.isArray(workspace.allowedDeps)) continue;
+    if (typeof workspace.allowedDeps === "string") continue;
     for (const dependency of workspace.allowedDeps) {
       if (!names.has(dependency)) {
         problems["dependency-bands"].push(
@@ -196,18 +197,22 @@ export function topologyProblems(
   return problems;
 }
 
-export function main(): void {
-  const problems = topologyProblems();
+export function main(
+  topology: readonly WorkspaceTopology[] = TOPOLOGY,
+  root = join(import.meta.dir, ".."),
+): number {
+  const problems = topologyProblems(topology, root);
   const failures = CONSUMERS.flatMap((consumer) =>
     problems[consumer].map((problem) => `${consumer}: ${problem}`),
   );
   if (failures.length > 0) {
     for (const failure of failures) process.stderr.write(`VIOLATION [topology] ${failure}\n`);
-    process.exit(1);
+    return 1;
   }
   process.stdout.write(
-    `OK: topology conformance — ${TOPOLOGY.length} workspaces feed dependency, cycle, knip/dead-export, CI, and tsconfig gates\n`,
+    `OK: topology conformance — ${topology.length} workspaces feed dependency, cycle, knip/dead-export, CI, and tsconfig gates\n`,
   );
+  return 0;
 }
 
-if (import.meta.main) main();
+if (import.meta.main) process.exitCode = main();

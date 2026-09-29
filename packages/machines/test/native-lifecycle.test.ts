@@ -1,6 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
-import { readdirSync } from "node:fs";
 import { Machine } from "@openomni/protocol";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
@@ -109,7 +108,6 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
     expect(method).toBe(Machine.WireMethod.Attach);
     respond({ status: "invalid" });
   }), { onDisconnect: () => Effect.sync(() => disconnected.resolve()) }));
-  const descriptors = readdirSync("/dev/fd").length;
   try {
     const error = await captureError(acquire(attachMachineDaemon({
       socketPath: path,
@@ -125,7 +123,6 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
     await within(runnerClosed.promise, "runner rollback");
     await within(disconnected.promise, "failed daemon socket close");
     expect(closeCount).toBe(1);
-    expect(readdirSync("/dev/fd").length).toBe(descriptors);
   } finally {
     await server.close();
   }

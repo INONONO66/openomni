@@ -17,7 +17,10 @@ const model = {
 
 function effectOverflowCompactionConfig() {
   const config = overflowCompactionConfig();
-  return { ...config, compaction: { ...config.compaction, onSummarize: () => Effect.succeed("overflow checkpoint") } };
+  return {
+    ...config,
+    compaction: { ...config.compaction, onSummarize: () => Effect.succeed("overflow checkpoint") },
+  };
 }
 
 const history = runInput([
@@ -28,6 +31,23 @@ const history = runInput([
   { role: "assistant", content: "recent answer" },
   { role: "user", content: "continue" },
 ]);
+
+function overflowLlm(onRun: () => ReturnType<typeof providerFailure>) {
+  return {
+    resolveModel: () => Effect.succeed(model),
+    run: () => Effect.sync(() => ({ type: "error" as const, error: onRun() })),
+  };
+}
+
+/** The run must fail with exactly the given provider error as its squashed cause. */
+async function expectSquashedCause<A, E>(
+  running: Promise<Exit.Exit<A, E>>,
+  expected: ReturnType<typeof providerFailure>,
+): Promise<void> {
+  const exit = await running;
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(expected);
+}
 
 describe("context overflow recovery", () => {
   it("classifies provider overflow text without matching rate limits", () => {
@@ -54,21 +74,20 @@ describe("context overflow recovery", () => {
       retryable: false,
     });
     let calls = 0;
-    const running = isolated(Effect.exit(runTestAgent(history, {
-      events: collector(),
-      model: { provider: "provider", id: "model" },
-      llm: {
-        resolveModel: () => Effect.succeed(model),
-        run: () => Effect.sync(() => {
-          calls += 1;
-          return { type: "error", error: original };
+    const running = isolated(
+      Effect.exit(
+        runTestAgent(history, {
+          events: collector(),
+          model: { provider: "provider", id: "model" },
+          llm: overflowLlm(() => {
+            calls += 1;
+            return original;
+          }),
         }),
-      },
-    })));
+      ),
+    );
 
-    const exit = await running;
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(original);
+    await expectSquashedCause(running, original);
     expect(calls).toBe(1);
   });
 
@@ -76,32 +95,35 @@ describe("context overflow recovery", () => {
     const seen: number[] = [];
     let sawAnchor = false;
     let calls = 0;
-    const result = await isolated(runTestAgent(history, {
-      ...effectOverflowCompactionConfig(),
-      llm: {
-        resolveModel: () => Effect.succeed(model),
-        run: (input, sink) => Effect.promise(async () => {
-          calls += 1;
-          seen.push(input.messages.length);
-          sawAnchor =
-            calls === 2 &&
-            input.messages.some((message) =>
-              message.parts.some(
-                (part) => part.type === "text" && part.text.includes("overflow checkpoint"),
-              ),
-            );
-          return calls === 1
-            ? {
-                type: "error",
-                error: providerFailure("prompt is too long", {
-                  contextOverflow: true,
-                  retryable: false,
-                }),
-              }
-            : completeModel(input, sink);
-        }),
-      },
-    }));
+    const result = await isolated(
+      runTestAgent(history, {
+        ...effectOverflowCompactionConfig(),
+        llm: {
+          resolveModel: () => Effect.succeed(model),
+          run: (input, sink) =>
+            Effect.promise(async () => {
+              calls += 1;
+              seen.push(input.messages.length);
+              sawAnchor =
+                calls === 2 &&
+                input.messages.some((message) =>
+                  message.parts.some(
+                    (part) => part.type === "text" && part.text.includes("overflow checkpoint"),
+                  ),
+                );
+              return calls === 1
+                ? {
+                    type: "error",
+                    error: providerFailure("prompt is too long", {
+                      contextOverflow: true,
+                      retryable: false,
+                    }),
+                  }
+                : completeModel(input, sink);
+            }),
+        },
+      }),
+    );
 
     expect(calls).toBe(2);
     expect(result.finishReason).toBe("stop");
@@ -115,22 +137,21 @@ describe("context overflow recovery", () => {
       contextOverflow: true,
       retryable: false,
     });
-    const second = providerFailure("prompt is too long on second call", { contextOverflow: true, retryable: false });
+    const second = providerFailure("prompt is too long on second call", {
+      contextOverflow: true,
+      retryable: false,
+    });
     let calls = 0;
-    const running = isolated(Effect.exit(runTestAgent(history, {
-      ...effectOverflowCompactionConfig(),
-      llm: {
-        resolveModel: () => Effect.succeed(model),
-        run: () => Effect.sync(() => {
-          calls += 1;
-          return { type: "error", error: calls === 1 ? first : second };
+    const running = isolated(
+      Effect.exit(
+        runTestAgent(history, {
+          ...effectOverflowCompactionConfig(),
+          llm: overflowLlm(() => (++calls === 1 ? first : second)),
         }),
-      },
-    })));
+      ),
+    );
 
-    const exit = await running;
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(second);
+    await expectSquashedCause(running, second);
     expect(calls).toBe(2);
   });
 });

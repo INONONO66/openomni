@@ -20,7 +20,7 @@ test.each([
   { inboundTreatment: "evidence_only" },
   { senderTier: "owner" },
   { addressee: "bot" },
-])("facts-only ingest rejects reserved fields: %j", async (reserved: Record<string, unknown>) => {
+])("facts-only ingest rejects reserved fields: %j", async (reserved) => {
   expect(await effectFailure(
     kernelRouter().ingest(ownerSender, { ...ownerFacts, ...reserved }),
   )).toMatchObject({

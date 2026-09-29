@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Policy } from "../../../src/policy/index.js";
+import type { JsonShapedValue } from "../../../src/json.js";
 
-function canonicalize(value: unknown): string {
+function canonicalize(value: JsonShapedValue): string {
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
 
   if (value !== null && typeof value === "object") {

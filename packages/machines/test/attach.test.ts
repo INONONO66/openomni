@@ -4,6 +4,7 @@ import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "../../ipc/test/helpers/native";
+import { captureError } from "../../ipc/test/helpers/signal";
 import { type BusEvent, Machine } from "@openomni/protocol";
 import { attachMachineDaemon, type CodeRunner } from "./helpers/native";
 import { type MachineHost, createMachineHost } from "./helpers/native";
@@ -12,17 +13,26 @@ import { MachineCellError } from "../src/errors";
 import { kernelEnrollment } from "./helpers";
 import { exit as runExit } from "./helpers/effect";
 
-type RecordedEvent<T> = {
+type MachineEventPayload =
+  | ReturnType<typeof Machine.Events.Attached.schema.parse>
+  | ReturnType<typeof Machine.Events.Detached.schema.parse>;
+type RecordedEvent = {
   readonly name: string;
-  readonly payload: T;
+  readonly payload: MachineEventPayload;
 };
 
 function eventCollector() {
-  const events: RecordedEvent<unknown>[] = [];
-  const waiters: Array<{ name: string; resolve: (event: RecordedEvent<unknown>) => void }> = [];
+  const events: RecordedEvent[] = [];
+  const waiters: Array<{ name: string; resolve: (event: RecordedEvent) => void }> = [];
   const sink: BusEvent.Sink = {
     publish(descriptor, payload) {
-      const event = { name: descriptor.name, payload };
+      const event =
+        descriptor.name === Machine.Events.Attached.name
+          ? { name: descriptor.name, payload: Machine.Events.Attached.schema.parse(payload) }
+          : {
+              name: descriptor.name,
+              payload: Machine.Events.Detached.schema.parse(payload),
+            };
       events.push(event);
       for (let i = waiters.length - 1; i >= 0; i -= 1) {
         const waiter = waiters[i];
@@ -37,7 +47,7 @@ function eventCollector() {
     sink,
     events,
     /** Resolves on the NEXT event of this name (bounded by bun's test timeout). */
-    next(name: string): Promise<RecordedEvent<unknown>> {
+    next(name: string): Promise<RecordedEvent> {
       return new Promise((resolve) => {
         waiters.push({ name, resolve });
       });
@@ -97,23 +107,18 @@ async function withHost(
   }
 }
 
-// Shared with rejection tests so the simulated peer's parse cannot silently weaken.
-function parsePeerCellRequest(params: unknown) {
-  return Machine.CellRequest.parse(params);
-}
-
 describe("machine attach handshake", () => {
   test.each([
     { cellId: "x" },
     { cellId: "x", timeoutMs: 1 },
     { cellId: "x", code: "ok" },
   ])("simulated peer rejects missing cell request fields: %j", (params) => {
-    expect(() => parsePeerCellRequest(params)).toThrow();
+    expect(() => Machine.CellRequest.parse(params)).toThrow();
   });
 
   test("simulated peer rejects extra cell request fields", () => {
     expect(() =>
-      parsePeerCellRequest({ cellId: "x", code: "ok", timeoutMs: 1, constructor: "extra" }),
+      Machine.CellRequest.parse({ cellId: "x", code: "ok", timeoutMs: 1, constructor: "extra" }),
     ).toThrow();
   });
 
@@ -160,7 +165,7 @@ describe("machine attach handshake", () => {
           const handle = host.get("mac-studio");
           const running = handle.runCode(cell);
           await entered.promise;
-          const duplicate = await handle.runCode(cell).catch((error: unknown) => error);
+          const duplicate = await captureError(handle.runCode(cell));
           expect(duplicate).toBeInstanceOf(MachineCellError);
           expect(duplicate).toMatchObject({
             _tag: "MachineCellError", code: "duplicate_cell_id", cellId: cell.cellId,
@@ -194,7 +199,7 @@ describe("machine attach handshake", () => {
               cancelled.resolve();
               throw new Error("cancel rejected by peer");
             } else {
-              const request = parsePeerCellRequest(params);
+              const request = Machine.CellRequest.parse(params);
               started.resolve();
               await cancelled.promise;
               respond({
@@ -217,7 +222,7 @@ describe("machine attach handshake", () => {
             { cellId: "cancel", code: "x", timeoutMs: 1000 },
             controller.signal,
           );
-          const outcome = running.catch((error: unknown) => error);
+          const outcome = captureError(running);
           await started.promise;
           controller.abort();
           expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.cancel" });

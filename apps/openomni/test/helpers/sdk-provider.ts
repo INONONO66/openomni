@@ -4,6 +4,7 @@ import type { FixtureLlm } from "./app-fixture";
 import type { Model } from "@openomni/protocol";
 import { assistantMessage } from "./assistant-message";
 import { providerFailure } from "./provider-failure";
+import { fakeProviderModel } from "./resident-suite";
 
 /** Real SDK error shape, with retry facts on the error rather than under data. */
 export function providerError(fields: {
@@ -26,10 +27,11 @@ export function transientProvider(
 ): FixtureLlm {
   let calls = 0;
   return {
-    resolveModel: (model) => Effect.sync(() => {
-      resolved.push(model);
-      return { id: model.id, name: model.id, providerID: model.provider };
-    }),
+    resolveModel: (model) =>
+      Effect.suspend(() => {
+        resolved.push(model);
+        return fakeProviderModel(model);
+      }),
     run: (input, sink) =>
       Effect.gen(function* () {
         if (auths !== undefined)

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type Gateway, type Inbox, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { IngressRoutingError } from "../../src/errors";
+import { recordingInbox } from "./_recording-inbox";
 
 beforeEach(() => {
   resetLedger();
@@ -53,12 +54,7 @@ test.each([
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
       }
     },
-    inbox: {
-      commit: (row: Inbox.Commit) => Effect.sync(() => {
-        commits.push(row);
-        return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
-      }),
-    },
+    inbox: recordingInbox(commits),
     prepare: (_sender: Gateway.IngestSender, _message: Gateway.SendMessage, target: string) => Effect.succeed({
       target,
       message: {
@@ -121,7 +117,7 @@ test.each([
     expect(ledger().kernel.pendingMessages("request-owner")).toMatchObject([{ content: "answer" }]);
     expect(ledger().kernel.requestById("request-raw-action")?.state).toBe("resolved");
   } else {
-    const failure = await effectFailure(outcome);
+    const failure: Error = await effectFailure(outcome);
     expect(failure).toBeInstanceOf(IngressRoutingError);
     expect(failure).toMatchObject({ _tag: "IngressRoutingError", code: "route_blocked" });
     expect(decisions[0]).toMatchObject({

@@ -1,5 +1,14 @@
 import type { Message } from "@openomni/protocol";
 
+function messageIdentity(sessionID: string, timeCreated?: number) {
+  return {
+    id: crypto.randomUUID(),
+    sessionID,
+    time: { created: timeCreated ?? Date.now() },
+    agent: sessionID,
+  };
+}
+
 export function createUserMessage(
   content: string,
   sessionID: string,
@@ -7,14 +16,9 @@ export function createUserMessage(
   // Hydrated messages retain their recorded creation time.
   timeCreated?: number,
 ): Message.WithParts {
-  const id = crypto.randomUUID();
-  const now = timeCreated ?? Date.now();
   const info: Message.UserMessage = {
-    id,
-    sessionID,
+    ...messageIdentity(sessionID, timeCreated),
     role: "user",
-    time: { created: now },
-    agent: sessionID,
     model: { providerID: "", modelID: "" },
   };
 
@@ -28,17 +32,12 @@ export function createAssistantMessage(
   partMetadata?: Message.TextPart["metadata"],
   timeCreated?: number,
 ): Message.WithParts {
-  const id = crypto.randomUUID();
-  const now = timeCreated ?? Date.now();
   const info: Message.AssistantMessage = {
-    id,
-    sessionID,
+    ...messageIdentity(sessionID, timeCreated),
     role: "assistant",
-    time: { created: now },
     parentID,
     modelID: "",
     providerID: "",
-    agent: sessionID,
     path: { cwd: process.cwd(), root: process.cwd() },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

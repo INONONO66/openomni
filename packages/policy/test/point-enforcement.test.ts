@@ -8,7 +8,6 @@ import {
   type PolicyEvaluationInput,
 } from "../src/index";
 import type { PolicyRow, Storage } from "@openomni/protocol";
-import { PolicyGenerationRefused } from "../../ledger/src/errors";
 import { atGeneration, compaction, draft, MemoryPolicyRows, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input: PolicyEvaluationInput = {
@@ -20,60 +19,45 @@ const input: PolicyEvaluationInput = {
   value: { path: "/tmp/result" },
 };
 
-function catchCompile(run: () => void): PolicyCompileError {
-  try {
-    run();
-  } catch (error) {
-    expect(PolicyCompileError.isInstance(error)).toBe(true);
-    if (PolicyCompileError.isInstance(error)) return error;
-  }
-  throw new Error("expected policy compile failure");
-}
-
 const detachedPolicyCompileErrorGuard = PolicyCompileError.isInstance;
 
-function preservesPolicyCompileErrorNarrowing(error: unknown): PolicyCompileError | undefined {
+function preservesPolicyCompileErrorNarrowing<Input>(
+  error: Input,
+): (Input & PolicyCompileError) | undefined {
   if (detachedPolicyCompileErrorGuard(error)) {
     return error;
   }
   return undefined;
 }
 
-function catchAppend(run: () => number): PolicyGenerationRefused {
-  try {
-    run();
-  } catch (error) {
-    if (error instanceof PolicyGenerationRefused) return error;
-    throw error;
-  }
-  throw new Error("expected append failure");
-}
-
 describe("policy row compiler enforcement", () => {
   it("narrows detached guards to PolicyCompileError", () => {
-    const error = new PolicyCompileError({ code: "snapshot_load_failed", generation: 1 });
+    const error = new PolicyCompileError({
+      code: "snapshot_load_failed",
+      generation: 1,
+      ruleName: "load",
+    });
     expect(preservesPolicyCompileErrorNarrowing(error)?.code).toBe("snapshot_load_failed");
+    expect(error.generation).toBe(1);
+    expect(error.ruleName).toBe("load");
   });
 
   it("cannot disable the mandatory rule and fails closed with exact fields", () => {
-    const error = catchCompile(() =>
+    expect(() =>
       compilePolicySnapshot({
         registry: KERNEL_POLICY_REGISTRY,
         generation: 1,
         rows: [],
         mandatory: [],
       }),
-    );
-
-    expect(error.toObject()).toEqual({
-      name: "PolicyCompileError",
-      data: {
+    ).toThrow(expect.objectContaining({
+      data: expect.objectContaining({
         code: "mandatory_rule_missing",
         generation: 1,
         ruleName: "compaction",
         message: "policy generation 1 is missing mandatory rule compaction",
-      },
-    });
+      }),
+    }));
   });
 
   it("turns storage load failure into a typed deny and never invokes a body", () => {
@@ -104,6 +88,31 @@ describe("policy row compiler enforcement", () => {
     });
   });
 
+  it("preserves exact compile failures after storage loads", () => {
+    const compiler = createPolicyCompiler({
+      registry: KERNEL_POLICY_REGISTRY,
+      source: new MemoryPolicyRows([
+        atGeneration(compaction, 1),
+        atGeneration(draft("bad-kind", "extension.unregistered", "pre", { type: "allow" }), 1),
+      ]),
+      mandatory: ["compaction"],
+    });
+
+    const decision = compiler.pin(1).evaluate(input);
+
+    expect(decision).toMatchObject({
+      generation: 1,
+      verdict: "deny",
+      matchedRuleIds: [],
+      reason: "unknown_kind",
+      error: {
+        code: "unknown_kind",
+        generation: 1,
+        ruleName: "bad-kind",
+      },
+    });
+  });
+
   it.each([
     ["kind", draft("bad-kind", "extension.unregistered", "pre", { type: "allow" }), "unknown_kind"],
     [
@@ -122,18 +131,16 @@ describe("policy row compiler enforcement", () => {
       "unknown_ref",
     ],
   ] as const)("rejects an unregistered %s with exact machine fields", (_label: string, badRow: PolicyRowDraft, code: PolicyCompileError["code"]) => {
-    const error = catchCompile(() =>
+    expect(() =>
       compilePolicySnapshot({
         registry: KERNEL_POLICY_REGISTRY,
         generation: 1,
         rows: [atGeneration(compaction, 1), atGeneration(badRow, 1)],
         mandatory: ["compaction"],
       }),
-    );
-
-    expect(error.code).toBe(code);
-    expect(error.generation).toBe(1);
-    expect(error.ruleName).toBe(badRow.name);
+    ).toThrow(expect.objectContaining({
+      data: expect.objectContaining({ code, generation: 1, ruleName: badRow.name }),
+    }));
   });
 
   it.each([
@@ -147,16 +154,16 @@ describe("policy row compiler enforcement", () => {
       atGeneration(draft("bad-verdict", "tool", "pre", { type: "unexpected" }), 1),
     ],
   ] as const)("rejects malformed rows with %s", (code: PolicyCompileError["code"], badRow: PolicyRow.Row) => {
-    const error = catchCompile(() =>
+    expect(() =>
       compilePolicySnapshot({
         registry: KERNEL_POLICY_REGISTRY,
         generation: 1,
         rows: [atGeneration(compaction, 1), badRow],
         mandatory: ["compaction"],
       }),
-    );
-
-    expect(error.code).toBe(code);
+    ).toThrow(expect.objectContaining({
+      data: expect.objectContaining({ code }),
+    }));
   });
 
   it("requires approval before lower-priority rules can allow", () => {
@@ -219,17 +226,17 @@ describe("policy row compiler enforcement", () => {
   it("rolls back the entire generation on a conflicting row with typed identity", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
     source.appendGeneration(() => [compaction]);
     const before = source.rows();
-    const error = catchAppend(() => source.appendGeneration(() => [compaction, compaction]));
-    expect(error).toMatchObject({
+    expect(() => source.appendGeneration(() => [compaction, compaction])).toThrow(expect.objectContaining({
       _tag: "PolicyGenerationRefused", reason: "conflict", generation: 2, ruleName: "compaction",
-    });
+    }));
     expect(source.rows()).toEqual(before);
     expect(source.appendGeneration(() => [compaction])).toBe(2);
   }));
 
   it("refuses empty generations and leaves no durable or cached partial snapshot", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
-    const error = catchAppend(() => source.appendGeneration(() => []));
-    expect(error).toMatchObject({ _tag: "PolicyGenerationRefused", reason: "empty", generation: 1 });
+    expect(() => source.appendGeneration(() => [])).toThrow(expect.objectContaining({
+      _tag: "PolicyGenerationRefused", reason: "empty", generation: 1,
+    }));
     expect(source.rows()).toEqual([]);
     expect(source.appendGeneration(() => [compaction])).toBe(1);
     const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, source });

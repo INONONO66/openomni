@@ -60,6 +60,29 @@ function isPlainObject(value: object, keyPolicy: PlainKeyPolicy): value is Plain
 }
 
 /**
+ * A JSON-shaped tree whose optional slots may be explicit undefined
+ * (JSON.stringify drops them on the wire) and whose numbers may be
+ * non-finite (JSON.stringify normalizes them to null). This is the honest
+ * static shape of values that ride a JSON wire before serialization;
+ * schemas built on it deliberately keep historical accept-anything runtime
+ * behavior, so consumers must not assume validation beyond this shape.
+ */
+export type JsonShapedValue =
+  | undefined
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonShapedValue[]
+  | { readonly [key: string]: JsonShapedValue };
+
+// Named generic acceptor (see isPersistedPlainValue on the callback typing):
+// runtime stays accept-anything, matching the z.unknown() it replaces.
+const acceptJsonShapedValue = <Input,>(_value: Input): boolean => true;
+export const JsonShapedValueSchema: z.ZodType<JsonShapedValue, JsonShapedValue> =
+  z.custom<JsonShapedValue>(acceptJsonShapedValue);
+
+/**
  * Strict live-boundary profile (policy effects): own keys named __proto__,
  * constructor, or prototype are refused outright — hostile input never gets
  * to look like plain data.
@@ -87,15 +110,19 @@ export function isPlainValue<Input>(value: Input): value is Input & PlainValue {
  * arrays and plain data properties), so no historical row is invalidated.
  */
 export const PlainValueSchema: z.ZodType<PlainValue, PlainValue> = z.custom<PlainValue>(
-  (value) => {
-    try {
-      return isPlainValueUnsafe(value, persistedPlainKey);
-    } catch {
-      return false;
-    }
-  },
+  isPersistedPlainValue,
   { message: "Expected a plain JSON value" },
 );
+
+// Named generic guard: z.custom's inline callback parameter would be
+// contextually typed `unknown`; a generic parameter carries no top type.
+function isPersistedPlainValue<Input>(value: Input): boolean {
+  try {
+    return isPlainValueUnsafe(value, persistedPlainKey);
+  } catch {
+    return false;
+  }
+}
 
 /** The persisted-fact profile narrowed to one JSON object: tool arguments and other record-shaped facts. */
 export const PlainObjectSchema: z.ZodType<PlainObject, PlainValue> = PlainValueSchema.transform(
@@ -106,7 +133,15 @@ export const PlainObjectSchema: z.ZodType<PlainObject, PlainValue> = PlainValueS
   },
 );
 
-function renderCanonical(value: PlainValue | object | undefined): string {
+type CanonicalInput = PlainValue | object | undefined;
+
+// Array.isArray's `arg is any[]` predicate would smear `any` over the
+// narrowed value; this guard keeps the element type explicit.
+function isCanonicalArray(value: CanonicalInput): value is readonly CanonicalInput[] {
+  return Array.isArray(value);
+}
+
+function renderCanonical(value: CanonicalInput): string {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
@@ -114,9 +149,9 @@ function renderCanonical(value: PlainValue | object | undefined): string {
     return Object.is(value, -0) ? "0" : String(value);
   }
   if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((entry) => renderCanonical(entry)).join(",")}]`;
+  if (isCanonicalArray(value)) return `[${value.map((entry) => renderCanonical(entry)).join(",")}]`;
   if (typeof value === "object") {
-    const prototype = Object.getPrototypeOf(value);
+    const prototype: object | null = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error("canonical JSON accepts plain objects only");
     }

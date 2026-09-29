@@ -12,6 +12,17 @@ import { nextResidentTurn } from "./helpers/resident-turn";
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
 const suite = residentSuite();
+
+/** Boots the app on `config`, opens the owner socket, and awaits one resident turn. */
+async function bootAndAwaitTurn(config: ReturnType<typeof suite.config>, text: string) {
+  const app = await suite.boot({ config });
+  const plane = await planeOf(app.runtime);
+  const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
+  const reply = nextResidentTurn(plane);
+  socket.send(JSON.stringify({ type: "message", text }));
+  await reply;
+  return plane;
+}
 function stream(text: string, fail: boolean, tool: boolean): Response {
   const frames = [
     messageStart("attempt", "claude-opus-4-5", 8),
@@ -67,12 +78,7 @@ for (const visible of ["none", "text", "tool"] as const) {
         baseUrl: `http://127.0.0.1:${provider.port}/v1`,
       },
     });
-    const app = await suite.boot({ config });
-    const plane = await planeOf(app.runtime);
-    const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-    const reply = nextResidentTurn(plane);
-    socket.send(JSON.stringify({ type: "message", text: "attempt" }));
-    await reply;
+    const plane = await bootAndAwaitTurn(config, "attempt");
     const sessionId = plane.listSessions().filter((row) => row.id !== "gateway-ingress")[0]?.id;
     if (sessionId === undefined) throw new Error("missing session");
     const sessionsDir = config.sessionsDir;
@@ -80,12 +86,12 @@ for (const visible of ["none", "text", "tool"] as const) {
     const db = new Database(sessionFilePath(sessionsDir, sessionId), { readonly: true });
     try {
       const parents = db
-        .query(
+        .query<{ id: string }, [string]>(
           "SELECT id FROM action WHERE session_id=? AND kind='llm' AND json_extract(intent,'$.phase')='intent'",
         )
         .all(sessionId);
       const attempts = db
-        .query(
+        .query<{ parent_id: string | null }, [string]>(
           "SELECT parent_id FROM action WHERE session_id=? AND kind='attempt' AND json_extract(intent,'$.phase')='intent' ORDER BY ordinal",
         )
         .all(sessionId);
@@ -93,10 +99,7 @@ for (const visible of ["none", "text", "tool"] as const) {
       expect(attempts).toHaveLength(visible === "none" ? 3 : 1);
       const parent = parents[0];
       expect(attempts).toEqual(
-        Array.from({ length: attempts.length }, () => ({
-          parent_id:
-            typeof parent === "object" && parent !== null && "id" in parent ? parent.id : null,
-        })),
+        Array.from({ length: attempts.length }, () => ({ parent_id: parent?.id ?? null })),
       );
       expect(requests).toBe(visible === "none" ? 3 : 1);
       // Durable retry schedule (timer plane): each backoff committed an
@@ -217,12 +220,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
   await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }));
-  const app = await suite.boot({ config });
-  const plane = await planeOf(app.runtime);
-  const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
-  const reply = nextResidentTurn(plane);
-  socket.send(JSON.stringify({ type: "message", text: "fallback" }));
-  await reply;
+  const plane = await bootAndAwaitTurn(config, "fallback");
   expect(authorization.map((request) => request.key)).toEqual([
     "primary-key",
     "Bearer fallback-key",

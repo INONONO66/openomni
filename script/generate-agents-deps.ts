@@ -34,7 +34,7 @@ function renderWorkspaceName(workspace: WorkspaceTopology): string {
 export function renderTopology(topology: readonly WorkspaceTopology[] = TOPOLOGY): string {
   const consumersByDependency = new Map<string, string[]>();
   for (const workspace of topology) {
-    if (!Array.isArray(workspace.allowedDeps)) {
+    if (typeof workspace.allowedDeps === "string") {
       continue;
     }
     for (const dependency of workspace.allowedDeps) {
@@ -76,9 +76,12 @@ function replaceGeneratedSection(document: string, generated: string): string {
   return `${document.slice(0, start)}${generated}${document.slice(afterEnd)}`;
 }
 
-async function main(): Promise<void> {
-  const current = await Bun.file(AGENTS_PATH).text();
-  const expected = replaceGeneratedSection(current, renderTopology());
+export async function main(
+  path: string | URL = AGENTS_PATH,
+  topology: readonly WorkspaceTopology[] = TOPOLOGY,
+): Promise<void> {
+  const current = await Bun.file(path).text();
+  const expected = replaceGeneratedSection(current, renderTopology(topology));
 
   if (process.argv.includes("--check")) {
     if (current !== expected) {
@@ -90,11 +93,9 @@ async function main(): Promise<void> {
       console.log("AGENTS.md dependency topology is current");
     }
   } else {
-    await Bun.write(AGENTS_PATH, expected);
+    await Bun.write(path, expected);
     console.log("Updated AGENTS.md dependency topology");
   }
 }
 
-if (import.meta.main) {
-  await main();
-}
+if (import.meta.main) await main();

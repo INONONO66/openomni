@@ -50,9 +50,13 @@ describe("scoped observations", () => {
       "test.scope.strict",
       z.object({ component: z.string(), msg: z.string() }).strict(),
     );
-    const received: unknown[] = [];
+    const received: Array<z.infer<typeof StrictEvent> & { extra: string }> = [];
     const scoped = scopeObservation({
-      publish: (_event, data) => received.push(data),
+      publish: (_event, data) => received.push(z.object({
+        component: z.string(),
+        msg: z.string(),
+        extra: z.string(),
+      }).parse(data)),
       scope: () => scoped,
     }, identity, { clock: () => 42, entropy: () => "event-strict" });
     scoped.publish(StrictEvent, { component: "test", msg: "strict", extra: "kept" } as never);

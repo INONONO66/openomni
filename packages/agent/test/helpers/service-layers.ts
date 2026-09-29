@@ -1,5 +1,5 @@
 import { SessionHandleStore } from "@openomni/ledger";
-import type { AnyToolDefinition } from "@openomni/protocol";
+import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { Context, Effect, Layer } from "effect";
 import { LlmLive } from "@openomni/llm";
 import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "@openomni/policy";
@@ -8,7 +8,33 @@ import { Clock, Entropy, GenerationOwnership, ObservationSink, SessionLayer, Too
 import { NamedPolicyRegistry } from "../../src/bundle";
 import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session-generations";
 import { createObservationBus, scopeObservation } from "../../src/observation/bus";
-import type { createTurnDispatcher } from "../../src/tool-dispatcher";
+import { createTurnDispatcher } from "../../src/tool-dispatcher";
+
+/** The dispatcher-backed tool surface of a chat fixture config. */
+export function dispatcherToolPorts(
+  dispatcher: Effect.Success<ReturnType<typeof createTurnDispatcher>>,
+  input: { readonly sessionId: string; readonly turnId: string },
+) {
+  return {
+    tools: [...dispatcher.specs],
+    toolWave: (calls: readonly Tool.Call[], signal?: AbortSignal) =>
+      dispatcher.executeWave(calls, { sessionId: input.sessionId, turnId: input.turnId, signal }),
+    toolExecutor: (call: Tool.Call) =>
+      dispatcher.execute(call, { sessionId: input.sessionId, turnId: input.turnId }),
+  };
+}
+
+/** Turn dispatcher over the test layers: given catalog plus the fixture's clock/entropy/sink. */
+export function testTurnDispatcher(
+  input: Parameters<typeof turnTestLayer>[0],
+  fixture: Parameters<typeof turnTestLayer>[1],
+  definitions: readonly AnyToolDefinition[] = [],
+) {
+  return createTurnDispatcher(input, fixture).pipe(
+    Effect.provide(catalogLayer(definitions)),
+    Effect.provide(turnTestLayer(input, fixture)),
+  );
+}
 
 export function turnTestLayer(input: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] },
   fixture: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">>) {

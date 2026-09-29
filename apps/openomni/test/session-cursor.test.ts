@@ -13,10 +13,10 @@ import { assistantMessage } from "./helpers/assistant-message";
 
 const suite = residentSuite();
 
-test("a reconnect replays only committed revisions beyond its cursor", async () => {
-  const committed = Promise.withResolvers<string>();
+/** Boot a resident app whose model answers every turn with "done", plus its ledger plane. */
+async function bootDoneApp(prefix: string, wsToken: string) {
   const app = await suite.boot({
-    config: suite.config("session-cursor-", { wsToken: "cursor-token" }),
+    config: suite.config(prefix, { wsToken }),
     llm: {
       resolveModel: fakeProviderModel,
       run: (input, sink) => Effect.sync(() => {
@@ -25,7 +25,12 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
       }),
     },
   });
-  const plane = await planeOf(app.runtime);
+  return { app, plane: await planeOf(app.runtime) };
+}
+
+test("a reconnect replays only committed revisions beyond its cursor", async () => {
+  const committed = Promise.withResolvers<string>();
+  const { app, plane } = await bootDoneApp("session-cursor-", "cursor-token");
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.kind === "turn") committed.resolve(event.sessionId);
   });
@@ -88,17 +93,7 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
 });
 
 test("a registered reader receives authoritative commits after its captured head", async () => {
-  const app = await suite.boot({
-    config: suite.config("session-reader-", { wsToken: "reader-token" }),
-    llm: {
-      resolveModel: fakeProviderModel,
-      run: (input, sink) => Effect.sync(() => {
-        sink.onMessage(assistantMessage(input, { text: "done" }));
-        return { type: "stop" as const };
-      }),
-    },
-  });
-  const plane = await planeOf(app.runtime);
+  const { app, plane } = await bootDoneApp("session-reader-", "reader-token");
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "reader-token"]);
   const order: string[] = [];
   socket.addEventListener("message", (event) => {

@@ -11,6 +11,7 @@ import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { resetStores } from "./_router-fixture";
 import { requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
+import { recordingInbox } from "./_recording-inbox";
 
 beforeEach(resetStores);
 afterEach(() => {
@@ -24,12 +25,7 @@ function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["
     stores: ledger().stores,
     transaction: channelTransaction,
     sink: () => undefined,
-    inbox: {
-      commit: (row: Inbox.Commit) => Effect.sync(() => {
-        commits.push(row);
-        return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
-      }),
-    },
+    inbox: recordingInbox(commits),
     prepare: () => Effect.succeed({
       target: "child",
       ...(sender === undefined ? {} : { sender }),

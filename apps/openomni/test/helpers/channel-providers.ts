@@ -1,6 +1,12 @@
 import { ChannelProviders } from "@openomni/channels";
 import type { Channel } from "@openomni/protocol";
 
+type ProviderCredentials =
+  | Parameters<typeof ChannelProviders.telegram.create>[0]
+  | Parameters<typeof ChannelProviders.discord.create>[0]
+  | Parameters<typeof ChannelProviders.slack.create>[0]
+  | Parameters<typeof ChannelProviders.github.create>[0];
+
 class FakeSurface implements Channel.Surface {
   handler: Channel.MessageHandler | null = null;
   started = false;
@@ -9,7 +15,7 @@ class FakeSurface implements Channel.Surface {
   constructor(
     readonly id: string,
     readonly config: Channel.Config,
-    readonly credentials: unknown,
+    readonly credentials: ProviderCredentials,
   ) {}
 
   onMessage(handler: Channel.MessageHandler): void {
@@ -33,7 +39,7 @@ export function fakeProviders() {
   const webhookCalls: Request[] = [];
   const delivery = (
     id: string,
-    credentials: unknown,
+    credentials: ProviderCredentials,
     config: Channel.Config,
     messageId: string,
   ) => {

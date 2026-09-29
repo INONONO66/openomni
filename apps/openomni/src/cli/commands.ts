@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { Result } from "effect";
+import { CauseText } from "../thrown";
 import {
   type DaemonIo,
   type DaemonTarget,
@@ -106,13 +108,13 @@ function daemon(verb: string | undefined, deps: CliDeps): number {
     deps.stderr("usage: openomni daemon install | uninstall | status | start | stop | restart");
     return 1;
   }
-  try {
-    deps.stdout(handler(deps.target, deps.io));
-    return 0;
-  } catch (error) {
-    deps.stderr(error instanceof Error ? error.message : String(error));
+  const output = Result.try({ try: () => handler(deps.target, deps.io), catch: CauseText.parse });
+  if (Result.isFailure(output)) {
+    deps.stderr(output.failure);
     return 1;
   }
+  deps.stdout(output.success);
+  return 0;
 }
 
 async function doctor(deps: CliDeps): Promise<number> {

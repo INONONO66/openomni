@@ -5,10 +5,10 @@
 // DeliverAt honors its not-before residual, and a duplicate client send of the
 // same messageId yields exactly one chain row (R3).
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import {
+  clusterTempDir,
   clusterMessages,
   readChain,
   readUntil,
@@ -17,10 +17,7 @@ import {
   sessionFileFor,
 } from "../helpers/cluster-runtime";
 
-const dir = mkdtempSync(join(tmpdir(), "w52-entity-crash-"));
-const sessionsDir = join(dir, "sessions");
-mkdirSync(sessionsDir, { recursive: true });
-const catalogFile = join(dir, "catalog.sqlite");
+const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-entity-crash-");
 const sessionId = "s-crash";
 const sessionFile = sessionFileFor(sessionsDir, sessionId);
 const childScript = join(import.meta.dir, "..", "helpers", "cluster-crash-child.ts");

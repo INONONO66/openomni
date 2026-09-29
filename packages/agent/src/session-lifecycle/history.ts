@@ -175,12 +175,21 @@ function checkpointSeed(sessionId: string, checkpoint: LedgerAction.Node) {
   return parsed.data.result;
 }
 
+/** One committed prefix materialized as fold state, model history and compatibility rows. */
+export interface HydratedSessionHistory {
+  readonly revision: number;
+  readonly state: FoldCheckpoint.State;
+  readonly history: Message.WithParts[];
+  readonly messages: FoldCheckpoint.State["compatibility"];
+  readonly nonCheckpointActions: number;
+}
+
 /** Validate the durable seed even when a commit does not need to materialize its suffix. */
 export function readHistoryCheckpoint(
   kernel: SessionKernel,
   sessionId: string,
   throughRevision?: number,
-) {
+): { nonCheckpointActions: number; hydrate: () => HydratedSessionHistory } {
   const { revision, checkpoint } = kernel.latestFoldCheckpoint(sessionId, throughRevision);
   const seed = checkpoint === undefined ? undefined : checkpointSeed(sessionId, checkpoint);
   return {
@@ -202,7 +211,7 @@ export function hydrateSessionHistory(
   kernel: SessionKernel,
   sessionId: string,
   throughRevision?: number,
-) {
+): HydratedSessionHistory {
   return readHistoryCheckpoint(kernel, sessionId, throughRevision).hydrate();
 }
 
@@ -210,8 +219,8 @@ export function hydrateSessionHistory(
 export function refreshSessionHistory(
   kernel: SessionKernel,
   sessionId: string,
-  previous: ReturnType<typeof hydrateSessionHistory>,
-) {
+  previous: HydratedSessionHistory,
+): HydratedSessionHistory {
   return readHistorySuffix(
     kernel,
     sessionId,
@@ -229,7 +238,7 @@ function readHistorySuffix(
   initial: FoldCheckpoint.State,
   afterRevision: number,
   count: number,
-) {
+): HydratedSessionHistory {
   let state = initial;
   let cursor = afterRevision;
   let nonCheckpointActions = count;

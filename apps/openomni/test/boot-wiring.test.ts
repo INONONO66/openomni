@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
   type ProviderDeliveryRoute,
@@ -18,11 +18,9 @@ import {
   type DesiredChannelRow,
   type DesiredChannels,
 } from "../src/provisioning/supervisor";
-import { createChannelStores } from "@openomni/channels";
-import { channelStoreSource } from "../src/gateway";
-import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { assistantMessage } from "./helpers/assistant-message";
-import { planeOf, testPlane } from "./helpers/ledger";
+import { planeOf } from "./helpers/ledger";
+import { planeFixture } from "./helpers/plane-fixture";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
@@ -67,7 +65,11 @@ test("stopping the daemon preserves the durable WebSocket bootstrap grant", asyn
   try {
     expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
     const grants = () =>
-      database.query("SELECT * FROM channel_grant WHERE id = ?").all("openomni-resident-ws");
+      database
+        .query<Record<string, string | number | null>, [string]>(
+          "SELECT * FROM channel_grant WHERE id = ?",
+        )
+        .all("openomni-resident-ws");
     const before = grants();
     expect(before).toHaveLength(1);
     await app.stop();
@@ -84,21 +86,7 @@ test("stopping the daemon preserves the durable WebSocket bootstrap grant", asyn
 // no kernel/fence equivalent, and boot no longer promotes legacy rows.
 
 describe("channel supervisor", () => {
-  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
-  function plane(): AppLedgerPlane {
-    if (planeRef.current === undefined) throw new Error("test plane not open");
-    return planeRef.current;
-  }
-  const channelStores = () => createChannelStores(channelStoreSource(plane()));
-
-  beforeEach(() => {
-    planeRef.current = testPlane();
-  });
-
-  afterEach(() => {
-    planeRef.current?.close();
-    planeRef.current = undefined;
-  });
+  const { plane, channelStores } = planeFixture();
 
   interface FakeChannel {
     readonly component: ChannelComponent;

@@ -95,18 +95,24 @@ check-written-types 0; root `bun test --timeout 15000 --coverage`:
 **4671 pass / 0 fail** after the r2 fix lanes (4635 before them); script
 lanes serially 253/81/336 pass, 0 fail.
 
-Honest audit deltas (`quality-audit --dry-run`; no local LCOV lanes, so
-`complete: false`):
+Honest audit deltas (`quality-audit --dry-run`; the W5.3 column had no local
+LCOV lanes, so `complete: false`; the sweep column ran all 15 lanes locally
+with LCOV, `complete: true`, `missingLanes: []`):
 
-| Kind | `8390912c` baseline | W5.3 HEAD |
-| --- | ---: | ---: |
-| coverage (missing-file records, not debt) | 3116 | 485 |
-| complexity | 17 | 14 |
-| cyclomatic (new, <22) | — | 1 |
-| halstead (new, <80) | — | 0 |
-| crap (new, <25; needs LCOV) | — | 761 (no coverage input) |
-| clones | 280 | 280 |
-| types (transitive inferred sites, not written keywords) | 2779 | 2123 |
+| Kind | `8390912c` baseline | W5.3 HEAD | quality-debt sweep (2026-09-29) |
+| --- | ---: | ---: | ---: |
+| coverage (uncovered lines with LCOV; missing-file records before) | 3116 | 485 | 1777 uncovered lines / 162 files |
+| complexity | 17 | 14 | 0 |
+| cyclomatic (new, <22) | — | 1 | 0 |
+| halstead (new, <80) | — | 0 | 0 |
+| crap (new, <25; needs LCOV) | — | 761 (no coverage input) | 0 |
+| clones | 280 | 280 | 0 |
+| types (transitive inferred sites, not written keywords) | 2779 | 2123 | 479 |
+
+The sweep's residual coverage is enumerated in `docs/SLOP.md` §J (CLI
+`main()`/violation-print paths in `script/`, race-guard tails in `agent`); the
+479 type sites are Zod boundary parses and inferred generics, not written
+keywords (`check-written-types` stays 0).
 
 Not claimed: CI green, patch coverage, or mutation completion. B-verify
 measured 71 patch-uncovered changed lines across 12 files locally; wave C

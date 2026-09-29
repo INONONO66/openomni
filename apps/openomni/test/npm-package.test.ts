@@ -171,16 +171,7 @@ function bounded<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
       () => reject(new ChildTimeoutError(`child exceeded ${timeoutMs}ms`)),
       timeoutMs,
     );
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
+    promise.finally(() => clearTimeout(timer)).then(resolve, reject);
   });
 }
 
@@ -188,11 +179,10 @@ async function terminate(child: Bun.Subprocess<"ignore", "pipe", "pipe">): Promi
   // Signal termination leaves exitCode null: signalCode is also terminal evidence.
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
-  try {
-    await bounded(child.exited, 1_000);
-  } catch (error) {
+  // bounded() rejects with ChildTimeoutError or the child's own exit Error.
+  await bounded(child.exited, 1_000).catch(async (error: Error) => {
     if (!(error instanceof ChildTimeoutError)) throw error;
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     await bounded(child.exited, 1_000);
-  }
+  });
 }

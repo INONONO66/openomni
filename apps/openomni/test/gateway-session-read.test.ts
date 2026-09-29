@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Bus } from "@openomni/agent";
 import { WebSocketHandler, type WsConnection } from "@openomni/channels";
-import type { LedgerAction, LedgerSession } from "@openomni/protocol";
+import type { LedgerAction, LedgerSession, PlainValue } from "@openomni/protocol";
 import { adoptWriter, materializeSession } from "../../../packages/ledger/test/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, readSessionCursor, webSocketCallbacks } from "../src/gateway";
@@ -47,18 +47,17 @@ function toolAction(
   phase: "intent" | "result",
   ts: number,
 ): LedgerAction.Append {
+  const outcome: PlainValue =
+    phase === "intent" ? { phase: "pending" } : { phase: "result", terminal: "executed" };
   return {
+    ts,
+    irreversible: true,
+    kind: "tool",
     id,
     parentId,
     sessionId,
-    kind: "tool",
-    intent: { encodingVersion: 1, value: { phase, op: "write" } },
-    effect: {
-      encodingVersion: 1,
-      value: phase === "intent" ? { phase: "pending" } : { phase: "result", terminal: "executed" },
-    },
-    irreversible: true,
-    ts,
+    effect: { encodingVersion: 1, value: outcome },
+    intent: { encodingVersion: 1, value: { op: "write", phase } },
   };
 }
 
@@ -139,7 +138,10 @@ test("a reader whose kernel read throws receives a session_read_failed error fra
       ws,
       JSON.stringify({ type: "session_read", sessionId, limit: 4 }),
     );
-    expect(frames.map((frame) => JSON.parse(frame) as unknown)).toEqual([
+    // JSON.parse returns a JSON value, not a gateway frame. No narrowing cast:
+    // the equality assertion validates the whole frame after this boundary.
+    const decodeJson: (frame: string) => PlainValue = JSON.parse;
+    expect(frames.map(decodeJson)).toEqual([
       { type: "error", reason: "session_read_failed", sessionId },
     ]);
     gatewaySocket.callbacks.close(ws);

@@ -2,7 +2,7 @@ import { LlmRunFailure, type Run } from "@openomni/llm";
 
 export function providerFailure(
   message: string,
-  cause: Error = Object.assign(new Error(message), {
+  cause: Error & { readonly isRetryable?: boolean; readonly statusCode?: number } = Object.assign(new Error(message), {
     name: "AI_APICallError",
     isRetryable: true,
     statusCode: 529,
@@ -23,8 +23,8 @@ export function providerFailure(
       },
       cause: String(cause),
       providerErrorName: cause.name,
-      isRetryable: "isRetryable" in cause && cause.isRetryable === true,
-      statusCode: "statusCode" in cause && typeof cause.statusCode === "number" ? cause.statusCode : undefined,
+      isRetryable: cause.isRetryable === true,
+      statusCode: cause.statusCode,
       retryAfterMs: 0,
   });
 }

@@ -25,7 +25,7 @@ function providerFailure(floor: number) {
 }
 
 function stream(prefix: Prefix, failed: boolean, floor: number): AsyncIterable<StreamEvent> {
-  return (async function* () {
+  return (async function* (): AsyncGenerator<StreamEvent, void, void> {
     if (prefix === "reasoning") yield { type: "reasoning-delta", id: "r", text: "private" };
     if (prefix === "text" || !failed) yield { type: "text-delta", text: "answer" };
     if (prefix === "tool") yield { type: "tool-call", toolCallId: "call", toolName: "write", input: {} };
@@ -84,13 +84,17 @@ function attempts(actions: readonly LedgerAction.Append[]) {
     PlainObjectSchema.parse(action.intent.value).phase === "intent");
 }
 
+function expectFailedPrimaryAttempt(value: Effect.Success<ReturnType<typeof scenario>>): void {
+  expect(value.result._tag).toBe("Failure");
+  expect(value.providers).toEqual([primary.provider]);
+  expect(value.arms).toEqual([]);
+  expect(attempts(value.committed)).toHaveLength(1);
+}
+
 for (const prefix of ["text", "tool"] as const) {
   test(`a failed ${prefix} prefix forbids fallback and keeps billed evidence`, () => isolated(Effect.gen(function* () {
     const value = yield* scenario(prefix);
-    expect(value.result._tag).toBe("Failure");
-    expect(value.providers).toEqual([primary.provider]);
-    expect(value.arms).toEqual([]);
-    expect(attempts(value.committed)).toHaveLength(1);
+    expectFailedPrimaryAttempt(value);
     const result = value.committed.find((action) => action.kind === "attempt" &&
       PlainObjectSchema.parse(action.effect.value).phase === "result");
     expect(result?.effect.value).toMatchObject({ evidence: { failures: [{
@@ -133,8 +137,5 @@ test("a canonical assistant write refusal vetoes fallback after a successful pro
 
 test("a provider floor beyond the retry header budget stops without scheduling an early retry", () => isolated(Effect.gen(function* () {
   const value = yield* scenario("none", Retry.RETRY_HEADER_DELAY_CAP + 1);
-  expect(value.result._tag).toBe("Failure");
-  expect(value.providers).toEqual([primary.provider]);
-  expect(value.arms).toEqual([]);
-  expect(attempts(value.committed)).toHaveLength(1);
+  expectFailedPrimaryAttempt(value);
 })));

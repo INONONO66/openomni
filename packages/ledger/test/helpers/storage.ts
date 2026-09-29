@@ -20,6 +20,20 @@ function open(paths: { session: string; catalog: string }, sink?: ObservationSin
   return { session, catalog, kernel: SessionHandleStore.createSessionKernel(session, catalog) };
 }
 
+function accessors(current: () => LedgerStores): LedgerStores {
+  return {
+    get session() {
+      return current().session;
+    },
+    get catalog() {
+      return current().catalog;
+    },
+    get kernel() {
+      return current().kernel;
+    },
+  };
+}
+
 /** Fresh in-memory session + catalog stores and a kernel over them, per test. */
 export function useMemoryStores(sink?: ObservationSink): LedgerStores {
   let stores: LedgerStores | undefined;
@@ -35,17 +49,7 @@ export function useMemoryStores(sink?: ObservationSink): LedgerStores {
     if (stores === undefined) throw new Error("stores are only open inside a test");
     return stores;
   };
-  return {
-    get session() {
-      return current().session;
-    },
-    get catalog() {
-      return current().catalog;
-    },
-    get kernel() {
-      return current().kernel;
-    },
-  };
+  return accessors(current);
 }
 
 /** Own one real on-disk session+catalog pair per test; `reopen` survives restarts. */
@@ -69,15 +73,16 @@ export function useSqliteStores(label: string) {
     if (stores === undefined) throw new Error("stores are only open inside a test");
     return stores;
   };
+  const live = accessors(current);
   return {
     get session() {
-      return current().session;
+      return live.session;
     },
     get catalog() {
-      return current().catalog;
+      return live.catalog;
     },
     get kernel() {
-      return current().kernel;
+      return live.kernel;
     },
     get sessionPath() {
       return paths.session;

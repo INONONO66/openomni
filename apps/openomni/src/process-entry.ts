@@ -7,11 +7,12 @@ import {
   currentExecutor,
   decideSessionAdmission,
   ForeignFailure,
+  adoptSessionAuthority,
+  receivedMessageAction,
   type SessionEntryServices,
   type SessionRuntime,
 } from "@openomni/agent";
 import { createChannelStores, createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
-import type { LedgerError } from "@openomni/ledger";
 import { Effect } from "effect";
 import {
   acquireAppResource,
@@ -22,14 +23,14 @@ import {
   toolPorts,
 } from "./gateway";
 import { AppScope, type AppRuntime } from "./runtime";
-import { type Inbox, Model, type LedgerAction, type SessionTransition } from "@openomni/protocol";
+import { type Inbox, Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { AppLedger, type AppLedgerPlane, type SessionKernel } from "./composition/cluster-runtime";
+import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import { createCompletionPort } from "./composition/completion";
 import { configureAuthority } from "./composition/generation-layers";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { createResident } from "./resident";
-import { materializeInboxTarget, prepareMessage } from "./composition/message-session";
+import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
@@ -55,25 +56,6 @@ export const ProcessSessionRequest = z
 export type ProcessSessionRequest = z.infer<typeof ProcessSessionRequest>;
 export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
 
-/** The child's fence adoption: the same strictly-newer CAS the entity uses (F5). */
-function adoptChildAuthority(
-  kernel: SessionKernel,
-  sessionId: string,
-  owner: string,
-): Effect.Effect<number, LedgerError> {
-  const attempt: Effect.Effect<number, LedgerError> = Effect.suspend(() => {
-    const current = kernel.row(sessionId);
-    if (current.leaseOwner === owner) return Effect.succeed(current.leaseFence);
-    return kernel
-      .adoptFence({ sessionId, owner, fence: current.leaseFence + 1 })
-      .pipe(
-        Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => attempt),
-      );
-  });
-  return attempt;
-}
-
 /**
  * Direct chain commit of one received message (child-side delivery). The
  * child has no cluster client; an idle destination gets a fence takeover and
@@ -86,25 +68,13 @@ function adoptChildAuthority(
  * there is no redelivery to absorb that refusal — the row lands between the
  * turn's awaits and the turn's continuation drain consumes it.
  */
-function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
+export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
   return (input: Inbox.Commit): Effect.Effect<Inbox.Row, ForeignFailure> =>
     Effect.gen(function* () {
       yield* materializeInboxTarget(plane, input, clock);
       const kernel = plane.openKernel(input.sessionId);
-      const asRow = (ordinal: number): Inbox.Row => ({
-        id: input.id,
-        sessionId: input.sessionId,
-        kind: input.kind,
-        content: input.content,
-        origin: input.origin,
-        status: "pending",
-        consumedBy: null,
-        consumedAt: null,
-        createdAt: input.createdAt,
-        ordinal,
-      });
       const existing = kernel.actionById(input.id);
-      if (existing !== undefined) return asRow(existing.ordinal);
+      if (existing !== undefined) return pendingInboxRow(input, existing.ordinal);
       const refuse = (error: { readonly _tag: string }) =>
         new ForeignFailure({ operation: "message.commit", cause: error._tag });
       const live = kernel.row(input.sessionId);
@@ -113,21 +83,12 @@ function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => num
           ? { owner: live.leaseOwner, fence: live.leaseFence }
           : {
               owner,
-              fence: yield* adoptChildAuthority(kernel, input.sessionId, owner).pipe(
+              fence: yield* adoptSessionAuthority(kernel, input.sessionId, owner).pipe(
                 Effect.mapError(refuse),
               ),
             };
       const row = kernel.row(input.sessionId);
-      const action: LedgerAction.Append = {
-        id: input.id,
-        parentId: input.parentActionId,
-        sessionId: input.sessionId,
-        kind: "prompt",
-        intent: input.origin,
-        effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
-        irreversible: true,
-        ts: input.createdAt,
-      };
+      const action = receivedMessageAction({ ...input, at: input.createdAt });
       const committed = yield* kernel
         .commit({
           sessionId: input.sessionId,
@@ -142,7 +103,7 @@ function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => num
       const receipt = committed.receipts[0];
       if (receipt === undefined)
         return yield* new ForeignFailure({ operation: "message.commit", cause: "no receipt" });
-      return asRow(receipt.action.ordinal);
+      return pendingInboxRow(input, receipt.action.ordinal);
     });
 }
 
@@ -234,7 +195,7 @@ export function serveProcessSession(
     scope,
   );
   const drain = Effect.gen(function* () {
-    const fence = yield* adoptChildAuthority(kernel, request.sessionId, owner).pipe(
+    const fence = yield* adoptSessionAuthority(kernel, request.sessionId, owner).pipe(
       Effect.mapError((error) => new ForeignFailure({ operation: "process.adopt", cause: error._tag })),
     );
     const authority = { sessionId: request.sessionId, owner, fence };

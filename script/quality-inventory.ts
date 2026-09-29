@@ -264,6 +264,49 @@ function collect(
     });
   }
 }
+function collectHistorical(
+  root: string,
+  contract: Contract,
+  configurations: Inventory["configurations"],
+  files: Inventory["files"],
+): Inventory["historical"] {
+  const historical: Inventory["historical"] = [];
+  if (!contract.topology) return historical;
+  const missingProjects = configurations.filter(
+    (file) =>
+      /\/tsconfig[^/]*\.json$/.test(file.path) &&
+      !file.path.split("/").some((part) => /fixtures?/.test(part)) &&
+      !contract.projects.includes(file.path) &&
+      !/\/test\/tsconfig\.json$/.test(file.path),
+  );
+  if (missingProjects.length)
+    throw new InventoryError(
+      "inventory",
+      "",
+      `unregistered projects: ${missingProjects.map((file) => file.path).join(", ")}`,
+    );
+  const git = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: root });
+  if (git.exitCode !== 0) throw new InventoryError("inventory", "", git.stderr.toString());
+  for (const path of git.stdout.toString().split("\0")) {
+    const language = languages.get(extname(path));
+    if (!language || files.some((file) => file.path === path)) continue;
+    // Git lists tracked paths even after an unstaged deletion; the
+    // inventory records the working tree, so vanished files are skipped.
+    const absolute = join(root, path);
+    if (!existsSync(absolute)) continue;
+    const bytes = readFileSync(absolute);
+    historical.push({
+      path,
+      sha256: digest(bytes),
+      bytes: bytes.length,
+      category: "historical",
+      language,
+    });
+  }
+  historical.sort((a, b) => compareText(a.path, b.path));
+  return historical;
+}
+
 export function buildInventory(root: string, contract: Contract): Inventory {
   if (contract.topology) assertTopologyComplete(undefined, root);
   const files: Inventory["files"] = [];
@@ -326,37 +369,7 @@ export function buildInventory(root: string, contract: Contract): Inventory {
   if (new Set(files.map((file) => file.path)).size !== files.length)
     throw new InventoryError("inventory", "", "overlapping source inventory");
   // Tracked historical evidence is recorded separately, never credited as product code.
-  const historical: Inventory["historical"] = [];
-  if (contract.topology) {
-    const missingProjects = configurations.filter(
-      (file) =>
-        /\/tsconfig[^/]*\.json$/.test(file.path) &&
-        !file.path.split("/").some((part) => /fixtures?/.test(part)) &&
-        !contract.projects.includes(file.path) &&
-        !/\/test\/tsconfig\.json$/.test(file.path),
-    );
-    if (missingProjects.length)
-      throw new InventoryError(
-        "inventory",
-        "",
-        `unregistered projects: ${missingProjects.map((file) => file.path).join(", ")}`,
-      );
-    const git = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: root });
-    if (git.exitCode !== 0) throw new InventoryError("inventory", "", git.stderr.toString());
-    for (const path of git.stdout.toString().split("\0")) {
-      const language = languages.get(extname(path));
-      if (!language || files.some((file) => file.path === path)) continue;
-      const bytes = readFileSync(join(root, path));
-      historical.push({
-        path,
-        sha256: digest(bytes),
-        bytes: bytes.length,
-        category: "historical",
-        language,
-      });
-    }
-  }
-  historical.sort((a, b) => compareText(a.path, b.path));
+  const historical = collectHistorical(root, contract, configurations, files);
   return {
     version: 1,
     contractHash: digest(JSON.stringify(contract)),

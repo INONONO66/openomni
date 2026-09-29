@@ -1,7 +1,7 @@
 export * from "./error/index.js";
 export { canonicalDigest, canonicalKey, PlainValueSchema } from "./json.js";
 export { PlainObjectSchema } from "./json.js";
-export type { PlainObject, PlainValue } from "./json.js";
+export type { JsonShapedValue, PlainObject, PlainValue } from "./json.js";
 export type { Clock, IdSource } from "./platform.js";
 export * from "./tool/index.js";
 export * from "./token/index.js";

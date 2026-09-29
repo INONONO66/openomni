@@ -24,7 +24,7 @@ export function paddingActions(
   count: number,
   prefix = "padding",
 ): LedgerAction.Append[] {
-  return Array.from({ length: count }, (_, index) => ({
+  return Array.from({ length: count }, (_value: never, index: number) => ({
     id: `${sessionId}:${prefix}:${index}`,
     sessionId,
     parentId,

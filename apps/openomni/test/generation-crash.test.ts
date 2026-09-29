@@ -20,7 +20,7 @@ test("G1 prerequisite: SIGKILL at committed configure rearms current and recorde
   const committed = eventSignal<z.infer<typeof Configured>>("post-configure commit");
   const child = Bun.spawn([process.execPath, join(import.meta.dir, "helpers/generation-crash-process.ts"), catalogPath, sessionsDir, auditPath], {
     stdout: "pipe", stderr: "pipe",
-    ipc: (message) => committed.resolve(Configured.parse(message)),
+    ipc: (message: string) => committed.resolve(Configured.parse(message)),
   });
   const exited = child.exited;
   const stderr = new Response(child.stderr).text();

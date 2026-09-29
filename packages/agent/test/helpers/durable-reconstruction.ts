@@ -166,7 +166,7 @@ export async function reconstructionProcessMain(
     }
   } catch (error) {
     if (!(error instanceof FoldCheckpointIntegrityError)) throw error;
-    emit(error.toObject());
+    emit({ name: "FoldCheckpointIntegrityError", data: error.data });
     exit(1);
   }
 }

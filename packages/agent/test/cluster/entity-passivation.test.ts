@@ -3,11 +3,10 @@
 // reactivates it (fence rotates, F5), and a DeliverAt scheduled beyond the
 // idle window is not stranded — its delivery reactivates the entity.
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import { Effect, Fiber } from "effect";
 import {
+  clusterTempDir,
   runCluster,
   sendDeadline,
   sendPrompt,
@@ -17,10 +16,7 @@ import {
   waitUntil,
 } from "../helpers/cluster-runtime";
 
-const dir = mkdtempSync(join(tmpdir(), "w52-entity-passivation-"));
-const sessionsDir = join(dir, "sessions");
-mkdirSync(sessionsDir, { recursive: true });
-const catalogFile = join(dir, "catalog.sqlite");
+const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-entity-passivation-");
 const options = { sessionsDir, catalogFile, idleMs: 500 };
 
 afterAll(() => {

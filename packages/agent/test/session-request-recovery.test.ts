@@ -132,7 +132,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
     crashAfterRequestOpen(initial, "process lost after durable suspension"),
     bodies,
   );
-  expect(yield* failure(
+  expect(yield* Effect.flip(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
   )).toMatchObject({ _tag: "ForeignFailure", operation: "process lost after durable suspension" });
   const originalId = currentRequest().requestId;
@@ -231,7 +231,7 @@ it("a committed application claim prevents replay after result persistence fails
 it("a gateway answer adopts a strictly newer fence over a crashed writer and resolves", () => persisted(() => Effect.gen(function* () {
   const initial = yield* requestLedger();
   const crashed = yield* dispatcher(crashAfterRequestOpen(initial, "lost"), []);
-  expect(yield* failure(
+  expect(yield* Effect.flip(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
   )).toMatchObject({ _tag: "ForeignFailure", operation: "lost" });
   const request = currentRequest();

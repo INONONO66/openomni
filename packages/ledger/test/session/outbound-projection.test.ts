@@ -1,29 +1,12 @@
 import { sessionTree } from "../helpers/session-tree";
-import { Effect, Result } from "effect";
 import { beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type SessionTransition } from "@openomni/protocol";
-import { runLedgerSync } from "../helpers/effect";
+import { materializeSession } from "../helpers/session";
 import { useMemoryStores } from "../helpers/storage";
 
 const stores = useMemoryStores();
 beforeEach(() => {
-  Result.getOrThrowWith(
-    runLedgerSync(
-      Effect.result(
-        stores.kernel.materialize({
-          id: "source",
-          parentId: null,
-          role: "resident",
-          tools: [],
-          system: { preset: "", blocks: [] },
-          policyGeneration: 0,
-          actionId: "configure",
-          at: 1,
-        }),
-      ),
-    ),
-    (error) => error,
-  );
+  materializeSession(stores.kernel, "source");
 });
 
 function append(action: LedgerAction.Append) {
@@ -48,7 +31,7 @@ test("outbound projection folds a verified acknowledgement without erasing its p
   };
   append({
     id: "pending",
-    parentId: "configure",
+    parentId: "source:configure",
     sessionId: "source",
     kind: "outbound",
     ts: 2,
@@ -85,7 +68,7 @@ test("outbound projection folds a verified acknowledgement without erasing its p
     { message, state: "delivered", destinationReceipt: { id: "received", revision: 2 } },
   ]);
   expect(sessionTree("source", stores.session.actions).map((action) => action.id)).toEqual([
-    "configure",
+    "source:configure",
     "pending",
     "ack",
   ]);
@@ -94,7 +77,7 @@ test("outbound projection folds a verified acknowledgement without erasing its p
 test("corrupt outbound evidence cannot silently disappear from recovery", () => {
   append({
     id: "corrupt",
-    parentId: "configure",
+    parentId: "source:configure",
     sessionId: "source",
     kind: "outbound",
     ts: 2,

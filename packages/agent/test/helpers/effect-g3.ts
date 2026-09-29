@@ -22,8 +22,11 @@ export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sin
   return createTestAgent(config).run(input, sink);
 }
 export function failure<A, E, R>(program: Effect.Effect<A, E, R> | Promise<A>) {
-  if (program instanceof Promise) return Effect.tryPromise({ try: () => program, catch: (error: unknown) => error }).pipe(Effect.flatMap(() => Effect.die("expected a failed Effect")), Effect.catch((error: unknown) => Effect.succeed(error)));
-  return program.pipe(Effect.exit, Effect.map((exit: Exit.Exit<A, E>): unknown => {
+  if (program instanceof Promise) return Effect.exit(Effect.promise(() => program)).pipe(Effect.map((exit) => {
+    if (Exit.isSuccess(exit)) throw new Error("expected a failed Promise");
+    return Cause.squash(exit.cause);
+  }));
+  return program.pipe(Effect.exit, Effect.map((exit: Exit.Exit<A, E>) => {
     if (Exit.isSuccess(exit)) throw new Error("expected failed Effect");
     return Cause.squash(exit.cause);
   }));

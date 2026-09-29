@@ -14,9 +14,9 @@
 
 import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels";
 import { ChannelProviders } from "@openomni/channels";
-import type { Channel, Provisioning } from "@openomni/protocol";
+import type { Channel, PlainValue, Provisioning } from "@openomni/protocol";
 import { Bus } from "@openomni/agent";
-import type { z } from "zod";
+import { Result } from "effect";
 
 export interface BuiltChannel {
   readonly surface: Channel.Surface;
@@ -87,12 +87,14 @@ function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
   plaintext: Uint8Array,
 ): ChannelComponent | { readonly invalid: string } {
-  let parsed: z.ZodSafeParseResult<TCredentials>;
-  try {
-    parsed = provider.credentials.safeParse(JSON.parse(new TextDecoder().decode(plaintext)));
-  } catch (error) {
-    return { invalid: `credential payload is not JSON (${String(error)})` };
+  const decoded = Result.try({
+    try: (): PlainValue => JSON.parse(new TextDecoder().decode(plaintext)),
+    catch: String,
+  });
+  if (Result.isFailure(decoded)) {
+    return { invalid: `credential payload is not JSON (${decoded.failure})` };
   }
+  const parsed = provider.credentials.safeParse(decoded.success);
   if (!parsed.success) return { invalid: parsed.error.message };
   return providerRow(provider, parsed.data, {});
 }

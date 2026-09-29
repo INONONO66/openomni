@@ -252,12 +252,9 @@ export function createIpcServer(
         const state = connId === undefined ? undefined : connections.get(connId);
         if (state) flushQueued(state);
       },
-      error(socket: BunSocket, error: Error) {
-        const id = connectionIdOf(socket);
-        if (id !== undefined) removeConnection(id, `socket error: ${error.message}`);
-      },
       close(socket: BunSocket) {
-        // The connection may die before `open` assigned socket.data.
+        // Bun delivers close after socket errors, so this is the single
+        // teardown path. The connection may die before `open` assigned data.
         const id = connectionIdOf(socket);
         if (id !== undefined) removeConnection(id, "socket closed");
       },

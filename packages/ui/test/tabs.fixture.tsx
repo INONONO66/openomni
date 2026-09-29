@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { ReactNode } from "react";
-import { SHELL, STRIP } from "./fixture";
+import { SHELL, STRIP, stripWithActions } from "./fixture";
 
 GlobalRegistrator.register();
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -190,12 +190,11 @@ describe("real tabs", () => {
       <Console
         shell={SHELL}
         sidebar={null}
-        strip={{
-          ...STRIP,
-          tabs: records,
-          onActivate: (id) => activated.push(id),
-          onClose: (id) => closed.push(id),
-        }}
+        strip={stripWithActions(
+          records,
+          (id) => activated.push(id),
+          (id) => closed.push(id),
+        )}
       />,
     );
     const button = node(host, "#tab-b");

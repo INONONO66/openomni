@@ -21,6 +21,7 @@ import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";
 import { originalAction, requestPort } from "./helpers/requests";
 import { requestFixture } from "./helpers/request-record";
+import { bounded } from "./helpers/bounded";
 
 const credential = "owner-frame-secret";
 const sender = { kind: "external", surface: "ws", externalId: "owner-console" } as const;
@@ -134,18 +135,15 @@ function router(
   });
 }
 
-function event<T extends Event>(target: EventTarget, name: string): Promise<T> {
-  return new Promise<T>((resolve: (value: T | PromiseLike<T>) => void, reject: (reason?: unknown) => void) => {
-    const timeout = setTimeout(() => {
-      target.removeEventListener(name, received);
-      reject(new Error(`missing websocket ${name}`));
-    }, 3000);
-    function received(value: Event) {
-      clearTimeout(timeout);
-      resolve(value as T);
-    }
-    target.addEventListener(name, received, { once: true });
-  });
+async function event(target: EventTarget, name: string): Promise<Event> {
+  const received = Promise.withResolvers<Event>();
+  const listener = (value: Event) => received.resolve(value);
+  target.addEventListener(name, listener, { once: true });
+  try {
+    return await bounded(received.promise);
+  } finally {
+    target.removeEventListener(name, listener);
+  }
 }
 
 async function connect(
@@ -186,9 +184,11 @@ async function connect(
 }
 
 async function frame(socket: WebSocket, value: object) {
-  const received = event<MessageEvent<string>>(socket, "message");
+  const received = event(socket, "message");
   socket.send(JSON.stringify(value));
-  return PlainValueSchema.parse(JSON.parse((await received).data));
+  const message = await received;
+  if (!(message instanceof MessageEvent)) throw new Error("expected WebSocket message");
+  return PlainValueSchema.parse(JSON.parse(message.data));
 }
 
 test.each([
@@ -411,7 +411,7 @@ test("actual WebSocket upgrade rejects the wrong transport token", async () => {
   await approval();
   const { server } = await connect(router());
   const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, ["auth", "wrong-upgrade"]);
-  const failed = event<ErrorEvent>(socket, "error");
+  const failed = event(socket, "error");
   await failed;
   expect(socket.readyState).not.toBe(WebSocket.OPEN);
 });

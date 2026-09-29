@@ -9,6 +9,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { Result } from "effect";
+import { ThrownError } from "../thrown";
 
 /**
  * The one durable CLI-owned config surface: `~/.openomni/env`. Onboarding
@@ -80,13 +82,17 @@ export function writeEnvFile(path: string, entries: readonly EnvEntry[]): void {
   // Unpredictable name + O_EXCL: a planted symlink or file at the temp path
   // fails the write instead of being followed or reused.
   const temp = `${path}.${randomBytes(8).toString("hex")}.tmp`;
-  try {
-    writeFileSync(temp, renderEnvFile(entries), { mode: 0o600, flag: "wx" });
-    chmodSync(temp, 0o600);
-    renameSync(temp, path);
-  } catch (error) {
+  const written = Result.try({
+    try: () => {
+      writeFileSync(temp, renderEnvFile(entries), { mode: 0o600, flag: "wx" });
+      chmodSync(temp, 0o600);
+      renameSync(temp, path);
+    },
+    catch: ThrownError.parse,
+  });
+  if (Result.isFailure(written)) {
     rmSync(temp, { force: true });
-    throw error;
+    throw written.failure;
   }
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonShapedValue } from "../../src/json.js";
 import { Policy } from "../../src/policy/index.js";
 
 const expectedPointIds = [
@@ -92,9 +93,9 @@ describe("PolicyPoint registry", () => {
 
   test("exports an initial contract for every required 3-tier point", () => {
     expect(Object.keys(Policy.PolicyPoint.Registry).sort()).toEqual([...expectedPointIds].sort());
-    // Widened to `unknown` so toEqual accepts the deeply-readonly Registry as
-    // the expectation; the runtime deep-equality assertion is unchanged.
-    const roundTripped: unknown = Policy.PolicyPoint.RegistrySchema.parse(
+    // Widened to the JSON-shaped tree so toEqual accepts the deeply-readonly
+    // Registry as the expectation; the runtime deep-equality assertion is unchanged.
+    const roundTripped: JsonShapedValue = Policy.PolicyPoint.RegistrySchema.parse(
       Policy.PolicyPoint.Registry,
     );
     expect(roundTripped).toEqual(Policy.PolicyPoint.Registry);

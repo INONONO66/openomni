@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { Result } from "effect";
 import { join } from "node:path";
 import { Vault } from "@openomni/ledger";
 
@@ -23,11 +24,10 @@ function kekFromBase64(encoded: string, source: string): KekResolution {
   // Buffer.from(_, "base64") never throws — bad characters shrink the output,
   // and a wrong-length result is exactly what kekOf refuses below.
   const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
-  try {
-    return { kind: "ok", kek: Vault.kekOf(bytes) };
-  } catch (error) {
-    return { kind: "locked", reason: `${source}: ${String(error)}` };
-  }
+  const kek = Result.try({ try: () => Vault.kekOf(bytes), catch: String });
+  return Result.isSuccess(kek)
+    ? { kind: "ok", kek: kek.success }
+    : { kind: "locked", reason: `${source}: ${kek.failure}` };
 }
 
 export function resolveKek(env: Record<string, string | undefined>, home: string): KekResolution {

@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import { z } from "zod";
 
 const FixtureModule = z.object({
-  socketPath: z.custom<(label: string) => string>((value) => typeof value === "function"),
+  socketPath: z.function({
+    input: [z.string()],
+    output: z.string(),
+  }),
 });
 
 test("fresh IPC fixture scopes cannot reuse a stale process-id socket path", async () => {

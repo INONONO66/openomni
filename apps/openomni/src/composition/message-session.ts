@@ -17,6 +17,22 @@ export interface MessageInboxDeps {
   readonly clock: () => number;
 }
 
+/** Pending inbox projection shared by entity and process delivery receipts. */
+export function pendingInboxRow(input: Inbox.Commit, ordinal: number): Inbox.Row {
+  return {
+    id: input.id,
+    sessionId: input.sessionId,
+    kind: input.kind,
+    content: input.content,
+    origin: input.origin,
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    createdAt: input.createdAt,
+    ordinal,
+  };
+}
+
 /**
  * Message delivery through the Session entity (W5.2 plan §1): the receiver's
  * activation commits the received-message chain action and drains its backlog
@@ -123,18 +139,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
           (error) => new ForeignFailure({ operation: "message.deliver", cause: String(error) }),
         ),
       );
-      return {
-        id: input.id,
-        sessionId: input.sessionId,
-        kind: input.kind,
-        content: input.content,
-        origin: input.origin,
-        status: "pending",
-        consumedBy: null,
-        consumedAt: null,
-        createdAt: input.createdAt,
-        ordinal: receipt.ordinal,
-      };
+      return pendingInboxRow(input, receipt.ordinal);
     });
   };
 }
@@ -163,28 +168,16 @@ export function messageMaterialization(
       },
       policyGeneration: currentPolicyGeneration(),
     });
-    return {
-      row: {
+    return SessionHandleStore.materializationSeed(
+      {
         id: input.id,
         parentId: input.parentId,
         role: input.role,
-        leaseOwner: null,
-        leaseFence: 0,
-        revision: 0,
-        state: "idle",
-        toolsGeneration: snapshot.generation,
-        systemHash: snapshot.systemHash,
-        policyGeneration: snapshot.policyGeneration,
-      },
-      initialAction: SessionHandleStore.configureAction({
-        id: crypto.randomUUID(),
-        sessionId: input.id,
-        parentId: null,
-        operation: "create",
-        snapshot,
+        actionId: crypto.randomUUID(),
         at: input.at,
-      }),
-    };
+      },
+      snapshot,
+    );
   };
 }
 

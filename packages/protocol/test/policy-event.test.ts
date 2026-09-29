@@ -5,16 +5,8 @@ describe("Policy.Events BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
   const actor = { userId: "user-1", role: "admin" };
 
-  const expectParseOk = (parse: () => unknown) => {
-    let thrown: unknown;
-
-    try {
-      parse();
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrown === undefined).toBe(true);
+  const expectParseOk = <Output,>(parse: () => Output) => {
+    expect(parse).not.toThrow();
   };
 
   test("ActionRequested parses with required fields", () => {

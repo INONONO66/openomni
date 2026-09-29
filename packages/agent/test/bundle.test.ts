@@ -63,7 +63,9 @@ test("rejects nested service paths and requirements outside the four-service see
 });
 
 test("runtime forged Tag identities fail definition validation", () => {
-  expect(() => Reflect.apply(bundle, undefined, [{ name: "number", requires: [], provides: [{ key: NumberService.key, _op: "Tag" }], layer: NumberLive }])).toThrow(BundleError);
+  expect(() => {
+    Reflect.apply(bundle, undefined, [{ name: "number", requires: [], provides: [{ key: NumberService.key, _op: "Tag" }], layer: NumberLive }]);
+  }).toThrow(BundleError);
 });
 
 test("seed missing output fails without starting a dependent observer", async () => {
@@ -184,8 +186,12 @@ test("acquisition rejects Tag mutation after composition before any resources op
 test("runtime compose refuses missing later-only and seed-colliding providers", () => {
   const TextLive = Layer.effect(TextService, Effect.map(NumberService, String));
   const second = bundle({ name: "text", provides: [TextService], requires: [NumberService], layer: TextLive });
-  expect(() => Reflect.apply(compose, undefined, [seed, [second]])).toThrow(BundleError);
-  expect(() => Reflect.apply(compose, undefined, [seed, [second, numberBundle()]])).toThrow(BundleError);
+  expect(() => {
+    Reflect.apply(compose, undefined, [seed, [second]]);
+  }).toThrow(BundleError);
+  expect(() => {
+    Reflect.apply(compose, undefined, [seed, [second, numberBundle()]]);
+  }).toThrow(BundleError);
   expect(() => compose({ provides: [NumberService], requires: [], layer: NumberLive }, [numberBundle()])).toThrow(BundleError);
 });
 

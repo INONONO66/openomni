@@ -249,7 +249,7 @@ export function runLifecycleTrace(trace: Trace) {
         }
         for (const step of trace.steps) {
             const mark = sink.committedEvents.length;
-            (yield* toEffect(step.run()));
+            yield* step.run();
             const events = sink.committedEvents.slice(mark);
             const current = new Map<string, SessionSnapshot>();
             for (const sessionId of trace.sessions) {
@@ -267,7 +267,7 @@ export function runLifecycleTrace(trace: Trace) {
             }
             named.set(step.name, current);
         }
-        (yield* toEffect(replayEffectFree(previous, trace.dispatched)));
+        yield* replayEffectFree(previous, trace.dispatched);
         return { named, final: previous };
     });
 }
@@ -429,6 +429,17 @@ function waveExecutor(input: SessionRunnerInput, runtime: SessionRuntime) {
         },
     });
 }
+/** A late approve after the wave settled must refuse as stale. */
+function expectStaleApprove(opened: Pick<Effect.Success<ReturnType<typeof openWaveAtApproval>>, "pending" | "approvals">): Effect.Effect<void, Error> {
+  return Effect.gen(function* () {
+    expect((yield* failure(opened.approvals.answer({
+        request: opened.pending,
+        credential: "owner-token",
+        decision: "approve",
+    })))).toMatchObject({ code: "stale_approval" });
+  });
+}
+
 function openWaveAtApproval(fixture: WaveFixture, text: string) {
     return Effect.gen(function* () {
         sink.resetToolTape();
@@ -496,7 +507,7 @@ describe("session lifecycle conformance", () => {
         let wavePending: ExecutionApprovalRequest | undefined;
         let waveRunning: Fiber.Fiber<SessionRunnerResult | undefined, SessionError> | undefined;
         let waveApprovals: ExecutionApprovals | undefined;
-        const result = (yield* toEffect(runLifecycleTrace({
+        const result = yield* runLifecycleTrace({
             sessions: ["S", "W"],
             dispatched: wave.dispatched,
             steps: [
@@ -557,7 +568,7 @@ describe("session lifecycle conformance", () => {
                     }),
                 },
             ],
-        })));
+        });
         const done = result.named.get("DONE")?.get("S");
         expect(kinds(done)).toEqual([
             "session.configure",
@@ -616,7 +627,7 @@ describe("session lifecycle conformance", () => {
         const interrupted = (yield* waveSession("INTERRUPTED"));
         const timedPort = (yield* Effect.gen(function* () { const fixture: SessionFixture = timed.runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
         const runs = new Map<string, Fiber.Fiber<SessionRunnerResult | undefined, SessionError>>();
-        const result = (yield* toEffect(runLifecycleTrace({
+        const result = yield* runLifecycleTrace({
             sessions: ["REFUSED", "TIMED", "INTERRUPTED"],
             dispatched: () => refused.dispatched() + timed.dispatched() + interrupted.dispatched(),
             steps: [
@@ -630,11 +641,7 @@ describe("session lifecycle conformance", () => {
                             credential: "owner-token",
                             decision: "refuse",
                         })));
-                        expect((yield* failure(opened.approvals.answer({
-                            request: opened.pending,
-                            credential: "owner-token",
-                            decision: "approve",
-                        })))).toMatchObject({ code: "stale_approval" });
+                        yield* expectStaleApprove(opened);
                     }),
                 },
                 {
@@ -655,11 +662,7 @@ describe("session lifecycle conformance", () => {
                         (yield* timedPort.timeout(opened.pending.id, now));
                         (yield* timedPort.timeout(opened.pending.id, now));
                         yield* waitFor(timed.entered.A.promise, "approval timeout observed by the wave");
-                        expect((yield* failure(opened.approvals.answer({
-                            request: opened.pending,
-                            credential: "owner-token",
-                            decision: "approve",
-                        })))).toMatchObject({ code: "stale_approval" });
+                        yield* expectStaleApprove(opened);
                     }),
                 },
                 {
@@ -682,7 +685,7 @@ describe("session lifecycle conformance", () => {
                     }),
                 },
             ],
-        })));
+        });
         // Bodies settle before the first post action; results then commit in slot
         // order A, B(blocked, no post), C, D. Refusal records the owner reply;
         // expiry records the single deadline input. Both then resolve once.
@@ -781,7 +784,7 @@ describe("session lifecycle conformance", () => {
         const handle = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "S", role: "resident", runner }, fixture), fixture); }));
         let firstInput: SessionRunnerInput | undefined;
         let recovered: SessionRunnerInput | undefined;
-        const result = (yield* toEffect(runLifecycleTrace({
+        const result = yield* runLifecycleTrace({
             sessions: ["S", "C"],
             dispatched: () => entries,
             steps: [
@@ -839,7 +842,7 @@ describe("session lifecycle conformance", () => {
                     }),
                 },
             ],
-        })));
+        });
         const interrupted = result.named.get("INTERRUPTED")?.get("S");
         const terminal = interrupted?.actions.find((a: LedgerAction.Node) => SessionHandleStore.turnTerminal(a) !== undefined);
         expect(SessionHandleStore.turnTerminal(terminal)).toMatchObject({
@@ -902,7 +905,7 @@ describe("session lifecycle conformance", () => {
         const ids = ["QLATE", "QCANCEL", "QANSWER", "QREJECT"] as const;
         const opened = new Map<string, SessionTransition.Request>();
         const parentChild = childParentFixture();
-        const result = (yield* toEffect(runLifecycleTrace({
+        const result = yield* runLifecycleTrace({
             sessions: [...ids, "PARENT", "CHILD"],
             dispatched: () => parentChild.consumed(),
             steps: [
@@ -974,7 +977,7 @@ describe("session lifecycle conformance", () => {
                     }),
                 },
             ],
-        })));
+        });
         assertRequestRaces(result);
         assertLossBoundary(result, parentChild);
     })));
@@ -993,7 +996,7 @@ describe("session lifecycle conformance", () => {
         const pairs = names.flatMap((first: keyof typeof contenders) => names.filter((second: keyof typeof contenders) => second !== first).map((second: keyof typeof contenders) => [first, second] as const));
         const opened = new Map<string, SessionTransition.Request>();
         const sessions = pairs.map(([first, second]: readonly [keyof typeof contenders, keyof typeof contenders]) => `${first}-${second}`);
-        const result = (yield* toEffect(runLifecycleTrace({
+        const result = yield* runLifecycleTrace({
             sessions: [...sessions, "STALE"],
             dispatched: () => 0,
             steps: [
@@ -1075,7 +1078,7 @@ describe("session lifecycle conformance", () => {
                     }),
                 },
             ],
-        })));
+        });
         // Terminal uniqueness: exactly one `<requestId>:resolution` record per
         // session; the losing contender is exactly one duplicate record. No product
         // session ever holds a `rejected` record: only STALE is probed with

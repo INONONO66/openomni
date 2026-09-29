@@ -3,7 +3,8 @@ import { Machine } from "@openomni/protocol";
 import { Effect, Fiber, Cause, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { execute as nativeExecute } from "../src/exec";
-import { exit as runExit, fork, run } from "./helpers/effect";
+import { run } from "../../ipc/test/helpers/effects";
+import { exit as runExit, fork } from "./helpers/effect";
 
 const request = { cmd: "while :; do :; done", cwd: "/" };
 

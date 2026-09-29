@@ -35,7 +35,7 @@ import {
   renderEnvFile,
   writeEnvFile,
 } from "../src/cli/env-file";
-import { ConfigurationError, parseWsPort } from "../src/config";
+import { parseWsPort } from "../src/config";
 import { runDoctor } from "../src/cli/doctor";
 import { processEntryPath } from "../src/process-entry-path";
 import type { DoctorPorts } from "../src/cli/doctor";
@@ -630,20 +630,13 @@ describe("doctor", () => {
         return Promise.resolve(true);
       },
     });
-    const parserVerdict = ((): ConfigurationError => {
-      try {
-        parseWsPort("70000");
-      } catch (error) {
-        if (ConfigurationError.isInstance(error)) return error;
-        throw error;
-      }
-      throw new Error("expected the config parser to refuse 70000");
-    })();
-    expect(parserVerdict.data.code).toBe("invalid_ws_port");
+    expect(() => parseWsPort("70000")).toThrow(
+      expect.objectContaining({ data: { code: "invalid_ws_port", message: "OPENOMNI_WS_PORT must be an integer from 0 to 65535" } }),
+    );
     expect(report.checks.find((check) => check.name === "health")).toEqual({
       name: "health",
       status: "fail",
-      detail: parserVerdict.data.message,
+      detail: "OPENOMNI_WS_PORT must be an integer from 0 to 65535",
     });
     expect(report.ok).toBe(false);
     expect(probes).toBe(0);
@@ -789,7 +782,7 @@ describe("cli dispatch", () => {
   });
 
   test("onboard writes collected answers and confirms an overwrite", async () => {
-    const writes: unknown[] = [];
+    const writes: Parameters<CliDeps["writeEnv"]>[0][] = [];
     const answers = ["y", "", "model", "key", "", "", "", ""];
     const { deps: cli } = deps({
       ask: () => Promise.resolve(answers.shift() ?? ""),
@@ -802,7 +795,7 @@ describe("cli dispatch", () => {
   });
 
   test("onboard declines to overwrite an existing env file without consent", async () => {
-    const writes: unknown[] = [];
+    const writes: Parameters<CliDeps["writeEnv"]>[0][] = [];
     const { deps: cli, out } = deps({
       writeEnv: (entries) => writes.push(entries),
       ask: () => Promise.resolve("n"),

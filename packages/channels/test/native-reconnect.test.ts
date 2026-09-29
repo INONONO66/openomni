@@ -9,6 +9,43 @@ import { SocketReconnectShell } from "../src/support/socket-shell";
 import { calculateBackoff } from "../src/support/reconnect-backoff";
 import { bounded } from "./helpers/bounded";
 
+function websocketServer(
+  onOpen: (peer: ServerWebSocket<undefined>, server: Bun.Server<undefined>) => void,
+) {
+  const server = Bun.serve<undefined>({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request, instance) {
+      if (instance.upgrade(request)) return;
+      return new Response(null, { status: 400 });
+    },
+    websocket: {
+      open(peer) {
+        onOpen(peer, server);
+      },
+      message: () => undefined,
+    },
+  });
+  return server;
+}
+
+function telegramUpdates(server: Bun.Server<undefined>) {
+  return {
+    async getUpdates() {
+      return z.array(TelegramUpdateSchema).parse(await (await fetch(server.url)).json());
+    },
+  };
+}
+
+function collectTelegramMessages(delivered: number[], onDelivery: () => void = () => undefined) {
+  return {
+    onMessage(message: { message_id: number }) {
+      delivered.push(message.message_id);
+      onDelivery();
+    },
+  };
+}
+
 for (const provider of ["slack", "discord"] as const) {
   test(`${provider}: callbacks on a retired real socket cannot dispatch or schedule reconnect`, async () => {
     const NativeWebSocket = globalThis.WebSocket;
@@ -27,35 +64,24 @@ for (const provider of ["slack", "discord"] as const) {
     const events: string[] = [];
     const logs: string[] = [];
     let delays = 0;
-    const server = Bun.serve<undefined>({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch(request, server) {
-        if (server.upgrade(request)) return;
-        return new Response(null, { status: 400 });
-      },
-      websocket: {
-        open(ws) {
-          peers.push(ws);
-          ws.send(
-            JSON.stringify(
-              provider === "slack"
-                ? { type: "hello" }
-                : {
-                    op: 0,
-                    t: "READY",
-                    s: 1,
-                    d: {
-                      session_id: "session",
-                      resume_gateway_url: `ws://127.0.0.1:${server.port}`,
-                      user: { id: "bot", username: "bot" },
-                    },
-                  },
-            ),
-          );
-        },
-        message: () => undefined,
-      },
+    const server = websocketServer((ws, server) => {
+      peers.push(ws);
+      ws.send(
+        JSON.stringify(
+          provider === "slack"
+            ? { type: "hello" }
+            : {
+                op: 0,
+                t: "READY",
+                s: 1,
+                d: {
+                  session_id: "session",
+                  resume_gateway_url: `ws://127.0.0.1:${server.port}`,
+                  user: { id: "bot", username: "bot" },
+                },
+              },
+        ),
+      );
     });
     const url = `ws://127.0.0.1:${server.port}`;
     const publish = (event: { name: string }) => {
@@ -122,20 +148,9 @@ test("a retired reconnect sleeper cannot replace a new real socket", async () =>
   const sleeping = Promise.withResolvers<number>();
   const wake = Promise.withResolvers<void>();
   let connections = 0;
-  const server = Bun.serve<undefined>({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request, server) {
-      if (server.upgrade(request)) return;
-      return new Response(null, { status: 400 });
-    },
-    websocket: {
-      open(ws) {
-        connections++;
-        ws.send("ready");
-      },
-      message: () => undefined,
-    },
+  const server = websocketServer((ws) => {
+    connections++;
+    ws.send("ready");
   });
   const url = `ws://127.0.0.1:${server.port}`;
   let reconnects = 0;
@@ -228,17 +243,9 @@ test("Telegram ignores a retired HTTP response even when cancellation arrives to
   });
   const delivered: number[] = [];
   const poller = new TelegramPoller(
-    {
-      async getUpdates() {
-        // A response already in flight may survive abort; generation, not abort alone, owns custody.
-        return z.array(TelegramUpdateSchema).parse(await (await fetch(server.url)).json());
-      },
-    },
-    {
-      onMessage(message) {
-        delivered.push(message.message_id);
-      },
-    },
+    // A response already in flight may survive abort; generation, not abort alone, owns custody.
+    telegramUpdates(server),
+    collectTelegramMessages(delivered),
     () => undefined,
   );
   try {
@@ -272,18 +279,11 @@ test("Telegram reconnect uses jittered backoff and its retired sleeper cannot po
   });
   const delivered: number[] = [];
   const poller = new TelegramPoller(
-    {
-      async getUpdates() {
-        return z.array(TelegramUpdateSchema).parse(await (await fetch(server.url)).json());
-      },
-    },
-    {
-      onMessage(message) {
-        delivered.push(message.message_id);
-        poller.stop();
-        arrived.resolve();
-      },
-    },
+    telegramUpdates(server),
+    collectTelegramMessages(delivered, () => {
+      poller.stop();
+      arrived.resolve();
+    }),
     () => undefined,
     (ms) => {
       sleeping.resolve(ms);

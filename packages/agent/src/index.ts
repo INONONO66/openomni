@@ -1,6 +1,8 @@
 // Agent package public API: only surfaces consumed by product composition.
 export type { ChatAgentConfig } from "./core/types";
 export { createSessionRequests } from "./session-requests";
+export { adoptSessionAuthority } from "./session-configuration";
+export { receivedMessageAction } from "./session-record";
 export { decideRequestTransition, requestBindingDigest } from "./session-request";
 export { decideSessionAdmission, requestAuthorityKernel } from "./session-admission";
 export { failureFacts } from "./core/retry";

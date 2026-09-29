@@ -31,7 +31,7 @@ test("non-JSON metadata fails before identity or endpoint persistence", () => {
       id: "invalid",
       kind: "human",
       trustTier: "observer",
-      metadata: { callback: () => "not JSON" },
+      metadata: { callback: (() => "not JSON") as never },
     }),
   ).toThrow();
   expect(registry().getIdentity("invalid")).toBeUndefined();
@@ -42,7 +42,7 @@ test("non-JSON metadata fails before identity or endpoint persistence", () => {
       actorId: "valid",
       channel: "discord",
       externalId: "user",
-      metadata: { count: 1n },
+      metadata: { count: 1n as never },
     }),
   ).toThrow();
   expect(registry().getEndpoint("invalid")).toBeUndefined();

@@ -168,8 +168,10 @@ export async function scanRequestAuthority(root: string) {
   return { scanned, violations };
 }
 
-if (import.meta.main) {
-  const result = await scanRequestAuthority(join(import.meta.dir, ".."));
+export function authorityMain(result: Awaited<ReturnType<typeof scanRequestAuthority>>): number {
   console.log(JSON.stringify(result, null, 2));
-  if (result.violations.length > 0) process.exitCode = 1;
+  return Number(result.violations.length > 0);
 }
+
+if (import.meta.main)
+  process.exitCode = authorityMain(await scanRequestAuthority(join(import.meta.dir, "..")));

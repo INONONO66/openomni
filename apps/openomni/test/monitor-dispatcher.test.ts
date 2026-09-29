@@ -8,9 +8,6 @@ import {
   type SessionEntityTimerContext,
 } from "@openomni/agent";
 import { Effect, Exit, Cause } from "effect";
-import { createAppLedger, type AppLedgerPlane } from "../src/composition/cluster-runtime";
-import type { WatchSources } from "../src/composition/watch-sources";
-import { seedKernelPolicyRows } from "../src/policy-seed";
 import { createMonitorTool } from "../src/tools/monitor";
 import {
   createWatchMonitorPorts,
@@ -19,9 +16,8 @@ import {
   watchState,
   type WatchSpec,
 } from "../src/composition/monitor-ports";
-import type { MonitorPorts } from "../src/tools/core/monitor-ports";
 import { runEffect } from "./helpers/effect";
-import { adoptTestFence } from "./helpers/ledger";
+import { watchFixture as createWatchFixture } from "./helpers/watch-fixture";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -77,7 +73,11 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ));
   expect(Exit.isFailure(missingContext)).toBe(true);
   if (Exit.isFailure(missingContext)) {
-    expect(missingContext.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([expect.any(ExecutorContextError)]);
+    expect(
+      missingContext.cause.reasons
+        .filter(Cause.isDieReason)
+        .map((reason) => (reason.defect instanceof ExecutorContextError ? reason.defect : null)),
+    ).toEqual([expect.any(ExecutorContextError)]);
   }
   await expect(
     monitorTool.execute(
@@ -86,14 +86,6 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
     ),
   ).rejects.toBeInstanceOf(ToolRefused);
 });
-
-interface WatchFixture {
-  readonly plane: AppLedgerPlane;
-  readonly ports: MonitorPorts;
-  readonly fence: number;
-  readonly installed: string[];
-  readonly closed: string[];
-}
 
 const OWNER = "watch-test-owner";
 const SESSION = "monitor-session";
@@ -104,37 +96,8 @@ const watchSpec = (notificationLimit: number): WatchSpec => ({
   notificationLimit,
 });
 
-async function watchFixture(): Promise<WatchFixture> {
-  const plane = createAppLedger({});
-  const installed: string[] = [];
-  const closed: string[] = [];
-  const sources: WatchSources = {
-    install: (spec) => {
-      installed.push(spec.id);
-      return Promise.resolve();
-    },
-    observe: () => undefined,
-    close: (id) => {
-      closed.push(id);
-      return Promise.resolve();
-    },
-    closeAll: () => Promise.resolve(),
-  };
-  seedKernelPolicyRows(plane.catalog.policies);
-  const kernel = plane.openKernel(SESSION);
-  await runEffect(
-    kernel.materialize({
-      id: SESSION,
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: kernel.currentPolicyGeneration(),
-      actionId: "configure",
-      at: 1,
-    }),
-  );
-  const fence = await runEffect(adoptTestFence(kernel, SESSION, OWNER));
+async function watchFixture() {
+  const { plane, fence, sources, installed, closed } = await createWatchFixture(SESSION, OWNER);
   const ports = createWatchMonitorPorts({
     openKernel: plane.openKernel,
     sources,

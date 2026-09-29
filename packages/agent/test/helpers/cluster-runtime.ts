@@ -18,6 +18,22 @@
  * terminal — so entity tests exercise the durable protocol without the full
  * executor (which reaches the entity plane in wave 3).
  */
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/** A throwaway cluster home: sessions dir plus catalog file under one temp root. */
+export function clusterTempDir(prefix: string): {
+  readonly dir: string;
+  readonly sessionsDir: string;
+  readonly catalogFile: string;
+} {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  const sessionsDir = join(dir, "sessions");
+  mkdirSync(sessionsDir, { recursive: true });
+  return { dir, sessionsDir, catalogFile: join(dir, "catalog.sqlite") };
+}
+
 import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { L0Write, SessionHandleStore } from "@openomni/ledger";

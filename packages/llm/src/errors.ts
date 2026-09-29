@@ -1,11 +1,12 @@
 import { Data } from "effect";
 import { z } from "zod";
 
-const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<z.infer<typeof Diagnostic>> {
+type Diagnostic = { readonly operation: string; readonly cause: string };
+export class ForeignFailure extends Data.TaggedError("ForeignFailure")<Diagnostic> {
   override get message(): string { return this.cause; }
 }
 
+const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
 const ProviderFields = MessageFields.extend({
   providerErrorName: z.string().optional(),

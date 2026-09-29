@@ -1,6 +1,6 @@
 import { Data } from "effect";
 import type { AgentStopError } from "./core/execution/stop-chain";
-import type { LedgerError } from "@openomni/ledger";
+import { ForeignFailure, type LedgerError } from "@openomni/ledger";
 import type { LlmRunFailure } from "@openomni/llm";
 
 export { AgentStopError } from "./core/execution/stop-chain";
@@ -36,12 +36,8 @@ export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
   readonly reason: string;
 }> {}
 
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
-  readonly operation: string;
-  readonly cause: string;
-}> {
-  override get message(): string { return `${this.operation}: ${this.cause}`; }
-}
+/** The one foreign-failure class: ledger owns it, the agent re-exports it. */
+export { ForeignFailure };
 
 export class SessionMissing extends Data.TaggedError("SessionMissing")<{
   readonly sessionId: string;

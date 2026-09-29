@@ -141,16 +141,7 @@ export class FrozenMutationCompiler {
   checkBatch(requests: CompilerRequest[]): CompilerProof[] {
     if (requests.length === 0 || requests.length > COMPILER_BATCH_SIZE) throw new Error("Invalid compiler batch size");
     this.verifyConfigurations();
-    const checks: { request: CompilerRequest; path: string; projects: ProjectProof[]; errors: string[]; covered: Set<string> }[] = requests.map((request) => {
-      const path = resolve(this.root, request.path);
-      const local = relative(this.root, path);
-      if (request.executionTreeSha256 !== this.identity || isAbsolute(local) || local === ".." || local.startsWith("../"))
-        throw new Error("Compiler request frozen identity mismatch");
-      const original = this.inventory.files.find((file) => file.path === request.path);
-      if (!original || original.sha256 !== request.originalSha256 || sha256(readFileSync(path)) !== request.originalSha256 || sha256(request.content) !== request.sourceSha256)
-        throw new Error("Compiler request source identity mismatch");
-      return { request, path, projects: [], errors: [], covered: new Set<string>() };
-    });
+    const checks = requests.map((request) => this.prepareRequest(request));
     // Keep one project active across the bounded batch, then release it before
     // the next project. Shared sources no longer force a cold build per mutant.
     for (const baseline of this.native) {
@@ -165,16 +156,15 @@ export class FrozenMutationCompiler {
     for (const state of checks) {
       const roots = this.inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
         .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(realpathSync(name)));
-      if (roots.length) {
-        const baseline = this.fallback ?? {
-          project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],
-          options: inventoryCompilerOptions(this.root),
-        };
-        const checked = baseline.members.has(state.path) || JSON.stringify(roots) !== JSON.stringify(baseline.roots)
-          ? this.compile(baseline, roots, state.request) : { project: baseline, mode: "frozen" as const };
-        state.projects.push(proof(checked.project, checked.mode));
-        state.errors.push(...checked.project.diagnostics);
-      }
+      if (!roots.length) continue;
+      const baseline = this.fallback ?? {
+        project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],
+        options: inventoryCompilerOptions(this.root),
+      };
+      const checked = baseline.members.has(state.path) || JSON.stringify(roots) !== JSON.stringify(baseline.roots)
+        ? this.compile(baseline, roots, state.request) : { project: baseline, mode: "frozen" as const };
+      state.projects.push(proof(checked.project, checked.mode));
+      state.errors.push(...checked.project.diagnostics);
     }
     return checks.map(({ request, projects, errors }) => ({
       kind: "persistent-compiler", compiler: ts.version, compilerSha256: this.compilerSha256,
@@ -183,6 +173,17 @@ export class FrozenMutationCompiler {
       originalSha256: request.originalSha256, sourceSha256: request.sourceSha256,
       valid: errors.length === 0, diagnostics: errors, diagnosticsSha256: sha256(JSON.stringify(errors)), projects,
     }));
+  }
+
+  private prepareRequest(request: CompilerRequest): { request: CompilerRequest; path: string; projects: ProjectProof[]; errors: string[]; covered: Set<string> } {
+    const path = resolve(this.root, request.path);
+    const local = relative(this.root, path);
+    if (request.executionTreeSha256 !== this.identity || isAbsolute(local) || local === ".." || local.startsWith("../"))
+      throw new Error("Compiler request frozen identity mismatch");
+    const original = this.inventory.files.find((file) => file.path === request.path);
+    if (!original || original.sha256 !== request.originalSha256 || sha256(readFileSync(path)) !== request.originalSha256 || sha256(request.content) !== request.sourceSha256)
+      throw new Error("Compiler request source identity mismatch");
+    return { request, path, projects: [], errors: [], covered: new Set<string>() };
   }
 }
 

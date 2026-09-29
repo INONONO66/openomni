@@ -1,5 +1,6 @@
 import { Policy } from "../packages/protocol/src/index";
 import { runScriptMain } from "./main-runner";
+import { verifyPinnedFilesExist } from "./lint-side-effects";
 
 type GuardRuleId =
   | "ad-hoc-list-membership"
@@ -106,19 +107,11 @@ const policyPackageBoundaryPattern =
  * path exists so a rename fails loud here instead (mirrors
  * lint-side-effects.ts's "Missing hot file" guard).
  */
-async function verifyPinnedFilesExist(): Promise<void> {
-  const pinned = [...canonicalPolicyEvaluator, ...canonicalPolicyRequiredFiles];
-  for (const filePath of pinned) {
-    if (!(await Bun.file(filePath).exists())) {
-      throw new Error(
-        `Missing pinned guard file: ${filePath} — a rule that keys off this path would silently go vacuous; update lint-guards.ts if the rename/deletion is intentional`,
-      );
-    }
-  }
-}
-
 export async function main(): Promise<void> {
-  await verifyPinnedFilesExist();
+  await verifyPinnedFilesExist(
+    [...canonicalPolicyEvaluator, ...canonicalPolicyRequiredFiles],
+    (filePath) => `Missing pinned guard file: ${filePath} — a rule that keys off this path would silently go vacuous; update lint-guards.ts if the rename/deletion is intentional`,
+  );
   const files = await collectSourceFiles();
   const violations: GuardViolation[] = [];
 
@@ -126,12 +119,7 @@ export async function main(): Promise<void> {
   for (const filePath of files) {
     const source = await Bun.file(filePath).text();
     collectPolicyPointRegistrations(filePath, source, registeredPoints);
-    violations.push(...validateCanonicalPolicyUsage(filePath, source));
-    violations.push(...validateChannelTriggerEvaluation(filePath, source));
-    violations.push(...validateListMembership(filePath, source));
-    violations.push(...validateInlineAuthorization(filePath, source));
-    violations.push(...validatePolicyPackageBoundary(filePath, source));
-    violations.push(...validateRunReasonCodeVocabulary(filePath, source));
+    violations.push(...validateGuardSource(filePath, source));
   }
 
   violations.push(...validatePolicyPointRegistrations(registeredPoints));
@@ -148,6 +136,17 @@ export async function main(): Promise<void> {
   }
 
   process.exit(1);
+}
+
+export function validateGuardSource(filePath: string, source: string): GuardViolation[] {
+  return [
+    ...validateCanonicalPolicyUsage(filePath, source),
+    ...validateChannelTriggerEvaluation(filePath, source),
+    ...validateListMembership(filePath, source),
+    ...validateInlineAuthorization(filePath, source),
+    ...validatePolicyPackageBoundary(filePath, source),
+    ...validateRunReasonCodeVocabulary(filePath, source),
+  ];
 }
 
 async function collectSourceFiles(): Promise<string[]> {
@@ -284,7 +283,7 @@ function collectPolicyPointRegistrations(
   }
 }
 
-function validatePolicyPointRegistrations(registeredPoints: Map<string, string>): GuardViolation[] {
+export function validatePolicyPointRegistrations(registeredPoints: Map<string, string>): GuardViolation[] {
   const violations: GuardViolation[] = [];
 
   for (const pointId of Object.keys(Policy.PolicyPoint.Registry)) {

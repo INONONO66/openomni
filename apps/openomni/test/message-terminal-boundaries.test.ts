@@ -8,20 +8,12 @@ import { SessionHandleStore } from "@openomni/ledger";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
+import { receivedMessages } from "./helpers/received-messages";
 import { assistantMessage, commissionInput, requestToolStep } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextFrame } from "./helpers/ws";
 
 const suite = residentSuite();
-/** Received-message evidence: prompt actions in one session's chain (W5.2). */
-function receivedMessages(plane: AppLedgerPlane, sessionId: string) {
-  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
-    .filter((action) => action.kind === "prompt")
-    .map((action) => ({
-      content: (action.effect.value as { content?: string }).content ?? "",
-      origin: { value: action.intent.value },
-    }));
-}
 
 test("startOpenOmni reports pre-denied socket admission as an error, not accepted", async () => {
   const app = await suite.boot({

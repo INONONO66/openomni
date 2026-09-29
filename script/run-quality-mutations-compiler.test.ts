@@ -73,6 +73,30 @@ function compilerRequest(root: string, identity: string, path: string, content: 
   return { executionTreeSha256: identity, candidateId: sha256(`${path}\0${content}`), path, originalSha256: sha256(readFileSync(join(root, path))), sourceSha256: sha256(content), content };
 }
 
+function expectFallbackCandidateDiagnostics(
+  compiler: FrozenMutationCompiler,
+  root: string,
+  identity: string,
+  invalidSource: string,
+): void {
+  const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", invalidSource));
+  expect(invalid.valid).toBe(false);
+  expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
+  const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
+  expect(consumer.valid).toBe(false);
+  expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+}
+
+function expectUnchangedFallbackCandidate(
+  compiler: FrozenMutationCompiler,
+  root: string,
+  identity: string,
+): ReturnType<FrozenMutationCompiler["check"]> {
+  return compiler.check(
+    compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")),
+  );
+}
+
 test("incremental compiler matches the cold oracle through stale-state, consumer, global and fallback changes", () => {
   const input = compilerFixture();
   try {
@@ -445,16 +469,11 @@ test("baseline diagnostics use project roots instead of transitive importer opti
     // Finding 2: the candidate compiler applies the same root ownership rule.
     const identity = executionTreeHash(root);
     const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
-    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+    const unchanged = expectUnchangedFallbackCandidate(compiler, root, identity);
     expect(unchanged.diagnostics).toEqual([]);
     expect(unchanged.valid).toBe(true);
-    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value: number = document.title;"));
-    expect(invalid.valid).toBe(false);
-    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
     // Errors attributed to a real consumer root file are preserved.
-    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
-    expect(consumer.valid).toBe(false);
-    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+    expectFallbackCandidateDiagnostics(compiler, root, identity, "export const value: number = document.title;");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -490,16 +509,11 @@ test("transitive-only inventory files enter the fallback beside native roots and
     // The candidate compiler owns the same fallback set deterministically.
     const identity = executionTreeHash(root);
     const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
-    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+    const unchanged = expectUnchangedFallbackCandidate(compiler, root, identity);
     expect(unchanged.valid).toBe(true);
     expect(unchanged.diagnostics).toEqual([]);
     expect(unchanged.projects.map((project) => project.project)).toEqual(["a/tsconfig.json", "inventory-fallback"]);
-    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", 'export const value: number = "shared";'));
-    expect(invalid.valid).toBe(false);
-    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
-    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
-    expect(consumer.valid).toBe(false);
-    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+    expectFallbackCandidateDiagnostics(compiler, root, identity, 'export const value: number = "shared";');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
