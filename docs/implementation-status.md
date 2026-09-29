@@ -61,6 +61,11 @@ under `.omo/reports/kernel-campaign-w53/`.
   derives from the phase-establishing transition; (7) the resume regression
   asserts exactly one delivery again. Each fix has a fails-before /
   passes-after regression.
+- **Review r2 finding 1 (F1-r2):** the accepted receipt is restored to its
+  frozen base shape `{type:"receipt",status:"accepted"}`; the durable binding
+  moved to the additive `session_bound` frame (`SessionRead.Bound`), sent
+  immediately after the receipt on the same socket; desktop binds from
+  `session_bound` and ignores receipts.
 
 Wave-B gate line (`B-verify.md`, run locally at branch HEAD): build 0,
 check-types 0, lint 0, lint:tools 0, lint:docs 0, check-topology 0,

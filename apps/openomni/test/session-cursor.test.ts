@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
+import { z } from "zod";
 import { Bus } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
 import { readSessionCursor } from "../src/gateway";
@@ -99,11 +100,23 @@ test("a registered reader receives authoritative commits after its captured head
   });
   const plane = await planeOf(app.runtime);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "reader-token"]);
-  const accepted = nextFrame(socket, (frame) => frame.type === "receipt" && frame.status === "accepted");
+  const order: string[] = [];
+  socket.addEventListener("message", (event) => {
+    const frame = z.object({ type: z.string() }).loose().safeParse(JSON.parse(String(event.data)));
+    if (frame.success && (frame.data.type === "receipt" || frame.data.type === "session_bound")) {
+      order.push(frame.data.type);
+    }
+  });
+  const accepted = nextFrame(socket, (frame) => frame.type === "receipt");
+  const boundFrame = nextFrame(socket, (frame) => frame.type === "session_bound");
   const firstTerminal = nextResidentTurn(plane);
   socket.send(JSON.stringify({ type: "message", text: "first" }));
-  const receipt = await accepted;
-  const target = receipt.result;
+  // Frozen frame: the accepted receipt is exactly its base two keys …
+  expect(await accepted).toEqual({ type: "receipt", status: "accepted" });
+  // … and the durable binding follows on the same socket as session_bound.
+  const bound = await boundFrame;
+  expect(order).toEqual(["receipt", "session_bound"]);
+  const target = bound.result;
   if (target === null || typeof target !== "object" || Array.isArray(target) ||
       target.status !== "executed" || target.handle === null ||
       typeof target.handle !== "object" || Array.isArray(target.handle) ||

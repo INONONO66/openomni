@@ -13,6 +13,7 @@ export type WebSocketMessageHandler = (
 
 export type WebSocketFrameOutcome =
   | z.infer<typeof SessionRead.Receipt>
+  | SessionRead.Bound
   | SessionRead.Request
   | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult };
 
@@ -230,7 +231,15 @@ export class WebSocketHandler {
           render: parsed.text,
         },
       });
-      return { type: "receipt", status: "accepted", ...(result === undefined ? {} : { result }) };
+      if (result === undefined) return { type: "receipt", status: "accepted" };
+      // Frozen frame: the accepted receipt keeps exactly its base two-key
+      // shape. The durable binding rides the additive session_bound frame:
+      // the receipt goes out here, first, on the inbound socket; the caller
+      // then sends the returned session_bound frame on that same socket.
+      this.connections
+        .get(connection.externalId)
+        ?.send(JSON.stringify({ type: "receipt", status: "accepted" }));
+      return { type: "session_bound", result };
     });
   }
 }

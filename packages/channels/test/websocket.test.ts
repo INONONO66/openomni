@@ -168,6 +168,31 @@ describe("WebSocketHandler ingress and receipts", () => {
     expect(entries).toBe(1);
   });
 
+  it("emits the frozen two-key receipt first, then session_bound carrying the admission", async () => {
+    const result = {
+      status: "executed",
+      handle: { messageId: "in-1", target: "durable-1" },
+      delivery: { kind: "session" },
+    } as const;
+    const handler = new WebSocketHandler(() => Effect.succeed(result), noopPublish);
+    const { ws, sent } = connection({
+      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
+    });
+    handler.ws.open(ws);
+
+    await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "bind me" }));
+
+    expect(sent.map((frame) => JSON.parse(frame))).toEqual([
+      { type: "receipt", status: "accepted" },
+      { type: "session_bound", result },
+    ]);
+    // The accepted receipt is a frozen frame: exactly its base two keys.
+    expect(Object.keys(z.record(z.string(), z.json()).parse(JSON.parse(sent[0] ?? "{}")))).toEqual([
+      "type",
+      "status",
+    ]);
+  });
+
   it("sends only the typed failure tag and never a receipt or private cause on handler refusal", async () => {
     const failure = new ForeignFailure({ operation: "fixture.ingress", cause: "private credential" });
     const handler = new WebSocketHandler(() => Effect.fail(failure), noopPublish);

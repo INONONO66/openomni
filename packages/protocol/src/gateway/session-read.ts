@@ -57,10 +57,20 @@ export namespace SessionRead {
   export const Response = z.union([Page, Gap]);
   export type Response = z.infer<typeof Response>;
 
-  /** The admitted target is the durable identity, never a renderer-created id. */
+  /** Frozen frame: an accepted receipt is exactly these two keys. */
   export const Receipt = z.object({
     type: z.literal("receipt"),
     status: z.literal("accepted"),
-    result: Gateway.IngestResult.optional(),
   }).strict();
+
+  /**
+   * Additive frame sent immediately after an accepted receipt on the same
+   * socket. The admitted target is the durable identity, never a
+   * renderer-created id.
+   */
+  export const Bound = z.object({
+    type: z.literal("session_bound"),
+    result: Gateway.IngestResult,
+  }).strict();
+  export type Bound = z.infer<typeof Bound>;
 }

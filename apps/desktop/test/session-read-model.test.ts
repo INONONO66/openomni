@@ -38,8 +38,9 @@ function serveReads() {
       message(socket: ServerWebSocket<undefined>, raw) {
         const frame = z.record(z.string(), z.json()).parse(JSON.parse(String(raw)));
         if (frame.type !== "session_read") {
+          socket.send(JSON.stringify({ type: "receipt", status: "accepted" }));
           socket.send(JSON.stringify({
-            type: "receipt", status: "accepted",
+            type: "session_bound",
             result: { status: "executed", handle: { messageId: "input", target: "durable" }, delivery: { kind: "session" } },
           }));
           return;

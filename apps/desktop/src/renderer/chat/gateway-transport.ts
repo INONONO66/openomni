@@ -22,7 +22,7 @@ type SocketConstructor = new (url: string, protocols?: string | string[]) => Soc
 interface GatewayChatTransportOptions {
   /** `ws://host:port` — the gateway's WebSocket endpoint. */
   readonly url: string;
-  
+
   readonly protocols?: string | readonly string[];
   /** Injected in tests. Defaults to the platform `WebSocket`. */
   readonly WebSocketImpl?: SocketConstructor;
@@ -117,19 +117,21 @@ function emptyStream(): ReadableStream<UIMessageChunk> {
 export function createGatewayChatTransport(
   options: GatewayChatTransportOptions,
 ): GatewayChatTransport {
-  
   const pending: Turn[] = [];
-  
+
   const outstanding = new Map<string, OutstandingMessage>();
   const lastChatId = new WeakMap<SocketLike, string>();
-  const reads = new Map<string, {
-    readonly socket: SocketLike;
-    readonly cursorKey: string;
-    readonly waiters: {
-      readonly resolve: (page: SessionRead.Page) => void;
-      readonly reject: (error: Error) => void;
-    }[];
-  }>();
+  const reads = new Map<
+    string,
+    {
+      readonly socket: SocketLike;
+      readonly cursorKey: string;
+      readonly waiters: {
+        readonly resolve: (page: SessionRead.Page) => void;
+        readonly reject: (error: Error) => void;
+      }[];
+    }
+  >();
   const listeners = new Set<(page: SessionRead.Page) => void>();
 
   function settleRead(source: SocketLike, frame: SessionRead.Response): void {
@@ -141,10 +143,14 @@ export function createGatewayChatTransport(
     }
     for (const listener of listeners) listener(frame);
     if (frame.nextRevision !== null) {
-      source.send(JSON.stringify({
-        type: "session_read", sessionId: frame.sessionId, limit: 256,
-        cursor: { revision: frame.nextRevision, epoch: frame.epoch },
-      }));
+      source.send(
+        JSON.stringify({
+          type: "session_read",
+          sessionId: frame.sessionId,
+          limit: 256,
+          cursor: { revision: frame.nextRevision, epoch: frame.epoch },
+        }),
+      );
       return;
     }
     reads.delete(frame.sessionId);
@@ -165,7 +171,11 @@ export function createGatewayChatTransport(
   }
 
   function settle(source: SocketLike, frame: ServerFrame): void {
-    if (frame.type === "session_snapshot" || frame.type === "session_page" || frame.type === "session_gap") {
+    if (
+      frame.type === "session_snapshot" ||
+      frame.type === "session_page" ||
+      frame.type === "session_gap"
+    ) {
       settleRead(source, frame);
       return;
     }
@@ -187,7 +197,10 @@ export function createGatewayChatTransport(
     if (frame.type === "message" || frame.type === "error") settleChat(source, frame);
   }
 
-  function settleChat(source: SocketLike, frame: Extract<ServerFrame, { type: "message" | "error" }>): void {
+  function settleChat(
+    source: SocketLike,
+    frame: Extract<ServerFrame, { type: "message" | "error" }>,
+  ): void {
     if (frame.type === "message") {
       const chatId =
         pending.find((turn) => turn.socket === source)?.chatId ?? lastChatId.get(source);
@@ -251,9 +264,16 @@ export function createGatewayChatTransport(
       return new Promise<SessionRead.Page>((resolve, reject) => {
         reads.set(sessionId, { socket: live, cursorKey, waiters: [{ resolve, reject }] });
         try {
-          live.send(JSON.stringify(SessionRead.Request.parse({
-            type: "session_read", sessionId, limit: 256, cursor,
-          })));
+          live.send(
+            JSON.stringify(
+              SessionRead.Request.parse({
+                type: "session_read",
+                sessionId,
+                limit: 256,
+                cursor,
+              }),
+            ),
+          );
         } catch (error) {
           reads.delete(sessionId);
           reject(error);
@@ -262,7 +282,9 @@ export function createGatewayChatTransport(
     },
     subscribeSession(listener) {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     async sendMessages({ trigger, chatId, messages, abortSignal }) {
       if (trigger === "regenerate-message") {
