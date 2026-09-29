@@ -2104,10 +2104,11 @@ describe("session crash recovery and observation", () => {
         // identity rather than to any turn.
         const [delivery, ...rest] = deliveries(handle.id);
         expect(rest).toEqual([]);
+        if (delivery === undefined) throw new Error("resume produced no delivery");
         expect(delivery).toMatchObject({ kind: "resume", boundary: "before_llm" });
-        expect(delivery?.turnId).toBe(delivery?.inboxId ?? "");
+        expect(delivery.turnId).toBe(delivery.inboxId);
         expect(inboxRows(handle.id).map((row) => ({ id: row.id, status: row.status }))).toEqual([
-          { id: delivery?.inboxId, status: "consumed" },
+          { id: delivery.inboxId, status: "consumed" },
         ]);
       }),
     ));
