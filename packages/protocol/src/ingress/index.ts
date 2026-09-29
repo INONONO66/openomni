@@ -53,18 +53,23 @@ const RawTargetSchema = z
   })
   .catchall(z.unknown());
 
+const LegacyTargetSchema = z
+  .object({
+    type: z.string(),
+    kind: z.undefined().optional(),
+  })
+  .catchall(z.unknown());
+
 const TargetSchemaImpl = z.preprocess((input) => {
   if (input === "resident") return { kind: "resident" };
   if (typeof input === "string" && input.startsWith("worker:")) {
     const id = input.slice("worker:".length);
     return { kind: "worker", workerId: id };
   }
-  if (input && typeof input === "object" && !Array.isArray(input)) {
-    const record = input as Record<string, unknown>;
-    if (typeof record.type === "string" && record.kind === undefined) {
-      const { type, ...rest } = record;
-      return { ...rest, kind: type };
-    }
+  const legacyTarget = LegacyTargetSchema.safeParse(input);
+  if (legacyTarget.success) {
+    const { type, ...rest } = legacyTarget.data;
+    return { ...rest, kind: type };
   }
   return input;
 }, RawTargetSchema);

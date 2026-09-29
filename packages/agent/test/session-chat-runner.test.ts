@@ -9,9 +9,8 @@ import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { Retry as LlmRetry } from "@openomni/llm";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { Bus, closeSessions, createSessionChatRunner, createTurnDispatcher, type Executor } from "../src/index";
@@ -348,54 +347,49 @@ describe("session chat runner", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const sleep = spyOn(LlmRetry, "sleep").mockReturnValue(Effect.void);
           let calls = 0;
 
-          try {
-            const { actions } = yield* runDurably(
-              async (
-                input: import("@openomni/llm").RunInput,
-                sink: import("@openomni/llm").Sink,
-              ) => {
-                calls += 1;
-                return calls === 1
-                  ? { type: "error", error: providerFailure("transient provider outage") }
-                  : completeModel(input, sink);
-              },
-            );
+          const { actions } = yield* runDurably(
+            async (
+              input: import("@openomni/llm").RunInput,
+              sink: import("@openomni/llm").Sink,
+            ) => {
+              calls += 1;
+              return calls === 1
+                ? { type: "error", error: providerFailure("transient provider outage") }
+                : completeModel(input, sink);
+            },
+          );
 
-            const llmIntents = actions.filter(
-              (action: import("@openomni/protocol").LedgerAction.Node) =>
-                action.kind === "llm" && actionPhase(action) === "intent",
-            );
-            const attempts = actions.filter(
-              (action: import("@openomni/protocol").LedgerAction.Node) =>
-                action.kind === "attempt" && actionPhase(action) === "intent",
-            );
-            const attemptResults = actions.filter(
-              (action: import("@openomni/protocol").LedgerAction.Node) =>
-                action.kind === "attempt" && actionPhase(action) === "result",
-            );
-            expect(calls).toBe(2);
-            expect(llmIntents).toHaveLength(1);
-            expect(attempts).toHaveLength(2);
-            expect(
-              attemptResults.map(
-                (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
-              ),
-            ).toEqual(
-              attempts.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
-            );
-            const llmIntent = llmIntents[0];
-            if (llmIntent === undefined) throw new Error("missing logical llm intent");
-            expect(
-              attempts.map(
-                (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
-              ),
-            ).toEqual([llmIntent.id, llmIntent.id]);
-          } finally {
-            sleep.mockRestore();
-          }
+          const llmIntents = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "llm" && actionPhase(action) === "intent",
+          );
+          const attempts = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "attempt" && actionPhase(action) === "intent",
+          );
+          const attemptResults = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "attempt" && actionPhase(action) === "result",
+          );
+          expect(calls).toBe(2);
+          expect(llmIntents).toHaveLength(1);
+          expect(attempts).toHaveLength(2);
+          expect(
+            attemptResults.map(
+              (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+            ),
+          ).toEqual(
+            attempts.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
+          );
+          const llmIntent = llmIntents[0];
+          if (llmIntent === undefined) throw new Error("missing logical llm intent");
+          expect(
+            attempts.map(
+              (action: import("@openomni/protocol").LedgerAction.Node) => action.parentId,
+            ),
+          ).toEqual([llmIntent.id, llmIntent.id]);
         }),
       ),
     ));
@@ -404,42 +398,37 @@ describe("session chat runner", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const sleep = spyOn(LlmRetry, "sleep").mockReturnValue(Effect.void);
           const fallback = { provider: "openai", id: "gpt-4o" };
           const answered: string[] = [];
 
-          try {
-            const { actions } = yield* runDurably(
-              async (
-                input: import("@openomni/llm").RunInput,
-                sink: import("@openomni/llm").Sink,
-              ) => {
-                answered.push(input.model.id);
-                return answered.length === 1
-                  ? { type: "error", error: providerFailure("transient provider outage") }
-                  : completeModel(input, sink);
-              },
-              { prompts: 2, fallbacks: [fallback] },
-            );
+          const { actions } = yield* runDurably(
+            async (
+              input: import("@openomni/llm").RunInput,
+              sink: import("@openomni/llm").Sink,
+            ) => {
+              answered.push(input.model.id);
+              return answered.length === 1
+                ? { type: "error", error: providerFailure("transient provider outage") }
+                : completeModel(input, sink);
+            },
+            { prompts: 2, fallbacks: [fallback] },
+          );
 
-            const llmIntents = actions
-              .filter(
-                (action: import("@openomni/protocol").LedgerAction.Node) =>
-                  action.kind === "llm" && actionPhase(action) === "intent",
-              )
-              .map((action: import("@openomni/protocol").LedgerAction.Node) => action.intent.value);
-            expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);
-            expect(llmIntents).toMatchObject([
-              { op: "chat", value: { model: mockProviderModel.id } },
-              {
-                op: "restore_model_selection",
-                value: { from: fallback, to: { provider: "anthropic", id: mockProviderModel.id } },
-              },
-              { op: "chat", value: { model: mockProviderModel.id } },
-            ]);
-          } finally {
-            sleep.mockRestore();
-          }
+          const llmIntents = actions
+            .filter(
+              (action: import("@openomni/protocol").LedgerAction.Node) =>
+                action.kind === "llm" && actionPhase(action) === "intent",
+            )
+            .map((action: import("@openomni/protocol").LedgerAction.Node) => action.intent.value);
+          expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);
+          expect(llmIntents).toMatchObject([
+            { op: "chat", value: { model: mockProviderModel.id } },
+            {
+              op: "restore_model_selection",
+              value: { from: fallback, to: { provider: "anthropic", id: mockProviderModel.id } },
+            },
+            { op: "chat", value: { model: mockProviderModel.id } },
+          ]);
         }),
       ),
     ));

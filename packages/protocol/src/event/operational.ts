@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent } from "../bus/index.js";
+import type { PlainValue } from "../json.js";
 import { EpochMs } from "../time.js";
 
 const Base = z.object({
@@ -21,7 +22,7 @@ export namespace Operational {
     readonly component: string;
     readonly msg: string;
     readonly sessionId?: string;
-    readonly context?: Readonly<Record<string, unknown>>;
+    readonly context?: Readonly<Record<string, PlainValue>>;
     readonly error?: string;
   }
 
