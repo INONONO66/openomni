@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PlainValue } from "../json.js";
 import { toolResultSchema } from "../tool/result.js";
 import { PolicyDefinition, policyKernelVersion } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
@@ -332,12 +333,12 @@ const toolResult = toolResultSchema();
 function validator<Schema extends z.ZodTypeAny>(
   schema: Schema,
 ): {
-  readonly parse: (input: unknown) => z.infer<Schema>;
-  readonly safeParse: (input: unknown) => z.ZodSafeParseResult<z.infer<Schema>>;
+  readonly parse: (input: PlainValue | undefined) => z.infer<Schema>;
+  readonly safeParse: (input: PlainValue | undefined) => z.ZodSafeParseResult<z.infer<Schema>>;
 } {
   return Object.freeze({
-    parse: (input: unknown) => schema.parse(input),
-    safeParse: (input: unknown) => schema.safeParse(input),
+    parse: (input: PlainValue | undefined) => schema.parse(input),
+    safeParse: (input: PlainValue | undefined) => schema.safeParse(input),
   });
 }
 
@@ -425,16 +426,11 @@ const policyPointInputSchemas = Object.freeze({
   ),
 } satisfies Record<
   RegisteredPolicyPointId,
-  Readonly<{ parse: (input: unknown) => unknown; safeParse: (input: unknown) => unknown }>
->);
-
-type PolicyPointInputMapType = {
-  readonly [PointId in keyof typeof policyPointInputSchemas]: (typeof policyPointInputSchemas)[PointId] extends Readonly<{
-    parse: (input: unknown) => infer Output;
+  Readonly<{
+    parse: (input: PlainValue | undefined) => object;
+    safeParse: (input: PlainValue | undefined) => z.ZodSafeParseResult<object>;
   }>
-    ? Output
-    : never;
-};
+>);
 
 export namespace PolicyPointModule {
   export const PolicyPoint = Object.assign(policyPoint, {
@@ -452,5 +448,4 @@ export namespace PolicyPointModule {
 
   export type PolicyPoint = z.infer<typeof policyPoint>;
 
-  export type PolicyPointInputMap = PolicyPointInputMapType;
 }

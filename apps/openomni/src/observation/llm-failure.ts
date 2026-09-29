@@ -2,6 +2,11 @@
 
 import { failureFacts } from "@openomni/agent";
 import { Retry } from "@openomni/llm";
+import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
+import { z } from "zod";
+
+const ThrownValue = z.union([z.instanceof(Error), PlainValueSchema]);
+type ThrownValue = z.input<typeof ThrownValue>;
 
 /** How the classified failure reads to the person who asked for the turn. */
 export interface ClassifiedFailure {
@@ -11,7 +16,7 @@ export interface ClassifiedFailure {
   readonly text: string;
 }
 
-function attemptClause(error: unknown): string {
+function attemptClause(error: object | undefined): string {
   const facts = failureFacts(error);
   // No decided facts means the run died before any retry decision — saying
   // "tried 1 time" would be a claim the run never made.
@@ -28,18 +33,21 @@ function attemptClause(error: unknown): string {
  * their balance is gone when it might be a card decline sends them to the
  * wrong place. These messages never include a thrown error's raw details.
  */
-export function classifyTurnFailure(error: unknown): ClassifiedFailure {
-  const reason = Retry.classifyFailure(error);
+export function classifyTurnFailure(error: ThrownValue): ClassifiedFailure {
+  const parsed = ThrownValue.safeParse(error);
+  const failure: Error | PlainValue = parsed.success ? parsed.data : null;
+  const reason = Retry.classifyFailure(failure);
+  const objectError = typeof failure === "object" && failure !== null ? failure : undefined;
   switch (reason) {
     case "rate_limit":
       return {
         reason,
-        text: `I could not answer: the model provider rate limited upstream${attemptClause(error)}. Nothing is wrong with the request — retry in a moment.`,
+        text: `I could not answer: the model provider rate limited upstream${attemptClause(objectError)}. Nothing is wrong with the request — retry in a moment.`,
       };
     case "billing":
       return {
         reason,
-        text: paymentRequired(error)
+        text: paymentRequired(objectError)
           ? "I could not answer: the provider returned payment required, so the account's quota or balance may be exhausted — check provider account. (402 Payment Required)"
           : "I could not answer: the provider reports quota/billing exhausted — check provider account balance or limits. Retrying will not help until it is topped up.",
       };
@@ -52,13 +60,13 @@ export function classifyTurnFailure(error: unknown): ClassifiedFailure {
     case "server_error":
       return {
         reason,
-        text: `I could not answer: the model provider failed server-side${attemptClause(error)}. This is upstream, not your request — retry shortly.`,
+        text: `I could not answer: the model provider failed server-side${attemptClause(objectError)}. This is upstream, not your request — retry shortly.`,
       };
     case "validation_error":
     case "non_retryable":
       return {
         reason,
-        text: unclassifiedText(error),
+        text: unclassifiedText(objectError),
       };
   }
 }
@@ -68,7 +76,7 @@ export function classifyTurnFailure(error: unknown): ClassifiedFailure {
  * MIGHT be a spent balance and might be a declined card, so it is hedged
  * rather than either asserted or hidden.
  */
-function unclassifiedText(error: unknown): string {
+function unclassifiedText(error: object | undefined): string {
   if (paymentRequired(error)) {
     return "I could not answer: the provider returned payment required, so the account's quota or balance may be exhausted — check provider account. (402 Payment Required)";
   }
@@ -81,10 +89,10 @@ function unclassifiedText(error: unknown): string {
  * `.data`. Cause links are walked for the same reason the llm classifier
  * walks them — the status can sit one wrapper down.
  */
-function paymentRequired(error: unknown): boolean {
-  let current: unknown = error;
+function paymentRequired(error: object | undefined): boolean {
+  let current: object | undefined = error;
   for (let depth = 0; depth < 8; depth += 1) {
-    if (typeof current !== "object" || current === null) return false;
+    if (current === undefined) return false;
     if ("statusCode" in current && current.statusCode === 402) return true;
     if (
       "data" in current &&
@@ -96,7 +104,7 @@ function paymentRequired(error: unknown): boolean {
       return true;
     const cause = "cause" in current ? current.cause : undefined;
     if (cause === undefined || cause === current) return false;
-    current = cause;
+    current = typeof cause === "object" && cause !== null ? cause : undefined;
   }
   return false;
 }

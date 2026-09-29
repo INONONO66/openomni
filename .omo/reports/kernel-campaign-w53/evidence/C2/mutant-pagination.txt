@@ -1,0 +1,32 @@
+bun test v1.4.1 (4661e494f)
+
+test/gateway-transport.test.ts:
+723 |     const stop = transport.subscribeSession((page) => seen.push(page.nextRevision));
+724 | 
+725 |     const final = await transport.readSession("durable");
+726 |     stop();
+727 | 
+728 |     expect(cursors).toEqual([undefined, { revision: 2, epoch: 2 }]);
+                          ^
+error: expect(received).toEqual(expected)
+
+  [
+    undefined,
+    {
+      "epoch": 2,
+-     "revision": 2,
++     "revision": 3,
+    },
+  ]
+
+- Expected  - 1
++ Received  + 1
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/desktop/test/gateway-transport.test.ts:728:21)
+(fail) session reads over the gateway socket > a page pointing at a next revision is followed with a cursor until the read drains [5.59ms]
+
+ 0 pass
+ 23 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [75.00ms]

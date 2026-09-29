@@ -1,0 +1,36 @@
+bun test v1.4.1 (4661e494f)
+
+apps/desktop/test/gateway-transport.test.ts:
+(pass) createGatewayChatTransport > empty history sends an empty prompt and does not offer reconnection [2.17ms]
+(pass) createGatewayChatTransport > close before opening rejects and failed send closes its socket [0.21ms]
+(pass) createGatewayChatTransport > a server message becomes start / text-start / text-delta / text-end / finish [4.22ms]
+(pass) createGatewayChatTransport > an error frame becomes one error chunk and closes the stream [1.35ms]
+(pass) createGatewayChatTransport > an outstanding server message id is echoed as replyToId on the next turn [1.27ms]
+(pass) createGatewayChatTransport > reply ids stay with their chat when two turns share the socket [1.26ms]
+(pass) createGatewayChatTransport > preserves subprotocol offers on the real socket [1.17ms]
+(pass) createGatewayChatTransport > ignores malformed frames and retains unsolicited reply correlation [0.77ms]
+(pass) createGatewayChatTransport > cancelling a stream invalidates its socket and clears reply correlation [0.18ms]
+(pass) createGatewayChatTransport > rejects regeneration instead of appending the historical prompt again [0.60ms]
+(pass) createGatewayChatTransport > an already-aborted turn never reaches the gateway [0.52ms]
+(pass) createGatewayChatTransport > an abort settles while the socket is still opening [0.09ms]
+(pass) createGatewayChatTransport > aborting ends the stream [0.76ms]
+(pass) createGatewayChatTransport > aborting one turn fails sibling turns on the invalidated socket [0.08ms]
+(pass) createGatewayChatTransport > a completed turn cannot later close the shared socket [0.94ms]
+(pass) createGatewayChatTransport > an unexpected socket close fails its pending turn [0.04ms]
+(pass) createGatewayChatTransport > an old socket close cannot drain a turn on its replacement [0.12ms]
+(pass) createGatewayChatTransport > a socket that fails while opening is replaced on retry [0.12ms]
+(pass) createGatewayChatTransport > a session-level terminal page cannot settle another turn's pending chat [2.90ms]
+(pass) createGatewayChatTransport > binds only from session_bound; receipts and pre-blocked results never bind [0.34ms]
+(pass) createGatewayChatTransport > the SDK reduces the chunks into one assistant message [1.79ms]
+(pass) session reads over the gateway socket > a page pointing at a next revision is followed with a cursor until the read drains [1.36ms]
+(pass) session reads over the gateway socket > a session-scoped error frame rejects that session's pending read [0.89ms]
+(pass) session reads over the gateway socket > a socket that closes mid-read rejects the pending read [0.77ms]
+(pass) session reads over the gateway socket > a send failure during a session read rejects instead of hanging [0.08ms]
+(pass) session reads over the gateway socket > two concurrent identical reads coalesce onto one request and both resolve [0.73ms]
+(pass) session reads over the gateway socket > a differing-cursor second read is rejected while the first still resolves [0.87ms]
+(pass) session reads over the gateway socket > a close drains every coalesced waiter [0.62ms]
+
+ 28 pass
+ 0 fail
+ 61 expect() calls
+Ran 28 tests across 1 file. [105.00ms]

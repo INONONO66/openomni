@@ -142,7 +142,12 @@ export function createSessionAdmission(
       const resultId = entropy();
       const turnId = entropy();
       const parentActionId = kernel.latestAction(sessionId)?.id ?? null;
-      const deliveries = deliveryActions(pending, turnId, "before_llm", parentActionId);
+      const deliveries = deliveryActions(
+        pending,
+        { kind: "turn", turnId },
+        "before_llm",
+        parentActionId,
+      );
       const envelope = turnIntentAction({
         id: turnId,
         parentId: deliveries.at(-1)?.id ?? parentActionId,
@@ -221,7 +226,12 @@ export function createSessionAdmission(
       const current = kernel.row(sessionId);
       return commitSession({
         expectedRevision: current.revision,
-        actions: deliveryActions(items, "noop", "before_llm", kernel.latestAction(sessionId)?.id ?? null),
+        actions: deliveryActions(
+          items,
+          { kind: "inbox" },
+          "before_llm",
+          kernel.latestAction(sessionId)?.id ?? null,
+        ),
         state: current.state,
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
     });
@@ -325,7 +335,12 @@ export function createSessionAdmission(
       const resultId = entropy();
       const turnId = entropy();
       const resumeCount = terminal.effect.resumeCount + 1;
-      const delivery = deliveryActions([item], turnId, "before_llm", terminal.action.id);
+      const delivery = deliveryActions(
+        [item],
+        { kind: "turn", turnId },
+        "before_llm",
+        terminal.action.id,
+      );
       const resume = turnIntentAction({ id: turnId, parentId: delivery.at(-1)?.id ?? terminal.action.id, sessionId, resultId, inboxIds: [item.id], generation, resumeCount, boundaryActionId: terminal.effect.boundaryActionId, at: clock() });
       yield* commitSession({ expectedRevision: current.revision, actions: [...delivery, resume], state: "running" });
       return yield* runTurn({ turnId, resultId, parentActionId: resume.id, boundaryActionId: terminal.effect.boundaryActionId, resumeCount, generation, resume: true });
@@ -335,7 +350,12 @@ export function createSessionAdmission(
   function consumeNoopInbox(items: readonly Inbox.Row[]): Effect.Effect<void, AdmissionError> {
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
-      const noops = deliveryActions(items, "noop", "before_llm", kernel.latestAction(sessionId)?.id ?? null);
+      const noops = deliveryActions(
+        items,
+        { kind: "inbox" },
+        "before_llm",
+        kernel.latestAction(sessionId)?.id ?? null,
+      );
       yield* commitSession({ expectedRevision: current.revision, actions: noops, state: current.state });
     });
   }

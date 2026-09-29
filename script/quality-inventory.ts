@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import ts from "typescript";
 import { decodeJson as strictJson } from "./quality-json";
 import { qualitySource } from "./quality-source";
+import type { TypescriptMetricContract } from "./quality-typescript-metrics";
 import { assertTopologyComplete } from "./topology";
 
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
@@ -58,15 +59,48 @@ function relativePath(value: Json | undefined): string {
     throw new InventoryError("schema", "", "expected relative path");
   return path;
 }
+function metricContract(value: Json | undefined): TypescriptMetricContract {
+  const object = jsonObject(value, [
+    "algorithm",
+    "tool",
+    "version",
+    "coverage",
+    "cyclomaticExclusiveMax",
+    "halsteadDifficultyExclusiveMax",
+    "crapExclusiveMax",
+  ]);
+  const thresholds = {
+    cyclomaticExclusiveMax: jsonNumber(object.cyclomaticExclusiveMax),
+    halsteadDifficultyExclusiveMax: jsonNumber(object.halsteadDifficultyExclusiveMax),
+    crapExclusiveMax: jsonNumber(object.crapExclusiveMax),
+  };
+  if (Object.values(thresholds).some((threshold) => !Number.isInteger(threshold) || threshold <= 0))
+    throw new InventoryError("schema", "", "invalid metric threshold");
+  return {
+    algorithm: jsonLiteral(object.algorithm, "openomni-typescript-function-metrics-v1"),
+    tool: jsonLiteral(object.tool, "typescript"),
+    version: jsonLiteral(object.version, "5.9.2"),
+    coverage: jsonLiteral(object.coverage, "lcov-da-line-fraction-v1"),
+    ...thresholds,
+  };
+}
 export const contractSchema = {
   parse(value: Json) {
-    const object = jsonObject(value, ["version", "typescript", "roots", "projects", "topology"]);
+    const object = jsonObject(value, [
+      "version",
+      "typescript",
+      "roots",
+      "projects",
+      "topology",
+      "metrics",
+    ]);
     const contract = {
       version: jsonLiteral(object.version, 1),
       typescript: jsonLiteral(object.typescript, "5.9.2"),
       roots: jsonArray(object.roots, relativePath),
       projects: jsonArray(object.projects, relativePath),
       topology: jsonBoolean(object.topology),
+      ...(object.metrics === undefined ? {} : { metrics: metricContract(object.metrics) }),
     };
     if (
       !contract.roots.length ||

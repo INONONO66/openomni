@@ -14,6 +14,6 @@ const GLYPH: Record<SessionPhase, ComponentProps<typeof StatusGlyph>> = {
   archived: { tone: "faint", shape: "hollow" },
 };
 
-export function sessionGlyphProps(phase: SessionPhase): ComponentProps<typeof StatusGlyph> {
-  return GLYPH[phase];
+export function sessionGlyphProps(phase: SessionPhase | null): ComponentProps<typeof StatusGlyph> {
+  return phase === null ? { tone: "muted", shape: "hollow" } : GLYPH[phase];
 }

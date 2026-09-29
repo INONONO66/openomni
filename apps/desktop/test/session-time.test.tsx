@@ -27,7 +27,7 @@ function renderRows(session: Session): Document {
   consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
   openTab({ kind: "route", route: "sessions" });
   const document = new Window().document;
-  document.body.innerHTML = renderShell();
+  document.body.innerHTML = renderShell(null, [session]);
   return document as unknown as Document;
 }
 
@@ -115,4 +115,8 @@ test("a session started here, or on a surface without a mark, carries none", () 
       expect(secondary?.textContent).not.toContain("·");
     }
   });
+});
+
+test("a session with no durable page yet reads as not connected", () => {
+  expect(sessionReason(makeSession({ phase: null }), now)).toBe("not connected");
 });

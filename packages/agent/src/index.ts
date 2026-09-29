@@ -6,6 +6,7 @@ export { decideSessionAdmission, requestAuthorityKernel } from "./session-admiss
 export { failureFacts } from "./core/retry";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
+export { attemptUsage, toolWallMs } from "./session-lifecycle/metrics";
 export { closeSessions, session } from "./session-handle";
 export { createSessionEntityRunTurn } from "./session-controller";
 export { createExecutor, ExecutionApprovalError } from "./executor";

@@ -5,6 +5,7 @@ export const scriptsLanes = {
   "scripts-contracts": [
     "benchmark-workflow.test.ts",
     "check-benchmark-regression.test.ts",
+    "check-dead-exports.test.ts",
     "check-patch-coverage.test.ts",
     "check-topology.test.ts",
     "ci-plan.test.ts",
@@ -13,7 +14,9 @@ export const scriptsLanes = {
     "conformance/protocol-event-pairing.test.ts",
     "conformance/request-authority-census.test.ts",
     "gate-discovery.test.ts",
+    "lint-guards.test.ts",
     "lint-tools.test.ts",
+    "main-runner.test.ts",
     "scripts-lanes.test.ts",
     "tool-target-deletion.test.ts",
     "verify-tsconfig-inheritance.test.ts",
@@ -23,10 +26,13 @@ export const scriptsLanes = {
   ],
   "scripts-tooling": [
     "bundle-type-contract.test.ts",
+    "census-consumer-contract.test.ts",
     "check-deps.test.ts",
     "check-quality-python.test.ts",
     "check-types-census.test.ts",
+    "check-written-types.test.ts",
     "conformance/summarize-benchmark-runs.test.ts",
+    "generate-models-snapshot.test.ts",
     "quality-audit.test.ts",
     "quality-audit-issues.test.ts",
     "quality-ci-receipt.test.ts",
@@ -56,7 +62,9 @@ export const scriptPartitions = [
 // suites, check-types-census ~48s) so both shards stay far below the timeout.
 export const scriptToolingPartitions = {
   "scripts-tooling-1": [
+    "census-consumer-contract.test.ts",
     "check-deps.test.ts",
+    "check-written-types.test.ts",
     "run-quality-mutations.test.ts",
     "quality-mutation-workflow.test.ts",
     "quality-source.test.ts",
@@ -69,6 +77,7 @@ export const scriptToolingPartitions = {
   ],
   "scripts-tooling-2": [
     "bundle-type-contract.test.ts",
+    "generate-models-snapshot.test.ts",
     "run-quality-mutations-compiler.test.ts",
     "quality-mutation-shard.test.ts",
     "check-types-census.test.ts",

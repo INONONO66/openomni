@@ -2,6 +2,8 @@ import { Glob } from "bun";
 import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { z } from "zod";
+import { runScriptMain } from "./main-runner";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
 type PackageRule = {
@@ -43,6 +45,8 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
+const JsonObject = z.record(z.string(), z.json());
+type JsonObject = z.infer<typeof JsonObject>;
 
 /** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
 function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
@@ -66,7 +70,7 @@ function isAllowedDep(rule: PackageRule, dep: string): boolean {
   return rule.allowedDeps.has(dep);
 }
 
-async function readJson(path: string): Promise<Record<string, unknown>> {
+async function readJson(path: string): Promise<JsonObject> {
   const file = Bun.file(path);
   const exists = await file.exists();
 
@@ -75,10 +79,10 @@ async function readJson(path: string): Promise<Record<string, unknown>> {
   }
 
   const text = await file.text();
-  return JSON.parse(text) as Record<string, unknown>;
+  return JsonObject.parse(JSON.parse(text));
 }
 
-function collectOpenOmniDeps(pkg: Record<string, unknown>): string[] {
+function collectOpenOmniDeps(pkg: JsonObject): string[] {
   const deps = new Set<string>();
 
   for (const field of DEP_FIELDS) {
@@ -88,7 +92,7 @@ function collectOpenOmniDeps(pkg: Record<string, unknown>): string[] {
       continue;
     }
 
-    for (const depName of Object.keys(value as Record<string, string>)) {
+    for (const depName of Object.keys(value)) {
       if (depName.startsWith("@openomni/")) {
         deps.add(depName);
       }
@@ -534,20 +538,27 @@ const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledg
  */
 const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
   "ActorRegistry",
+  // packages/channels/src/router/stores.ts:2,35
   "createActorRegistry",
   "BlacklistStore",
+  // packages/channels/src/router/stores.ts:3,36
   "createBlacklistStore",
   "ChannelGrantStore",
+  // packages/channels/src/router/stores.ts:4,37
   "createChannelGrantStore",
   "ReplyGrantStore",
+  // packages/channels/src/router/stores.ts:7,38
   "createReplyGrantStore",
   "SurfaceKey",
+  // packages/channels/src/router/stores.ts:8,40
   "createSurfaceKeyStore",
   "DecisionFacts",
+  // packages/channels/src/router/stores.ts:5,41
   "createDecisionFactPort",
   // #219 active-egress debit ledger — a perimeter surface written ONLY by the
   // router's send kernel (brain never reaches the perimeter debit store).
   "EgressBudgetStore",
+  // packages/channels/src/router/stores.ts:6,39
   "createEgressBudgetStore",
 ]);
 
@@ -1123,10 +1134,4 @@ export async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-if (import.meta.main) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`ERROR: ${message}`);
-    process.exit(1);
-  });
-}
+if (import.meta.main) await runScriptMain(main);

@@ -5,8 +5,8 @@ describe("run stream stop conditions", () => {
   const capture = useStreamCapture();
 
   test.each([
-    { toolChoice: "required" as const, maxSteps: 7 },
-    { toolChoice: undefined, maxSteps: undefined },
+    { toolChoice: "required" as const },
+    { toolChoice: undefined },
   ])("forwards choice and caps every attempt at one step: %s", async (input) => {
     await capture.run(input);
     expect(capture.args.toolChoice).toBe(input.toolChoice);

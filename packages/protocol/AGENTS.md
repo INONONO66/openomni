@@ -14,17 +14,15 @@ Protocol defines schemas plus pure folds — no effects, storage, or I/O. It may
 src/
 ├── index.ts              # Package barrel: all public domains
 ├── actor/                # Actor.Identity / Endpoint, TrustTier, blacklist schemas
-├── app-connector/        # Connector definition, consent, installation, and lifecycle schemas
 ├── bus/                  # BusEvent.define() + injected BusEvent.Sink contract
 ├── channel/              # Channel surfaces, messages, config, and surface-key codec
 ├── cron/                 # Cron job schemas
 ├── error/                # NamedError factory and shared protocol errors
-├── event/                # Ingress, LLM, MCP, operational, policy, and tool descriptors
+├── event/                # Ingress, LLM, operational, policy, and tool descriptors
 ├── gateway/              # Gateway delivery/send/request contracts and messaging events
 ├── ingress/              # Inbound contracts plus payload, route-record, surface-key, and target helpers
 ├── ipc/                  # Version-2 generic envelopes plus machine wire method schemas
 ├── ledger/               # Append/adopt/chain contracts and frozen stream payload registry
-├── mcp/                  # MCP server config schemas
 ├── message/              # Message.Part variants, Message.Info, Message.WithParts
 ├── model/                # Model.Ref and model status
 ├── policy/               # 18-point registry, contracts, plan, permissions, resources, and effects
@@ -48,7 +46,6 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 - **Policy points**: `policy/policy-point.ts` registers 18 policy points (`dispatch.action.pre`, `run.lifecycle.pre/post`, `run.turn.pre/post`, `run.completion.pre`, `run.error.error`, `prompt.context.pre`, `connection.llm.pre/post`, `tool.catalog.pre`, `tool.native.pre/post`, `tool.mcp.pre/post`, `delegation.worker.pre/post`), each with allowed-effects whitelist, default fail policy (pre-boundary fail-closed, post fail-open), required context, and input schema — contract vocabulary, registry, and per-point input validators live in that one file. Generic agent-loop `run.completion.pre` are distinct points. `Policy.PolicyPlan` is defined in `policy/index.ts`. `Policy.PolicyDecision` verdict is one of `allow | deny | pending`. A legacy `Policy.Timing` alias survives for pre-v2 timing names; do not build new code on it.
 - **Storage sub-adapters**: `storage/index.ts` holds the `Storage` namespace of pure interface contracts — no runtime logic. Implementations live in `@openomni/ledger`.
 - **IPC contracts**: `ipc/` describes the generic wire envelopes and the machine wire method schemas only. Process delegation lifecycle lives in the product app.
-- **AppConnector namespace**: `app-connector/index.ts` defines installed-app connector schema contracts. Runtime install, consent, and process execution live above protocol.
 - **Trace contract**: `trace/index.ts` defines `TraceContext` and the pure `traceIdFromUuid()` format codec. Runtime entropy belongs to telemetry or the consuming driver package.
 
 ## CONTRACT BOUNDARY

@@ -1,0 +1,4 @@
+gated apps/openomni/src/gateway.ts: 15 changed executable line(s)
+gated packages/agent/src/session-lifecycle/inspect.ts: 22 changed executable line(s)
+worktree patch coverage: all changed executable lines covered
+exit=0

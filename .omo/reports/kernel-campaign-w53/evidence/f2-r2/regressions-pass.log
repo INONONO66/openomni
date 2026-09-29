@@ -1,0 +1,167 @@
+bun test v1.4.1 (4661e494f)
+
+script/run-quality-mutations-compiler.test.ts:
+(pass) fallback compiler ignores untyped JavaScript inventory sources [138.34ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+{"kind":"typecheck","valid":true,"diagnostics":[],"diagnosticsSha256":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"}
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+{"kind":"typecheck","valid":false,"diagnostics":["../../../../private/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/mutation-incremental-ObAxCv/b/consumer.ts(1,50): error TS2322: Type 'string' is not assignable to type 'number'.\n","../../../../private/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/mutation-incremental-ObAxCv/fallback.ts(1,49): error TS2322: Type 'string' is not assignable to type 'number'.\n"],"diagnosticsSha256":"fd8df12fc6e8f69abccafc6b656b9d327d1885e3990740255c4d0c60bfb609c7"}
+(pass) typecheck CLI reports native valid and invalid source outcomes in process [596.79ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) incremental compiler matches the cold oracle through stale-state, consumer, global and fallback changes [5449.01ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) batched compiler checks preserve cold diagnostics and reuse affected projects [1660.58ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) compiler overlays workspace package consumers through an aliased execution root [1119.50ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) compiler refuses wrong frozen/source identities and recreated roots cannot inherit stale state [1841.25ms]
+(pass) compiler worker closes after an unexpected child exit and preserves its receipt [542.27ms]
+(pass) compiler worker returns actual compiler proof and fails closed on initialization error and disposal [642.96ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) compiler message server returns initialization errors and real diagnostics over message ports [372.51ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) stdio compiler port frames split newline-delimited requests and rejects malformed lines [354.14ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project c/tsconfig.json
+(pass) inventory fallback resolves ambient types from its root rather than the process cwd [637.86ms]
+(pass) compiler fallback stays inside the frozen root and Python command names resolve [8.53ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project b/tsconfig.json
+(pass) baseline diagnostics use project roots instead of transitive importer options [1529.04ms]
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+[mutation] compiler project a/tsconfig.json
+(pass) transitive-only inventory files enter the fallback beside native roots and unreferenced files [683.09ms]
+[mutation] compiler project apps/desktop/tsconfig.json
+[mutation] compiler project apps/desktop/tsconfig.node.json
+[mutation] compiler project apps/desktop/tsconfig.test.json
+[mutation] compiler project apps/desktop/tsconfig.web.json
+[mutation] compiler project apps/openomni/tsconfig.build.json
+[mutation] compiler project apps/openomni/tsconfig.json
+[mutation] compiler project apps/openomni/tsconfig.test.json
+[mutation] compiler project packages/agent/tsconfig.bench.json
+[mutation] compiler project packages/agent/tsconfig.build.json
+[mutation] compiler project packages/agent/tsconfig.json
+[mutation] compiler project packages/agent/tsconfig.test.json
+[mutation] compiler project packages/channels/tsconfig.build.json
+[mutation] compiler project packages/channels/tsconfig.json
+[mutation] compiler project packages/codemode/tsconfig.json
+[mutation] compiler project packages/codemode/tsconfig.test.json
+[mutation] compiler project packages/ipc/tsconfig.build.json
+[mutation] compiler project packages/ipc/tsconfig.json
+[mutation] compiler project packages/ipc/tsconfig.test.json
+[mutation] compiler project packages/ledger/tsconfig.contract-test.json
+[mutation] compiler project packages/ledger/tsconfig.json
+[mutation] compiler project packages/ledger/tsconfig.test.json
+[mutation] compiler project packages/llm/tsconfig.json
+[mutation] compiler project packages/llm/tsconfig.test.json
+[mutation] compiler project packages/machines/tsconfig.json
+[mutation] compiler project packages/machines/tsconfig.test.json
+[mutation] compiler project packages/policy/tsconfig.json
+[mutation] compiler project packages/protocol/tsconfig.build.json
+[mutation] compiler project packages/protocol/tsconfig.json
+[mutation] compiler project packages/protocol/tsconfig.test.json
+[mutation] compiler project packages/ui/tsconfig.json
+[mutation] compiler project packages/ui/tsconfig.test.json
+[mutation] compiler project script/tsconfig.json
+(pass) real mutation contract has no baseline compiler diagnostics [48154.78ms]
+
+ 15 pass
+ 0 fail
+ 211 expect() calls
+Ran 15 tests across 1 file. [63.80s]
+FULLFILE=0

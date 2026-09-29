@@ -40,9 +40,14 @@ test("native full campaign records a complete measurement receipt and exits by s
     "packages/demo/src/main.ts": "export const run = true;",
     "support/assertion.ts": 'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>expect(run).toBe(true));',
   });
+  // Candidate ownership follows each project's root files, so the demo
+  // package needs its own compiler project rather than an importer's.
+  cpSync(join(input.root, "src/tsconfig.json"), join(input.root, "packages/demo/tsconfig.json"));
   const contractPath = join(input.root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
-  writeFileSync(contractPath, JSON.stringify({ ...contract, roots: ["src", "packages"] }));
+  writeFileSync(contractPath, JSON.stringify({
+    ...contract, roots: ["src", "packages"], projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
+  }));
   expect(await mutationMain(prepareNative(input.root))).toBe(0);
   const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
   expect(native.command).toEqual(expect.arrayContaining(["--mutant-memory-mb", "6144"]));

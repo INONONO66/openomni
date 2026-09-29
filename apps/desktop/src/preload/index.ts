@@ -4,12 +4,13 @@ import {
   GATEWAY_CHANNEL,
   SHELL_COMMAND_CHANNEL,
   type DesktopApi,
+  type ShellCommand,
 } from "./api";
 import { gatewayEndpointSchema, shellCommandSchema } from "./validation";
 
 const api: DesktopApi = {
   onShellCommand: (listener) => {
-    const wrapper = (_event: IpcRendererEvent, command: unknown) => {
+    const wrapper = (_event: IpcRendererEvent, command: ShellCommand) => {
       const result = shellCommandSchema.safeParse(command);
       if (result.success) listener(result.data);
     };

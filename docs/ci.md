@@ -126,18 +126,24 @@ shards. All lanes must succeed before the audit can publish issues.
 | --- | --- |
 | Absolute line coverage | Bun LCOV, unioned across the same lanes as CI; per-file covered/executable denominators, with unloaded production/tooling sources explicitly reported as missing records |
 | Cognitive complexity | The pinned Biome engine used by Ultracite, JSON reporter, `noExcessiveCognitiveComplexity` above 21; `--only` also measures the two lint-override files |
+| Cyclomatic complexity | TypeScript 5.9.2 AST function walker `openomni-typescript-function-metrics-v1`; one plus branch, loop, catch, case, conditional-expression and short-circuit decision nodes; exclusive maximum 22 |
+| Halstead difficulty | The same function walker counts TypeScript operator and operand tokens and computes `(distinct operators / 2) * (total operands / distinct operands)`; exclusive maximum 80 |
+| CRAP | `cyclomatic^2 * (1 - coverage)^3 + cyclomatic`, where coverage is the function's fraction of covered LCOV `DA` lines; exclusive maximum 25 |
 | Clones | Pinned jscpd, separate production and test configurations, at least 5 lines and 50 tokens; fixtures, declarations and generated output excluded |
 | Type census | Surviving `check-types-census.ts`, preserving site kind and owned/foreign origin |
 | Mutation | Link to `quality-mutation.yml`; no second campaign or inferred completion |
 
 Coverage totals count uncovered executable lines, or one finding for an unloaded
 file whose executable denominator is unavailable. Complexity counts violating
-functions, clones count both endpoints, and types count census sites. Python is
-included in clone scans, not Bun coverage. This audit does not add a separate
-cyclomatic/CRAP analyzer or claim all functions have measured complexity scores.
+functions, cyclomatic/Halstead/CRAP count functions at or above their exclusive
+contract bounds, clones count both endpoints, and types count census sites.
+Python is included in clone scans, not Bun coverage or TypeScript function
+metrics. `script/conformance/quality-contract.json` pins the metric algorithm,
+TypeScript version, LCOV coverage interpretation and thresholds.
 
 `script/quality-audit-issues.ts` uses `gh` with parsed JSON, creates missing
-`quality-debt` and `quality:{coverage,complexity,clones,types}` labels, and maintains
+`quality-debt` and
+`quality:{coverage,complexity,cyclomatic,halstead,crap,clones,types}` labels, and maintains
 one rolling `quality: audit summary` issue. The first run creates **only** that
 summary. Subsequent runs update/reopen `quality: <repo-relative path>` issues,
 close resolved files with a comment, and create at most 50 open per-file issues.

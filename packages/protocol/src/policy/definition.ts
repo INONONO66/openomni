@@ -21,19 +21,6 @@ export namespace PolicyDefinition {
 
   export type Timing = (typeof Timing)[keyof typeof Timing];
 
-  export const Scope = z.object({
-    agentType: z.array(z.string()).optional(),
-  });
-  export type Scope = z.infer<typeof Scope>;
-
   export const FailPolicy = z.enum(["fail-open", "fail-closed"]);
   export type FailPolicy = z.infer<typeof FailPolicy>;
-
-  export const Definition = z.object({
-    name: z.string().min(1),
-    priority: z.number().int().min(0),
-    scope: Scope.optional(),
-    failPolicy: FailPolicy.optional(),
-  });
-  export type Definition = z.infer<typeof Definition>;
 }

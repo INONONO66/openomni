@@ -161,7 +161,12 @@ export function createSessionTurn(
         return yield* new ForeignFailure({ operation: "session.prompt", cause: refusal.reason });
       }
       const checkpointId = entropy();
-      const deliveries = deliveryActions(pending, input.turnId, boundary, checkpointId);
+      const deliveries = deliveryActions(
+        pending,
+        { kind: "turn", turnId: input.turnId },
+        boundary,
+        checkpointId,
+      );
       const checkpoint = turnCheckpointAction({
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary, at: clock(),
@@ -186,7 +191,12 @@ export function createSessionTurn(
       const current = kernel.row(sessionId);
       const latest = kernel.latestAction(sessionId);
       const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt") : [];
-      const deliveries = deliveryActions(interrupts, open.turnId, "before_llm", latest?.id ?? open.action.id);
+      const deliveries = deliveryActions(
+        interrupts,
+        { kind: "turn", turnId: open.turnId },
+        "before_llm",
+        latest?.id ?? open.action.id,
+      );
       const terminal = turnTerminalAction({
         id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
         sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),

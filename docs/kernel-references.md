@@ -15,6 +15,17 @@ This document owns the tracked source pins for the kernel campaign. It grounds t
 | Effect cluster | `effect/cluster` from `effect` (npm) | `4.0.0-rc.118`, published 2026-09-28 (exact pin, no caret) | Shipped W5.2 `SingleRunner` entity runtime; rc.118 exposes the stable `effect/cluster` path, not `effect/unstable/cluster`. |
 | Effect SQLite | `@effect/sql-sqlite-bun` (npm) | `4.0.0-rc.118`, published 2026-09-28 (exact pin, no caret) | Bun SQLite client used by the per-session files and shared catalog. |
 
+W5.3 (#1113) closure runs on `kernel/1113-w5-closure-20260929` (draft PR
+#1240, ⏳ pending merge): the app-owned `session_read` read model lives in
+`packages/protocol/src/gateway/session-read.ts` (plain-data wire DTOs),
+`apps/openomni/src/gateway.ts` (the single read surface), and
+`packages/agent/src/session-lifecycle/inspect.ts` (bounded inspection,
+ancestry through 256-action history windows); the accepted receipt keeps its
+frozen base shape and the durable binding travels in the additive
+`session_bound` frame (`SessionRead.Bound`, review r2 Owner decision);
+lane receipts are under `.omo/reports/kernel-campaign-w53/`. W5.2 (#1197)
+merged as `8390912c` (PR #1239).
+
 ## Decision references
 
 All citations below name a file and line range at the pinned SHA. The receipts at

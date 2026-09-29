@@ -8,6 +8,7 @@ import {
   tsconfigWorkspaces,
   type WorkspaceTopology,
 } from "./topology";
+import { z } from "zod";
 
 export type TopologyConsumer =
   | "dependency-bands"
@@ -28,8 +29,13 @@ const CONSUMERS: readonly TopologyConsumer[] = [
   "tsconfig",
 ];
 
-function json(path: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+const JsonObject = z.record(z.string(), z.json());
+const KnipConfig = z.object({
+  workspaces: z.record(z.string(), z.json()).optional(),
+});
+
+function json(path: string): z.infer<typeof JsonObject> {
+  return JsonObject.parse(JSON.parse(readFileSync(path, "utf8")));
 }
 
 function emptyProblems(): TopologyProblems {
@@ -143,7 +149,7 @@ function checkKnipInventory(
   problems: TopologyProblems,
 ): void {
   const knip = json(join(root, "knip.json"));
-  const knipConfig = (knip.workspaces ?? {}) as Record<string, unknown>;
+  const knipConfig = KnipConfig.parse(knip).workspaces ?? {};
   const actual = Object.keys(knipConfig).sort();
   const expected = [".", ...knipWorkspaces(topology).map((workspace) => workspace.dir)].sort();
   if (actual.join("\n") === expected.join("\n")) return;

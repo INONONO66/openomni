@@ -1,0 +1,12 @@
+bun test v1.4.1 (4661e494f)
+
+apps/desktop/test/gateway-transport.test.ts:
+(fail) session reads over the gateway socket > two concurrent identical reads coalesce onto one request and both resolve [15001.43ms]
+  ^ this test timed out after 15000ms.
+(fail) session reads over the gateway socket > a close drains every coalesced waiter [15000.74ms]
+  ^ this test timed out after 15000ms.
+
+ 0 pass
+ 26 filtered out
+ 2 fail
+Ran 2 tests across 1 file. [30.12s]

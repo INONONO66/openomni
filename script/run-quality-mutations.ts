@@ -1,4 +1,4 @@
-import { diagnostics, executionTreeHash, fail, mutationFailure, MutationError, pathIn, programs, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
+import { diagnostics, executionTreeHash, fail, formatDiagnostic, mutationFailure, MutationError, ownsDiagnostic, pathIn, programs, projectRootPaths, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
 export { diagnostics, executionTreeHash, programs, sha256 } from "./quality-mutation-input";
 import { decodeJson as sharedJson } from "./quality-inventory";
 import { spawnSync } from "node:child_process";
@@ -778,14 +778,18 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
 	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
 	const sourceDiagnostics: string[] = [];
 	for (const program of programs(root, contract, inventory)) {
+		const projectRoots = projectRootPaths(program.getRootFileNames());
 		const files = [...pending.values()].filter((file) =>
-			["typescript", "javascript"].includes(file.language) && program.getSourceFile(pathIn(root, file.path)),
+			["typescript", "javascript"].includes(file.language) &&
+			projectRoots.has(realpathSync(pathIn(root, file.path))),
 		);
 		const part = enumerate(root, { files, historical: [], embedded: inventory.embedded, configurations: [] }, operators, [program]);
 		result.candidates.push(...part.candidates);
 		result.census.push(...part.census.filter((row) => row.language !== "python"));
 		result.errors.push(...part.errors);
-		sourceDiagnostics.push(...diagnostics([program]));
+		sourceDiagnostics.push(...ts.getPreEmitDiagnostics(program)
+			.filter((diagnostic) => ownsDiagnostic(projectRoots, diagnostic))
+			.map((diagnostic) => formatDiagnostic(diagnostic, root)));
 		for (const file of files) pending.delete(file.path);
 	}
 	const rest = enumerate(root, { ...inventory, files: [...pending.values()] }, operators, []);
@@ -981,8 +985,15 @@ function gitCopyCommand(root: string, args: string[]): string {
 	return result.stdout;
 }
 export function copyExecution(sourceRoot: string, target: string): void {
-	if (existsSync(join(sourceRoot, ".git"))) // Own detached index; share Git objects/history.
+	if (existsSync(join(sourceRoot, ".git"))) {
+		// Own detached index; share Git objects/history.
 		gitCopyCommand(sourceRoot, ["worktree", "add", "--detach", target, "HEAD"]);
+		// The detached worktree starts from HEAD; mirror tracked deletions before
+		// overlaying dirty files so removed sources cannot reappear in the snapshot.
+		const deleted = gitCopyCommand(sourceRoot, ["diff", "--name-only", "--diff-filter=D", "-z", "HEAD"])
+			.split("\0").filter(Boolean);
+		for (const path of deleted) rmSync(join(target, path), { force: true });
+	}
 	const skipped = new Set([".git", ".omo", "coverage", ".turbo"]); // Copy dependencies; reject external links.
 	cpSync(sourceRoot, target, {
 		recursive: true,

@@ -35,7 +35,7 @@ describe("nothing open", () => {
 
 describe("empty routes", () => {
   test("renders each non-session route as an honest empty column", () => {
-    for (const route of ["inbox", "automations", "memory"] as const) {
+    for (const route of ["inbox", "automations"] as const) {
       consoleStore.setState(() => INITIAL_CLIENT_STATE);
       openTab({ kind: "route", route });
       const html = shell(null);

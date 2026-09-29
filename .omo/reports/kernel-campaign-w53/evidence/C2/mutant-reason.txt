@@ -1,0 +1,23 @@
+bun test v1.4.1 (4661e494f)
+
+test/session-time.test.tsx:
+116 |     }
+117 |   });
+118 | });
+119 | 
+120 | test("a session with no durable page yet reads as not connected", () => {
+121 |   expect(sessionReason(makeSession({ phase: null }), now)).toBe("not connected");
+                                                                 ^
+error: expect(received).toBe(expected)
+
+Expected: "not connected"
+Received: "offline"
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/desktop/test/session-time.test.tsx:121:60)
+(fail) a session with no durable page yet reads as not connected [0.26ms]
+
+ 0 pass
+ 19 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [249.00ms]

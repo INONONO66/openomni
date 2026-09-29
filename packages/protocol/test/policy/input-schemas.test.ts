@@ -22,6 +22,11 @@ const pointIds = [
 const sessionId = "session-1";
 const runId = "run-1";
 const toolResult = { id: "result-1", toolCallId: "call-1", output: "ok" };
+type PointInputs = {
+  [PointId in keyof typeof Policy.PolicyPoint.InputSchemas]: ReturnType<
+    (typeof Policy.PolicyPoint.InputSchemas)[PointId]["parse"]
+  >;
+};
 const validDispatchInput = {
   actor: { kind: "resident", actorId: "actor-1" },
   dispatchId: "dispatch-1",
@@ -31,7 +36,7 @@ const validDispatchInput = {
   runId,
   agentType: "resident",
   context: { requestId: "request-1" },
-} satisfies Policy.PolicyPointInputMap["dispatch.action.pre"];
+} satisfies PointInputs["dispatch.action.pre"];
 const validInputs = {
   "dispatch.action.pre": validDispatchInput,
   "run.lifecycle.pre": { actorId: "actor-1", sessionId, runId },
@@ -52,7 +57,7 @@ const validInputs = {
   "run.completion.pre": { sessionId, runId, completionCandidate: {} },
   "run.lifecycle.post": { sessionId, runId, runOutcome: { type: "stop" } },
   "run.error.error": { sessionId, runId, errorCode: "error", errorPhase: "turn" },
-} satisfies Policy.PolicyPointInputMap;
+} satisfies PointInputs;
 
 function isObject<Value>(value: Value): value is Value & object {
   return typeof value === "object" && value !== null;
@@ -192,7 +197,7 @@ describe("PolicyPoint executable input schemas", () => {
 
   test("accepts canonical dispatch input and preserves generic context", () => {
     const parsed = Policy.PolicyPoint.InputSchemas["dispatch.action.pre"].parse(validDispatchInput);
-    const typedInput: Policy.PolicyPointInputMap["dispatch.action.pre"] = parsed;
+    const typedInput: PointInputs["dispatch.action.pre"] = parsed;
 
     expect(typedInput).toEqual(validDispatchInput);
   });

@@ -663,7 +663,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                     cause: admission.reasonCode,
                   }),
                 )
-              : Effect.void,
+              : Effect.succeed(admission),
           ),
         ),
       Bus.publish,
@@ -673,7 +673,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
     );
 
-    const wsCallbacks = webSocketCallbacks(runtime, wsHandler);
+    const wsCallbacks = webSocketCallbacks(runtime, wsHandler, (id) =>
+      plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id));
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,

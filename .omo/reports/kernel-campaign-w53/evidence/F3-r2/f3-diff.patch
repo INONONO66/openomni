@@ -1,0 +1,108 @@
+diff --git a/script/quality-audit-issues.test.ts b/script/quality-audit-issues.test.ts
+index ddeae0d6..a6cbacaa 100644
+--- a/script/quality-audit-issues.test.ts
++++ b/script/quality-audit-issues.test.ts
+@@ -145,10 +145,52 @@ test("regression detection is per kind, including when the total sum shrinks", (
+       types: 0,
+     },
+   };
+-  expect(regressions(previous, audit([finding()]))).toEqual(["types"]);
++  expect(regressions(previous, audit([finding()]))).toEqual([
++    { kind: "types", previous: 0, current: 1 },
++  ]);
+   expect(regressions(previous, audit())).toEqual([]);
+ });
+ 
++// The live persisted summary footer (issue #1119) predates the
++// cyclomatic/Halstead/CRAP dimensions; its exact shape must keep decoding.
++const LEGACY_FOOTER =
++  '{"version":1,"head":"5b925d12bbfa154c40c84ddaed3652c999984251","totals":{"coverage":3116,"complexity":17,"clones":280,"types":2779}}';
++function legacyBody() {
++  return ["<!-- quality-audit:v1 -->", "```json", LEGACY_FOOTER, "```"].join("\n");
++}
++
++test("the actual version-1 footer without new dimensions still decodes", () => {
++  const previous = previousAudit(legacyBody());
++  expect(previous.head).toBe("5b925d12bbfa154c40c84ddaed3652c999984251");
++  expect(previous.totals.coverage).toBe(3116);
++  expect(previous.totals.cyclomatic).toBeUndefined();
++  expect(previous.totals.halstead).toBeUndefined();
++  expect(previous.totals.crap).toBeUndefined();
++});
++
++test("dimensions absent from history are not previously measured: no regression, no zeros, no reset", () => {
++  const current = audit([
++    { path: "script/a.ts", count: 1, kind: "cyclomatic", line: 2, message: "cyclomatic 30 >= 22" },
++  ]);
++  const previous = previousAudit(legacyBody());
++  expect(regressions(previous, current)).toEqual([]);
++  const plan = planIssues(current, [issue("quality: audit summary", 99, legacyBody())]);
++  expect(plan.firstRun).toBe(false);
++  expect(plan.operations.some((row) => row.title.startsWith("quality: regression "))).toBe(false);
++  const advanced = previousAudit(plan.operations.at(-1)?.body ?? "");
++  expect(advanced.totals.cyclomatic).toBe(1);
++});
++
++test("a version-1 dimension regression still fires against the legacy footer", () => {
++  const current = audit([finding("script/a.ts", 2780)]);
++  const plan = planIssues(current, [issue("quality: audit summary", 99, legacyBody())]);
++  const regression = plan.operations.find((row) => row.title.startsWith("quality: regression "));
++  expect(regression?.title).toBe(
++    `quality: regression 5b925d12bbfa154c40c84ddaed3652c999984251..${current.head}`,
++  );
++  expect(regression?.body).toContain("| types | 2779 | 2780 |");
++});
++
+ test("regression issue is named by base and head and not duplicated on retry", () => {
+   const current = audit([finding()]);
+   const title = `quality: regression ${"a".repeat(40)}..${current.head}`;
+diff --git a/script/quality-audit-issues.ts b/script/quality-audit-issues.ts
+index fa5d7ed5..d23b9882 100644
+--- a/script/quality-audit-issues.ts
++++ b/script/quality-audit-issues.ts
+@@ -9,10 +9,19 @@ const issueSchema = z.object({
+   labels: z.array(z.object({ name: z.string() })),
+ });
+ type Issue = z.infer<typeof issueSchema>;
++/** Historical summaries can predate the cyclomatic/Halstead/CRAP dimensions.
++ * Decoding accepts version-1 totals without them: an absent dimension means
++ * "not previously measured", never an invented historical zero. Current-output
++ * validation stays on the full totalsSchema in quality-audit.ts. */
++const previousTotalsSchema = totalsSchema.partial({
++  cyclomatic: true,
++  halstead: true,
++  crap: true,
++});
+ const previousSchema = z.object({
+   version: z.literal(1),
+   head: z.string().regex(/^[a-f0-9]{40}$/),
+-  totals: totalsSchema,
++  totals: previousTotalsSchema,
+ });
+ type Previous = z.infer<typeof previousSchema>;
+ const SUMMARY = "quality: audit summary";
+@@ -33,7 +42,12 @@ export function previousAudit(body: string): Previous {
+ }
+ 
+ export function regressions(previous: Previous, audit: Audit) {
+-  return findingKinds.filter((kind) => audit.totals[kind] > previous.totals[kind]);
++  return findingKinds.flatMap((kind) => {
++    const measured = previous.totals[kind];
++    return measured !== undefined && audit.totals[kind] > measured
++      ? [{ kind, previous: measured, current: audit.totals[kind] }]
++      : [];
++  });
+ }
+ 
+ function cell(text: string) {
+@@ -183,9 +197,7 @@ export function planIssues(audit: Audit, issues: readonly Issue[]) {
+             "",
+             "| Kind | Previous | Current |",
+             "| --- | ---: | ---: |",
+-            ...increased.map(
+-              (kind) => `| ${kind} | ${previous.totals[kind]} | ${audit.totals[kind]} |`,
+-            ),
++            ...increased.map((row) => `| ${row.kind} | ${row.previous} | ${row.current} |`),
+           ].join("\n"),
+           ["quality-debt"],
+           issues,

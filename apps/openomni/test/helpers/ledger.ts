@@ -21,6 +21,7 @@ import {
 } from "../../src/composition/cluster-runtime";
 import { materializeInboxTarget } from "../../src/composition/message-session";
 import type { AppRuntime } from "../../src/runtime";
+import { runRuntimeEffect } from "./effect";
 
 /** A standalone app ledger plane for fixtures that never boot the runtime. */
 export function testPlane(
@@ -31,7 +32,7 @@ export function testPlane(
 
 /** The booted runtime's own plane — the one the entity and boot share. */
 export function planeOf(runtime: AppRuntime): Promise<AppLedgerPlane> {
-  return runtime.runPromise(Effect.map(AppLedger, (plane) => plane));
+  return runRuntimeEffect(runtime, Effect.map(AppLedger, (plane) => plane));
 }
 
 /** Strictly-newer fence adoption on a fixture kernel (the entity's own CAS). */

@@ -19,10 +19,5 @@ export namespace Transcript {
   export const Fact = Schema.Fact;
   export type Fact = Schema.Fact;
 
-  export const RejectReason = Fold.RejectReason;
-  export type RejectReason = Fold.RejectReason;
-
-  export type FoldOutcome = Fold.FoldOutcome;
-
   export const fold = Fold.fold;
 }

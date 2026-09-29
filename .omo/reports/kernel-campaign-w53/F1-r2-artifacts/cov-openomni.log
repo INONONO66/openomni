@@ -1,0 +1,981 @@
+bun test v1.4.1 (4661e494f)
+
+test/shutdown-hooks.test.ts:
+(pass) entry-point shutdown handlers > SIGINT/SIGTERM handler awaits stop() completion before exiting [0.19ms]
+app shutdown incident 55 |     const sigterm = handlers.get("SIGTERM");
+56 |     if (sigterm === undefined) throw new Error("expected a SIGTERM handler");
+57 | 
+58 |     sigterm();
+59 |     expect(exits).toEqual([]);
+60 |     rejectStop(new Error("flush failed"));
+                    ^
+error: flush failed
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/openomni/test/shutdown-hooks.test.ts:60:16)
+
+(pass) entry-point shutdown handlers > handler exits non-zero when stop() rejects [0.24ms]
+
+test/request-domain-cas.test.ts:
+(pass) an endpoint changed at body entry cannot spend consent for its old binding [28.79ms]
+(pass) a second Owner decision cannot spend the same promotion CAS [7.83ms]
+
+test/cli-entry.test.ts:
+(pass) real CLI entry > managed output cancellation settles a blocked stream read [0.32ms]
+(pass) real CLI entry > help dispatch {"args":[]} [279.21ms]
+(pass) real CLI entry > help dispatch {"args":["help"]} [288.65ms]
+(pass) real CLI entry > help dispatch {"args":["--help"]} [280.32ms]
+(pass) real CLI entry > help dispatch {"args":["-h"]} [302.37ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["not-a-command"]} [301.77ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["daemon"]} [270.33ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["daemon","missing"]} [264.31ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["machine"]} [265.89ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["machine","attach"]} [267.45ms]
+(pass) real CLI entry > rejects invalid dispatch {"args":["machine","attach","config.json","extra"]} [269.91ms]
+(pass) real CLI entry > native entry coverage executes the real main guard [299.28ms]
+(pass) real CLI entry > platform admission linux [760.27ms]
+(pass) real CLI entry > platform admission win32 [0.79ms]
+(pass) real CLI entry > exported main uses the same process adapters [0.24ms]
+(pass) real CLI entry > daemon status reaches service IO [837.76ms]
+(pass) real CLI entry > daemon start reaches service IO [674.42ms]
+(pass) real CLI entry > daemon stop reaches service IO [669.75ms]
+(pass) real CLI entry > daemon restart reaches service IO [657.80ms]
+(pass) real CLI entry > logs forwards the follow process output and exit status [673.22ms]
+(pass) real CLI entry > boots the Resident and shuts it down through its installed signal handler [344.40ms]
+(pass) real CLI entry > binds doctor to the real environment, daemon query, and health probe [439.62ms]
+(pass) real CLI entry > binds daemon file and command IO without touching the user's home [655.35ms]
+(pass) real CLI entry > refuses onboarding before prompting when stdin is not a terminal [267.69ms]
+(pass) real CLI entry > real IO adapters execute, follow, and mutate only the requested paths [17.33ms]
+(pass) real CLI entry > real doctor adapter reads effective process state [170.79ms]
+(pass) real CLI entry > real start adapter owns shutdown through the installed signal handler [47.96ms]
+
+test/request-domain-revisions.test.ts:
+(pass) contact_add reads back the live Person revision, absent as -1 [1.29ms]
+(pass) a request without domain preconditions reads back nothing [0.05ms]
+(pass) domain preconditions on an unrecognized operation fail closed [0.14ms]
+
+test/request-channel-e2e.test.ts:
+(pass) real external WebSocket reply wakes its original idle request owner without legacy writes [184.32ms]
+
+test/generation-layers.test.ts:
+(pass) AppLive retains distinct same-number session generations [8.09ms]
+(pass) generation composition rejects use before initialization and duplicate initialization [5.64ms]
+(pass) concurrent captures and hibernation reuse one owner; failed candidate acquisition and commit unwind without publication [22.48ms]
+(pass) configureAuthority refuses session.configure when the pinned pre-policy yields require_approval [6.31ms]
+(pass) configureAuthority refuses session.configure when the pinned pre-policy yields deny [5.27ms]
+
+test/bundle-observer.test.ts:
+(pass) one AppLive bundle argument controls real WS JSONL observation (false) [99.56ms]
+(pass) one AppLive bundle argument controls real WS JSONL observation (true) [80.68ms]
+(pass) a held WS generation keeps its catalog and transformer while public tools.add selects the next generation [130.12ms]
+
+test/session-wave-e2e.test.ts:
+(pass) real provider returns calls before any app tool body starts [74.79ms]
+(pass) after-model SDK interrupt starts zero bodies and seals one interrupted terminal [67.65ms]
+937 ordered wave {"preCounts":[4,4,4,4],"results":[{"phase":"result","terminal":"executed","callId":"call-A"},{"phase":"result","terminal":"executed","callId":"call-B"},{"phase":"result","terminal":"executed","callId":"call-C"},{"phase":"result","terminal":"executed","callId":"call-D"}],"requests":2}
+(pass) all pre decisions precede A B C and reverse completion preserves ledger/provider order across D [91.26ms]
+(pass) authenticated approve of B holds A/C and retains the original invocation [84.08ms]
+(pass) authenticated refuse of B holds A/C and retains the original invocation [82.40ms]
+(pass) interrupting pending B cancels every unstarted positional slot [70.89ms]
+(pass) noncooperative bodies release the wave but retain fence ownership and cannot commit late [80.72ms]
+[04:48:43.538] ERROR (#1558): detached session turn failed: 1d79a0b7-3eb7-451a-80a6-b8d917396b45 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(1d79a0b7-3eb7-451a-80a6-b8d917396b45).Prompt
+(pass) nested raw effects retain fence ownership through captured-cell after caller interruption [87.14ms]
+[04:48:43.627] ERROR (#1674): detached session turn failed: 22e686c0-531f-40e9-b465-b5091ca2b4d9 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(22e686c0-531f-40e9-b465-b5091ca2b4d9).Prompt
+(pass) nested raw effects retain fence ownership through captured-wave after caller interruption [88.25ms]
+[04:48:43.712] ERROR (#1790): detached session turn failed: fdd36b58-aab6-48dc-bb25-7d941d7ffe49 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(fdd36b58-aab6-48dc-bb25-7d941d7ffe49).Prompt
+(pass) timed current-cell retains the actual definition until fulfillment [88.08ms]
+[04:48:43.797] ERROR (#1908): detached session turn failed: 2253553a-b2b6-44ea-9b25-126fab969581 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(2253553a-b2b6-44ea-9b25-126fab969581).Prompt
+(pass) timed current-cell retains the actual definition until rejection [81.53ms]
+[04:48:43.880] ERROR (#2026): detached session turn failed: daee5bf0-b0b0-459c-82e0-181e781bf92f CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(daee5bf0-b0b0-459c-82e0-181e781bf92f).Prompt
+(pass) timed current-wave retains the actual definition until fulfillment [84.02ms]
+[04:48:43.965] ERROR (#2144): detached session turn failed: fb551e62-2d9b-4f60-b16d-492f383fead2 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(fb551e62-2d9b-4f60-b16d-492f383fead2).Prompt
+(pass) timed current-wave retains the actual definition until rejection [82.51ms]
+[04:48:44.046] ERROR (#2262): detached session turn failed: dd808ab3-998c-4bb5-8d69-71bb1f07794e CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(dd808ab3-998c-4bb5-8d69-71bb1f07794e).Prompt
+(pass) timed captured-cell retains the actual definition until fulfillment [80.02ms]
+[04:48:44.126] ERROR (#2380): detached session turn failed: c32ee1c1-2b4c-4103-9a5f-d3c6ff38f5f7 CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(c32ee1c1-2b4c-4103-9a5f-d3c6ff38f5f7).Prompt
+(pass) timed captured-cell retains the actual definition until rejection [82.84ms]
+[04:48:44.210] ERROR (#2498): detached session turn failed: fd451c4d-8d33-4757-83fe-6546bcd9c87e CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(fd451c4d-8d33-4757-83fe-6546bcd9c87e).Prompt
+(pass) timed captured-wave retains the actual definition until fulfillment [83.10ms]
+[04:48:44.291] ERROR (#2616): detached session turn failed: d5de0b3e-7303-4aec-ac28-2758a443a62e CommitFailed: CommitRefused
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/session-turn.ts:209:46)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:757:53)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at loop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:621:5)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:617:9)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:434:19)
+    at Session(d5de0b3e-7303-4aec-ac28-2758a443a62e).Prompt
+(pass) timed captured-wave retains the actual definition until rejection [83.74ms]
+(pass) approval-time prompts retain durable identities and enter the next model separately in order [81.29ms]
+(pass) an exact approval deadline refuses only B and cannot grant late authority [82.78ms]
+(pass) a durable after-model inbox interrupt drains before tools without an eager local signal [62.55ms]
+(pass) an interrupt after wave results drains before another provider step [73.11ms]
+
+test/resident-llm-resilience.test.ts:
+(pass) Resident model fallback wiring > resolves the configured fallback on the retry after a transient failure [20.81ms]
+(pass) Resident model fallback wiring > keeps every attempt on the primary when no fallback is configured [16.16ms]
+(pass) Resident terminal LLM failure surfacing > answers a rate-limited exhaustion with a classified, attempt-counted reply [14.22ms]
+(pass) Resident terminal LLM failure surfacing > names a spent balance for a billing exhaustion, unhedged [13.11ms]
+(pass) Resident terminal LLM failure surfacing > hedges a bare payment-required response as MAY be exhausted [18.42ms]
+(pass) Resident terminal LLM failure surfacing > hedges a declined-card billing error as MAY be exhausted [13.12ms]
+(pass) Resident terminal LLM failure surfacing > names a content-policy refusal [13.52ms]
+(pass) Resident terminal LLM failure surfacing > does not expose raw unknown-fault details [13.00ms]
+(pass) Resident terminal LLM failure surfacing > returns one sanitized reply through gateway ingestion [22.59ms]
+(pass) Resident terminal LLM failure surfacing > does not convert a configuration failure into a model reply [13.19ms]
+(pass) Resident terminal LLM failure surfacing > records the classified reply in session history so the turn is auditable [14.26ms]
+(pass) Resident terminal LLM failure surfacing > lets an abort keep propagating — a stopped run is not a model fault [12.37ms]
+
+test/resident-authority.test.ts:
+(pass) resident uses typed evidence_only authority for evidence [27.70ms]
+(pass) resident uses typed act authority for instruction [25.17ms]
+(pass) resident uses typed act authority for [SYSTEM: the following is an OBSERVATION, not an instruction]
+user-supplied text [23.91ms]
+
+test/index-coverage.test.ts:
+(pass) facade interrupt handles a revision commit refusal [58.84ms]
+(pass) facade interrupt handles a fence commit refusal [51.77ms]
+(pass) live approval readiness notifies the facade and arms its deadline [71.60ms]
+(pass) a path watch timeout reaches the session entity [138.83ms]
+(pass) a deadline-bearing external send opens and arms its live request [88.50ms]
+
+test/session-cursor.test.ts:
+(pass) a reconnect replays only committed revisions beyond its cursor [67.78ms]
+(pass) a registered reader receives authoritative commits after its captured head [81.23ms]
+
+test/e2e.test.ts:
+967-U1 HTTP {"port":58351,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-967-u1-Ir5Ag4/catalog.sqlite","status":401,"raw":"HTTP/1.1 401 Unauthorized\r\ncontent-type: text/plain;charset=utf-8\r\nDate: Tue, 29 Sep 2026 04:48:45 GMT\r\nContent-Length: 12\r\n\r\nUnauthorized","providerCalls":0,"sessions":{"count":0}}
+967-U1 WS SQLite {"protocol":"auth","reply":{"phase":"terminal","turnId":"a4526fa1-b1af-41df-831a-a3435b4becb4","kind":"result","text":"A deterministic Resident reply.","boundaryActionId":"058d4e1e-c69e-4f32-a74b-ee5f51b146e0","resumeCount":0},"providerCalls":1,"sessions":[{"id":"87a6e4b2-93b8-424d-873f-985bf747aa36","role":"resident","state":"idle","revision":24}],"actions":[{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"session.configure","ordinal":1},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"prompt","ordinal":2},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":3},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":4},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"inbox.deliver","ordinal":5},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":6},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":7},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":8},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":9},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"llm","ordinal":10},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"attempt","ordinal":11},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"attempt","ordinal":12},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":13},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"llm","ordinal":14},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":15},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"message","ordinal":16},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":17},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"message","ordinal":18},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":19},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":20},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":21},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":22},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"policy.decision","ordinal":23},{"session_id":"87a6e4b2-93b8-424d-873f-985bf747aa36","kind":"turn","ordinal":24}],"turns":[{"turnId":"a4526fa1-b1af-41df-831a-a3435b4becb4","state":"idle","startedAt":1790657325486,"terminal":{"kind":"result","actionId":"202b750a-71ea-4c1d-9e0c-ed4f28abbbf1","at":1790657325499},"messages":[{"role":"user","text":"967-U1 input"},{"role":"assistant","text":"A deterministic Resident reply."}]}]}
+967-U1 cleanup {"port":58351,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-967-u1-Ir5Ag4/catalog.sqlite","directoryExists":false}
+(pass) OpenOmni Resident WebSocket > 967-U1 real upgrade rejects query-only before admission and accepts canonical auth [61.57ms]
+967-U1 failure cleanup {"state":3,"directoryExists":false,"port":58354}
+(pass) OpenOmni Resident WebSocket > 967-U1 closes owned sockets and removes SQLite after an assertion failure [23.77ms]
+(pass) OpenOmni Resident WebSocket > boots WebSocket-only when no channel credentials are configured [54.55ms]
+(pass) OpenOmni Resident WebSocket > boots WebSocket-only through loadConfig when channel env vars are unset [22.89ms]
+(pass) OpenOmni Resident WebSocket > refuses boot configuration with a legacy channel credential [0.68ms]
+(pass) OpenOmni Resident WebSocket > mounts a declared GitHub driver on the existing HTTP server [32.02ms]
+(pass) OpenOmni Resident WebSocket > rejects an upgrade carrying the wrong subprotocol token [21.12ms]
+(pass) OpenOmni Resident WebSocket > rolls a failed boot back and leaves the next boot clean [31.36ms]
+
+test/monitor-app.test.ts:
+(pass) app monitor source escapes the creating tool wave and wakes a hibernated session [131.11ms]
+
+test/compaction-summarizer.test.ts:
+(pass) production compaction summarizer > merges the previous anchor without tools and bounds output tokens [1.41ms]
+(pass) production compaction summarizer > throws a typed empty error for an empty model response [0.32ms]
+(pass) production compaction summarizer > uses the typed overflow flag to shrink twice before a typed overflow error [1.02ms]
+(pass) production compaction summarizer > does not retry overflow prose when the typed flag is false [0.23ms]
+(pass) production compaction summarizer > surfaces an aborted run as Interrupted (pre-aborted=%s) [0.32ms]
+(pass) production compaction summarizer > surfaces an aborted run as Interrupted (pre-aborted=%s) [0.12ms]
+
+test/eval-tool-failure.test.ts:
+(pass) eval propagates a cell failure that is not a spent cell id unchanged [0.30ms]
+(pass) eval refuses before any cell operation when codemode is not composed [0.08ms]
+
+test/prompt.test.ts:
+(pass) buildAgentPrompt > is deterministic for the same preset and input [0.02ms]
+(pass) buildAgentPrompt > includes the resident sections in preset order [0.02ms]
+(pass) buildAgentPrompt > omits unavailable optional sections without a trailing separator [0.01ms]
+(pass) buildAgentPrompt > assembles every populated section in stable-to-volatile order [0.02ms]
+(pass) buildAgentPrompt > includes model tuning when available and omits it otherwise [0.03ms]
+
+test/catalog.test.ts:
+(pass) tool catalog > constructs fresh definitions without sharing port closures [1.27ms]
+(pass) tool catalog > rejects a thirteenth catalog tool [0.09ms]
+(pass) tool catalog > is sealed at eleven model-door tools plus the cell-only completion [0.54ms]
+(pass) tool catalog > uses snake_case names and one `op` discriminator under `operation` [0.90ms]
+(pass) tool catalog > projects every input as an object root [0.49ms]
+(pass) tool catalog > derives safe solely from category and shares both doors for path tools [0.97ms]
+(pass) tool catalog > keeps completion cell-only with exactly prompt, model, system and schema [0.11ms]
+
+test/code-mode-e2e.test.ts:
+967-U1 interpreter birth {"pid":57190,"parentPid":57057}
+967-U1 interpreter birth {"pid":57206,"parentPid":57057}
+967-U1 interpreter exit {"pid":57206,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57206,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":57190,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57190,"code":null,"signal":"SIGKILL"}
+(pass) app root runs machine read write shell and code through one eval cell [176.30ms]
+967-U1 interpreter birth {"pid":57210,"parentPid":57057}
+967-U1 interpreter exit {"pid":57210,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57210,"code":null,"signal":"SIGKILL"}
+967-U1 code-mode cleanup {"pids":[57210],"socketPath":"/tmp/omo-app-57057-2.sock","socketExists":false,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-R307SY/catalog.sqlite","directoryExists":false}
+(pass) a cell creates three child sessions through send_message [260.65ms]
+(pass) the catalog remains available while machine execution refuses without attachment [89.97ms]
+967-U1 interpreter birth {"pid":57211,"parentPid":57057}
+967-U1 interpreter birth {"pid":57212,"parentPid":57057}
+967-U1 interpreter exit {"pid":57211,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57211,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":57212,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57212,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-4.sock","socketExists":false}
+(pass) a cell cannot present another cell's id when calling back [33.44ms]
+967-U1 interpreter birth {"pid":57213,"parentPid":57057}
+967-U1 interpreter birth {"pid":57214,"parentPid":57057}
+967-U1 interpreter exit {"pid":57214,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57214,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":57213,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57213,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-5.sock","socketExists":false}
+967-U1 code-mode failure cleanup {"pids":[57213,57214],"socketPath":"/tmp/omo-app-57057-5.sock","socketExists":false,"directory":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-code-mode-failure-7UVNX8","directoryExists":false}
+(pass) 967-U1 error cleanup owns the host and awaits every interpreter [68.21ms]
+967-U1 interpreter birth {"pid":57215,"parentPid":57057}
+967-U1 interpreter exit {"pid":57215,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57215,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-6.sock","socketExists":false}
+(pass) a detached eval cell admits nested calls after run returns and refuses them after stop [1048.09ms]
+967-U1 interpreter birth {"pid":57229,"parentPid":57057}
+967-U1 interpreter birth {"pid":57230,"parentPid":57057}
+967-U1 interpreter exit {"pid":57230,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57230,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter exit {"pid":57229,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57229,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-7.sock","socketExists":false}
+(pass) cells from different sessions never share interpreter state [70.71ms]
+967-U1 interpreter birth {"pid":57231,"parentPid":57057}
+967-U1 interpreter exit {"pid":57231,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57231,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter birth {"pid":57232,"parentPid":57057}
+967-U1 interpreter exit {"pid":57232,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57232,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-8.sock","socketExists":false}
+(pass) eval background run and peek stay running; stop settles the typed cancelled state once [1067.35ms]
+967-U1 interpreter birth {"pid":57233,"parentPid":57057}
+967-U1 interpreter exit {"pid":57233,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57233,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-9.sock","socketExists":false}
+(pass) eval background peek and stop race spends the cell id and settles cancelled exactly once [1035.79ms]
+967-U1 interpreter birth {"pid":57234,"parentPid":57057}
+967-U1 interpreter exit {"pid":57234,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57234,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-10.sock","socketExists":false}
+(pass) eval peek and stop refuse another session's cell id and a forged one [36.14ms]
+967-U1 interpreter birth {"pid":57236,"parentPid":57057}
+967-U1 interpreter exit {"pid":57236,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57236,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-11.sock","socketExists":false}
+(pass) completion(prompt, model=, system=, schema=) reaches the port and decodes the validated JSON [33.45ms]
+967-U1 interpreter birth {"pid":57240,"parentPid":57057}
+967-U1 interpreter exit {"pid":57240,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57240,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-12.sock","socketExists":false}
+(pass) a cell rejects legacy batched completion input and serves one prompt [31.33ms]
+967-U1 interpreter birth {"pid":57242,"parentPid":57057}
+967-U1 interpreter exit {"pid":57242,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57242,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-13.sock","socketExists":false}
+(pass) a failing completion call raises ToolError inside the cell instead of returning failure text [33.46ms]
+967-U1 interpreter birth {"pid":57250,"parentPid":57057}
+967-U1 interpreter exit {"pid":57250,"code":null,"signal":"SIGKILL"}
+967-U1 interpreter close {"pid":57250,"code":null,"signal":"SIGKILL"}
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-14.sock","socketExists":false}
+(pass) parallel() runs independent tool calls concurrently and returns both results in input order [36.01ms]
+967-U1 host cleanup {"socketPath":"/tmp/omo-app-57057-15.sock","socketExists":false}
+(pass) a machine offering more than it is enrolled for keeps only the intersection [1.28ms]
+
+test/gateway-phase-since.test.ts:
+(pass) phaseSince derives from the transition that established the emitted phase [4.36ms]
+(pass) an interrupted session reports interrupted since the sealing terminal [1.77ms]
+
+test/channel-composition.test.ts:
+(pass) declared channel composition > no declarations produce no rows [0.08ms]
+(pass) declared channel composition > one row per declaration preserves credentials and binds the handler [0.46ms]
+
+test/process-replies.test.ts:
+(pass) process receiving transport correlates replies without minting another request lifecycle [0.79ms]
+(pass) process receiving refusal reaches the source instead of becoming an acknowledgement [0.28ms]
+(pass) process receiving malformed response fails its exact pending operation [0.14ms]
+(pass) process receiving unsolicited response fails its exact pending operation [0.04ms]
+(pass) closing process input settles both the missing initial frame and a pending response [0.36ms]
+
+test/resident-compaction.test.ts:
+(pass) Resident compaction > replaces oversized hydrated history before continuing the Resident run [134.74ms]
+
+test/provision-consent.test.ts:
+(pass) consent is a require_approval policy row on the two contact authority ops, nothing else [4.62ms]
+(pass) the model cannot mint or decide Owner consent, and workers cannot see provision [3.45ms]
+(pass) executes exactly the original promotion after authenticated consent [5.86ms]
+(pass) Owner refusal never promotes a provisional contact [3.96ms]
+(pass) rejects an endpoint move after source or target changes, including same-clock edits [3.65ms]
+(pass) merges only the approved endpoint into the exact target [4.37ms]
+(pass) consent to merge an unknown endpoint is refused by the act itself, never applied [4.93ms]
+(pass) consent to merge an unknown target is refused by the act itself, never applied [4.59ms]
+(pass) consent to merge an endpoint already bound to its target is refused by the act itself, never applied [4.52ms]
+(pass) invalidates a merge when the source identity changes without moving its endpoint [3.92ms]
+(pass) refuses malformed output at the real dispatcher boundary [1.32ms]
+(pass) bounds pending Owner requests across sessions without applying a ninth act [20.25ms]
+(pass) contact_promote preserves Owner Wait across SQLite reopen and approve settles exactly once [23.76ms]
+(pass) contact_promote preserves Owner Wait across SQLite reopen and refuse settles exactly once [21.36ms]
+(pass) contact_merge preserves Owner Wait across SQLite reopen and approve settles exactly once [20.60ms]
+(pass) contact_merge preserves Owner Wait across SQLite reopen and refuse settles exactly once [19.20ms]
+
+test/process-session-transport.test.ts:
+(pass) process transport relays the child's doorbell and both receipt outcomes [17.48ms]
+(pass) an answer whose principal is not the authenticated child is refused [15.17ms]
+(pass) measured process entry exits without a request on empty stdin [219.17ms]
+(pass) native process entry validates and releases a request for a missing durable session [294.72ms]
+(pass) a child exiting without settling surfaces its exit code [15.94ms]
+(pass) closing the transport kills lingering children [15.95ms]
+(pass) a doorbell is not successful settlement when the child crashes [15.36ms]
+(pass) malformed child output rejects the wire rather than being acknowledged [14.47ms]
+(pass) real process entry validates its first request: {"input":"","code":78,"error":false} [213.62ms]
+(pass) real process entry validates its first request: {"input":"{not-json}\n","code":1,"error":true} [212.17ms]
+(pass) real process entry validates its first request: {"input":"{}\n","code":1,"error":true} [211.09ms]
+
+test/provisioning.test.ts:
+(pass) vault-key resolution > OPENOMNI_VAULT_KEY wins over the key file [1.83ms]
+(pass) vault-key resolution > a wrong-length env key is locked, never a partial KEK [0.29ms]
+(pass) vault-key resolution > no env key and no key file is locked with the missing path named [0.20ms]
+(pass) vault-key resolution > an operator key file resolves without changing its bytes or permissions [0.72ms]
+(pass) declared channel profile > a valid declaration mounts with the provider's empty driver configuration [0.18ms]
+(pass) declared channel profile > disabled, unknown-provider, and credential-less rows are statuses, not mounts [0.04ms]
+(pass) declared channel profile > locked vault and malformed payloads fail closed per row [0.14ms]
+(pass) declared channel profile > vaultCredentialReader opens real store rows and reports lock reasons [1.05ms]
+(pass) boot profile selection (§8.1, §8.4) > no declarations means no external channels [0.99ms]
+(pass) boot profile selection (§8.1, §8.4) > a declared row carries its grant tier, and an undeclared grant mounts at the mount tier [1.58ms]
+(pass) boot profile selection (§8.1, §8.4) > a disabled declaration stays unmounted [0.85ms]
+(pass) boot profile selection (§8.1, §8.4) > §8.4 locked vault: enabled declarations become vault_locked statuses, nothing mounts [1.06ms]
+(pass) boot profile selection (§8.1, §8.4) > §8.7 the declared bounce key folds revision with the secret's rotation epoch [1.25ms]
+(pass) materializePersons > Person manifests become identity and endpoint facts, idempotently [1.13ms]
+(pass) provider credential gate > an unregistered provider is refused before any schema runs [0.03ms]
+(pass) github declared row > a github declaration mounts through the provider credential schema [0.05ms]
+(pass) github declared row > a slack declaration mounts through the provider credential schema [0.14ms]
+
+test/monitor-errors.test.ts:
+(pass) alarm JSON boundary validates values instead of assigning a payload type [0.42ms]
+(pass) PTY callback faults surface a typed boundary failure [29.37ms]
+(pass) owned PTY drains the final UTF-8 line before reporting the child's exit status [28.37ms]
+(pass) PTY cancellation settles from a subscribed line signal without requiring natural EOF [28.28ms]
+(pass) path callback faults report a typed failure without advancing its observation cursor [1.10ms]
+
+test/machine-entry-adapter.test.ts:
+(pass) machine entry adapter handles enrollment %s [4.84ms]
+(pass) machine entry adapter handles enrollment %s [2.08ms]
+
+test/effect-runtime.test.ts:
+(pass) tool ports bridge machine filesystem and exec effects through the app runtime [0.29ms]
+(pass) the server edge consumes the shared gateway runtime and its injected services [16.14ms]
+(pass) failed boot releases acquired resources in reverse and rethrows the typed cause [3.08ms]
+(pass) double stop observes one pending disposal and releases exactly once [2.35ms]
+(pass) scope finalizers all run and aggregate failures in reverse release order [2.11ms]
+(pass) a runtime with fixed entity ports refuses late rebinding [7.33ms]
+
+test/effect-shutdown.test.ts:
+(pass) shutdown stops ingress before session cleanup and awaits cleanup before storage and exit [2.61ms]
+(pass) a cleanup failure is an observed shutdown incident and cannot produce a successful exit [2.05ms]
+(pass) zero-grace close retains a raw tool lease (settle after turn: false) [17.11ms]
+(pass) zero-grace close retains a raw tool lease (settle after turn: true) [13.76ms]
+
+test/send-message-e2e.test.ts:
+(pass) an external turn never dispatches an unsolicited reply for connection ?actor=owner [58.27ms]
+(pass) an external turn never dispatches an unsolicited reply for connection  [57.98ms]
+(pass) an explicit model send_message routes through MessagePort.ingest to the external surface [70.18ms]
+(pass) a child session terminal commits exactly one parent reply with the original reply binding [170.51ms]
+
+test/outbound-inbox-binding.test.ts:
+post-commit observation failed: different-letter
+(pass) the receiving consumer may only commit the exact outbound letter [5.50ms]
+
+test/gateway-session-read.test.ts:
+(pass) a commit interleaved with the page read yields a typed session gap at the new head [1.95ms]
+(pass) session pages report tool wall time from committed intent/result pairs [1.82ms]
+(pass) a reader whose kernel read throws receives a session_read_failed error frame [3.62ms]
+
+test/process-session-e2e.test.ts:
+(pass) process entry exits on empty stdin and closes its reply channel [0.76ms]
+(pass) process entry logs committed sessions and disposes its runtime [90.72ms]
+(pass) process session drain stops without invoking a model when the session is idle [19.47ms]
+(pass) process session drain defers entity-owned resume consumption [20.06ms]
+(pass) process session drain recovers an open turn through the default admission path [37.87ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [61.86ms]
+(pass) process-session entry preserves deadline and parent with tool send %s [84.94ms]
+(pass) process-session focused message path reads policy generation for a new-session attempt [91.10ms]
+(pass) process-session focused message path refuses a typed target commit failure [256.05ms]
+process session wake failed 84 |               });
+85 |               end = buffer.indexOf("\n");
+86 |             }
+87 |           }
+88 |           const code = await child.exited;
+89 |           if (code !== 0) throw new Error(`session process exited ${code}: ${sessionId}`);
+                                     ^
+error: session process exited 143: 4685fd8d-5834-49bb-abb2-0ec084de6a87
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/openomni/src/composition/process-session.ts:89:33)
+      at async close (/Users/ino/Develop/openomni-w53/apps/openomni/src/composition/process-session.ts:103:21)
+
+(pass) startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement [1224.62ms]
+
+test/machine-cli.test.ts:
+machines-codemode QA {"list":[{"machineId":"A","name":"A","tags":["A"],"allowedCapabilities":["fs.read","fs.write","shell.exec","kernel.py"],"allowedExports":["data"],"enrolledAt":1,"capabilities":["fs.read","fs.write","kernel.py","shell.exec"],"os":"darwin","arch":"arm64"},{"machineId":"B","name":"B","tags":["B"],"allowedCapabilities":["fs.read","fs.write","shell.exec","kernel.py"],"allowedExports":["data"],"enrolledAt":1,"capabilities":["fs.read","fs.write","kernel.py","shell.exec"],"os":"darwin","arch":"arm64"}],"write":{"op":"write","bytesWritten":4},"readback":[0,255,128,65],"exec":{"stdout":[111,117,116],"stderr":[101,114,114],"exitCode":7,"signal":null},"runCode":{"status":"completed","cellId":"qa-code","output":{"stdout":"","stderr":""},"value":"42"},"result":"(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')","tenantIsolation":"NameError","daemonPids":[57271,57272]}
+machines-codemode cleanup {"daemonExits":2,"socketExists":false,"directoryExists":false}
+(pass) machine attach CLI composes real runners; eval pipelines two machine handles [704.33ms]
+
+test/composition-typed-failures.test.ts:
+(pass) message preparation fails in the typed admission channel without a sender lease [1.59ms]
+(pass) child preparation refuses a pinned policy without admission bounds [1.26ms]
+(pass) ingress commit without a receipt becomes a typed corrupt-record commit failure [3.06ms]
+
+test/compaction-wiring.test.ts:
+(pass) compaction composition configuration > wires a run-scoped summarizer by default [0.15ms]
+(pass) compaction composition configuration > omits the summarizer when explicitly off while preserving deterministic reduction [0.05ms]
+(pass) compaction composition configuration > passes configured compaction through the production Resident root [241.23ms]
+
+test/policy-generation.test.ts:
+(pass) the ledger writer seeds generation one with mandatory rows and identical reseeding is a no-op [1.62ms]
+(pass) an unresolved named ref in a ledger generation compiles to a typed deny [1.70ms]
+
+test/alarm-runtime.test.ts:
+(pass) command source refuses construction without the PTY builtin [0.08ms]
+(pass) app boot refuses a missing PTY builtin with a typed runtime requirement [7.88ms]
+
+test/monitor-dispatcher.test.ts:
+(pass) monitor schema and dispatcher keep one strict create/rearm/cancel surface [4.09ms]
+(pass) monitor controls fold arm/rearm/cancel as chain facts scoped to the arming session [4.01ms]
+(pass) watchFiredHook commits occurrence, wake prompt, and budget pause as one chain batch [3.12ms]
+
+test/codemode-completion-budget.test.ts:
+(pass) two cells in one turn each own a full completion budget [59.16ms]
+
+test/fact-tap-retirement.test.ts:
+967 provider {"requests":3,"billed":{"input":16,"output":20},"calls":[{"id":"paired","tool":"lookup","input":{}}],"results":[],"terminals":[{"info":{"id":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","role":"assistant","time":{"created":1790657335269,"completed":1790657335277},"parentID":"ws::ws%3A%3Adm%3A06ba6f28-6db2-422b-b4de-1ee4200bac26:6df1cbe0-4140-4dbd-bc3f-4c5c87ce8c1a","modelID":"fixture","providerID":"anthropic","agent":"default","path":{"cwd":"/Users/ino/Develop/openomni-w53/apps/openomni","root":"/Users/ino/Develop/openomni-w53/apps/openomni"},"cost":0,"tokens":{"input":5,"output":7,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"},"parts":[{"id":"05951ea0-ea6d-48fc-92eb-a9ce496e82cb","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","type":"step-start"},{"id":"1ab0e160-552b-45c1-aceb-07ba7863931b","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","type":"tool","callID":"paired","tool":"lookup","state":{"status":"pending","input":{}}},{"id":"016d4484-d4a4-494b-a5cc-29954d894682","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","type":"step-finish","reason":"tool-calls","cost":0,"tokens":{"input":5,"output":7,"reasoning":0,"cache":{"read":0,"write":0}}}]},{"info":{"id":"msg-45099536-96ce-4f5f-9699-2094c445a0bb","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","role":"assistant","time":{"created":1790657335296,"completed":1790657335299},"parentID":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","modelID":"fixture","providerID":"anthropic","agent":"default","path":{"cwd":"/Users/ino/Develop/openomni-w53/apps/openomni","root":"/Users/ino/Develop/openomni-w53/apps/openomni"},"cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"error"},"parts":[]},{"info":{"id":"msg-b80cfb80-cfb9-42c5-8cf6-6d37e856c262","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","role":"assistant","time":{"created":1790657335302,"completed":1790657335304},"parentID":"msg-1942b6f0-7520-4cc3-b016-26d10e9a2d16","modelID":"fixture","providerID":"anthropic","agent":"default","path":{"cwd":"/Users/ino/Develop/openomni-w53/apps/openomni","root":"/Users/ino/Develop/openomni-w53/apps/openomni"},"cost":0,"tokens":{"input":11,"output":13,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"},"parts":[{"id":"2fefa337-9b75-4a78-a7b2-357693477a54","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-b80cfb80-cfb9-42c5-8cf6-6d37e856c262","type":"step-start"},{"id":"35c474f9-8693-4a78-b4c4-6acd43f6a16b","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-b80cfb80-cfb9-42c5-8cf6-6d37e856c262","type":"text","text":"retained reply","time":{"start":1790657335304,"end":1790657335304},"metadata":{}},{"id":"5dbb42c8-4480-4b76-8528-f9ce01cff555","sessionID":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","messageID":"msg-b80cfb80-cfb9-42c5-8cf6-6d37e856c262","type":"step-finish","reason":"stop","cost":0,"tokens":{"input":11,"output":13,"reasoning":0,"cache":{"read":0,"write":0}}}]}]}
+967 app SQLite {"reply":{"phase":"terminal","turnId":"47be03f2-4184-4766-829f-a2e44c27ce59","kind":"result","text":"retained reply","boundaryActionId":"6985bd5a-a441-4770-9d69-c63ac831039f","resumeCount":0},"requests":3,"appPort":58434,"catalogPath":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-967-fact-tap-9dgeT1/catalog.sqlite","actions":[{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"session.configure","ordinal":1},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"prompt","ordinal":2},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":3},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":4},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"inbox.deliver","ordinal":5},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":6},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":7},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":8},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":9},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"llm","ordinal":10},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":11},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":12},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":13},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"llm","ordinal":14},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":15},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":16},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":17},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":18},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":19},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":20},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"tool","ordinal":21},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":22},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"tool","ordinal":23},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":24},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":25},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":26},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":27},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":28},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":29},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":30},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":31},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":32},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":33},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":34},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":35},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"llm","ordinal":36},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":37},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":38},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"alarm.arm","ordinal":39},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":40},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":41},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"attempt","ordinal":42},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":43},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"llm","ordinal":44},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":45},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":46},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":47},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"message","ordinal":48},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":49},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":50},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":51},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":52},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"policy.decision","ordinal":53},{"session_id":"b713a535-7d9c-463e-aefa-9ac426bc4cf0","kind":"turn","ordinal":54}],"turns":[{"turnId":"47be03f2-4184-4766-829f-a2e44c27ce59","state":"idle","startedAt":1790657335254,"terminal":{"kind":"result","actionId":"06d96f39-29f9-4ea8-9ef2-3338361f0c58","at":1790657335312},"messages":[{"role":"user","text":"967 input"},{"role":"assistant","text":"retained reply"}]}]}
+967 cleanup {"appPort":58434,"providerPort":58433,"directory":"/var/folders/hn/5mq7n_jn6k3065zcjcjmrpgw0000gn/T/openomni-967-fact-tap-9dgeT1","directoryExists":false,"socketState":3}
+ 
+(pass) 967 actual provider stream and app SQLite reply survive fact tap retirement [428.59ms]
+
+test/generation-crash.test.ts:
+{"case":"G1-prerequisite","volatileScopes":"not_durable","reconstructedResources":"rearmed","generations":[2,1]}
+(pass) G1 prerequisite: SIGKILL at committed configure rearms current and recorded older generations [342.27ms]
+
+test/resident-tool-executor-wiring.test.ts:
+(pass) a resident tool call is executed and observed through the durable executor [23.58ms]
+
+test/boot-wiring.test.ts:
+(pass) boot tool catalog > boots ready without legacy work tools in the Resident catalog [57.23ms]
+(pass) stopping the daemon preserves the durable WebSocket bootstrap grant [23.14ms]
+(pass) channel supervisor > a stage owns its grant, route, and webhook; stopAll revokes all of them [1.62ms]
+(pass) channel supervisor > a row's declared tier is the mounted grant's tier and disposal removes the row [0.94ms]
+(pass) channel supervisor > §8.7 rotation bounces exactly the changed stage, stop before start [0.61ms]
+(pass) channel supervisor > a removed declaration unmounts and a failed start unwinds fail-closed [0.97ms]
+(pass) channel supervisor > three consecutive start failures trip the breaker; only resume re-arms it [0.64ms]
+(pass) channel supervisor > app scope disposal drives stopAll exactly like shutdown [2.77ms]
+(pass) supervisor status passthrough > profile statuses surface verbatim in the reconcile verdict, detail included [0.07ms]
+
+test/rlm-tools.test.ts:
+(pass) the completion tool > returns the port's answer [2.50ms]
+(pass) the completion tool > classifies a malformed call as invalid input without touching the port [1.65ms]
+(pass) the completion tool > forwards system and model to the port and validates a schema-shaped answer [2.57ms]
+(pass) the completion tool > serves 32 calls per cell, then refuses that cell without invoking the port [6.65ms]
+(pass) the completion tool > surfaces a failure as an error RESULT through the dispatcher, never as data [1.48ms]
+(pass) the completion tool > refuses an unlisted model instead of guessing an SDK for it [0.51ms]
+(pass) the completion tool > dispatches the cell door without a target eligibility fold [1.25ms]
+(pass) the completion port > runs one toolless step under its own trace and returns the assistant text [0.31ms]
+(pass) the completion port > carries a system text and a model id override on the configured provider [0.19ms]
+(pass) the completion port > ignores non-assistant messages when reading the answer [0.17ms]
+(pass) the completion port > throws the provider's failure instead of returning it as data [0.55ms]
+(pass) the completion port > names the outcome when a non-stop run carries no error [0.23ms]
+(pass) the completion port > rejects a run that asks to continue: a one-step toolless call has nothing to continue [0.20ms]
+(pass) the completion port > refuses without the session's attempt authority instead of running unrecorded [0.06ms]
+(pass) the completion port > surfaces a refused llm operation as the refusal's reason [0.06ms]
+(pass) the completion port > rejects an executed value that is not the text record the run produces [0.11ms]
+(pass) catalog gating for the rlm tools > lists the completion spec in the shippable surface the lint reads [1.31ms]
+(pass) catalog gating for the rlm tools > stays in the static catalog without a wired port and refuses at execution [2.22ms]
+(pass) catalog gating for the rlm tools > projects completion without target metadata [1.23ms]
+
+test/request-owner-e2e.test.ts:
+(pass) authenticated Owner executes the captured Person invocation once across SIGKILL and two restarts [1134.65ms]
+(pass) real Owner socket cannot apply an original Person invocation against a changed domain revision [419.62ms]
+
+test/machine-composition-failure.test.ts:
+(pass) the app machine host translates a codemode failure at its callback boundary [13.74ms]
+
+test/session-tool-recovery-e2e.test.ts:
+937 R1 {"mode":"after-wave","bodies":["A"],"results":[{"type":"tool_result","tool_use_id":"call-A","content":"ACTUAL_COMPLETED_RESULT:A"}]}
+(pass) real SDK after-wave preserves committed rendered tool slots without replay [53.02ms]
+937 R1 {"mode":"partial-wave","bodies":["A","B"],"results":[{"type":"tool_result","tool_use_id":"call-A","content":"ACTUAL_COMPLETED_RESULT:A"},{"type":"tool_result","tool_use_id":"call-B","content":"Error: fiber_interrupted"}]}
+(pass) real SDK partial-wave preserves committed rendered tool slots without replay [47.08ms]
+937 R1 {"mode":"crash-window","bodies":["A","B"],"results":[{"type":"tool_result","tool_use_id":"call-A","content":"ACTUAL_COMPLETED_RESULT:A"},{"type":"tool_result","tool_use_id":"call-B","content":"Error: B outcome unknown: the process was lost before a result was recorded"}]}
+(pass) real SDK crash-window preserves committed rendered tool slots without replay [60.87ms]
+observation emit failed {
+  eventName: "tool.execution.completed",
+  error: "Error: crash after committed result",
+}
+937 R1 {"mode":"error-window","bodies":["A"],"results":[{"type":"tool_result","tool_use_id":"call-A","content":"ACTUAL_COMPLETED_RESULT:A"}]}
+(pass) real SDK error-window preserves committed rendered tool slots without replay [41.51ms]
+
+test/gateway-contracts.test.ts:
+(pass) channel grant registration > the revoker removes exactly the grant it registered [1.35ms]
+(pass) channel grant registration > named surfaces resolve their mount tier while loopback ws keeps its explicit owner bootstrap [3.75ms]
+(pass) channel grant registration > the composition-root registrar materializes the row's tier and the configured allowlist [1.01ms]
+(pass) channel grant registration > an allowlisted mount grant exists for listed senders alone at the mount tier [0.95ms]
+(pass) authenticated gateway ingress > real gateway observations retain stamped metadata for schema consumers [29.40ms]
+(pass) authenticated gateway ingress > rejects invalid message types at the boundary without committing inbox state [3.77ms]
+(pass) authenticated gateway ingress > evidence-only ingress suppresses offered tools and keeps the original content [19.30ms]
+(pass) authenticated gateway ingress > a normal prompt restores tool driving after an evidence-only turn [38.71ms]
+(pass) authenticated gateway ingress > a forced tool call is refused on evidence-only ingress [21.75ms]
+(pass) cold egress needs a budget but a reply-scoped send remains available [35.02ms]
+
+test/codemode-completion-lifetime.test.ts:
+(pass) background completion retains generation until settlement; stop=false [1037.23ms]
+(pass) background completion retains generation until settlement; stop=true [1064.53ms]
+
+test/npm-package.test.ts:
+(pass) health endpoint > GET /health answers ok on the ws port [26.46ms]
+(pass) npm package staging > build stages a dependency-free package whose bundle boots against a fresh ledger [400.80ms]
+
+test/locus-routing.test.ts:
+(pass) parseLocus > local /tmp/a [0.06ms]
+(pass) parseLocus > local a/b
+(pass) parseLocus > local ./a:b
+(pass) parseLocus > local /tmp/a:b
+(pass) parseLocus > local ../relative
+(pass) parseLocus > remote m:/tmp/a:b [0.07ms]
+(pass) parseLocus > remote c:/
+(pass) parseLocus > remote node-1:/a
+(pass) parseLocus > refuses "" [0.03ms]
+(pass) parseLocus > refuses ":/a"
+(pass) parseLocus > refuses "m:" [0.10ms]
+(pass) parseLocus > refuses "m:relative" [0.01ms]
+(pass) parseLocus > refuses "m://a"
+(pass) parseLocus > refuses "m:/../a"
+(pass) parseLocus > refuses "m:/a\u0000"
+(pass) parseLocus > refuses "/machines/m/a"
+(pass) parseLocus > refuses " /a\u0000"
+(pass) parseLocus > refuses "a b:/x"
+(pass) local tools > all five filesystem verbs preserve values and route mutations [13.25ms]
+(pass) local tools > binary encoding, exact edit conflict, missing files, and full cell output [12.53ms]
+(pass) local tools > bash returns stdout, stderr, exit status and has no persistent cwd [9.42ms]
+(pass) real Unix daemon tools > all five filesystem verbs preserve values and route mutations [20.19ms]
+(pass) real Unix daemon tools > binary encoding, exact edit conflict, missing files, and full cell output [56.15ms]
+(pass) real Unix daemon tools > bash returns stdout, stderr, exit status and has no persistent cwd [13.55ms]
+(pass) R1 bash rejects composite machine IDs before endpoint lookup even with an allowed cwd [15.33ms]
+(pass) R2 recursive search preserves local colon escapes under . [6.50ms]
+(pass) R2 recursive search preserves local colon escapes under ./ [5.42ms]
+(pass) R3 real daemon Unicode read preserves cells and reports exact dropped bytes to the model [6.77ms]
+(pass) a real daemon read assembles successive bounded chunks without dropping the tail [7.16ms]
+(pass) a truncated remote read without progress is refused instead of looping [3.30ms]
+(pass) daemon authority refuses writes and exec independently of the catalog [3.53ms]
+(pass) missing machine host and malformed machine ids yield typed refusals [1.84ms]
+
+test/watch-sources.test.ts:
+(pass) watch-sources composition refuses a missing PTY builtin with the typed runtime error [0.07ms]
+(pass) command watch sends filtered lines in source order and a terminal exit summary [31.58ms]
+(pass) path watch fires on observed modification with the stat-identity source key [1.22ms]
+(pass) path watch native callback observes a created target [10.80ms]
+(pass) command close accepts EPERM after readback finds no live group members [62.02ms]
+(pass) a faulting path source sends a terminal source_error summary and the typed failure [1.08ms]
+(pass) a rejecting watchFired send routes through the failure callback with the watch id [29.91ms]
+(pass) reinstalling a watch id replaces the previous epoch's handle before new occurrences [57.57ms]
+
+test/message-admission.test.ts:
+(pass) app composition preserves actor accepted in the committed message terminal [28.78ms]
+(pass) app composition preserves actor rejected in the committed message terminal [20.13ms]
+(pass) app composition preserves actor unknown in the committed message terminal [20.66ms]
+(pass) ungranted app actor send is a compiled pre-denial, never an executed delivery [18.77ms]
+(pass) app ingress applies the channel default tier as policy facts, not top-level authority [15.84ms]
+
+test/ingress-failure-boundaries.test.ts:
+(pass) a mounted driver receives a rejected promise when message policy refuses admission [37.31ms]
+
+test/cli-readline.test.ts:
+(pass) readline adapter returns a terminal answer: {"secret":false} [2.42ms]
+(pass) readline adapter returns a terminal answer: {"secret":false,"fallback":"default"} [0.25ms]
+(pass) readline adapter returns a terminal answer: {"secret":true} [0.18ms]
+
+test/session-attempt-e2e.test.ts:
+937 SSE attempt {"visible":"none","requests":3,"retryAlarms":[{"status":"armed"},{"status":"armed"}],"parents":[{"id":"72077474-4233-4581-b5d8-615649779a6c"}],"attempts":[{"parent_id":"72077474-4233-4581-b5d8-615649779a6c"},{"parent_id":"72077474-4233-4581-b5d8-615649779a6c"},{"parent_id":"72077474-4233-4581-b5d8-615649779a6c"}]}
+(pass) real SSE none visibility has exact provider invocation and durable child topology [69.80ms]
+937 SSE attempt {"visible":"text","requests":1,"retryAlarms":[],"parents":[{"id":"89386817-2d10-4ac1-9618-aa34f8e1a7de"}],"attempts":[{"parent_id":"89386817-2d10-4ac1-9618-aa34f8e1a7de"}]}
+(pass) real SSE text visibility has exact provider invocation and durable child topology [57.91ms]
+937 SSE attempt {"visible":"tool","requests":1,"retryAlarms":[],"parents":[{"id":"fce858fd-a994-4b4f-ba2b-cb6e8dd2175a"}],"attempts":[{"parent_id":"fce858fd-a994-4b4f-ba2b-cb6e8dd2175a"}]}
+(pass) real SSE tool visibility has exact provider invocation and durable child topology [59.57ms]
+937 fallback transport [{"path":"/v1/messages","key":"primary-key"},{"path":"/v1/responses","key":"Bearer fallback-key"}]
+(pass) real cross-provider fallback sends only the fallback's stored credential [84.52ms]
+
+test/message-session.test.ts:
+(pass) inbox target materialization refuses a child beyond its pinned fanout [3.17ms]
+(pass) entity inbox refuses bytes that do not match the outbound letter [0.93ms]
+
+test/request-entry-auth.test.ts:
+(pass) an authenticated socket still requires the Owner credential on a request answer [24.22ms]
+
+test/policy-seed.test.ts:
+(pass) interrupted policy promotion rolls back every row and reopens with the complete generation [9.53ms]
+(pass) budget presence alone does not complete a generation; preserve existing policy content [7.89ms]
+
+test/model-transport.test.ts:
+(pass) modelTransport > is absent when the operator configured neither field [0.01ms]
+(pass) modelTransport > carries whichever fields the operator set [0.03ms]
+(pass) modelTransport > copies the header map so later config mutation cannot reach a live call [0.02ms]
+(pass) operator transport reaches every model caller > the Resident forwards it to the llm call [17.03ms]
+(pass) operator transport reaches every model caller > the completion port forwards it to its one-shot sub-model call [0.44ms]
+(pass) operator transport reaches every model caller > the process worker wire carries it across the process boundary [0.06ms]
+(pass) operator transport reaches every model caller > the process worker wire rejects an unknown transport field [0.04ms]
+
+test/message-terminal-boundaries.test.ts:
+(pass) startOpenOmni reports pre-denied socket admission as an error, not accepted [28.93ms]
+(pass) startOpenOmni deadline-bound child delivers result under the original request [106.27ms]
+(pass) startOpenOmni deadline-bound child delivers error under the original request [105.82ms]
+(pass) startOpenOmni deadline-bound child delivers interrupted under the original request [98.46ms]
+
+test/provision-tools.test.ts:
+(pass) provision output boundary > rejects malformed output through the dispatcher [1.66ms]
+(pass) original Person invocation consent > a protected raise suspends then applies the exact original manifest once [5.69ms]
+(pass) original Person invocation consent > refusal leaves the Person unchanged and approvalId cannot mint authority [5.34ms]
+(pass) original Person invocation consent > a collaborator declaration remains direct [2.56ms]
+(pass) original Person invocation consent > the act itself refuses consent bound to a Person revision that no longer holds [0.86ms]
+(pass) original Person invocation consent > domain revision changes invalidate consent instead of applying a stale manifest [3.59ms]
+(pass) owner Person protection and sole owner > same-tier owner endpoint edits suspend and apply only after consent [4.56ms]
+(pass) owner Person protection and sole owner > consent cannot bypass the sole-owner store invariant [4.07ms]
+(pass) owner Person protection and sole owner > contact_remove refuses the owner and removes other people [6.14ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > channel_add validates the credential BEFORE anything lands [2.55ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > channel_add refuses an unregistered provider before anything lands [1.95ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > §4 channel_add refuses unknown settings knobs — never accepted-and-ignored [2.46ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > a store refusal while landing the row surfaces as the tool's refusal, not a crash [2.44ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > a valid declaration seals the credential, lands the row, and reconciles [2.53ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > a locked vault refuses to seal — declaration never half-lands [2.01ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > a locked vault refuses to rotate — the sealed secret stays as it was [9.16ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > enable re-arms the breaker then reconciles; disable just reconciles [9.26ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > §8.7 secret_rotate keeps the id, bumps rotatedAt, and bounces via reconcile [7.72ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > catalog gate: provisioning administration is the Resident's alone [1.47ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > catalog gate: an uncomposed provisioning port keeps the tool and refuses [2.14ms]
+(pass) channel administration ends in reconcile (§5, §8.7) > provision_status reports source, vault state, and per-instance verdicts [8.07ms]
+(pass) refusal branches > malformed inputs refuse with the tool's typed refusal [10.34ms]
+(pass) refusal branches > foreign approval identifiers are invalid rather than reusable authority [1.43ms]
+(pass) refusal branches > missing request authority refuses instead of applying a protected mutation [1.29ms]
+(pass) refusal branches > a durable-write failure in channel_add is a typed refusal [2.55ms]
+
+test/composition-errors.test.ts:
+(pass) component failure observation preserves an unprintable rejection [0.39ms]
+(pass) resident materialization refuses unregistered runners before storage [1.31ms]
+
+test/config.test.ts:
+(pass) declared channel cutover > refuses legacy DISCORD_BOT_TOKEN with the typed provisioning replacement [0.15ms]
+(pass) declared channel cutover > refuses legacy TELEGRAM_BOT_TOKEN with the typed provisioning replacement [0.03ms]
+(pass) declared channel cutover > refuses legacy GITHUB_WEBHOOK_SECRET with the typed provisioning replacement [0.02ms]
+(pass) declared channel cutover > ignores blank legacy variables [0.03ms]
+(pass) cluster storage config > defaults the catalog file, sessions dir, and idle budget under the home [0.03ms]
+(pass) cluster storage config > resolves injected partial configs through the same default owner [0.03ms]
+(pass) cluster storage config > reads operator overrides from the environment [0.03ms]
+(pass) cluster storage config > treats whitespace-only overrides as unset [0.03ms]
+(pass) cluster storage config > refuses OPENOMNI_ENTITY_IDLE_MS="0" with a typed configuration code [0.04ms]
+(pass) cluster storage config > refuses OPENOMNI_ENTITY_IDLE_MS="-5" with a typed configuration code [0.02ms]
+(pass) cluster storage config > refuses OPENOMNI_ENTITY_IDLE_MS="1.5" with a typed configuration code [0.01ms]
+(pass) cluster storage config > refuses OPENOMNI_ENTITY_IDLE_MS="not-ms" with a typed configuration code
+(pass) cluster crypto layer > serves webcrypto random bytes and SHA-256 digests [0.28ms]
+(pass) compaction summarizer config > defaults on and accepts only explicit off [0.03ms]
+(pass) compaction summarizer config > fails closed on unknown values with a typed configuration code [0.03ms]
+(pass) ws port parsing > is the single owner of the bound port, including the unset default [0.03ms]
+(pass) ws port parsing > accepts 0 as the ephemeral bind the daemon honors [0.04ms]
+(pass) ws port parsing > refuses "-1" with a typed configuration code [0.03ms]
+(pass) ws port parsing > refuses "70000" with a typed configuration code [0.01ms]
+(pass) ws port parsing > refuses "8080.5" with a typed configuration code
+(pass) ws port parsing > refuses "not-a-port" with a typed configuration code
+(pass) ws exposure enforcement > refuses a non-loopback host without an upgrade token [0.03ms]
+(pass) ws exposure enforcement > refuses injected non-loopback config before binding [0.05ms]
+(pass) ws exposure enforcement > accepts a non-loopback host once a token is set [0.02ms]
+(pass) ws exposure enforcement > allows loopback without a token and omits the field [0.02ms]
+(pass) ws exposure enforcement > refuses a missing required model value [0.02ms]
+(pass) ws exposure enforcement > leaves the model transport overrides absent when unset [0.01ms]
+(pass) ws exposure enforcement > reads the operator's model base URL and headers [0.07ms]
+(pass) ws exposure enforcement > fails closed on malformed OPENOMNI_MODEL_HEADERS JSON [0.04ms]
+(pass) ws exposure enforcement > fails closed on a JSON array [0.05ms]
+(pass) ws exposure enforcement > fails closed on a bare string [0.01ms]
+(pass) ws exposure enforcement > fails closed on non-string header values [0.03ms]
+(pass) ws exposure enforcement > fails closed on an empty header name [0.09ms]
+(pass) ws exposure enforcement > fails closed on a header name containing a CR/LF [0.03ms]
+(pass) ws exposure enforcement > fails closed on a header value containing a CR/LF [0.02ms]
+(pass) ws exposure enforcement > leaves the fallback chain absent when unset [0.02ms]
+(pass) ws exposure enforcement > reads a comma-separated provider/model fallback chain in order [0.08ms]
+(pass) ws exposure enforcement > keeps a model id containing slashes intact — only the first slash splits [0.02ms]
+(pass) ws exposure enforcement > fails closed on an entry with no provider separator [0.03ms]
+(pass) ws exposure enforcement > fails closed on an empty provider segment [0.01ms]
+(pass) ws exposure enforcement > fails closed on an empty model segment
+(pass) ws exposure enforcement > fails closed on a blank entry between two valid ones [0.01ms]
+(pass) ws exposure enforcement > fails closed on whitespace inside a segment
+(pass) ws exposure enforcement > fails closed on a provider absent from the bundled catalog
+(pass) ws exposure enforcement > treats a whitespace-only value as unset rather than as an empty chain [0.01ms]
+(pass) ws exposure enforcement > reads the Owner's export allowlist off the enrollment [0.07ms]
+(pass) ws exposure enforcement > leaves the allowlist absent when the Owner named no export — no config, no reach [0.03ms]
+(pass) ws exposure enforcement > refuses an enrollment whose export names collide or break the grammar [0.08ms]
+(pass) ws exposure enforcement > reads explicit social budgets while keeping the default absent [0.32ms]
+(pass) ws exposure enforcement > reads per-surface sender allowlists, absent by default [0.07ms]
+
+test/catalog-generation.test.ts:
+(pass) two turns retain one catalog Layer; configure acquires a fresh generation catalog [27.22ms]
+
+test/session-loop-e2e.test.ts:
+937 real SSE compaction {"requests":6,"summaries":2,"sessionId":"f9695b7b-8ce4-4027-9ba7-86808783d344","compactionIds":["20d6ac92-a37b-42aa-8641-94a0aef4b916"],"persisted":{"count":12}}
+(pass) real app SSE compaction commits reversible evidence through the session executor [179.02ms]
+
+test/cleanup-oracle.test.ts:
+bun test v1.4.1 (4661e494f)
+U1_REAL_CLEANUP_RESOLVED
+ 
+test/e2e.test.ts:
+ 7 |   const suite = residentSuite(beforeReset);
+ 8 |   const cleanup = suite.cleanup;
+ 9 |   suite.cleanup = async () => {
+10 |     await cleanup();
+11 |     console.log("U1_REAL_CLEANUP_RESOLVED");
+12 |     const error = new Error("U1_TEARDOWN_REJECTION");
+                           ^
+U1_TEARDOWN_REJECTION: U1_TEARDOWN_REJECTION
+      at <anonymous> (/Users/ino/Develop/openomni-w53/apps/openomni/test/helpers/cleanup-rejection.preload.ts:12:23)
+      at async <anonymous> (/Users/ino/Develop/openomni-w53/apps/openomni/test/e2e.test.ts:249:19)
+(fail) OpenOmni Resident WebSocket > 967-U1 closes owned sockets and removes SQLite after an assertion failure [46.73ms]
+
+ 0 pass
+ 7 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [294.00ms]
+
+(pass) 967-U1 teardown rejection fails the real assertion-failure cleanup test [304.42ms]
+
+test/cluster-runtime.test.ts:
+(pass) AppLive hosts the session entity: prompts append through the fenced kernel and dedupe on redelivery [127.46ms]
+(pass) deadline delivery expires an open request through the activation fence [3.04ms]
+(pass) late-bound entity ports refuse early use and forward after one binding [1.76ms]
+
+test/message-mutation-killers.test.ts:
+(pass) worker actor send is blocked by a compiled B row before transport [18.43ms]
+(pass) duplicate external event does not commit a second inbox message [19.38ms]
+(pass) external ingress retry after inbox fault commits once despite a recorded route [23.28ms]
+(pass) conversation correlation cannot select the physical default session [16.45ms]
+(pass) corrupted persisted policy evidence is refused: {"mutation":"json_set(intent, '$.matchedRuleIds', json_array(42))","error":"invalid message decision rule identity"} [22.33ms]
+(pass) corrupted persisted policy evidence is refused: {"mutation":"json_remove(intent, '$.inputHash')","error":"message pre decision is missing"} [28.23ms]
+(pass) message observations carry the committed compiled policy rule identity [17.01ms]
+(pass) an actor answer preserves platform correlation and wins its durable message deadline [23.81ms]
+(pass) real compiled B parent refuses the violating session request [18.82ms]
+(pass) real compiled B fanout refuses the violating session request [37.10ms]
+(pass) real compiled B depth refuses the violating session request [29.68ms]
+(pass) real compiled B deadline refuses the violating session request [32.44ms]
+(pass) real compiled B worker cannot interrupt its parent [20.04ms]
+(pass) an external reply to an awaited message admits with the correlated reply origin [20.43ms]
+
+test/message-ingress-boundaries.test.ts:
+(pass) complete reply chain selects ancestor through the compiled gateway [32.47ms]
+(pass) complete reply chain selects nearer through the compiled gateway [33.17ms]
+(pass) complete reply chain selects ambiguous through the compiled gateway [36.48ms]
+(pass) actor deadline and send admission commit before delivery [21.83ms]
+(pass) actor deadline and send admission roll back together [18.08ms]
+(pass) child admission observations see the deadline before the child's inbox commit [20.43ms]
+(pass) Table A projects live dnc budget without debiting ingress [14.93ms]
+(pass) Table A projects live zero budget without debiting ingress [14.12ms]
+(pass) Table A projects live spent budget without debiting ingress [25.86ms]
+(pass) Table A projects live allowed budget without debiting ingress [17.46ms]
+
+test/llm-failure-classification.test.ts:
+(pass) turn failure classification > covers every provider failure class without exposing raw details [2.87ms]
+(pass) turn failure classification > payment status can be nested and cause walking is bounded [0.15ms]
+
+test/cli.test.ts:
+(pass) env file > parse: comments, blanks, quotes, and duplicate keys (last wins) [0.13ms]
+(pass) env file > render round-trips through parse and rejects line breaks [0.11ms]
+(pass) env file > write replaces a symlink at the destination instead of following it [0.67ms]
+(pass) env file > write creates parents and enforces 0600 on overwrite [0.62ms]
+(pass) env file > failed replacement removes its temporary file [5.86ms]
+(pass) env file > merge preserves explicit empty values and does not mutate process env [0.08ms]
+(pass) env file > apply fills only unset keys; process env wins; missing file is a no-op [0.51ms]
+(pass) daemon units > launchd plist carries bun+entry+start, KeepAlive, and log paths [0.09ms]
+(pass) daemon units > systemd unit quotes ExecStart paths and restarts on failure [0.04ms]
+(pass) daemon units > systemd unit escapes %, quotes, and backslashes; control chars are rejected [0.05ms]
+(pass) daemon units > darwin install creates the log dir, writes the plist, boots out the old generation, bootstraps [0.12ms]
+(pass) daemon units > linux install reloads, enables, restarts (replacing a running old generation), enables linger [0.03ms]
+(pass) daemon units > linux install fails hard when linger cannot be enabled [0.03ms]
+(pass) daemon units > install surfaces the failing command with stderr [0.04ms]
+(pass) daemon units > uninstall on a clean host reports not installed and runs nothing [0.03ms]
+(pass) daemon units > uninstall removes the unit after a successful stop [0.05ms]
+(pass) daemon units > uninstall after a failed stop proceeds only when inactive AND disabled are proven [0.04ms]
+(pass) daemon units > uninstall keeps the unit when the process stopped but the enable symlink survived [0.03ms]
+(pass) daemon units > uninstall keeps the unit when the stop fails and the state is transitional [0.02ms]
+(pass) daemon units > darwin uninstall retains the plist without proof of unload: {"code":0,"stdout":"state = waiting","stderr":""} [0.04ms]
+(pass) daemon units > darwin uninstall retains the plist without proof of unload: {"code":1,"stdout":"","stderr":"Operation not permitted"} [0.02ms]
+(pass) daemon units > darwin uninstall proceeds when the job is specifically not found [0.03ms]
+(pass) daemon units > stop failure propagates (launchctl bootout on unloaded service) [0.02ms]
+(pass) daemon units > start, stop, and restart dispatch both platform service commands [0.10ms]
+(pass) daemon units > status and activity read launchctl print state [0.06ms]
+(pass) onboarding > gathers model config and leaves channel provisioning to declarations [0.20ms]
+(pass) onboarding > rejects a missing API key, a non-numeric port, and port 0 [0.06ms]
+(pass) onboarding > onboarding accepts decimal port 1 [0.04ms]
+(pass) onboarding > onboarding accepts decimal port 80 [0.02ms]
+(pass) onboarding > onboarding accepts decimal port 65535
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port 1e2 with the original error contract [0.07ms]
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port 0x50 with the original error contract [0.01ms]
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port +80 with the original error contract
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port 80.0 with the original error contract
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port 65536 with the original error contract
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port invalid with the original error contract
+(pass) onboarding > onboarding rejects non-decimal or out-of-range port 0 with the original error contract
+(pass) onboarding > secret prompts are flagged so the terminal never echoes them [0.05ms]
+(pass) doctor > legacy channel credential DISCORD_BOT_TOKEN fails doctor [0.34ms]
+(pass) doctor > legacy channel credential TELEGRAM_BOT_TOKEN fails doctor [0.03ms]
+(pass) doctor > legacy channel credential GITHUB_WEBHOOK_SECRET fails doctor [0.02ms]
+(pass) doctor > all green: ok verdict and the configured port is probed [0.06ms]
+(pass) doctor > missing env file only warns; absent model config fails; silent health warns [0.06ms]
+(pass) doctor > exported environment alone satisfies model config without an env file [0.04ms]
+(pass) doctor > a blank required value fails exactly like a missing one [0.04ms]
+(pass) doctor > an installed but inactive daemon fails diagnostics [0.03ms]
+(pass) doctor > installed daemon without linger warns [0.03ms]
+(pass) doctor > unsupported onboarding provider is refused before credentials [0.04ms]
+(pass) doctor > active daemon with unreachable health is a failure [0.04ms]
+(pass) doctor > an ephemeral port skips the probe and warns instead of failing an active daemon [0.06ms]
+(pass) doctor > a port the daemon would refuse to bind fails with the config parser's verdict [0.11ms]
+(pass) doctor > an unset port probes the same default the daemon binds [0.04ms]
+(pass) cli entry point > returns the dispatch exit status without terminating an importer [0.08ms]
+(pass) cli dispatch > machine attach validates arity and forwards the config without starting the Resident [0.10ms]
+(pass) cli dispatch > unknown command prints usage and exits 1 [0.04ms]
+(pass) cli dispatch > bare invocation shows usage with exit 0 [0.03ms]
+(pass) cli dispatch > daemon requires a known verb [0.04ms]
+(pass) cli dispatch > daemon verb errors become stderr + exit 1, not a crash [0.04ms]
+(pass) cli dispatch > dispatches start and both platform log followers [0.08ms]
+(pass) cli dispatch > onboard writes collected answers and confirms an overwrite [0.10ms]
+(pass) cli dispatch > onboard declines to overwrite an existing env file without consent [0.04ms]
+(pass) cli dispatch > doctor exit code follows the report verdict [0.09ms]
+(pass) processEntryPath > probes the JavaScript sibling, then the source entry [0.40ms]
+
+test/machine-tool-bridge.test.ts:
+(pass) code-mode tool bridge > a cell reaches host tools repeatedly within one eval [30.37ms]
+(pass) code-mode tool bridge > parallel tool calls overlap and interleaved answers route by callId in input order [29.28ms]
+(pass) code-mode tool bridge > completion calls the cell-only tool with one prompt and returns its value unchanged [31.09ms]
+(pass) code-mode tool bridge > parallel batches completion calls and returns results in input order [27.73ms]
+(pass) code-mode tool bridge > parallel waits for other thunks before propagating an exception [30.10ms]
+(pass) code-mode tool bridge > a tool the host refuses raises a catchable error and does not run [28.45ms]
+(pass) code-mode tool bridge > a dotted tool name reaches the host under its canonical spelling [31.10ms]
+(pass) code-mode tool bridge > a tool that fails on the host surfaces the failure inside the cell [28.79ms]
+(pass) code-mode tool bridge > a cell blocked on a slow tool still honours its deadline and recovers [830.16ms]
+(pass) code-mode tool bridge > a duplicate in-flight cellId is refused with a typed error on a live connection [140.27ms]
+(pass) code-mode tool bridge > a connection that never attached cannot reach host tools [100.82ms]
+(pass) code-mode tool bridge > an attached daemon cannot invoke tools outside a cell the host dispatched [695.18ms]
+(pass) code-mode tool bridge > a cellId stops working the moment its cell settles [204.40ms]
+(pass) code-mode tool bridge > a superseded daemon loses tool access mid-cell without wedging it [31.07ms]
+(pass) code-mode tool bridge > a thread outliving its cell is refused tools instead of inheriting the next cell [28.15ms]
+(pass) code-mode tool bridge > a forged frame claiming another cell is refused without a host call [28.90ms]
+(pass) code-mode tool bridge > each tenant gets its own interpreter: state persists within, never across [78.39ms]
+(pass) code-mode tool bridge > a host wired without a tool port says so instead of pretending [29.18ms]
+
+test/boot-cleanup-failures.test.ts:
+(pass) boot retains both the acquisition failure and the failing cleanup [2.99ms]
+(pass) server bind failure preserves its cleanup failure and closes storage [9.61ms]
+
+test/monitor-ports.test.ts:
+(pass) watch arm retries one lost revision race before installing the source [2.71ms]
+(pass) watch arm does not retry a commit failure that is not a revision race [1.84ms]
+(pass) watch state scans a full occurrence page before reading the next page [19.11ms]
+(pass) watch timeout commits a terminal occurrence and wake prompt [2.68ms]
+
+test/helpers/socket-path.test.ts:
+(pass) socketPath > creates distinct paths within the macOS Unix socket limit [0.02ms]
+
+test/helpers/resident-suite.test.ts:
+(pass) 967-U1 cleanup attempts every disposer and propagates every rejection [0.40ms]
+(pass) 967-U1 a single cleanup rejection retains its identity [0.04ms]
+(pass) 967-U1 non-Error cleanup rejections retain their cause [0.04ms]
+
+test/helpers/assistant-message.test.ts:
+(pass) assistantMessage > builds an assistant reply from a run input [0.06ms]
+(pass) assistantMessage > derives call-count reply metadata [0.03ms]
+
+ 557 pass
+ 0 fail
+ 2535 expect() calls
+Ran 557 tests across 80 files. [32.73s]

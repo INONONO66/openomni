@@ -1,0 +1,141 @@
+patch coverage: apps/desktop/src/preload/index.ts: 1 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/app.tsx: 3 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/attention/reason.ts: 0 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/chat/gateway-transport.ts: 30 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/chat/select-transport.ts: 3 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/shell/place-icon.tsx: 1 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/shell/session-glyph.ts: 0 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/state/queries.ts: 28 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/state/selectors.ts: 1 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/state/session-actions.ts: 1 AST-skipped changed line(s)
+patch coverage: apps/desktop/src/renderer/state/store.ts: 12 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/composition/cluster-runtime.ts: 1 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/composition/completion.ts: 0 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/config.ts: 1 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/gateway.ts: 35 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/index.ts: 0 AST-skipped changed line(s)
+patch coverage: apps/openomni/src/observation/llm-failure.ts: 4 AST-skipped changed line(s)
+patch coverage: packages/agent/src/cluster/session-entity.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/agent/src/core/execution/turn.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/agent/src/executor-attempts.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/agent/src/index.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-admission.ts: 3 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-contract.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-controller.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-lifecycle/inspect.ts: 25 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-lifecycle/metrics.ts: 25 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-record.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/agent/src/session-turn.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/channels/src/router/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/channels/src/websocket.ts: 5 AST-skipped changed line(s)
+patch coverage: packages/ipc/src/framing.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/ledger/src/session/kernel.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/ledger/src/storage/catalog-store.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/ledger/src/storage/schema-catalog.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/llm/src/errors.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/llm/src/processor/index.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/llm/src/processor/stream-events.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/llm/src/retry/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/llm/src/run.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/policy/src/row-compiler.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/error/index.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/event/operational.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/gateway/index.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/gateway/session-read.ts: 16 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/index.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/ingress/index.ts: 2 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/ipc/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/json.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/machine/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/platform.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/policy/definition.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/policy/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/policy/policy-point.ts: 7 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/policy/resource.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/provisioning/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/provisioning/schema.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/tool/index.ts: 0 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/transcript/fold.ts: 1 AST-skipped changed line(s)
+patch coverage: packages/protocol/src/transcript/index.ts: 0 AST-skipped changed line(s)
+patch coverage: script/check-dead-exports.ts: 35 AST-skipped changed line(s)
+patch coverage: script/check-deps.ts: 10 AST-skipped changed line(s)
+patch coverage: script/check-effect-boundaries.ts: 3 AST-skipped changed line(s)
+patch coverage: script/check-topology.ts: 3 AST-skipped changed line(s)
+patch coverage: script/check-written-types.ts: 26 AST-skipped changed line(s)
+patch coverage: script/generate-models-snapshot.ts: 5 AST-skipped changed line(s)
+patch coverage: script/lint-guards.ts: 0 AST-skipped changed line(s)
+patch coverage: script/lint-side-effects.ts: 0 AST-skipped changed line(s)
+patch coverage: script/lint-tools.ts: 11 AST-skipped changed line(s)
+patch coverage: script/quality-audit.ts: 14 AST-skipped changed line(s)
+patch coverage: script/quality-inventory.ts: 6 AST-skipped changed line(s)
+patch coverage: script/quality-mutation-input.ts: 2 AST-skipped changed line(s)
+patch coverage: script/quality-typescript-metrics.ts: 57 AST-skipped changed line(s)
+patch coverage: script/run-quality-mutations.ts: 5 AST-skipped changed line(s)
+patch coverage: script/scripts-lanes.ts: 0 AST-skipped changed line(s)
+patch coverage: script/topology.ts: 2 AST-skipped changed line(s)
+patch coverage: script/verify-tsconfig-inheritance.ts: 1 AST-skipped changed line(s)
+uncovered: apps/openomni/src/composition/cluster-runtime.ts: no coverage record
+uncovered: apps/openomni/src/composition/completion.ts: no coverage record
+uncovered: apps/openomni/src/config.ts: no coverage record
+uncovered: apps/openomni/src/gateway.ts: no coverage record
+uncovered: apps/openomni/src/index.ts: no coverage record
+uncovered: apps/openomni/src/observation/llm-failure.ts: no coverage record
+uncovered: packages/agent/src/cluster/session-entity.ts: no coverage record
+uncovered: packages/agent/src/core/execution/turn.ts: no coverage record
+uncovered: packages/agent/src/executor-attempts.ts: no coverage record
+uncovered: packages/agent/src/index.ts: no coverage record
+uncovered: packages/agent/src/session-admission.ts: no coverage record
+uncovered: packages/agent/src/session-contract.ts: no coverage record
+uncovered: packages/agent/src/session-controller.ts: no coverage record
+uncovered: packages/agent/src/session-lifecycle/inspect.ts: no coverage record
+uncovered: packages/agent/src/session-lifecycle/metrics.ts: no coverage record
+uncovered: packages/agent/src/session-record.ts: no coverage record
+uncovered: packages/agent/src/session-turn.ts: no coverage record
+uncovered: packages/channels/src/router/index.ts: no coverage record
+uncovered: packages/channels/src/websocket.ts: no coverage record
+uncovered: packages/ipc/src/framing.ts: no coverage record
+uncovered: packages/ledger/src/session/kernel.ts: no coverage record
+uncovered: packages/ledger/src/storage/catalog-store.ts: no coverage record
+uncovered: packages/ledger/src/storage/schema-catalog.ts: no coverage record
+uncovered: packages/llm/src/errors.ts: no coverage record
+uncovered: packages/llm/src/processor/index.ts: no coverage record
+uncovered: packages/llm/src/processor/stream-events.ts: no coverage record
+uncovered: packages/llm/src/retry/index.ts: no coverage record
+uncovered: packages/llm/src/run.ts: no coverage record
+uncovered: packages/policy/src/row-compiler.ts: no coverage record
+uncovered: packages/protocol/src/error/index.ts: no coverage record
+uncovered: packages/protocol/src/event/operational.ts: no coverage record
+uncovered: packages/protocol/src/gateway/index.ts: no coverage record
+uncovered: packages/protocol/src/gateway/session-read.ts: no coverage record
+uncovered: packages/protocol/src/index.ts: no coverage record
+uncovered: packages/protocol/src/ingress/index.ts: no coverage record
+uncovered: packages/protocol/src/ipc/index.ts: no coverage record
+uncovered: packages/protocol/src/json.ts: no coverage record
+uncovered: packages/protocol/src/machine/index.ts: no coverage record
+uncovered: packages/protocol/src/policy/definition.ts: no coverage record
+uncovered: packages/protocol/src/policy/index.ts: no coverage record
+uncovered: packages/protocol/src/policy/policy-point.ts: no coverage record
+uncovered: packages/protocol/src/policy/resource.ts: no coverage record
+uncovered: packages/protocol/src/provisioning/index.ts: no coverage record
+uncovered: packages/protocol/src/provisioning/schema.ts: no coverage record
+uncovered: packages/protocol/src/tool/index.ts: no coverage record
+uncovered: packages/protocol/src/transcript/fold.ts: no coverage record
+uncovered: packages/protocol/src/transcript/index.ts: no coverage record
+uncovered: script/check-dead-exports.ts: no coverage record
+uncovered: script/check-deps.ts: no coverage record
+uncovered: script/check-effect-boundaries.ts: no coverage record
+uncovered: script/check-topology.ts: no coverage record
+uncovered: script/check-written-types.ts: no coverage record
+uncovered: script/generate-models-snapshot.ts: no coverage record
+uncovered: script/lint-guards.ts: no coverage record
+uncovered: script/lint-side-effects.ts: no coverage record
+uncovered: script/lint-tools.ts: no coverage record
+uncovered: script/quality-audit.ts: no coverage record
+uncovered: script/quality-inventory.ts: no coverage record
+uncovered: script/quality-mutation-input.ts: no coverage record
+uncovered: script/quality-typescript-metrics.ts: no coverage record
+uncovered: script/run-quality-mutations.ts: no coverage record
+uncovered: script/scripts-lanes.ts: no coverage record
+uncovered: script/topology.ts: no coverage record
+uncovered: script/verify-tsconfig-inheritance.ts: no coverage record
+patch coverage: 64 changed executable line(s) uncovered

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { PlainValue } from "@openomni/protocol";
 import { classifyTurnFailure } from "../src/observation/llm-failure";
 
 import { providerError } from "./helpers/sdk-provider";
@@ -30,7 +31,7 @@ describe("turn failure classification", () => {
     expect(classifyTurnFailure({ cause: { data: { statusCode: 402 } } }).reason).toBe(
       "non_retryable",
     );
-    let error: unknown = { statusCode: 402 };
+    let error: PlainValue = { statusCode: 402 };
     for (let index = 0; index < 9; index += 1) error = { cause: error };
     expect(classifyTurnFailure(error).reason).toBe("non_retryable");
   });

@@ -48,6 +48,7 @@ export type StreamEventState = {
   reasoning: Map<string, OpenBlock>;
   pendingTools: Map<string, string>;
   usage: Transcript.Usage;
+  usageProvenance: "reported" | "estimated" | "unknown";
   /**
    * Assistant output this step emitted — text, reasoning, and tool-call JSON —
    * the local estimator's output-token source. Reset at each step-finish so
@@ -63,6 +64,7 @@ export function createStreamEventState(): StreamEventState {
     reasoning: new Map(),
     pendingTools: new Map(),
     usage: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    usageProvenance: "unknown",
     stepEmittedAssistant: "",
     visibleOutput: false,
   };
@@ -291,6 +293,10 @@ function handleStepFinish(
     cacheReadTokens: provider.cacheReadTokens,
     cacheWriteTokens: provider.cacheWriteTokens,
   };
+  state.usageProvenance =
+    state.usageProvenance === "estimated" ||
+    provider.inputTokens === undefined || provider.outputTokens === undefined
+      ? "estimated" : "reported";
 
   state.finishReason = finishReason;
   state.stepEmittedAssistant = "";

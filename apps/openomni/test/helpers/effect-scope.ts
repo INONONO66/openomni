@@ -1,9 +1,9 @@
-import { Effect, Exit, Scope } from "effect";
+import { type Effect, Exit, Scope } from "effect";
 import { runEffect, runSyncEffect } from "./effect";
 
 /** A resource scope kept alive across imperative test actions. */
 export function effectScope() {
-  const scope = Effect.runSync(Scope.make());
+  const scope = runSyncEffect(Scope.make());
   return {
     scope,
     runSync<A, E>(effect: Effect.Effect<A, E, Scope.Scope>): A {

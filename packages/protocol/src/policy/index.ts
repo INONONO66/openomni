@@ -9,10 +9,6 @@ import { PolicyResource } from "./resource.js";
 export { PolicyPermission } from "./permission.js";
 
 export namespace Policy {
-  export const LabelEntry = PolicyPermission.LabelEntry;
-  export type LabelEntry = z.infer<typeof LabelEntry>;
-  export const InputRule = PolicyPermission.InputRule;
-  export type InputRule = z.infer<typeof InputRule>;
   export const Permission = PolicyPermission.Permission;
   export type Permission = z.infer<typeof Permission>;
   export const EvaluationRequest = PolicyPermission.EvaluationRequest;
@@ -22,15 +18,7 @@ export namespace Policy {
 
   export const Timing = PolicyDefinition.Timing;
   export type Timing = (typeof Timing)[keyof typeof Timing];
-  export const Scope = PolicyDefinition.Scope;
-  export type Scope = z.infer<typeof Scope>;
-  export const FailPolicy = PolicyDefinition.FailPolicy;
-  export type FailPolicy = z.infer<typeof FailPolicy>;
-  export const Definition = PolicyDefinition.Definition;
-  export type Definition = z.infer<typeof Definition>;
 
-  export const PolicyEffectType = PolicyEffects.PolicyEffectType;
-  export type PolicyEffectType = z.infer<typeof PolicyEffectType>;
   export const PolicyEffect = PolicyEffects.PolicyEffect;
   export type PolicyEffect = z.infer<typeof PolicyEffect>;
   export const PolicyObligation = PolicyEffects.PolicyObligation;
@@ -40,7 +28,6 @@ export namespace Policy {
 
   export const PolicyPoint = PolicyPointModule.PolicyPoint;
   export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint>;
-  export type PolicyPointInputMap = PolicyPointModule.PolicyPointInputMap;
 
   /**
    * Runtime resource descriptors ride bus events; shape is wire-frozen.
@@ -49,8 +36,6 @@ export namespace Policy {
    * `Policy.Resource.*` consumer from the dead-export ratchet (#498 K4).
    */
   export namespace Resource {
-    export const Source = PolicyResource.Source;
-    export type Source = PolicyResource.Source;
     export const Descriptor = PolicyResource.Descriptor;
     export type Descriptor = PolicyResource.Descriptor;
   }
@@ -110,10 +95,6 @@ export namespace PolicyDecision {
 
   export function pending(options: Options): Policy.PolicyDecision {
     return create("pending", options);
-  }
-
-  export function isBlocking(decision: Policy.PolicyDecision): boolean {
-    return decision.verdict !== "allow";
   }
 
   export function reason(

@@ -2,17 +2,19 @@ import { z } from "zod";
 import { Effect } from "effect";
 import { decodeChannelFailure, InvalidInbound, type ChannelError } from "./errors";
 import { newTraceId } from "./support/trace";
-import { Channel, Gateway, Operational } from "@openomni/protocol";
+import { Channel, Gateway, Operational, SessionRead } from "@openomni/protocol";
 import { authenticateWebSocketUpgrade } from "./authn/websocket";
 import type { ChannelAuthnDecisionObserver } from "./authn/types";
 import type { PublishPort } from "./types";
 
 export type WebSocketMessageHandler = (
   message: Channel.InboundMessage,
-) => Effect.Effect<void, ChannelError>;
+) => Effect.Effect<void, ChannelError> | Effect.Effect<Gateway.IngestResult, ChannelError>;
 
 export type WebSocketFrameOutcome =
-  | { readonly type: "receipt"; readonly status: "accepted" }
+  | z.infer<typeof SessionRead.Receipt>
+  | SessionRead.Bound
+  | SessionRead.Request
   | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult };
 
 export interface WebSocketConfig {
@@ -58,7 +60,7 @@ const TextFrame = z
     type: z
       .json()
       .optional()
-      .refine((type) => type !== "request_answer"),
+      .refine((type) => type !== "request_answer" && type !== "session_read"),
     text: z.string().min(1),
     eventId: z.string().min(1).optional().catch(undefined),
     replyToId: z.string().min(1).optional().catch(undefined),
@@ -69,7 +71,7 @@ const TextFrame = z
     eventId: frame.eventId,
     replyToId: frame.replyToId,
   }));
-const WebSocketFrame = z.union([RequestAnswerFrame, TextFrame]);
+const WebSocketFrame = z.union([SessionRead.Request, RequestAnswerFrame, TextFrame]);
 
 export class WebSocketHandler {
   /**
@@ -199,6 +201,8 @@ export class WebSocketHandler {
       });
       const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
       const parsed = yield* decodeFrame(raw);
+      // The app owns the read; the perimeter only decodes and transports it.
+      if ("type" in parsed) return parsed;
       const sender = {
         kind: "external",
         surface: "ws",
@@ -214,7 +218,7 @@ export class WebSocketHandler {
         const result = yield* this.config.onRequestAnswer(sender, parsed);
         return { type: "receipt", inputId: parsed.inputId, result };
       }
-      yield* this.handler({
+      const result = yield* this.handler({
         sender,
         facts: {
           eventId: parsed.eventId ?? crypto.randomUUID(),
@@ -227,7 +231,15 @@ export class WebSocketHandler {
           render: parsed.text,
         },
       });
-      return { type: "receipt", status: "accepted" };
+      if (result === undefined) return { type: "receipt", status: "accepted" };
+      // Frozen frame: the accepted receipt keeps exactly its base two-key
+      // shape. The durable binding rides the additive session_bound frame:
+      // the receipt goes out here, first, on the inbound socket; the caller
+      // then sends the returned session_bound frame on that same socket.
+      this.connections
+        .get(connection.externalId)
+        ?.send(JSON.stringify({ type: "receipt", status: "accepted" }));
+      return { type: "session_bound", result };
     });
   }
 }

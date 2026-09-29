@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
+import type { PlainValue } from "../packages/protocol/src/json";
 import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
 import {
   checkEarned,
@@ -13,6 +14,7 @@ import {
   definitionInvariantViolations,
   diffToolSchemaSnapshots,
   lintToolSurface,
+  main as lintToolsMain,
   selfTest,
   type Baseline,
   type LocatedDefinition,
@@ -94,7 +96,7 @@ describe("tool surface lint (#949 sealed catalog grammar)", () => {
   });
   test("seven public fields is the sealed budget; an eighth is over", () => {
     const surface = (count: number) => {
-      const properties: Record<string, object> = {};
+      const properties: Record<string, PlainValue> = {};
       for (let index = 0; index < count; index++) properties[`f${index}`] = {};
       return lintToolSurface({
         name: "grep",
@@ -205,6 +207,21 @@ test("the protocol tree passes the vocab ratchet and naming checks in-process re
   } finally {
     process.chdir(previousCwd);
   }
+});
+
+test("the full conformance gate passes in-process against the shipped tree", async () => {
+  const lines: string[] = [];
+  const write = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+    lines.push(String(chunk));
+    return true;
+  });
+  try {
+    // main exits the process on any violation, so returning is the verdict.
+    await expect(lintToolsMain([])).resolves.toBeUndefined();
+  } finally {
+    write.mockRestore();
+  }
+  expect(lines.join("")).toStartWith("OK: conformance lint");
 });
 
 test("the self-test discriminates on its known-bad fixtures in-process", () => {

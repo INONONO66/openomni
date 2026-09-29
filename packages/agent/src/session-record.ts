@@ -202,7 +202,9 @@ export function turnCheckpointAction(input: {
 
 export function deliveryActions(
   items: readonly Inbox.Row[],
-  turnId: string,
+  target:
+    | { readonly kind: "turn"; readonly turnId: string }
+    | { readonly kind: "inbox" },
   boundary: SessionTurn.Boundary,
   parentId: string | null,
 ): LedgerAction.Append[] {
@@ -218,7 +220,7 @@ export function deliveryActions(
         encodingVersion: 1,
         value: {
           phase: "delivery",
-          turnId,
+          turnId: target.kind === "turn" ? target.turnId : item.id,
           inboxId: item.id,
           kind: item.kind,
           content: item.content,

@@ -1,0 +1,63 @@
+bun test v1.4.1 (4661e494f)
+
+apps/openomni/test/session-cursor.test.ts:
+(pass) a reconnect replays only committed revisions beyond its cursor [135.81ms]
+(pass) a registered reader receives authoritative commits after its captured head [102.66ms]
+
+apps/desktop/test/gateway-transport.test.ts:
+(pass) createGatewayChatTransport > empty history sends an empty prompt and does not offer reconnection [1.01ms]
+(pass) createGatewayChatTransport > close before opening rejects and failed send closes its socket [0.14ms]
+(pass) createGatewayChatTransport > a server message becomes start / text-start / text-delta / text-end / finish [3.71ms]
+(pass) createGatewayChatTransport > an error frame becomes one error chunk and closes the stream [1.54ms]
+(pass) createGatewayChatTransport > an outstanding server message id is echoed as replyToId on the next turn [1.24ms]
+(pass) createGatewayChatTransport > reply ids stay with their chat when two turns share the socket [1.36ms]
+(pass) createGatewayChatTransport > preserves subprotocol offers on the real socket [1.30ms]
+(pass) createGatewayChatTransport > ignores malformed frames and retains unsolicited reply correlation [1.10ms]
+(pass) createGatewayChatTransport > cancelling a stream invalidates its socket and clears reply correlation [0.16ms]
+(pass) createGatewayChatTransport > rejects regeneration instead of appending the historical prompt again [1.30ms]
+(pass) createGatewayChatTransport > an already-aborted turn never reaches the gateway [1.04ms]
+(pass) createGatewayChatTransport > an abort settles while the socket is still opening [0.08ms]
+(pass) createGatewayChatTransport > aborting ends the stream [1.30ms]
+(pass) createGatewayChatTransport > aborting one turn fails sibling turns on the invalidated socket [0.11ms]
+(pass) createGatewayChatTransport > a completed turn cannot later close the shared socket [1.82ms]
+(pass) createGatewayChatTransport > an unexpected socket close fails its pending turn [0.06ms]
+(pass) createGatewayChatTransport > an old socket close cannot drain a turn on its replacement [0.11ms]
+(pass) createGatewayChatTransport > a socket that fails while opening is replaced on retry [0.18ms]
+(pass) createGatewayChatTransport > a session-level terminal page cannot settle another turn's pending chat [2.66ms]
+(pass) createGatewayChatTransport > binds only from session_bound; receipts and pre-blocked results never bind [0.47ms]
+(pass) createGatewayChatTransport > the SDK reduces the chunks into one assistant message [1.97ms]
+(pass) session reads over the gateway socket > a page pointing at a next revision is followed with a cursor until the read drains [1.39ms]
+(pass) session reads over the gateway socket > a session-scoped error frame rejects that session's pending read [0.99ms]
+(pass) session reads over the gateway socket > a socket that closes mid-read rejects the pending read [1.24ms]
+(pass) session reads over the gateway socket > a send failure during a session read rejects instead of hanging [0.10ms]
+(pass) session reads over the gateway socket > two concurrent identical reads coalesce onto one request and both resolve [1.38ms]
+(pass) session reads over the gateway socket > a differing-cursor second read is rejected while the first still resolves [1.25ms]
+(pass) session reads over the gateway socket > a close drains every coalesced waiter [1.21ms]
+
+apps/desktop/test/session-read-model.test.ts:
+(pass) session_read repairs a stale cursor with a fresh snapshot on the existing transport [3.16ms]
+(pass) durable query pages own phase and attention while tabs and drafts stay local [2.80ms]
+(pass) an empty same-epoch same-head continuation keeps the authoritative activity [2.02ms]
+
+packages/channels/test/websocket.test.ts:
+(pass) WebSocketHandler authentication > accepts the canonical protocol and records authentication [0.21ms]
+(pass) WebSocketHandler authentication > rejects missing websocket auth before upgrade [0.09ms]
+(pass) WebSocketHandler authentication > does not bind an actor on tokenless bootstrap [0.06ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers "frame-7" before emitting facts [0.54ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers "" before emitting facts [0.23ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers 0 before emitting facts [0.14ms]
+(pass) WebSocketHandler ingress and receipts > validates optional frame identifiers null before emitting facts [0.09ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame { before entering the handler [0.26ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame [] before entering the handler [0.11ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame {} before entering the handler [0.14ms]
+(pass) WebSocketHandler ingress and receipts > rejects malformed frame {"type":"request_answer","text":"must not become a message"} before entering the handler [0.15ms]
+(pass) WebSocketHandler ingress and receipts > defers ingress until execution and accepts binary frames exactly once [0.25ms]
+(pass) WebSocketHandler ingress and receipts > emits the frozen two-key receipt first, then session_bound carrying the admission [0.20ms]
+(pass) WebSocketHandler ingress and receipts > sends only the typed failure tag and never a receipt or private cause on handler refusal [0.23ms]
+(pass) WebSocketHandler ingress and receipts > push returns an accepted receipt with a stable external message id [0.13ms]
+(pass) WebSocketHandler ingress and receipts > reconnects without losing the current delivery target [0.03ms]
+
+ 49 pass
+ 0 fail
+ 139 expect() calls
+Ran 49 tests across 4 files. [815.00ms]

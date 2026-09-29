@@ -37,13 +37,13 @@ describe("Machine.WireMethod.FsOp", () => {
 describe("Machine.ExportName grammar", () => {
   test("accepts lowercase names with digits, dashes, and underscores", () => {
     for (const name of ["notes", "a", "code-2", "my_export", "x0", "a".repeat(64)]) {
-      expect(Machine.ExportName.safeParse(name).success).toBe(true);
+      expect(Machine.Enrollment.shape.allowedExports.unwrap().element.safeParse(name).success).toBe(true);
     }
   });
 
   test("rejects uppercase, leading digits/symbols, dots, and empty names", () => {
     for (const name of ["Notes", "0notes", "-notes", "_notes", "notes.d", "note s", ""]) {
-      const result = Machine.ExportName.safeParse(name);
+      const result = Machine.Enrollment.shape.allowedExports.unwrap().element.safeParse(name);
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error.issues[0]?.message).toBe(
@@ -55,7 +55,7 @@ describe("Machine.ExportName grammar", () => {
   });
 
   test("rejects names past 64 characters", () => {
-    const result = Machine.ExportName.safeParse("a".repeat(65));
+    const result = Machine.Enrollment.shape.allowedExports.unwrap().element.safeParse("a".repeat(65));
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toBe("export name must be at most 64 characters");

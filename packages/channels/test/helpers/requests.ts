@@ -39,7 +39,7 @@ export function requestPort(
 
 export function originalAction(requestId: string, sessionId: string, value: PlainValue = {}) {
   const kernel = ledger().kernel;
-  Effect.runSync(
+  runEffect(
     kernel
       .materialize({
         id: sessionId,
@@ -52,6 +52,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
         at: 0,
       })
       .pipe(Effect.orDie),
+    "sync",
   );
   const existing = sessionTree(sessionId, ledger().sessions.actions).find(
     (action) => action.id === requestId,
@@ -59,7 +60,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
   if (existing) return;
   const fence = adoptLedgerFence(sessionId, "fixture");
   const row = kernel.row(sessionId);
-  Effect.runSync(kernel.commit({
+  runEffect(kernel.commit({
     sessionId,
     owner: "fixture",
     fence,
@@ -81,7 +82,7 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
       },
     ],
     state: "idle",
-  }));
+  }), "sync");
 }
 
 export async function openRequest(requestId: string, overrides: Partial<Gateway.RequestSpec> = {}) {
@@ -142,7 +143,7 @@ export async function command(
       request,
     },
   );
-  await Effect.runPromise(kernel.commitRequestTransition({
+  await runEffect(kernel.commitRequestTransition({
     sessionId,
     owner: "command",
     fence,

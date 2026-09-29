@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Gateway, Machine, NamedError, type Model } from "@openomni/protocol";
+import { Actor, Gateway, Machine, NamedError, type Model, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 
 export const ConfigurationError = NamedError.create(
@@ -274,7 +274,7 @@ const Actors = z
 function parseEnvJson<T>(name: string, schema: z.ZodType<T>): T | undefined {
   const raw = process.env[name]?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
-  let json: unknown;
+  let json: PlainValue;
   try {
     json = JSON.parse(raw);
   } catch (error) {

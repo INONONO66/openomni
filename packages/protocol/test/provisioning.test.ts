@@ -5,13 +5,13 @@ const NOW = 1_756_000_000_000;
 
 describe("Provisioning ids", () => {
   test("PersonId / ChannelInstanceId / SecretId enforce their prefixes and slugs", () => {
-    expect(Provisioning.PersonId.safeParse("person:ino").success).toBe(true);
-    expect(Provisioning.PersonId.safeParse("ino").success).toBe(false);
-    expect(Provisioning.PersonId.safeParse("person:Ino").success).toBe(false);
-    expect(Provisioning.ChannelInstanceId.safeParse("channel:telegram:main").success).toBe(true);
-    expect(Provisioning.ChannelInstanceId.safeParse("channel:main").success).toBe(false);
-    expect(Provisioning.SecretId.safeParse("secret:channel-telegram-main").success).toBe(true);
-    expect(Provisioning.SecretId.safeParse("secret:").success).toBe(false);
+    expect(Provisioning.Person.shape.id.safeParse("person:ino").success).toBe(true);
+    expect(Provisioning.Person.shape.id.safeParse("ino").success).toBe(false);
+    expect(Provisioning.Person.shape.id.safeParse("person:Ino").success).toBe(false);
+    expect(Provisioning.ChannelInstance.shape.id.safeParse("channel:telegram:main").success).toBe(true);
+    expect(Provisioning.ChannelInstance.shape.id.safeParse("channel:main").success).toBe(false);
+    expect(Provisioning.Secret.shape.id.safeParse("secret:channel-telegram-main").success).toBe(true);
+    expect(Provisioning.Secret.shape.id.safeParse("secret:").success).toBe(false);
   });
 });
 
@@ -34,10 +34,10 @@ describe("Provisioning.Person", () => {
 
   test("endpoints reject blank ids and unknown fields", () => {
     expect(
-      Provisioning.PersonEndpoint.safeParse({ channel: "telegram", externalId: "" }).success,
+      Provisioning.Person.shape.endpoints.element.safeParse({ channel: "telegram", externalId: "" }).success,
     ).toBe(false);
     expect(
-      Provisioning.PersonEndpoint.safeParse({
+      Provisioning.Person.shape.endpoints.element.safeParse({
         channel: "telegram",
         externalId: "1",
         username: "mutable",
@@ -97,10 +97,5 @@ describe("Provisioning typed errors", () => {
     });
     expect(Provisioning.VaultError.isInstance(vault)).toBe(true);
     expect(vault.data.code).toBe("vault_locked");
-    expect(Provisioning.VaultErrorCode.options).toEqual([
-      "vault_locked",
-      "unopenable",
-      "kek_mismatch",
-    ]);
   });
 });

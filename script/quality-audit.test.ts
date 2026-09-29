@@ -15,9 +15,11 @@ import {
   coverageFindings,
   findingTotals,
   measure,
+  typescriptMetricFindings,
   type Finding,
   typeFindings,
 } from "./quality-audit";
+import { measureTypescriptFunctions, type TypescriptMetricContract } from "./quality-typescript-metrics";
 import { planChanges } from "./ci-plan";
 
 const finding: Finding = {
@@ -35,7 +37,13 @@ function document() {
     generatedAt: "2026-09-20T00:00:00.000Z",
     complete: true,
     missingLanes: [],
-    tools: { coverage: "bun", complexity: "biome", clones: "jscpd", types: "census" },
+    tools: {
+      coverage: "bun",
+      complexity: "biome",
+      typescriptMetrics: "typescript",
+      clones: "jscpd",
+      types: "census",
+    },
     mutation: "see quality-mutation.yml",
     coverage: [],
     findings: [finding],
@@ -61,7 +69,15 @@ test("audit schema refuses mismatched totals and incomplete coverage claims", ()
   expect(() =>
     auditSchema.parse({
       ...document(),
-      totals: { coverage: 0, complexity: 0, clones: 0, types: 1 },
+      totals: {
+        coverage: 0,
+        complexity: 0,
+        cyclomatic: 0,
+        halstead: 0,
+        crap: 0,
+        clones: 0,
+        types: 1,
+      },
     }),
   ).toThrow();
   expect(() => auditSchema.parse({ ...document(), missingLanes: ["agent"] })).toThrow();
@@ -88,7 +104,15 @@ test("aggregation sums finding counts and sorts ties deterministically by path",
     ["script/a.ts", 5],
     ["script/b.ts", 5],
   ]);
-  expect(findingTotals(findings)).toEqual({ coverage: 3, complexity: 0, clones: 0, types: 13 });
+  expect(findingTotals(findings)).toEqual({
+    coverage: 3,
+    complexity: 0,
+    cyclomatic: 0,
+    halstead: 0,
+    crap: 0,
+    clones: 0,
+    types: 13,
+  });
   expect(aggregateFiles([])).toEqual([]);
 });
 
@@ -164,6 +188,72 @@ test("complexity parses the pinned Biome JSON diagnostic shape", () => {
   expect(() => complexityFindings("{}")).toThrow();
 });
 
+const metricContract: TypescriptMetricContract = {
+  algorithm: "openomni-typescript-function-metrics-v1",
+  tool: "typescript",
+  version: "5.9.2",
+  coverage: "lcov-da-line-fraction-v1",
+  cyclomaticExclusiveMax: 22,
+  halsteadDifficultyExclusiveMax: 80,
+  crapExclusiveMax: 25,
+};
+const metricFixture = measureTypescriptFunctions(
+  "src/choose.ts",
+  [
+    "export function choose(a: number, b: number, flag: boolean) {",
+    "  if (flag) return a + b;",
+    "  return a - b;",
+    "}",
+  ].join("\n"),
+  [
+    { line: 2, hits: 1 },
+    { line: 3, hits: 0 },
+  ],
+)[0];
+if (!metricFixture) throw new Error("metric fixture did not produce a function");
+
+test("TypeScript function names resolve across declaration shapes", () => {
+  const source = [
+    "class Widget {",
+    "  constructor() { this.size = 1; }",
+    "  handler = function () { return 1; };",
+    "}",
+    "const arrow = () => 1;",
+    "const literal = { nested: function () { return 2; } };",
+    "[1].map(function () { return 3; });",
+  ].join("\n");
+  expect(
+    measureTypescriptFunctions("src/names.ts", source, []).map((metric) => metric.symbol),
+  ).toEqual(["constructor", "handler", "arrow", "nested", "<function@7>"]);
+});
+
+test("TypeScript AST cyclomatic metric matches the hand-computed fixture", () => {
+  expect(metricFixture.cyclomatic).toBe(2);
+});
+
+test("TypeScript AST Halstead difficulty matches the hand-computed fixture", () => {
+  expect(metricFixture.halsteadDifficulty).toBe(2.5);
+});
+
+test("TypeScript AST CRAP uses the fixture's one-half LCOV line coverage", () => {
+  expect(metricFixture.coverage).toBe(0.5);
+  expect(metricFixture.crap).toBe(2.5);
+});
+
+test("TypeScript metric thresholds are exclusive zero-baseline findings", () => {
+  const metric = {
+    ...metricFixture,
+    cyclomatic: 22,
+    halsteadDifficulty: 80,
+    crap: 25,
+  };
+  expect(typescriptMetricFindings([metric], metricContract).map((finding) => finding.kind)).toEqual([
+    "cyclomatic",
+    "halstead",
+    "crap",
+  ]);
+});
+
 test("clone parsing accounts for both endpoints in separate scan scopes", () => {
   const report = JSON.stringify({
     statistics: { total: { sources: 2 } },
@@ -226,6 +316,7 @@ function fixture() {
     JSON.stringify({
       version: 1,
       typescript: "5.9.2",
+      metrics: metricContract,
       roots: ["src", "packages/agent/src"],
       projects: ["tsconfig.json"],
       topology: false,

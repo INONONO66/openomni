@@ -2,6 +2,7 @@ import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerErro
 import { Effect } from "effect";
 import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";
+import { runEffect } from "./effect";
 
 /**
  * The channels test ledger plane (W5.2 F1): one in-memory catalog plus one
@@ -86,11 +87,12 @@ export function adoptLedgerFence(sessionId: string, owner: string): number {
   for (;;) {
     const row = kernel.row(sessionId);
     if (row.leaseOwner === owner) return row.leaseFence;
-    const adopted = Effect.runSync(
+    const adopted = runEffect(
       kernel.adoptFence({ sessionId, owner, fence: row.leaseFence + 1 }).pipe(
         Effect.map((receipt) => receipt.fence),
         Effect.catchTag("LeaseRefused", () => Effect.succeed(undefined)),
       ),
+      "sync",
     );
     if (adopted !== undefined) return adopted;
   }

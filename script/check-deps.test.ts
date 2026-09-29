@@ -163,6 +163,29 @@ test("allows same namespace, external dependencies, approved core barrels and ap
   expect((await run(root)).code).toBe(0);
 });
 
+test("manifest layer order: allowed @openomni deps pass, inverted deps fail", async () => {
+  const manifest = (name: string, deps: Record<string, string>) =>
+    JSON.stringify({ name, dependencies: deps });
+  const allowed = fixture({
+    "packages/agent/package.json": manifest("@openomni/agent", {
+      "@openomni/protocol": "workspace:*",
+      typescript: "catalog:",
+    }),
+  });
+  expect((await run(allowed)).code).toBe(0);
+
+  const inverted = fixture({
+    "packages/protocol/package.json": manifest("@openomni/protocol", {
+      "@openomni/agent": "workspace:*",
+    }),
+  });
+  const result = await run(inverted);
+  expect(result.code).toBe(1);
+  expect(result.error).toContain(
+    "VIOLATION: protocol depends on @openomni/agent — not allowed by layer order",
+  );
+});
+
 test("accepts a clean repository with no dependency or doc warnings", async () => {
   // Nested in the existing worktree so git can establish that these new docs have no history.
   // No index, commit or git configuration is changed.

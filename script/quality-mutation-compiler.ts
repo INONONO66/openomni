@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { diagnostics, executionTreeHash, inventoryCompilerOptions, pathIn, type MutationError, programs, sha256 } from "./quality-mutation-input";
+import { diagnostics, executionTreeHash, inventoryCompilerOptions, ownsDiagnostic, pathIn, type MutationError, programs, projectRootPaths, sha256 } from "./quality-mutation-input";
 
 type Contract = Parameters<typeof programs>[1];
 type Inventory = Parameters<typeof programs>[2];
@@ -118,12 +118,13 @@ export class FrozenMutationCompiler {
     this.active = { key, builder, sources, changed: path };
     // Same diagnostic families and native ordering/deduplication as
     // getPreEmitDiagnostics; the builder owns semantic invalidation and caching.
+    const owned = projectRootPaths(roots);
     const errors = ts.sortAndDeduplicateDiagnostics([
       ...builder.getConfigFileParsingDiagnostics(), ...builder.getOptionsDiagnostics(),
       ...builder.getSyntacticDiagnostics(), ...builder.getGlobalDiagnostics(),
       ...builder.getSemanticDiagnostics(),
       ...(project.options.declaration ? builder.getDeclarationDiagnostics() : []),
-    ]).map((diagnostic) => ts.formatDiagnostics([diagnostic], {
+    ]).filter((diagnostic) => ownsDiagnostic(owned, diagnostic)).map((diagnostic) => ts.formatDiagnostics([diagnostic], {
       getCanonicalFileName: (name) => name, getCurrentDirectory: () => process.cwd(), getNewLine: () => "\n",
     }));
     const members = new Set(builder.getSourceFiles().map((source) => source.fileName));
@@ -158,12 +159,12 @@ export class FrozenMutationCompiler {
         const checked = baseline.members.has(state.path) ? this.compile(baseline, baseline.roots, state.request) : { project: baseline, mode: "frozen" as const };
         state.projects.push(checked.mode === "frozen" ? frozenProof : proof(checked.project, checked.mode));
         state.errors.push(...checked.project.diagnostics);
-        for (const member of checked.project.members) state.covered.add(member);
+        for (const path of projectRootPaths(checked.project.roots)) state.covered.add(path);
       }
     }
     for (const state of checks) {
       const roots = this.inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
-        .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(name));
+        .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(realpathSync(name)));
       if (roots.length) {
         const baseline = this.fallback ?? {
           project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],

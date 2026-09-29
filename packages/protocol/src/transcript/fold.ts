@@ -39,13 +39,13 @@ import type * as Schema from "./schema.js";
  *   6. apply                -> new state objects, inputs never mutated
  */
 
-export const RejectReason = z.enum([
+const RejectReason = z.enum([
   "unknown_message",
   "unknown_part",
   "invalid_transition",
   "already_finished",
 ]);
-export type RejectReason = z.infer<typeof RejectReason>;
+type RejectReason = z.infer<typeof RejectReason>;
 
 export type FoldOutcome =
   | { applied: true; state: Message.WithParts }

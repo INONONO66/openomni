@@ -158,6 +158,27 @@ test("reports a live ratchet row without failing", (): void => {
   expect(run(root).code).toBe(0);
 });
 
+test("permits only the named test runner owner and rejects a second helper", (): void => {
+  const root = fixture([
+    { path: "packages/agent/test/helpers/isolated.ts", source: 'import * as Effect from "effect";\nEffect.runPromise(Effect.void);' },
+    { path: "packages/agent/test/helpers/second.ts", source: 'import * as Effect from "effect";\nEffect.runPromise(Effect.void);' },
+    { path: "packages/agent/test/consumer.test.ts", source: 'import * as Effect from "effect";\nEffect.runPromise(Effect.void);' },
+  ]);
+  expect(checkEffectBoundaries(root)).toEqual([
+    "packages/agent/test/consumer.test.ts:2 R2_EFFECT_RUNNER",
+    "packages/agent/test/helpers/second.ts:2 R2_EFFECT_RUNNER",
+  ]);
+  expect(run(root).code).toBe(1);
+});
+
+test("permits a named owner helper without a ratchet row", (): void => {
+  const root = fixture([
+    { path: "packages/machines/test/helpers/effect.ts", source: 'import * as Effect from "effect";\nEffect.runSync(Effect.void);' },
+  ]);
+  expect(checkEffectBoundaries(root)).toEqual([]);
+  expect(run(root).code).toBe(0);
+});
+
 test("rejects a production src ratchet row so production runners always fail", (): void => {
   const root = fixture(
     [{ path: "packages/agent/src/run.ts", source: ['import * as Effect from "effect";', "Effect.runPromise(Effect.void);"].join("\n") }],

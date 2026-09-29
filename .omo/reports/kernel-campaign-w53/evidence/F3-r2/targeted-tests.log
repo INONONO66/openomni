@@ -1,0 +1,49 @@
+bun test v1.4.1 (4661e494f)
+
+quality-audit-issues.test.ts:
+(pass) first run produces only the summary and round-trippable totals [1.61ms]
+(pass) summary-only bootstrap holds even when unrelated or legacy per-file issues exist [0.08ms]
+(pass) cap prioritizes highest counts with deterministic path ties [0.53ms]
+(pass) existing open findings retain their slots, resolved issues free slots [0.06ms]
+(pass) upsert updates existing issues, replaces kind labels and preserves manual labels [0.25ms]
+(pass) resolved per-file issues close, summary and regression issues do not [0.07ms]
+(pass) closed file issue is reopened rather than duplicated [0.07ms]
+(pass) regression detection is per kind, including when the total sum shrinks [0.03ms]
+(pass) the actual version-1 footer without new dimensions still decodes [0.04ms]
+(pass) dimensions absent from history are not previously measured: no regression, no zeros, no reset [0.11ms]
+(pass) a version-1 dimension regression still fires against the legacy footer [0.06ms]
+(pass) regression issue is named by base and head and not duplicated on retry [0.11ms]
+(pass) history corruption is an error, not a new first run [0.35ms]
+(pass) file body contains machine values, escapes table cells and bounds finding groups [0.15ms]
+(pass) fake gh first run creates labels and only one issue via JSON [0.71ms]
+(pass) fake gh pagination, comment-before-close, reopening and summary-last execute together [0.69ms]
+(pass) fake gh failures and incomplete evidence never advance summary history [0.23ms]
+(pass) repository lookup uses parsed gh JSON when not supplied [0.22ms]
+(pass) gh process boundary sends JSON stdin and surfaces nonzero exits [33.38ms]
+(pass) cap refuses an already-overfull managed set instead of opening more [0.28ms]
+
+quality-audit.test.ts:
+(pass) audit schema accepts a JSON boundary and retains typed totals [1.19ms]
+(pass) audit schema rejects invalid identity, escaping paths and counts [0.40ms]
+(pass) audit schema refuses mismatched totals and incomplete coverage claims [0.28ms]
+(pass) aggregation sums finding counts and sorts ties deterministically by path [0.05ms]
+(pass) coverage unions lane hits and distinguishes missing source records [0.20ms]
+(pass) coverage preserves zero-line loaded modules without a debt finding [0.02ms]
+(pass) complexity parses the pinned Biome JSON diagnostic shape [0.49ms]
+(pass) TypeScript function names resolve across declaration shapes [2.50ms]
+(pass) TypeScript AST cyclomatic metric matches the hand-computed fixture [0.01ms]
+(pass) TypeScript AST Halstead difficulty matches the hand-computed fixture
+(pass) TypeScript AST CRAP uses the fixture's one-half LCOV line coverage
+(pass) TypeScript metric thresholds are exclusive zero-baseline findings [0.07ms]
+(pass) clone parsing accounts for both endpoints in separate scan scopes [0.54ms]
+(pass) audit lane matrix is the full CI plan plus contracts without duplicates [0.23ms]
+(pass) collector combines typed census and isolated lane receipts, preserving missing lanes [1015.77ms]
+(pass) command boundary drains output and rejects process failures without network [31.21ms]
+(pass) CLI dry-run prints schema-valid JSON and operations without invoking gh [1.51ms]
+(pass) CLI publishing uses injected gh results, and measurement-only does not publish [0.48ms]
+(pass) typeFindings keeps owned rows only and folds duplicate sites into one count [0.04ms]
+
+ 39 pass
+ 0 fail
+ 121 expect() calls
+Ran 39 tests across 2 files. [1411.00ms]

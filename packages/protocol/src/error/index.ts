@@ -13,34 +13,34 @@ import { z } from "zod";
 // actually has the promised shape.
 const NAMED_ERROR_BRAND = Symbol.for("openomni.protocol.namedError");
 
-type NamedErrorInstance<Name extends string, Data extends z.ZodType> = NamedError & {
+type NamedErrorInstance<Name extends string, Data extends z.ZodType> = NamedError<z.input<Data>> & {
   readonly name: Name;
   readonly data: z.input<Data>;
   schema(): z.ZodObject<{ name: z.ZodLiteral<Name>; data: Data }>;
   toObject(): { name: Name; data: z.input<Data> };
 };
-export abstract class NamedError extends Error {
+export abstract class NamedError<Data = never> extends Error {
   protected constructor(message: string) {
     super(message);
     this.name = "NamedError";
   }
 
   abstract schema(): z.ZodType;
-  abstract toObject(): { name: string; data: unknown };
+  abstract toObject(): { name: string; data: Data };
 
   static create<Name extends string, Data extends z.ZodType>(name: Name, data: Data) {
     const schema = z.object({
       name: z.literal(name),
       data,
     });
-    const result = class extends NamedError {
+    const result = class extends NamedError<z.input<Data>> {
       public static readonly Schema = schema;
 
       public override readonly name = name as Name;
 
       constructor(
         public readonly data: z.input<Data>,
-        options?: { cause?: unknown },
+        options?: { cause?: Error | null | boolean | number | string | undefined },
       ) {
         const message =
           typeof data === "object" &&
@@ -60,12 +60,12 @@ export abstract class NamedError extends Error {
         this.name = name;
       }
 
-      static isInstance(input: unknown): input is NamedErrorInstance<Name, Data> {
+      static isInstance<Input>(input: Input): input is Input & NamedErrorInstance<Name, Data> {
         if (!(input instanceof Error)) return false;
-        if ((input as unknown as Partial<Record<symbol, unknown>>)[NAMED_ERROR_BRAND] !== name) {
+        if (Reflect.get(input, NAMED_ERROR_BRAND) !== name) {
           return false;
         }
-        return data.safeParse((input as { data?: unknown }).data).success;
+        return data.safeParse(Reflect.get(input, "data")).success;
       }
 
       schema() {

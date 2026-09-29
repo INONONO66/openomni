@@ -1,9 +1,13 @@
 import { Chat } from "@ai-sdk/react";
+import { SessionRead } from "@openomni/protocol";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ServerWebSocket, Server } from "bun";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { z } from "zod";
-import { createGatewayChatTransport } from "../src/renderer/chat/gateway-transport";
+import {
+  createGatewayChatTransport,
+  SessionReadSupersessionError,
+} from "../src/renderer/chat/gateway-transport";
 
 /**
  * The wire is asserted against a REAL socket, not a stubbed WebSocket. What
@@ -575,6 +579,107 @@ describe("createGatewayChatTransport", () => {
     ).toBe(true);
   });
 
+  test("a session-level terminal page cannot settle another turn's pending chat", async () => {
+    // Review r1 finding 1: with an established read subscription, a terminal
+    // session page arriving before the second turn's message frame must not
+    // close that turn's stream — both answers have to be emitted.
+    const readFrame = z.object({ type: z.string().optional() }).loose();
+    const sessionPage = (kind: "session_snapshot" | "session_page", revision: number) => ({
+      type: kind, sessionId: "durable", state: "idle", phase: "completed",
+      phaseSince: 100, epoch: 1, afterRevision: revision - 1, headRevision: revision,
+      nextRevision: null,
+      actions: [{ revision, actionId: `action-${revision}`, kind: "turn", at: 100 }],
+      usage: [], toolWallMs: 0,
+    });
+    let turns = 0;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
+          const frame = readFrame.parse(JSON.parse(typeof raw === "string" ? raw : raw.toString()));
+          if (frame.type === "session_read") {
+            ws.send(JSON.stringify(sessionPage("session_snapshot", 2)));
+            return;
+          }
+          turns += 1;
+          ws.send(JSON.stringify({ type: "receipt", status: "accepted" }));
+          ws.send(JSON.stringify({
+            type: "session_bound",
+            result: { status: "executed", handle: { messageId: `input-${turns}`, target: "durable" }, delivery: { kind: "session" } },
+          }));
+          if (turns === 1) {
+            ws.send(JSON.stringify({ type: "message", messageId: "msg-1", text: "answer 1" }));
+            return;
+          }
+          // The terminal page describes the PREVIOUS completion and lands
+          // before this turn's own answer frame.
+          ws.send(JSON.stringify(sessionPage("session_page", 3)));
+          ws.send(JSON.stringify({ type: "message", messageId: "msg-2", text: "answer 2" }));
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const stop = transport.subscribeSession(() => undefined);
+
+    const first = await collect(await send(transport, [userMessage("one")]));
+    expect(
+      first.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer 1"]);
+    await transport.readSession("durable");
+
+    const second = await collect(await send(transport, [userMessage("two")]));
+    stop();
+    expect(second.map((chunk) => chunk.type)).toEqual([
+      "start",
+      "text-start",
+      "text-delta",
+      "text-end",
+      "finish",
+    ]);
+    expect(
+      second.filter((chunk) => chunk.type === "text-delta").map((chunk) => chunk.delta),
+    ).toEqual(["answer 2"]);
+  });
+
+  test("binds only from session_bound; receipts and pre-blocked results never bind", async () => {
+    ControlledSocket.instances.length = 0;
+    const bound: [string, string][] = [];
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ControlledSocket,
+      onSessionBound: (chatId, sessionId) => bound.push([chatId, sessionId]),
+    });
+    const sending = send(transport, [userMessage("bind")]);
+    const controlled = ControlledSocket.instances[0];
+    if (controlled === undefined) throw new Error("socket was not constructed");
+    controlled.open();
+    const stream = await sending;
+
+    controlled.receive(JSON.stringify({ type: "receipt", status: "accepted" }));
+    // The retired result-bearing receipt is no longer a valid frame: ignored.
+    controlled.receive(JSON.stringify({
+      type: "receipt", status: "accepted",
+      result: { status: "executed", handle: { messageId: "in-0", target: "legacy" }, delivery: { kind: "session" } },
+    }));
+    // A pre-blocked admission carries no durable target.
+    controlled.receive(JSON.stringify({
+      type: "session_bound", result: { status: "blocked_pre", reasonCode: "policy" },
+    }));
+    expect(bound).toEqual([]);
+
+    controlled.receive(JSON.stringify({
+      type: "session_bound",
+      result: { status: "executed", handle: { messageId: "in-1", target: "durable-1" }, delivery: { kind: "session" } },
+    }));
+    expect(bound).toEqual([["chat-1", "durable-1"]]);
+    controlled.respond("done");
+    await collect(stream);
+  });
+
   test("the SDK reduces the chunks into one assistant message", async () => {
     const { url } = serveWire([
       [
@@ -600,5 +705,250 @@ describe("createGatewayChatTransport", () => {
     expect(last.parts.map((part) => (part.type === "text" ? part.text : "")).join("")).toBe(
       "two files touched",
     );
+  });
+});
+
+describe("session reads over the gateway socket", () => {
+  const head = {
+    sessionId: "durable",
+    state: "idle",
+    phase: "completed",
+    phaseSince: 100,
+    epoch: 2,
+    headRevision: 3,
+    usage: [],
+    toolWallMs: 0,
+  } as const;
+
+  test("a page pointing at a next revision is followed with a cursor until the read drains", async () => {
+    const cursors: (SessionRead.Cursor | undefined)[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
+          const request = SessionRead.Request.parse(JSON.parse(String(raw)));
+          cursors.push(request.cursor);
+          ws.send(
+            JSON.stringify(
+              request.cursor === undefined
+                ? {
+                    ...head,
+                    type: "session_snapshot",
+                    afterRevision: 0,
+                    nextRevision: 2,
+                    actions: [
+                      { revision: 1, actionId: "action-1", kind: "turn", at: 100 },
+                      { revision: 2, actionId: "action-2", kind: "turn", at: 101 },
+                    ],
+                  }
+                : {
+                    ...head,
+                    type: "session_page",
+                    afterRevision: request.cursor.revision,
+                    nextRevision: null,
+                    actions: [{ revision: 3, actionId: "action-3", kind: "turn", at: 102 }],
+                  },
+            ),
+          );
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const seen: (number | null)[] = [];
+    const stop = transport.subscribeSession((page) => seen.push(page.nextRevision));
+
+    const final = await transport.readSession("durable");
+    stop();
+
+    expect(cursors).toEqual([undefined, { revision: 2, epoch: 2 }]);
+    expect(seen).toEqual([2, null]);
+    expect(final).toMatchObject({ type: "session_page", afterRevision: 2, nextRevision: null });
+    expect(final.actions.map((action) => action.revision)).toEqual([3]);
+  });
+
+  test("a session-scoped error frame rejects that session's pending read", async () => {
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>) {
+          ws.send(JSON.stringify({ type: "error", sessionId: "durable", reason: "session evicted" }));
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+
+    await expect(transport.readSession("durable")).rejects.toThrow("session evicted");
+  });
+
+  test("a socket that closes mid-read rejects the pending read", async () => {
+    let sawRead: (() => void) | undefined;
+    const readSeen = new Promise<void>((resolve) => {
+      sawRead = resolve;
+    });
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message() {
+          sawRead?.();
+        },
+      },
+    });
+    servers.push(server);
+    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+
+    const read = transport.readSession("durable");
+    const rejection = read.then(
+      () => {
+        throw new Error("read unexpectedly resolved");
+      },
+      (error: Error) => error,
+    );
+    await readSeen;
+    server.stop(true);
+
+    expect((await rejection).message).toBe("gateway socket closed unexpectedly");
+  });
+
+  test("a send failure during a session read rejects instead of hanging", async () => {
+    class ReadFailingSocket extends ControlledSocket {
+      override send(data: string): void {
+        if (data.includes("session_read")) throw new Error("session read send failed");
+        super.send(data);
+      }
+    }
+    ControlledSocket.instances.length = 0;
+    const transport = createGatewayChatTransport({
+      url: "ws://controlled",
+      WebSocketImpl: ReadFailingSocket,
+    });
+
+    const read = transport.readSession("durable");
+    const rejection = read.then(
+      () => {
+        throw new Error("read unexpectedly resolved");
+      },
+      (error: Error) => error,
+    );
+    const socket = ControlledSocket.instances[0];
+    if (socket === undefined) throw new Error("socket was not constructed");
+    socket.open();
+
+    expect((await rejection).message).toBe("session read send failed");
+  });
+
+  /**
+   * A server that holds every inbound `session_read` until the test releases
+   * it, so a second read can be admitted while the first is still in flight.
+   */
+  function serveHeldRead() {
+    let heldSocket: ServerWebSocket<undefined> | undefined;
+    let requests = 0;
+    let sawRead: (() => void) | undefined;
+    const readSeen = new Promise<void>((resolve) => {
+      sawRead = resolve;
+    });
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, self) =>
+        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      websocket: {
+        message(ws: ServerWebSocket<undefined>) {
+          requests += 1;
+          heldSocket = ws;
+          sawRead?.();
+        },
+      },
+    });
+    servers.push(server);
+    return {
+      readSeen,
+      requests: () => requests,
+      respond(page: Readonly<Record<string, unknown>>) {
+        if (heldSocket === undefined) throw new Error("no read was received");
+        heldSocket.send(JSON.stringify(page));
+      },
+      stop() {
+        server.stop(true);
+      },
+      url: `ws://127.0.0.1:${server.port}`,
+    };
+  }
+
+  const terminalPage = {
+    ...head,
+    type: "session_snapshot",
+    afterRevision: 0,
+    nextRevision: null,
+    actions: [{ revision: 3, actionId: "action-3", kind: "turn", at: 102 }],
+  } as const;
+
+  test("two concurrent identical reads coalesce onto one request and both resolve", async () => {
+    const wire = serveHeldRead();
+    const transport = createGatewayChatTransport({ url: wire.url });
+
+    const first = transport.readSession("durable");
+    await wire.readSeen;
+    const second = transport.readSession("durable");
+    wire.respond(terminalPage);
+
+    const [firstPage, secondPage] = await Promise.all([first, second]);
+    expect(firstPage).toMatchObject({ type: "session_snapshot", nextRevision: null });
+    expect(secondPage).toEqual(firstPage);
+    expect(wire.requests()).toBe(1);
+  });
+
+  test("a differing-cursor second read is rejected while the first still resolves", async () => {
+    const wire = serveHeldRead();
+    const transport = createGatewayChatTransport({ url: wire.url });
+
+    const first = transport.readSession("durable");
+    await wire.readSeen;
+    const superseding = transport.readSession("durable", { revision: 2, epoch: 2 }).then(
+      () => {
+        throw new Error("superseding read unexpectedly resolved");
+      },
+      (error: Error) => error,
+    );
+    const rejection = await superseding;
+    expect(rejection).toBeInstanceOf(SessionReadSupersessionError);
+    expect(rejection.message).toBe(
+      'a session read for "durable" is already in flight with a different cursor',
+    );
+
+    wire.respond(terminalPage);
+    expect(await first).toMatchObject({ type: "session_snapshot", nextRevision: null });
+    expect(wire.requests()).toBe(1);
+  });
+
+  test("a close drains every coalesced waiter", async () => {
+    const wire = serveHeldRead();
+    const transport = createGatewayChatTransport({ url: wire.url });
+
+    const asRejection = (read: Promise<SessionRead.Page>) =>
+      read.then(
+        () => {
+          throw new Error("read unexpectedly resolved");
+        },
+        (error: Error) => error,
+      );
+    const first = asRejection(transport.readSession("durable"));
+    await wire.readSeen;
+    const second = asRejection(transport.readSession("durable"));
+    wire.stop();
+
+    expect((await first).message).toBe("gateway socket closed unexpectedly");
+    expect((await second).message).toBe("gateway socket closed unexpectedly");
   });
 });

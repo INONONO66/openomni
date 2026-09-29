@@ -20,7 +20,13 @@ function audit(findings: Finding[] = []): Audit {
     generatedAt: "2026-09-20T00:00:00.000Z",
     complete: true,
     missingLanes: [],
-    tools: { coverage: "bun", complexity: "biome", clones: "jscpd", types: "census" },
+    tools: {
+      coverage: "bun",
+      complexity: "biome",
+      typescriptMetrics: "typescript",
+      clones: "jscpd",
+      types: "census",
+    },
     mutation: "see quality-mutation.yml",
     coverage: [],
     findings,
@@ -129,10 +135,60 @@ test("regression detection is per kind, including when the total sum shrinks", (
   const previous = {
     version: 1 as const,
     head: "a".repeat(40),
-    totals: { coverage: 100, complexity: 0, clones: 0, types: 0 },
+    totals: {
+      coverage: 100,
+      complexity: 0,
+      cyclomatic: 0,
+      halstead: 0,
+      crap: 0,
+      clones: 0,
+      types: 0,
+    },
   };
-  expect(regressions(previous, audit([finding()]))).toEqual(["types"]);
+  expect(regressions(previous, audit([finding()]))).toEqual([
+    { kind: "types", previous: 0, current: 1 },
+  ]);
   expect(regressions(previous, audit())).toEqual([]);
+});
+
+// The live persisted summary footer (issue #1119) predates the
+// cyclomatic/Halstead/CRAP dimensions; its exact shape must keep decoding.
+const LEGACY_FOOTER =
+  '{"version":1,"head":"5b925d12bbfa154c40c84ddaed3652c999984251","totals":{"coverage":3116,"complexity":17,"clones":280,"types":2779}}';
+function legacyBody() {
+  return ["<!-- quality-audit:v1 -->", "```json", LEGACY_FOOTER, "```"].join("\n");
+}
+
+test("the actual version-1 footer without new dimensions still decodes", () => {
+  const previous = previousAudit(legacyBody());
+  expect(previous.head).toBe("5b925d12bbfa154c40c84ddaed3652c999984251");
+  expect(previous.totals.coverage).toBe(3116);
+  expect(previous.totals.cyclomatic).toBeUndefined();
+  expect(previous.totals.halstead).toBeUndefined();
+  expect(previous.totals.crap).toBeUndefined();
+});
+
+test("dimensions absent from history are not previously measured: no regression, no zeros, no reset", () => {
+  const current = audit([
+    { path: "script/a.ts", count: 1, kind: "cyclomatic", line: 2, message: "cyclomatic 30 >= 22" },
+  ]);
+  const previous = previousAudit(legacyBody());
+  expect(regressions(previous, current)).toEqual([]);
+  const plan = planIssues(current, [issue("quality: audit summary", 99, legacyBody())]);
+  expect(plan.firstRun).toBe(false);
+  expect(plan.operations.some((row) => row.title.startsWith("quality: regression "))).toBe(false);
+  const advanced = previousAudit(plan.operations.at(-1)?.body ?? "");
+  expect(advanced.totals.cyclomatic).toBe(1);
+});
+
+test("a version-1 dimension regression still fires against the legacy footer", () => {
+  const current = audit([finding("script/a.ts", 2780)]);
+  const plan = planIssues(current, [issue("quality: audit summary", 99, legacyBody())]);
+  const regression = plan.operations.find((row) => row.title.startsWith("quality: regression "));
+  expect(regression?.title).toBe(
+    `quality: regression 5b925d12bbfa154c40c84ddaed3652c999984251..${current.head}`,
+  );
+  expect(regression?.body).toContain("| types | 2779 | 2780 |");
 });
 
 test("regression issue is named by base and head and not duplicated on retry", () => {
@@ -173,7 +229,16 @@ test("fake gh first run creates labels and only one issue via JSON", async () =>
   const result = await publishAudit(audit([finding()]), fake.run, "owner/repo");
   expect(result.firstRun).toBe(true);
   expect(fake.calls.filter((call) => call.args[0] === "label").map((call) => call.args[2])).toEqual(
-    ["quality-debt", "quality:coverage", "quality:complexity", "quality:clones", "quality:types"],
+    [
+      "quality-debt",
+      "quality:coverage",
+      "quality:complexity",
+      "quality:cyclomatic",
+      "quality:halstead",
+      "quality:crap",
+      "quality:clones",
+      "quality:types",
+    ],
   );
   expect(fake.calls.filter((call) => call.input)).toHaveLength(1);
   const body = z

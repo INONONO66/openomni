@@ -100,7 +100,7 @@ async function mount(url?: string, strict = false) {
     host.remove();
     client.clear();
   });
-  return { host, render, unmount: () => act(async () => root.render(null)) };
+  return { host, render, client, unmount: () => act(async () => root.render(null)) };
 }
 const click = (element: HTMLElement) => act(async () => element.click());
 const command = (value: ShellCommand) =>
@@ -201,21 +201,18 @@ test("Sessions list holds its order until a focus boundary after a phase update"
   const { a, c } = seed();
   openTab({ kind: "route", route: "sessions" });
   const tabId = consoleStore.state.activeTabId;
-  const { host } = await mount();
+  const { host, client } = await mount();
   const kinds = () =>
     [...host.querySelectorAll('[role="tabpanel"] [data-attention-kind]')].map((group) =>
       group.getAttribute("data-attention-kind"),
     );
   expect(kinds()).toEqual(["rest"]);
-  await act(() =>
-    consoleStore.setState((state) => ({
-      ...state,
-      sessions: state.sessions.map((session) => ({
-        ...session,
-        phase: session.id === a ? "waiting_input" : session.id === c ? "running" : "idle",
-      })),
-    })),
-  );
+  await act(() => {
+    client.setQueryData(queryKeys.gatewayEndpoint, null);
+    for (const session of consoleStore.state.sessions) cacheSession(client, makeSession({
+      ...session, phase: session.id === a ? "waiting_input" : session.id === c ? "running" : "idle",
+    }));
+  });
   expect(kinds()).toEqual(["rest"]);
   await click(node(host, `#tab-${tabId}`));
   expect(kinds()).toEqual(["demand", "watch", "rest"]);
@@ -241,7 +238,7 @@ test("list selection targets its own active tab even when sidebar search was inv
   expect(consoleStore.state.tabs.find((tab) => tab.id === aTab)?.history).toBe(invocationHistory);
 });
 
-import { makeSession } from "./helpers/session";
+const { cacheSession, makeSession } = await import("./helpers/session");
 
 test("SessionList renders real project/time metadata and an empty list without controls", async () => {
   const host = document.createElement("div");
@@ -342,7 +339,7 @@ test("real close commands recover composer/panel/tab focus, inactive closure pre
 });
 
 test("closing a composer onto a route focuses its tab rather than the removed panel", async () => {
-  openTab({ kind: "route", route: "memory" });
+  openTab({ kind: "route", route: "automations" });
   const routeTab = consoleStore.state.activeTabId;
   newSessionTab();
   const { host } = await mount();
@@ -388,7 +385,7 @@ test("pointer-pressing an inactive tab's close control leaves the editor focused
 
 test("history stays local across live duplicate views and tab titles resolve current metadata", async () => {
   const { a, b, aTab, bTab } = seed();
-  navigate({ kind: "route", route: "memory" });
+  navigate({ kind: "route", route: "automations" });
   activateTab(bTab);
   navigate({ kind: "session", sessionId: a });
   expect(consoleStore.state.activeTabId).toBe(bTab);

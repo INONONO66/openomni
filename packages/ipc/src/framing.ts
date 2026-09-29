@@ -1,4 +1,4 @@
-import type { PlainValue } from "@openomni/protocol";
+import type { Ipc, PlainValue } from "@openomni/protocol";
 import { FrameSchema } from "./frame-schema";
 import { IpcProtocolError } from "./errors";
 
@@ -10,7 +10,7 @@ const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 // Cap each reported malformed line so error reporting stays bounded.
 const MALFORMED_REPORT_CHARS = 64;
 
-export function encode(msg: unknown): Uint8Array {
+export function encode(msg: PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification): Uint8Array {
   return encoder.encode(`${JSON.stringify(msg)}\n`);
 }
 

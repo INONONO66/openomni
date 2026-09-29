@@ -94,7 +94,6 @@ export function buildTurn(
         ...(config.transport === undefined ? {} : { transport: config.transport }),
         allowAuthFallback: config.allowAuthFallback,
         toolChoice: configuredToolChoice,
-        maxSteps: stepCap,
         // Yield at the same ratio the compaction trigger defaults to: the
         // loop stops at a step boundary once the window fills, the seam
         // below gets its chance on every path — Resident and tool loops

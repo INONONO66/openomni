@@ -1,0 +1,215 @@
+diff --git a/script/quality-mutation-compiler.ts b/script/quality-mutation-compiler.ts
+index 2247d97c..698dfbbd 100644
+--- a/script/quality-mutation-compiler.ts
++++ b/script/quality-mutation-compiler.ts
+@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from "node:path";
+ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+ import { fileURLToPath } from "node:url";
+ import ts from "typescript";
+-import { diagnostics, executionTreeHash, inventoryCompilerOptions, pathIn, type MutationError, programs, sha256 } from "./quality-mutation-input";
++import { diagnostics, executionTreeHash, inventoryCompilerOptions, ownsDiagnostic, pathIn, type MutationError, programs, projectRootPaths, sha256 } from "./quality-mutation-input";
+ 
+ type Contract = Parameters<typeof programs>[1];
+ type Inventory = Parameters<typeof programs>[2];
+@@ -118,12 +118,13 @@ export class FrozenMutationCompiler {
+     this.active = { key, builder, sources, changed: path };
+     // Same diagnostic families and native ordering/deduplication as
+     // getPreEmitDiagnostics; the builder owns semantic invalidation and caching.
++    const owned = projectRootPaths(roots);
+     const errors = ts.sortAndDeduplicateDiagnostics([
+       ...builder.getConfigFileParsingDiagnostics(), ...builder.getOptionsDiagnostics(),
+       ...builder.getSyntacticDiagnostics(), ...builder.getGlobalDiagnostics(),
+       ...builder.getSemanticDiagnostics(),
+       ...(project.options.declaration ? builder.getDeclarationDiagnostics() : []),
+-    ]).map((diagnostic) => ts.formatDiagnostics([diagnostic], {
++    ]).filter((diagnostic) => ownsDiagnostic(owned, diagnostic)).map((diagnostic) => ts.formatDiagnostics([diagnostic], {
+       getCanonicalFileName: (name) => name, getCurrentDirectory: () => process.cwd(), getNewLine: () => "\n",
+     }));
+     const members = new Set(builder.getSourceFiles().map((source) => source.fileName));
+@@ -158,12 +159,12 @@ export class FrozenMutationCompiler {
+         const checked = baseline.members.has(state.path) ? this.compile(baseline, baseline.roots, state.request) : { project: baseline, mode: "frozen" as const };
+         state.projects.push(checked.mode === "frozen" ? frozenProof : proof(checked.project, checked.mode));
+         state.errors.push(...checked.project.diagnostics);
+-        for (const member of checked.project.members) state.covered.add(member);
++        for (const path of projectRootPaths(checked.project.roots)) state.covered.add(path);
+       }
+     }
+     for (const state of checks) {
+       const roots = this.inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
+-        .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(name));
++        .map((file) => resolve(this.root, file.path)).filter((name) => !state.covered.has(realpathSync(name)));
+       if (roots.length) {
+         const baseline = this.fallback ?? {
+           project: "inventory-fallback", roots: [], members: new Set<string>(), diagnostics: [],
+diff --git a/script/quality-mutation-input.ts b/script/quality-mutation-input.ts
+index 020cd904..5b52495a 100644
+--- a/script/quality-mutation-input.ts
++++ b/script/quality-mutation-input.ts
+@@ -48,12 +48,13 @@ export function* programs(directory: string, contract: Contract, inventory: Inve
+   const covered = new Set<string>();
+   for (const path of contract.projects) {
+     const program = projectProgram(root, path);
+-    for (const source of program.getSourceFiles()) covered.add(source.fileName);
++    // Canonical root ownership: a native project covers only its root files, in
++    // contract order, so transitive-only inventory members enter the fallback.
++    for (const name of program.getRootFileNames()) covered.add(realpathSync(name));
+     yield program;
+   }
+-  // Native coverage first; only canonical remaining members enter fallback.
+   const remaining = inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
+-    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(path));
++    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(realpathSync(path)));
+   if (remaining.length) {
+     const options = inventoryCompilerOptions(root);
+     const host = ts.createCompilerHost(options);
+@@ -66,10 +67,25 @@ export function formatDiagnostic(diagnostic: ts.Diagnostic, cwd: string): string
+     getCanonicalFileName: (name) => name, getCurrentDirectory: () => cwd, getNewLine: () => "\n",
+   });
+ }
++// The one diagnostic ownership rule shared by baseline and candidate checks:
++// a project owns file-less diagnostics and diagnostics attributed to its own
++// root files. Diagnostics on transitive members belong to the project (or the
++// inventory fallback) that lists them as roots.
++export function projectRootPaths(rootNames: Iterable<string>): Set<string> {
++  const roots = new Set<string>();
++  for (const name of rootNames) roots.add(realpathSync(name));
++  return roots;
++}
++export function ownsDiagnostic(roots: ReadonlySet<string>, diagnostic: ts.Diagnostic): boolean {
++  return diagnostic.file === undefined || roots.has(realpathSync(diagnostic.file.fileName));
++}
+ export function diagnostics(items: Iterable<ts.Program>, cwd = process.cwd()): string[] {
+   const errors: string[] = [];
+-  for (const program of items)
+-    for (const diagnostic of ts.getPreEmitDiagnostics(program)) errors.push(formatDiagnostic(diagnostic, cwd));
++  for (const program of items) {
++    const roots = projectRootPaths(program.getRootFileNames());
++    for (const diagnostic of ts.getPreEmitDiagnostics(program))
++      if (ownsDiagnostic(roots, diagnostic)) errors.push(formatDiagnostic(diagnostic, cwd));
++  }
+   return errors;
+ }
+ function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
+diff --git a/script/run-quality-mutations-compiler.test.ts b/script/run-quality-mutations-compiler.test.ts
+index 4a1030de..da1faf5d 100644
+--- a/script/run-quality-mutations-compiler.test.ts
++++ b/script/run-quality-mutations-compiler.test.ts
+@@ -1,5 +1,5 @@
+ import { expect, test } from "bun:test";
+-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
++import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+ import { tmpdir } from "node:os";
+ import { join, relative, resolve } from "node:path";
+ import { PassThrough } from "node:stream";
+@@ -424,7 +424,7 @@ test("baseline diagnostics use project roots instead of transitive importer opti
+         include: ["index.ts"],
+       }),
+     );
+-    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export { value };');
++    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
+     writeFileSync(
+       join(root, "b/tsconfig.json"),
+       JSON.stringify({
+@@ -440,11 +440,70 @@ test("baseline diagnostics use project roots instead of transitive importer opti
+       projects: ["a/tsconfig.json", "b/tsconfig.json"],
+       topology: false,
+     };
+-    expect(analyze(root, contract, buildInventory(root, contract), []).sourceDiagnostics).toEqual([]);
++    const inventory = buildInventory(root, contract);
++    expect(analyze(root, contract, inventory, []).sourceDiagnostics).toEqual([]);
++    // Finding 2: the candidate compiler applies the same root ownership rule.
++    const identity = executionTreeHash(root);
++    const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
++    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
++    expect(unchanged.diagnostics).toEqual([]);
++    expect(unchanged.valid).toBe(true);
++    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value: number = document.title;"));
++    expect(invalid.valid).toBe(false);
++    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
++    // Errors attributed to a real consumer root file are preserved.
++    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
++    expect(consumer.valid).toBe(false);
++    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+   } finally {
+     rmSync(root, { recursive: true, force: true });
+   }
+-});
++}, 120000);
++
++test("transitive-only inventory files enter the fallback beside native roots and unreferenced files", () => {
++  const root = mkdtempSync(join(tmpdir(), "mutation-transitive-fallback-"));
++  try {
++    mkdirSync(join(root, "a"));
++    mkdirSync(join(root, "b"));
++    mkdirSync(join(root, "c"));
++    writeFileSync(
++      join(root, "a/tsconfig.json"),
++      JSON.stringify({
++        compilerOptions: { strict: true, noEmit: true, lib: ["ES2022"], baseUrl: ".", paths: { b: ["../b/value.ts"] } },
++        include: ["index.ts"],
++      }),
++    );
++    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
++    writeFileSync(join(root, "b/value.ts"), 'export const value = "shared";');
++    writeFileSync(join(root, "c/orphan.ts"), "export const orphan = true;");
++    const contract = { version: 1 as const, typescript: "5.9.2" as const, roots: ["a", "b", "c"], projects: ["a/tsconfig.json"], topology: false };
++    const inventory = buildInventory(root, contract);
++    // Finding 6: b/value.ts is imported by project a but is no project's root,
++    // so canonical ownership sends it to the fallback beside c/orphan.ts.
++    const owners = [...programs(root, contract, inventory)].map((program) => program.getRootFileNames().map((name) => relative(realpathSync(root), name)).sort());
++    expect(owners).toEqual([["a/index.ts"], ["b/value.ts", "c/orphan.ts"]]);
++    const analyzed = analyze(root, contract, inventory, []);
++    expect(analyzed.enumerated.errors).toEqual([]);
++    expect(analyzed.sourceDiagnostics).toEqual([]);
++    const census = analyzed.enumerated.census.filter((row) => row.path.endsWith(".ts")).map((row) => [row.path, row.syntax]);
++    expect(census).toEqual([["a/index.ts", "parsed"], ["b/value.ts", "parsed"], ["c/orphan.ts", "parsed"]]);
++    // The candidate compiler owns the same fallback set deterministically.
++    const identity = executionTreeHash(root);
++    const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
++    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
++    expect(unchanged.valid).toBe(true);
++    expect(unchanged.diagnostics).toEqual([]);
++    expect(unchanged.projects.map((project) => project.project)).toEqual(["a/tsconfig.json", "inventory-fallback"]);
++    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", 'export const value: number = "shared";'));
++    expect(invalid.valid).toBe(false);
++    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
++    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
++    expect(consumer.valid).toBe(false);
++    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
++  } finally {
++    rmSync(root, { recursive: true, force: true });
++  }
++}, 120000);
+ 
+ test("real mutation contract has no baseline compiler diagnostics", () => {
+   const root = resolve(import.meta.dir, "..");
+diff --git a/script/run-quality-mutations.ts b/script/run-quality-mutations.ts
+index b8519f1f..1a6788c1 100644
+--- a/script/run-quality-mutations.ts
++++ b/script/run-quality-mutations.ts
+@@ -1,4 +1,4 @@
+-import { diagnostics, executionTreeHash, fail, formatDiagnostic, mutationFailure, MutationError, pathIn, programs, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
++import { diagnostics, executionTreeHash, fail, formatDiagnostic, mutationFailure, MutationError, ownsDiagnostic, pathIn, programs, projectRootPaths, sha256, type Entry, type Contract, type Inventory } from "./quality-mutation-input";
+ export { diagnostics, executionTreeHash, programs, sha256 } from "./quality-mutation-input";
+ import { decodeJson as sharedJson } from "./quality-inventory";
+ import { spawnSync } from "node:child_process";
+@@ -778,7 +778,7 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
+ 	const result: ReturnType<typeof enumerate> = { candidates: [], census: [], errors: [] };
+ 	const sourceDiagnostics: string[] = [];
+ 	for (const program of programs(root, contract, inventory)) {
+-		const projectRoots = new Set(program.getRootFileNames().map((path) => realpathSync(path)));
++		const projectRoots = projectRootPaths(program.getRootFileNames());
+ 		const files = [...pending.values()].filter((file) =>
+ 			["typescript", "javascript"].includes(file.language) &&
+ 			projectRoots.has(realpathSync(pathIn(root, file.path))),
+@@ -788,9 +788,7 @@ export function analyze(directory: string, contract: Contract, inventory: Invent
+ 		result.census.push(...part.census.filter((row) => row.language !== "python"));
+ 		result.errors.push(...part.errors);
+ 		sourceDiagnostics.push(...ts.getPreEmitDiagnostics(program)
+-			.filter((diagnostic) =>
+-				diagnostic.file === undefined ||
+-				projectRoots.has(realpathSync(String(diagnostic.file.fileName))))
++			.filter((diagnostic) => ownsDiagnostic(projectRoots, diagnostic))
+ 			.map((diagnostic) => formatDiagnostic(diagnostic, root)));
+ 		for (const file of files) pending.delete(file.path);
+ 	}

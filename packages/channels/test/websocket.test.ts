@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
 import { ForeignFailure } from "../src/errors";
 import { websocketCallbacks } from "./helpers/websocket-server";
+import { runEffect } from "./helpers/effect";
 import type { Channel } from "@openomni/protocol";
 import { z } from "zod";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
@@ -144,7 +145,7 @@ describe("WebSocketHandler ingress and receipts", () => {
   ])("rejects malformed frame %s before entering the handler", async (raw, reason) => {
     let entries = 0;
     const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish);
-    const result = await Effect.runPromise(Effect.result(handler.handleFrame({
+    const result = await runEffect(Effect.result(handler.handleFrame({
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, raw)));
     expect(result).toMatchObject({
@@ -163,8 +164,33 @@ describe("WebSocketHandler ingress and receipts", () => {
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     }, Buffer.from(JSON.stringify({ text: "fixture", eventId: "event" })));
     expect(entries).toBe(0);
-    expect(await Effect.runPromise(effect)).toEqual({ type: "receipt", status: "accepted" });
+    expect(await runEffect(effect)).toEqual({ type: "receipt", status: "accepted" });
     expect(entries).toBe(1);
+  });
+
+  it("emits the frozen two-key receipt first, then session_bound carrying the admission", async () => {
+    const result = {
+      status: "executed",
+      handle: { messageId: "in-1", target: "durable-1" },
+      delivery: { kind: "session" },
+    } as const;
+    const handler = new WebSocketHandler(() => Effect.succeed(result), noopPublish);
+    const { ws, sent } = connection({
+      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
+    });
+    handler.ws.open(ws);
+
+    await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "bind me" }));
+
+    expect(sent.map((frame) => JSON.parse(frame))).toEqual([
+      { type: "receipt", status: "accepted" },
+      { type: "session_bound", result },
+    ]);
+    // The accepted receipt is a frozen frame: exactly its base two keys.
+    expect(Object.keys(z.record(z.string(), z.json()).parse(JSON.parse(sent[0] ?? "{}")))).toEqual([
+      "type",
+      "status",
+    ]);
   });
 
   it("sends only the typed failure tag and never a receipt or private cause on handler refusal", async () => {
@@ -175,7 +201,7 @@ describe("WebSocketHandler ingress and receipts", () => {
     });
     await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "fixture" }));
     expect(sent).toEqual([JSON.stringify({ type: "error", reason: "ForeignFailure" })]);
-    expect(await Effect.runPromise(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture"}')))).toBe(failure);
+    expect(await runEffect(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture"}')))).toBe(failure);
   });
 
   it("push returns an accepted receipt with a stable external message id", () => {

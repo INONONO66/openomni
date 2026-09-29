@@ -17,7 +17,7 @@ export namespace PolicyResource {
     "work",
   ]);
 
-  export const Source = z.discriminatedUnion("type", [
+  const Source = z.discriminatedUnion("type", [
     z.object({
       type: z.literal("system"),
     }),
@@ -70,7 +70,6 @@ export namespace PolicyResource {
       filePath: z.string().optional(),
     }),
   ]);
-  export type Source = z.infer<typeof Source>;
 
   export const Descriptor = z
     .object({

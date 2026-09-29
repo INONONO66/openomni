@@ -40,38 +40,6 @@ export type AnyToolDefinition = ToolDefinition<z.ZodType, z.ZodType>;
 
 export namespace Tool {
   /**
-   * Compact runtime tool-catalog source discriminator.
-   *
-   * This intentionally does not replace Policy.Resource.Source policy provenance:
-   * richer source metadata stays on catalog-specific fields such as `mcpServer`
-   * or resource descriptors.
-   */
-  export const Source = z.enum(["system", "mcp", "agent", "server"]);
-  export type Source = z.infer<typeof Source>;
-
-  /** Tool source provenance reader for catalog labels shaped as `source:<Source>`. */
-  const sourceLabelPrefix = "source:";
-
-  export function sourceFromLabels(labels: readonly string[] | undefined): Source | undefined {
-    const label = labels?.find((candidate) => candidate.startsWith(sourceLabelPrefix));
-    if (label === undefined) return undefined;
-    const parsed = Source.safeParse(label.slice(sourceLabelPrefix.length));
-    return parsed.success ? parsed.data : undefined;
-  }
-
-  /** MCP server provenance reader for catalog labels shaped as `mcp.<serverId>`. */
-  const mcpServerLabelPrefix = "mcp.";
-
-  export function mcpServerFromLabels(labels: readonly string[] | undefined): string | undefined {
-    const label = labels?.find((candidate) => candidate.startsWith(mcpServerLabelPrefix));
-    const serverId = label?.slice(mcpServerLabelPrefix.length);
-    return serverId ? serverId : undefined;
-  }
-
-  export const RiskTier = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
-  export type RiskTier = z.infer<typeof RiskTier>;
-
-  /**
    * Shared tool exposure config accepted at ingress and execution boundaries.
    *
    * `workspaceRoot` is the existing workspace selector for tool resolution; keep
@@ -153,21 +121,6 @@ export namespace Tool {
   export type Result = z.infer<typeof Result>;
 
   /**
-   * Tool-catalog selection vocabulary — one noun namespace for the tool
-   * grammar, consumed by the openomni tool catalog resolver.
-   */
-  export const Category = z.enum(["filesystem", "execution", "delegation", "mcp", "custom"]);
-  export type Category = z.infer<typeof Category>;
-
-  export const Selection = z.object({
-    all: z.boolean().optional(),
-    categories: z.array(Category).optional(),
-    allow: z.array(z.string()).optional(),
-    deny: z.array(z.string()).optional(),
-  });
-  export type Selection = z.infer<typeof Selection>;
-
-  /**
    * Where a tool's effect happens (docs/machines-and-delegation.md §4):
    * `machine` — on an attached machine's daemon; `host` — on the brain's own
    * host process; `free` — anywhere (pure/network tools). The Spec field is
@@ -193,18 +146,6 @@ export namespace Tool {
     requires: z.array(CapabilityId).optional(),
   });
   export type Spec = z.infer<typeof Spec>;
-
-  /**
-   * Every identity an executor may dispatch a tool by: its catalog name plus
-   * the dot-to-underscore spelling executors register for providers that
-   * reject dots. Single owner of that convention — dispatch-table builders
-   * and the placement execution gate both read it, so a tool can never be
-   * runnable under a name one side does not know about.
-   */
-  export function executableNames(name: string): readonly string[] {
-    const sanitized = name.replace(/\./g, "_");
-    return sanitized === name ? [name] : [name, sanitized];
-  }
 
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;

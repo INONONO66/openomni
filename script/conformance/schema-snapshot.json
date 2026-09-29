@@ -56,6 +56,7 @@
   ],
   "Actor.ProvisionalMintPolicy": ["max", "windowMs"],
   "Actor.ResolvedEndpoint": ["endpoint", "identity"],
+  "Alarm.RetrySchedule": ["attempt", "kind", "notBefore", "reason"],
   "Alarm.Watch#0": [
     "command",
     "description",
@@ -65,84 +66,6 @@
   ],
   "Alarm.Watch#1": ["description", "event", "path", "persistent", "timeout_ms"],
   "Alarm.WatchSpec": ["notificationLimit", "policyGeneration", "watch"],
-  "AppConnector.Consent": [
-    "capabilities",
-    "credentials",
-    "grantedAt",
-    "grantedBy",
-    "permissions"
-  ],
-  "AppConnector.Definition": [
-    "description",
-    "detect",
-    "driver",
-    "evidence",
-    "id",
-    "logs",
-    "name",
-    "profile",
-    "questionBridge",
-    "requires",
-    "spawn",
-    "version"
-  ],
-  "AppConnector.Installation": [
-    "connectorId",
-    "connectorVersion",
-    "consent",
-    "createdAt",
-    "definition",
-    "detectedVersion",
-    "endpointId",
-    "id",
-    "registeredBy",
-    "status",
-    "updatedAt",
-    "workspace"
-  ],
-  "AppConnector.Logs#jsonl": [
-    "eventTimeField",
-    "kind",
-    "messageField",
-    "path",
-    "tokenUsageField",
-    "tokenUsageMode",
-    "toolCallField"
-  ],
-  "AppConnector.Logs#stream_json": [
-    "eventTimeField",
-    "kind",
-    "messageField",
-    "path",
-    "tokenUsageField",
-    "tokenUsageMode",
-    "toolCallField"
-  ],
-  "AppConnector.Logs#text": ["kind", "path"],
-  "AppConnector.QuestionBridge#hook": [
-    "args",
-    "command",
-    "kind",
-    "promptField",
-    "responseMode"
-  ],
-  "AppConnector.QuestionBridge#none": ["kind"],
-  "AppConnector.QuestionBridge#stdio": ["kind", "promptField", "responseMode"],
-  "AppConnector.ReportSource": [
-    "artifactGlobs",
-    "finalMessage",
-    "readBackRequests"
-  ],
-  "AppConnector.Requires": ["capabilities", "credentials", "permissions"],
-  "AppConnector.Spawn": [
-    "args",
-    "command",
-    "cwd",
-    "env",
-    "promptArgument",
-    "stallTimeoutMs",
-    "timeoutMs"
-  ],
   "BusEvent.Metadata": [
     "actorId",
     "agentName",
@@ -166,6 +89,17 @@
   "DecisionFact.Outcome#recorded": ["fact", "kind"],
   "DecisionFact.Record": ["data", "key", "timeCreated", "type"],
   "DecisionFact.Recorded": ["data", "key", "rowHash", "timeCreated", "type"],
+  "FoldCheckpoint.Effect": ["phase", "result", "terminal"],
+  "FoldCheckpoint.Intent": ["foldVersion", "phase", "reason", "revision"],
+  "FoldCheckpoint.Result": ["foldVersion", "revision", "state", "stateHash"],
+  "FoldCheckpoint.State": [
+    "canonicalTurn",
+    "compatibility",
+    "messages",
+    "messageTurns",
+    "parents",
+    "successorActionId"
+  ],
   "Gateway.ActorContext": [
     "actorId",
     "inboundTreatment",
@@ -603,6 +537,7 @@
   ],
   "LedgerAction.ChainVerdict#broken": ["actual", "expected", "kind", "ordinal"],
   "LedgerAction.ChainVerdict#intact": ["head", "kind", "length"],
+  "LedgerAction.Intent": ["op", "originalArgs", "phase", "value"],
   "LedgerAction.Node#0": [
     "actionHash",
     "effect",
@@ -630,6 +565,7 @@
     "ts"
   ],
   "LedgerAction.Receipt": ["action", "revision"],
+  "LedgerSession.AdoptFence": ["fence", "owner", "sessionId"],
   "LedgerSession.Commit": [
     "actions",
     "expectedRevision",
@@ -727,31 +663,6 @@
   "Machine.ToolCall": ["arguments", "cellId", "name"],
   "Machine.ToolCallResult#completed": ["status", "value"],
   "Machine.ToolCallResult#failed": ["error", "status"],
-  "McpConfig.ServerConfig#sse": [
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport",
-    "url"
-  ],
-  "McpConfig.ServerConfig#stdio": [
-    "args",
-    "command",
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport"
-  ],
-  "McpConfig.ServerConfig#streamable-http": [
-    "headers",
-    "name",
-    "retries",
-    "timeout",
-    "transport",
-    "url"
-  ],
   "Message.AssistantMessage": [
     "agent",
     "cost",
@@ -880,7 +791,6 @@
   ],
   "Message.WithParts": ["info", "parts"],
   "Model.Ref": ["id", "provider"],
-  "Policy.Definition": ["failPolicy", "name", "priority", "scope"],
   "Policy.EvaluationRequest": [
     "action",
     "actor",
@@ -897,15 +807,6 @@
     "policyId",
     "reason"
   ],
-  "Policy.InputRule": [
-    "action",
-    "field",
-    "pattern",
-    "priority",
-    "reason",
-    "toolPattern"
-  ],
-  "Policy.LabelEntry": ["source", "value"],
   "Policy.Permission": [
     "action",
     "allowLabels",
@@ -953,7 +854,6 @@
   ],
   "Policy.PolicyPlan": ["labels", "policies", "registryVersion"],
   "Policy.PolicyPoint": ["allowedEffects", "defaultFailPolicy", "point"],
-  "Policy.Scope": ["agentType"],
   "PolicyPermission.EvaluationRequest": [
     "action",
     "actor",
@@ -1009,11 +909,6 @@
     "settings",
     "updatedAt"
   ],
-  "Provisioning.GrantPolicy": [
-    "allowedSenders",
-    "defaultTier",
-    "provisionalMint"
-  ],
   "Provisioning.Person": [
     "createdBy",
     "displayName",
@@ -1024,7 +919,6 @@
     "trustTier",
     "updatedAt"
   ],
-  "Provisioning.PersonEndpoint": ["channel", "externalId", "workspace"],
   "Provisioning.Secret": [
     "ciphertext",
     "createdAt",
@@ -1034,11 +928,18 @@
     "rotatedAt",
     "wrappedDek"
   ],
+  "RowVerdict.out#allow": ["effects", "reason", "reasonCodes", "type"],
+  "RowVerdict.out#deny": ["reason", "type"],
+  "RowVerdict.out#obligation": ["limit", "metric", "ref", "type"],
+  "RowVerdict.out#require_approval": ["reason", "type"],
+  "RowVerdict.out#transform": ["config", "ref", "type"],
   "SessionGeneration.ConfigureEffect": ["phase", "snapshot"],
   "SessionGeneration.ConfigureIntent": ["operation"],
   "SessionGeneration.ConfigureReceipt": ["generation", "revertTo"],
   "SessionGeneration.ConfigureRevert": ["generation"],
+  "SessionGeneration.Id": ["generation", "sessionId"],
   "SessionGeneration.Snapshot": [
+    "bundles",
     "generation",
     "policyGeneration",
     "revertTo",
@@ -1092,8 +993,10 @@
     "matchedRuleIds",
     "op",
     "reason",
+    "ref",
     "revision",
     "subjectActionId",
+    "transforms",
     "turnId",
     "verdict"
   ],
@@ -1236,6 +1139,61 @@
     "resumeCount",
     "turnId"
   ],
+  "SessionTurn.Context": [
+    "foldVersion",
+    "messageIds",
+    "projection",
+    "projectionHash",
+    "snapshotActionId",
+    "sourceRevision",
+    "successorActionId"
+  ],
+  "SessionTurn.DecodeIntent#0": [
+    "boundaryActionId",
+    "context",
+    "inboxIds",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash"
+  ],
+  "SessionTurn.DecodeIntent#1": [
+    "boundaryActionId",
+    "inboxIds",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash"
+  ],
+  "SessionTurn.DecodeResume#0": [
+    "boundaryActionId",
+    "context",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash",
+    "turnId"
+  ],
+  "SessionTurn.DecodeResume#1": [
+    "boundaryActionId",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash",
+    "turnId"
+  ],
   "SessionTurn.Delivery": [
     "boundary",
     "content",
@@ -1245,8 +1203,31 @@
     "phase",
     "turnId"
   ],
+  "SessionTurn.HistoricalIntent": [
+    "boundaryActionId",
+    "inboxIds",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash"
+  ],
+  "SessionTurn.HistoricalResume": [
+    "boundaryActionId",
+    "phase",
+    "policyGeneration",
+    "resultId",
+    "resumeCount",
+    "systemHash",
+    "toolsGeneration",
+    "toolsHash",
+    "turnId"
+  ],
   "SessionTurn.Intent": [
     "boundaryActionId",
+    "context",
     "inboxIds",
     "phase",
     "policyGeneration",
@@ -1268,6 +1249,7 @@
   "SessionTurn.Pending": ["phase"],
   "SessionTurn.Resume": [
     "boundaryActionId",
+    "context",
     "phase",
     "policyGeneration",
     "resultId",
@@ -1320,7 +1302,6 @@
     "toolCallId",
     "toolName"
   ],
-  "Tool.Selection": ["all", "allow", "categories", "deny"],
   "Tool.Spec": [
     "description",
     "inputSchema",

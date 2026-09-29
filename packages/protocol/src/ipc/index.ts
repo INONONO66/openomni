@@ -95,12 +95,12 @@ export namespace Ipc {
   export function createRequest(
     id: string,
     method: string,
-    params?: Record<string, unknown>,
+    params?: Request["params"],
   ): Request {
     return { v: version, type: "request", id, method, params };
   }
 
-  export function createResponse(id: string, result: unknown): Response {
+  export function createResponse(id: string, result: Response["result"]): Response {
     return { v: version, type: "response", id, result };
   }
 
@@ -110,7 +110,7 @@ export namespace Ipc {
 
   export function createNotification(
     method: string,
-    params?: Record<string, unknown>,
+    params?: Notification["params"],
   ): Notification {
     return { v: version, type: "notification", method, params };
   }

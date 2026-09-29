@@ -51,7 +51,7 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
     const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id })
       .pipe(Effect.mapError((error) => new ForeignFailure({ operation: "completion.resolve", cause: String(error) })));
     const input: RunInput = {
-      messages: call.messages, tools: [], toolChoice: "none", maxSteps: 1, model: resolved,
+      messages: call.messages, tools: [], toolChoice: "none", model: resolved,
       auth: { type: "api", key: call.model.apiKey }, authProvider: call.model.provider,
       ...(call.system === undefined ? {} : { system: call.system }),
       ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),

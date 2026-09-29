@@ -179,7 +179,7 @@ function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): 
       fence: authority.fence,
       now: env.clock(),
       expectedRevision: row.revision,
-      actions: deliveryActions(items, "noop", "before_llm", parentId),
+      actions: deliveryActions(items, { kind: "inbox" }, "before_llm", parentId),
       state: row.state,
     })
     .pipe(Effect.asVoid);

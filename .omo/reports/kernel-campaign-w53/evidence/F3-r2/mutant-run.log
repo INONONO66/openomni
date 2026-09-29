@@ -1,0 +1,33 @@
+bun test v1.4.1 (4661e494f)
+
+script/quality-audit-issues.test.ts:
+171 | test("dimensions absent from history are not previously measured: no regression, no zeros, no reset", () => {
+172 |   const current = audit([
+173 |     { path: "script/a.ts", count: 1, kind: "cyclomatic", line: 2, message: "cyclomatic 30 >= 22" },
+174 |   ]);
+175 |   const previous = previousAudit(legacyBody());
+176 |   expect(regressions(previous, current)).toEqual([]);
+                                               ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   {
++     "current": 1,
++     "kind": "cyclomatic",
++     "previous": 0,
++   },
++ ]
+
+- Expected  - 1
++ Received  + 7
+
+      at <anonymous> (/Users/ino/Develop/openomni-w53/script/quality-audit-issues.test.ts:176:42)
+(fail) dimensions absent from history are not previously measured: no regression, no zeros, no reset [3.14ms]
+
+ 0 pass
+ 19 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [267.00ms]
+EXIT=0

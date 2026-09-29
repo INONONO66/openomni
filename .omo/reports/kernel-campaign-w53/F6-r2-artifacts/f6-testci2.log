@@ -1,0 +1,1118 @@
+$ bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
+bun test v1.4.1 (4661e494f)
+
+bench/turns.test.ts:
+(pass) turn benchmarks > first delta reports sink latency rather than the drained turn duration [11.17ms]
+(pass) turn benchmarks > echo dispatch commits a real tool intent and successful result [2.21ms]
+(pass) turn benchmarks > round trip returns only after assistant and terminal turn are committed in SQLite [44.55ms]
+(pass) turn benchmarks > token accounting folds one message without accumulating across samples [0.06ms]
+┌───┬───────────────────────────┬──────────────────┬──────────────────┬────────────────────────┬────────────────────────┬─────────┐
+│   │ Task name                 │ Latency avg (ns) │ Latency med (ns) │ Throughput avg (ops/s) │ Throughput med (ops/s) │ Samples │
+├───┼───────────────────────────┼──────────────────┼──────────────────┼────────────────────────┼────────────────────────┼─────────┤
+│ 0 │ compaction/20-messages    │ 231726 ± 4.41%   │ 213230 ± 14750   │ 4526 ± 1.35%           │ 4690 ± 333             │ 432     │
+│ 1 │ compaction/100-messages   │ 865273 ± 4.43%   │ 818375 ± 21563   │ 1186 ± 2.07%           │ 1222 ± 33              │ 116     │
+│ 2 │ compaction/500-messages   │ 4251355 ± 4.25%  │ 4145479 ± 178417 │ 239 ± 2.77%            │ 241 ± 11               │ 64      │
+│ 3 │ compaction/should-compact │ 120.37 ± 3.76%   │ 125.00 ± 0.00    │ 9372391 ± 0.05%        │ 8000000 ± 0            │ 830770  │
+│ 4 │ turn/first-delta          │ 65931 ± 19.27%   │ 49250 ± 4000.0   │ 19201 ± 0.98%          │ 20305 ± 1657           │ 1517    │
+│ 5 │ turn/tool-dispatch        │ 51542 ± 7.24%    │ 42709 ± 3125.0   │ 22161 ± 0.84%          │ 23414 ± 1753           │ 1941    │
+│ 6 │ turn/round-trip           │ 9029051 ± 6.54%  │ 8344938 ± 788583 │ 116 ± 4.74%            │ 120 ± 12               │ 64      │
+│ 7 │ turn/token-accounting     │ 88.52 ± 4.03%    │ 83.00 ± 0.00     │ 12851057 ± 0.05%       │ 12048193 ± 0           │ 1142650 │
+└───┴───────────────────────────┴──────────────────┴──────────────────┴────────────────────────┴────────────────────────┴─────────┘
+(pass) turn benchmarks > benchmark entry point writes exactly four compaction and four turn metrics [2861.16ms]
+
+test/generation-policy.test.ts:
+(pass) captured bundle data resolves custom transforms and obligations alongside kernel refs [10.35ms]
+(pass) unresolved bundle transform ref denies at pinned pre before a tool body runs [4.32ms]
+(pass) unresolved bundle obligation ref denies at pinned pre before a tool body runs [3.06ms]
+
+test/session-request-controller.test.ts:
+(pass) the injected gateway port uses the live controller's fence and releases the original call [18.30ms]
+(pass) configuration drift refuses consent while interruption cancels the whole suspended call [12.56ms]
+
+test/executor-approval.test.ts:
+(pass) commits authenticated approve on the original invocation before opening the whole wave [8.43ms]
+(pass) commits authenticated refuse on the original invocation before opening the whole wave [5.70ms]
+(pass) rejects forged input, changed domain facts and unavailable Owner authority [5.60ms]
+(pass) rechecks cancellation after asynchronous authentication [4.73ms]
+(pass) waits for the durable deadline owner instead of registering an executor timer [4.36ms]
+(pass) expires exactly once at the deadline, even with a delayed alarm [7.34ms]
+(pass) handles immediate expiry through the durable alarm transition [11.17ms]
+(pass) rejects invalid deadlines before admitting execution [2.81ms]
+(pass) does not treat an uncommitted notification as approval authority [5.27ms]
+(pass) the captured table retains approval binding through catalog copying and later metadata changes [5.04ms]
+(pass) propagates a failed deadline commit without settling the live suspension [5.53ms]
+
+test/attempt-metrics.test.ts:
+(pass) failed billed usage is read once from its settled physical attempt [0.41ms]
+(pass) unmarked usage is unknown rather than an invented zero or provider report [0.06ms]
+(pass) overlapping tools consume wall duration by union rather than sum [0.05ms]
+(pass) a real committed failed attempt contributes billed usage once [6.96ms]
+(pass) a provider stream records reported usage through the agent and executor [11.80ms]
+(pass) a provider stream records estimated usage through the agent and executor [4.00ms]
+(pass) a provider stream records unknown usage through the agent and executor [3.10ms]
+
+test/session-generation-swap.test.ts:
+(pass) committed configure swaps the next captured Layer; old body and terminal stay A until its finalizer [7.18ms]
+(pass) dispatch table stays captured across configure even when the next generation reuses the tool name [6.30ms]
+(pass) unavailable generations fail closed; revert appends a selection [3.42ms]
+(pass) configure denied by the captured pre-policy never acquires or selects the candidate Layer [3.15ms]
+(pass) refuses a corrupt captured system pin without substituting the current catalog [1.81ms]
+(pass) refuses a corrupt captured tools pin without substituting the current catalog [1.59ms]
+(pass) refuses a corrupt captured policy pin without substituting the current catalog [2.01ms]
+(pass) missing historical executable refuses capture instead of adopting the newest catalog [1.83ms]
+(pass) retired generation stays acquired after interrupted fiber until its raw slot actually settles [4.53ms]
+
+test/session-history.test.ts:
+(pass) positional settlements survive open crash history and do not cross turns [1.42ms]
+(pass) positional settlements survive interrupted history and do not cross turns [0.25ms]
+(pass) positional settlements survive error history and do not cross turns [0.18ms]
+
+test/tool-executor-denial.test.ts:
+(pass) compiled tool.pre denial > normalizes noncanonical numeric tool results without rejecting [2.32ms]
+(pass) compiled tool.pre denial > returns an error result through the model door without running the body [2.23ms]
+(pass) compiled tool.pre denial > throws through the cell door without running the body [2.06ms]
+(pass) cell-door executor propagation > inherits the enclosing executor so nested cell tools commit durably [2.50ms]
+(pass) cell-door executor propagation > refuses a cell tool that has no enclosing executor at all [1.69ms]
+
+test/session-failure-boundaries.test.ts:
+(pass) a completed turn's captured ledger rejects late writes without appending [8.33ms]
+(pass) request transitions refuse a usurped fence beneath a live runner without appending rows [6.96ms]
+(pass) an idle request transition preserves a competing owner's fence and typed refusal [2.65ms]
+(pass) zero-grace shutdown seals 1 open turns and pending tools under the retained fence [10.26ms]
+(pass) zero-grace shutdown seals 257 open turns and pending tools under the retained fence [1759.25ms]
+(pass) zero-grace shutdown rescans when an executor terminal lands after its seal scan [12.80ms]
+
+test/session-request.test.ts:
+(pass) opens only the exact existing invocation and original effect [0.47ms]
+(pass) records one canonical resolution and deduplicates equivalent input after restart [0.36ms]
+(pass) expires late answers before binding checks without reopening or inbox effects [0.10ms]
+(pass) rejects non-Owner approval and changed domain revisions [0.19ms]
+(pass) refuses an answer addressed to another request before any record [0.12ms]
+(pass) counts distinct responders, not repeated replies, for all and quorum [0.47ms]
+(pass) never borrows a foreign lease or accepts an obsolete revision [0.16ms]
+(pass) accepts an expected responder's refusal as the single terminal winner [0.15ms]
+(pass) refuses approval when current domain revisions cannot be read [0.08ms]
+(pass) proposes observed global approval count only for a new approval open [0.39ms]
+(pass) pins unknown physical receipts and deduplicates without their local timestamp [0.59ms]
+(pass) checks answer bindings before terminal duplication and never receives a rejected reply [0.19ms]
+(pass) gives timeout and cancellation only one terminal winner [0.18ms]
+(pass) gateway admission intake commits atomically with the request open (fault: %s) [17.40ms]
+(pass) gateway admission intake commits atomically with the request open (fault: %s) [16.34ms]
+(pass) file-backed %s answers only the captured invocation [21.73ms]
+(pass) file-backed %s answers only the captured invocation [18.68ms]
+(pass) file-backed %s answers only the captured invocation [18.97ms]
+
+test/session-result.test.ts:
+(pass) session result wire contract > round-trips result without adding fields [0.36ms]
+(pass) session result wire contract > round-trips result without adding fields [0.21ms]
+(pass) session result wire contract > round-trips result without adding fields [0.02ms]
+(pass) session result wire contract > round-trips result without adding fields
+(pass) session result wire contract > round-trips interrupted without adding fields [0.09ms]
+(pass) session result wire contract > round-trips interrupted without adding fields
+(pass) session result wire contract > round-trips waiting without adding fields [0.13ms]
+(pass) session result wire contract > round-trips error without adding fields [0.09ms]
+(pass) session result wire contract > round-trips error without adding fields
+(pass) session result wire contract > does not persist the invocation-local cause [0.02ms]
+(pass) session result wire contract > rejects malformed durable values 0 [0.07ms]
+(pass) session result wire contract > rejects malformed durable values 1 [0.02ms]
+(pass) session result wire contract > rejects malformed durable values 2
+(pass) session result wire contract > rejects malformed durable values 3 [0.04ms]
+(pass) session result wire contract > rejects malformed durable values 4 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 5 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 6 [0.02ms]
+(pass) session result wire contract > rejects malformed durable values 7 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 8 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 9 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 10 [0.02ms]
+(pass) session result wire contract > rejects malformed durable values 11 [0.01ms]
+(pass) session result wire contract > rejects malformed durable values 12
+(pass) session result wire contract > rejects malformed durable values 13
+(pass) session result wire contract > rejects malformed durable values 14
+(pass) session result wire contract > rejects malformed durable values 15
+(pass) session result wire contract > rejects malformed durable values 16
+(pass) session result wire contract > rejects malformed durable values 17
+(pass) session result wire contract > rejects malformed durable values 18 [0.08ms]
+(pass) session result wire contract > rejects malformed durable values 19 [0.05ms]
+(pass) session result wire contract > rejects malformed durable values 20
+(pass) session result wire contract > requires finite numeric inputTokens [0.09ms]
+(pass) session result wire contract > requires finite numeric outputTokens [0.03ms]
+(pass) session result wire contract > requires finite numeric totalTokens [0.02ms]
+(pass) session result wire contract > requires finite numeric reasoningTokens [0.03ms]
+(pass) session result wire contract > requires finite numeric cacheReadTokens [0.02ms]
+(pass) session result wire contract > requires finite numeric cacheWriteTokens [0.03ms]
+
+test/executor-recovery.test.ts:
+(pass) the body receives deeply frozen admitted input [2.51ms]
+(pass) recovery rejects a corrupted recorded verdict ("corrupted") before the body [4.55ms]
+(pass) recovery rejects a corrupted recorded verdict (null) before the body [4.28ms]
+(pass) recovery rejects a corrupted recorded verdict (42) before the body [3.45ms]
+(pass) completion recovery > a result commit throwing before_persist keeps one terminal and never replays the body [4.56ms]
+(pass) completion recovery > a result commit throwing after_persist keeps one terminal and never replays the body [3.69ms]
+(pass) completion recovery > a throwing model-facing projection preserves the executed body's evidence [1.64ms]
+(pass) completion recovery > a refused post decision propagates without a fabricated verdict and recovers without replay [2.57ms]
+(pass) completion recovery > a blocked_post terminal lost after persistence survives recovery without re-deciding or reverting twice [2.80ms]
+(pass) completion recovery > a throwing reverter is never proof of rollback [1.54ms]
+(pass) completion recovery > a refused recovery commit stays pending: the typed refusal propagates and nothing is appended blindly [2.60ms]
+(pass) SQLite recovery settles all 257 open operations across the page boundary exactly once [212.31ms]
+(pass) crash-open recovery > classification is pinned on the intent and defaults by kind [3.07ms]
+(pass) crash-open recovery > an ordinary open tool settles outcome_unknown once, with no body and an unknown settlement [4.74ms]
+(pass) crash-open recovery > a request-bearing wave is left to its captured dispatcher [4.34ms]
+(pass) crash-open recovery > other turns and already-settled intents are untouched [5.25ms]
+(pass) crash-open recovery > a lost provider attempt makes the logical llm outcome_unknown, never a silent retry [3.97ms]
+(pass) crash-open recovery > recovery keeps billed success evidence and never proves a visible prefix absent [3.89ms]
+(pass) crash-open recovery > recovery keeps billed failure evidence and never proves a visible prefix absent [3.46ms]
+(pass) crash-open recovery > recovery keeps billed reasoning evidence and never proves a visible prefix absent [3.45ms]
+(pass) crash-open recovery > an llm whose attempts all settled is interrupted from that evidence under a resume parent [7.17ms]
+(pass) crash-open recovery > kernel-local projections are interrupted from ledger read-back instead of staying ambiguous [3.74ms]
+(pass) turn dispatcher recovery > settles the executor's crash-open evidence before captured waves, without running tools [3.47ms]
+
+test/fiber-outcome-crash.test.ts:
+(pass) SIGKILL after execute before action commit: absent receipt [490.71ms]
+(pass) SIGKILL after execute before action commit: present receipt [500.43ms]
+(pass) interrupted fiber seals one interrupted action after its entry signal [5.74ms]
+(pass) pre denied commits its policy node and enters zero bodies [3.77ms]
+(pass) expected failures, defects and child finalizer defects have distinct serializable evidence [4.65ms]
+(pass) terminal commit refusal publishes no success and leaves the intent open [3.27ms]
+(pass) ignored raw abort fixes outcome_unknown without awaiting raw settlement or releasing escrow [3.57ms]
+
+test/tool-dispatcher.test.ts:
+(pass) tool dispatcher public contract > records admission before acting and never acts before the commit resolves [2.20ms]
+(pass) tool dispatcher public contract > rejects empty metadata and non-object input schemas [0.21ms]
+(pass) tool dispatcher public contract > projects model and session specifications from definitions [0.21ms]
+(pass) tool dispatcher public contract > classifies missing tools and invalid inputs without invoking a tool [2.10ms]
+(pass) tool dispatcher public contract > distinguishes explicit refusal from execution failure [3.75ms]
+(pass) tool dispatcher public contract > returns typed cell output and truncates oversized model output [2.56ms]
+(pass) tool dispatcher public contract > R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text [4.09ms]
+(pass) tool dispatcher public contract > R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text [3.26ms]
+(pass) tool dispatcher public contract > R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text [2.94ms]
+(pass) tool dispatcher public contract > R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text [3.01ms]
+(pass) tool dispatcher public contract > R3 Unicode boundary keeps the exact prefix and byte marker through the dispatcher [3.08ms]
+
+test/helpers-bounded.test.ts:
+(pass) bounded test signals > returns the signal value when it settles first [0.07ms]
+(pass) bounded test signals > fails with the label once the deadline passes a signal that never settles [1.38ms]
+
+test/session-generations.test.ts:
+(pass) drain refuses retained owners and retires every settled generation [2.28ms]
+
+test/session-outbound.test.ts:
+(pass) a dropped receiving consumer leaves a sealed source obligation without mutating its parent [13.28ms]
+(pass) restart after receiving commit reconciles exact bytes without dispatch or receiver execution [41.50ms]
+(pass) a destination receipt for different bytes is refused and the obligation stays pending [9.23ms]
+(pass) a fence stolen during dispatch surfaces the ack refusal and never marks delivery [8.57ms]
+(pass) outbound insert failure rolls back the source terminal in the same SQLite transaction [22.53ms]
+(pass) a child answers the original request once and reconciles a lost ACK after SQLite reopen [38.06ms]
+
+test/fold-crash.test.ts:
+(pass) in-process witness at fold_checkpoint_committed_before_wake [147.98ms]
+(pass) in-process witness at fold_checkpoint_transaction_before_commit [26.40ms]
+(pass) in-process witness at fold_checkpoint_tampered_before_load [4.33ms]
+(pass) in-process witness at turn_context_snapshot_committed_before_model_entry [8.30ms]
+(pass) in-process witness at compaction_result_checkpoint_committed_before_publication [20.49ms]
+(pass) in-process witness at compaction_replacement_invalidates_prepared_projection [24.99ms]
+(pass) a failing transaction witness is propagated and rolls the inserted checkpoint back [24.30ms]
+(pass) a failing stale-projection witness is not silently swallowed [66.61ms]
+(pass) the importable crash main dispatches turn_intent_before_llm_entry through its injected exit [5.14ms]
+(pass) the importable crash main dispatches inbox_admitted_before_turn_open through its injected exit [3.89ms]
+(pass) the importable crash main dispatches outbound_reply_before_delivery_settle through its injected exit [13.98ms]
+(pass) the importable crash main dispatches fold_checkpoint_transaction_before_commit through its injected exit [33.01ms]
+(pass) the importable crash main enters the original turn's resume seam [9.55ms]
+(pass) the crash process argument boundary rejects unsupported cuts [3.22ms]
+
+test/request-count-admission.test.ts:
+(pass) admission carries its observed count into the real SQLite transaction [7.53ms]
+
+test/session-lifecycle-conformance.test.ts:
+(pass) session lifecycle conformance > lifecycle v1 ordinary and mixed-wave approved [74.96ms]
+(pass) session lifecycle conformance > lifecycle v1 refusal timeout and interrupt [94.71ms]
+(pass) session lifecycle conformance > lifecycle v1 terminal resume differs from crash-open recovery [53.10ms]
+(pass) session lifecycle conformance > lifecycle v1 delayed timer cancel reply and duplicate input [103.89ms]
+(pass) session lifecycle conformance > lifecycle v1 product totality and effect-free prefix replay [161.45ms]
+(pass) session lifecycle conformance > T11 refused stale executor CAS runs zero bodies and publishes zero observations [26.25ms]
+(pass) session lifecycle conformance > pure replay uses recorded time IDs and retry jitter without invoking body or runtime providers [26.12ms]
+
+test/turn-dispatcher-coverage.test.ts:
+(pass) createTurnDispatcher > exposes the captured invocation only inside its dispatched tool body [3.10ms]
+(pass) createTurnDispatcher > composes a durable executor and commits intent before result [2.43ms]
+(pass) wave tracking > hands every model wave to trackWave as a settlement promise [5.88ms]
+(pass) currentExecutor > throws outside an active execution [0.05ms]
+(pass) currentExecutor > returns the executor running the tool body [1.68ms]
+(pass) tool body outcomes > settles a never-resolving body as timed_out [7.68ms]
+(pass) tool body outcomes > forwards the caller's abort reason into a timed body's signal [2.33ms]
+(pass) tool body outcomes > clears the timer when the body finishes inside the timeout [1.92ms]
+(pass) tool body outcomes > fails closed when the body violates the output schema [1.93ms]
+(pass) tool body outcomes > propagates an executor failure to the caller [1.82ms]
+
+test/model-selection.test.ts:
+(pass) the last provider attempt of an earlier turn pins the selection [2.87ms]
+(pass) this turn's own attempts, including those under its resume actions, are not a pin [5.49ms]
+(pass) non-chat attempts and malformed intents never pin [4.41ms]
+
+test/retry-route-contract.test.ts:
+(pass) a failed text prefix forbids fallback and keeps billed evidence [6.83ms]
+(pass) a failed tool prefix forbids fallback and keeps billed evidence [4.31ms]
+(pass) reasoning-only failure re-admits the fallback and attributes the failure to the original route [8.17ms]
+(pass) a canonical assistant write refusal vetoes fallback after a successful provider attempt [4.04ms]
+(pass) a provider floor beyond the retry header budget stops without scheduling an early retry [8.45ms]
+
+test/inbound-authority.test.ts:
+(pass) internal and fixture origins act [0.07ms]
+(pass) external origins act only with a recorded full_access treatment [0.20ms]
+(pass) external origins without a decodable treatment fail closed [0.03ms]
+
+test/session-configuration-boundaries.test.ts:
+(pass) does not record a denied configuration [3.69ms]
+(pass) rejects configuration whose authorization outlives its captured generation [3.95ms]
+
+test/tool-capability-bridge.test.ts:
+(pass) bridge: nested failure in an admitted async body preserves its typed outcome, not ForeignFailure [5.37ms]
+(pass) bridge: two concurrent nested calls resolve independently in call order [5.07ms]
+(pass) bridge: closing the executor rejects every pending nested request with InvocationClosed [4.51ms]
+(pass) bridge: cancel-before-reply interrupts the body and late nested reply performs zero ledger effects [4.55ms]
+(pass) bridge: detached late requests after settle fail with InvocationClosed and execute nothing [4.48ms]
+(pass) bridge: detached late requests after a rejected body fail with InvocationClosed reason failed [3.78ms]
+(pass) bridge: a forked invocation owns its lifetime independently of the body view it was forked from [3.21ms]
+(pass) bridge: generation-one frame refuses nested dispatch after committed generation-two selection [4.64ms]
+
+test/agent.test.ts:
+(pass) agent foundation tags and failure evidence are runtime contracts [0.14ms]
+(pass) ChatAgent public run contract > returns terminal text, step, and token usage [2.59ms]
+(pass) ChatAgent public run contract > forwards provider options, auth, transport, and tool choice [2.02ms]
+(pass) ChatAgent public run contract > invokes onStepFinish with the exact returned step [2.28ms]
+(pass) ChatAgent public run contract > rejects incomplete trace identity before provider execution [1.71ms]
+(pass) ChatAgent public run contract > passes the configured abort signal through the LLM tool bridge [5.98ms]
+(pass) ChatAgent public run contract > rejects configured tools without an executor and emits no retry [1.44ms]
+(pass) ChatAgent provider boundary failures > uses the empty assistant fallback for a provider stop without a snapshot [2.44ms]
+(pass) ChatAgent provider boundary failures > rejects a structured error without a message [1.71ms]
+(pass) ChatAgent provider boundary failures > rejects an object without a type [1.53ms]
+(pass) ChatAgent provider boundary failures > rejects an object with an unknown type [1.39ms]
+(pass) ChatAgent provider boundary failures > rejects a primitive [1.35ms]
+(pass) ChatAgent provider boundary failures > reports a missing default provider [3.96ms]
+(pass) ChatAgent provider boundary failures > reports a non-Error proxy listing failure [2.27ms]
+(pass) ChatAgent provider boundary failures > reports a missing model in a known provider [1.56ms]
+(pass) ChatAgent provider boundary failures > resolves a known model through the default provider path [1.78ms]
+(pass) ChatAgent loop controls > creates an instance with a run method [0.02ms]
+(pass) ChatAgent loop controls > honors an already-aborted signal before provider execution [1.24ms]
+
+test/fixture-assertions.test.ts:
+(pass) shared budget assertions reject wrong reasons and unexpected provider calls [0.13ms]
+(pass) shared tool assertions remain sensitive to result and durable commit mutations [1.75ms]
+
+test/session-chat-runner.test.ts:
+(pass) session chat runner > returns interrupted before invoking the model [2.16ms]
+(pass) session chat runner > passes boundary messages into the model and returns its terminal result [2.28ms]
+(pass) session chat runner > starts another model turn when a post-model boundary supplies continuation [2.98ms]
+(pass) session chat runner > returns interrupted at either post-model boundary [2.75ms]
+(pass) session chat runner > records real prompt and turn ownership with sibling llm pairs for normal calls [11.33ms]
+(pass) session chat runner > records retry attempts beneath one logical llm action [9.70ms]
+(pass) session chat runner > restores the primary model at the next turn boundary as a recorded llm action [19.46ms]
+(pass) session chat runner > does not invoke the model when a durable chat composition loses its executor [6.46ms]
+(pass) session chat runner > turns reported failures into error results and rethrows unreported failures [2.72ms]
+
+test/session-inspection.test.ts:
+(pass) action-based history and diagnostic projections > inspection pages more than 256 actions without enumerating session rows [48.86ms]
+(pass) action-based history and diagnostic projections > every transition of a request spanning child, retry, refusal, approval, wake and compaction traces to a committed cause [40.95ms]
+(pass) action-based history and diagnostic projections > policy decisions carry generation, rule and verdict and never carry payloads [30.36ms]
+(pass) action-based history and diagnostic projections > inspection and history are pure reads: no body runs and no action is appended [40.76ms]
+(pass) action-based history and diagnostic projections > a materialized tail rebuilt from bounded pages equals the canonical fold [37.94ms]
+(pass) bounded inspection pages keep advancing and keep causal attribution (review F3/F4) > limits 1 and 2 advance children from an empty root page and every continuation advances or terminates [3.40ms]
+(pass) bounded inspection pages keep advancing and keep causal attribution (review F3/F4) > a page boundary between a turn and its tool intent preserves the tool's turn attribution [3.19ms]
+(pass) bounded inspection pages keep advancing and keep causal attribution (review F3/F4) > a page opening below a tool's result attributes the turn across multi-hop ancestry [2.37ms]
+(pass) bounded inspection pages keep advancing and keep causal attribution (review F3/F4) > a one-action page over a 300-link turn-less chain resolves null attribution in bounded window reads [20.35ms]
+(pass) bounded inspection pages keep advancing and keep causal attribution (review F3/F4) > a one-action page over a 300-link chain under a turn attributes the turn in bounded window reads [24.71ms]
+
+test/session-fsm.test.ts:
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x prompt x open=false: all terminal and identity products [0.17ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x prompt x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x interrupt x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x interrupt x open=true: all terminal and identity products [0.04ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x resume x open=false: all terminal and identity products [0.03ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > idle x resume x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x prompt x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x prompt x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x interrupt x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x interrupt x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x resume x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > running x resume x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x prompt x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x prompt x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x interrupt x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x interrupt x open=true: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x resume x open=false: all terminal and identity products [0.02ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > interrupted x resume x open=true: all terminal and identity products [0.01ms]
+(pass) T02/T05/T07/T08/T10 admission Cartesian product > empty inbox and control prefix have explicit decisions without consuming a following prompt [0.04ms]
+(pass) T12/T13 request source x event x authority product > absent x request.open [0.35ms]
+(pass) T12/T13 request source x event x authority product > absent x request.answer [0.11ms]
+(pass) T12/T13 request source x event x authority product > absent x request.cancel [0.04ms]
+(pass) T12/T13 request source x event x authority product > absent x request.timeout [0.05ms]
+(pass) T12/T13 request source x event x authority product > absent x request.delivery [0.05ms]
+(pass) T12/T13 request source x event x authority product > open x request.open [0.10ms]
+(pass) T12/T13 request source x event x authority product > open x request.answer [0.11ms]
+(pass) T12/T13 request source x event x authority product > open x request.cancel [0.05ms]
+(pass) T12/T13 request source x event x authority product > open x request.timeout [0.02ms]
+(pass) T12/T13 request source x event x authority product > open x request.delivery [0.06ms]
+(pass) T12/T13 request source x event x authority product > resolved x request.open [0.08ms]
+(pass) T12/T13 request source x event x authority product > resolved x request.answer [0.06ms]
+(pass) T12/T13 request source x event x authority product > resolved x request.cancel [0.03ms]
+(pass) T12/T13 request source x event x authority product > resolved x request.timeout [0.03ms]
+(pass) T12/T13 request source x event x authority product > resolved x request.delivery [0.05ms]
+(pass) T12/T13 request source x event x authority product > refused x request.open [0.07ms]
+(pass) T12/T13 request source x event x authority product > refused x request.answer [0.07ms]
+(pass) T12/T13 request source x event x authority product > refused x request.cancel [0.04ms]
+(pass) T12/T13 request source x event x authority product > refused x request.timeout [0.02ms]
+(pass) T12/T13 request source x event x authority product > refused x request.delivery [0.03ms]
+(pass) T12/T13 request source x event x authority product > expired x request.open [0.08ms]
+(pass) T12/T13 request source x event x authority product > expired x request.answer [0.05ms]
+(pass) T12/T13 request source x event x authority product > expired x request.cancel [0.03ms]
+(pass) T12/T13 request source x event x authority product > expired x request.timeout [0.02ms]
+(pass) T12/T13 request source x event x authority product > expired x request.delivery [0.04ms]
+(pass) T12/T13 request source x event x authority product > cancelled x request.open [0.08ms]
+(pass) T12/T13 request source x event x authority product > cancelled x request.answer [0.05ms]
+(pass) T12/T13 request source x event x authority product > cancelled x request.cancel [0.05ms]
+(pass) T12/T13 request source x event x authority product > cancelled x request.timeout [0.03ms]
+(pass) T12/T13 request source x event x authority product > cancelled x request.delivery [0.04ms]
+(pass) T12/T13 request source x event x authority product > T12 exact invocation, delivery input and replay record identities cannot be substituted [0.28ms]
+(pass) T12/T13 request source x event x authority product > T13 captured commit time at the deadline wins over a backdated answer [0.07ms]
+(pass) T01-T15 real controller transition witnesses > T01 stable identity is recorded once; conflicting durable redeclaration enters no body [3.04ms]
+(pass) T01-T15 real controller transition witnesses > T02/T05/T07 intent and result ID precede entry; idle controls and running resume enter no extra runner [8.53ms]
+(pass) T01-T15 real controller transition witnesses > T03/T04 ordered distinct prompts drain only at before_llm with unchanged pins [6.55ms]
+(pass) T01-T15 real controller transition witnesses > T03/T04 ordered distinct prompts drain only at after_llm with unchanged pins [5.88ms]
+(pass) T01-T15 real controller transition witnesses > T03/T04 ordered distinct prompts drain only at after_tools with unchanged pins [5.84ms]
+(pass) T01-T15 real controller transition witnesses > T06/T08 interruption fixes its terminal; settled resume branches with fresh IDs and current G [8.35ms]
+(pass) T01-T15 real controller transition witnesses > T09 result seals exactly one pre-minted terminal and releases its lease [5.04ms]
+(pass) T01-T15 real controller transition witnesses > T09 error seals exactly one pre-minted terminal and releases its lease [4.70ms]
+(pass) T01-T15 real controller transition witnesses > T09 live_wait requires a still-armed action from this turn: current [9.61ms]
+(pass) T01-T15 real controller transition witnesses > T09 live_wait requires a still-armed action from this turn: prior [14.84ms]
+(pass) T01-T15 real controller transition witnesses > T09 live_wait requires a still-armed action from this turn: cancelled [25.85ms]
+(pass) T01-T15 real controller transition witnesses > T10 recovery budget 0 keeps captured IDs and G [5.71ms]
+(pass) T01-T15 real controller transition witnesses > T10 recovery budget 10 keeps captured IDs and G [2.91ms]
+(pass) T01-T15 real controller transition witnesses > T14 in-flight pins stay fixed and the next turn captures the appended generation [8.56ms]
+(pass) T01-T15 real controller transition witnesses > T15 restoration appends a branch, preserves original facts and refuses missing sources [13.54ms]
+
+test/session-handle.test.ts:
+(pass) durable session handle > records prompt and turn policy once at their existing durable envelopes [7.83ms]
+(pass) durable session handle > a prompt pre denial consumes the inbox row without constructing or running a turn [3.92ms]
+(pass) durable session handle > a prompt post denial records both prompt decisions but never starts a turn [4.50ms]
+(pass) durable session handle > fails closed when prompt post policy transforms its immutable receipt [3.98ms]
+(pass) durable session handle > accepts a turn post transform of result.usage only when the result still satisfies its contract [4.61ms]
+(pass) durable session handle > accepts a turn post transform of result.text only when the result still satisfies its contract [4.04ms]
+(pass) durable session handle > validates transformed session usage with required counters [9.22ms]
+(pass) durable session handle > validates transformed session usage with optional counters [4.82ms]
+(pass) durable session handle > validates transformed session usage with missing required counter [5.32ms]
+(pass) durable session handle > validates transformed session usage with invalid optional counter [4.84ms]
+(pass) durable session handle > validates transformed session usage with unknown counter [4.81ms]
+(pass) durable session handle > turn pre policy denial distinguishes body-zero pre from irreversible post [4.83ms]
+(pass) durable session handle > turn post policy denial distinguishes body-zero pre from irreversible post [5.59ms]
+(pass) durable session handle > refuses a turn when its pinned generation has no mandatory policy row [2.88ms]
+(pass) durable session handle > serializes one runner and drains concurrent prompts as distinct ordered messages [12.68ms]
+(pass) durable session handle > a turn's ledger refuses a request transition once that turn has sealed [6.04ms]
+(pass) durable session handle > an interrupt landing during turn.pre admission seals interrupted without entering the runner [7.04ms]
+(pass) durable session handle > a storage failure during turn admission seals the turn as an error [4.93ms]
+(pass) durable session handle > records an idle interrupt as a no-op without resuming the next prompt [8.42ms]
+(pass) durable session handle > seals a queued prompt followed by an interrupt without entering the runner [10.00ms]
+(pass) durable session handle > a leading idle interrupt is consumed before a later prompt starts [6.88ms]
+(pass) durable session handle > consumes a running interrupt and seals interrupted rather than error [6.70ms]
+(pass) durable session handle > does not overlap a resumed runner when the interrupted runner ignores abort [7.98ms]
+(pass) durable session handle > retained turn ownership holds the generation until released [5.04ms]
+(pass) durable session handle > configure during the ignored-abort window keeps the fence pinned by the live runner [6.84ms]
+(pass) durable session handle > configure re-entered from the interrupted seal observation still sees the fence as pinned [5.44ms]
+(pass) durable session handle > close() returns once a positive grace window lapses while the runner still ignores abort [7.81ms]
+(pass) durable session handle > close() returns after the zero grace window while the runner settles its turn durably [6.12ms]
+(pass) durable session handle > pins generation N while configure commits generation N+1 [8.49ms]
+(pass) durable session handle > immediate configure interrupts the old turn before selecting and resuming the new generation [9.66ms]
+(pass) durable session handle > rejects an existing tool name before committing a configure action [5.96ms]
+(pass) durable session handle > a reactivated handle removes a tool from the next runner generation [10.09ms]
+(pass) durable session handle > a reactivated handle replaces system blocks for the next runner generation [9.23ms]
+(pass) durable session handle > evicts idle runtime state while a retained handle can rehydrate it [10.54ms]
+(pass) durable session handle > a hibernated handle routes restore and close through its live successor [6.90ms]
+(pass) durable session handle > approval answers reach only a turn's live approvals [5.98ms]
+(pass) durable session handle > resume after interruption carries no prompt content into the runner [9.32ms]
+(pass) durable session handle > child result terminal offers the original parent letter to the atomic commit port [8.66ms]
+(pass) durable session handle > child error terminal offers the original parent letter to the atomic commit port [7.34ms]
+(pass) durable session handle > child interrupted terminal offers the original parent letter to the atomic commit port [7.12ms]
+(pass) durable session handle > materializes a worker as a parent-linked session with an independent fence [5.83ms]
+(pass) session crash recovery and observation > reactivation resumes with the original pre-minted result id [8.77ms]
+(pass) session crash recovery and observation > reactivation refuses an open turn whose pinned generation no longer matches the ledger [2.83ms]
+(pass) session crash recovery and observation > a prompt denied at a mid-turn boundary is consumed and fails the runner's drain [5.54ms]
+(pass) session crash recovery and observation > reactivation seals a durable interrupt before admitting an open turn [3.29ms]
+(pass) session crash recovery and observation > reactivation seals error at resume budget ten without entering the runner [3.14ms]
+(pass) session crash recovery and observation > a resume for an interrupted session without any terminal is consumed as a no-op [3.14ms]
+(pass) session crash recovery and observation > watch reports a revision gap and get replaces state after a dropped observation [3.09ms]
+
+test/foundation-services.test.ts:
+(pass) context admission failure remains typed and has closed durable evidence [1.56ms]
+(pass) the generation layer supplies the captured policy, tools, observations, clock and entropy [1.87ms]
+
+test/session-resume-reopen.test.ts:
+(pass) reopened SQLite interrupted chooses the correct IDs and generation with no stale-fence writes [52.73ms]
+(pass) reopened SQLite crash-open chooses the correct IDs and generation with no stale-fence writes [34.30ms]
+
+test/captured-catalog.test.ts:
+(pass) recovery refuses a missing or changed captured definition instead of executing latest code [2.16ms]
+(pass) a recovered tool and its policy decisions remain children of the captured turn, not the resume checkpoint [2.09ms]
+
+test/session-request-port.test.ts:
+(pass) gateway request port commits physical bindings and receiving intake without a live controller [5.14ms]
+(pass) gateway timeout resolves the original action without creating conversational input [4.18ms]
+(pass) request opening uses its original turn generation, never a later catalog [3.62ms]
+(pass) gateway port refuses missing original actions and mismatched physical receipts [2.61ms]
+
+test/fold-checkpoint.test.ts:
+(pass) below-interval audit commits do not replay the unchanged history prefix [2.51ms]
+(pass) durable cadence at 255 non-checkpoint actions, including empty suffix [22.70ms]
+(pass) durable cadence at 256 non-checkpoint actions, including empty suffix [25.66ms]
+(pass) durable cadence at 257 non-checkpoint actions, including empty suffix [26.62ms]
+(pass) legacy genesis paging fixes a high-water revision, then checkpoints under the existing fence [69.33ms]
+(pass) a compaction below N commits result and checkpoint together, rolls both back inside SQLite, and refuses a stale CAS [21.56ms]
+(pass) legacy compaction without captured context reconstructs its predecessor before committing the successor [3.64ms]
+(pass) prepared compaction refuses a later replacement without overwriting or dropping it [16.09ms]
+(pass) prepared compaction refuses a later delivered-tail without overwriting or dropping it [11.79ms]
+
+test/session-stop-evidence.test.ts:
+(pass) reports armed alarms of this turn and every open intent from obligations and pending approvals [2.38ms]
+(pass) ignores alarms that are no longer armed and reports nothing when no obligations exist [2.02ms]
+
+test/crash-matrix.test.ts:
+(pass) the authoritative crash matrix names every crash point once [0.04ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell session_configure_commit_before_hibernate [496.13ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell turn_intent_before_llm_entry [276.22ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell llm_body_before_attempt_result_commit [291.47ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell fiber_exit_after_execute_before_action_commit [895.39ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell llm_result_committed [308.27ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell tool_wave_between_result_commits [305.86ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell retry_backoff_wait [313.72ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell compaction_summary_before_result_commit [305.33ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell inbox_admitted_before_turn_open [299.33ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell outbound_reply_before_delivery_settle [325.89ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell recovery_dispatch_identity_committed_before_rpc [604.55ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell compaction_boundary_committed_before_publication [297.99ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell delivery_ack_committed_before_owner_cleanup [531.13ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell platform_send_committed_before_local_ack_reconciled_sent [546.26ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell platform_attempt_marker_before_send_reconciled_not_sent [520.47ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell platform_send_ambiguous_without_reconciliation [564.85ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell compaction_concurrent_tail_committed_before_owner_crash [364.24ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell outbound_flood_deadline_before_timer_rearm [1042.98ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell watch_fired_committed_before_entity_wake [536.78ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell owner_reclaimed_before_stale_transcript_flush [292.69ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell compaction_summary_before_boundary_commit [294.36ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell fold_checkpoint_committed_before_wake [660.82ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell context_restore_checkpoint_committed_before_publish [530.48ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell fold_checkpoint_tampered_before_load [541.81ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell same_id_result_after_checkpoint_before_wake [552.50ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell open_tool_checkpoint_before_terminal [551.22ms]
+(pass) SQLite crash recovery matches the authoritative matrix cell captured_generation_missing_after_restart [486.11ms]
+
+test/session-request-recovery.test.ts:
+(pass) reopens SQLite and resumes the exact original wave without a model reconstruction [26.51ms]
+(pass) a committed application claim prevents replay after result persistence fails [24.62ms]
+(pass) a gateway answer adopts a strictly newer fence over a crashed writer and resolves [13.79ms]
+(pass) answer wins once across a request-port restart [15.05ms]
+(pass) timeout wins once across a request-port restart [12.39ms]
+(pass) cancel wins once across a request-port restart [13.96ms]
+
+test/generation-retirement.test.ts:
+(pass) root scope does not finalize a generation before physical raw settlement [1.78ms]
+(pass) a retired generation cannot reacquire ownership after its last release notification [1.40ms]
+
+test/executor-fiber-ownership.test.ts:
+(pass) an unguarded action owns one body fiber and closes its scope before returning [2.51ms]
+
+test/session-context-restore.test.ts:
+(pass) restore_context_projection > folding minus a selected subtree is a no-I/O what-if, not a live restoration [8.73ms]
+(pass) restore_context_projection > appends the typed compensation, restores the prior projection and leaves the compaction intact [10.89ms]
+(pass) restore_context_projection > a refused restoration records only the policy decision and changes nothing [7.97ms]
+(pass) restore_context_projection > an unknown or unexecuted compaction is refused before anything is recorded [7.52ms]
+
+test/bundle.test.ts:
+(pass) ordered acquisition supplies earlier outputs and releases observers before providers [1.91ms]
+(pass) rejects invalid namespace Bad [0.06ms]
+(pass) rejects invalid namespace a_b
+(pass) rejects invalid namespace a/evil
+(pass) rejects invalid namespace 
+(pass) rejects invalid namespace 0name
+(pass) rejects duplicate Tag keys, wrong namespaces and kernel collisions [0.17ms]
+(pass) rejects repeated and self requirements [0.04ms]
+(pass) rejects nested service paths and requirements outside the four-service seed [0.05ms]
+(pass) runtime forged Tag identities fail definition validation [0.06ms]
+(pass) seed missing output fails without starting a dependent observer [1.15ms]
+(pass) defects and interruption remain causes rather than acquisition failures [1.90ms]
+(pass) policy contributions reject wrong namespaces duplicates and malformed services [1.93ms]
+(pass) selection preserves installed order and rejects omitted dependencies [1.19ms]
+(pass) copies and freezes metadata without freezing callers [0.10ms]
+(pass) validates tools rows events and duplicate identities [0.24ms]
+(pass) compose rechecks forged metadata and mutable Tag keys [0.12ms]
+(pass) compose snapshots the seed before caller mutation [0.94ms]
+(pass) acquisition rejects Tag mutation after composition before any resources open [0.93ms]
+(pass) runtime compose refuses missing later-only and seed-colliding providers [0.10ms]
+(pass) missing runtime outputs fail typed and release resources [0.93ms]
+(pass) failed later acquisition unwinds once [0.96ms]
+(pass) BundlesLive acquires only selected generation recipes and captures policy services [2.75ms]
+
+test/durable-reconstruction.test.ts:
+(pass) fresh-process checkpoint plus bounded suffix equals independent full replay [1786.25ms]
+(pass) fresh-process refuses tampered checkpoint state before writes [725.01ms]
+(pass) fresh-process refuses tampered checkpoint stateHash before writes [722.21ms]
+(pass) fresh-process refuses tampered checkpoint foldVersion before writes [715.21ms]
+(pass) fresh-process refuses tampered checkpoint revision before writes [710.80ms]
+(pass) in-process reconstruction uses capped suffix reads and rejects a stale seed hash on an intact row chain [298.75ms]
+
+test/model-switch-branch.test.ts:
+(pass) route transitions are committed attempt metadata and switching back does not reset the attempt cap [6.95ms]
+(pass) restoration honors a caller-captured pre-switch parent and appends a new branch [5.27ms]
+
+test/request-authority-kernel.test.ts:
+(pass) a borrowed-fence caller opens a request mid-turn under the live owner [3.39ms]
+(pass) an unrelated owner is still refused mid-turn [2.32ms]
+(pass) an idle session falls back to a real fence adoption [1.32ms]
+(pass) a foreign-session admission does not ride the sender's batch [2.61ms]
+(pass) a same-session admission still rides the sender's batch [2.34ms]
+
+test/cluster/sharding-config.test.ts:
+(pass) the env var alone drives layerFromEnv (the ambient hazard is real and the key is right) [116.44ms]
+(pass) an explicit override beats a conflicting env var at the SingleRunner seam (R2) [113.12ms]
+(pass) a fully explicit ShardingConfig.layer ignores the environment entirely (prod pin, D9) [105.61ms]
+
+test/cluster/entity-crash.test.ts:
+(pass) SIGKILL mid-turn: chain action durable, envelope unprocessed, redelivery dedupes, DeliverAt residual holds [2164.32ms]
+(pass) R3: a duplicate client send of the same messageId appends exactly one chain row [137.65ms]
+
+test/cluster/entity-boot.test.ts:
+(pass) boot creates exactly the 5 cluster_* tables in the catalog [8.69ms]
+(pass) prompts reply with chain receipts; the chain links from genesis and the envelope is processed [123.22ms]
+(pass) each session gets its own ledger file [118.57ms]
+
+test/cluster/session-entity-coverage.test.ts:
+(pass) an unindexed session file self-heals before mailbox admission [125.50ms]
+[04:56:39.623] ERROR (#22492): Defect building entity handlers LeaseRefused: 
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/cluster/session-entity.ts:103:30)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+    at flushScheduled (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:2614:15)
+    at runTasks (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:169:15)
+    at afterScheduled (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Scheduler.js:159:10)
+[04:56:40.129] ERROR (#22492): Defect building entity handlers LeaseRefused: 
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/src/cluster/session-entity.ts:103:30)
+    at runLoop (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:463:86)
+    at evaluate (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:414:23)
+    at <anonymous> (/Users/ino/Develop/openomni-w53/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/effect.js:816:17)
+(pass) a stale activation yields until a later fence can adopt the session [1337.28ms]
+[04:56:41.061] ERROR (#22554): detached session turn failed: failed-detached-turn StorageUnavailable: 
+    at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/test/cluster/session-entity-coverage.test.ts:165:43)
+    at Session(failed-detached-turn).Prompt
+(pass) a failed detached turn re-drains an acknowledged prompt [123.30ms]
+(pass) a received prompt retries exactly one revision refusal [120.01ms]
+
+test/cluster/entity-passivation.test.ts:
+(pass) F3: idle passivation closes the session file; the next message reactivates and rotates the fence [5049.65ms]
+(pass) R1: a DeliverAt beyond the idle window survives passivation and reactivates the entity [9223.81ms]
+
+test/cluster/entity-admission.test.ts:
+(pass) Table A: admission decisions over the chain-derived pending set > A01 idle + [] -> stop [0.06ms]
+(pass) Table A: admission decisions over the chain-derived pending set > A02 idle + [prompt] -> start [0.01ms]
+(pass) Table A: admission decisions over the chain-derived pending set > A03 idle + [interrupt, prompt] -> consume [interrupt] [0.04ms]
+(pass) Table A: admission decisions over the chain-derived pending set > A04 idle + [prompt, prompt] -> start (second stays queued)
+(pass) Table A: admission decisions over the chain-derived pending set > A05 idle + [resume] -> consume [resume]
+(pass) Table A: admission decisions over the chain-derived pending set > A06 idle + [resume, resume, prompt] -> consume control prefix
+(pass) Table A: admission decisions over the chain-derived pending set > A07 running + open -> recover
+(pass) Table A: admission decisions over the chain-derived pending set > A08 running without open -> refused
+(pass) Table A: admission decisions over the chain-derived pending set > A09 interrupted + [resume] + terminal interrupted -> resume
+(pass) Table A: admission decisions over the chain-derived pending set > A10 interrupted + [resume] without interrupted terminal -> consume
+(pass) Table A: admission decisions over the chain-derived pending set > A11 interrupted + [prompt] -> stop
+(pass) Table A: admission decisions over the chain-derived pending set > A12 foreign-session item -> refused
+(pass) Table A: admission decisions over the chain-derived pending set > A13 foreign open -> refused
+(pass) Table A: admission decisions over the chain-derived pending set > A14 foreign terminal -> refused
+(pass) Table A: admission decisions over the chain-derived pending set > A15 idle + own open -> refused
+(pass) Table A: admission decisions over the chain-derived pending set > A16 FIFO invariance (idle): items after the first prompt never change the decision [0.10ms]
+(pass) Table A: admission decisions over the chain-derived pending set > A17 interrupted scans the WHOLE pending set for resume (not prefix-invariant) [0.04ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B1 [resolve] -> resolved [0.17ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B2 [resolve, cancel] -> resolved then duplicate (terminal already won) [0.06ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B3 [cancel, resolve] -> cancelled; later resolve refused-as-duplicate [0.05ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B4 [cancel, timeout] -> cancelled then duplicate [0.03ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B5 [timeout, resolve] -> expired then late_unknown [0.04ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B6 duplicate resolve -> resolved then duplicate [0.05ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B7 [open, resolve] -> opened then resolved [0.14ms]
+(pass) Table B: request commands in FIFO order keep the W1 resolutions > B8 cancel-first means the resolve never resolves and produces no intake [0.09ms]
+(pass) Integration: entity mailbox is a single writer with whole-backlog drain > C1 three concurrent prompts serialize: distinct ascending receipts, no handler overlap, linear chain [224.51ms]
+(pass) Integration: entity mailbox is a single writer with whole-backlog drain > A17 integration: interrupted + backlog [prompt, resume] resumes and leaves the prompt pending (F4) [124.84ms]
+
+test/cluster/entity-timers.test.ts:
+(pass) retry delivery chain guard > re-runs only the live unsettled attempt; settled or superseded deliveries no-op [3.19ms]
+(pass) retry delivery chain guard > supersede detection pages past a full 256-child window [1.20ms]
+(pass) deadline delivery chain guard > expires an open request once; late answers keep the late_unknown token [3.61ms]
+(pass) deadline delivery chain guard > a deadline after RequestResolve no-ops and duplicates stay duplicates [3.36ms]
+(pass) watch delivery chain guards > occurrence and timeout deliveries dedupe on committed chain keys [2.17ms]
+(pass) retry timer port over DeliverAt > arm persists chain evidence strictly before the rearm message [0.12ms]
+(pass) retry timer port over DeliverAt > a refused chain commit fails the arm and never sends the rearm [0.11ms]
+(pass) retry timer port over DeliverAt > settle is a no-op: supersede is decided at delivery, never as a cancel [0.04ms]
+(pass) retry timer port over DeliverAt > wait sleeps exactly the residual and resolves immediately when due [4.10ms]
+(pass) retry timer port over DeliverAt > an aborted signal interrupts the residual wait [0.22ms]
+
+test/core/context-admission.test.ts:
+(pass) model context admission > compacts before the attempt and refuses admission when the window still overflows [2.17ms]
+
+test/core/model-selection-vocabulary.test.ts:
+(pass) model selection and retry vocabulary > selects the correct candidate for timeout [0.02ms]
+(pass) model selection and retry vocabulary > selects the correct candidate for tool_error [0.01ms]
+(pass) model selection and retry vocabulary > selects the correct candidate for transient_error
+(pass) model selection and retry vocabulary > selects the correct candidate for validation_error
+(pass) model selection and retry vocabulary > selects the correct candidate for context_overflow
+(pass) model selection and retry vocabulary > selects the correct candidate for aborted
+
+test/core/model-fallback.test.ts:
+(pass) model fallback via placement > selects the expected retry model for transient blip [2.42ms]
+(pass) model fallback via placement > selects the expected retry model for tool exploded [1.62ms]
+(pass) model fallback via placement > selects the expected retry model for validation failed [1.67ms]
+(pass) model fallback via placement > keeps validation failures terminal without a fallback [1.48ms]
+(pass) model fallback via placement > re-arms window yield after switching models [2.09ms]
+
+test/core/streaming.test.ts:
+(pass) ChatAgent.run() streaming > streams assistant text to the sink and returns the result [1.90ms]
+(pass) ChatAgent.run() streaming > streams tool calls and their results to the sink [2.13ms]
+
+test/core/retry.test.ts:
+(pass) isAbort (audit M4) > recognizes an aborted signal regardless of the error message [0.03ms]
+(pass) isAbort (audit M4) > recognizes the typed abort error without a signal [0.02ms]
+(pass) isAbort (audit M4) > does NOT classify by message substring: a tool error mentioning 'aborted' is not an abort [0.02ms]
+
+test/core/budget.test.ts:
+(pass) effectiveBudgetThresholds > uses protocol-owned defaults and runtime-local resolution [0.03ms]
+(pass) budget telemetry 4-state > returns ok when below reassurance threshold [0.04ms]
+(pass) budget telemetry 4-state > returns reassurance when between reassurance and warning thresholds [0.10ms]
+(pass) budget telemetry 4-state > returns warning when between warning and exceeded thresholds [0.03ms]
+(pass) budget telemetry 4-state > returns exceeded when at limit [0.02ms]
+(pass) budget telemetry 4-state > returns exceeded when tool runtime reaches its limit [0.03ms]
+(pass) budget telemetry 4-state > maxTurns -1 allows unlimited turns [0.01ms]
+(pass) budget telemetry 4-state > maxTurns -1 with maxToolCalls limit uses only toolCalls ratio [0.02ms]
+(pass) budget telemetry 4-state > all limits -1 always returns ok [0.01ms]
+(pass) budget telemetry 4-state > backward compat: undefined budget uses defaults
+(pass) budget telemetry 4-state > custom thresholds override defaults [0.02ms]
+(pass) budget telemetry does not publish outside its supplied sink > emits no telemetry even called twice at the warning threshold [0.17ms]
+(pass) budget telemetry does not publish outside its supplied sink > emits no telemetry at the exceeded threshold [0.04ms]
+(pass) publishBudgetTelemetry is the command (emits once, returns status) > files the warning event under the run's trace [0.14ms]
+(pass) publishBudgetTelemetry is the command (emits once, returns status) > files the reassurance event under the run's trace [0.02ms]
+(pass) publishBudgetTelemetry is the command (emits once, returns status) > files the exceeded event under the run's trace
+(pass) publishBudgetTelemetry is the command (emits once, returns status) > emits exactly one event per call at the warning threshold [0.06ms]
+(pass) publishBudgetTelemetry is the command (emits once, returns status) > emits nothing below the reassurance threshold [0.02ms]
+(pass) describeBudgetRemaining > includes turns remaining [0.01ms]
+(pass) describeBudgetRemaining > displays unlimited when maxTurns is -1
+(pass) describeBudgetRemaining > singular turn when 1 remaining
+(pass) default budget ceilings > enforces the default turn ceiling at 24 [0.02ms]
+(pass) default budget ceilings > enforces the default tool-call ceiling at 40
+(pass) default budget ceilings > enforces the default tool-runtime ceiling at two minutes
+(pass) default budget ceilings > the default wall-time ceilings narrate from the same constants
+(pass) default budget ceilings > selects the first exceeded ceiling before computing ratios [0.02ms]
+(pass) BudgetState token tracking > starts with zero token counts
+(pass) BudgetState token tracking > recordTokenUsage accumulates tokens
+
+test/core/provider-retry-ownership.test.ts:
+(pass) provider retry ownership > issues exactly one provider call per agent attempt [3.58ms]
+(pass) provider retry ownership > does not call the provider for an already-aborted run [1.31ms]
+(pass) provider retry ownership > does not add an agent attempt for a non-retryable provider failure [1.52ms]
+(pass) provider retry ownership > standalone llm runs exactly one provider attempt [1.16ms]
+(pass) typed provider failure preservation > preserves abort identity without retry [1.65ms]
+(pass) typed provider failure preservation > preserves context-overflow cause and usage without blind retry [1.37ms]
+
+test/core/entropy.test.ts:
+(pass) process entropy > returns the supplied source untouched [0.03ms]
+(pass) process entropy > supplies a fresh uuid per call [0.08ms]
+(pass) process entropy > uses the injected clock and entropy sources instead of the real defaults [0.04ms]
+
+test/core/prompt-builder.test.ts:
+(pass) buildSystemPrompt > combines base prompt with tool prompt [0.02ms]
+(pass) buildSystemPrompt > returns base prompt when no tool has prompt
+(pass) buildSystemPrompt > returns tool prompt when no base prompt
+(pass) buildSystemPrompt > returns undefined when no base and no tool prompts
+
+test/core/run-message.test.ts:
+(pass) run terminal message result contract > preserves asymmetric snapshot usage 0/7 [1.47ms]
+(pass) run terminal message result contract > preserves asymmetric snapshot usage 11/0 [1.25ms]
+(pass) run terminal message result contract > returns stop, text, steps, and usage from the terminal assistant snapshot [1.32ms]
+(pass) run terminal message result contract > reports a budget error without calling the provider when the turn budget is zero [1.10ms]
+(pass) run terminal message result contract > propagates a terminal validation error [1.29ms]
+
+test/core/transport.test.ts:
+(pass) operator transport config threading > hands the configured baseUrl and headers to the llm call [1.55ms]
+(pass) operator transport config threading > leaves transport absent when the host configured none [1.24ms]
+
+test/core/model-restore.test.ts:
+(pass) restore_model_selection at the turn boundary > records an executed restoration before chatting on the primary again [1.57ms]
+(pass) restore_model_selection at the turn boundary > keeps the fallback pinned when the policy refuses the restoration [1.24ms]
+(pass) restore_model_selection at the turn boundary > records nothing when the earlier turn was already on the primary or off the chain [2.21ms]
+
+test/core/steering.test.ts:
+(pass) mid-turn steering > yields at a step boundary and continues on the next model call [1.78ms]
+(pass) mid-turn steering > passes no steering callback when steering is absent [1.28ms]
+(pass) mid-turn steering > keeps the same turn index when retrying the provider [1.58ms]
+
+test/core/settled.test.ts:
+(pass) settled > resolves to void once a fulfilled promise settles [0.03ms]
+(pass) settled > resolves to void once a rejected promise settles instead of propagating [0.02ms]
+(pass) settled > does not settle before the tracked promise does [0.04ms]
+
+test/compaction/bracket.test.ts:
+(pass) Compaction bracket > brackets a cut: one started, one completed(cut), completed last [1.19ms]
+(pass) Compaction bracket > records a failed terminal when publishing the normal completion throws [1.19ms]
+(pass) Compaction bracket > a summarizer throw degrades to a recorded skip — the run lives (#734 F1) [1.35ms]
+(pass) Compaction bracket > brackets the refused cut: completed(no_user_boundary) [0.98ms]
+(pass) Compaction bracket > brackets the trivial no-op: completed(nothing_reclaimed) [0.94ms]
+
+test/compaction/compact.test.ts:
+(pass) Compaction > kept-window assertion rejects a missing timestamp [0.26ms]
+(pass) Compaction > kept-window assertion rejects a non-finite timestamp: %s [0.10ms]
+(pass) Compaction > kept-window assertion rejects a non-finite timestamp: %s [0.04ms]
+(pass) Compaction > kept-window assertion rejects a non-finite timestamp: %s [0.03ms]
+(pass) Compaction > kept-window assertion rejects malformed metadata: {"value":null} [0.04ms]
+(pass) Compaction > kept-window assertion rejects malformed metadata: {"value":{}} [0.01ms]
+(pass) Compaction > kept-window assertion rejects malformed metadata: {"value":[{"time":1}]} [0.03ms]
+(pass) Compaction > kept-window assertion rejects malformed metadata: {"value":[{"time":"1","text":"ok"}]} [0.03ms]
+(pass) Compaction > files the compaction record under the run's trace [1.11ms]
+(pass) Compaction > shouldCompact > compacts before consuming a larger configured reserve [0.03ms]
+(pass) Compaction > shouldCompact > moves a low-yield next round later [0.01ms]
+(pass) Compaction > ineffective yield > requires both the absolute and ratio floors
+(pass) Compaction > compact > does not compact when messages count is within protectRecent [0.88ms]
+(pass) Compaction > compact > removes oldest non-system messages beyond protectRecent [0.98ms]
+(pass) Compaction > compact > preserves the most recent messages [0.99ms]
+(pass) Compaction > compact > passes a bounded summarizer budget contract [1.14ms]
+(pass) Compaction > compact > weights long base64-like runs at four times their character length [0.10ms]
+(pass) Compaction > compact > inserts summary message when onSummarize is provided [1.03ms]
+(pass) Compaction > compact > does not compact when non-system messages are within protectRecent [0.84ms]
+(pass) Compaction > commit boundary invariant > snaps the cutoff back to a user boundary when no summary anchors the kept window [0.99ms]
+(pass) Compaction > commit boundary invariant > refuses as a value when no valid user boundary exists — never a throw [0.82ms]
+(pass) Compaction > commit boundary invariant > reports nothing reclaimed when the only user boundary is the opening message [0.94ms]
+(pass) Compaction > commit boundary invariant > reports the elision as reduced when the opening message is the only user boundary [1.21ms]
+(pass) Compaction > commit boundary invariant > keeps the natural cutoff when a summary user message anchors the window [1.16ms]
+(pass) Compaction > commit boundary invariant > threads the history session id into the summary message [1.01ms]
+(pass) Compaction > anchored iterative summarization (L2) > excludes user messages from the summarizer and preserves them byte-exact [1.08ms]
+(pass) Compaction > anchored iterative summarization (L2) > threads the previous anchor body through the second cut — no recursive re-summarization [2.04ms]
+(pass) Compaction > anchored iterative summarization (L2) > markers are regenerated, never stacked; nudges are not dated (#737) [3.04ms]
+(pass) Compaction > anchored iterative summarization (L2) > skips the model call when the cut span holds nothing summarizable [2.08ms]
+(pass) Compaction > anchored iterative summarization (L2) > counts completed tool output when selecting preserved user messages [1.11ms]
+(pass) Compaction > anchored iterative summarization (L2) > refuses a zero-progress cut instead of reporting it as compaction (review M1) [0.92ms]
+(pass) Compaction > anchored iterative summarization (L2) > records anchored=false without an anchor render [1.04ms]
+(pass) Compaction > anchored iterative summarization (L2) > records anchored=true when the anchor render heads the kept window [0.93ms]
+
+test/compaction/reduce.test.ts:
+(pass) elideToolOutputs > elides old bulky outputs, keeps identity, and leaves the protected tail intact [0.07ms]
+(pass) elideToolOutputs > is idempotent: a second pass over its own output finds nothing [0.03ms]
+(pass) elideToolOutputs > reclaims nothing from small outputs or non-completed tools [0.02ms]
+(pass) Compaction.compact with elision configured > reduces instead of cutting while there is something to elide [1.63ms]
+(pass) Compaction.compact with elision configured > falls back to the cut once elision has nothing left [1.09ms]
+(pass) Compaction.compact with elision configured > never grows an output: the unsafe-config region is skipped, not stacked [0.07ms]
+(pass) Compaction.compact with elision configured > also cuts in the same round when elision cannot cover the measured overage [0.98ms]
+(pass) Compaction.compact with elision configured > keeps successful elision when the subsequent summarizer fails [1.10ms]
+(pass) Compaction.compact with elision configured > keeps the round to elision alone when the estimated reclaim covers the overage [0.90ms]
+
+test/compaction/apply.test.ts:
+(pass) compaction geometry and application > uses adaptive geometry instead of cumulative run spend [0.01ms]
+(pass) compaction geometry and application > reserves configured headroom before the ratio threshold [0.01ms]
+(pass) compaction geometry and application > moves a low-yield next threshold later
+(pass) compaction geometry and application > cuts at a user boundary when the threshold seam fires [0.95ms]
+(pass) compaction geometry and application > falls back to a user-boundary cut when summarization fails [1.01ms]
+(pass) compaction geometry and application > records nothing reclaimed when the protected tail covers history [0.83ms]
+
+test/compaction/geometry.test.ts:
+(pass) compaction geometry > tiers the base threshold by context window [0.01ms]
+(pass) compaction geometry > moves the threshold from the previous compaction yield and clamps it [0.02ms]
+(pass) compaction geometry > owns reserve, lead, prepare, and grace boundaries [0.01ms]
+
+test/compaction/speculate.test.ts:
+(pass) run-scoped compaction speculation > starts only at the prepare boundary [1.91ms]
+(pass) run-scoped compaction speculation > is single-flight and retains one candidate [1.49ms]
+(pass) run-scoped compaction speculation > promotes a fresh candidate without another summary call [1.24ms]
+(pass) run-scoped compaction speculation > discards a changed prefix and falls back synchronously [1.21ms]
+(pass) run-scoped compaction speculation > promotes across appended turns and preserves the appended tail [1.13ms]
+(pass) run-scoped compaction speculation > keeps a candidate valid when only a completed tool output changes [1.22ms]
+(pass) run-scoped compaction speculation > invalidates a warm candidate when a different compaction anchor lands [1.14ms]
+(pass) run-scoped compaction speculation > replaces a stale candidate during the next background prepare [1.43ms]
+(pass) run-scoped compaction speculation > recovers from a background prepare failure through the synchronous seam [1.32ms]
+(pass) run-scoped compaction speculation > falls back synchronously when a valid candidate cannot reclaim [1.22ms]
+(pass) run-scoped compaction speculation > retains an unevaluated candidate after a protected-tail no-op [1.08ms]
+(pass) run-scoped compaction speculation > uses deterministic fallback when the summarizer deadline expires [1.13ms]
+(pass) run-scoped compaction speculation > aborts before the scheduled summary starts [0.96ms]
+(pass) run-scoped compaction speculation > aborts an active summary through its exact signal [1.03ms]
+(pass) run-scoped compaction speculation > stops preparing after two failures [0.93ms]
+
+test/compaction/measure.test.ts:
+(pass) measuredContextTokens > uses the last model step rather than cumulative turn input [0.03ms]
+(pass) measuredContextTokens > does not add cache lanes to cache-inclusive input
+(pass) measuredContextTokens > returns no measurement before a model step finishes
+
+test/compaction/boundaries.test.ts:
+(pass) compaction boundary integrity > interrupts a summarizer before invoking it [0.88ms]
+(pass) compaction boundary integrity > rejects empty or entirely retained histories [0.07ms]
+(pass) compaction boundary integrity > rejects changed revert evidence [0.07ms]
+(pass) compaction boundary integrity > fingerprints reasoning and step boundaries rather than just visible text [0.07ms]
+(pass) compaction boundary integrity > consumes candidates and disables further speculative work [1.19ms]
+
+test/observation/scope.test.ts:
+(pass) scoped observations > stamps authoritative identity, event id, and time onto payloads [0.06ms]
+(pass) scoped observations > preserves strict descriptor payload fields while stamping scope identity [0.07ms]
+(pass) scoped observations > merges child identity while retaining parent fields [0.04ms]
+(pass) scoped observations > reports invalid payloads and sink failures without escaping [0.11ms]
+(pass) scoped observations > contains reporter failure without changing its identity: 102 |       { name: TestEvent.name, type: "Error" },
+103 |     ]);
+104 |   });
+105 | 
+106 |   it.each([
+107 |     new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
+          ^
+error: reporter failed
+      at <anonymous> (/Users/ino/Develop/openomni-w53/packages/agent/test/observation/scope.test.ts:107:5)
+ [0.24ms]
+(pass) scoped observations > contains reporter failure without changing its identity: Symbol(reporter) [0.05ms]
+(pass) scoped observations > contains reporter failure without changing its identity: {
+  toString: 0,
+} [0.04ms]
+(pass) scoped observations > contains reporter failure without changing its identity: null [0.03ms]
+(pass) scoped observations > contains reporter failure without changing its identity: undefined [0.03ms]
+(pass) scoped observations > contains reporter failure without changing its identity: false [0.02ms]
+(pass) scoped observations > contains reporter failure without changing its identity: 1 [0.02ms]
+(pass) scoped observations > contains reporter failure without changing its identity: 1n [0.02ms]
+(pass) scoped observations > contains reporter failure without changing its identity: "reporter" [0.02ms]
+(pass) scoped observations > contains reporter failure without changing its identity: [Function] [0.02ms]
+(pass) scoped observations > forwards subscriptions when the underlying sink supports them [0.04ms]
+(pass) scoped observations > collector groups and resets observations [0.04ms]
+(pass) scoped observations > generates compact trace identifiers [0.03ms]
+
+test/observation/bus.test.ts:
+(pass) observation bus delivery > publishes asynchronously in FIFO subscriber order [0.14ms]
+(pass) observation bus delivery > isolates a throwing subscriber while preserving the publish snapshot [0.10ms]
+(pass) observation bus delivery > delivers the original handler failure to the injected error sink [0.06ms]
+(pass) observation bus delivery > filters subscriptions by all requested payload fields [0.14ms]
+(pass) observation bus delivery > delivers runtime descriptors and every primitive to observers [0.30ms]
+(pass) observation bus delivery > keeps isolated subscriptions out of root delivery [0.10ms]
+
+test/core/execution/run-terminal-record.test.ts:
+(pass) one terminal record per started run > records ordinary completion with charged turns [1.70ms]
+(pass) one terminal record per started run > records budget error without invoking the model [1.19ms]
+(pass) one terminal record per started run > records final classified retry facts at the terminal ceiling [1.61ms]
+(pass) one terminal record per started run > records an abort during retry backoff as an interrupt rather than provider failure [1.67ms]
+(pass) one terminal record per started run > records aborts without publishing a retry promise [1.10ms]
+(pass) one terminal record per started run > preserves a pre-provider non-Error terminal value [1.02ms]
+
+test/core/execution/run-agent-loop.test.ts:
+(pass) reopened SQLite hydrates exact tool-bearing assistant identities and rendered results [59.38ms]
+(pass) compaction projection and lossless revert survive SQLite reopen without deleting originals [103.18ms]
+
+test/core/execution/retry-turn-budget.test.ts:
+(pass) turn budget across retries > charges the same turn once and a subsequent turn once [0.05ms]
+(pass) turn budget across retries > reports one charged turn after a successful retry [2.33ms]
+
+test/core/execution/execution-verdicts-model.test.ts:
+(pass) the single L2 executor's four-kind verdict model > refuses an unregistered kind with a typed error before policy or body [1.28ms]
+(pass) the single L2 executor's four-kind verdict model > registers extension kinds as declarative data [1.20ms]
+(pass) the single L2 executor's four-kind verdict model > passes the committed intent receipt to the body after its commit resolves [4.05ms]
+(pass) the single L2 executor's four-kind verdict model > fails closed when a transform removes the result envelope [1.72ms]
+(pass) the single L2 executor's four-kind verdict model > commits a linked failed result carrying the typed body failure [1.37ms]
+(pass) the single L2 executor's four-kind verdict model > prompt: pre deny commits no intent/result and never calls body [1.21ms]
+(pass) the single L2 executor's four-kind verdict model > prompt: allow commits intent/result and calls body exactly once [1.13ms]
+(pass) the single L2 executor's four-kind verdict model > prompt: post deny reverts when a reverter exists [1.30ms]
+(pass) the single L2 executor's four-kind verdict model > prompt: post deny records irreversible when no reverter exists [1.18ms]
+(pass) the single L2 executor's four-kind verdict model > turn: pre deny commits no intent/result and never calls body [1.02ms]
+(pass) the single L2 executor's four-kind verdict model > turn: allow commits intent/result and calls body exactly once [0.99ms]
+(pass) the single L2 executor's four-kind verdict model > turn: post deny reverts when a reverter exists [0.96ms]
+(pass) the single L2 executor's four-kind verdict model > turn: post deny records irreversible when no reverter exists [0.94ms]
+(pass) the single L2 executor's four-kind verdict model > llm: pre deny commits no intent/result and never calls body [0.89ms]
+(pass) the single L2 executor's four-kind verdict model > llm: allow commits intent/result and calls body exactly once [0.91ms]
+(pass) the single L2 executor's four-kind verdict model > llm: post deny reverts when a reverter exists [0.92ms]
+(pass) the single L2 executor's four-kind verdict model > llm: post deny records irreversible when no reverter exists [0.88ms]
+(pass) the single L2 executor's four-kind verdict model > tool: pre deny commits no intent/result and never calls body [0.86ms]
+(pass) the single L2 executor's four-kind verdict model > tool: allow commits intent/result and calls body exactly once [0.90ms]
+(pass) the single L2 executor's four-kind verdict model > tool: post deny reverts when a reverter exists [0.92ms]
+(pass) the single L2 executor's four-kind verdict model > tool: post deny records irreversible when no reverter exists [0.89ms]
+(pass) the durable boundary child action commits only for executed outcomes > an executed boundary request commits exactly one boundary child under its intent [1.05ms]
+(pass) the durable boundary child action commits only for executed outcomes > a post-denied boundary request commits NO boundary child: recovery must never resurrect a reverted outcome as executed [1.06ms]
+
+test/core/execution/stop-chain.test.ts:
+(pass) executor stop judgment consumes pinned policy and records the first verdict [7.84ms]
+(pass) alternate policy thresholds change repetition; invoking tools never resets progress [5.42ms]
+(pass) changed outputs without tools stall, denied tools recur, committed effects reset streaks [7.67ms]
+
+test/core/execution/llm-attempts.test.ts:
+(pass) executor admits ordered retry children and retains every failed billed usage [1.75ms]
+(pass) every attempt pins its ordinal, cap and retry reason; the settled one pins projected evidence [1.27ms]
+(pass) visible output makes a provider failure terminal without a second admission [1.14ms]
+(pass) retry cap retains three failed children and never invokes a fourth body [1.20ms]
+(pass) retry re-evaluates policy and context before admitting another child [1.42ms]
+(pass) interrupt cancels an exactly registered backoff without another provider admission [1.29ms]
+(pass) retry approval approve settles the captured child without reconstructing the provider call [5.29ms]
+(pass) retry approval refuse settles the captured child without reconstructing the provider call [4.29ms]
+(pass) the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once [3.27ms]
+
+test/core/execution/lifecycle-budget.test.ts:
+(pass) run budget terminal facts > charges successful and failed tools across turns before the next admission [2.25ms]
+(pass) run budget terminal facts > reports wall-time exhaustion through only the injected sink [1.17ms]
+(pass) run budget terminal facts > correlates the exceeded-budget record to the run identity [1.03ms]
+
+test/core/execution/events.test.ts:
+(pass) RunEvents BusEvents > TurnStart parses [0.24ms]
+(pass) RunEvents BusEvents > published run events round-trip actorId through the schema [0.27ms]
+(pass) RunEvents BusEvents > TurnComplete parses [0.24ms]
+(pass) RunEvents BusEvents > TurnComplete requires total usage [0.05ms]
+(pass) RunEvents BusEvents > tool execution events are not duplicated under RunEvents
+(pass) RunEvents BusEvents > budget warning uses the operational event contract [0.21ms]
+(pass) RunEvents BusEvents > budget reassurance uses the operational event contract [0.03ms]
+(pass) RunEvents BusEvents > CompactionStarted parses, with and without measurement [0.27ms]
+(pass) RunEvents BusEvents > CompactionStarted rejects an unknown trigger [0.03ms]
+(pass) RunEvents BusEvents > CompactionCompleted parses every outcome; rejects unknown ones [0.07ms]
+(pass) RunEvents BusEvents > ErrorRetry requires reason [0.03ms]
+(pass) RunEvents BusEvents > ErrorRetry requires backoffMs [0.01ms]
+(pass) RunEvents BusEvents > ErrorRetry parses [0.01ms]
+
+test/core/execution/compaction-deferral.test.ts:
+(pass) compaction apply seam deferral > defers the threshold trigger while a speculative cut is in flight below grace [1.37ms]
+(pass) compaction apply seam deferral > runs the merge once the measured window reaches grace even with a cut in flight [1.30ms]
+
+test/core/execution/message-policy.test.ts:
+(pass) the final result consumes the executor-transformed canonical assistant rather than raw provider text [2.29ms]
+
+test/core/execution/turn-yield.test.ts:
+(pass) window and steering yield > arms the provider call from the resolved model window [1.80ms]
+(pass) window and steering yield > continues on a window yield and disarms the next turn after no rewrite [2.11ms]
+(pass) window and steering yield > applies compaction before continuing a window yield [2.98ms]
+(pass) window and steering yield > aborts active speculative preparation when the run settles [1.64ms]
+(pass) window and steering yield > treats unlimited tool calls as a window yield, never a step-cap terminal [1.90ms]
+(pass) window and steering yield > continues a steering yield instead of reporting max-steps [1.64ms]
+(pass) window and steering yield > keeps the step cap terminal when steering also fired [1.36ms]
+(pass) window and steering yield > compacts at the ordered boundary even when steering requests continuation [5.98ms]
+(pass) window and steering yield > reports the step cap honestly [2.50ms]
+
+test/core/execution/tools-context.test.ts:
+(pass) tool execution context > forwards per-call cancellation with kernel-owned correlation identity [2.06ms]
+(pass) tool execution context > never enters a body when the caller already cancelled [1.31ms]
+
+test/core/execution/lifecycle-turn-pre.test.ts:
+(pass) turn preparation compaction geometry > arms the model below the compaction threshold [0.01ms]
+(pass) turn preparation compaction geometry > moves the yield arm earlier after a high-yield compaction [0.01ms]
+(pass) turn preparation compaction geometry > keeps reserve, prepare, threshold, and grace ordered [0.01ms]
+
+test/core/execution/turn-provenance.test.ts:
+(pass) turn provenance > preserves hydrated assistant role and parent linkage in model history [1.51ms]
+
+test/core/execution/lifecycle-error.test.ts:
+(pass) provider status 408 produces canonical placement facts [0.14ms]
+(pass) provider status 529 produces canonical placement facts [0.03ms]
+(pass) provider status 400 produces canonical placement facts [0.03ms]
+(pass) a context overflow is not classified as a generic provider retry [0.03ms]
+
+test/core/execution/tools-sole-emitter.test.ts:
+(pass) publishes no lifecycle event when pre policy blocks before tool intent [1.50ms]
+(pass) publishes Started after intent commit and Completed after result commit [1.42ms]
+(pass) publishes one error completion after a failed tool result commits [1.26ms]
+(pass) publishes TimedOut and Completed exactly once after the timeout result commits [1.97ms]
+
+test/core/execution/result-canonical-json.test.ts:
+(pass) body results cross the durable boundary as canonical JSON: non-finite numbers become null [1.24ms]
+
+test/core/execution/tool-wave.test.ts:
+(pass) fulfills bound ownership after timed cell rejection [1.93ms]
+(pass) fulfills generation ownership after timed cell rejection [1.66ms]
+(pass) reports timed cell rejection before timeout [1.37ms]
+(pass) inherits generation retention into a timed cell definition that fulfills [1.49ms]
+(pass) inherits generation retention into a timed cell definition that rejects [1.10ms]
+(pass) fulfills bound ownership after timed wave rejection [1.10ms]
+(pass) fulfills generation ownership after timed wave rejection [1.13ms]
+(pass) reports timed wave rejection before timeout [1.05ms]
+(pass) inherits generation retention into a timed wave definition that fulfills [1.06ms]
+(pass) inherits generation retention into a timed wave definition that rejects [1.02ms]
+(pass) inherits raw-body retention through nested executors without a bound turn owner [1.43ms]
+(pass) freezes unsettled slots as interrupted at the abort event, even if a body resolves in that event [1.07ms]
+(pass) does not let a late body fulfillment overwrite cancellation [1.31ms]
+(pass) does not let a late body rejection overwrite cancellation [1.26ms]
+(pass) preserves input-order results and ledger terminals after reverse body completion [1.74ms]
+(pass) retains siblings' evidence after a typed body failure [1.33ms]
+(pass) retains siblings' evidence after a defect body failure [1.13ms]
+(pass) refuses incomplete arguments without losing valid or invalid input positions [1.35ms]
+(pass) holds the entire wave until every captured approval has a durable answer [6.53ms]
+(pass) dispatches zero tools when the canonical assistant call-block write fails [1.65ms]
+(pass) settles a defective fallback slot without interrupting its sibling or losing model evidence [1.18ms]
+(pass) propagates a fallback body's interruption instead of settling the slot as an error [0.99ms]
+(pass) does not enter a body when cancellation predates the wave [1.04ms]
+(pass) keeps a sequential barrier after preceding rejection and runs later work [1.12ms]
+(pass) joins preceding work and blocks following work at a sequential barrier [1.21ms]
+
+test/core/execution/lifecycle-audit-facts.test.ts:
+(pass) canonical lifecycle audit facts > reports current-response tokens rather than cumulative run tokens [1.94ms]
+
+test/core/execution/overflow-recovery.test.ts:
+(pass) context overflow recovery > classifies provider overflow text without matching rate limits [0.05ms]
+(pass) context overflow recovery > does not blindly retry when compaction is unavailable and preserves the failure [1.43ms]
+(pass) context overflow recovery > compacts once and the same-model retry sees rewritten history [5.89ms]
+(pass) context overflow recovery > stops after the one compacting retry and preserves the second overflow [2.23ms]
+
+test/core/execution/lifecycle-stop.test.ts:
+(pass) run stop outcomes > returns the current turn text and records one text step [1.58ms]
+(pass) run stop outcomes > does not resurrect prior text when a later continuation snapshot is empty [2.24ms]
+
+test/core/execution/compaction-node.test.ts:
+(pass) retains an original atomic entry when the configured protected tail is zero [1.17ms]
+(pass) restores exact originals when a replacement has no shared suffix [0.10ms]
+(pass) snapshots removed evidence independently of mutable source messages [0.11ms]
+(pass) refuses compaction restoration when the original kept boundary is missing [0.10ms]
+(pass) retains concurrent entries after restoring a full-range elision [0.08ms]
+(pass) commits a reversible compaction result before completion observations and the next model call [2.46ms]
+(pass) holds completion observation until the reversible commit resolves [1.79ms]
+(pass) does not report completion or mutate history when the reversible commit fails [1.58ms]
+(pass) refuses compaction before the summarizer when compiled pre policy denies it [1.41ms]
+(pass) forwards session cancellation into an in-flight compaction summarizer [1.79ms]
+
+test/core/execution/tool-history.test.ts:
+(pass) tool-bearing history > feeds a completed tool call and result into the next model turn [2.31ms]
+(pass) tool-bearing history > preserves accumulated tool history and usage across an agent retry [2.30ms]
+(pass) tool-bearing history > does not resurrect prior text when the next turn emits an empty snapshot [1.94ms]
+
+test/core/execution/tools.test.ts:
+(pass) applies scoped action identity after a malicious observation payload [0.10ms]
+
+test/core/execution/stop-runtime.test.ts:
+(pass) real session repeat uses machine exact_repeat with 3 admitted steps [22.69ms]
+(pass) real session stall uses machine toolless_stall with 3 admitted steps [15.61ms]
+(pass) real session blocked uses machine blocked_recurrence with 3 admitted steps [18.27ms]
+(pass) real session progress uses machine continuation with 8 admitted steps [68.50ms]
+(pass) only a still-armed action created by this turn permits a waiting terminal [25.68ms]
+
+test/core/execution/run-actor-resolution.test.ts:
+(pass) run actor resolution > uses trace.agentName when present [4.99ms]
+(pass) run actor resolution > falls back to the run identity when agentName is absent [2.12ms]
+
+test/core/execution/turn-tool-metadata-collision.test.ts:
+(pass) tool metadata key collisions > refuses a catalog where a_b's alias collides with a tool named a.b [1.42ms]
+(pass) tool metadata key collisions > refuses two distinct tools carrying the same name (identity, not name, owns a key) [1.16ms]
+(pass) tool metadata key collisions > a single tool claiming its own alias keys stays legal [1.68ms]
+
+test/core/execution/run-failure-facts.test.ts:
+(pass) terminal failure facts > carries canonical classification, spent attempts and ceiling [1.98ms]
+(pass) terminal failure facts > keeps nonretryable provider failures at one attempt [1.32ms]
+(pass) terminal failure facts > does not add enumerable provenance or change the provider error identity [1.52ms]
+(pass) terminal failure facts > does not attribute catalog, policy, storage or unrelated failures to the provider [1.13ms]
+
+test/core/policy/native-tool-pre-dispatch.test.ts:
+(pass) approval recovery executes recorded admitted bytes without transforming again [5.84ms]
+(pass) model executes and renders only schema-valid admitted input (admitted) [2.70ms]
+(pass) model executes and renders only schema-valid admitted input (null) [2.68ms]
+(pass) cell executes and renders only schema-valid admitted input (admitted) [2.83ms]
+(pass) cell executes and renders only schema-valid admitted input (null) [2.22ms]
+(pass) wave executes and renders only schema-valid admitted input (admitted) [2.12ms]
+(pass) wave executes and renders only schema-valid admitted input (null) [2.11ms]
+
+test/core/policy/tool-admission.test.ts:
+(pass) tool calls reach the executor without target gating > preserves the catalog and executor refusal at the single door [2.32ms]
+(pass) tool calls reach the executor without target gating > preserves the catalog and executor refusal at the wave door [1.82ms]
+
+test/core/policy/native-tool-post-dispatch.test.ts:
+(pass) tool post-policy refusal > publishes one completion only after the blocked-post result commits [2.18ms]
+(pass) tool post-policy refusal > returns an error result through the model door [1.47ms]
+(pass) tool post-policy refusal > throws through the cell door [1.25ms]
+(pass) tool post-policy refusal > model door uses a valid transformed output [1.24ms]
+(pass) tool post-policy refusal > model door rejects a transformed output that breaks the schema [1.13ms]
+(pass) tool post-policy refusal > cell door uses a valid transformed output [1.02ms]
+(pass) tool post-policy refusal > cell door rejects a transformed output that breaks the schema [1.05ms]
+
+test/core/policy/audit-emission.test.ts:
+(pass) awaits policy.decision commit before publishing its observation [1.79ms]
+
+ 852 pass
+ 0 fail
+ 10015 expect() calls
+Ran 852 tests across 110 files. [47.20s]

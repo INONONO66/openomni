@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { z } from "zod";
 import { type ApiFailure, coerceApiError, declaredContextOverflow } from "../error";
 import { headerDelay } from "./delay";
@@ -57,19 +56,6 @@ export namespace Retry {
   export const RETRY_BACKOFF_FACTOR = 2;
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000;
   export const RETRY_MAX_DELAY = 2_147_483_647;
-
-  export function sleep(ms: number, signal?: AbortSignal): Effect.Effect<void> {
-    const timer = Effect.sleep(Math.min(ms, RETRY_MAX_DELAY));
-    if (signal === undefined) return timer;
-    if (signal.aborted) return Effect.interrupt;
-    const abort = Effect.callback<never>((resume) => {
-      const onAbort = () => resume(Effect.interrupt);
-      signal.addEventListener("abort", onAbort, { once: true });
-      if (signal.aborted) onAbort();
-      return Effect.sync(() => signal.removeEventListener("abort", onAbort));
-    });
-    return Effect.raceFirst(timer, abort);
-  }
 
   /**
    * Server-directed waits above this cap fail fast instead of silently

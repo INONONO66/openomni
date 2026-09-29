@@ -1,0 +1,602 @@
+bun test v1.4.1 (4661e494f)
+
+test/blacklist.test.ts:
+(pass) Blacklist protocol contracts > parses active actor, endpoint, channel, and pattern entries [1.04ms]
+(pass) Blacklist protocol contracts > rejects entries without an audit creator [0.30ms]
+
+test/named-policy-contract.test.ts:
+(pass) durable named-policy wire contract > transform rows require namespaced refs and JSON-only config [0.93ms]
+(pass) durable named-policy wire contract > one historical decoder preserves raw bytes while canonicalizing known names [1.19ms]
+(pass) durable named-policy wire contract > generation identity is session-qualified and bundle selection is a canonical set [0.67ms]
+(pass) durable named-policy wire contract > intent retains original args beside admitted args and inspection retains ordered refs [0.70ms]
+
+test/trace.test.ts:
+(pass) traceIdFromUuid removes UUID separators without changing hex digits [0.02ms]
+
+test/policy.test.ts:
+(pass) Policy schemas > InputRule > parses a basic rule [0.44ms]
+(pass) Policy schemas > InputRule > parses a rule with reason and priority [0.03ms]
+(pass) Policy schemas > Permission > parses action-only permission [0.21ms]
+(pass) Policy schemas > Permission > parses with allowlist [0.02ms]
+(pass) Policy schemas > Permission > parses with denylist [0.01ms]
+(pass) Policy schemas > Permission > parses with requireApproval [0.01ms]
+(pass) Policy schemas > Permission > parses with inputRules [0.05ms]
+(pass) Policy schemas > Permission > rejects unsafe regex patterns [0.29ms]
+(pass) Policy schemas > Permission > accepts linear regex patterns used by policy callsites [0.06ms]
+(pass) Policy schemas > Policy.Timing > parses all 13 valid timing values [0.02ms]
+(pass) Policy schemas > Policy.Timing > has all 13 timing values as constants [0.01ms]
+(pass) Policy schemas > Policy.Timing > does not register invalid timing values [0.01ms]
+(pass) Policy schemas > Policy.PolicyDecision > accepts canonical allow, deny, and pending verdicts [0.29ms]
+(pass) Policy schemas > Policy.PolicyDecision > rejects legacy evaluator and effect verdict strings [0.07ms]
+(pass) Policy schemas > Policy.PolicyDecision > rejects hybrid canonical decisions carrying legacy verdict keys [0.03ms]
+(pass) Policy schemas > Policy.PolicyDecision > creates allow decisions with helper defaults [0.04ms]
+(pass) Policy schemas > Policy.PolicyDecision > creates deny and pending decisions as blocking [0.03ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses prompt.append_context effect [0.16ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses prompt.inject_message effect [0.10ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses tool.filter effect [0.07ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses tool.rewrite_input effect [0.11ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses model.override effect (#753) — connection-scoped model routing [0.09ms]
+(pass) Policy schemas > Policy.PolicyEffect > refuses a model.override with empty coordinates, naming the offending field [0.10ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses tool.require_approval effect [0.08ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses run.abort effect [0.03ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses run.continue_with_prompt effect [0.06ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses run.retry_after effect [0.13ms]
+(pass) Policy schemas > Policy.PolicyEffect > parses audit.annotate effect [0.10ms]
+(pass) Policy schemas > Policy.PolicyPoint > parses policy point with timing and allowed effects [0.12ms]
+(pass) Policy schemas > Policy.PolicyPoint > parses policy point with all allowed effect types [0.03ms]
+(pass) Policy schemas > Policy.PolicyPlan > parses policy plan with policies array [0.43ms]
+(pass) Policy schemas > Policy.PolicyPlan > parses policy plan with registry version [0.01ms]
+(pass) Policy schemas > Policy.PolicyPlan > accepts policy plan with no policies [0.01ms]
+(pass) Policy schemas > Policy.PolicyPlan > rejects policy with empty id [0.04ms]
+
+test/llm-event.test.ts:
+(pass) LlmCall BusEvents > Completed refuses missing token lanes — the producer states them [0.47ms]
+(pass) LlmCall BusEvents > Failed refuses a missing aborted flag — false is load-bearing [0.27ms]
+(pass) LlmCall BusEvents > Completed rejects negative and fractional token counts [0.10ms]
+
+test/actor.test.ts:
+(pass) Actor protocol contracts > parses canonical identity and endpoint records [0.49ms]
+(pass) Actor protocol contracts > rejects invalid actor vocabulary values [0.05ms]
+(pass) Actor protocol contracts > Kind is THE one actor-kind vocabulary, including unknown (#498 A2) [0.06ms]
+(pass) Actor protocol contracts > an old identity blob carrying the retired relationship key still parses (#498 A1) [0.02ms]
+(pass) Actor.Profile (#498 A3) > parses a full profile: authority half + executable half [0.68ms]
+(pass) Actor.Profile (#498 A3) > parses a minimal profile — grant refs and executable fields are optional [0.02ms]
+(pass) Actor.Profile (#498 A3) > Budget rejects thresholds outside (0, 1) and threshold endpoints [0.09ms]
+(pass) Actor.Profile (#498 A3) > Budget rejects thresholds that invert the staged status order [0.04ms]
+(pass) Actor.Profile (#498 A3) > Budget rejects non-positive limits other than the -1 unlimited sentinel [0.03ms]
+(pass) Actor.Profile (#498 A3) > exposes shared budget threshold defaults
+(pass) Actor.Profile (#498 A3) > exposes budget threshold input as a Zod-first contract [0.08ms]
+
+test/ingress-internal.test.ts:
+(pass) InternalEventSchema > parses valid internal event [0.35ms]
+(pass) InternalEventSchema > rejects missing agentName [0.06ms]
+(pass) InternalEventSchema > external inbound schema rejects internal events [0.28ms]
+(pass) InternalEventSchema > trigger metadata parses correctly [0.26ms]
+
+test/session-history.test.ts:
+(pass) SessionHistory.Page > accepts a strictly ascending slice that continues, and a head slice that ends [0.86ms]
+(pass) SessionHistory.Page > refuses ordinals outside (afterRevision, headRevision], non-ascending order and a wrong cursor [0.35ms]
+(pass) SessionHistory requests > page requests default to the first hundred actions and cap the limit [0.17ms]
+(pass) SessionHistory requests > inspect requests default to direct children and cap traversal depth [0.11ms]
+(pass) SessionHistory projections > causes are one of action, inbox, alarm or root and carry only identities [0.88ms]
+(pass) SessionHistory projections > outcome_unknown is a distinct outcome and payload fields are refused [0.04ms]
+(pass) SessionHistory projections > an inspection nests child inspections to any depth [0.65ms]
+
+test/bus.test.ts:
+(pass) BusEvent.define > returns a descriptor with name and schema [0.01ms]
+(pass) BusEvent.define > preserves the provided name
+(pass) BusEvent.define > preserves the schema reference
+(pass) BusEvent.define > parses valid payloads [0.13ms]
+(pass) BusEvent.define > throws for invalid payloads [0.06ms]
+(pass) BusEvent.define > allows an empty string name
+
+test/provisioning.test.ts:
+(pass) Provisioning ids > PersonId / ChannelInstanceId / SecretId enforce their prefixes and slugs [0.12ms]
+(pass) Provisioning.Person > parses a full manifest and rejects unknown fields (strict) [0.34ms]
+(pass) Provisioning.Person > endpoints reject blank ids and unknown fields [0.04ms]
+(pass) Provisioning.ChannelInstance > parses with optional credentialRef/grant and rejects inline secrets (strict) [0.32ms]
+(pass) Provisioning.Secret > §8.2 by construction: only ciphertext fields exist, plaintext is rejected [0.20ms]
+(pass) Provisioning typed errors > StoreError and VaultError carry their code taxonomies [0.26ms]
+
+test/session-waiting.test.ts:
+(pass) waiting is a distinct terminal carrying nonempty live alarm identities [0.30ms]
+
+test/tool.test.ts:
+(pass) Tool shared contracts > parses tool config shared by execution and ingress [0.17ms]
+(pass) Tool shared contracts > rejects invalid tool config shapes [0.04ms]
+(pass) Tool.StatePending > parses valid pending state with empty input [0.15ms]
+(pass) Tool.StatePending > rejects missing input [0.06ms]
+(pass) Tool.StatePending > rejects missing status [0.11ms]
+(pass) Tool.StatePending > rejects wrong status [0.14ms]
+(pass) Tool.StateRunning > refuses a negative start time — timestamps share the EpochMs contract [0.10ms]
+(pass) Tool.StateRunning > rejects missing time [0.02ms]
+(pass) Tool.StateRunning > rejects missing input [0.03ms]
+(pass) Tool.StateCompleted > parses valid completed state with time.end set to 0 [0.23ms]
+(pass) Tool.StateCompleted > rejects non-plain metadata values [0.08ms]
+(pass) Tool.StateCompleted > rejects missing output [0.03ms]
+(pass) Tool.StateCompleted > rejects missing title [0.03ms]
+(pass) Tool.StateCompleted > rejects missing time [0.03ms]
+(pass) Tool.StateError > parses valid error state [0.20ms]
+(pass) Tool.StateError > rejects missing error [0.03ms]
+(pass) Tool.StateError > rejects missing time [0.02ms]
+(pass) Tool.State > parses each variant by status [0.03ms]
+(pass) Tool.State > rejects wrong status value [0.03ms]
+(pass) Tool.State > rejects missing status field [0.02ms]
+(pass) Tool.Call > parses valid call [0.09ms]
+(pass) Tool.Call > rejects missing id [0.02ms]
+(pass) Tool.Call > rejects missing tool [0.02ms]
+(pass) Tool.Result > parses valid minimal result [0.15ms]
+(pass) Tool.Result > parses valid full result [0.01ms]
+(pass) Tool.Result > rejects missing output [0.03ms]
+(pass) Tool.Spec > parses valid minimal spec [0.02ms]
+(pass) Tool.Spec > parses valid full spec [0.02ms]
+(pass) Tool.Spec > parses valid spec with prompt only [0.01ms]
+(pass) Tool.Spec > parses valid spec without prompt [0.01ms]
+(pass) Tool.Spec > rejects missing name [0.02ms]
+(pass) Tool.Spec > rejects missing inputSchema [0.02ms]
+
+test/module-surface.test.ts:
+(pass) protocol module surface > package entry points at the declaration-backed dist barrel [0.12ms]
+(pass) protocol module surface > resolved configs preserve declaration emission without composite/reference drift [9.78ms]
+(pass) protocol module surface > build project compiles the barrel plus src modules only, tests excluded [2.03ms]
+(pass) protocol module surface > built dist carries a declaration for every build input (when dist exists) [3.19ms]
+
+test/message.test.ts:
+(pass) Message.TextPart > parses valid minimal text part [0.35ms]
+(pass) Message.TextPart > parses valid full text part with time and metadata [0.14ms]
+(pass) Message.TextPart > parses the full persisted metadata value grammar with a typed result [0.03ms]
+(pass) Message.TextPart > rejects missing text [0.08ms]
+(pass) Message.ReasoningPart > parses valid reasoning part with required time [0.24ms]
+(pass) Message.ReasoningPart > rejects missing time [0.04ms]
+(pass) Message.ReasoningPart > rejects missing text [0.04ms]
+(pass) Message.StepStartPart > parses valid step-start part [0.12ms]
+(pass) Message.StepFinishPart > step-finish lane defaults are read-side migration for pre-#61 parts [0.35ms]
+(pass) Message.StepFinishPart > rejects missing cost [0.05ms]
+(pass) Message.StepFinishPart > rejects missing tokens [0.02ms]
+(pass) Message.StepFinishPart > rejects negative and fractional token counts [0.08ms]
+(pass) Message.ToolPart > parses with pending state [0.19ms]
+(pass) Message.ToolPart > parses with running state [0.02ms]
+(pass) Message.ToolPart > parses with completed state [0.03ms]
+(pass) Message.ToolPart > parses with error state [0.02ms]
+(pass) Message.ToolPart > rejects missing callID [0.03ms]
+(pass) Message.ToolPart > rejects wrong Tool.State status [0.03ms]
+(pass) Message.Part > rejects unknown type literal [0.09ms]
+(pass) Message.UserMessage > parses valid minimal user message [0.31ms]
+(pass) Message.UserMessage > parses valid full user message with system, tools, variant [0.03ms]
+(pass) Message.UserMessage > rejects missing agent [0.03ms]
+(pass) Message.UserMessage > rejects wrong role [0.03ms]
+(pass) Message.AssistantMessage > parses valid minimal assistant message [0.52ms]
+(pass) Message.AssistantMessage > rejects missing parentID [0.04ms]
+(pass) Message.AssistantMessage > rejects negative and fractional token counts [0.06ms]
+(pass) Message.Info > rejects wrong role [0.03ms]
+(pass) Message.WithParts > parses valid WithParts [0.09ms]
+(pass) Message.WithParts > rejects missing info [0.03ms]
+(pass) Message.WithParts > rejects missing parts [0.02ms]
+
+test/policy-event-shapes.test.ts:
+(pass) policy decision-event field maps > descriptor names and visibilities are unchanged [0.02ms]
+(pass) policy decision-event field maps > every descriptor requires the shared trace/session/time base [1.23ms]
+(pass) policy decision-event field maps > runId is optional on the shared base and survives parsing [0.04ms]
+(pass) policy decision-event field maps > the identity slot differs per event: actionId vs policyId vs neither [0.08ms]
+(pass) policy decision-event field maps > verdict vocabulary is the same three literals on every verdict-bearing event [0.13ms]
+(pass) policy decision-event field maps > only Evaluated and DecisionComposed accept the audit context [0.04ms]
+(pass) policy decision-event field maps > ActionRequested and ActionBlocked STRIP the audit context they do not declare [0.04ms]
+(pass) policy decision-event field maps > beforeSideEffect belongs to Evaluated alone [0.03ms]
+(pass) policy decision-event field maps > context belongs to ActionRequested alone [0.02ms]
+(pass) policy decision-event field maps > actor is an open record on every event (policy carries caller-shaped actors) [0.02ms]
+
+test/policy-event.test.ts:
+(pass) Policy.Events BusEvents > ActionRequested parses with required fields [0.07ms]
+(pass) Policy.Events BusEvents > ActionRequested parses with optional context [0.04ms]
+(pass) Policy.Events BusEvents > Evaluated parses with required fields [0.03ms]
+(pass) Policy.Events BusEvents > Evaluated parses with beforeSideEffect [0.02ms]
+(pass) Policy.Events BusEvents > Evaluated parses with policy audit context [0.56ms]
+(pass) Policy.Events BusEvents > DecisionComposed parses merged decision context [0.04ms]
+(pass) Policy.Events BusEvents > ActionBlocked parses [0.02ms]
+(pass) Policy.Events BusEvents > all verdict types are accepted [0.04ms]
+(pass) Policy.Events BusEvents > Evaluated parses with deny verdict [0.02ms]
+(pass) Policy.Events BusEvents > ActionRequested includes runId when provided [0.02ms]
+(pass) Policy.Events BusEvents > event descriptors have correct names [0.01ms]
+(pass) Policy.Events BusEvents > event descriptors have schemas
+(pass) Policy.Events BusEvents > policy audit events are persistent
+
+test/operational.test.ts:
+(pass) Operational.envelope > parses JSON context values with a typed result [0.22ms]
+(pass) Operational.envelope > uses the caller-supplied timestamp [0.01ms]
+
+test/request-schema.test.ts:
+(pass) a request preserves the original invocation and rejects incomplete or contradictory terminals [1.10ms]
+(pass) request quorum and all bounds count distinct expected responders [0.13ms]
+
+test/transcript.test.ts:
+(pass) Transcript fold — happy path > created → appended(text) → appended(tool) → running → completed → finished folds to the exact WithParts [0.28ms]
+(pass) Transcript fold — happy path > completed on a text part stamps the authoritative final text and end time [0.04ms]
+(pass) Transcript fold — happy path > interrupted projects a running tool part onto Tool.StateError with error 'interrupted' [0.02ms]
+(pass) Transcript fold — happy path > error transition on a running tool part records the error string [0.02ms]
+(pass) Transcript fold — unknown_message > any non-created fact on undefined state is unknown_message [0.03ms]
+(pass) Transcript fold — unknown_message > a fact addressed to a different messageId is unknown_message [0.01ms]
+(pass) Transcript fold — unknown_part > part.advanced on an absent partId is unknown_part [0.01ms]
+(pass) Transcript fold — invalid_transition > message.created on an existing message is invalid_transition
+(pass) Transcript fold — invalid_transition > skipping running: pending tool part advanced straight to completed is invalid_transition [0.01ms]
+(pass) Transcript fold — invalid_transition > error and interrupted on a pending tool part are invalid_transition [0.03ms]
+(pass) Transcript fold — invalid_transition > re-advancing a terminal tool part is invalid_transition [0.02ms]
+(pass) Transcript fold — invalid_transition > re-advancing a completed text part is invalid_transition [0.02ms]
+(pass) Transcript fold — invalid_transition > non-completed transitions on text parts are invalid_transition [0.02ms]
+(pass) Transcript fold — invalid_transition > advancing a punctual part (step-start) is invalid_transition [0.02ms]
+(pass) Transcript fold — invalid_transition > appending a duplicate partId is invalid_transition
+(pass) Transcript fold — invalid_transition > appending a part stamped with a foreign messageID is invalid_transition
+(pass) Transcript fold — invalid_transition > message.finished on a user message is invalid_transition [0.01ms]
+(pass) Transcript fold — appended initial state and coherence (F1/F3/F4/F5) > appending a tool part born past pending is invalid_transition [0.03ms]
+(pass) Transcript fold — appended initial state and coherence (F1/F3/F4/F5) > appending a text or reasoning part born terminal (time.end set) is invalid_transition [0.02ms]
+(pass) Transcript fold — appended initial state and coherence (F1/F3/F4/F5) > appending a part stamped with a foreign sessionID is invalid_transition
+(pass) Transcript fold — appended initial state and coherence (F1/F3/F4/F5) > closing a running part before its start (end < start) is invalid_transition [0.04ms]
+(pass) Transcript fold — appended initial state and coherence (F1/F3/F4/F5) > message.created with an already-finished assistant info is invalid_transition
+(pass) Transcript fold — reasoning signature carrier (F2) > completed with signature projects it onto the reasoning part [0.02ms]
+(pass) Transcript fold — reasoning signature carrier (F2) > signature on completed is ignored for text and tool parts [0.03ms]
+(pass) Transcript fold — reasoning signature carrier (F2) > PartTransition completed round-trips signature through zod [0.21ms]
+(pass) Transcript fold — already_finished > a second message.finished is already_finished [0.02ms]
+(pass) Transcript fold — already_finished > any fact after message.finished is already_finished [0.03ms]
+(pass) Transcript fold — immutability and determinism > the input state is deep-unchanged by applied folds [0.09ms]
+(pass) Transcript schema > negative and fractional usage counts are rejected [0.13ms]
+(pass) Transcript schema > empty ids are rejected [0.45ms]
+(pass) Transcript schema > unknown finish reasons and transition kinds are rejected [0.17ms]
+
+test/token.test.ts:
+(pass) Token usage contracts > provider usage is a static input and runtime agent usage validates the full accounting record [0.23ms]
+(pass) Token usage contracts > requires total tokens for agent usage [0.04ms]
+(pass) Token usage contracts > rejects negative token counts [0.02ms]
+
+test/route-record.test.ts:
+(pass) Ingress.routeStreamId > scopes the key by surface:workspace:channel:id [0.04ms]
+(pass) Ingress.routeStreamId > URI-encodes each component so a ':' inside one field cannot forge another scope [0.02ms]
+(pass) Ingress.routeStreamId > absent workspace/channel encode to empty segments (stable arity)
+(pass) Ingress.routeStreamId > correction stream shares the scope on a distinct class prefix [0.01ms]
+(pass) Ingress.routeDecidedFact / routeNotDeliveredFact > builds the route.decided record input verbatim [0.03ms]
+(pass) Ingress.routeDecidedFact / routeNotDeliveredFact > builds the route.not_delivered correction input [0.01ms]
+(pass) Ingress.routeDecisionsEquivalent > equal on execution-shaping fields → equivalent (ignores delivery-local traceId/time/reason) [0.02ms]
+(pass) Ingress.routeDecisionsEquivalent > divergent stage → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent outcome → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent target → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent sessionId → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent actorId → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent trustTier → not equivalent (redelivery fails closed)
+(pass) Ingress.routeDecisionsEquivalent > divergent inboundTreatment → not equivalent (redelivery fails closed)
+
+test/channel-grant.test.ts:
+(pass) Actor.ChannelGrant > parses trusted, broadcast, and blocked grants [0.38ms]
+(pass) Actor.ChannelGrant > accepts default tier and explicit inbound treatment [0.03ms]
+(pass) Actor.ChannelGrant > rejects missing creator audit field [0.04ms]
+
+test/ingress.test.ts:
+(pass) AgentDef > should parse agent with only model required [0.19ms]
+(pass) AgentDef > should parse agent with optional fields [0.14ms]
+(pass) AgentDef > should parse full canonical budget fields through direct events [0.04ms]
+(pass) Ingress meta contracts > parses actor and target metadata [0.73ms]
+(pass) Ingress meta contracts > parses worker target without identity as new worker request [0.04ms]
+(pass) DirectEvent > should parse valid direct event with agent [0.03ms]
+(pass) DirectEvent validation > should parse direct event [0.01ms]
+(pass) DirectEvent validation > should reject invalid mode value [0.06ms]
+(pass) DirectEvent validation > parses ADR-008 target aliases and actor metadata [0.06ms]
+(pass) DirectEvent validation > parses worker target without workerId or sessionId [0.03ms]
+(pass) DirectEvent validation > should reject missing id [0.03ms]
+
+test/channel-surface-key.test.ts:
+(pass) Channel.SurfaceKey codec > create > creates a valid surfaceKey from parts [0.03ms]
+(pass) Channel.SurfaceKey codec > create > creates a surfaceKey with single part and colon
+(pass) Channel.SurfaceKey codec > create > throws error on empty parts [0.01ms]
+(pass) Channel.SurfaceKey codec > create > throws error if format validation fails (no colon) [0.03ms]
+(pass) Channel.SurfaceKey codec > create > creates complex keys with multiple colons
+(pass) Channel.SurfaceKey codec > assertWellFormed > returns a well-formed key unchanged
+(pass) Channel.SurfaceKey codec > assertWellFormed > throws on a key without a surface prefix
+(pass) Channel.SurfaceKey codec > fromChannel > creates a DM key [0.02ms]
+(pass) Channel.SurfaceKey codec > fromChannel > creates a group key
+(pass) Channel.SurfaceKey codec > fromChannel > creates a thread key under a group
+(pass) Channel.SurfaceKey codec > fromChannel > creates a channel key (backward compat kind)
+(pass) Channel.SurfaceKey codec > fromChannel > creates a telegram chat key
+(pass) Channel.SurfaceKey codec > parse > parses a DM key [0.04ms]
+(pass) Channel.SurfaceKey codec > parse > parses a group key
+(pass) Channel.SurfaceKey codec > parse > parses a thread key
+(pass) Channel.SurfaceKey codec > parse > parses a chat key
+(pass) Channel.SurfaceKey codec > parse > parses a legacy key without known kind
+(pass) Channel.SurfaceKey codec > parse > parse handles legacy keys gracefully
+(pass) Channel.SurfaceKey codec > DM vs group vs thread distinction > produces distinct keys for DM and group in same workspace [0.01ms]
+(pass) Channel.SurfaceKey codec > DM vs group vs thread distinction > produces distinct keys for group and thread in same channel [0.01ms]
+(pass) Channel.SurfaceKey codec > DM vs group vs thread distinction > roundtrips fromChannel → parse correctly [0.02ms]
+
+test/json-boundary.test.ts:
+(pass) plain JSON owner > the typed key profile retains its established bytes [0.08ms]
+(pass) plain JSON owner > one grammar rejects non-JSON values for live boundaries and typed keys [0.07ms]
+(pass) plain JSON owner > the object profile admits one JSON record and refuses every other JSON value [0.16ms]
+(pass) plain JSON owner > rejects values whose property descriptors cannot be read [0.06ms]
+(pass) plain JSON owner > canonical digest rejects values outside the JSON grammar [0.09ms]
+(pass) plain JSON owner > canonical digest bytes remain pinned independently of object key order [0.02ms]
+
+test/gateway.test.ts:
+(pass) Gateway.Deliver > parses a minimal anonymous delivery (no actorId, no requestContext) [1.73ms]
+(pass) Gateway.Deliver > parses a request resumption with requestContext [0.14ms]
+(pass) Gateway.Deliver > rejects unknown fields (strict at every level) [0.19ms]
+(pass) Gateway.Deliver > rejects 'drop' across the seam — a dropped message is never delivered [0.06ms]
+(pass) Gateway.Deliver > nested strictness: requestContext rejects unknown fields [0.06ms]
+(pass) Gateway.Deliver > rejects an out-of-enum treatment or trust tier [0.10ms]
+(pass) Gateway.Deliver > an actorContext without origin is rejected — a tier verdict needs its taint root [0.06ms]
+(pass) Gateway.Deliver > a Deliver without the recorded decision is rejected [0.06ms]
+(pass) Gateway.Deliver > a parsed DeliveredEvent drops an extraneous embedded agent (brain material never crosses) [0.02ms]
+(pass) Gateway.SendInput (re-homed #215 vocabulary) > awaited requires a requestSpec [0.39ms]
+(pass) Gateway.SendInput (re-homed #215 vocabulary) > fire_and_forget forbids a requestSpec [0.22ms]
+(pass) Gateway.SendInput (re-homed #215 vocabulary) > awaited with a coherent requestSpec parses [0.02ms]
+(pass) Gateway.SendInput (re-homed #215 vocabulary) > class is additive-optional: absent parses (defaults from operation downstream) [0.01ms]
+(pass) Gateway.SendInput (re-homed #215 vocabulary) > class coherence: converse ⟺ awaited, notify ⟺ fire_and_forget [0.07ms]
+(pass) Gateway.SocialBudget (#219 active-egress contract) > a minimal budget parses; optional caps/quiet-hours/DNC/expiry are additive [0.35ms]
+(pass) Gateway.SocialBudget (#219 active-egress contract) > maxPerWindow and windowMs must be positive; cooldownMs may be zero [0.06ms]
+(pass) Gateway.SocialBudget (#219 active-egress contract) > quiet-hours minutes are bounded to a day and unknown keys are rejected (strict) [0.06ms]
+(pass) Gateway.SenderTargetGrant (instances) > an Owner-written standing grant parses without rule fields [0.20ms]
+(pass) Gateway.SenderTargetGrant (instances) > a rule-materialized instance requires replyScope AND expiresAt [0.10ms]
+(pass) Gateway.SenderTargetGrant (instances) > replyScope without a ruleId is orphaned containment — rejected [0.02ms]
+(pass) Gateway.RequestSpec — quorum coherence is deliberately NOT refined here > quorum without resolution 'quorum' still parses at spec level (#215 rule 4: Request.Record.parse at SessionHandleStore.create is the one enforcement layer) [0.02ms]
+(pass) Gateway.ReplyGrantRule > parses an Owner-written rule row [0.22ms]
+(pass) Gateway.ReplyGrantRule > rejects a zero or negative live-instance cap (farming bound) [0.04ms]
+
+test/error.test.ts:
+(pass) NamedError.create > returns a class with static schema helpers [0.01ms]
+(pass) NamedError.create > creates instances with message and data from payload [0.02ms]
+(pass) NamedError.create > falls back to the error name when payload has no message [0.04ms]
+(pass) NamedError.create > returns the schema and object shape [0.02ms]
+(pass) NamedError.create > sets cause when provided [0.01ms]
+(pass) NamedError.create > retains an explicitly provided falsy cause: null [0.02ms]
+(pass) NamedError.create > retains an explicitly provided falsy cause: false
+(pass) NamedError.create > retains an explicitly provided falsy cause: 0
+(pass) NamedError.create > retains an explicitly provided falsy cause: ""
+(pass) NamedError.create > distinguishes omitted cause from an explicitly present undefined cause [0.02ms]
+(pass) NamedError.create > isInstance matches real instances [0.13ms]
+(pass) NamedError.create > isInstance rejects null
+(pass) NamedError.create > isInstance rejects plain objects with the same name
+(pass) NamedError.create > isInstance rejects plain objects with a different name
+(pass) NamedError.create > isInstance recognizes instances from an independent copy of the class [0.05ms]
+(pass) NamedError.create > isInstance rejects a real Error whose name merely matches
+(pass) NamedError.Unknown > uses the built-in name and message field [0.01ms]
+(pass) NamedError.Unknown > parses valid objects and rejects missing message [0.18ms]
+(pass) NamedError.create with non-object data > falls back to the class name for string payloads [0.03ms]
+(pass) emits a concrete cross-package guard type [935.10ms]
+(pass) isInstance refuses a same-named error whose data violates this factory's schema [0.35ms]
+
+test/session-bundle-behavior.test.ts:
+(pass) existing Snapshot retains requested durable bundle identity [0.18ms]
+
+test/tool-placement.test.ts:
+(pass) Tool.Placement > the three placements parse and anything else is refused [0.13ms]
+(pass) Tool.Placement > a legacy spec stays valid and placement stays absent — the catalog resolver owns the free default [0.07ms]
+(pass) Tool.Placement > rejects non-plain input schemas [0.10ms]
+(pass) Tool.Placement > requires speaks the capability grammar [0.16ms]
+(pass) Tool.Placement > a placed machine tool accepts placement + requires together [0.03ms]
+
+test/l0-ledger.test.ts:
+(pass) L0 ledger protocol > changed payload fields retain the plain-object contract [0.01ms]
+(pass) L0 ledger protocol > rejects non-plain decision fact data [0.33ms]
+(pass) L0 ledger protocol > rejects non-plain recorded fact data [0.32ms]
+(pass) L0 ledger protocol > parses every confirmed action kind and enforces terminal exclusivity [0.32ms]
+(pass) L0 ledger protocol > child inbox materialization requires pinned limits but root admission does not [1.46ms]
+(pass) L0 ledger protocol > watch lifetimes, absolute paths and regular expressions validate at the public boundary [5.08ms]
+(pass) L0 ledger protocol > alarm occurrences retain domain-separated delivery identity [0.08ms]
+(pass) L0 ledger protocol > parses session, inbox, fence-adoption, and global policy rows [0.67ms]
+
+test/send-message.test.ts:
+(pass) sendMessage stage-1 protocol > all target/type combinations round trip without executing policy [0.63ms]
+(pass) sendMessage stage-1 protocol > handles contain only message identity and resolved target identity [0.13ms]
+(pass) sendMessage stage-1 protocol > rejects stale verbs, target aliases, parent impersonation and malformed content [0.17ms]
+(pass) gateway ingest > sender identity is separate from driver facts and policy verdicts [0.20ms]
+(pass) gateway ingest > preserves event identity, mentions, DM, reply chain, payload and rendering [0.81ms]
+(pass) gateway ingest > normalized reply facts preserve shared correlation fields and precedence [0.15ms]
+(pass) gateway ingest > reply facts reject resolved identity and authority but retain correlation validation [0.16ms]
+(pass) gateway ingest > only actor executed delivery carries the three exhaustive receipt values [0.54ms]
+(pass) rule table shapes > every sender tier is orthogonal to every resolved addressee [0.26ms]
+(pass) rule table shapes > session rows express bounded checks and the worker deny fixtures [0.49ms]
+(pass) six message observation families > each event round trips its measured fields; no later duration is invented [2.56ms]
+(pass) six message observation families > durations are required at their event and reject negative/nonfinite values [0.27ms]
+(pass) six message observation families > rejects sibling durations, verdict reversal, and unknown fields [0.10ms]
+
+test/tool-execution.test.ts:
+(pass) Tool.Events BusEvents > Started parses actor and input summary [0.25ms]
+(pass) Tool.Events BusEvents > PermissionDenied parses actor and uses canonical event name [0.21ms]
+
+test/ingress/routing-decision.test.ts:
+(pass) Ingress.Events.RoutingDecision > uses the durable routing decision descriptor
+(pass) Ingress.Events.RoutingDecision > parses the terminal blacklist/drop decision [0.04ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal request_correlation/route decision [0.04ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal request_correlation/ambiguous decision [0.05ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal request_correlation/block decision [0.04ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal channel_ceiling/block decision [0.06ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal actor_identity/block decision [0.04ms]
+(pass) Ingress.Events.RoutingDecision > parses the terminal surface_default/route decision [0.04ms]
+(pass) Ingress.Events.RoutingDecision > preserves the evidence order in factsUsed [0.06ms]
+(pass) Ingress.Events.RoutingDecision > requires traceId [0.19ms]
+(pass) Ingress.Events.RoutingDecision > requires time [0.08ms]
+(pass) Ingress.Events.RoutingDecision > requires inboundId [0.08ms]
+(pass) Ingress.Events.RoutingDecision > requires surface [0.09ms]
+(pass) Ingress.Events.RoutingDecision > requires mode [0.10ms]
+(pass) Ingress.Events.RoutingDecision > requires stage [0.08ms]
+(pass) Ingress.Events.RoutingDecision > requires outcome [0.06ms]
+(pass) Ingress.Events.RoutingDecision > requires reason [0.08ms]
+(pass) Ingress.Events.RoutingDecision > requires factsUsed [0.08ms]
+(pass) Ingress.Events.RoutingDecision > requires target [0.08ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal blacklist/route pair [0.09ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal blacklist/block pair [0.07ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal blacklist/ambiguous pair [0.05ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal request_correlation/drop pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal channel_ceiling/route pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal channel_ceiling/drop pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal channel_ceiling/ambiguous pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal actor_identity/route pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal actor_identity/drop pair [0.05ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal actor_identity/ambiguous pair [0.06ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal surface_default/drop pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal surface_default/block pair [0.05ms]
+(pass) Ingress.Events.RoutingDecision > rejects the invalid terminal surface_default/ambiguous pair [0.04ms]
+(pass) Ingress.Events.RoutingDecision > rejects candidate interaction IDs outside an ambiguous decision [0.12ms]
+(pass) Ingress.Events.RoutingDecision > requires at least two source-qualified candidates for an ambiguous decision [0.20ms]
+(pass) Ingress.Events.RoutingDecision > rejects the retired plan mode [0.11ms]
+(pass) Ingress.recordedRoutingDecision (upcast-on-read) > strips the dead runId/pendingInteractionId fields from pre-0025 facts [0.54ms]
+(pass) Ingress.recordedRoutingDecision (upcast-on-read) > reads legacy pending-prefixed ambiguous candidates verbatim [0.31ms]
+(pass) Ingress.recordedRoutingDecision (upcast-on-read) > parses modern facts unchanged [0.89ms]
+(pass) Ingress.recordedRoutingDecision (upcast-on-read) > rejects wrong-typed retired fields — invalid in every era [0.06ms]
+(pass) Ingress.recordedRoutingDecision (upcast-on-read) > returns undefined for bytes no era could parse [0.23ms]
+
+test/ingress/target.test.ts:
+(pass) ingress target helpers > defaults events without explicit target to resident [0.07ms]
+(pass) ingress target helpers > resolves metadata targets when no explicit target is present [0.06ms]
+(pass) ingress target helpers > resolves explicit target before metadata target [0.07ms]
+(pass) ingress target helpers > builds stable target keys [0.03ms]
+
+test/machine/machine.test.ts:
+(pass) Machine.WellKnownCapability > exports the Python kernel capability
+(pass) Machine.CapabilityId grammar > accepts dot-namespaced lowercase ids [0.04ms]
+(pass) Machine.CapabilityId grammar > rejects single-segment, uppercase, and empty ids with the grammar message [0.07ms]
+(pass) Machine.CapabilityId grammar > rejects ids past 128 characters [0.03ms]
+(pass) Machine.Enrollment > rejects duplicate capabilities [0.23ms]
+(pass) Machine.Enrollment > rejects an empty allowlist — an enrolled machine with no capability is a contradiction [0.03ms]
+(pass) Machine.Enrollment > rejects unknown fields [0.02ms]
+(pass) Machine.Offer > accepts an empty offer — a daemon may attach able to do nothing yet [0.17ms]
+(pass) Machine.Offer > rejects duplicate capabilities [0.02ms]
+(pass) Machine.effectiveCapabilities > effective = enrollment ∩ offer, sorted ascending [0.04ms]
+(pass) Machine.effectiveCapabilities > an offered capability the Owner never allowed is excluded [0.01ms]
+(pass) Machine.effectiveCapabilities > structurally duplicated offers still yield a set
+(pass) Machine.effectiveCapabilities > mismatched machine ids refuse instead of intersecting
+(pass) machine.attached event payload > rejects a duplicated effective set [0.11ms]
+(pass) Machine.AttachResult > attached refuses a duplicated effective set [0.13ms]
+(pass) Machine.AttachResult > refused accepts only the enrollment refusal vocabulary [0.08ms]
+(pass) Machine.AttachResult > refused carries no capability set [0.02ms]
+
+test/machine/machine-fs.test.ts:
+(pass) Machine.WellKnownCapability.fsRead > one capability gates the whole read-only fs surface
+(pass) Machine.WireMethod.FsOp > names the frozen fs wire method
+(pass) Machine.ExportName grammar > accepts lowercase names with digits, dashes, and underscores [0.06ms]
+(pass) Machine.ExportName grammar > rejects uppercase, leading digits/symbols, dots, and empty names [0.06ms]
+(pass) Machine.ExportName grammar > rejects names past 64 characters [0.02ms]
+(pass) Machine.Enrollment.allowedExports > accepts an enrollment carrying no exports at all [0.02ms]
+(pass) Machine.Enrollment.allowedExports > accepts an explicitly empty allowlist [0.03ms]
+(pass) Machine.Enrollment.allowedExports > rejects duplicate export names [0.02ms]
+(pass) Machine.Offer.exports > accepts an offer carrying no exports at all [0.03ms]
+(pass) Machine.Offer.exports > rejects duplicate export names [0.18ms]
+(pass) Machine.Offer.exports > requires a real absolute export root [0.05ms]
+(pass) machine wire compatibility > an Enrollment JSON written before exports existed still parses [0.03ms]
+(pass) machine wire compatibility > an Offer JSON written before exports existed still parses [0.01ms]
+(pass) machine wire compatibility > an AttachResult without an export ceiling fails closed [0.02ms]
+(pass) machine wire compatibility > attached carries the negotiated export set when present [0.01ms]
+(pass) machine wire compatibility > attached refuses a duplicated export set [0.02ms]
+(pass) Machine.effectiveExports > effective = enrollment ∩ offer, sorted ascending [0.03ms]
+(pass) Machine.effectiveExports > an absent allowlist grants nothing — exports are fail-closed [0.02ms]
+(pass) Machine.effectiveExports > an absent offer yields nothing even with a full allowlist [0.02ms]
+(pass) Machine.effectiveExports > an offered export the Owner never allowed is excluded [0.01ms]
+(pass) Machine.effectiveExports > intersection of several names stays sorted and deduped [0.02ms]
+(pass) Machine.effectiveExports > mismatched machine ids refuse instead of intersecting
+(pass) Machine.FsRequest > accepts the three read-only ops [0.31ms]
+(pass) Machine.FsRequest > read accepts an offset/limit window [0.02ms]
+(pass) Machine.FsRequest > read rejects a negative offset and a non-positive limit [0.03ms]
+(pass) Machine.FsRequest > rejects an absolute path — the export root is the only anchor [0.04ms]
+(pass) Machine.FsRequest > rejects any .. segment, wherever it sits [0.04ms]
+(pass) Machine.FsRequest > accepts a filename that merely starts with dots [0.01ms]
+(pass) Machine.FsRequest > rejects an embedded NUL [0.01ms]
+(pass) Machine.FsRequest > rejects an unknown op and unknown fields [0.13ms]
+(pass) Machine.FsRequest > rejects an export name that breaks the grammar [0.02ms]
+(pass) Machine.FsResult > completed read carries decoded text plus truncation facts [0.27ms]
+(pass) Machine.FsResult > completed list carries entry kinds and optional sizes [0.19ms]
+(pass) Machine.FsResult > completed stat carries kind, size, and mtime [0.11ms]
+(pass) Machine.FsResult > rejects a value whose op does not match its shape [0.03ms]
+(pass) Machine.FsResult > rejects an unknown entry kind [0.02ms]
+(pass) Machine.FsResult > parses every refusal reason with a message [0.10ms]
+(pass) Machine.FsResult > refuses an unknown reason and an empty message [0.03ms]
+(pass) Machine.FsResult > refused carries no value [0.02ms]
+(pass) write, exec and cancellation wire contracts > write bytes are lossless base64 and malformed input is rejected [0.11ms]
+(pass) write, exec and cancellation wire contracts > exec always requires a real absolute cwd and preserves terminals [0.61ms]
+(pass) machine fs limits > protocol owns the single read/list ceiling the daemon enforces
+
+test/ipc/schema.test.ts:
+(pass) Ipc.Request > rejects missing id [0.25ms]
+(pass) Ipc.Request > rejects wrong version [0.03ms]
+(pass) Ipc.Request > rejects wrong type [0.01ms]
+(pass) Ipc.Response > rejects missing id [0.15ms]
+(pass) Ipc.Notification > rejects missing method [0.14ms]
+(pass) Ipc helpers > createRequest preserves the caller-supplied id byte-exact [0.04ms]
+(pass) Ipc helpers > createRequest without params [0.01ms]
+(pass) Ipc helpers > createResponse produces valid response [0.02ms]
+(pass) Ipc helpers > createErrorResponse produces valid error response [0.11ms]
+(pass) Ipc helpers > createNotification produces valid notification [0.02ms]
+(pass) Ipc helpers > createNotification without params [0.01ms]
+(pass) Ipc.Methods param schemas > registers exactly the machine wire methods [0.02ms]
+(pass) Ipc.Methods param schemas > machine.fs_op params/result are the Machine fs contracts
+(pass) Ipc.Methods param schemas > machine.attach params/result are the Machine offer contracts
+(pass) Ipc.Methods param schemas > machine.run_code params reject a cell request without a timeout [0.14ms]
+(pass) Ipc.Methods param schemas > machine.call_tool params reject an unnamed tool call [0.12ms]
+
+test/policy/point-registry.test.ts:
+(pass) PolicyPoint registry > accepts only canonical 3-tier point IDs [0.10ms]
+(pass) PolicyPoint registry > validates the versioned point contract shape [0.28ms]
+(pass) PolicyPoint registry > retains the generic run completion contract [0.03ms]
+(pass) PolicyPoint registry > rejects effects that are not PolicyEffect types [0.03ms]
+(pass) PolicyPoint registry > exports an initial contract for every required 3-tier point [0.26ms]
+(pass) PolicyPoint registry > preserves every v1 input schema identifier [0.03ms]
+(pass) PolicyPoint registry > pre-boundary contracts fail closed and post-boundary contracts fail open [0.02ms]
+(pass) model.override point admission (#753) > connection.llm.pre allows model.override; every other point refuses it [0.03ms]
+
+test/policy/effect-json-plain.test.ts:
+(pass) rejects non-JSON-plain effect values [0.11ms]
+(pass) rejects reserved object keys in effect values [0.07ms]
+(pass) rejects sparse arrays and arrays carrying named properties [0.04ms]
+(pass) round-trips JSON-plain effect values unchanged [0.03ms]
+(pass) refuses accessor properties without invoking their getters [0.03ms]
+(pass) a throwing getter or Proxy trap yields a parse failure, never a throw [0.07ms]
+(pass) rejects symbol-keyed properties on objects and arrays [0.03ms]
+
+test/policy/module-surface.test.ts:
+(pass) policy module public surface > root and policy barrels expose identical runtime policy symbols [0.02ms]
+(pass) policy module public surface > locks the public policy namespace keys [0.08ms]
+(pass) policy module public surface > shares the ReDoS-safety predicate with the moved evaluator (no duplication) [0.06ms]
+
+test/policy/input-schema-isolation.test.ts:
+(pass) policy input validators isolate authority schemas from shared public mutation [0.56ms]
+
+test/policy/input-schema-parity.test.ts:
+(pass) PolicyPoint private input schema parity > Tool.Spec [0.15ms]
+(pass) PolicyPoint private input schema parity > Tool.Result [0.08ms]
+
+test/policy/resource-descriptor.test.ts:
+(pass) Policy.Resource descriptors > Descriptor > parses a two-segment descriptor id [0.04ms]
+(pass) Policy.Resource descriptors > Descriptor > parses a three-segment descriptor id with source metadata [0.17ms]
+(pass) Policy.Resource descriptors > Descriptor > rejects a custom kind string [0.02ms]
+(pass) Policy.Resource descriptors > Descriptor > enforces id arity, non-empty segments, and the kind prefix independently [0.06ms]
+(pass) Policy.Resource descriptors > Descriptor > binds tool source presence and type to the corresponding id segments [0.16ms]
+(pass) Policy.Resource descriptors > Descriptor > rejects descriptors with invalid source type [0.03ms]
+
+test/policy/input-schemas.test.ts:
+(pass) PolicyPoint executable input schemas > has a one-to-one schema catalog for every registered point [0.03ms]
+(pass) PolicyPoint executable input schemas > requires every context field declared by each point contract [2.27ms]
+(pass) PolicyPoint executable input schemas > protects policy point authority catalogs from caller mutation [0.16ms]
+(pass) PolicyPoint executable input schemas > exposes only immutable validator methods [0.07ms]
+(pass) PolicyPoint executable input schemas > does not expose mutable Zod caches or native collections [0.08ms]
+(pass) PolicyPoint executable input schemas > accepts canonical dispatch input and preserves generic context [0.03ms]
+(pass) PolicyPoint executable input schemas > accepts dispatch input without optional session and run identity [0.03ms]
+(pass) PolicyPoint executable input schemas > represents max-steps at the agent lifecycle policy boundary [0.04ms]
+(pass) PolicyPoint executable input schemas > rejects malformed canonical dispatch fields [0.06ms]
+
+test/policy/decision-effect.test.ts:
+(pass) Policy decision and effect schemas > parses every supported PolicyEffect variant [0.26ms]
+(pass) Policy decision and effect schemas > rejects unknown effect types [0.02ms]
+(pass) Policy decision and effect schemas > parses PolicyDecision with effects and obligations [0.18ms]
+(pass) Policy decision and effect schemas > requires reason codes on PolicyDecision [0.02ms]
+(pass) Policy decision and effect schemas > parses PolicyObligation variants [0.03ms]
+
+test/policy/conformance/versioning.test.ts:
+(pass) PolicyPoint versioning conformance > replays old PolicyDecision fixtures against current schemas [0.14ms]
+(pass) PolicyPoint versioning conformance > validates golden fixtures for current PolicyPoint schema versions [0.09ms]
+(pass) PolicyPoint versioning conformance > locks the dispatch policy point golden fixture [0.03ms]
+(pass) PolicyPoint versioning conformance > requires explicit migration errors for breaking point schema changes [0.08ms]
+(pass) PolicyPoint versioning conformance > exposes consistent kernel, point, and resource schema versions [0.30ms]
+
+test/policy/conformance/descriptor.test.ts:
+(pass) Policy.Resource.Descriptor conformance > roundtrip serializes and validates every descriptor kind [0.16ms]
+(pass) Policy.Resource.Descriptor conformance > digest is stable for the same content and changes with descriptor content [0.52ms]
+(pass) Policy.Resource.Descriptor conformance > redact removes credential source paths from serialized descriptors [0.07ms]
+
+ 502 pass
+ 0 fail
+ 1901 expect() calls
+Ran 502 tests across 47 files. [1360.00ms]

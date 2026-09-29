@@ -1,5 +1,3 @@
-import { setSessionAttention } from "../src/renderer/state/session-actions";
-import { setSessionPhase } from "../src/renderer/state/session-actions";
 import { beforeEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -36,7 +34,7 @@ for (const [phase, kind, tone, shape] of cases) {
     const session = makeSession({ phase });
     consoleStore.setState((s) => ({ ...s, sessions: [session] }));
     openTab({ kind: "session", sessionId: session.id });
-    const html = renderShell();
+    const html = renderShell(null, [session]);
     expect(html.match(/data-ui="StatusGlyph"/g)).toHaveLength(3);
     expect(html.match(new RegExp(`data-tone="${tone}"`, "g"))).toHaveLength(3);
     expect(html.match(new RegExp(`data-shape="${shape}"`, "g"))).toHaveLength(3);
@@ -182,19 +180,4 @@ test("scores decrease monotonically for every phase and clamp future activity", 
       previous = score;
     }
   }
-});
-
-test("setters keep phase timestamps stable on repeated projections", () => {
-  consoleStore.setState((s) => ({ ...s, sessions: [makeSession()] }));
-  setSessionPhase("session", "running", now);
-  setSessionPhase("session", "running", now + 1);
-  setSessionAttention("session", { unread: true, pinned: true, snoozedUntil: now + hour });
-  expect(consoleStore.state.sessions[0]).toMatchObject({
-    phase: "running",
-    phaseSince: now,
-    lastActivityAt: now,
-    unread: true,
-    pinned: true,
-    snoozedUntil: now + hour,
-  });
 });

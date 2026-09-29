@@ -200,7 +200,12 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
               boundaryActionId: null,
               at: Date.now(),
             }),
-            ...deliveryActions([item], turnId, "before_llm", resumeId),
+            ...deliveryActions(
+              [item],
+              { kind: "turn", turnId },
+              "before_llm",
+              resumeId,
+            ),
           ],
           "running",
         );
@@ -230,7 +235,12 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
             boundaryActionId: null,
             at: Date.now(),
           }),
-          ...deliveryActions([item], turnId, "before_llm", turnId),
+          ...deliveryActions(
+            [item],
+            { kind: "turn", turnId },
+            "before_llm",
+            turnId,
+          ),
         ],
         "running",
       );

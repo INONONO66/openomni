@@ -15,6 +15,7 @@
     "check-types": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@openomni/protocol": "workspace:*",
     "@ai-sdk/react": "4.0.96",
     "@openomni/ui": "workspace:*",
     "@tanstack/react-query": "5.102.8",

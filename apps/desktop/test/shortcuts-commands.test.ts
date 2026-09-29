@@ -74,7 +74,7 @@ test("history dispatch stays in its tab when another tab currently shows its des
   navigate({ kind: "route", route: "inbox" });
   activateTab(first.id);
   navigate(second.place);
-  navigate({ kind: "route", route: "memory" });
+  navigate({ kind: "route", route: "automations" });
   activateTab(second.id);
   navigate(second.place);
   const other = currentTab();
@@ -86,7 +86,7 @@ test("history dispatch stays in its tab when another tab currently shows its des
   expect(consoleStore.state.tabs.find((tab) => tab.id === other.id)).toBe(other);
   dispatchShellCommand("forward");
   expect(currentTab().id).toBe(first.id);
-  expect(currentTab().place).toEqual({ kind: "route", route: "memory" });
+  expect(currentTab().place).toEqual({ kind: "route", route: "automations" });
   expect(currentTab().history.cursor).toBe(2);
   expect(consoleStore.state.tabs.find((tab) => tab.id === other.id)).toBe(other);
 });

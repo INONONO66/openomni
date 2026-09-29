@@ -4,7 +4,7 @@ import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
 import { OutcomeUnknown, CommitFailed } from "../src/errors";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -17,6 +17,8 @@ import { resolveSessionRuntime } from "../src/session-contract";
 import { createController } from "../src/session-controller";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { inspectSession } from "../src/session-lifecycle/inspect";
+import { fencedTurnFixture } from "./helpers/fenced-writer";
 import { session } from "../src/session-handle";
 
 const SECRET = "sk-live-credential-never-shown";
@@ -285,6 +287,46 @@ function lifecycle() {
 }
 
 describe("action-based history and diagnostic projections", () => {
+  test("inspection pages more than 256 actions without enumerating session rows", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const parent = yield* lifecycle();
+          const kernel = isolatedLedger().kernel;
+          const firstRevision = kernel.row("parent").revision;
+          const adopted = yield* kernel.adoptFence({
+            sessionId: "parent", owner: "inspection-page", fence: kernel.row("parent").leaseFence + 1,
+          });
+          yield* kernel.commit({
+            sessionId: "parent", owner: "inspection-page", fence: adopted.fence, now: 1_000,
+            expectedRevision: firstRevision, state: kernel.row("parent").state,
+            actions: Array.from({ length: 300 }, (_, index) => ({
+              id: `inspection-page-${index}`, sessionId: "parent", parentId: null,
+              kind: "alarm.arm" as const,
+              intent: { encodingVersion: 1 as const, value: { alarmId: `inspect-${index}` } },
+              effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+              ts: 1_000, irreversible: true,
+            })),
+          });
+          const listRows = spyOn(kernel, "listRows");
+          try {
+            const first = parent.inspect({ depth: 1, cursor: firstRevision, limit: 256 });
+            expect(first.transitions).toHaveLength(256);
+            expect(first.nextCursor).toBe(firstRevision + 256);
+            expect(first.nextChildrenCursor).toBe("");
+            const second = parent.inspect({ depth: 1, cursor: first.nextCursor ?? 0, limit: 256 });
+            expect(second.transitions).toHaveLength(44);
+            expect(second.nextCursor).toBeNull();
+            expect(second.transitions[0]?.revision).toBe(firstRevision + 257);
+            expect(second.children.map((child) => child.sessionId)).toEqual(["child"]);
+            expect(listRows).toHaveBeenCalledTimes(0);
+          } finally {
+            listRows.mockRestore();
+          }
+        }),
+      ),
+    ));
+
   test("every transition of a request spanning child, retry, refusal, approval, wake and compaction traces to a committed cause", () =>
     isolated(
       Effect.scoped(
@@ -544,5 +586,210 @@ describe("action-based history and diagnostic projections", () => {
           );
         }),
       ),
+    ));
+});
+
+describe("bounded inspection pages keep advancing and keep causal attribution (review F3/F4)", () => {
+  test("limits 1 and 2 advance children from an empty root page and every continuation advances or terminates", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const materialize = (id: string, parentId: string | null) =>
+          kernel.materialize({
+            id, parentId, role: "resident", tools: [], system: { preset: "", blocks: [] },
+            policyGeneration: 1, actionId: `${id}:configure`, at: 1_000,
+          });
+        yield* materialize("root", null);
+        yield* materialize("child-a", "root");
+        yield* materialize("child-b", "root");
+        const head = kernel.row("root").revision;
+        // limit 1: the mandatory root response must not consume the descendant budget.
+        const first = inspectSession(kernel, "root", { depth: 1, cursor: head, limit: 1 });
+        expect(first.transitions).toEqual([]);
+        expect(first.nextCursor).toBeNull();
+        expect(first.children.map((child) => child.sessionId)).toEqual(["child-a"]);
+        expect(first.children[0]?.transitions.map((entry) => entry.actionId)).toEqual([
+          "child-a:configure",
+        ]);
+        expect(first.nextChildrenCursor).toBe("child-a");
+        const second = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 1, childrenCursor: first.nextChildrenCursor ?? "",
+        });
+        expect(second.children.map((child) => child.sessionId)).toEqual(["child-b"]);
+        expect(second.nextChildrenCursor).toBe("child-b");
+        const third = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 1, childrenCursor: second.nextChildrenCursor ?? "",
+        });
+        expect(third.children).toEqual([]);
+        expect(third.nextChildrenCursor).toBeNull();
+        // limit 2: both children fit; the advertised continuation then terminates.
+        const wide = inspectSession(kernel, "root", { depth: 1, cursor: head, limit: 2 });
+        expect(wide.children.map((child) => child.sessionId)).toEqual(["child-a", "child-b"]);
+        expect(wide.nextChildrenCursor).toBe("child-b");
+        const done = inspectSession(kernel, "root", {
+          depth: 1, cursor: head, limit: 2, childrenCursor: wide.nextChildrenCursor ?? "",
+        });
+        expect(done.children).toEqual([]);
+        expect(done.nextChildrenCursor).toBeNull();
+      }),
+    ));
+
+  test("a page boundary between a turn and its tool intent preserves the tool's turn attribution", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "attribution", clock: () => 1_000, turnId: "turn-1",
+        });
+        yield* kernel.commit({
+          sessionId: "attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+          expectedRevision: kernel.row("attribution").revision, state: kernel.row("attribution").state,
+          actions: [{
+            id: "tool-1", sessionId: "attribution", parentId: "turn-1", kind: "tool",
+            intent: {
+              encodingVersion: 1,
+              value: { phase: "intent", op: "write", value: { path: "approved.txt" } },
+            },
+            effect: { encodingVersion: 1, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          }],
+        });
+        const complete = inspectSession(kernel, "attribution");
+        const full = complete.transitions.find((entry) => entry.actionId === "tool-1");
+        expect(full?.turnId).toBe("turn-1");
+        // The boundary falls between turn-1 (revision 2) and tool-1 (revision 3).
+        const paged = inspectSession(kernel, "attribution", { depth: 0, cursor: 2, limit: 1 });
+        expect(paged.transitions).toHaveLength(1);
+        const boundary = paged.transitions[0];
+        expect(boundary?.actionId).toBe("tool-1");
+        expect(boundary?.turnId).toBe("turn-1");
+        expect(boundary?.revision).toBe(full?.revision ?? -1);
+        expect(boundary?.digest).toBe(full?.digest ?? "");
+      }),
+    ));
+  // Review F4 continuation: a page whose first action sits two hops below its
+  // turn (result -> tool intent -> turn) must walk THROUGH the intermediate
+  // ancestor that carries no turn id of its own to reach the turn.
+  test("a page opening below a tool's result attributes the turn across multi-hop ancestry", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "deep-attribution", clock: () => 1_000, turnId: "turn-1",
+        });
+        const commitTool = (id: string, parentId: string, phase: "intent" | "result") =>
+          kernel.commit({
+            sessionId: "deep-attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+            expectedRevision: kernel.row("deep-attribution").revision,
+            state: kernel.row("deep-attribution").state,
+            actions: [{
+              id, sessionId: "deep-attribution", parentId, kind: "tool",
+              intent: { encodingVersion: 1, value: { phase, op: "write" } },
+              effect: {
+                encodingVersion: 1,
+                value: phase === "intent"
+                  ? { phase: "pending" }
+                  : { phase: "result", terminal: "executed" },
+              },
+              ts: 1_000, irreversible: true,
+            }],
+          });
+        yield* commitTool("tool-1", "turn-1", "intent");
+        yield* commitTool("tool-1:result", "tool-1", "result");
+        // The page holds only the result (revision 4): tool-1 carries no own
+        // turn id, so attribution must continue up its parent chain to turn-1.
+        const paged = inspectSession(kernel, "deep-attribution", { depth: 0, cursor: 3, limit: 1 });
+        expect(paged.transitions).toHaveLength(1);
+        expect(paged.transitions[0]?.actionId).toBe("tool-1:result");
+        expect(paged.transitions[0]?.turnId).toBe("turn-1");
+      }),
+    ));
+
+  // Review r2 F5: a one-action page must never trigger an unbounded ancestor
+  // scan. Ancestry is resolved through bounded descending history windows, so
+  // a 300-link turn-less chain costs a handful of page reads and zero
+  // per-ancestor point reads while the attribution stays exact (null because
+  // the walk reached the root, not because anything was truncated).
+  test("a one-action page over a 300-link turn-less chain resolves null attribution in bounded window reads", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        yield* kernel.materialize({
+          id: "long-chain", parentId: null, role: "resident", tools: [],
+          system: { preset: "", blocks: [] }, policyGeneration: 1,
+          actionId: "long-chain:configure", at: 1_000,
+        });
+        const adopted = yield* kernel.adoptFence({
+          sessionId: "long-chain", owner: "chain-writer",
+          fence: kernel.row("long-chain").leaseFence + 1,
+        });
+        yield* kernel.commit({
+          sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence, now: 1_000,
+          expectedRevision: kernel.row("long-chain").revision, state: kernel.row("long-chain").state,
+          actions: Array.from({ length: 300 }, (_, index) => ({
+            id: `link-${index}`, sessionId: "long-chain",
+            parentId: index === 0 ? "long-chain:configure" : `link-${index - 1}`,
+            kind: "message" as const,
+            intent: { encodingVersion: 1 as const, value: {} },
+            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          })),
+        });
+        const head = kernel.row("long-chain").revision;
+        const pointReads = spyOn(kernel, "actionById");
+        const pageReads = spyOn(kernel, "historyPage");
+        try {
+          const page = inspectSession(kernel, "long-chain", { depth: 0, cursor: head - 1, limit: 1 });
+          expect(page.transitions).toHaveLength(1);
+          expect(page.transitions[0]?.actionId).toBe("link-299");
+          expect(page.transitions[0]?.turnId).toBeNull();
+          expect(pointReads).toHaveBeenCalledTimes(0);
+          // The page itself plus at most ceil(301/256) = 2 ancestry windows.
+          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
+        } finally {
+          pointReads.mockRestore();
+          pageReads.mockRestore();
+        }
+      }),
+    ));
+
+  // The same bounded lookup must still attribute correctly when the long
+  // chain DOES descend from a turn: the null above is a derived fact, not a
+  // budget truncation (that would reintroduce the r1 attribution bug).
+  test("a one-action page over a 300-link chain under a turn attributes the turn in bounded window reads", () =>
+    isolated(
+      Effect.gen(function* () {
+        const kernel = isolatedLedger().kernel;
+        const fixture = yield* fencedTurnFixture(kernel, {
+          id: "long-turn-chain", clock: () => 1_000, turnId: "turn-1",
+        });
+        yield* kernel.commit({
+          sessionId: "long-turn-chain", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+          expectedRevision: kernel.row("long-turn-chain").revision,
+          state: kernel.row("long-turn-chain").state,
+          actions: Array.from({ length: 300 }, (_, index) => ({
+            id: `link-${index}`, sessionId: "long-turn-chain",
+            parentId: index === 0 ? "turn-1" : `link-${index - 1}`,
+            kind: "message" as const,
+            intent: { encodingVersion: 1 as const, value: {} },
+            effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
+            ts: 1_000, irreversible: true,
+          })),
+        });
+        const head = kernel.row("long-turn-chain").revision;
+        const pointReads = spyOn(kernel, "actionById");
+        const pageReads = spyOn(kernel, "historyPage");
+        try {
+          const page = inspectSession(kernel, "long-turn-chain", { depth: 0, cursor: head - 1, limit: 1 });
+          expect(page.transitions).toHaveLength(1);
+          expect(page.transitions[0]?.actionId).toBe("link-299");
+          expect(page.transitions[0]?.turnId).toBe("turn-1");
+          expect(pointReads).toHaveBeenCalledTimes(0);
+          expect(pageReads.mock.calls.length).toBeLessThanOrEqual(3);
+        } finally {
+          pointReads.mockRestore();
+          pageReads.mockRestore();
+        }
+      }),
     ));
 });

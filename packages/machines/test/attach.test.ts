@@ -1,4 +1,4 @@
-import { Effect, Exit, Cause } from "effect";
+import { Exit, Cause } from "effect";
 import { describe, expect, test } from "bun:test";
 import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +10,7 @@ import { type MachineHost, createMachineHost } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
 import { MachineCellError } from "../src/errors";
 import { kernelEnrollment } from "./helpers";
+import { exit as runExit } from "./helpers/effect";
 
 type RecordedEvent<T> = {
   readonly name: string;
@@ -166,7 +167,7 @@ describe("machine attach handshake", () => {
           });
           finish.resolve();
           expect((await running).status).toBe("cancelled");
-          const preAborted = await Effect.runPromiseExit(handle.native.runCode(cell, AbortSignal.abort()));
+          const preAborted = await runExit(handle.native.runCode(cell, AbortSignal.abort()));
           expect(Exit.isFailure(preAborted) && Cause.hasInterrupts(preAborted.cause)).toBe(true);
         } finally {
           finish.resolve();

@@ -1975,9 +1975,9 @@ describe("session crash recovery and observation", () => {
           actions.filter((action) => action.kind === "policy.decision").map(policyHook),
         ).toEqual(["turn.pre", "prompt.pre"]);
         // The chain is the inbox: consuming the blocked prompt IS a delivery
-        // action, bound to no turn ("noop") instead of the open turn.
+        // action, bound to its durable inbox identity instead of the open turn.
         expect(deliveries("boundary-deny")).toMatchObject([
-          { turnId: "noop", inboxId: "boundary-deny:late", kind: "prompt" },
+          { turnId: "boundary-deny:late", inboxId: "boundary-deny:late", kind: "prompt" },
         ]);
         expect(inboxRows("boundary-deny").map((row) => row.status)).toEqual(["consumed"]);
       }),
@@ -2100,7 +2100,16 @@ describe("session crash recovery and observation", () => {
         expect(runs).toEqual([]);
         expect(handle.get().state).toBe("interrupted");
         expect(pendingInbox(handle.id)).toEqual([]);
-        expect(deliveries(handle.id).map((delivery) => delivery.turnId)).toEqual(["noop"]);
+        // Exactly one delivery: the consumed resume, bound to its own inbox
+        // identity rather than to any turn.
+        const [delivery, ...rest] = deliveries(handle.id);
+        expect(rest).toEqual([]);
+        if (delivery === undefined) throw new Error("resume produced no delivery");
+        expect(delivery).toMatchObject({ kind: "resume", boundary: "before_llm" });
+        expect(delivery.turnId).toBe(delivery.inboxId);
+        expect(inboxRows(handle.id).map((row) => ({ id: row.id, status: row.status }))).toEqual([
+          { id: delivery.inboxId, status: "consumed" },
+        ]);
       }),
     ));
 

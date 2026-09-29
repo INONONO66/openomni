@@ -3,6 +3,7 @@ import type { SessionError, ExecutionError } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
 import type { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
+import type { InspectRequest, InspectionPage } from "./session-lifecycle/inspect";
 import type {
   Inbox,
   LedgerAction,
@@ -213,7 +214,7 @@ export interface SessionHandle {
   /** Bounded revision page of committed actions; the resynchronization read after a `watch` gap. */
   history(request?: SessionHistory.PageRequest): SessionHistory.Page;
   /** Redacted causal projection over this session and the sessions it commissioned. */
-  inspect(request?: SessionHistory.InspectRequest): SessionHistory.Inspection;
+  inspect(request?: InspectRequest): InspectionPage;
   close(): Effect.Effect<void, SessionError>;
 }
 

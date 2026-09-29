@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Ingress } from "../../src/ingress/index.js";
-import { extractSurfaceKey, resolveTarget, targetKey } from "../../src/ingress/index.js";
+import { resolveTarget, targetKey } from "../../src/ingress/index.js";
 
 describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {
@@ -46,25 +46,5 @@ describe("ingress target helpers", () => {
     expect(targetKey({ kind: "worker" })).toBe("worker");
     expect(targetKey({ kind: "worker", workerId: "worker-7" })).toBe("worker:worker-7");
     expect(targetKey({ kind: "worker", sessionId: "sess-2" })).toBe("worker-session:sess-2");
-  });
-
-  it("separates worker surface sessions while preserving resident keys", () => {
-    expect(extractSurfaceKey({ surface: "cli", workspace: "ws", channel: "ch" })).toBe("cli:ws:ch");
-    expect(
-      extractSurfaceKey({
-        surface: "cli",
-        workspace: "ws",
-        channel: "ch",
-        target: { kind: "resident", sessionId: "resident-session" },
-      }),
-    ).toBe("cli:ws:ch");
-    expect(
-      extractSurfaceKey({
-        surface: "cli",
-        workspace: "ws",
-        channel: "ch",
-        meta: { target: { kind: "worker", workerId: "worker-7" } },
-      }),
-    ).toBe("cli:ws:ch:target:worker:worker-7");
   });
 });

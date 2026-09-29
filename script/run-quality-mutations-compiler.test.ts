@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
-import { programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
+import { analyze, programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
 import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler, stdioCompilerPort } from "./quality-mutation-compiler";
 
 type CompilerResponse = Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0];
@@ -406,8 +406,107 @@ test("compiler fallback stays inside the frozen root and Python command names re
   }
 });
 
+test("baseline diagnostics use project roots instead of transitive importer options", () => {
+  const root = mkdtempSync(join(tmpdir(), "mutation-transitive-project-"));
+  try {
+    mkdirSync(join(root, "a"));
+    mkdirSync(join(root, "b"));
+    writeFileSync(
+      join(root, "a/tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          lib: ["ES2022"],
+          baseUrl: ".",
+          paths: { b: ["../b/value.ts"] },
+        },
+        include: ["index.ts"],
+      }),
+    );
+    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
+    writeFileSync(
+      join(root, "b/tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, lib: ["ES2022", "DOM"] },
+        include: ["value.ts"],
+      }),
+    );
+    writeFileSync(join(root, "b/value.ts"), "export const value = document.title;");
+    const contract = {
+      version: 1 as const,
+      typescript: "5.9.2" as const,
+      roots: ["a", "b"],
+      projects: ["a/tsconfig.json", "b/tsconfig.json"],
+      topology: false,
+    };
+    const inventory = buildInventory(root, contract);
+    expect(analyze(root, contract, inventory, []).sourceDiagnostics).toEqual([]);
+    // Finding 2: the candidate compiler applies the same root ownership rule.
+    const identity = executionTreeHash(root);
+    const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
+    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+    expect(unchanged.diagnostics).toEqual([]);
+    expect(unchanged.valid).toBe(true);
+    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value: number = document.title;"));
+    expect(invalid.valid).toBe(false);
+    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
+    // Errors attributed to a real consumer root file are preserved.
+    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
+    expect(consumer.valid).toBe(false);
+    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 120000);
+
+test("transitive-only inventory files enter the fallback beside native roots and unreferenced files", () => {
+  const root = mkdtempSync(join(tmpdir(), "mutation-transitive-fallback-"));
+  try {
+    mkdirSync(join(root, "a"));
+    mkdirSync(join(root, "b"));
+    mkdirSync(join(root, "c"));
+    writeFileSync(
+      join(root, "a/tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true, lib: ["ES2022"], baseUrl: ".", paths: { b: ["../b/value.ts"] } },
+        include: ["index.ts"],
+      }),
+    );
+    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
+    writeFileSync(join(root, "b/value.ts"), 'export const value = "shared";');
+    writeFileSync(join(root, "c/orphan.ts"), "export const orphan = true;");
+    const contract = { version: 1 as const, typescript: "5.9.2" as const, roots: ["a", "b", "c"], projects: ["a/tsconfig.json"], topology: false };
+    const inventory = buildInventory(root, contract);
+    // Finding 6: b/value.ts is imported by project a but is no project's root,
+    // so canonical ownership sends it to the fallback beside c/orphan.ts.
+    const owners = [...programs(root, contract, inventory)].map((program) => program.getRootFileNames().map((name) => relative(realpathSync(root), name)).sort());
+    expect(owners).toEqual([["a/index.ts"], ["b/value.ts", "c/orphan.ts"]]);
+    const analyzed = analyze(root, contract, inventory, []);
+    expect(analyzed.enumerated.errors).toEqual([]);
+    expect(analyzed.sourceDiagnostics).toEqual([]);
+    const census = analyzed.enumerated.census.filter((row) => row.path.endsWith(".ts")).map((row) => [row.path, row.syntax]);
+    expect(census).toEqual([["a/index.ts", "parsed"], ["b/value.ts", "parsed"], ["c/orphan.ts", "parsed"]]);
+    // The candidate compiler owns the same fallback set deterministically.
+    const identity = executionTreeHash(root);
+    const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
+    const unchanged = compiler.check(compilerRequest(root, identity, "b/value.ts", readFileSync(join(root, "b/value.ts"), "utf8")));
+    expect(unchanged.valid).toBe(true);
+    expect(unchanged.diagnostics).toEqual([]);
+    expect(unchanged.projects.map((project) => project.project)).toEqual(["a/tsconfig.json", "inventory-fallback"]);
+    const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", 'export const value: number = "shared";'));
+    expect(invalid.valid).toBe(false);
+    expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
+    const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
+    expect(consumer.valid).toBe(false);
+    expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 120000);
+
 test("real mutation contract has no baseline compiler diagnostics", () => {
   const root = resolve(import.meta.dir, "..");
   const contract = readContract(resolve(root, "script/conformance/quality-contract.json"));
-  expect(diagnostics(programs(root, contract, buildInventory(root, contract)))).toEqual([]);
+  expect(analyze(root, contract, buildInventory(root, contract), []).sourceDiagnostics).toEqual([]);
 }, 300_000);

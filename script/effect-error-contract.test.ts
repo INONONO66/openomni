@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Result } from "effect";
 import ts from "typescript";
+import { runSyncEffect } from "../apps/openomni/test/helpers/effect";
 import * as Agent from "../packages/agent/src/errors";
 import * as Channels from "../packages/channels/src/errors";
 import * as Code from "../packages/codemode/src/errors";
@@ -126,7 +127,7 @@ for (const entry of packages) {
     for (const ctor of owned) expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
-      const caught = Effect.runSync(Effect.result(Effect.fail(failure)));
+      const caught = runSyncEffect(Effect.result(Effect.fail(failure)));
       expect(Result.isFailure(caught) && caught.failure === failure).toBe(true);
       expect("data" in failure).toBe(false);
     }

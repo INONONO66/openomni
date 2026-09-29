@@ -1,17 +1,7 @@
-import { Effect, Cause, Exit, Fiber } from "effect";
-import { TestClock } from "effect/testing";
 import { describe, expect, test, vi } from "bun:test";
 import { Retry } from "../../src/retry";
 
 import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
-
-async function sleepWithClock(ms: number, signal?: AbortSignal): Promise<void> {
-  await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-    const fiber = yield* Effect.forkScoped(Retry.sleep(ms, signal));
-    yield* TestClock.adjust(ms);
-    yield* Fiber.join(fiber);
-  }).pipe(Effect.provide(TestClock.layer()))));
-}
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
@@ -60,31 +50,6 @@ describe("Retry", () => {
     expect(Object.hasOwn(Retry, "agentSleep")).toBe(false);
     expect(retrySource).not.toMatch(/\bexport\s+type\s+AgentRetryReason\b/);
     expect(retrySource).not.toMatch(/\bexport\s+interface\s+WithRetryOptions\b/);
-  });
-
-  describe("sleep(ms, abortSignal)", () => {
-    test("completes on the injected clock", async () => {
-      await sleepWithClock(100);
-    });
-
-    test("signal interruption settles without a Promise twin", async () => {
-      const controller = new AbortController();
-      const exit = await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-        const fiber = yield* Effect.forkScoped(Retry.sleep(5_000, controller.signal));
-        controller.abort();
-        return yield* Fiber.await(fiber);
-      }).pipe(Effect.provide(TestClock.layer()))));
-      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-    });
-
-    test("an already-aborted signal interrupts without scheduling work", async () => {
-      const controller = new AbortController();
-      controller.abort();
-      const exit = await Effect.runPromiseExit(Retry.sleep(Retry.RETRY_MAX_DELAY + 1000, controller.signal));
-      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-    });
-
-
   });
 
   describe("decide(attempt, error) delay computation", () => {

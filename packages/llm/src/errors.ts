@@ -29,6 +29,7 @@ const RunFields = ProviderFields.partial({ isRetryable: true }).extend({
   providerErrorName: z.string().optional(),
   retryAfterMs: z.number().nonnegative().optional(),
   usage: UsageFields,
+  usageProvenance: z.enum(["reported", "estimated", "unknown"]).optional(),
   aborted: z.boolean(),
   contextOverflow: z.boolean(),
   visibleOutput: z.boolean(),
