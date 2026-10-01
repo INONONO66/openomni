@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790853805501,
+  "lastUpdate": 1790869249204,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76017,6 +76017,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 88038,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a4478b0eacd00d65026f4f8ad914837acb67fa95",
+          "message": "#1244: package-owned typed failures replace ForeignFailure; bare throws and console logging gone (epic #1260 P2) (#1262)\n\n* errors: declare package-owned Failures beside ForeignFailure (#1244 step 1)\n\n* ipc/machines/codemode: package-owned failures, Effect log events, named fs throws (#1244 transport lane)\n\n* ipc tests: route logger-capture tests through the package runner owner (#1244)\n\n* channels: ChannelsFailure replaces ForeignFailure, named refusals and defects (#1244 channels lane)\n\n* protocol/ui/desktop: named error classes replace bare throws (#1244 effect-free lane)\n\n* ledger: LedgerFailure replaces ForeignFailure; observation publish failures return a typed value to a failure port (#1244 ledger lane)\n\n* agent: AgentFailure replaces ForeignFailure; invariants die, refusals fail typed, bus logs through Effect (#1244 agent lane)\n\n* app: CliError/AppInvariantError/ConfigurationError codes; every thrown Error becomes a typed failure or Effect.die (#1244 app lane)\n\n* agent/app tests: take ai as a devDependency so fixtures construct the SDK's APICallError (#1244)\n\n* llm: thin APIError over the SDK's APICallError, LlmFailure replaces ForeignFailure (#1244 llm lane)\n\nProvider facts (status, headers, body, retryability) stay on the SDK error\nunder cause and are never copied; detection is APICallError.isInstance,\nnot structural field matching. ModelResolutionError replaces bare Error\nthrows in the provider loader, TranscriptRecordingDefect names the fold\ndefect, and header delay lookup lowercases header names. Tests build real\nAPICallError causes and assert provider facts on cause.*.\n\n* agent/app tests: reconcile fixtures with the typed-failure reshape (#1244)\n\nmock-llm, provider-failure and sdk-provider helpers build real APICallError\ncauses; assertions on status/retryability move to cause.*; the injected\nledger-commit refusal in tool-wave is a LedgerFailure; codemode completion\ntests drop the test-side CodeError->MachinesFailure map that src already\nperforms. DataPaymentRequired is deleted: no producer puts statusCode under\n.data (APICallError.data is the provider body).\n\n* agent: report observation delivery failures as bus facts, runner-free (#1244)\n\ncreateObservationBus/scopeObservation no longer run Effect.logWarning via\nEffect.runSync inside a driver-band package (R2_EFFECT_RUNNER, allowlist\n[]). Without an injected reporter a subscriber or sink failure is published\nas observation.delivery_failed on the same sink; a throwing reporter yields\nboth failures in that fact; a failing failure report is dropped, never\nre-reported. ContextRestoreError is package-private (tests match _tag).\n\n* docs: #1244 receipt — implementation-status section, SLOP §K row, AGENTS stamp\n\n* script: gate-discovery fixture mirrors protocol/src/error alongside json.ts (#1244)\n\njson.ts now imports the NamedError factory for CanonicalJsonError (effect-free\nlane), so the copied gates in the fixture need that one relative module too.\n\n* codemode: CodemodeFailure fields come from the Diagnostic schema (#1244)\n\nThe literal field block duplicated IpcFailure's (one jscpd production clone;\nmain is at 0). The payload type is the existing Diagnostic schema's inferred\ntype, as the other package errors here already do.\n\n* ledger: route post-commit publish failures through a non-unwinding port\n\nA throwing observation failure port used to turn an already committed write\ninto a reported failure (receipt lost; writeEffect folded the reporter throw\ninto LedgerFailure). reportCommitted now contains the port throw so the write\nresult always leaves the store; the app composes its incident-log port at both\nstore-opening sites instead of relying on the silent default.\n\n* agent: context-restore refusals are typed SessionError failures, not thrown defects\n\nrequireCompactionIntent and recordedCompaction return Effect failures;\nContextRestoreError joins the SessionError union (not ExecutionError) and\nthe tests assert the typed failure through Effect.flip instead of squashing\na Cause.\n\n* script: effect-error contract follows the package-owned carriers\n\nEach package names its string-cause carrier (AgentFailure, LedgerFailure,\n...) and the exported error classes that are thrown from synchronous\npaths by design; the exhaustiveness fixture derives from the same table.\n\n* tests: drop the constructor-only SpacingGapError case; literal reporter diagnostics\n\nThe spacing guard is type-unreachable through spacingClass's public domain,\nso the constructor assertion certified nothing. The scope table now carries\nthe expected rendering per thrown value instead of re-running the bus's\nown algorithm.\n\n* docs: separate result refusals, typed failures and defects in the #1244 status\n\n* ledger: a sink's thrown value is converted without running its own conversion twice\n\nr2 N1: `String(cause)` inside the catch could throw again (`{toString: 0}`) and\nescaped before the failure port, so a committed materialize/append/commit read as\nfailed. The fallback diagnostic names only `typeof`. Regression rows cover an Error\nand an unrepresentable value through materialize, append and a two-action commit,\nasserting receipts, durable revision and one port report per receipt.\n\n* tests: cover the remaining #1244 branches instead of duplicating Failure.of\n\nr2 N2: drop the session-requests copy of the Failure.of defect test. Add the\nLlmFailure/CompactionExecutionError evidence rows, the open-turn torn-intent\nLedgerInvariant case, and a table test for the two named process-group failures\nof the alarm command source (shared failing-tool fixture).\n\n* docs: ActorRegistryRefused is a synchronous refusal; stamp channels for #1244\n\nr2 LOW: the status doc listed ActorRegistryRefused beside the invariant defects;\nit is a caller-handleable registry refusal thrown from a non-Effect surface.\npackages/channels/AGENTS.md records the typed-failure cut so check-deps no\nlonger reports it stale.\n\n* ledger: thrown-value conversion contains instanceof as well as String()\n\nr3 N1: a revoked Proxy throws from `instanceof Error` itself, so the check\nmoves inside the same try as the String() conversion; the typeof fallback is the\nonly code that runs after that point. Regression row through materialize, append\nand a two-action commit.\n\n* tests: the recovered CompactionExecutionError message is asserted on the real path\n\nCI patch coverage flagged packages/agent/src/errors.ts:58: every test read only\n_tag and reason, so the message getter never ran. The catchTag recovery test now\nreads it where the error is actually produced.",
+          "timestamp": "2026-10-01T15:38:06Z",
+          "tree_id": "16f5ad970461cc911dff49a81a6ce02151abac7e",
+          "url": "https://github.com/INONONO66/openomni/commit/a4478b0eacd00d65026f4f8ad914837acb67fa95"
+        },
+        "date": 1790869248398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1507,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1285937,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 297726,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5465767,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 113,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 867,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 125883,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 627918,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 349805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2687,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9259537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1103541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 13911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 130016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 656355,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 169197,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11092682,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 70,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 120286,
             "unit": "ns/op"
           }
         ]
