@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlainValueSchema } from "../json.js";
 import { Events as EventDescriptors } from "../event/policy.js";
 import { PolicyDefinition } from "./definition.js";
 import { PolicyEffects } from "./effects.js";
@@ -44,7 +45,7 @@ export namespace Policy {
       z.object({
         id: z.string().min(1),
         required: z.boolean(),
-        config: z.record(z.string(), z.unknown()).optional(),
+        config: z.record(z.string(), PlainValueSchema).optional(),
       }),
     ),
     labels: z.array(z.string()),

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlainValue } from "@openomni/protocol";
-import { compilePolicySnapshot, PolicyCompileError } from "../src/index";
+import { compilePolicySnapshot } from "../src/index";
 import { atGeneration, compaction, draft } from "./row-fixtures";
 
 test("existing compiler executes the supplied captured named transform", () => {
@@ -25,19 +25,12 @@ test("existing compiler executes the supplied captured named transform", () => {
     ],
   };
 
-  const result = (() => {
-    try {
-      return compilePolicySnapshot(options).evaluate({
-        kind: "tool",
-        phase: "pre",
-        op: "bash",
-        value: { command: "original" },
-      }).value;
-    } catch (error) {
-      if (PolicyCompileError.isInstance(error)) return { compileError: error.code };
-      throw error;
-    }
-  })();
+  const result = compilePolicySnapshot(options).evaluate({
+    kind: "tool",
+    phase: "pre",
+    op: "bash",
+    value: { command: "original" },
+  }).value;
 
   expect(result).toEqual({ command: "admitted" });
 });

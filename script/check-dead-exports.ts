@@ -22,17 +22,18 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
+import { commandOutput } from "./command-output";
 import { runScriptMain } from "./main-runner";
-import type { PlainValue } from "../packages/protocol/src/json.js";
+import { PlainValueSchema, type PlainValue } from "../packages/protocol/src/json.js";
 import { knipWorkspaces } from "./topology";
 
 const BASELINE_PATH = "script/conformance/knip-baseline.json";
 const KNIP_CMD = ["bunx", "knip", "--reporter", "json", "--no-exit-code"];
 
-const KnipFileRecordSchema = z.object({ file: z.string() }).catchall(z.json());
+const KnipFileRecordSchema = z.object({ file: z.string() }).catchall(PlainValueSchema);
 const KnipReportSchema = z.object({ issues: z.array(KnipFileRecordSchema) });
 const DeadExportBaselineSchema = z.object({ grandfathered: z.array(z.string()).optional() });
-const KnipConfigSchema = z.object({ workspaces: z.record(z.string(), z.json()).optional() });
+const KnipConfigSchema = z.object({ workspaces: z.record(z.string(), PlainValueSchema).optional() });
 
 export type KnipFileRecord = z.infer<typeof KnipFileRecordSchema>;
 
@@ -149,15 +150,11 @@ export async function runKnip(
   cwd = ".",
   verifyInventory = true,
   includeEntryExports = false,
+  output = commandOutput,
 ): Promise<KnipReport> {
   if (verifyInventory) verifyKnipWorkspaceInventory();
   const cmd = includeEntryExports ? [...KNIP_CMD, "--include-entry-exports"] : KNIP_CMD;
-  const proc = Bun.spawn({ cmd, cwd, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await output(cmd, cwd);
 
   // --no-exit-code makes issue-bearing runs exit 0; nonzero means knip itself
   // broke (config error, crash) and must not be read as "no issues".
@@ -274,7 +271,7 @@ export function readBaseline(): DeadExportBaseline {
 // self-test — synthetic reports only; never invokes knip or reads the baseline
 // ---------------------------------------------------------------------------
 
-function selfTest(): void {
+function selfTest(): number {
   const failures: string[] = [];
 
   const fixtureReport: KnipReport = {
@@ -326,33 +323,26 @@ function selfTest(): void {
     failures.push("a resolved baseline entry failed the check (shrink must be --update-only)");
   }
 
-  if (failures.length > 0) {
-    for (const failure of failures) {
-      process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
-    }
-    process.exit(1);
-  }
+  for (const failure of failures) process.stderr.write(`SELF-TEST FAIL: ${failure}\n`);
+  if (failures.length > 0) return 1;
   process.stdout.write(
     "OK: dead-exports self-test — new issues discriminate, stale baseline entries pass at check time\n",
   );
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function main(loadReports: () => Promise<readonly [KnipReport, KnipReport]> = () => Promise.all([runKnip(), runKnip(".", true, true)])): Promise<number> {
   const args = new Set(process.argv.slice(2));
 
   if (args.has("--self-test")) {
-    selfTest();
-    return;
+    return selfTest();
   }
 
-  const [standardReport, entryExportReport] = await Promise.all([
-    runKnip(),
-    runKnip(".", true, true),
-  ]);
+  const [standardReport, entryExportReport] = await loadReports();
   const packageEntries = new Set(
     knipWorkspaces().map((workspace) => `${workspace.dir}/src/index.ts`),
   );
@@ -369,7 +359,7 @@ async function main(): Promise<void> {
     process.stdout.write(
       `OK: dead-exports baseline regenerated (${currentKeys.length} issues) — this diff is the sign-off surface\n`,
     );
-    return;
+    return 0;
   }
 
   const { newIssues, resolved } = compareDeadExports(readBaseline().grandfathered, currentKeys);
@@ -382,7 +372,7 @@ async function main(): Promise<void> {
     process.stdout.write(
       `OK: dead-export ratchet — ${knipWorkspaces().length} topology workspaces scanned, ${currentKeys.length} known issues, none new${shrinkNote}\n`,
     );
-    return;
+    return 0;
   }
 
   for (const key of newIssues) {
@@ -390,7 +380,7 @@ async function main(): Promise<void> {
       `VIOLATION [dead-exports] ${key} — new unused export/type/file beyond the baseline; delete it or get Owner sign-off to baseline it via --update\n`,
     );
   }
-  process.exit(1);
+  return 1;
 }
 
-if (import.meta.main) await runScriptMain(main);
+if (import.meta.main) await runScriptMain(async () => { process.exitCode = await main(); });

@@ -3,6 +3,7 @@ import { Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import { SpawnFailure, type MachineError } from "./errors";
+import { listenForAbort } from "./abort";
 
 const spawnFailure = z.preprocess(String, z.string()).transform((cause) => new SpawnFailure({ operation: "exec.spawn", message: cause, cause })).parse;
 const killFailure = z.object({ code: z.enum(["ESRCH", "EPERM"]) });
@@ -41,10 +42,7 @@ export function execute(request: Machine.ExecRequest, signal: AbortSignal): Effe
       Deferred.doneUnsafe(closed, failed ? Exit.fail(failed) : Exit.succeed({ status: "completed", stdout: Buffer.concat(stdout).toString("base64"), stderr: Buffer.concat(stderr).toString("base64"), exitCode, signal: exitSignal, truncated }));
     });
     const abort = Effect.callback<never>((resume) => {
-      const listener = () => resume(Effect.interrupt);
-      signal.addEventListener("abort", listener, { once: true });
-      if (signal.aborted) listener();
-      return Effect.sync(() => signal.removeEventListener("abort", listener));
+      return Effect.sync(listenForAbort(signal, () => resume(Effect.interrupt)));
     });
     const cleanup = Effect.try({ try: kill, catch: spawnFailure }).pipe(Effect.andThen(Deferred.await(closed)), Effect.asVoid, Effect.orDie);
     const result = yield* Deferred.await(closed).pipe(Effect.raceFirst(abort), Effect.timeoutOption(Machine.EXEC_TIMEOUT_MS), Effect.ensuring(cleanup));

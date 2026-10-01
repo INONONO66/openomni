@@ -3,43 +3,13 @@ import { Effect } from "effect";
 import { expect, spyOn, test } from "bun:test";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime } from "./helpers/session-services";
-import { openRequest } from "./helpers/open-request";
+import { pendingRequest } from "./helpers/open-request";
 import type { SessionTransition } from "@openomni/protocol";
 import { commitSessionRequest } from "../src/session-admission";
 
-import { requestLedger } from "./helpers/g0-request-ledger";
 
 function pending(id: string) {
-  return Effect.gen(function* () {
-    const fixture = yield* requestLedger({ id });
-    const { identity } = fixture;
-    const request = openRequest({
-      requestId: `${id}:original`,
-      sessionId: id,
-      turnId: identity.turnId,
-      callId: `${id}:call`,
-      parsedInput: { path: id },
-      toolsGeneration: identity.toolsGeneration,
-      toolsHash: identity.toolsHash,
-      systemHash: identity.systemHash,
-      deadline: 1000,
-      createdAt: 100,
-    });
-    yield* fixture.ledger.commit({
-      id: request.requestId,
-      parentId: identity.parentActionId,
-      sessionId: id,
-      kind: "tool",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "intent", value: request.parsedInput, effectHash: request.effectHash },
-      },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      irreversible: true,
-      ts: 100,
-    });
-    return request;
-  });
+  return pendingRequest(id);
 }
 
 function open(request: SessionTransition.Request) {

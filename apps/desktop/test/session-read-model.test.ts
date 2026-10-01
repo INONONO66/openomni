@@ -6,16 +6,36 @@ import { z } from "zod";
 import { attentionKind } from "../src/renderer/attention/order";
 import { createGatewayChatTransport } from "../src/renderer/chat/gateway-transport";
 import {
-  queryKeys, sessionReadModel, sessionReadOptions, subscribeSessionReads,
+  fetchGatewayEndpoint,
+  queryKeys,
+  sessionReadModel,
+  sessionReadOptions,
+  subscribeSessionReads,
 } from "../src/renderer/state/queries";
 import { bindDurableSession } from "../src/renderer/state/session-actions";
 import {
   consoleStore, createSession, INITIAL_CLIENT_STATE, openTab, setDraft,
 } from "../src/renderer/state/store";
+import { upgradeWebSocket } from "./helpers/chat-server";
 
 const cleanups: (() => void)[] = [];
 beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
 afterEach(() => { for (const close of cleanups.splice(0).reverse()) close(); });
+
+test("gateway endpoint reads the bridge and stays null outside Electron", async () => {
+  expect(await fetchGatewayEndpoint()).toBeNull();
+  const desktop = {
+    gateway: () => Promise.resolve({ url: "ws://localhost:3000/ws" }),
+    closeWindow: () => undefined,
+    onShellCommand: () => () => undefined,
+  };
+  Object.defineProperty(globalThis, "desktop", { configurable: true, value: desktop });
+  try {
+    expect(await fetchGatewayEndpoint()).toEqual({ url: "ws://localhost:3000/ws" });
+  } finally {
+    Reflect.deleteProperty(globalThis, "desktop");
+  }
+});
 
 function page(phase: SessionRead.Page["phase"], revision: number, epoch = 2): SessionRead.Page {
   return SessionRead.Page.parse({
@@ -32,7 +52,7 @@ function serveReads() {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request, self) => self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+    fetch: upgradeWebSocket,
     websocket: {
       open: (socket: ServerWebSocket<undefined>) => { connection = socket; },
       message(socket: ServerWebSocket<undefined>, raw) {
@@ -141,7 +161,7 @@ test("an empty same-epoch same-head continuation keeps the authoritative activit
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request, self) => self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+    fetch: upgradeWebSocket,
     websocket: {
       message(socket: ServerWebSocket<undefined>, raw) {
         const request = SessionRead.Request.parse(JSON.parse(String(raw)));

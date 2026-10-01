@@ -1,4 +1,5 @@
 import { PlainObjectSchema, SessionTransition, type LedgerAction } from "@openomni/protocol";
+import { Effect } from "effect";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutionLedger } from "../../src/executor-contract";
 
@@ -12,6 +13,37 @@ export function executionReads(kernel: SessionKernel, sessionId: string): Reads 
     openOperationsPage: (id, cursor) => kernel.openOperationsPage(sessionId, id, cursor),
     operationChildrenPage: (id, cursor) => kernel.operationChildrenPage(sessionId, id, cursor),
     guardedOperationsPage: (id, cursor) => kernel.guardedOperationsPage(sessionId, id, cursor),
+  };
+}
+
+/** Commit lane bound to one fenced writer; reads come straight from the kernel. */
+export function fencedExecutionLedger(
+  kernel: SessionKernel,
+  id: string,
+  writer: { readonly owner: string; readonly fence: number },
+  clock: () => number,
+  commit: (
+    batch: Parameters<SessionKernel["commit"]>[0],
+  ) => ReturnType<SessionKernel["commit"]> = kernel.commit,
+): Reads & Pick<ExecutionLedger, "commit"> {
+  return {
+    ...executionReads(kernel, id),
+    commit: (action: LedgerAction.Append) =>
+      Effect.gen(function* () {
+        const row = kernel.row(id);
+        const committed = yield* commit({
+          sessionId: id,
+          owner: writer.owner,
+          fence: writer.fence,
+          now: clock(),
+          expectedRevision: row.revision,
+          actions: [action],
+          state: row.state,
+        });
+        const receipt = committed.receipts[0];
+        if (receipt === undefined) throw new Error("test receipt missing");
+        return receipt;
+      }),
   };
 }
 

@@ -8,7 +8,7 @@ import { runEffect } from "../../helpers/effect";
 import { replaceDecisionFacts } from "../../helpers/ledger";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import type { Gateway, PlainObject, SessionTransition } from "@openomni/protocol";
+import type { Gateway, PlainObject, SessionTransition, Storage } from "@openomni/protocol";
 import { Bus } from "../../helpers/observation";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import type { KernelDeliveryReceipt } from "../../../src/support/deliver";
@@ -53,8 +53,8 @@ function inspectDebitCount(): number {
   return count;
 }
 
-function messaging() {
-  return createExistingAgentMessaging({
+function messagingPorts() {
+  return {
     stores: ledger().stores,
     transaction: channelTransaction,
     requests: channelRequests(seededRequests()),
@@ -64,7 +64,23 @@ function messaging() {
     },
     grants: () => grants,
     publish: Bus.publish,
-  });
+  };
+}
+
+function messaging() {
+  return createExistingAgentMessaging(messagingPorts());
+}
+
+type DecisionFacts = Storage.DecisionFactSubAdapter;
+type DecisionFact = Parameters<DecisionFacts["record"]>[0];
+type RecordResult = ReturnType<DecisionFacts["record"]>;
+
+function overrideAdmissionRecord(record: (facts: DecisionFacts, fact: DecisionFact) => RecordResult): void {
+  replaceDecisionFacts((facts: DecisionFacts) => ({
+    ...facts,
+    record: (fact: DecisionFact) =>
+      fact.type === "gateway.send.admitted" ? record(facts, fact) : facts.record(fact),
+  }));
 }
 
 beforeEach(() => {
@@ -390,14 +406,7 @@ describe("durable send admission faults", () => {
     const input = buildSendInput({ messageId: "message:reentrant-adapter-swap" });
     const detachedFacts = ledger().sessions.decisionFacts;
     const reentrant = createExistingAgentMessaging({
-    stores: ledger().stores,
-    transaction: channelTransaction,
-      requests: channelRequests(seededRequests()),
-      deliver: (message: OutboundMessage) => {
-        deliveries.push(message);
-        return { value: "accepted" as const };
-      },
-      grants: () => grants,
+      ...messagingPorts(),
       budgets: () => {
         ledger().setDecisionFacts(undefined);
         return [
@@ -410,7 +419,6 @@ describe("durable send admission faults", () => {
           },
         ];
       },
-      publish: Bus.publish,
     });
 
     try {
@@ -427,18 +435,11 @@ describe("durable send admission faults", () => {
   test("fails closed when decision facts disappear before admission lookup", async () => {
     const detachedFacts = ledger().sessions.decisionFacts;
     const withoutFacts = createExistingAgentMessaging({
-    stores: ledger().stores,
-    transaction: channelTransaction,
-      requests: channelRequests(seededRequests()),
-      deliver: (message: OutboundMessage) => {
-        deliveries.push(message);
-        return { value: "accepted" as const };
-      },
+      ...messagingPorts(),
       grants: () => {
         ledger().setDecisionFacts(undefined);
         return grants;
       },
-      publish: Bus.publish,
     });
 
     try {
@@ -450,45 +451,33 @@ describe("durable send admission faults", () => {
   });
 
   test("fails closed when a concurrent record returns a corrupt winner", async () => {
-    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
-      ...facts,
-      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
-        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
-        facts.record({ ...fact, data: { signature: 7 } });
-        return facts.record(fact);
-      },
-    }));
+    overrideAdmissionRecord((facts, fact) => {
+      facts.record({ ...fact, data: { signature: 7 } });
+      return facts.record(fact);
+    });
 
     expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
   test("an incompatible concurrent admission still rejects an awaited send", async () => {
-    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
-      ...facts,
-      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
-        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
-        const data = z.record(z.string(), z.json()).parse(fact.data);
-        expect(facts.record({ ...fact, data: { ...data, signature: "conflicting" } }).kind).toBe(
-          "recorded",
-        );
-        return facts.record(fact);
-      },
-    }));
+    overrideAdmissionRecord((facts, fact) => {
+      const data = z.record(z.string(), z.json()).parse(fact.data);
+      expect(facts.record({ ...fact, data: { ...data, signature: "conflicting" } }).kind).toBe(
+        "recorded",
+      );
+      return facts.record(fact);
+    });
     expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
   test("uses the matching admission that won a concurrent record race", async () => {
-    replaceDecisionFacts((facts: import("@openomni/protocol").Storage.DecisionFactSubAdapter) => ({
-      ...facts,
-      record: (fact: Parameters<import("@openomni/protocol").Storage.DecisionFactSubAdapter["record"]>[0]) => {
-        if (fact.type !== "gateway.send.admitted") return facts.record(fact);
-        const result = facts.record(fact);
-        expect(result.kind).toBe("recorded");
-        return facts.record(fact);
-      },
-    }));
+    overrideAdmissionRecord((facts, fact) => {
+      const result = facts.record(fact);
+      expect(result.kind).toBe("recorded");
+      return facts.record(fact);
+    });
 
     const receipt = await runEffect(messaging().send(buildSendInput()));
 

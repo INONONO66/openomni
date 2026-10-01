@@ -21,7 +21,7 @@ import { fixtureHashes } from "../helpers/compiled-policy";
 import { memoryExecutionReads } from "../helpers/execution-reads";
 import { requestLedger } from "../helpers/g0-request-ledger";
 import { isolated, isolatedLedger } from "../helpers/isolated";
-import { openRequest } from "../helpers/open-request";
+import { pendingRequest } from "../helpers/open-request";
 import { allowConfigure, isolatedRuntime } from "../helpers/session-services";
 
 /** Chain oracle over the active isolation's kernel. */
@@ -186,33 +186,7 @@ function approvalAnswer(
 
 const openApproval = (id: string, deadline: number) =>
   Effect.gen(function* () {
-    const fixture = yield* requestLedger({ id });
-    const { identity } = fixture;
-    const request = openRequest({
-      requestId: `${id}:original`,
-      sessionId: id,
-      turnId: identity.turnId,
-      callId: `${id}:call`,
-      parsedInput: { path: id },
-      toolsGeneration: identity.toolsGeneration,
-      toolsHash: identity.toolsHash,
-      systemHash: identity.systemHash,
-      deadline,
-      createdAt: 100,
-    });
-    yield* fixture.ledger.commit({
-      id: request.requestId,
-      parentId: identity.parentActionId,
-      sessionId: id,
-      kind: "tool",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "intent", value: request.parsedInput, effectHash: request.effectHash },
-      },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      irreversible: true,
-      ts: 100,
-    });
+    const request = yield* pendingRequest(id, deadline);
     const transition = (payload: SessionTransition.Payload, inputId: string, at: number) =>
       commitSessionRequest(isolatedLedger().kernel, id, { owner: `${id}:owner`, fence: 1 }, payload, inputId, at, {
         authorizeConfigure: allowConfigure,

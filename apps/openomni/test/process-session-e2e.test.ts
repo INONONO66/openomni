@@ -10,10 +10,8 @@ import { Database } from "bun:sqlite";
 import { catalogDefinitions } from "../src/tools/core/catalog";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import {
-  type AppLedgerPlane,
-  sessionFilePath,
-} from "../src/composition/cluster-runtime";
+import { sessionFilePath } from "../src/composition/cluster-runtime";
+import { receivedMessages } from "./helpers/received-messages";
 import { planeOf } from "./helpers/ledger";
 import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
 import { bounded } from "./helpers/protected-dispatch";
@@ -26,15 +24,75 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 
 const suite = residentSuite();
-/** All received-message evidence in one session's chain (W5.2 inbox = prompt actions). */
-function receivedMessages(plane: AppLedgerPlane, sessionId: string) {
-  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
-    .filter((action) => action.kind === "prompt")
-    .map((action) => ({
-      id: action.id,
-      content: (action.effect.value as { content?: string }).content ?? "",
-      origin: { value: action.intent.value },
-    }));
+
+type ProcessPlane = {
+  catalogPath: string;
+  sessionsDir: string;
+  runtime: ReturnType<typeof gatewayRuntime>;
+};
+
+/** Per-fixture catalog/sessions paths plus a gateway runtime rooted in the fixture directory. */
+function processPlane(fixture: { directory: string }): ProcessPlane {
+  const catalogPath = join(fixture.directory, "catalog.sqlite");
+  const sessionsDir = join(fixture.directory, "sessions");
+  return {
+    catalogPath,
+    sessionsDir,
+    runtime: gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
+  };
+}
+
+/** Commission a process-runner worker from the fixture session and return its row. */
+async function commissionWorker(
+  fixture: ReturnType<typeof messageFixture>,
+  message: { content: string; replyTo: string; deadline?: number },
+) {
+  expect(
+    (
+      await fixture.send({
+        to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+        type: "message",
+        ...message,
+      })
+    ).isError,
+  ).not.toBe(true);
+  const child = fixture.plane.listSessions().find((row) => row.role === "worker");
+  if (child === undefined) throw new Error("missing commissioned process session");
+  return child;
+}
+
+/** A ProcessSessionRequest against the fake fixture model or a local anthropic SSE provider. */
+function processRequest(
+  sessionId: string,
+  plane: ProcessPlane,
+  provider?: { port: number | undefined },
+): ProcessSessionRequest {
+  const base = {
+    sessionId,
+    catalogPath: plane.catalogPath,
+    sessionsDir: plane.sessionsDir,
+    entityIdleMs: 50,
+  };
+  return provider === undefined
+    ? { ...base, model: { provider: "fake", id: "fixture" }, apiKey: "fixture-key" }
+    : {
+        ...base,
+        model: { provider: "anthropic", id: "claude-opus-4-5" },
+        apiKey: "process-key",
+        transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+      };
+}
+
+/** Common teardown: dispose the runtime, stop the provider, reset the bus, drop fixture files. */
+async function releaseProcess(
+  fixture: { directory: string },
+  runtime: ReturnType<typeof gatewayRuntime>,
+  provider?: ReturnType<typeof Bun.serve>,
+) {
+  await runtime.dispose();
+  await provider?.stop(true);
+  Bus.reset();
+  rmSync(fixture.directory, { recursive: true, force: true });
 }
 function response(target?: string): Response {
   const block =
@@ -124,9 +182,8 @@ test("process entry logs committed sessions and disposes its runtime", async () 
       return response(requests === 1 ? "sender" : undefined);
     },
   });
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const plane = processPlane(fixture);
+  const { catalogPath, sessionsDir, runtime } = plane;
   const dispose = spyOn(runtime, "dispose");
   const createRuntime = mock((options: Parameters<typeof gatewayRuntime>[0]) => {
     expect(options).toEqual({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
@@ -142,23 +199,11 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     throw new Error(`unexpected process exit: ${code}`);
   });
   try {
-    expect((await fixture.send({
-      to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
-      type: "message",
+    const child = await commissionWorker(fixture, {
       content: "work",
       replyTo: "process-entry-original",
-    })).isError).not.toBe(true);
-    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
-    if (child === undefined) throw new Error("missing commissioned process session");
-    const request: ProcessSessionRequest = {
-      sessionId: child.id,
-      catalogPath,
-      sessionsDir,
-      entityIdleMs: 50,
-      model: { provider: "anthropic", id: "claude-opus-4-5" },
-      apiKey: "process-key",
-      transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
-    };
+    });
+    const request = processRequest(child.id, plane, provider);
     const running = runProcessEntry({ stdin, log, exit, gatewayRuntime: createRuntime });
     stdin.write(`${JSON.stringify(request)}\n`);
     const answer = await bounded(answerRequested.promise);
@@ -178,31 +223,20 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     )).toBe(true);
   } finally {
     dispose.mockRestore();
-    await runtime.dispose();
     stdin.destroy();
-    await provider.stop(true);
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime, provider);
   }
 });
 
 test("process session drain stops without invoking a model when the session is idle", async () => {
   const fixture = messageFixture("resident");
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const plane = processPlane(fixture);
+  const { runtime } = plane;
   try {
     await acquireAppResource(
       runtime,
       serveProcessSession(
-        {
-          sessionId: fixture.sessionId,
-          catalogPath,
-          sessionsDir,
-          entityIdleMs: 50,
-          model: { provider: "fake", id: "fixture" },
-          apiKey: "fixture-key",
-        },
+        processRequest(fixture.sessionId, plane),
         () => {
           throw new Error("idle drain must not commit a message");
         },
@@ -214,17 +248,14 @@ test("process session drain stops without invoking a model when the session is i
       [],
     );
   } finally {
-    await runtime.dispose();
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime);
   }
 });
 
 test("process session drain defers entity-owned resume consumption", async () => {
   const fixture = messageFixture("resident");
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const plane = processPlane(fixture);
+  const { runtime } = plane;
   const deferred = spyOn(console, "error").mockImplementation(() => undefined);
   try {
     const kernel = fixture.plane.openKernel(fixture.sessionId);
@@ -266,14 +297,7 @@ test("process session drain defers entity-owned resume consumption", async () =>
     await acquireAppResource(
       runtime,
       serveProcessSession(
-        {
-          sessionId: fixture.sessionId,
-          catalogPath,
-          sessionsDir,
-          entityIdleMs: 50,
-          model: { provider: "fake", id: "fixture" },
-          apiKey: "fixture-key",
-        },
+        processRequest(fixture.sessionId, plane),
         () => {
           throw new Error("deferred consume must not commit a message");
         },
@@ -290,22 +314,19 @@ test("process session drain defers entity-owned resume consumption", async () =>
     ]);
   } finally {
     deferred.mockRestore();
-    await runtime.dispose();
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime);
   }
 });
 
 test("process session drain recovers an open turn through the default admission path", async () => {
   const fixture = messageFixture("resident");
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
+  const plane = processPlane(fixture);
+  const { runtime } = plane;
   const provider = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: () => response(),
   });
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
   try {
     const kernel = fixture.plane.openKernel(fixture.sessionId);
     const generation = kernel.latestGenerationFor(fixture.sessionId);
@@ -359,15 +380,7 @@ test("process session drain recovers an open turn through the default admission 
     await acquireAppResource(
       runtime,
       serveProcessSession(
-        {
-          sessionId: fixture.sessionId,
-          catalogPath,
-          sessionsDir,
-          entityIdleMs: 50,
-          model: { provider: "anthropic", id: "claude-opus-4-5" },
-          apiKey: "process-key",
-          transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
-        },
+        processRequest(fixture.sessionId, plane, provider),
         () => {
           throw new Error("recovery must not commit a child message");
         },
@@ -379,10 +392,7 @@ test("process session drain recovers an open turn through the default admission 
     expect(kernel.latestTurnTerminal(fixture.sessionId)?.action.id).toBe(`${turnId}:result`);
     expect(kernel.row(fixture.sessionId).state).toBe("idle");
   } finally {
-    await runtime.dispose();
-    await provider.stop(true);
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime, provider);
   }
 });
 
@@ -405,34 +415,17 @@ test.each([
     },
   });
   const deadline = Date.now() + 60_000;
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const plane = processPlane(fixture);
+  const { runtime } = plane;
   try {
-    expect(
-      (
-        await fixture.send({
-          to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
-          type: "message",
-          content: "work",
-          ...(toolSend ? {} : { deadline }),
-          replyTo: "process-original",
-        })
-      ).isError,
-    ).not.toBe(true);
-    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
-    if (child === undefined) throw new Error("missing commissioned process session");
+    const child = await commissionWorker(fixture, {
+      content: "work",
+      replyTo: "process-original",
+      ...(toolSend ? {} : { deadline }),
+    });
     const notified: string[] = [];
     await acquireAppResource(runtime, serveProcessSession(
-      {
-        sessionId: child.id,
-        catalogPath,
-        sessionsDir,
-        entityIdleMs: 50,
-        model: { provider: "anthropic", id: "claude-opus-4-5" },
-        apiKey: "process-key",
-        transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
-      },
+      processRequest(child.id, plane, provider),
       (ids) => notified.push(...ids),
       undefined,
       runtime,
@@ -466,10 +459,7 @@ test.each([
         .filter((row) => row.state === "open" && row.deadline !== null && row.deadline <= deadline),
     ).toEqual([]);
   } finally {
-    await runtime.dispose();
-    await provider.stop(true);
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime, provider);
   }
 });
 
@@ -519,24 +509,15 @@ test.each([
       return requests === 1 ? toolResponse(input) : response();
     },
   });
-  const catalogPath = join(fixture.directory, "catalog.sqlite");
-  const sessionsDir = join(fixture.directory, "sessions");
-  const runtime = gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+  const plane = processPlane(fixture);
+  const { runtime } = plane;
   try {
-    expect(
-      (
-        await fixture.send({
-          to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
-          type: "message",
-          content: "focused process path",
-          replyTo: "focused-process",
-        })
-      ).isError,
-    ).not.toBe(true);
-    const child = fixture.plane.listSessions().find((row) => row.role === "worker");
-    if (child === undefined) throw new Error("missing focused process child");
+    const child = await commissionWorker(fixture, {
+      content: "focused process path",
+      replyTo: "focused-process",
+    });
     if (failTarget) {
-      const database = new Database(sessionFilePath(sessionsDir, "sender"));
+      const database = new Database(sessionFilePath(plane.sessionsDir, "sender"));
       database.exec(
         "CREATE TRIGGER refuse_process_message BEFORE INSERT ON action BEGIN SELECT RAISE(ABORT, 'forced process refusal'); END",
       );
@@ -545,15 +526,7 @@ test.each([
     const serving = acquireAppResource(
       runtime,
       serveProcessSession(
-        {
-          sessionId: child.id,
-          catalogPath,
-          sessionsDir,
-          entityIdleMs: 50,
-          model: { provider: "anthropic", id: "claude-opus-4-5" },
-          apiKey: "process-key",
-          transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
-        },
+        processRequest(child.id, plane, provider),
         () => undefined,
         undefined,
         runtime,
@@ -576,10 +549,7 @@ test.each([
       ),
     ).toHaveLength(senderMessages);
   } finally {
-    await runtime.dispose();
-    await provider.stop(true);
-    Bus.reset();
-    rmSync(fixture.directory, { recursive: true, force: true });
+    await releaseProcess(fixture, runtime, provider);
   }
 });
 

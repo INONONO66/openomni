@@ -144,7 +144,7 @@ test.each([
       createdBy: "owner",
     });
   }
-  const caught = await effectFailure(router.ingest(ownerSender, ownerFacts));
+  const caught: Error = await effectFailure(router.ingest(ownerSender, ownerFacts));
   expect(caught).toMatchObject({ _tag: "IngressRoutingError", code: "route_replay_divergent" });
   for (const value of ["actor-owner", "replacement", "manager", "evidence_only"])
     expect(String(caught)).not.toContain(value);

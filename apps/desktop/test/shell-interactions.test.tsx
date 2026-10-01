@@ -3,7 +3,6 @@ import { QueryClient } from "@tanstack/react-query";
 import { Timeline } from "@openomni/ui";
 import { Window } from "happy-dom";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { App } from "../src/renderer/app";
 import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
@@ -12,26 +11,11 @@ import { queryKeys } from "../src/renderer/state/queries";
 import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
 import { activeTab, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
-import { installGlobals } from "./helpers";
+import { mountWindow } from "./helpers";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
   const window = new Window({ url: "http://localhost" });
-  const replacements = {
-    window,
-    document: window.document,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const restoreGlobals = installGlobals(replacements);
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
+  const { host, restoreGlobals, root } = mountWindow(window);
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
   client.setQueryData(queryKeys.gatewayEndpoint, null);
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

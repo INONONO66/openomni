@@ -249,11 +249,7 @@ describe("Compaction", () => {
         onSummarize: () => Effect.sync(() => "Summary of removed messages"),
       });
       expect(result.compacted).toBe(true);
-      const allTexts = result.messages.flatMap((m: Message.WithParts) =>
-        m.parts
-          .filter((p: Message.Part): p is Message.TextPart => p.type === "text")
-          .map((p: Message.TextPart) => p.text),
-      );
+      const allTexts = textsOf(result.messages);
       expect(allTexts.some((t: string) => t.includes("Summary of removed messages"))).toBe(true);
     });
 
@@ -553,11 +549,7 @@ describe("Compaction", () => {
       // The previous anchor arrived as state, not as content:
       expect(calls[1]?.previous).toBe("anchor-v1");
       // ...and the anchor RENDER never re-entered the summarizer input.
-      const secondInputTexts = calls[1]?.input.flatMap((m: Message.WithParts) =>
-        m.parts
-          .filter((p: Message.Part): p is Message.TextPart => p.type === "text")
-          .map((p: Message.TextPart) => p.text),
-      );
+      const secondInputTexts = calls[1] === undefined ? undefined : textsOf(calls[1].input);
       expect(secondInputTexts?.some((t: string) => t.includes("anchor-v1"))).toBe(false);
       expect(calls[1]?.input.every((m: Message.WithParts) => m.info.role === "assistant")).toBe(
         true,

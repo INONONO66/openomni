@@ -41,12 +41,11 @@ export async function openSocket(
   timeoutMs = 2000,
 ): Promise<WebSocket> {
   const ws = new WebSocket(url, protocols);
-  try {
-    await opened(ws, timeoutMs);
-  } catch (error) {
+  // opened() only ever rejects with its own Error; keep that cause intact.
+  await opened(ws, timeoutMs).catch(async (error: Error) => {
     await closeSocket(ws, timeoutMs);
     throw error;
-  }
+  });
   return ws;
 }
 

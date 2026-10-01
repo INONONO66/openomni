@@ -8,10 +8,30 @@ import { mutationFixture } from "./quality-mutation-fixture";
 
 const { fixture, dependencies, decision } = mutationFixture("native-wrapper");
 
-function prepareNative(root: string): string[] {
+function prepareNative(root: string, demoProject = false): string[] {
+  if (demoProject) {
+    // Native campaigns own the compiler-project setup alongside their copied tools.
+    cpSync(join(root, "src/tsconfig.json"), join(root, "packages/demo/tsconfig.json"));
+    const path = join(root, "contract.json");
+    writeFileSync(path, JSON.stringify({
+      ...jsonObject(decodeJson(readFileSync(path, "utf8"))),
+      roots: ["src", "packages"],
+      projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
+    }));
+  }
   cpSync(import.meta.dir, join(root, "script"), { recursive: true });
   cpSync(dependencies, join(root, "node_modules"), { recursive: true, dereference: true });
   return ["--root", root, "--contract", "contract.json", "--decision", decision];
+}
+function completeReceipt<R extends object, C extends object, S extends object>(
+  inventoryHash: string, result: R, counts: C, census: S[],
+) {
+  return {
+    version: 1, complete: true, full: true,
+    originalHashesVerified: true, cleanupVerified: true,
+    inventorySha256: inventoryHash, errors: [],
+    results: [result], counts, census,
+  };
 }
 
 test("native pilot executes the real campaign without creating a full ratchet measurement", async () => {
@@ -40,15 +60,8 @@ test("native full campaign records a complete measurement receipt and exits by s
     "packages/demo/src/main.ts": "export const run = true;",
     "support/assertion.ts": 'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>expect(run).toBe(true));',
   });
-  // Candidate ownership follows each project's root files, so the demo
-  // package needs its own compiler project rather than an importer's.
-  cpSync(join(input.root, "src/tsconfig.json"), join(input.root, "packages/demo/tsconfig.json"));
-  const contractPath = join(input.root, "contract.json");
-  const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
-  writeFileSync(contractPath, JSON.stringify({
-    ...contract, roots: ["src", "packages"], projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
-  }));
-  expect(await mutationMain(prepareNative(input.root))).toBe(0);
+  // Candidate ownership follows each project's root files, not an importer's.
+  expect(await mutationMain(prepareNative(input.root, true))).toBe(0);
   const native = jsonObject(decodeJson(readFileSync(join(input.root, "quality-mutation-results/native.json"), "utf8")));
   expect(native.command).toEqual(expect.arrayContaining(["--mutant-memory-mb", "6144"]));
   const document = jsonObject(native.document);
@@ -81,25 +94,14 @@ test("mutation normalization rejects pilots missing candidates and stale killed 
     operator: "boolean",
     replacementSha256: digest("false"),
   };
-  const receipt = {
-    version: 1,
-    complete: true,
-    full: true,
-    originalHashesVerified: true,
-    cleanupVerified: true,
-    inventorySha256: identity.inventoryHash,
-    errors: [],
-    results: [result],
-    counts: {
+  const receipt = completeReceipt(identity.inventoryHash, result, {
       killed: 1,
       survived: 0,
       noCoverage: 0,
       invalid: 0,
       infrastructure: 0,
       uncompleted: 0,
-    },
-    census: [{ path, sha256: digest(source), operators: [{ candidates: 1 }] }],
-  };
+  }, [{ path, sha256: digest(source), operators: [{ candidates: 1 }] }]);
   try {
     mkdirSync(join(root, "script"));
     writeFileSync(join(root, path), source);
@@ -151,28 +153,17 @@ test("embedded Python mutants retain original host coordinates and cannot disapp
       operator: "py-boolean",
       replacementSha256: digest("False"),
     };
-    const receipt = {
-      version: 1,
-      complete: true,
-      full: true,
-      originalHashesVerified: true,
-      cleanupVerified: true,
-      inventorySha256: identity.inventoryHash,
-      errors: [],
-      results: [result],
-      counts: {
+    const receipt = completeReceipt(identity.inventoryHash, result, {
         killed: 0,
         survived: 1,
         noCoverage: 0,
         invalid: 0,
         infrastructure: 0,
         uncompleted: 0,
-      },
-      census: [
+    }, [
         { path: hostPath, operators: [{ candidates: 0 }] },
         { path, operators: [{ candidates: 1 }] },
-      ],
-    };
+    ]);
     expect(normalizeMutation(receipt, identity, root).findings).toEqual([
       {
         gate: "mutation",

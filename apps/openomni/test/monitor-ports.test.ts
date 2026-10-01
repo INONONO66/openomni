@@ -3,11 +3,7 @@ import type { SessionEntityTimerContext } from "@openomni/agent";
 import { CommitRefused, ForeignFailure } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import {
-  createAppLedger,
-  type AppLedgerPlane,
-  type SessionKernel,
-} from "../src/composition/cluster-runtime";
+import type { AppLedgerPlane, SessionKernel } from "../src/composition/cluster-runtime";
 import {
   createWatchMonitorPorts,
   watchState,
@@ -15,9 +11,8 @@ import {
   type WatchSpec,
 } from "../src/composition/monitor-ports";
 import type { WatchSources } from "../src/composition/watch-sources";
-import { seedKernelPolicyRows } from "../src/policy-seed";
 import { runEffect } from "./helpers/effect";
-import { adoptTestFence } from "./helpers/ledger";
+import { watchFixture as createWatchFixture } from "./helpers/watch-fixture";
 
 const OWNER = "monitor-ports-owner";
 const SESSION = "monitor-ports-session";
@@ -38,37 +33,7 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  const plane = createAppLedger({});
-  seedKernelPolicyRows(plane.catalog.policies);
-  const kernel = plane.openKernel(SESSION);
-  await runEffect(
-    kernel.materialize({
-      id: SESSION,
-      parentId: null,
-      role: "resident",
-      tools: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: kernel.currentPolicyGeneration(),
-      actionId: "configure",
-      at: 1,
-    }),
-  );
-  const fence = await runEffect(adoptTestFence(kernel, SESSION, OWNER));
-  const installed: string[] = [];
-  const closed: string[] = [];
-  const sources: WatchSources = {
-    install: (spec) => {
-      installed.push(spec.id);
-      return Promise.resolve();
-    },
-    observe: () => undefined,
-    close: (id) => {
-      closed.push(id);
-      return Promise.resolve();
-    },
-    closeAll: () => Promise.resolve(),
-  };
-  return { plane, kernel, fence, sources, installed, closed };
+  return createWatchFixture(SESSION, OWNER);
 }
 
 function portsFor(input: {
@@ -88,29 +53,24 @@ function portsFor(input: {
 test("watch arm retries one lost revision race before installing the source", async () => {
   const state = await fixture();
   let commits = 0;
-  const racedKernel = new Proxy(state.kernel, {
-    get(target, property, receiver) {
-      if (property !== "commit") return Reflect.get(target, property, receiver);
-      const commit: SessionKernel["commit"] = (input) => {
-        commits += 1;
-        if (commits === 1) {
-          const row = target.row(input.sessionId);
-          return Effect.fail(
-            new CommitRefused({
-              sessionId: input.sessionId,
-              reason: "revision",
-              expectedRevision: input.expectedRevision,
-              currentRevision: row.revision + 1,
-              fence: input.fence,
-              currentFence: row.leaseFence,
-            }),
-          );
-        }
-        return target.commit(input);
-      };
-      return commit;
-    },
-  });
+  const racedCommit: SessionKernel["commit"] = (input) => {
+    commits += 1;
+    if (commits === 1) {
+      const row = state.kernel.row(input.sessionId);
+      return Effect.fail(
+        new CommitRefused({
+          reason: "revision",
+          currentFence: row.leaseFence,
+          currentRevision: row.revision + 1,
+          expectedRevision: input.expectedRevision,
+          fence: input.fence,
+          sessionId: input.sessionId,
+        }),
+      );
+    }
+    return state.kernel.commit(input);
+  };
+  const racedKernel: SessionKernel = { ...state.kernel, commit: racedCommit };
   const ports = portsFor({
     plane: state.plane,
     sources: state.sources,
@@ -138,16 +98,11 @@ test("watch arm retries one lost revision race before installing the source", as
 test("watch arm does not retry a commit failure that is not a revision race", async () => {
   const state = await fixture();
   let commits = 0;
-  const brokenKernel = new Proxy(state.kernel, {
-    get(target, property, receiver) {
-      if (property !== "commit") return Reflect.get(target, property, receiver);
-      const commit: SessionKernel["commit"] = () => {
-        commits += 1;
-        return Effect.fail(new ForeignFailure({ operation: "commit", cause: "disk full" }));
-      };
-      return commit;
-    },
-  });
+  const brokenCommit: SessionKernel["commit"] = () => {
+    commits += 1;
+    return Effect.fail(new ForeignFailure({ operation: "commit", cause: "disk full" }));
+  };
+  const brokenKernel: SessionKernel = { ...state.kernel, commit: brokenCommit };
   const ports = portsFor({
     plane: state.plane,
     sources: state.sources,
@@ -190,7 +145,7 @@ test("watch state scans a full occurrence page before reading the next page", as
     const row = state.kernel.row(SESSION);
     const actions = Array.from(
       { length: 256 },
-      (_, index): LedgerAction.Append => ({
+      (_: undefined, index): LedgerAction.Append => ({
         id: `paged:occ:1:${index}`,
         parentId: "paged:arm:1",
         sessionId: SESSION,

@@ -200,28 +200,27 @@ function hibernatingSession(
   });
 }
 
-class TestObservationSink implements ObservationSink {
-  dropNextCommit = false;
+interface TestObservationSink extends ObservationSink {
+  dropNextCommit: boolean;
   onCommit: ((committed: L0Observation.ActionCommitted) => void) | undefined;
+}
 
-  publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    if (event.name === L0Observation.ActionCommittedEvent.name) {
-      if (this.dropNextCommit) {
-        this.dropNextCommit = false;
-        return;
+function testObservationSink(): TestObservationSink {
+  return {
+    dropNextCommit: false,
+    onCommit: undefined,
+    publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
+      if (event.name === L0Observation.ActionCommittedEvent.name) {
+        if (this.dropNextCommit) {
+          this.dropNextCommit = false;
+          return;
+        }
+        this.onCommit?.(L0Observation.ActionCommittedEvent.schema.parse(data));
       }
-      this.onCommit?.(L0Observation.ActionCommittedEvent.schema.parse(data));
-    }
-    Bus.publish(event, data);
-  }
-
-  subscribe<T>(
-    event: BusEvent.Descriptor<T>,
-    handler: (data: T) => void,
-    options?: { match?: Partial<T> },
-  ): () => void {
-    return Bus.subscribe(event, handler, options);
-  }
+      Bus.publish(event, data);
+    },
+    subscribe: Bus.subscribe,
+  };
 }
 
 const tool = (name: string): SessionGeneration.Tool => ({
@@ -291,7 +290,7 @@ beforeEach(() => {
   Bus.reset();
   now = 1_000;
   nextId = 0;
-  sink = new TestObservationSink();
+  sink = testObservationSink();
   fixtures.length = 0;
   runtime = track({
     ...isolatedRuntime(),
@@ -937,7 +936,7 @@ describe("durable session handle", () => {
         const before = tree(handle.id);
         if (input.ledger.transition === undefined) throw new Error("missing transition port");
         const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
-        const refused = yield* failure(late);
+        const refused = yield* Effect.flip(late);
         expect(refused).toMatchObject({
           _tag: "ForeignFailure",
           operation: "session.request.transition",
@@ -1649,12 +1648,12 @@ describe("durable session handle", () => {
           reason: "unknown_compaction",
         });
         yield* awaitSignal(bounded(first.close(), "close through successor"));
-        expect(yield* failure(successor.prompt("after close"))).toMatchObject({
+        expect(yield* Effect.flip(successor.prompt("after close"))).toMatchObject({
           _tag: "ForeignFailure",
           operation: "session.handle",
           cause: "closed",
         });
-        expect(yield* failure(first.prompt("after close"))).toMatchObject({
+        expect(yield* Effect.flip(first.prompt("after close"))).toMatchObject({
           _tag: "ForeignFailure",
           operation: "session.handle",
           cause: "closed",
@@ -1692,7 +1691,7 @@ describe("durable session handle", () => {
           decision: "approve",
         } as const;
         expect(handle.approvals.pending()).toEqual([]);
-        expect(yield* failure(awaitSignal(handle.approvals.answer(answer)))).toMatchObject({
+        expect(yield* Effect.flip(awaitSignal(handle.approvals.answer(answer)))).toMatchObject({
           code: "stale_approval",
         });
         const prompted = yield* Effect.forkChild(handle.prompt("needs approval"));
@@ -1923,7 +1922,7 @@ describe("session crash recovery and observation", () => {
             }),
           ),
         );
-        expect(yield* failure(awaitSignal(waking))).toMatchObject({
+        expect(yield* Effect.flip(awaitSignal(waking))).toMatchObject({
           _tag: "GenerationUnavailable",
           generation: 1,
         });

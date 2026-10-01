@@ -1,9 +1,19 @@
 import { z } from "zod";
+import { type JsonShapedValue, JsonShapedValueSchema } from "../json.js";
 import { Token } from "../token/index.js";
 import { Tool } from "../tool/index.js";
 import { EpochMs } from "../time.js";
 
 export namespace Message {
+  /**
+   * What a provider can attach to a part before sanitizing (the SDK's
+   * metadata objects carry explicit undefined and non-finite numbers; JSON
+   * persistence normalizes both). Runtime acceptance is deliberately
+   * unchanged from the historical open record.
+   */
+  export type MetadataValue = JsonShapedValue;
+  const MetadataValueSchema = JsonShapedValueSchema;
+
   const PartBase = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -19,7 +29,7 @@ export namespace Message {
         end: EpochMs.optional(),
       })
       .optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), MetadataValueSchema).optional(),
   });
   export type TextPart = z.infer<typeof TextPart>;
 
@@ -32,7 +42,7 @@ export namespace Message {
       start: EpochMs,
       end: EpochMs.optional(),
     }),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), MetadataValueSchema).optional(),
   });
   export type ReasoningPart = z.infer<typeof ReasoningPart>;
 

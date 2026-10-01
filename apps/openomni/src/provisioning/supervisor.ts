@@ -1,4 +1,5 @@
 import type { ChannelDeliveryRoute } from "@openomni/channels";
+import { ThrownError } from "../thrown";
 import type { Actor } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent, DeclaredChannelStatus } from "../channels";
 
@@ -103,12 +104,11 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
       deps.deliveryRoutes.delete(surfaceId);
       revokeGrant();
     };
-    try {
-      await built.surface.start(deps.traceId());
-    } catch (error) {
+    const failure = await built.surface.start(deps.traceId()).then(() => undefined, ThrownError.parse);
+    if (failure !== undefined) {
       // Fail-closed: a stage that did not start owns nothing.
       await unwind(false);
-      throw error;
+      throw failure;
     }
     mounted.set(row.instanceId, {
       key: row.key,
@@ -128,20 +128,20 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
       });
       return;
     }
-    try {
-      await mountRow(row);
+    const failure = await mountRow(row).then(() => undefined, ThrownError.parse);
+    if (failure === undefined) {
       failures.delete(row.instanceId);
       statuses.push({ id: row.instanceId, surface: row.component.id, state: "mounted" });
-    } catch (error) {
-      const count = failed + 1;
-      failures.set(row.instanceId, count);
-      statuses.push({
-        id: row.instanceId,
-        surface: row.component.id,
-        state: count >= threshold ? "paused_by_breaker" : "start_failed",
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      return;
     }
+    const count = failed + 1;
+    failures.set(row.instanceId, count);
+    statuses.push({
+      id: row.instanceId,
+      surface: row.component.id,
+      state: count >= threshold ? "paused_by_breaker" : "start_failed",
+      detail: failure.message,
+    });
   }
 
   async function reconcile(): Promise<ChannelRuntimeStatus[]> {

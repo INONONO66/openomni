@@ -67,6 +67,22 @@ function compactWith(
   );
 }
 
+function prepareCandidate(session: CompactionSession, messages: Message.WithParts[]) {
+  return Effect.gen(function* () {
+    yield* session.prepare(messages, 70, 60, 1000);
+    yield* session.settled();
+  });
+}
+
+function preparedHistory(summary: (call: number) => string) {
+  return Effect.gen(function* () {
+    const messages = history();
+    const { session, calls } = countingSession(summary);
+    yield* prepareCandidate(session, messages);
+    return { messages, session, calls };
+  });
+}
+
 describe("run-scoped compaction speculation", () => {
   it("starts only at the prepare boundary", () =>
     isolated(
@@ -120,10 +136,7 @@ describe("run-scoped compaction speculation", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const messages = history();
-          const { session, calls } = countingSession(() => "prepared");
-          yield* session.prepare(messages, 70, 60, 1000);
-          yield* session.settled();
+          const { messages, session, calls } = yield* preparedHistory(() => "prepared");
           const result = yield* compactWith(session, messages, calls);
           expect(result.candidate).toBe("promoted");
           expect(calls.count).toBe(1);
@@ -135,10 +148,7 @@ describe("run-scoped compaction speculation", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const messages = history();
-          const { session, calls } = countingSession(() => "prepared");
-          yield* session.prepare(messages, 70, 60, 1000);
-          yield* session.settled();
+          const { messages, session, calls } = yield* preparedHistory(() => "prepared");
           const changed = structuredClone(messages);
           const part = changed[1]?.parts[0];
           if (part?.type !== "text") throw new Error("expected text fixture");
@@ -214,9 +224,7 @@ describe("run-scoped compaction speculation", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const { session, calls } = countingSession((call: number) => `anchor-${call}`);
-          yield* session.prepare(history(), 70, 60, 1000);
-          yield* session.settled();
+          const { session, calls } = yield* preparedHistory((call) => `anchor-${call}`);
           const landed = message("user", "landed-compaction");
           const part = landed.parts[0];
           if (part?.type !== "text") throw new Error("expected text fixture");
@@ -232,9 +240,7 @@ describe("run-scoped compaction speculation", () => {
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const { session, calls } = countingSession((call: number) => `anchor-${call}`);
-          yield* session.prepare(history(), 70, 60, 1000);
-          yield* session.settled();
+          const { session, calls } = yield* preparedHistory((call) => `anchor-${call}`);
           const replacement = history();
           yield* session.prepare(replacement, 70, 60, 1000);
           yield* session.settled();

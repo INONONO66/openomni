@@ -283,9 +283,10 @@ for (const operation of [PROMOTE, MERGE]) {
           if (recovery === undefined) throw new Error("missing recovery");
           const running = yield* Effect.forkScoped(recovery());
           yield* Effect.promise(() => bounded(ready.promise));
-          const approvals = recovered.executor.approvals;
-          const pending = approvals?.pending()[0];
-          if (approvals === undefined || pending === undefined) throw new Error("missing recovered approval");
+          const { approvals } = recovered.executor;
+          if (approvals === undefined) throw new Error("missing recovered approvals");
+          const pending = approvals.pending()[0];
+          if (pending === undefined) throw new Error("missing recovered approval");
           expect(pending.durable).toEqual(original);
           yield* approvals.answer({ request: pending, decision, credential: "owner" });
           yield* Fiber.join(running);

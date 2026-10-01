@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
 import { type z, ZodError } from "zod";
 
-export function expectIssue(
-  result: z.ZodSafeParseResult<unknown>,
+export function expectIssue<Output>(
+  result: z.ZodSafeParseResult<Output>,
   expected: { message?: string; path: string | PropertyKey[] },
 ): void {
   expect(result.success).toBe(false);
@@ -13,6 +13,6 @@ export function expectIssue(
   else expect(issue?.path).toEqual(expected.path);
 }
 
-export function expectParseFailure(parse: () => unknown): void {
+export function expectParseFailure<Output>(parse: () => Output): void {
   expect(parse).toThrow(ZodError);
 }

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { Ipc } from "@openomni/protocol";
+import type { IdSource, Ipc } from "@openomni/protocol";
 import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../src/index";
 import { PeerRequestTable as NativeTable } from "../../src/peer-request-table";
 import { decodeIpcFailure } from "../../src/failure";
@@ -43,12 +43,30 @@ export type IpcServer = Awaited<ReturnType<typeof createIpcServer>>;
 export function typedCall<M extends keyof typeof Ipc.Methods>(caller: Pick<IpcClient, "native"> | Pick<IpcServer, "native">, method: M, params: (typeof Ipc.Methods)[M]["params"]["_input"], timeoutMs?: number) {
   return run(nativeCall(caller.native, method, params, timeoutMs));
 }
+type TableOptions<P> = {
+  readonly send: (
+    peer: P,
+    frame: Ipc.Request | Ipc.Response | Ipc.Notification,
+  ) => void;
+  readonly idSource?: IdSource;
+  readonly onRequest?: (
+    peer: P,
+    method: string,
+    params: Ipc.Request["params"],
+    respond: (result: Ipc.Response["result"]) => void,
+    notify: (method: string, params?: Ipc.Notification["params"]) => void,
+  ) => void | Promise<void>;
+  readonly onNotification?: (
+    peer: P,
+    method: string,
+    params: Ipc.Notification["params"],
+  ) => void | Promise<void>;
+  readonly missingRequestHandlerMessage?: (method: string) => string;
+  readonly samePeer?: (pendingPeer: P, inboundPeer: P) => boolean;
+};
 export class PeerRequestTable<P = undefined> {
   private readonly native: NativeTable<P>;
-  constructor(options: Omit<ConstructorParameters<typeof NativeTable<P>>[0], "onRequest" | "onNotification"> & {
-    onRequest?: (peer: P, method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void, notify: (method: string, params?: Ipc.Notification["params"]) => void) => void | Promise<void>;
-    onNotification?: (peer: P, method: string, params: Ipc.Notification["params"]) => void | Promise<void>;
-  }) {
+  constructor(options: TableOptions<P>) {
     this.native = new NativeTable({ ...options,
       onRequest: options.onRequest ? (...args) => handlerEffect(() => options.onRequest?.(...args)) : undefined,
       onNotification: options.onNotification ? (...args) => handlerEffect(() => options.onNotification?.(...args)) : undefined,

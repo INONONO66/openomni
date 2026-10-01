@@ -4,7 +4,6 @@ import { Crypto, Effect } from "effect";
 import { BunCrypto } from "../src/composition/cluster-crypto";
 import {
   assertWsExposure,
-  ConfigurationError,
   loadConfig,
   parseWsPort,
   resolveClusterStorage,
@@ -38,14 +37,9 @@ const ENV_KEYS = [
 
 let saved: Record<string, string | undefined>;
 
-/** Runs `act`, returning its thrown value and failing if it returns. */
-function thrownBy(act: () => unknown): unknown {
-  try {
-    act();
-  } catch (error) {
-    return error;
-  }
-  throw new Error("expected an enrollment refusal, got a value");
+/** expect.objectContaining, typed as the value the partial shape matches. */
+function containing<T extends object>(shape: Partial<T> & object): T {
+  return expect.objectContaining(shape) as T;
 }
 
 beforeEach(() => {
@@ -69,11 +63,15 @@ describe("declared channel cutover", () => {
     "refuses legacy %s with the typed provisioning replacement",
     (key) => {
       process.env[key] = "legacy-secret";
-      const error = thrownBy(loadConfig);
-      expect(ConfigurationError.isInstance(error)).toBe(true);
-      if (!ConfigurationError.isInstance(error)) throw error;
-      expect(error.data.code).toBe("legacy_channel_credentials");
-      expect(error.data.replacement).toEqual({ tool: "provision", op: "channel_add" });
+      expect(loadConfig).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({
+            code: "legacy_channel_credentials",
+            replacement: { tool: "provision", op: "channel_add" },
+          }),
+        }),
+      );
     },
   );
 
@@ -86,12 +84,15 @@ describe("declared channel cutover", () => {
 
 describe("cluster storage config", () => {
   const home = "/tmp/openomni-config-test-home";
-
-  it("defaults the catalog file, sessions dir, and idle budget under the home", () => {
+  const expectStorageDefaults = () => {
     const config = loadConfig(home);
     expect(config.catalogPath).toBe(join(home, ".openomni", "catalog.sqlite"));
     expect(config.sessionsDir).toBe(join(home, ".openomni", "sessions"));
     expect(config.entityIdleMs).toBe(60_000);
+  };
+
+  it("defaults the catalog file, sessions dir, and idle budget under the home", () => {
+    expectStorageDefaults();
   });
 
   it("resolves injected partial configs through the same default owner", () => {
@@ -130,21 +131,19 @@ describe("cluster storage config", () => {
     process.env.OPENOMNI_SESSIONS_DIR = "";
     process.env.OPENOMNI_ENTITY_IDLE_MS = " ";
 
-    const config = loadConfig(home);
-
-    expect(config.catalogPath).toBe(join(home, ".openomni", "catalog.sqlite"));
-    expect(config.sessionsDir).toBe(join(home, ".openomni", "sessions"));
-    expect(config.entityIdleMs).toBe(60_000);
+    expectStorageDefaults();
   });
 
   it.each(["0", "-5", "1.5", "not-ms"])(
     "refuses OPENOMNI_ENTITY_IDLE_MS=%p with a typed configuration code",
     (raw) => {
       process.env.OPENOMNI_ENTITY_IDLE_MS = raw;
-      const error = thrownBy(() => loadConfig(home));
-      expect(ConfigurationError.isInstance(error)).toBe(true);
-      if (!ConfigurationError.isInstance(error)) throw error;
-      expect(error.data.code).toBe("invalid_entity_idle_ms");
+      expect(() => loadConfig(home)).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({ code: "invalid_entity_idle_ms" }),
+        }),
+      );
     },
   );
 });
@@ -177,10 +176,12 @@ describe("compaction summarizer config", () => {
   it("fails closed on unknown values with a typed configuration code", () => {
     process.env.OPENOMNI_COMPACTION_SUMMARIZER = "false";
 
-    const error = thrownBy(loadConfig);
-    expect(ConfigurationError.isInstance(error)).toBe(true);
-    if (!ConfigurationError.isInstance(error)) throw error;
-    expect(error.data.code).toBe("invalid_compaction_summarizer");
+    expect(loadConfig).toThrow(
+      expect.objectContaining({
+        name: "OpenOmniConfigurationError",
+        data: containing({ code: "invalid_compaction_summarizer" }),
+      }),
+    );
   });
 });
 
@@ -203,10 +204,12 @@ describe("ws port parsing", () => {
     "8080.5",
     "not-a-port",
   ])("refuses %p with a typed configuration code", (raw) => {
-    const error = thrownBy(() => parseWsPort(raw));
-    expect(ConfigurationError.isInstance(error)).toBe(true);
-    if (!ConfigurationError.isInstance(error)) throw error;
-    expect(error.data.code).toBe("invalid_ws_port");
+    expect(() => parseWsPort(raw)).toThrow(
+      expect.objectContaining({
+        name: "OpenOmniConfigurationError",
+        data: containing({ code: "invalid_ws_port" }),
+      }),
+    );
   });
 });
 
@@ -374,9 +377,7 @@ describe("ws exposure enforcement", () => {
         enrolledAt: 0,
       },
     ]);
-    const duplicate = thrownBy(loadConfig);
-    expect(duplicate).toBeInstanceOf(Error);
-    expect((duplicate as Error).message).toBe(
+    expect(loadConfig).toThrow(
       "OPENOMNI_MACHINES_ENROLLED is invalid: export names must be unique",
     );
 
@@ -389,9 +390,7 @@ describe("ws exposure enforcement", () => {
         enrolledAt: 0,
       },
     ]);
-    const invalidName = thrownBy(loadConfig);
-    expect(invalidName).toBeInstanceOf(Error);
-    expect((invalidName as Error).message).toBe(
+    expect(loadConfig).toThrow(
       "OPENOMNI_MACHINES_ENROLLED is invalid: export name must be lowercase alphanumeric with - or _ (e.g. notes)",
     );
   });

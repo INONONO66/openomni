@@ -1,11 +1,16 @@
 import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
-import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
+import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import { Effect } from "effect";
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import { Cause, Effect, Exit } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -13,9 +18,14 @@ import { describe, expect, it } from "bun:test";
 
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
-import { Bus, closeSessions, createSessionChatRunner, createTurnDispatcher, type Executor } from "../src/index";
+import {
+  Bus,
+  closeSessions,
+  createSessionChatRunner,
+  type Executor,
+} from "../src/index";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
-import { turnExecutor, nullRetryAlarm, failure, foreign } from "./helpers/effect-g2";
+import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
 import {
   completeModel,
@@ -26,7 +36,8 @@ import {
   mockProviderModel,
 } from "./helpers/mock-llm";
 
-const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+const policy = compilePolicySnapshot({
+  registry: KERNEL_POLICY_REGISTRY,
   generation: 0,
   rows: SEEDED_POLICY_ROWS.map(
     (row: Omit<import("@openomni/protocol").PolicyRow.Row, "generation">) => ({
@@ -41,18 +52,45 @@ function input(
   messages: SessionRunnerInput["messages"] = [{ role: "user", text: "initial" }],
 ): SessionRunnerInput {
   const kernel = isolatedLedger().kernel;
-  const seeded = runAgentSync(kernel.materialize({
-    id: "session-1", parentId: null, role: "resident", tools: [], system: { preset: "system", blocks: [] },
-    policyGeneration: 0, actionId: "fixture-configure", at: 1,
-  }));
+  const seeded = runAgentSync(
+    kernel.materialize({
+      id: "session-1",
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "system", blocks: [] },
+      policyGeneration: 0,
+      actionId: "fixture-configure",
+      at: 1,
+    }),
+  );
   if (seeded.created) {
     const actions = isolatedLedger().session.actions;
-    for (const [index, message] of messages.entries()) actions.append({
-      id: `fixture-delivery-${index}`, sessionId: "session-1", parentId: null, kind: "inbox.deliver",
-      intent: { encodingVersion: 1, value: {} },
-      effect: { encodingVersion: 1, value: { phase: "delivery", turnId: "turn-1", inboxId: message.id ?? `fixture-message-${index}`, kind: "prompt", content: message.text, origin: { encodingVersion: 1, value: {} }, boundary: "before_llm" } },
-      ts: 1, irreversible: true,
-    }, kernel.row("session-1").revision);
+    for (const [index, message] of messages.entries())
+      actions.append(
+        {
+          id: `fixture-delivery-${index}`,
+          sessionId: "session-1",
+          parentId: null,
+          kind: "inbox.deliver",
+          intent: { encodingVersion: 1, value: {} },
+          effect: {
+            encodingVersion: 1,
+            value: {
+              phase: "delivery",
+              turnId: "turn-1",
+              inboxId: message.id ?? `fixture-message-${index}`,
+              kind: "prompt",
+              content: message.text,
+              origin: { encodingVersion: 1, value: {} },
+              boundary: "before_llm",
+            },
+          },
+          ts: 1,
+          irreversible: true,
+        },
+        kernel.row("session-1").revision,
+      );
   }
   return {
     sessionId: "session-1",
@@ -146,14 +184,25 @@ function runDurably(
     };
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input: import("../src/session-handle").SessionRunnerInput) => Effect.gen(function* () {
-        return prepareChatFixture({
-          config: config(run, (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); })).executor, fallbacks),
-          traceContext,
-        });
-      }),
+      prepare: (input: import("../src/session-handle").SessionRunnerInput) =>
+        Effect.gen(function* () {
+          return prepareChatFixture({
+            config: config(
+              run,
+              (yield* testTurnDispatcher(input, runtime)).executor,
+              fallbacks,
+            ),
+            traceContext,
+          });
+        }),
     });
-    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "boundary-session", role: "resident", runner: chatRunner }, fixture), fixture); });
+    const handle = yield* Effect.gen(function* () {
+      const fixture: SessionFixture = runtime;
+      return yield* withSessionServices(
+        session({ id: "boundary-session", role: "resident", runner: chatRunner }, fixture),
+        fixture,
+      );
+    });
 
     try {
       yield* promptTurns(handle, prompts);
@@ -163,8 +212,14 @@ function runDurably(
       return {
         actions,
         inboxIds: actions
-          .filter((action: LedgerAction.Node) => action.kind === "turn" && actionPhase(action) === "intent")
-          .flatMap((action: LedgerAction.Node) => SessionTurn.DecodeIntent.parse(action.intent.value).inboxIds),
+          .filter(
+            (action: LedgerAction.Node) =>
+              action.kind === "turn" && actionPhase(action) === "intent",
+          )
+          .flatMap(
+            (action: LedgerAction.Node) =>
+              SessionTurn.DecodeIntent.parse(action.intent.value).inboxIds,
+          ),
       };
     } finally {
       yield* closeSessions(runtime);
@@ -180,13 +235,16 @@ describe("session chat runner", () => {
         Effect.gen(function* () {
           let calls = 0;
           const runner = createSessionChatRunner({
-            prepare: () => Effect.gen(function* () { return prepareChatFixture(({
-              config: config(async () => {
-                calls += 1;
-                return createStopOutcome();
+            prepare: () =>
+              Effect.gen(function* () {
+                return prepareChatFixture({
+                  config: config(async () => {
+                    calls += 1;
+                    return createStopOutcome();
+                  }),
+                  traceContext,
+                });
               }),
-              traceContext,
-            })); }),
           });
 
           const result = yield* runner(
@@ -268,7 +326,10 @@ describe("session chat runner", () => {
         Effect.gen(function* () {
           for (const interruptedAt of ["after_llm", "after_tools"] as const) {
             const runner = createSessionChatRunner({
-              prepare: () => Effect.sync(() => prepareChatFixture({ config: config(completeModel), traceContext })),
+              prepare: () =>
+                Effect.sync(() =>
+                  prepareChatFixture({ config: config(completeModel), traceContext }),
+                ),
             });
             const result = yield* runner(
               input((boundary: import("@openomni/protocol").SessionTurn.Boundary) =>
@@ -350,10 +411,7 @@ describe("session chat runner", () => {
           let calls = 0;
 
           const { actions } = yield* runDurably(
-            async (
-              input: import("@openomni/llm").RunInput,
-              sink: import("@openomni/llm").Sink,
-            ) => {
+            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
               calls += 1;
               return calls === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }
@@ -402,10 +460,7 @@ describe("session chat runner", () => {
           const answered: string[] = [];
 
           const { actions } = yield* runDurably(
-            async (
-              input: import("@openomni/llm").RunInput,
-              sink: import("@openomni/llm").Sink,
-            ) => {
+            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
               answered.push(input.model.id);
               return answered.length === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }
@@ -444,14 +499,15 @@ describe("session chat runner", () => {
           });
           Reflect.deleteProperty(preparedConfig, "executor");
           const runner = createSessionChatRunner({
-            prepare: () => Effect.sync(() => prepareChatFixture({ config: preparedConfig, traceContext })),
+            prepare: () =>
+              Effect.sync(() => prepareChatFixture({ config: preparedConfig, traceContext })),
           });
 
-          expect(
-            yield* failure(
-              runner(input(() => Effect.succeed({ messages: [], interrupted: false }))),
-            ),
-          ).toBeInstanceOf(TypeError);
+          const exit = yield* Effect.exit(
+            runner(input(() => Effect.succeed({ messages: [], interrupted: false }))),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(TypeError);
           expect(calls).toBe(0);
         }),
       ),
@@ -467,7 +523,9 @@ describe("session chat runner", () => {
             prepare: () => Effect.sync(() => prepareChatFixture(prepared)),
             reportError: (error: Error) => (error === cause ? "reported" : undefined),
           });
-          const unreported = createSessionChatRunner({ prepare: () => Effect.sync(() => prepareChatFixture(prepared)) });
+          const unreported = createSessionChatRunner({
+            prepare: () => Effect.sync(() => prepareChatFixture(prepared)),
+          });
           const ready = input(() => Effect.fail(cause));
 
           expect(yield* reported(ready)).toEqual({
@@ -476,14 +534,17 @@ describe("session chat runner", () => {
             cause,
             reported: true,
           });
-          expect(yield* failure(unreported(ready))).toBe(cause);
+          expect(yield* Effect.flip(unreported(ready))).toBe(cause);
           const defect = new Error("prepare failed");
           const defective = createSessionChatRunner({
-            prepare: () => Effect.sync(() => {
-              throw defect;
-            }),
+            prepare: () =>
+              Effect.sync(() => {
+                throw defect;
+              }),
           });
-          expect(yield* failure(defective(ready))).toBe(defect);
+          const exit = yield* Effect.exit(defective(ready));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(defect);
         }),
       ),
     ));

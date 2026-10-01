@@ -156,7 +156,7 @@ test.each([
   { resolution: "all", expectedResponders: ["a", "b"], threshold: 1 },
   { resolution: "first", threshold: 2 },
   { state: "resolved", outcome: null },
-] as const)("request schema rejects incoherent bounds or terminal state %#", (overrides: Record<string, unknown>) => {
+] as const)("request schema rejects incoherent bounds or terminal state %#", (overrides) => {
   expect(SessionTransition.Request.safeParse({ ...requestFixture(), ...overrides }).success).toBe(
     false,
   );

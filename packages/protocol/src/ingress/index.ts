@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlainValueSchema } from "../json.js";
 import { Actor } from "../actor/index.js";
 import {
   Events as EventDescriptors,
@@ -51,16 +52,18 @@ const RawTargetSchema = z
     parentSessionId: z.string().min(1).optional(),
     workerId: z.string().optional(),
   })
-  .catchall(z.unknown());
+  .catchall(PlainValueSchema);
 
 const LegacyTargetSchema = z
   .object({
     type: z.string(),
     kind: z.undefined().optional(),
   })
-  .catchall(z.unknown());
+  .catchall(PlainValueSchema);
 
-const TargetSchemaImpl = z.preprocess((input) => {
+// Named generic preprocessor: z.preprocess's inline callback parameter would
+// be contextually typed `unknown`; a generic parameter carries no top type.
+function normalizeTargetInput<Input>(input: Input) {
   if (input === "resident") return { kind: "resident" };
   if (typeof input === "string" && input.startsWith("worker:")) {
     const id = input.slice("worker:".length);
@@ -72,7 +75,9 @@ const TargetSchemaImpl = z.preprocess((input) => {
     return { ...rest, kind: type };
   }
   return input;
-}, RawTargetSchema);
+}
+
+const TargetSchemaImpl = z.preprocess(normalizeTargetInput, RawTargetSchema);
 
 /**
  * #500 A3: the one lifecycle that rides an inbound event is the WORKER axis

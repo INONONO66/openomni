@@ -53,6 +53,11 @@ async function withBridge(
   }
 }
 
+/** The canonical daemon handshake: attach a live connection as machine m-1. */
+function attachAsBridgeMachine(client: Effect.Success<ReturnType<typeof connectIpcClient>>) {
+  return runEffect(typedCall(client, Machine.WireMethod.Attach, bridgeOffer(), 5000));
+}
+
 describe("code-mode tool bridge", () => {
   test("a cell reaches host tools repeatedly within one eval", async () => {
     await withBridge(async ({ host, calls }) => {
@@ -278,18 +283,7 @@ describe("code-mode tool bridge", () => {
       }),
     }));
     try {
-      await runEffect(typedCall(
-        daemon,
-        Machine.WireMethod.Attach,
-        {
-          machineId: "m-1",
-          daemonVersion: "0.1.0",
-          platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
-          offeredAt: 2000,
-        },
-        5000,
-      ));
+      await attachAsBridgeMachine(daemon);
       const first = runEffect(host.get("m-1").runCode({
         cellId: "duplicate",
         code: "'first'",
@@ -348,18 +342,7 @@ describe("code-mode tool bridge", () => {
     const { host, reached } = await bridgeProbe(path);
     const client = await acquireEffect(connectIpcClient(path, {}));
     try {
-      await runEffect(typedCall(
-        client,
-        Machine.WireMethod.Attach,
-        {
-          machineId: "m-1",
-          daemonVersion: "0.1.0",
-          platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
-          offeredAt: 2000,
-        },
-        5000,
-      ));
+      await attachAsBridgeMachine(client);
       // Attached, but this host never dispatched a cell called "ghost".
       // (See the sibling test for a cellId that WAS dispatched and settled.)
       await expect(
@@ -395,18 +378,7 @@ describe("code-mode tool bridge", () => {
       }),
     }));
     try {
-      await runEffect(typedCall(
-        daemon,
-        Machine.WireMethod.Attach,
-        {
-          machineId: "m-1",
-          daemonVersion: "0.1.0",
-          platform: "darwin",
-          offeredCapabilities: ["kernel.py"],
-          offeredAt: 2000,
-        },
-        5000,
-      ));
+      await attachAsBridgeMachine(daemon);
       const cell = await runEffect(host.get("m-1").runCode({
         cellId: "spent",
         code: "'done'",

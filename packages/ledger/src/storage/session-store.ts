@@ -54,9 +54,31 @@ export function openStoreDatabase(path: string, schema: readonly string[]): Data
 
 /** Folds the WAL back into the main file so a cold start reads a clean
  * baseline, then closes the connection. */
-export function closeStoreDatabase(db: Database): void {
+function closeStoreDatabase(db: Database): void {
   db.query("PRAGMA wal_checkpoint(TRUNCATE)").get();
   db.close();
+}
+
+/** Shared transaction and idempotent close behavior for catalog and session files. */
+export class StoreHandle {
+  readonly observationSink: ObservationSink;
+  // Every transaction caller is a write unit: take the write lock up front
+  // (BEGIN IMMEDIATE) instead of upgrading mid-transaction.
+  readonly transaction = <T>(operation: () => T): T => this.db.transaction(operation).immediate();
+  protected readonly db: Database;
+  private closed = false;
+
+  constructor(db: Database, observationSink: ObservationSink) {
+    this.db = db;
+    this.observationSink = observationSink;
+  }
+
+  /** Idempotent — explicit teardown and scope finalizers may both close. */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    closeStoreDatabase(this.db);
+  }
 }
 
 /**
@@ -64,30 +86,15 @@ export function closeStoreDatabase(db: Database): void {
  * `<sessionsDir>/<sessionId>.sqlite`, no process-global registration. Owns the
  * session row, the action hash chain and decision facts of exactly one session.
  */
-export class SessionStore {
-  readonly observationSink: ObservationSink;
+export class SessionStore extends StoreHandle {
   readonly sessions: SessionWriteAdapter;
   readonly actions: ProtocolStorage.ActionSubAdapter;
   readonly decisionFacts: ProtocolStorage.DecisionFactSubAdapter;
-  // Every transaction caller is a write unit: take the write lock up front
-  // (BEGIN IMMEDIATE) instead of upgrading mid-transaction.
-  readonly transaction = <T>(operation: () => T): T => this.db.transaction(operation).immediate();
-  private readonly db: Database;
-  private closed = false;
-
   constructor(db: Database, observationSink: ObservationSink) {
-    this.db = db;
-    this.observationSink = observationSink;
+    super(db, observationSink);
     this.sessions = createSessions(db, this.transaction, observationSink);
     this.actions = createActions(db, this.transaction, observationSink);
     this.decisionFacts = createSqliteDecisionFacts(db);
-  }
-
-  /** Idempotent — the entity activation finalizer and explicit teardown may both close. */
-  close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    closeStoreDatabase(this.db);
   }
 }
 

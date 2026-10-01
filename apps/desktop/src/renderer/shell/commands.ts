@@ -46,9 +46,5 @@ export function dispatchShellCommand(command: ShellCommand): void {
     case "select-tab-9":
       activateTabAt(Number(command.slice(-1)));
       return;
-    default: {
-      const unhandled: never = command;
-      throw new Error(`Unhandled shell command: ${unhandled}`);
-    }
   }
 }

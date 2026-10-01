@@ -84,15 +84,11 @@ esac
 function bounded<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
+    promise.finally(() => clearTimeout(timeout)).then(
       (value) => {
-        clearTimeout(timeout);
         resolve(value);
       },
-      (error: unknown) => {
-        clearTimeout(timeout);
-        reject(error);
-      },
+      reject,
     );
   });
 }
@@ -101,13 +97,11 @@ async function boundedFollow(
   promise: Promise<number>,
   controller: AbortController,
 ): Promise<number> {
-  try {
-    return await bounded(promise, CHILD_TIMEOUT_MS, "follow child did not exit");
-  } catch (error) {
+  return bounded(promise, CHILD_TIMEOUT_MS, "follow child did not exit").catch(async (error: Error) => {
     controller.abort();
     await bounded(promise, KILL_TIMEOUT_MS * 2, "follow child did not settle after cancellation");
     throw error;
-  }
+  });
 }
 
 interface StreamConsumer {

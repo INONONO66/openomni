@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SessionTransition } from "@openomni/protocol";
+import { CauseText } from "../thrown";
 import type { ProcessSessionRequest } from "../process-entry";
 
 const Doorbell = z.object({ sessionIds: z.array(z.string().min(1)) }).strict();
@@ -44,16 +45,10 @@ export function createProcessSessionTransport(options: {
       answer.outbound?.sourceSessionId !== sessionId
     )
       throw new Error("process answer principal does not match its authenticated child");
-    let receipt: z.infer<typeof ProcessReplyReceipt>;
-    try {
-      receipt = { ok: true, inputId: answer.inputId, resolution: await options.answer(answer) };
-    } catch (error) {
-      receipt = {
-        ok: false,
-        inputId: answer.inputId,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+    const receipt: z.infer<typeof ProcessReplyReceipt> = await options.answer(answer).then(
+      (resolution) => ({ ok: true as const, inputId: answer.inputId, resolution }),
+      CauseText.transform((error) => ({ ok: false as const, inputId: answer.inputId, error })).parse,
+    );
     write(`${JSON.stringify(receipt)}\n`);
   }
   return {

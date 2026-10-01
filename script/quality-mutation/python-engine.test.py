@@ -10,6 +10,8 @@ import tempfile
 import unittest
 
 SPEC = importlib.util.spec_from_file_location('mutation_engine', pathlib.Path(__file__).with_name('python-engine.py'))
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError('Python mutation engine module is unavailable')
 ENGINE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ENGINE)
 DECISION = json.loads(pathlib.Path(os.environ['QUALITY_MUTATION_DECISION']).read_text())
@@ -23,8 +25,20 @@ def rows(source, family):
 def expressions(candidates):
     return [ast.unparse(ast.parse(row['replacement'], mode='eval')) for row in candidates]
 
+def run_instrumented(source, site, marker):
+    probe = ENGINE.instrument(source, ast.parse(source), site['start'], site['end'], str(marker))
+    return subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, timeout=5)
+
 
 class EngineTests(unittest.TestCase):
+    def assert_probe_reached(self, source, site, expected):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = pathlib.Path(directory) / 'hit'
+            result = run_instrumented(source, site, marker)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, expected)
+            self.assertEqual(marker.read_text(), '1')
+
     def test_nested_replacements_preserve_the_parent_ast(self):
         cases = [
             ('print(~(1 + 2) * 0)', 'py-unary', 'print((1 + 2) * 0)'),
@@ -100,14 +114,7 @@ thread.join()
 print(effects)
 '''
         row = rows(source, 'py-number')[0]
-        with tempfile.TemporaryDirectory() as directory:
-            marker = pathlib.Path(directory) / 'hit'
-            site = row['site']
-            probe = ENGINE.instrument(source, ast.parse(source), site['start'], site['end'], str(marker))
-            result = subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, timeout=5)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, "['subject', ('eq', 7), 'guard', 'matched']\n")
-            self.assertEqual(marker.read_text(), '1')
+        self.assert_probe_reached(source, row['site'], "['subject', ('eq', 7), 'guard', 'matched']\n")
 
     def test_all_comparison_replacements_and_census(self):
         source = '\n'.join(f'value = a {op} b' for op in ('==', '!=', 'is', 'is not', 'in', 'not in', '<', '<=', '>', '>='))
@@ -155,8 +162,7 @@ print(effects)
         with tempfile.TemporaryDirectory() as directory:
             marker = pathlib.Path(directory) / 'hit'
             site = candidates[-1]['site']
-            probe = ENGINE.instrument(source, ast.parse(source), site['start'], site['end'], str(marker))
-            result = subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, timeout=5)
+            result = run_instrumented(source, site, marker)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, 'False []\n')
             self.assertFalse(marker.exists())
@@ -164,14 +170,7 @@ print(effects)
     def test_probe_preserves_receiver_and_single_evaluation(self):
         source = 'effects=[]\nclass Value:\n    def run(self):\n        effects.append(1)\n        return True\nprint(Value().run(),effects)\n'
         row = rows(source, 'py-boolean')[0]
-        with tempfile.TemporaryDirectory() as directory:
-            marker = pathlib.Path(directory) / 'hit'
-            site = row['site']
-            probe = ENGINE.instrument(source, ast.parse(source), site['start'], site['end'], str(marker))
-            result = subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, timeout=5)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, 'True [1]\n')
-            self.assertEqual(marker.read_text(), '1')
+        self.assert_probe_reached(source, row['site'], 'True [1]\n')
 
 
 if __name__ == '__main__':

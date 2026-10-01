@@ -3,7 +3,7 @@ import type { ObservationSink, Storage as ProtocolStorage } from "@openomni/prot
 import { z } from "zod";
 import { SessionNotFound } from "../errors";
 import { CATALOG_SCHEMA } from "./schema-catalog.js";
-import { closeStoreDatabase, openStoreDatabase, SILENT_OBSERVATION_SINK } from "./session-store.js";
+import { openStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-store.js";
 import { createSqliteActorRegistryAdapter } from "./sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./sqlite-channel-grant-adapter";
@@ -49,8 +49,7 @@ const RotatedFence = z.object({ fence: z.number().int().positive() });
  * tables and policy rows. Never authorizes a session-file write by itself;
  * `commitSession`'s owner+fence check in the session file stays the authority.
  */
-export class CatalogStore {
-  readonly observationSink: ObservationSink;
+export class CatalogStore extends StoreHandle {
   readonly surfaceKey: ProtocolStorage.SurfaceKeySubAdapter;
   readonly egressBudget: ProtocolStorage.EgressBudgetSubAdapter;
   readonly actorRegistry: ProtocolStorage.ActorRegistrySubAdapter;
@@ -59,13 +58,8 @@ export class CatalogStore {
   readonly replyGrant: ProtocolStorage.ReplyGrantSubAdapter;
   readonly provisioning: ProtocolStorage.ProvisioningSubAdapter;
   readonly policies: ProtocolStorage.PolicyRowSubAdapter;
-  readonly transaction = <T>(operation: () => T): T => this.db.transaction(operation).immediate();
-  private readonly db: Database;
-  private closed = false;
-
   constructor(db: Database, observationSink: ObservationSink) {
-    this.db = db;
-    this.observationSink = observationSink;
+    super(db, observationSink);
     this.surfaceKey = createSqliteSurfaceKeyAdapter(db);
     this.egressBudget = createSqliteEgressBudgetAdapter(db);
     this.actorRegistry = createSqliteActorRegistryAdapter(db);
@@ -117,13 +111,6 @@ export class CatalogStore {
       if (rotated === null) throw new SessionNotFound({ sessionId });
       return rotated.fence;
     });
-  }
-
-  /** Idempotent — explicit teardown and scope finalizers may both close. */
-  close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    closeStoreDatabase(this.db);
   }
 }
 

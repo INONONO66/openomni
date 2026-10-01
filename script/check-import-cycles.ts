@@ -17,6 +17,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { z } from "zod";
+import { decodeJson } from "./quality-json";
+import { runScriptMain } from "./main-runner";
 import { assertTopologyComplete, TOPOLOGY } from "./topology";
 
 const root = join(import.meta.dir, "..");
@@ -47,16 +50,15 @@ function workspaceEntryPoints(): Map<string, string> {
     if (!existsSync(manifestPath)) {
       throw new Error(`topology workspace ${workspace.dir} has no package.json`);
     }
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-      name?: string;
-      main?: string;
-    };
-    if (manifest.name !== workspace.packageName || !manifest.main) {
+    const manifest = z.object({ name: z.string(), main: z.string().min(1) }).safeParse(
+      decodeJson(readFileSync(manifestPath, "utf8")),
+    );
+    if (!manifest.success || manifest.data.name !== workspace.packageName) {
       throw new Error(
         `topology workspace ${workspace.dir} expected package ${workspace.packageName} with a main entry`,
       );
     }
-    entries.set(workspace.packageName, resolve(dirname(manifestPath), manifest.main));
+    entries.set(workspace.packageName, resolve(dirname(manifestPath), manifest.data.main));
   }
   return entries;
 }
@@ -157,7 +159,8 @@ export function findCycles(graph: Map<string, readonly string[]>): string[][] {
   return cycles;
 }
 
-function buildGraph(): Map<string, readonly string[]> {
+/** Eager value-import graph over every topology workspace's src tree. */
+export function buildGraph(): Map<string, readonly string[]> {
   const files = listSourceFiles();
   const inScope = new Set(files);
   const workspaces = workspaceEntryPoints();
@@ -173,7 +176,7 @@ function buildGraph(): Map<string, readonly string[]> {
   return graph;
 }
 
-function selfTest(): void {
+export function selfTest(): void {
   const cyclic = new Map<string, readonly string[]>([
     ["a.ts", ["b.ts"]],
     ["b.ts", ["c.ts", "a.ts"]],
@@ -200,28 +203,20 @@ function selfTest(): void {
   console.log("OK: import-cycle self-test — planted cycle red, acyclic green, type edges erased");
 }
 
-if (import.meta.main) {
-  if (process.argv.includes("--self-test")) {
-    selfTest();
-  } else {
-    let graph: Map<string, readonly string[]>;
-    try {
-      assertTopologyComplete();
-      graph = buildGraph();
-    } catch (error) {
-      console.error(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
+/** Check the shipped tree; exits 1 with every cycle printed when one exists. */
+export async function main(graph: Map<string, readonly string[]> = buildGraph()): Promise<void> {
+  assertTopologyComplete();
+  const cycles = findCycles(graph);
+  if (cycles.length > 0) {
+    for (const cycle of cycles) {
+      console.error(`CYCLE: ${cycle.map((file) => relative(root, file)).join("\n    -> ")}`);
     }
-    const cycles = findCycles(graph);
-    if (cycles.length > 0) {
-      for (const cycle of cycles) {
-        console.error(`CYCLE: ${cycle.map((file) => relative(root, file)).join("\n    -> ")}`);
-      }
-      console.error(
-        `\n${cycles.length} value-import cycle(s) found — baseline is 0. Break the cycle (extract a shared leaf module) instead of adding to it.`,
-      );
-      process.exit(1);
-    }
-    console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
+    console.error(
+      `\n${cycles.length} value-import cycle(s) found — baseline is 0. Break the cycle (extract a shared leaf module) instead of adding to it.`,
+    );
+    process.exit(1);
   }
+  console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
 }
+
+if (import.meta.main) { if (process.argv.includes("--self-test")) selfTest(); else await runScriptMain(main); }

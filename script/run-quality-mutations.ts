@@ -501,6 +501,197 @@ function mutable(file: { category: string; language: string }): boolean {
 	return !EXEMPT_CATEGORIES.has(file.category) && file.language !== "sql";
 }
 
+type AddMutation = (
+	op: string, node: ts.Node, replacement: string, siteNode?: ts.Node, mode?: Site["mode"],
+) => void;
+
+function addCandidate(
+	context: { file: Entry; source: ts.SourceFile; seen: Set<string>; candidates: Candidate[] },
+	op: string,
+	node: ts.Node,
+	replacement: string,
+	siteNode: ts.Node = node,
+	mode: Site["mode"] = "expression",
+): void {
+	const { file, source, seen, candidates } = context;
+	const startOffset = node.getStart(source);
+	const endOffset = node.end;
+	if (source.text.slice(startOffset, endOffset) === replacement) return;
+	const replacementSha256 = sha256(replacement);
+	const id = sha256(`${file.path}\0${startOffset}\0${endOffset}\0${replacementSha256}`);
+	if (seen.has(id)) return;
+	seen.add(id);
+	const value = mode === "expression" ? valueBoundary(siteNode) : siteNode;
+	// A literal switch discriminant becomes an entry marker on the statement.
+	const literalSwitch = literalDiscriminantSwitch(value);
+	const boundary = literalSwitch ?? value;
+	const siteMode = literalSwitch ? "statement" : mode;
+	const start = boundary.getStart(source);
+	// Keep block-owned statements at their lexical level, including super().
+	const end = siteMode === "statement" && ts.isBlock(boundary.parent) ? start : boundary.end;
+	candidates.push({
+		id, path: file.path, sourceSha256: file.sha256, startOffset, endOffset,
+		operator: op, replacement, replacementSha256, site: { start, end, mode: siteMode },
+	});
+}
+
+function addScalarMutations(
+	node: ts.Node, raw: string, source: ts.SourceFile, operators: Operator[], add: AddMutation,
+): void {
+	if (ts.isBinaryExpression(node))
+		for (const op of operators)
+			for (const replacement of op.replacements.get(node.operatorToken.getText(source)) ?? [])
+				add(op.id, node.operatorToken, replacement, node);
+	if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)
+		add("boolean-literal", node, raw === "true" ? "false" : "true");
+	if (ts.isNumericLiteral(node) && literalValue(node) && Number.isFinite(Number(node.text)))
+		add("numeric-literal", node, Number(node.text) === 0 ? "1" : "0");
+	if (ts.isBigIntLiteral(node) && literalValue(node))
+		add("bigint-literal", node, BigInt(node.text.slice(0, -1).replaceAll("_", "")) === 0n ? "1n" : "0n");
+}
+
+function addTemplateMutations(
+	node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression,
+	source: ts.SourceFile, embedded: boolean, add: AddMutation,
+): void {
+	if (embedded) return;
+	// Quasis are template data, not ordinary expression literals.
+	// Keep tag/receiver/substitutions and the raw/cooked pair intact.
+	const parts = ts.isTemplateExpression(node)
+		? [node.head, ...node.templateSpans.map((span) => span.literal)]
+		: [node];
+	for (const part of parts) {
+		const opening = ts.isTemplateMiddle(part) || ts.isTemplateTail(part) ? "}" : "`";
+		const closing = ts.isTemplateHead(part) || ts.isTemplateMiddle(part) ? "${" : "`";
+		add("string-literal", part,
+			`${opening}${part.getText(source).length > opening.length + closing.length ? "" : "__d945_mutant__"}${closing}`,
+			node.parent);
+	}
+}
+
+function addStringMutations(
+	node: ts.Node, source: ts.SourceFile, embeddedPath: string, inventory: Inventory, add: AddMutation,
+): void {
+	if (
+		(ts.isStringLiteral(node) ||
+			ts.isNoSubstitutionTemplateLiteral(node) ||
+			ts.isTemplateExpression(node)) &&
+		literalValue(node)
+	) {
+		if (ts.isTaggedTemplateExpression(node.parent)) {
+			const embedded = inventory.embedded.some(
+				(entry) =>
+					entry.path === embeddedPath &&
+					ts.isVariableDeclaration(node.parent.parent) &&
+					node.parent.parent.name.getText(source) === "PYTHON_DRIVER",
+			);
+			addTemplateMutations(node, source, embedded, add);
+		} else
+			add("string-literal", node,
+				ts.isTemplateExpression(node) || node.text.length ? '""' : '"__d945_mutant__"',
+				node, ts.isJsxAttribute(node.parent) ? "jsx" : "expression");
+	}
+}
+
+function addUnaryMutations(node: ts.Node, source: ts.SourceFile, add: AddMutation): void {
+	if (ts.isPrefixUnaryExpression(node)) {
+		const operand = node.operand.getText(source);
+		const unary = new Map([
+			[ts.SyntaxKind.ExclamationToken, `(${operand})`],
+			[ts.SyntaxKind.TildeToken, `(${operand})`],
+			[ts.SyntaxKind.PlusToken, `-(${operand})`],
+			[ts.SyntaxKind.MinusToken, `+(${operand})`],
+		]);
+		const replacement = unary.get(node.operator);
+		if (replacement) add("unary", node, replacement);
+	}
+	if (
+		(ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+		(node.operator === ts.SyntaxKind.PlusPlusToken ||
+			node.operator === ts.SyntaxKind.MinusMinusToken)
+	) {
+		const token = node.operator === ts.SyntaxKind.PlusPlusToken ? "--" : "++";
+		add("update", node, ts.isPrefixUnaryExpression(node)
+			? `${token}${node.operand.getText(source)}`
+			: `${node.operand.getText(source)}${token}`);
+	}
+}
+
+function addConditionMutations(node: ts.Node, source: ts.SourceFile, add: AddMutation): void {
+	if (
+		ts.isIfStatement(node) ||
+		ts.isWhileStatement(node) ||
+		ts.isDoStatement(node) ||
+		ts.isForStatement(node) ||
+		ts.isConditionalExpression(node)
+	) {
+		const condition = ts.isForStatement(node)
+			? node.condition
+			: ts.isConditionalExpression(node)
+				? node.condition
+				: node.expression;
+		if (condition)
+			for (const replacement of ["true", "false"]) add("condition", condition, replacement);
+	}
+	if (ts.isConditionalExpression(node))
+		add("conditional-arm", node,
+			`(${node.condition.getText(source)}) ? (${node.whenFalse.getText(source)}) : (${node.whenTrue.getText(source)})`);
+}
+
+function addStatementAndCollectionMutations(node: ts.Node, add: AddMutation): void {
+	if (ts.isExpressionStatement(node) && !directive(node))
+		add("statement-delete", node, ";", node, "statement");
+	if (ts.isReturnStatement(node) && node.expression)
+		add("return-value", node.expression, "undefined");
+	if (ts.isThrowStatement(node)) add("throw-delete", node, ";", node, "statement");
+	if (ts.isArrayLiteralExpression(node) && node.elements.length)
+		add("array-literal", node, "[]");
+	if (ts.isObjectLiteralExpression(node) && node.properties.length)
+		add("object-literal", node, "{}");
+}
+
+function addAccessAndControlMutations(
+	node: ts.Node, raw: string, source: ts.SourceFile, add: AddMutation,
+): void {
+	if (
+		(ts.isPropertyAccessExpression(node) ||
+			ts.isElementAccessExpression(node) ||
+			ts.isCallExpression(node)) &&
+		node.questionDotToken
+	)
+		add("optional-chain", node.questionDotToken,
+			ts.isPropertyAccessExpression(node) ? "." : "", node);
+	if (ts.isAwaitExpression(node))
+		add("await-delete", node, `(${node.expression.getText(source)})`);
+	if (
+		ts.isCaseClause(node) &&
+		(ts.isLiteralExpression(node.expression) ||
+			node.expression.kind === ts.SyntaxKind.TrueKeyword ||
+			node.expression.kind === ts.SyntaxKind.FalseKeyword)
+	)
+		add("switch-case", node, "", node, "case");
+	if (ts.isRegularExpressionLiteral(node))
+		for (const replacement of regexChanges(raw)) add("regex", node, replacement);
+}
+
+function addMethodMutations(
+	node: ts.Node, checker: ts.TypeChecker, add: AddMutation,
+): void {
+	if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+		const access = node.expression;
+		const receiver = checker.getTypeAtLocation(access.expression);
+		const name = access.name.text;
+		const isArray = checker.isArrayType(receiver) || checker.isTupleType(receiver);
+		const isString = (receiver.flags & ts.TypeFlags.StringLike) !== 0;
+		if (isArray && name === "filter" && node.arguments[0])
+			add("method", node.arguments[0], "() => true", node);
+		if (isArray && (name === "every" || name === "some"))
+			add("method", access.name, name === "every" ? "some" : "every", node);
+		if (isString && (name === "startsWith" || name === "endsWith"))
+			add("method", access.name, name === "startsWith" ? "endsWith" : "startsWith", node);
+	}
+}
+
 export function enumerate(
 	directory: string,
 	inventory: Inventory,
@@ -540,215 +731,20 @@ export function enumerate(
 			} else if (!selected.isDeclarationFile) {
 				const source = selected;
 				const checker = owner.getTypeChecker();
-				function add(
-					op: string,
-					node: ts.Node,
-					replacement: string,
-					siteNode: ts.Node = node,
-					mode: Site["mode"] = "expression",
-				): void {
-					const startOffset = node.getStart(source);
-					const endOffset = node.end;
-					if (source.text.slice(startOffset, endOffset) === replacement) return;
-					const replacementSha256 = sha256(replacement);
-					const id = sha256(`${file.path}\0${startOffset}\0${endOffset}\0${replacementSha256}`);
-					if (seen.has(id)) return;
-					seen.add(id);
-					const value = mode === "expression" ? valueBoundary(siteNode) : siteNode;
-					// `switch (true)` narrows by its literal discriminant; a probe there
-					// becomes an entry marker on the statement, which has the same reach.
-					const literalSwitch = literalDiscriminantSwitch(value);
-					const boundary = literalSwitch ?? value;
-					const siteMode = literalSwitch ? "statement" : mode;
-					const start = boundary.getStart(source);
-					// Keep block-owned statements at their original lexical level.
-					// Wrapping super() changes Bun's parameter-property initialization.
-					const end = siteMode === "statement" && ts.isBlock(boundary.parent) ? start : boundary.end;
-					candidates.push({
-						id,
-						path: file.path,
-						sourceSha256: file.sha256,
-						startOffset,
-						endOffset,
-						operator: op,
-						replacement,
-						replacementSha256,
-						site: { start, end, mode: siteMode },
-					});
-				}
-				function addScalarMutations(node: ts.Node, raw: string): void {
-					if (ts.isBinaryExpression(node))
-						for (const op of operators)
-							for (const replacement of op.replacements.get(node.operatorToken.getText(source)) ??
-								[])
-								add(op.id, node.operatorToken, replacement, node);
-					if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)
-						add("boolean-literal", node, raw === "true" ? "false" : "true");
-					if (ts.isNumericLiteral(node) && literalValue(node) && Number.isFinite(Number(node.text)))
-						add("numeric-literal", node, Number(node.text) === 0 ? "1" : "0");
-					if (ts.isBigIntLiteral(node) && literalValue(node))
-						add(
-							"bigint-literal",
-							node,
-							BigInt(node.text.slice(0, -1).replaceAll("_", "")) === 0n ? "1n" : "0n",
-						);
-				}
-				function addTemplateMutations(
-					node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression,
-				): void {
-					const embedded = inventory.embedded.some(
-						(entry) =>
-							entry.path === `${file.path}#PYTHON_DRIVER` &&
-							ts.isVariableDeclaration(node.parent.parent) &&
-							node.parent.parent.name.getText(source) === "PYTHON_DRIVER",
-					);
-					if (embedded) return;
-					// Quasis are template data, not ordinary expression literals.
-					// Keep tag/receiver/substitutions and the raw/cooked pair intact.
-					const parts = ts.isTemplateExpression(node)
-						? [node.head, ...node.templateSpans.map((span) => span.literal)]
-						: [node];
-					for (const part of parts) {
-						const opening = ts.isTemplateMiddle(part) || ts.isTemplateTail(part) ? "}" : "`";
-						const closing = ts.isTemplateHead(part) || ts.isTemplateMiddle(part) ? "${" : "`";
-						add(
-							"string-literal",
-							part,
-							`${opening}${part.getText(source).length > opening.length + closing.length ? "" : "__d945_mutant__"}${closing}`,
-							node.parent,
-						);
-					}
-				}
-				function addStringMutations(node: ts.Node): void {
-					if (
-						(ts.isStringLiteral(node) ||
-							ts.isNoSubstitutionTemplateLiteral(node) ||
-							ts.isTemplateExpression(node)) &&
-						literalValue(node)
-					) {
-						if (ts.isTaggedTemplateExpression(node.parent)) addTemplateMutations(node);
-						else
-							add(
-								"string-literal",
-								node,
-								ts.isTemplateExpression(node) || node.text.length ? '""' : '"__d945_mutant__"',
-								node,
-								ts.isJsxAttribute(node.parent) ? "jsx" : "expression",
-							);
-					}
-				}
-				function addUnaryMutations(node: ts.Node): void {
-					if (ts.isPrefixUnaryExpression(node)) {
-						const operand = node.operand.getText(source);
-						const unary = new Map([
-							[ts.SyntaxKind.ExclamationToken, `(${operand})`],
-							[ts.SyntaxKind.TildeToken, `(${operand})`],
-							[ts.SyntaxKind.PlusToken, `-(${operand})`],
-							[ts.SyntaxKind.MinusToken, `+(${operand})`],
-						]);
-						const replacement = unary.get(node.operator);
-						if (replacement) add("unary", node, replacement);
-					}
-					if (
-						(ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-						(node.operator === ts.SyntaxKind.PlusPlusToken ||
-							node.operator === ts.SyntaxKind.MinusMinusToken)
-					) {
-						const token = node.operator === ts.SyntaxKind.PlusPlusToken ? "--" : "++";
-						add(
-							"update",
-							node,
-							ts.isPrefixUnaryExpression(node)
-								? `${token}${node.operand.getText(source)}`
-								: `${node.operand.getText(source)}${token}`,
-						);
-					}
-				}
-				function addConditionMutations(node: ts.Node): void {
-					if (
-						ts.isIfStatement(node) ||
-						ts.isWhileStatement(node) ||
-						ts.isDoStatement(node) ||
-						ts.isForStatement(node) ||
-						ts.isConditionalExpression(node)
-					) {
-						const condition = ts.isForStatement(node)
-							? node.condition
-							: ts.isConditionalExpression(node)
-								? node.condition
-								: node.expression;
-						if (condition)
-							for (const replacement of ["true", "false"]) add("condition", condition, replacement);
-					}
-					if (ts.isConditionalExpression(node))
-						add(
-							"conditional-arm",
-							node,
-							`(${node.condition.getText(source)}) ? (${node.whenFalse.getText(source)}) : (${node.whenTrue.getText(source)})`,
-						);
-				}
-				function addStatementAndCollectionMutations(node: ts.Node): void {
-					if (ts.isExpressionStatement(node) && !directive(node))
-						add("statement-delete", node, ";", node, "statement");
-					if (ts.isReturnStatement(node) && node.expression)
-						add("return-value", node.expression, "undefined");
-					if (ts.isThrowStatement(node)) add("throw-delete", node, ";", node, "statement");
-					if (ts.isArrayLiteralExpression(node) && node.elements.length)
-						add("array-literal", node, "[]");
-					if (ts.isObjectLiteralExpression(node) && node.properties.length)
-						add("object-literal", node, "{}");
-				}
-				function addAccessAndControlMutations(node: ts.Node, raw: string): void {
-					if (
-						(ts.isPropertyAccessExpression(node) ||
-							ts.isElementAccessExpression(node) ||
-							ts.isCallExpression(node)) &&
-						node.questionDotToken
-					)
-						add(
-							"optional-chain",
-							node.questionDotToken,
-							ts.isPropertyAccessExpression(node) ? "." : "",
-							node,
-						);
-					if (ts.isAwaitExpression(node))
-						add("await-delete", node, `(${node.expression.getText(source)})`);
-					if (
-						ts.isCaseClause(node) &&
-						(ts.isLiteralExpression(node.expression) ||
-							node.expression.kind === ts.SyntaxKind.TrueKeyword ||
-							node.expression.kind === ts.SyntaxKind.FalseKeyword)
-					)
-						add("switch-case", node, "", node, "case");
-					if (ts.isRegularExpressionLiteral(node))
-						for (const replacement of regexChanges(raw)) add("regex", node, replacement);
-				}
-				function addMethodMutations(node: ts.Node): void {
-					if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-						const access = node.expression;
-						const receiver = checker.getTypeAtLocation(access.expression);
-						const name = access.name.text;
-						const isArray = checker.isArrayType(receiver) || checker.isTupleType(receiver);
-						const isString = (receiver.flags & ts.TypeFlags.StringLike) !== 0;
-						if (isArray && name === "filter" && node.arguments[0])
-							add("method", node.arguments[0], "() => true", node);
-						if (isArray && (name === "every" || name === "some"))
-							add("method", access.name, name === "every" ? "some" : "every", node);
-						if (isString && (name === "startsWith" || name === "endsWith"))
-							add("method", access.name, name === "startsWith" ? "endsWith" : "startsWith", node);
-					}
-				}
+				const context = { file, source, seen, candidates };
+				const add: AddMutation = (op, node, replacement, siteNode, mode) =>
+					addCandidate(context, op, node, replacement, siteNode, mode);
 				function visit(node: ts.Node): void {
 					row.astNodes++;
 					if (!runtimeNode(node)) return;
 					const raw = node.getText(source);
-					addScalarMutations(node, raw);
-					addStringMutations(node);
-					addUnaryMutations(node);
-					addConditionMutations(node);
-					addStatementAndCollectionMutations(node);
-					addAccessAndControlMutations(node, raw);
-					addMethodMutations(node);
+					addScalarMutations(node, raw, source, operators, add);
+					addStringMutations(node, source, `${file.path}#PYTHON_DRIVER`, inventory, add);
+					addUnaryMutations(node, source, add);
+					addConditionMutations(node, source, add);
+					addStatementAndCollectionMutations(node, add);
+					addAccessAndControlMutations(node, raw, source, add);
+					addMethodMutations(node, checker, add);
 					ts.forEachChild(node, visit);
 				}
 				visit(source);
@@ -2034,6 +2030,23 @@ function carriedResult(row: ObjectValue, carried: Map<string, CarriedResult>): v
 	if (result.restored !== true) fail("progress", "Recorded result without restoration proof");
 	carried.set(candidateId, { candidateId, outcome, sourceSha256: hash(text(result.sourceSha256)), document: result });
 }
+function progressRows(parsed: (ObjectValue | null)[], inventoryHash: string): {
+	proofs: Map<string, ObjectValue>;
+	recorded: ObjectValue[];
+} {
+	const proofs = new Map<string, ObjectValue>();
+	const recorded: ObjectValue[] = [];
+	for (const row of parsed.slice(1)) {
+		if (row === null) return fail("progress", "Malformed progress row");
+		if (row.inventorySha256 !== inventoryHash)
+			return fail("progress", "Progress row inventory mismatch");
+		if (row.type === "proof" && row.originalHashesVerified === true && row.cleanupVerified === true)
+			proofs.set(text(row.run), row);
+		else if (row.type === "result") recorded.push(row);
+		else if (row.type !== "proof") return fail("progress", "Unrecognized progress row");
+	}
+	return { proofs, recorded };
+}
 function loadShardProgress(options: Options): ShardProgress {
 	const shard = options.shard ?? fail("arguments", "Shard progress requires shard options");
 	const run = crypto.randomUUID();
@@ -2078,17 +2091,7 @@ function loadShardProgress(options: Options): ShardProgress {
 	for (const key of ["shardIndex", "shardCount"] as const)
 		if (head[key] !== header[key])
 			fail("progress", `Progress artifact does not match this shard (${key}: ${JSON.stringify(head[key])} != ${JSON.stringify(header[key])})`);
-	const proofs = new Map<string, ObjectValue>();
-	const recorded: ObjectValue[] = [];
-	for (const row of parsed.slice(1)) {
-		if (row === null) return fail("progress", "Malformed progress row");
-		if (row.inventorySha256 !== options.inventoryHash)
-			return fail("progress", "Progress row inventory mismatch");
-		if (row.type === "proof" && row.originalHashesVerified === true && row.cleanupVerified === true)
-			proofs.set(text(row.run), row);
-		else if (row.type === "result") recorded.push(row);
-		else if (row.type !== "proof") return fail("progress", "Unrecognized progress row");
-	}
+	const { proofs, recorded } = progressRows(parsed, options.inventoryHash);
 	const carried = new Map<string, CarriedResult>();
 	// Only rows from runs that appended their restoration/cleanup proof are
 	// carried; a killed run's unproven tail is re-executed, never mixed in.

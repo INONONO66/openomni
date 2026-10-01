@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlainValueSchema } from "../json.js";
 import { BusEvent } from "../bus/index.js";
 import { EpochMs } from "../time.js";
 // Deep imports (not ../policy/index.js): the Policy namespace re-exports these
@@ -24,7 +25,7 @@ const PolicyBase = z.object({
 // re-parses persisted rows with this schema.
 const PolicyObligation = PolicyEffects.PolicyObligation.partial()
   .extend({ type: z.string() })
-  .passthrough();
+  .catchall(PlainValueSchema);
 
 const PolicyAuditContext = z.object({
   effects: PolicyEffects.PolicyEffect.array().optional(),
@@ -46,7 +47,7 @@ const EffectiveVerdict = z.enum(["allow", "deny", "pending"]);
 // do-not-touch ledger permits — it is deliberately NOT a universal BaseEvent,
 // because correlation requirements differ across families.
 const PolicySubject = {
-  actor: z.record(z.string(), z.unknown()),
+  actor: z.record(z.string(), PlainValueSchema),
   action: z.string(),
   resource: z.string(),
 } as const;
@@ -65,7 +66,7 @@ export const Events = {
     PolicyBase.extend({
       actionId: z.string(),
       ...PolicySubject,
-      context: z.record(z.string(), z.unknown()).optional(),
+      context: z.record(z.string(), PlainValueSchema).optional(),
     }),
     { visibility: "ephemeral" },
   ),
@@ -74,7 +75,7 @@ export const Events = {
     PolicyBase.extend({
       policyId: z.string(),
       ...PolicyDecision,
-      beforeSideEffect: z.record(z.string(), z.unknown()).optional(),
+      beforeSideEffect: z.record(z.string(), PlainValueSchema).optional(),
     }).merge(PolicyAuditContext),
     { visibility: "llm_reason" },
   ),

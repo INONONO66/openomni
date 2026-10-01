@@ -26,6 +26,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { runScriptMain } from "./main-runner";
 import { toolSpec } from "../packages/agent/src/index.js";
@@ -33,6 +34,8 @@ import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/c
 import type { Tool, AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 import type { PlainObject, PlainValue } from "../packages/protocol/src/json.js";
 import { z } from "zod";
+import { decodeJson } from "./quality-json";
+import * as protocolExports from "../packages/protocol/src/index.js";
 
 // Schema inspection never executes ports; absent capabilities are explicit test doubles.
 const schemaPorts: ToolPorts = {
@@ -337,14 +340,13 @@ const TOOL_SOURCE_GLOB = "apps/openomni/src/tools/**/*.ts";
 const TOOL_CATEGORIES: readonly ToolCategory[] = ["query", "mutation", "authority", "execution"];
 
 function looksLikeToolDefinition(value: object): value is AnyToolDefinition {
-  if (typeof value !== "object" || value === null) return false;
-  return (
-    "name" in value && typeof value.name === "string" &&
-    "category" in value && typeof value.category === "string" &&
-    "description" in value && typeof value.description === "string" &&
-    "execute" in value && typeof value.execute === "function" &&
-    "render" in value && typeof value.render === "function"
-  );
+  return z.object({
+    name: z.string(),
+    category: z.string(),
+    description: z.string(),
+    execute: z.function(),
+    render: z.function(),
+  }).safeParse(value).success;
 }
 
 export interface LocatedDefinition {
@@ -360,7 +362,10 @@ async function locateExportedDefinitions(
   for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
     const source = await Bun.file(join(ROOT, filePath)).text();
-    const module = await import(`../${filePath}`);
+    const module = z.record(z.string(), z.union([
+      z.instanceof(Object), z.string(), z.number(), z.boolean(),
+      z.bigint(), z.symbol(), z.null(), z.undefined(),
+    ])).parse(createRequire(import.meta.url)(join(ROOT, filePath)));
     for (const value of Object.values(module)) {
       if (typeof value === "object" && value !== null && looksLikeToolDefinition(value))
         located.set(value, filePath);
@@ -472,11 +477,7 @@ interface ZodObjectLike {
 }
 
 function isZodSchema(value: object): value is ZodObjectLike {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "safeParse" in value && typeof value.safeParse === "function"
-  );
+  return z.object({ safeParse: z.function() }).safeParse(value).success;
 }
 
 function shapeKeys(schema: ZodObjectLike, seen: Set<ZodObjectLike> = new Set()): string[] | undefined {
@@ -509,14 +510,17 @@ function discriminatorValue(option: ZodObjectLike, discriminator: string): strin
 }
 
 export async function buildSchemaSnapshot(): Promise<SchemaSnapshot> {
-  const protocol = await import("../packages/protocol/src/index.js");
   const snapshot: Record<string, readonly string[]> = {};
+  const protocol: Record<string, object> = protocolExports;
 
   for (const [namespaceName, namespaceValue] of Object.entries(protocol)) {
     if (typeof namespaceValue !== "object" || namespaceValue === null) {
       continue;
     }
-    for (const [exportName, exportValue] of Object.entries(namespaceValue)) {
+    // The imported protocol barrel is trusted code; its namespace properties
+    // include schemas, functions, and scalar constants rather than JSON input.
+    const namespace = namespaceValue as Record<string, object | string | number | boolean | null | undefined>;
+    for (const [exportName, exportValue] of Object.entries(namespace)) {
       if (typeof exportValue !== "object" || exportValue === null || !isZodSchema(exportValue)) {
         continue;
       }
@@ -531,7 +535,7 @@ export async function buildSchemaSnapshot(): Promise<SchemaSnapshot> {
         // the others (an index shift reads as every later option "losing"
         // fields). Plain unions without a discriminator keep index keys.
         const discriminator = exportValue._def?.discriminator;
-        exportValue.options.forEach((option, index) => {
+        exportValue.options.forEach((option: object, index: number) => {
           if (isZodSchema(option)) {
             const optionKeys = shapeKeys(option);
             if (optionKeys) {
@@ -577,7 +581,7 @@ export function diffSnapshots(previous: SchemaSnapshot, current: SchemaSnapshot)
 }
 
 async function checkSchemaSnapshot(): Promise<Violation[]> {
-  const previous = z.record(z.string(), z.array(z.string())).parse(JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")));
+  const previous = z.record(z.string(), z.array(z.string())).parse(decodeJson(readFileSync(SNAPSHOT_PATH, "utf8")));
   const current = await buildSchemaSnapshot();
   return diffSnapshots(previous, current);
 }
@@ -591,16 +595,8 @@ export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(
   current: readonly T[],
 ): Violation[] {
   if (JSON.stringify(previous) === JSON.stringify(current)) return [];
-  const previousNames = previous.flatMap((value) =>
-    typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
-      ? [value.name]
-      : [],
-  );
-  const currentNames = current.flatMap((value) =>
-    typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
-      ? [value.name]
-      : [],
-  );
+  const previousNames = previous.flatMap((value) => typeof value.name === "string" ? [value.name] : []);
+  const currentNames = current.flatMap((value) => typeof value.name === "string" ? [value.name] : []);
   return [
     {
       check: "tool-schema-snapshot",
@@ -612,7 +608,7 @@ export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(
 
 function checkToolSchemaSnapshot(): Violation[] {
   const previous = z.array(z.object({ name: z.string() }).catchall(z.json())).parse(
-    JSON.parse(readFileSync(TOOL_SNAPSHOT_PATH, "utf8")),
+    decodeJson(readFileSync(TOOL_SNAPSHOT_PATH, "utf8")),
   );
   return diffToolSchemaSnapshots(previous, buildToolSchemaSnapshot());
 }
@@ -658,6 +654,15 @@ function definitionSelfTest(failures: string[]): void {
     ).length;
     if (flagged !== expected) failures.push(`tool-file-name misjudged ${filePath} for ${name}`);
   }
+  const invalidDefinition = { ...exemplar, name: "", description: "" } as AnyToolDefinition;
+  const invalidMessages = definitionInvariantViolations(
+    [invalidDefinition],
+    [{ definition: invalidDefinition, filePath: "apps/openomni/src/tools/.ts" }],
+  ).map(({ message }) => message);
+  if (!invalidMessages.some((message) => message.startsWith("[tool-name]")) || !invalidMessages.some((message) => message.startsWith("[tool-description]"))) failures.push("definition invariants missed empty name or description");
+  const unknownCategory: AnyToolDefinition = { ...exemplar };
+  Object.defineProperty(unknownCategory, "category", { value: "unregistered" });
+  if (!definitionInvariantViolations([unknownCategory], [{ definition: unknownCategory, filePath: `apps/openomni/src/tools/${unknownCategory.name.replaceAll("_", "-")}.ts` }]).some(({ message }) => message.startsWith("[tool-category]"))) failures.push("definition invariants missed an unregistered tool category");
 }
 
 export function selfTest(): void {
@@ -710,6 +715,17 @@ export function selfTest(): void {
   if (topLevelFieldCount(composedSchema) !== 6) {
     failures.push("tool field budget walker did not follow allOf/anyOf/$ref");
   }
+  const recursiveSchema: PlainObject = {
+    $defs: {
+      "common/fields": {
+        properties: { h: {} },
+        $ref: "#/$defs/common~1fields",
+      },
+    },
+    properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {} },
+    $ref: "#/$defs/common~1fields",
+  };
+  if (lintToolSurface({ name: "read", description: "ok", inputSchema: recursiveSchema }).map((failure) => failure.rule).join() !== "tool-max-fields") failures.push("tool field budget walker lost escaped recursive reference fields");
 
   const snapshotViolations = diffSnapshots(
     { "Tool.Call": ["id", "input", "tool"] },
@@ -718,6 +734,7 @@ export function selfTest(): void {
   if (snapshotViolations.length !== 1 || !snapshotViolations[0]?.message.includes("input")) {
     failures.push("schema-snapshot did not flag a field rename");
   }
+  if (diffSnapshots({ "Tool.Call": ["id"] }, {}).map((violation) => violation.subject).join() !== "Tool.Call") failures.push("schema-snapshot did not flag a removed type");
   if (diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }).length !== 0) {
     failures.push("schema-snapshot flagged an additive change");
   }
@@ -766,7 +783,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     vocab: z.object({ unmappedNamespaces: z.array(z.string()) }),
     tools: z.object({ exceptions: z.record(z.string(), z.array(z.string())) }).optional(),
     naming: z.object({ grandfathered: z.array(z.string()) }),
-  }).parse(JSON.parse(readFileSync(BASELINE_PATH, "utf8")));
+  }).parse(decodeJson(readFileSync(BASELINE_PATH, "utf8")));
   const violations = [
     ...(await checkVocabRatchet(baseline)),
     ...(await checkToolLint(baseline)),

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Policy } from "../../src/index.js";
+import type { JsonShapedValue } from "../../src/json.js";
 
 const pointIds = [
   "dispatch.action.pre",
@@ -63,6 +64,19 @@ function isObject<Value>(value: Value): value is Value & object {
   return typeof value === "object" && value !== null;
 }
 
+// Decorrelates the 15-member validator union at the call site: resolving
+// safeParse across the whole union of recursive catchall input types trips
+// TS2589, while this structural view checks each member once.
+type AnyPointValidator = { safeParse: (input: JsonShapedValue) => { success: boolean } };
+
+// Typed window onto zod internals (Reflect.get returns `any`); the caller
+// names the slot shape it pokes at.
+function internalSlot<Slot>(target: object, key: string): Slot | undefined {
+  return Reflect.get(target, key);
+}
+const safeParseSucceeds = (schema: AnyPointValidator, input: JsonShapedValue): boolean =>
+  schema.safeParse(input).success;
+
 describe("PolicyPoint executable input schemas", () => {
   test("has a one-to-one schema catalog for every registered point", () => {
     expect(Object.keys(Policy.PolicyPoint.InputSchemas).sort()).toEqual([...pointIds].sort());
@@ -78,13 +92,13 @@ describe("PolicyPoint executable input schemas", () => {
       expect(contract).toBeDefined();
       expect(schema).toBeDefined();
       if (contract === undefined || schema === undefined) continue;
-      expect(schema.safeParse(validInput).success).toBe(true);
+      expect(safeParseSucceeds(schema, validInput)).toBe(true);
 
       for (const requiredKey of contract.requiredContext) {
         const missingRequired = { ...validInput };
         Reflect.deleteProperty(missingRequired, requiredKey);
 
-        expect(schema.safeParse(missingRequired).success).toBe(false);
+        expect(safeParseSucceeds(schema, missingRequired)).toBe(false);
       }
     }
   });
@@ -168,8 +182,8 @@ describe("PolicyPoint executable input schemas", () => {
     const valid = { sessionId: "session-1", runId: "run-1", runOutcome: { type: "stop" } };
     schema.parse(valid);
 
-    const cached = Reflect.get(schema, "_cached");
-    const cachedKeys = isObject(cached) ? Reflect.get(cached, "keys") : undefined;
+    const cached: object | undefined = Reflect.get(schema, "_cached");
+    const cachedKeys = isObject(cached) ? internalSlot<string[]>(cached, "keys") : undefined;
     const runIdIndex = Array.isArray(cachedKeys) ? cachedKeys.indexOf("runId") : -1;
     const cacheMutated = runIdIndex >= 0;
     if (cacheMutated) Reflect.apply(Array.prototype.splice, cachedKeys, [runIdIndex, 1]);
@@ -179,9 +193,10 @@ describe("PolicyPoint executable input schemas", () => {
     }).success;
     if (cacheMutated) Reflect.apply(Array.prototype.splice, cachedKeys, [runIdIndex, 0, "runId"]);
 
-    const shape = Reflect.get(schema, "shape");
-    const runOutcome = isObject(shape) ? Reflect.get(shape, "runOutcome") : undefined;
-    const optionsMap = isObject(runOutcome) ? Reflect.get(runOutcome, "optionsMap") : undefined;
+    const shape: object | undefined = Reflect.get(schema, "shape");
+    const runOutcome = isObject(shape) ? internalSlot<object>(shape, "runOutcome") : undefined;
+    const optionsMap =
+      runOutcome === undefined ? undefined : internalSlot<Map<string, object>>(runOutcome, "optionsMap");
     const stopOption = optionsMap instanceof Map ? optionsMap.get("stop") : undefined;
     const mapMutated =
       optionsMap instanceof Map ? Reflect.apply(Map.prototype.delete, optionsMap, ["stop"]) : false;

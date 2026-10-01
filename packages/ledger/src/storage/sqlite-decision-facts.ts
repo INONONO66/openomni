@@ -4,23 +4,23 @@ import { z } from "zod";
 import { computeDecisionFactHash } from "./l0-hash";
 import { parseStoredJson } from "./sqlite-json-data";
 
-const Row = z
-  .object({
-    key: z.string(),
-    type: z.string(),
-    data: z.string(),
-    row_hash: z.string(),
-    time_created: z.number(),
-  })
-  .transform((row) =>
-    DecisionFact.Recorded.parse({
-      key: row.key,
-      type: row.type,
-      data: parseStoredJson(row.data),
-      rowHash: row.row_hash,
-      timeCreated: row.time_created,
-    }),
-  );
+const SqliteRow = z.object({
+  key: z.string(),
+  type: z.string(),
+  data: z.string(),
+  row_hash: z.string(),
+  time_created: z.number(),
+});
+
+const Row = SqliteRow.transform((row: z.infer<typeof SqliteRow>) =>
+  DecisionFact.Recorded.parse({
+    key: row.key,
+    type: row.type,
+    data: parseStoredJson(row.data),
+    rowHash: row.row_hash,
+    timeCreated: row.time_created,
+  }),
+);
 
 export function createSqliteDecisionFacts(db: Database): Storage.DecisionFactSubAdapter {
   function head(key: string): DecisionFact.Recorded | undefined {

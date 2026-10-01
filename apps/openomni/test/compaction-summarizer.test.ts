@@ -67,6 +67,24 @@ function runFailure(contextOverflow: boolean, message: string): Run.Failure {
   });
 }
 
+function failingRun(failure: Run.Failure, onCall: (input: Parameters<NonNullable<FixtureLlm["run"]>>[0]) => void): NonNullable<FixtureLlm["run"]> {
+  return (input) => Effect.sync(() => {
+    onCall(input);
+    return { type: "error", error: failure };
+  });
+}
+
+async function expectForeignFailure(
+  run: NonNullable<FixtureLlm["run"]>,
+  spans: Message.WithParts[],
+  kind: "empty" | "overflow",
+): Promise<void> {
+  const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
+  const error = await runEffect(Effect.flip(summarize(spans, undefined, BUDGET)));
+  expect(error).toBeInstanceOf(SummarizerError);
+  expect(error).toMatchObject({ _tag: "ForeignFailure", kind });
+}
+
 describe("production compaction summarizer", () => {
   it("merges the previous anchor without tools and bounds output tokens", async () => {
     let captured: Parameters<NonNullable<FixtureLlm["run"]>>[0] | undefined;
@@ -93,39 +111,25 @@ describe("production compaction summarizer", () => {
       sink.onMessage(answer("   "));
       return { type: "stop" };
     });
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
-
-    const error = await runEffect(Effect.flip(summarize([message("m1", "span")], undefined, BUDGET)));
-    expect(error).toBeInstanceOf(SummarizerError);
-    expect(error).toMatchObject({ _tag: "ForeignFailure", kind: "empty" });
+    await expectForeignFailure(run, [message("m1", "span")], "empty");
   });
 
   it("uses the typed overflow flag to shrink twice before a typed overflow error", async () => {
     const inputLengths: number[] = [];
     const failure = runFailure(true, "opaque upstream failure");
-    const run: NonNullable<FixtureLlm["run"]> = (input) => Effect.sync(() => {
-      inputLengths.push(input.messages.length);
-      return { type: "error", error: failure };
-    });
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
-
-    const error = await runEffect(Effect.flip(summarize(
+    const run = failingRun(failure, (input) => { inputLengths.push(input.messages.length); });
+    await expectForeignFailure(
+      run,
       [message("m1", "oldest"), message("m2", "middle"), message("m3", "newest")],
-      undefined,
-      BUDGET,
-    )));
+      "overflow",
+    );
     expect(inputLengths).toEqual([4, 3, 2]);
-    expect(error).toBeInstanceOf(SummarizerError);
-    expect(error).toMatchObject({ _tag: "ForeignFailure", kind: "overflow" });
   });
 
   it("does not retry overflow prose when the typed flag is false", async () => {
     let calls = 0;
     const failure = runFailure(false, "context window has been exceeded");
-    const run: NonNullable<FixtureLlm["run"]> = () => Effect.sync(() => {
-      calls += 1;
-      return { type: "error", error: failure };
-    });
+    const run = failingRun(failure, () => { calls += 1; });
     const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
 
     const error = await runEffect(Effect.flip(summarize([message("m1", "span")], undefined, BUDGET)));

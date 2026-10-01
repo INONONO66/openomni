@@ -27,6 +27,9 @@ function fixture(): string {
     "lint-side-effects.ts",
     "lint-tools.test.ts",
     "main-runner.ts",
+    "command-output.ts",
+    "quality-json.ts",
+    "capture-output.test-helper.ts",
   ]) {
     copyFileSync(join(import.meta.dir, name), join(root, "script", name));
   }
@@ -41,6 +44,12 @@ function fixture(): string {
     );
     put(root, `${workspace.dir}/src/index.ts`, "export {};\n");
   }
+  // The copied gates import ../packages/protocol/src/json.js; mirror the real
+  // module so the fixture resolves it exactly like the repository does.
+  copyFileSync(
+    join(import.meta.dir, "../packages/protocol/src/json.ts"),
+    join(root, "packages/protocol/src/json.ts"),
+  );
   return root;
 }
 

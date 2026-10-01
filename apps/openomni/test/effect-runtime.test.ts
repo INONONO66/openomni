@@ -20,7 +20,7 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
   const runtime = { runPromise: runEffect } as never;
   const read = { op: "read", data: new Uint8Array([1]) };
   const write = { op: "write" };
-  const list = { op: "list", entries: [] };
+  const list = { op: "list" as const, entries: [], truncated: false };
   const stat = { op: "stat", kind: "file" };
   const exec = { status: "completed", stdout: new Uint8Array(), stderr: new Uint8Array() };
   const machine = {
@@ -35,14 +35,14 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
   const ports = toolPorts(runtime, {
     machines: { get: (): typeof machine => machine } as never,
     completion: (() => Effect.succeed({})) as never,
-    messages: { ingest: (): Effect.Effect<unknown> => Effect.succeed({}) } as never,
+    messages: { ingest: () => Effect.succeed({}) } as never,
   });
   const handle = ports.machines?.get("machine");
-  expect<unknown>(await handle?.fs.read("/file")).toBe(read);
-  expect<unknown>(await handle?.fs.write("/file", new Uint8Array())).toBe(write);
-  expect<unknown>(await handle?.fs.list("/")).toBe(list);
-  expect<unknown>(await handle?.fs.stat("/file")).toBe(stat);
-  expect<unknown>(await handle?.exec("true", "/")).toBe(exec);
+  expect((await handle?.fs.read("/file")) === read).toBe(true);
+  expect((await handle?.fs.write("/file", new Uint8Array())) === write).toBe(true);
+  expect((await handle?.fs.list("/")) === list).toBe(true);
+  expect((await handle?.fs.stat("/file")) === stat).toBe(true);
+  expect((await handle?.exec("true", "/")) === exec).toBe(true);
 });
 
 test("the server edge consumes the shared gateway runtime and its injected services", async () => {
@@ -152,7 +152,7 @@ test("scope finalizers all run and aggregate failures in reverse release order",
   const exit = await runRuntimeExit(runtime, runtime.disposeEffect);
   expect(order).toEqual(["second.close", "first.close"]);
   expect(Exit.isFailure(exit)).toBe(true);
-  if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect)).toEqual([second, first]);
+  if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect as AppLifecycleFailure)).toEqual([second, first]);
   await runtime.dispose();
 });
 

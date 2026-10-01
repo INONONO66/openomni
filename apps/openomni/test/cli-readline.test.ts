@@ -16,7 +16,7 @@ test.each([
   const prompted = Promise.withResolvers<void>();
   const chunks: string[] = [];
   const output = new Writable({
-    write(chunk, _encoding, callback) {
+    write(chunk: string | Uint8Array, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
       chunks.push(String(chunk));
       prompted.resolve();
       callback();

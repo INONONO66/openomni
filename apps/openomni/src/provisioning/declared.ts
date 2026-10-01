@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { Result } from "effect";
 import {
   Vault,
   type ActorRegistry,
@@ -31,11 +32,10 @@ export function vaultCredentialReader(
     if (secret === undefined) {
       return { kind: "locked", reason: `no vault row for credentialRef ${ref}` };
     }
-    try {
-      return { kind: "ok", plaintext: Vault.open(secret, kek).reveal() };
-    } catch (error) {
-      return { kind: "locked", reason: String(error) };
-    }
+    const opened = Result.try({ try: () => Vault.open(secret, kek).reveal(), catch: String });
+    return Result.isSuccess(opened)
+      ? { kind: "ok", plaintext: opened.success }
+      : { kind: "locked", reason: opened.failure };
   };
 }
 

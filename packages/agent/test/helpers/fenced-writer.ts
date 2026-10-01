@@ -16,6 +16,23 @@ export interface FencedTurnFixture {
  * pending turn intent — the shared write authority every ledger-plane fixture
  * rides now that the TTL lease is gone (W5.2 F5).
  */
+/** The identity every fenced-turn fixture hands its executor. */
+export function fencedTurnIdentity(
+  id: string,
+  turnId: string,
+  generation: { readonly generation: number; readonly toolsHash: string; readonly systemHash: string },
+) {
+  return {
+    sessionId: id,
+    role: "resident" as const,
+    parentActionId: turnId,
+    turnId,
+    toolsGeneration: generation.generation,
+    toolsHash: generation.toolsHash,
+    systemHash: generation.systemHash,
+  };
+}
+
 export function fencedTurnFixture(
   kernel: SessionKernel,
   input: {

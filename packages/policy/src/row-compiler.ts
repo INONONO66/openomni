@@ -556,27 +556,36 @@ export function createPolicyCompiler(options: {
   function pin(generation: number): CompiledPolicySnapshot {
     const found = cache.get(generation);
     if (found !== undefined) return found;
-    let compiled: CompiledPolicySnapshot;
+    const compiled = loadSnapshot(generation);
+    cache.set(generation, compiled);
+    return compiled;
+  }
+
+  function loadSnapshot(generation: number): CompiledPolicySnapshot {
+    let rows: readonly PolicyRow.Row[];
     try {
-      compiled = compilePolicySnapshot({
+      rows = options.source.rows(generation);
+    } catch {
+      return failedSnapshot(
+        new PolicyCompileError({
+          code: "snapshot_load_failed",
+          generation,
+          message: "policy snapshot load failed",
+        }),
+      );
+    }
+    try {
+      return compilePolicySnapshot({
         registry,
         generation,
-        rows: options.source.rows(generation),
+        rows,
         mandatory,
         ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
       });
     } catch (error) {
-      const failure = PolicyCompileError.isInstance(error)
-        ? error
-        : new PolicyCompileError({
-            code: "snapshot_load_failed",
-            generation,
-            message: "policy snapshot load failed",
-          });
-      compiled = failedSnapshot(failure);
+      if (PolicyCompileError.isInstance(error)) return failedSnapshot(error);
+      throw error;
     }
-    cache.set(generation, compiled);
-    return compiled;
   }
 
   return { pin };

@@ -335,6 +335,46 @@ interface WatchHookDeps {
 }
 
 /**
+ * Shared wake prologue: the armed fold this wake targets, or `undefined` when
+ * the wake is a no-op. `onUnarmed` is the one policy split: a fired source
+ * whose watch is no longer armed gets closed; an expired timer just lapses.
+ */
+function wakeFold(
+  deps: WatchHookDeps,
+  context: SessionEntityTimerContext,
+  payload: { readonly watchId: string; readonly epoch: number },
+  onUnarmed: "close" | "skip",
+) {
+  const fold = watchState(context.kernel, context.authority.sessionId, payload.watchId);
+  if (fold === undefined || fold.state.epoch !== payload.epoch) return undefined;
+  if (fold.state.status !== "armed") {
+    if (onUnarmed === "close") deps.closeSource(payload.watchId);
+    return undefined;
+  }
+  return fold;
+}
+
+/** One chain batch under the activation's fence: the shared commit tail of both watch hooks. */
+function commitHookActions(
+  context: SessionEntityTimerContext,
+  actions: readonly LedgerAction.Append[],
+): Effect.Effect<void> {
+  const { kernel, authority } = context;
+  const row = kernel.row(authority.sessionId);
+  return kernel
+    .commit({
+      sessionId: authority.sessionId,
+      owner: authority.owner,
+      fence: authority.fence,
+      now: context.now,
+      expectedRevision: row.revision,
+      actions: [...actions],
+      state: row.state,
+    })
+    .pipe(Effect.orDie, Effect.asVoid);
+}
+
+/**
  * `WatchFired` fold body (entity timer hook): commits the occurrence, its wake
  * prompt, and — when the source is terminal or the wake budget is exhausted —
  * the pausing fact, all in one chain batch under the activation's fence.
@@ -350,13 +390,9 @@ export function watchFiredHook(deps: WatchHookDeps) {
     },
   ): Effect.Effect<"applied" | "noop"> =>
     Effect.gen(function* () {
-      const { kernel, authority } = context;
-      const fold = watchState(kernel, authority.sessionId, payload.watchId);
-      if (fold === undefined || fold.state.epoch !== payload.epoch) return "noop" as const;
-      if (fold.state.status !== "armed") {
-        deps.closeSource(payload.watchId);
-        return "noop" as const;
-      }
+      const { authority } = context;
+      const fold = wakeFold(deps, context, payload, "close");
+      if (fold === undefined) return "noop" as const;
       const batch = z
         .object({ content: z.string(), terminal: z.boolean() })
         .parse(JSON.parse(payload.batch));
@@ -394,18 +430,7 @@ export function watchFiredHook(deps: WatchHookDeps) {
             at: context.now,
           }),
         );
-      const row = kernel.row(authority.sessionId);
-      yield* kernel
-        .commit({
-          sessionId: authority.sessionId,
-          owner: authority.owner,
-          fence: authority.fence,
-          now: context.now,
-          expectedRevision: row.revision,
-          actions,
-          state: row.state,
-        })
-        .pipe(Effect.orDie);
+      yield* commitHookActions(context, actions);
       if (batch.terminal || exhausted) deps.closeSource(payload.watchId);
       return "applied" as const;
     });
@@ -418,47 +443,35 @@ export function watchTimeoutHook(deps: WatchHookDeps) {
     payload: { readonly watchId: string; readonly epoch: number; readonly fireAt: number },
   ): Effect.Effect<"applied" | "noop"> =>
     Effect.gen(function* () {
-      const { kernel, authority } = context;
-      const fold = watchState(kernel, authority.sessionId, payload.watchId);
-      if (fold === undefined || fold.state.epoch !== payload.epoch) return "noop" as const;
-      if (fold.state.status !== "armed") return "noop" as const;
+      const { authority } = context;
+      const fold = wakeFold(deps, context, payload, "skip");
+      if (fold === undefined) return "noop" as const;
       const id = watchTimeoutId(payload.watchId, payload.epoch);
       const content = JSON.stringify({
         watchId: payload.watchId,
         epoch: payload.epoch,
         reason: "timeout",
       });
-      const row = kernel.row(authority.sessionId);
-      yield* kernel
-        .commit({
+      yield* commitHookActions(context, [
+        watchAction({
+          id,
+          parentId: fold.armId,
           sessionId: authority.sessionId,
-          owner: authority.owner,
-          fence: authority.fence,
-          now: context.now,
-          expectedRevision: row.revision,
-          actions: [
-            watchAction({
-              id,
-              parentId: fold.armId,
-              sessionId: authority.sessionId,
-              kind: "alarm.fired",
-              intent: { op: "timeout", watchId: payload.watchId, epoch: payload.epoch },
-              effect: { status: "fired", terminal: true, reason: "timeout", content },
-              at: context.now,
-            }),
-            watchPromptAction({
-              id: `${id}:prompt`,
-              sessionId: authority.sessionId,
-              watchId: payload.watchId,
-              epoch: payload.epoch,
-              sourceKey: id,
-              content,
-              at: context.now,
-            }),
-          ],
-          state: row.state,
-        })
-        .pipe(Effect.orDie);
+          kind: "alarm.fired",
+          intent: { op: "timeout", watchId: payload.watchId, epoch: payload.epoch },
+          effect: { status: "fired", terminal: true, reason: "timeout", content },
+          at: context.now,
+        }),
+        watchPromptAction({
+          id: `${id}:prompt`,
+          sessionId: authority.sessionId,
+          watchId: payload.watchId,
+          epoch: payload.epoch,
+          sourceKey: id,
+          content,
+          at: context.now,
+        }),
+      ]);
       deps.closeSource(payload.watchId);
       return "applied" as const;
     });

@@ -2,7 +2,7 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { Bus } from "@openomni/agent";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
 import { createSurfaceKeyStore } from "@openomni/ledger";
@@ -14,9 +14,9 @@ import {
   MOUNTED_CHANNEL_DEFAULT_TIER,
   registerTrustedChannelGrant,
 } from "../src/gateway";
-import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { residentRunner } from "./helpers/resident-runner";
-import { localInbox, testPlane } from "./helpers/ledger";
+import { localInbox } from "./helpers/ledger";
+import { planeFixture } from "./helpers/plane-fixture";
 import { prepareMessage } from "../src/composition/message-session";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { messageFixture } from "./helpers/message-fixture";
@@ -73,19 +73,7 @@ function recordingRun(calls: RunInput[]): ResidentRun {
     return { type: "stop" };
   });
 }
-const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
-function plane(): AppLedgerPlane {
-  if (planeRef.current === undefined) throw new Error("test plane not open");
-  return planeRef.current;
-}
-const channelStores = () => createChannelStores(channelStoreSource(plane()));
-beforeEach(() => {
-  planeRef.current = testPlane();
-});
-afterEach(() => {
-  planeRef.current?.close();
-  planeRef.current = undefined;
-});
+const { plane, channelStores } = planeFixture();
 describe("channel grant registration", () => {
   test("the revoker removes exactly the grant it registered", () => {
     const revokeTelegram = registerTrustedChannelGrant(plane().stores.channelGrants, {
@@ -204,13 +192,11 @@ describe("authenticated gateway ingress", () => {
           setTimeout(() => reject(new Error("observation projection timeout")), 1000),
         ),
       ]);
-      expect(observation).toMatchObject({
-        kind: "message.sent",
-        sessionId: "gateway-ingress",
-        messageId: expect.any(String),
-        eventId: expect.any(String),
-        time: expect.any(Number),
-      });
+      expect(observation.kind).toBe("message.sent");
+      expect(observation.sessionId).toBe("gateway-ingress");
+      expect(typeof observation.messageId).toBe("string");
+      expect(typeof observation.eventId).toBe("string");
+      expect(typeof observation.time).toBe("number");
     } finally {
       stop();
     }

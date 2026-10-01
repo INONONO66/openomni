@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
-import { failure } from "./helpers/effect-g3";
 import { createTestAgent } from "./helpers/effect-g3";
 import { describe, expect, it, mock, spyOn, test } from "bun:test";
 import { Auth } from "@openomni/llm";
@@ -105,10 +104,10 @@ describe("ChatAgent public run contract", () => {
 
   it("rejects incomplete trace identity before provider execution", async () => {
     let calls = 0;
-    expect(await isolated(failure(agent(async () => {
+    await expect(isolated(agent(async () => {
         calls += 1;
         return createStopOutcome();
-      }).run({ messages: [{ role: "user", content: "hello" }] })))).toBeInstanceOf(Error);
+      }).run({ messages: [{ role: "user", content: "hello" }] }))).rejects.toThrow("agent run requires a trace context");
     expect(calls).toBe(0);
   });
 
@@ -119,7 +118,7 @@ describe("ChatAgent public run contract", () => {
       jsonSchema: (schema: object) => ({ jsonSchema: schema }),
       stepCountIs: () => () => false,
       streamText: () => ({
-        fullStream: (async function* () {
+        fullStream: (async function* (): AsyncGenerator<object, void, void> {
           providerSteps += 1;
           if (providerSteps === 1)
             yield { type: "tool-call", toolCallId: "call-1", toolName: "lookup", input: {} };
@@ -181,7 +180,8 @@ describe("ChatAgent public run contract", () => {
       }),
     });
     try {
-      expect(await isolated(failure(configured.run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
+      await expect(isolated(configured.run(runInput([{ role: "user", content: "hello" }]))))
+        .rejects.toThrow("toolExecutor is required when tools are provided");
       expect(retries).toEqual([]);
       expect(calls).toBe(0);
     } finally {
@@ -192,7 +192,7 @@ describe("ChatAgent public run contract", () => {
 
 describe("ChatAgent provider boundary failures", () => {
   it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
-    expect(await isolated(failure(agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
+    expect(await isolated(Effect.flip(agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
   });
   it.each([
     {
@@ -218,11 +218,11 @@ describe("ChatAgent provider boundary failures", () => {
       }),
     });
 
-    expect(await isolated(failure(malformed.run(runInput([{ role: "user", content: "malformed" }]))))).toBeInstanceOf(Error);
+    expect(await isolated(Effect.flip(malformed.run(runInput([{ role: "user", content: "malformed" }]))))).toBeInstanceOf(Error);
   });
 
   it("reports a missing default provider", async () => {
-    expect(await isolated(failure(createTestAgent({
+    expect(await isolated(Effect.flip(createTestAgent({
         events: Bus,
         model: { provider: "missing-provider", id: "missing-model" },
       }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
@@ -237,7 +237,7 @@ describe("ChatAgent provider boundary failures", () => {
     }));
     const listing = spyOn(globalThis, "fetch").mockRejectedValue("proxy offline");
     try {
-      expect(await isolated(failure(createTestAgent({
+      expect(await isolated(Effect.flip(createTestAgent({
           events: Bus,
           model: { provider: "anthropic", id: "missing-proxy-model" },
         }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
@@ -250,7 +250,7 @@ describe("ChatAgent provider boundary failures", () => {
   });
 
   it("reports a missing model in a known provider", async () => {
-    expect(await isolated(failure(createTestAgent({
+    expect(await isolated(Effect.flip(createTestAgent({
         events: Bus,
         model: { provider: "anthropic", id: "missing-model" },
       }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "ForeignFailure", operation: "llm" });
@@ -276,7 +276,7 @@ describe("ChatAgent loop controls", () => {
     const controller = new AbortController();
     controller.abort();
     let calls = 0;
-    expect(await isolated(failure(createTestAgent({
+    expect(await isolated(Effect.flip(createTestAgent({
         events: Bus,
         model,
         signal: controller.signal,

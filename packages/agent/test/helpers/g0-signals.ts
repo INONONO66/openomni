@@ -11,7 +11,7 @@ export function awaitSignal<A, E = never, R = never>(
 
 export function failure<A, E, R>(
   program: Effect.Effect<A, E, R>,
-): Effect.Effect<unknown, never, R> {
+) {
   return Effect.gen(function* () {
     const exit = yield* Effect.exit(program);
     if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected a failed Effect"));

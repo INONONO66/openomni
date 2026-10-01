@@ -380,9 +380,9 @@ test("967-U1 error cleanup owns the host and awaits every interpreter", async ()
     await runWith({ role: "resident", sessionId: "failure-b" }, "2 + 2");
     expect(witness.pids).toHaveLength(2);
     try {
-      throw failure;
-    } catch (error) {
-      expect(error).toBe(failure);
+      expect(() => {
+        throw failure;
+      }).toThrow(failure);
     } finally {
       await suite.cleanup();
     }
@@ -545,20 +545,25 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
+async function heldCell(code: string) {
+  const harness = await startHeldCompletionHarness();
+  const starting = harness.executeResult({ operation: { op: "run", code, timeout: 1 } });
+  await runEffect(Effect.promise(() => harness.entered.promise).pipe(Effect.timeout("5 seconds")));
+  expect(await starting).not.toHaveProperty("isError", true);
+  const started = harness.states.at(-1);
+  expect(started?.status).toBe("running");
+  return { ...harness, started };
+}
+
 /**
  * The wait window is the behavior under test here: a held cell cannot settle,
  * so the one-second `timeout` is exactly what makes run answer `running`.
  */
 test("eval background run and peek stay running; stop settles the typed cancelled state once", async () => {
-  const { run, executeResult, states, entered, release, calls } = await startHeldCompletionHarness();
+  const { run, executeResult, states, started, release, calls } = await heldCell(
+    "print('started')\ncompletion('hold')\nprint('never')",
+  );
   try {
-    const starting = executeResult({ operation: {
-      op: "run", code: "print('started')\ncompletion('hold')\nprint('never')", timeout: 1,
-    } });
-    await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
-    expect(await starting).not.toHaveProperty("isError", true);
-    const started = states.at(-1);
-    expect(started?.status).toBe("running");
     if (started?.status !== "running") return;
     const cellId = started.cellId;
     expect(started.output).toEqual({ stdout: "started\n", stderr: "" });
@@ -579,13 +584,8 @@ test("eval background run and peek stay running; stop settles the typed cancelle
 }, 40_000);
 
 test("eval background peek and stop race spends the cell id and settles cancelled exactly once", async () => {
-  const { executeResult, states, entered, release, calls } = await startHeldCompletionHarness();
+  const { executeResult, states, started, release, calls } = await heldCell("completion('hold')");
   try {
-    const starting = executeResult({ operation: { op: "run", code: "completion('hold')", timeout: 1 } });
-    await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
-    expect(await starting).not.toHaveProperty("isError", true);
-    const started = states.at(-1);
-    expect(started?.status).toBe("running");
     if (started?.status !== "running") return;
     expect(calls()).toBe(1);
     const [peeked, stopped] = await Promise.all([

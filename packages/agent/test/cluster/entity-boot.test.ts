@@ -3,12 +3,11 @@
 // per-session files, and the cluster catalog holds the 5 cluster_* tables.
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, rmSync } from "node:fs";
 import { L0Write } from "@openomni/ledger";
 import { Effect } from "effect";
 import {
+  clusterTempDir,
   clusterMessages,
   readChain,
   runCluster,
@@ -18,10 +17,7 @@ import {
   waitUntil,
 } from "../helpers/cluster-runtime";
 
-const dir = mkdtempSync(join(tmpdir(), "w52-entity-boot-"));
-const sessionsDir = join(dir, "sessions");
-mkdirSync(sessionsDir, { recursive: true });
-const catalogFile = join(dir, "catalog.sqlite");
+const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-entity-boot-");
 const options = { sessionsDir, catalogFile };
 
 afterAll(() => {

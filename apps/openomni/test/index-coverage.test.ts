@@ -21,6 +21,7 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { waveTool } from "./helpers/session-wave";
 import { nextFrame } from "./helpers/ws";
+import { approvalPolicy } from "./helpers/approval-policy";
 
 const suite = residentSuite();
 
@@ -51,27 +52,22 @@ test.each(["revision", "fence"] as const)(
     const spy = spyOn(plane, "openKernel").mockImplementation((id) => {
       const kernel = original(id);
       if (id !== sessionId) return kernel;
-      return new Proxy(kernel, {
-        get(target, property, receiver) {
-          if (property !== "commit") return Reflect.get(target, property, receiver);
-          const commit: typeof kernel.commit = (input) => {
-            const effect = input.actions[0]?.effect.value;
-            if (
-              effect === null || typeof effect !== "object" ||
-              Array.isArray(effect) || effect.inboxKind !== "interrupt"
-            ) return target.commit(input);
-            commits += 1;
-            if (commits > 1) return target.commit(input);
-            const row = target.row(id);
-            return Effect.fail(new CommitRefused({
-              sessionId: id, reason,
-              expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
-              fence: input.fence, currentFence: row.leaseFence,
-            }));
-          };
-          return commit;
-        },
-      });
+      const commit: typeof kernel.commit = (input) => {
+        const effect = input.actions[0]?.effect.value;
+        if (
+          effect === null || typeof effect !== "object" ||
+          Array.isArray(effect) || effect.inboxKind !== "interrupt"
+        ) return kernel.commit(input);
+        commits += 1;
+        if (commits > 1) return kernel.commit(input);
+        const row = kernel.row(id);
+        return Effect.fail(new CommitRefused({
+          sessionId: id, reason,
+          expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
+          fence: input.fence, currentFence: row.leaseFence,
+        }));
+      };
+      return { ...kernel, commit };
     });
     try {
       if (reason === "revision") {
@@ -121,18 +117,7 @@ test("live approval readiness notifies the facade and arms its deadline", async 
   });
   const plane = await planeOf(running.runtime);
   expect(
-    plane.catalog.policies.append({
-      name: "index-approval",
-      kind: "tool",
-      phase: "pre",
-      generation: 1,
-      priority: 2000,
-      match: { encodingVersion: 1, value: { op: "B" } },
-      verdict: {
-        encodingVersion: 1,
-        value: { type: "require_approval", reason: "owner" },
-      },
-    }),
+    plane.catalog.policies.append(approvalPolicy("index-approval")),
   ).toBe(true);
   const waiting = Promise.withResolvers<{
     readonly handle: AppSessionHandle;

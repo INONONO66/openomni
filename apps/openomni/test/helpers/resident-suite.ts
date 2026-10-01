@@ -44,15 +44,15 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
     const failures: Error[] = [];
     // Every owner gets a disposal attempt; no later failure replaces an earlier one.
     async function attempt(dispose: () => Promise<void> | void) {
-      try {
-        await dispose();
-      } catch (error) {
-        failures.push(
-          error instanceof Error
-            ? error
-            : new Error("non-Error cleanup rejection", { cause: error }),
-        );
-      }
+      await Promise.resolve()
+        .then(dispose)
+        .catch((error: Error | symbol) => {
+          failures.push(
+            error instanceof Error
+              ? error
+              : new Error("non-Error cleanup rejection", { cause: error }),
+          );
+        });
     }
     await Promise.all(sockets.splice(0).map((ws) => attempt(() => closeSocket(ws))));
     for (const dispose of disposers.splice(0).reverse()) await attempt(dispose);

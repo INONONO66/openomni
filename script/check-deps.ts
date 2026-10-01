@@ -3,6 +3,8 @@ import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { z } from "zod";
+import { PlainValueSchema } from "../packages/protocol/src/json.js";
+import { commandOutput } from "./command-output";
 import { runScriptMain } from "./main-runner";
 import { assertTopologyComplete, TOPOLOGY, type WorkspaceTopology } from "./topology";
 
@@ -13,8 +15,6 @@ type PackageRule = {
   allowedDeps: "none" | "any-except-self" | Set<string>;
   srcAllowedDeps?: Set<string>;
 };
-
-const SHOW_FIX_SUGGESTIONS = Bun.argv.includes("--fix-suggestions");
 
 /** Barrel-only cross-package import specifier, shared by both direction checks. */
 const openomniBarrelImportPattern = () =>
@@ -45,8 +45,13 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
-const JsonObject = z.record(z.string(), z.json());
-type JsonObject = z.infer<typeof JsonObject>;
+const Manifest = z.object({
+  dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
+  peerDependencies: z.record(z.string(), z.string()).optional(),
+  optionalDependencies: z.record(z.string(), z.string()).optional(),
+}).catchall(PlainValueSchema);
+type Manifest = z.infer<typeof Manifest>;
 
 /** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
 function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
@@ -55,10 +60,6 @@ function isAllowedSourceDep(rule: PackageRule, dep: string): boolean {
 }
 
 function isAllowedDep(rule: PackageRule, dep: string): boolean {
-  if (!dep.startsWith("@openomni/")) {
-    return true;
-  }
-
   if (rule.allowedDeps === "none") {
     return false;
   }
@@ -70,7 +71,7 @@ function isAllowedDep(rule: PackageRule, dep: string): boolean {
   return rule.allowedDeps.has(dep);
 }
 
-async function readJson(path: string): Promise<JsonObject> {
+async function readJson(path: string): Promise<Manifest> {
   const file = Bun.file(path);
   const exists = await file.exists();
 
@@ -79,10 +80,10 @@ async function readJson(path: string): Promise<JsonObject> {
   }
 
   const text = await file.text();
-  return JsonObject.parse(JSON.parse(text));
+  return Manifest.parse(JSON.parse(text));
 }
 
-function collectOpenOmniDeps(pkg: JsonObject): string[] {
+function collectOpenOmniDeps(pkg: Manifest): string[] {
   const deps = new Set<string>();
 
   for (const field of DEP_FIELDS) {
@@ -167,7 +168,7 @@ type ScannedSource = { filePath: string; source: string };
  * rule, one read. Every validator below consumes this instead of repeating the
  * scan options.
  */
-async function* scanRepositorySources(pattern: string, root = "."): AsyncGenerator<ScannedSource> {
+async function* scanRepositorySources(pattern: string, root = "."): AsyncGenerator<ScannedSource, void, void> {
   const sourceGlob = new Glob(pattern);
 
   for await (const filePath of sourceGlob.scan({
@@ -708,44 +709,45 @@ async function validateDeepImports(): Promise<string[]> {
   const importPattern =
     /(?:from\s+|import\s+|import\s*\(\s*)["'](@openomni\/[^"']+\/src\/[^"']*)["']/g;
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
-    for (const match of source.matchAll(importPattern)) {
-      const importPath = match[1] as string;
-      const line = lineNumberForOffset(source, match.index);
-      const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
-
-      if (SHOW_FIX_SUGGESTIONS) {
-        const suggested = suggestBarrelImport(importPath);
-        violations.push(`${base} (suggestion: ${suggested})`);
-      } else {
-        violations.push(base);
-      }
+  for await (const { filePath, importPath, line } of scannedImports(importPattern)) {
+    const base = `VIOLATION: ${filePath}:${line} imports ${importPath} — use package barrel instead`;
+    if (Bun.argv.includes("--fix-suggestions")) {
+      const suggested = suggestBarrelImport(importPath);
+      violations.push(`${base} (suggestion: ${suggested})`);
+    } else {
+      violations.push(base);
     }
   }
 
   return violations;
 }
 
+async function* scannedImports(pattern: RegExp): AsyncGenerator<{
+  filePath: string;
+  importPath: string;
+  line: number;
+}, void, void> {
+  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
+    for (const match of source.matchAll(pattern)) {
+      const importPath = match[1];
+      if (importPath === undefined) continue;
+      yield { filePath, importPath, line: lineNumberForOffset(source, match.index) };
+    }
+  }
+}
+
 async function validateDeepRelativeImports(): Promise<string[]> {
   const violations: string[] = [];
   const importPattern = /(?:from\s+|import\s*\(\s*)["'](\.{2}\/[^"']*)["']/g;
 
-  for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
-    for (const match of source.matchAll(importPattern)) {
-      const importPath = match[1] as string;
-      const line = lineNumberForOffset(source, match.index);
-      const isSelfRootImport = importPath.startsWith("../../src/");
-      const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
-
-      if (!isSelfRootImport && !isDeepRelativeImport) {
-        continue;
-      }
-
-      const reason = isSelfRootImport ? "self-root relative import" : "deep relative import";
-      violations.push(
-        `VIOLATION: ${filePath}:${line} imports ${importPath} — ${reason}; use a closer relative import or a domain barrel`,
-      );
-    }
+  for await (const { filePath, importPath, line } of scannedImports(importPattern)) {
+    const isSelfRootImport = importPath.startsWith("../../src/");
+    const isDeepRelativeImport = parentTraversalDepth(importPath) >= 3;
+    if (!isSelfRootImport && !isDeepRelativeImport) continue;
+    const reason = isSelfRootImport ? "self-root relative import" : "deep relative import";
+    violations.push(
+      `VIOLATION: ${filePath}:${line} imports ${importPath} — ${reason}; use a closer relative import or a domain barrel`,
+    );
   }
 
   return violations;
@@ -815,23 +817,16 @@ const TRACKED_DOCS = [
 const STALE_THRESHOLD = 50; // commits since last modification
 
 async function gitOutput(args: readonly string[]): Promise<string> {
-  const proc = Bun.spawn({
-    cmd: ["git", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  const { stdout, stderr, exitCode } = await commandOutput(["git", ...args]);
   if (exitCode !== 0) {
     throw new Error(`git ${args.join(" ")} failed (${exitCode}): ${stderr.trim() || "no stderr"}`);
   }
   return stdout;
 }
 
-async function checkDocFreshness(): Promise<string[]> {
+export async function checkDocFreshness(
+  readHistory: (args: readonly string[]) => Promise<string> = gitOutput,
+): Promise<string[]> {
   const warnings: string[] = [];
 
   for (const docPath of TRACKED_DOCS) {
@@ -843,11 +838,11 @@ async function checkDocFreshness(): Promise<string[]> {
 
     try {
       // Empty hash means no git history (untracked or new file).
-      const lastTouchHash = (await gitOutput(["log", "-1", "--format=%H", "--", docPath])).trim();
+      const lastTouchHash = (await readHistory(["log", "-1", "--format=%H", "--", docPath])).trim();
       if (!lastTouchHash) continue;
 
       const commitsSince = Number.parseInt(
-        (await gitOutput(["rev-list", "--count", `${lastTouchHash}..HEAD`])).trim(),
+        (await readHistory(["rev-list", "--count", `${lastTouchHash}..HEAD`])).trim(),
         10,
       );
 
@@ -856,9 +851,8 @@ async function checkDocFreshness(): Promise<string[]> {
           `STALE: ${docPath} — last updated ${commitsSince} commits ago (threshold: ${STALE_THRESHOLD})`,
         );
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      warnings.push(`WARNING: doc freshness unavailable for ${docPath}: ${message}`);
+    } catch {
+      warnings.push(`WARNING: doc freshness unavailable for ${docPath}`);
     }
   }
 
@@ -874,7 +868,7 @@ async function checkDocFreshness(): Promise<string[]> {
  * forbids is exactly the thing the manifest still permits. That is the shape
  * of a decorative gate, which is what this file is supposed to prevent.
  */
-function selfTest(): void {
+function selfTest(): number {
   const twoTier: PackageRule = {
     displayName: "self-test",
     packageJsonPath: "",
@@ -883,8 +877,11 @@ function selfTest(): void {
     srcAllowedDeps: new Set(["@openomni/protocol"]),
   };
   const oneTier: PackageRule = { ...twoTier, srcAllowedDeps: undefined };
+  const anyExceptSelf: PackageRule = { ...twoTier, allowedDeps: "any-except-self" };
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/agent")],
+    ["open workspace band rejects its own package", !isAllowedDep(anyExceptSelf, "@openomni/self-test")],
+    ["open workspace band permits another package", isAllowedDep(anyExceptSelf, "@openomni/agent")],
     ["src refuses what only the manifest lists", !isAllowedSourceDep(twoTier, "@openomni/agent")],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
     ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/ledger")],
@@ -1077,17 +1074,18 @@ function selfTest(): void {
   ];
 
   const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
-  if (failed.length > 0) {
-    for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
-    process.exit(1);
-  }
+  for (const name of failed) console.error(`SELF-TEST FAILED: ${name}`);
+  if (failed.length > 0) return 1;
   console.log(`OK: check-deps self-test — ${cases.length} layer discriminations hold`);
-  process.exit(0);
+  return 0;
 }
 
 export async function main(): Promise<void> {
   assertTopologyComplete();
-  if (Bun.argv.includes("--self-test")) selfTest();
+  if (Bun.argv.includes("--self-test")) {
+    process.exitCode = selfTest();
+    return;
+  }
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
   const channelsBandingViolations = await validateChannelsIntraPackageBanding();

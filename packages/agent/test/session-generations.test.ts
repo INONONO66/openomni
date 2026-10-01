@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { AgentGenerationLive } from "./helpers/generation-layer";
 import { createObservationBus } from "../src/observation/bus";
@@ -26,23 +26,34 @@ function bundle(generation: number, closed: number[]): GenerationBundle {
   };
 }
 
+/** One captured-and-retained owner handle outside the capture scope. */
+function retainedOwner(manager: Effect.Success<ReturnType<typeof makeSessionGenerations>>) {
+  return Effect.scoped(Effect.gen(function* () {
+    const captured = yield* manager.capture();
+    const owners = yield* captured.provide(GenerationRawSlots);
+    return { release: captured.retain(), pending: owners.pending };
+  }));
+}
+
 test("drain refuses retained owners and retires every settled generation", () =>
   isolated(Effect.gen(function* () {
     const closed: number[] = [];
     const manager = yield* makeSessionGenerations(bundle(1, closed));
     expect(yield* manager.configure(bundle(2, closed), Effect.succeed("committed"))).toBe("committed");
     expect(closed).toEqual([1]);
-    const retained = yield* Effect.scoped(Effect.gen(function* () {
-      const captured = yield* manager.capture();
-      const owners = yield* captured.provide(GenerationRawSlots);
-      return { release: captured.retain(), pending: owners.pending };
-    }));
+    const retained = yield* retainedOwner(manager);
     try {
       expect(retained.pending()).toBe(1);
-      expect(yield* Effect.result(manager.drain)).toMatchObject({
+      const drained = yield* Effect.result(manager.drain);
+      expect(drained).toMatchObject({
         _tag: "Failure",
         failure: { _tag: "GenerationUnsettled", sessionId: "generation-drain", generation: 2, owners: 1 },
       });
+      if (drained._tag === "Failure" && drained.failure._tag === "GenerationUnsettled") {
+        expect(drained.failure.message).toBe(
+          "session generation-drain generation 2 has 1 live owner(s)",
+        );
+      }
       expect(closed).toEqual([1]);
     } finally {
       retained.release();
@@ -55,5 +66,25 @@ test("drain refuses retained owners and retires every settled generation", () =>
     expect(yield* Effect.result(manager.capture())).toMatchObject({
       _tag: "Failure", failure: { _tag: "GenerationUnavailable", generation: 2 },
     });
+  })),
+);
+
+// W5.2 S4: `settle` waits for live owners without flipping `stopping`, so a
+// shutdown that interrupts turns first can hand a clean zero-owner state to
+// the fail-fast drain. The join can only complete after the release.
+test("settle awaits a retained owner and completes exactly when it releases", () =>
+  isolated(Effect.gen(function* () {
+    const closed: number[] = [];
+    const manager = yield* makeSessionGenerations(bundle(1, closed));
+    const retained = yield* retainedOwner(manager);
+    expect(retained.pending()).toBe(1);
+    const settling = yield* Effect.forkScoped(manager.settle);
+    // Let the settle fiber run to its owner subscription before releasing.
+    yield* Effect.yieldNow;
+    retained.release();
+    yield* Fiber.join(settling);
+    expect(retained.pending()).toBe(0);
+    yield* manager.drain;
+    expect(closed).toEqual([1]);
   })),
 );

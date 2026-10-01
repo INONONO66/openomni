@@ -23,6 +23,14 @@ const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().ke
 const context = { sessionId: fiberSessionId, turnId: `${fiberSessionId}:turn` };
 const request = (op: string) => ({ kind: "tool", op, intent: {}, effect: { category: "query" } });
 const awaitSignal = <A, E>(signal: Deferred.Deferred<A, E>) => Deferred.await(signal).pipe(Effect.timeout("5 seconds"));
+const toolFailureResult = z.object({
+  phase: z.literal("result"),
+  evidence: z.object({ failures: z.array(z.object({ tag: z.string() })) }),
+});
+const interruptedToolResult = z.object({
+  callId: z.string(),
+  evidence: z.object({ interrupted: z.boolean() }),
+});
 function failure<A, E>(exit: Exit.Exit<A, E>): E | undefined {
   return Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
 }
@@ -56,6 +64,34 @@ function setup(definitions: readonly AnyToolDefinition[], signal?: AbortSignal) 
   });
 }
 
+function detachedRequestCase(rejectBody: boolean, reason: "settled" | "failed") {
+  return isolated(Effect.gen(function* () {
+    const ready = yield* Deferred.make<readonly Effect.Effect<PlainValue, ExecutionError>[]>();
+    let bodies = 0;
+    const fixture = yield* setup([
+      tool("outer", async () => {
+        const frame = currentInvocation();
+        Deferred.doneUnsafe(ready, Exit.succeed([
+          frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
+          frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
+        ]));
+        if (rejectBody) throw new Error("outer-rejected");
+        return "settled";
+      }),
+      tool("inner", async () => { bodies += 1; return "forbidden"; }),
+    ]);
+    if (rejectBody)
+      expect(yield* fixture.run).toMatchObject({ isError: true, errorKind: "execution_failed", output: "Error: outer-rejected" });
+    else expect(yield* fixture.run).toMatchObject({ output: "settled" });
+    const pending = yield* awaitSignal(ready);
+    const before = sessionTree(fiberSessionId);
+    for (const work of pending)
+      expect(failure(yield* Effect.exit(work))).toMatchObject({ _tag: "InvocationClosed", tool: "outer", reason });
+    expect(bodies).toBe(0);
+    expect(sessionTree(fiberSessionId)).toEqual(before);
+  }));
+}
+
 test("bridge: nested failure in an admitted async body preserves its typed outcome, not ForeignFailure", () => isolated(Effect.gen(function* () {
   const observed = yield* Deferred.make<Exit.Exit<ExecutionResult, ExecutionError>>();
   const fixture = yield* setup([tool("outer", async () => {
@@ -69,10 +105,13 @@ test("bridge: nested failure in an admitted async body preserves its typed outco
   const result = yield* awaitSignal(observed);
   expect(failure(result)).toMatchObject({ _tag: "ToolBodyFailed", tool: "nested", cause: "nested-outcome" });
   expect(failure(result)).not.toMatchObject({ _tag: "ForeignFailure" });
-  expect(sessionTree(fiberSessionId).filter((action: LedgerAction.Node) => action.kind === "tool").map(effectValue))
-    .toContainEqual(expect.objectContaining({ phase: "result", evidence: expect.objectContaining({
-      failures: [expect.objectContaining({ tag: "ToolBodyFailed" })],
-    }) }));
+  const failures = sessionTree(fiberSessionId)
+    .filter((action: LedgerAction.Node) => action.kind === "tool")
+    .map(effectValue)
+    .map((value) => toolFailureResult.safeParse(value))
+    .filter((parsed) => parsed.success)
+    .flatMap((parsed) => parsed.data.evidence.failures);
+  expect(failures.some((entry) => entry.tag === "ToolBodyFailed")).toBe(true);
 })));
 
 test("bridge: two concurrent nested calls resolve independently in call order", () => isolated(Effect.gen(function* () {
@@ -166,55 +205,22 @@ test("bridge: cancel-before-reply interrupts the body and late nested reply perf
   yield* Scope.close(fixture.captureScope, Exit.void);
   yield* fixture.slots.awaitSettled.pipe(Effect.timeout("5 seconds"));
   expect(sessionTree(fiberSessionId)).toEqual(before);
-  expect(before.filter((action: LedgerAction.Node) => action.kind === "tool" && effectValue(action).phase === "result")
-    .map(effectValue)).toContainEqual(expect.objectContaining({ callId: "outer", evidence: expect.objectContaining({ interrupted: true }) }));
+  const interruptedResults = before
+    .filter((action: LedgerAction.Node) => action.kind === "tool" && effectValue(action).phase === "result")
+    .map(effectValue)
+    .map((value) => interruptedToolResult.safeParse(value))
+    .filter((parsed) => parsed.success)
+    .map((parsed) => parsed.data);
+  expect(interruptedResults).toContainEqual({ callId: "outer", evidence: { interrupted: true } });
   expect(before.filter((action: LedgerAction.Node) => action.kind === "tool" && effectValue(action).phase === "result")
     .map(effectValue)).not.toContainEqual(expect.objectContaining({ callId: "nested", terminal: "executed" }));
 })));
 
-test("bridge: detached late requests after settle fail with InvocationClosed and execute nothing", () => isolated(Effect.gen(function* () {
-  const ready = yield* Deferred.make<readonly Effect.Effect<PlainValue, ExecutionError>[]>();
-  let bodies = 0;
-  const fixture = yield* setup([
-    tool("outer", async () => {
-      const frame = currentInvocation();
-      Deferred.doneUnsafe(ready, Exit.succeed([
-        frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
-        frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
-      ]));
-      return "settled";
-    }),
-    tool("inner", async () => { bodies += 1; return "forbidden"; }),
-  ]);
-  expect(yield* fixture.run).toMatchObject({ output: "settled" });
-  const pending = yield* awaitSignal(ready);
-  const before = sessionTree(fiberSessionId);
-  for (const work of pending) expect(failure(yield* Effect.exit(work))).toMatchObject({ _tag: "InvocationClosed", tool: "outer", reason: "settled" });
-  expect(bodies).toBe(0);
-  expect(sessionTree(fiberSessionId)).toEqual(before);
-})));
+test("bridge: detached late requests after settle fail with InvocationClosed and execute nothing", () =>
+  detachedRequestCase(false, "settled"));
 
-test("bridge: detached late requests after a rejected body fail with InvocationClosed reason failed", () => isolated(Effect.gen(function* () {
-  const ready = yield* Deferred.make<readonly Effect.Effect<PlainValue, ExecutionError>[]>();
-  let bodies = 0;
-  const fixture = yield* setup([
-    tool("outer", async () => {
-      const frame = currentInvocation();
-      Deferred.doneUnsafe(ready, Exit.succeed([
-        frame.executor.run(request("detached"), () => Effect.sync(() => { bodies += 1; return "forbidden"; })).pipe(Effect.as("done")),
-        frame.cell.executeCell({ id: "detached-cell", tool: "inner", input: {} }, context).pipe(Effect.as("done")),
-      ]));
-      throw new Error("outer-rejected");
-    }),
-    tool("inner", async () => { bodies += 1; return "forbidden"; }),
-  ]);
-  expect(yield* fixture.run).toMatchObject({ isError: true, errorKind: "execution_failed", output: "Error: outer-rejected" });
-  const pending = yield* awaitSignal(ready);
-  const before = sessionTree(fiberSessionId);
-  for (const work of pending) expect(failure(yield* Effect.exit(work))).toMatchObject({ _tag: "InvocationClosed", tool: "outer", reason: "failed" });
-  expect(bodies).toBe(0);
-  expect(sessionTree(fiberSessionId)).toEqual(before);
-})));
+test("bridge: detached late requests after a rejected body fail with InvocationClosed reason failed", () =>
+  detachedRequestCase(true, "failed"));
 
 test("bridge: a forked invocation owns its lifetime independently of the body view it was forked from", () => isolated(Effect.gen(function* () {
   const frames = yield* Deferred.make<{ readonly view: InvocationFrame; readonly forked: ReturnType<typeof forkInvocation> }>();

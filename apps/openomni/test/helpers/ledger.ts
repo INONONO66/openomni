@@ -1,4 +1,5 @@
 import {
+  adoptSessionAuthority,
   Clock,
   createSessionEntityRunTurn,
   decideSessionAdmission,
@@ -11,7 +12,7 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import type { LedgerError } from "@openomni/ledger";
-import type { Inbox, LedgerAction, SessionTurn } from "@openomni/protocol";
+import type { SessionTurn } from "@openomni/protocol";
 import { Context, Effect, type Scope } from "effect";
 import {
   AppLedger,
@@ -19,7 +20,7 @@ import {
   type AppLedgerPlane,
   type SessionKernel,
 } from "../../src/composition/cluster-runtime";
-import { materializeInboxTarget } from "../../src/composition/message-session";
+import { localInboxCommit } from "../../src/process-entry";
 import type { AppRuntime } from "../../src/runtime";
 import { runRuntimeEffect } from "./effect";
 
@@ -41,79 +42,19 @@ export function adoptTestFence(
   sessionId: string,
   owner: string,
 ): Effect.Effect<number, LedgerError> {
-  const attempt: Effect.Effect<number, LedgerError> = Effect.suspend(() => {
-    const current = kernel.row(sessionId);
-    if (current.leaseOwner === owner) return Effect.succeed(current.leaseFence);
-    return kernel
-      .adoptFence({ sessionId, owner, fence: current.leaseFence + 1 })
-      .pipe(
-        Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => attempt),
-      );
-  });
-  return attempt;
+  return adoptSessionAuthority(kernel, sessionId, owner);
 }
 
 /**
- * A cluster-free inbox commit for fixtures: the historical delivery as one
- * `prompt` chain action under an adopted fence, idempotent on the action id.
- * Mirrors the process child's local delivery (src/process-entry.ts).
+ * A cluster-free inbox commit for fixtures: the process child's own local
+ * delivery (src/process-entry.ts), bound to a fixture plane and owner.
  */
 export function localInbox(
   plane: AppLedgerPlane,
   owner = "test-inbox",
   clock: () => number = () => Date.now(),
 ) {
-  return (input: Inbox.Commit): Effect.Effect<Inbox.Row, ForeignFailure> =>
-    Effect.gen(function* () {
-      yield* materializeInboxTarget(plane, input, clock);
-      const kernel = plane.openKernel(input.sessionId);
-      const asRow = (ordinal: number): Inbox.Row => ({
-        id: input.id,
-        sessionId: input.sessionId,
-        kind: input.kind,
-        content: input.content,
-        origin: input.origin,
-        status: "pending",
-        consumedBy: null,
-        consumedAt: null,
-        createdAt: input.createdAt,
-        ordinal,
-      });
-      const existing = kernel.actionById(input.id);
-      if (existing !== undefined) return asRow(existing.ordinal);
-      const refuse = (error: { readonly _tag: string }) =>
-        new ForeignFailure({ operation: "message.commit", cause: error._tag });
-      const fence = yield* adoptTestFence(kernel, input.sessionId, owner).pipe(
-        Effect.mapError(refuse),
-      );
-      const row = kernel.row(input.sessionId);
-      const action: LedgerAction.Append = {
-        id: input.id,
-        parentId: input.parentActionId,
-        sessionId: input.sessionId,
-        kind: "prompt",
-        intent: input.origin,
-        effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
-        irreversible: true,
-        ts: input.createdAt,
-      };
-      const committed = yield* kernel
-        .commit({
-          sessionId: input.sessionId,
-          owner,
-          fence,
-          now: clock(),
-          expectedRevision: row.revision,
-          actions: [action],
-          state: row.state,
-        })
-        .pipe(Effect.mapError(refuse));
-      const receipt = committed.receipts[0];
-      if (receipt === undefined)
-        return yield* new ForeignFailure({ operation: "message.commit", cause: "no receipt" });
-      return asRow(receipt.action.ordinal);
-    });
+  return localInboxCommit(plane, owner, clock);
 }
 
 export type ResolvedTestRuntime = Parameters<typeof createSessionEntityRunTurn>[1];

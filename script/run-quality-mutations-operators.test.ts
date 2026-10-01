@@ -5,6 +5,12 @@ import { sha256 } from "./run-quality-mutations";
 import { mutationFixture } from "./quality-mutation-fixture";
 const { fixture, invoke, select, record, rows } = mutationFixture("operators");
 
+function baselineReachExit(report: { reachMap?: Parameters<typeof record>[0] }): number | undefined {
+	const reach = record(report.reachMap);
+	const run = rows(reach.runs).map(record)[0];
+	return run?.receipt ? Number(record(run.receipt).exitCode) : undefined;
+}
+
 const families = [
 	{
 		id: "boolean-literal",
@@ -221,8 +227,7 @@ test("optional chain probe keeps skipped key and argument effects lazy", async (
 	// Removing ?. is itself a runtime error, but the ORIGINAL probe must be green.
 	expect(result.code).toBe(2);
 	expect(result.selected[0]?.reason).toBe("failure-without-complete-behavioral-assertions");
-	const reachRuns = rows(record(result.report.reachMap).runs).map(record);
-	expect(reachRuns[0]?.receipt && record(reachRuns[0].receipt).exitCode).toBe(0);
+	expect(baselineReachExit(result.report)).toBe(0);
 }, 90000);
 
 test("ordinary interpolated template has a runtime string mutant", async () => {
@@ -243,7 +248,6 @@ test("tagged template probe preserves tag receiver, raw data and substitutions",
 	const result = await invoke(input, "tagged-template", select("string-literal"));
 	expect(result.code).toBe(0);
 	expect(result.selected[0]?.outcome).toBe("killed");
-	const reachRuns = rows(record(result.report.reachMap).runs).map(record);
-	expect(reachRuns[0]?.receipt && record(reachRuns[0].receipt).exitCode).toBe(0);
+	expect(baselineReachExit(result.report)).toBe(0);
 }, 90000);
 

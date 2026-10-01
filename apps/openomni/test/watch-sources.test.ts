@@ -145,12 +145,13 @@ test("path watch native callback observes a created target", async () => {
       watch: { path, event: "create", description: "native create", persistent: true },
     });
     writeFileSync(path, "created");
-    expect(await created.promise).toMatchObject({
+    const fire = await created.promise;
+    expect(fire).toMatchObject({
       watchId: "watch-create",
-      sourceKey: expect.stringContaining("path:create:"),
       content: JSON.stringify({ path, event: "create" }),
       terminal: false,
     });
+    expect(fire.sourceKey.startsWith("path:create:")).toBe(true);
   } finally {
     await sources.closeAll();
     rmSync(directory, { recursive: true, force: true });
@@ -167,7 +168,11 @@ test("command close accepts EPERM after readback finds no live group members", a
   );
   const spawn = Bun.spawn;
   const epermSpawn = new Proxy(spawn, {
-    apply(target, thisArg, args) {
+    apply(
+      target,
+      thisArg: typeof Bun,
+      args: Parameters<typeof Bun.spawn>,
+    ): ReturnType<typeof Bun.spawn> {
       const [command, options] = args;
       if (Array.isArray(command) && command[0] === "/bin/kill") {
         const pid = command.at(-1);

@@ -1,7 +1,5 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import {
   CommitRefused,
   openCatalogStore,
@@ -12,6 +10,7 @@ import {
 import { Effect } from "effect";
 import { SessionEntity } from "../../src/cluster/session-entity";
 import {
+  clusterTempDir,
   readChain,
   runCluster,
   sendPrompt,
@@ -19,10 +18,7 @@ import {
 } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
-const dir = mkdtempSync(join(tmpdir(), "w52-session-entity-coverage-"));
-const sessionsDir = join(dir, "sessions");
-mkdirSync(sessionsDir, { recursive: true });
-const catalogFile = join(dir, "catalog.sqlite");
+const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-session-entity-coverage-");
 const options = { sessionsDir, catalogFile };
 
 afterAll(() => {

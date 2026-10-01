@@ -363,6 +363,7 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
 
   let dirfd = openFilesystemRoot();
 
+  let walkCompleted = false;
   try {
     while (pending.length > 0) {
       const segment = pending[0] as string;
@@ -403,9 +404,9 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
       release();
       dirfd = openFilesystemRoot();
     }
-  } catch (error) {
-    release();
-    throw error;
+    walkCompleted = true;
+  } finally {
+    if (!walkCompleted) release();
   }
 
   const canonicalPath = sep + traversed.join(sep);
@@ -546,13 +547,15 @@ export function createFsDriver(
 ): Effect.Effect<FsDriver, MachineError> {
   return Effect.try({ try: () => {
   const roots = new Map<string, Root>();
+  let rootsOpened = false;
   try {
     for (const [name, configuredRoot] of exports) {
       roots.set(name, openRoot(configuredRoot, testHooks));
     }
-  } catch (error) {
-    for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
-    throw error;
+    rootsOpened = true;
+  } finally {
+    if (!rootsOpened)
+      for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
   }
 
   let closed = false;

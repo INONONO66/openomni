@@ -5,6 +5,7 @@ import { isolatedLedger } from "./helpers/isolated";
 import { sessionTree } from "./helpers/session-tree";
 import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import { openRequest } from "./helpers/open-request";
+import { approvalAnswer, invocationNode } from "./helpers/request-fixtures";
 import {
   canonicalDigest,
   PlainObjectSchema,
@@ -27,28 +28,11 @@ const row: LedgerSession.Row = {
   systemHash: "system",
   policyGeneration: 1,
 };
-const original: LedgerAction.Node = {
-  id: "invocation",
+const original = invocationNode({
   sessionId: "session",
   parentId: null,
-  kind: "tool",
-  ts: 1,
-  ordinal: 1,
-  prevHash: "fixture-prev",
-  actionHash: "fixture-hash",
-  intent: {
-    encodingVersion: 1,
-    value: {
-      phase: "intent",
-      op: "write",
-      value: { path: "original" },
-      effectHash: canonicalDigest({ category: "mutation" }),
-      domainRevisions: { person: 3 },
-    },
-  },
-  effect: { encodingVersion: 1, value: { phase: "pending" } },
-  irreversible: true,
-};
+  domainRevisions: { person: 3 },
+});
 function request(): SessionTransition.Request {
   return openRequest({
     requestId: "invocation",
@@ -60,22 +44,7 @@ function request(): SessionTransition.Request {
   });
 }
 function answer(pending = request()): SessionTransition.Answer {
-  return {
-    inputId: "answer",
-    requestId: pending.requestId,
-    sessionId: pending.sessionId,
-    receivedAt: 20,
-    principal: { kind: "owner", principalId: "owner", evidenceId: "authenticated" },
-    bindingDigest: pending.bindingDigest,
-    inputHash: pending.inputHash,
-    effectHash: pending.effectHash,
-    generation: pending.generation,
-    toolsHash: pending.toolsHash,
-    domainRevisions: pending.domainRevisions,
-    decision: "approve",
-    allowedAction: "report_result",
-    content: "yes",
-  };
+  return approvalAnswer(pending, "answer", 20);
 }
 function decide(
   payload: SessionTransition.Payload,

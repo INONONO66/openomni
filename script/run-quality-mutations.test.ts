@@ -10,6 +10,13 @@ import { analyze, enumerate, programs, diagnostics, failedAssertions } from "./r
 import { tmpdir } from "node:os";
 import { MutationCompilerWorker } from "./quality-mutation-compiler";
 
+function captureOutput(): { output: string[]; restore: () => void } {
+	const output: string[] = [];
+	const log: (value: string) => void = console.log;
+	console.log = (value: string) => { output.push(value); };
+	return { output, restore: () => { console.log = log; } };
+}
+
 test("switch case reach instrumentation inserts a probe after the label", () => {
 	const source = "switch (value) { case 1: return true; default: return false; }";
 	const directory = mkdtempSync(join(tmpdir(), "mutation-case-instrument-"));
@@ -576,9 +583,7 @@ test("campaign runs baseline, mutant, restoration and JSON receipt in process", 
 	const external = await invoke(input, "in-process-reference", select("boolean-literal"));
 	assertBehavioralKill(external);
 	const argv = rows(evidence.at(-1)?.argv).map(String).slice(2);
-	const output: string[] = [];
-	const log: (value: string) => void = console.log;
-	console.log = (value: string) => { output.push(value); };
+	const { output, restore } = captureOutput();
 	try {
 		expect(await main(argv)).toBe(0);
 		const report = record(decode(output.join("")));
@@ -590,7 +595,7 @@ test("campaign runs baseline, mutant, restoration and JSON receipt in process", 
 		expect(batches).toHaveLength(2);
 		expect(batches.every((batch) => record(batch.process).timedOut === false)).toBe(true);
 		expect(reportResults(report)[0]?.outcome).toBe("killed");
-	} finally { console.log = log; }
+	} finally { restore(); }
 }, 90000);
 
 test("reach discovery follows baseline execution across package ignore rules", async () => {
@@ -1037,16 +1042,14 @@ test("red baseline names its failing testcases and unexplained process exits", a
 	expect(rows(assertion.report.errors)).toEqual([expect.stringMatching(identity)]);
 	// The same campaign in process: the red branch of campaign() logs every identity natively.
 	const argv = rows(evidence.at(-1)?.argv).map(String).slice(2);
-	const output: string[] = [];
-	const log: (value: string) => void = console.log;
-	console.log = (value: string) => { output.push(value); };
+	const { output, restore } = captureOutput();
 	const written = spyOn(process.stderr, "write");
 	let red: string[] = [];
 	try {
 		expect(await main(argv)).toBe(2);
 		red = written.mock.calls.map((call) => String(call[0])).filter((chunk) => chunk.startsWith("[mutation] baseline red: "));
 	} finally {
-		console.log = log;
+		restore();
 		written.mockRestore();
 	}
 	const report = record(decode(output.join("")));

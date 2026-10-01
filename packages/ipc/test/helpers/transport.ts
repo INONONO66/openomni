@@ -26,10 +26,13 @@ export async function connectRaw(path: string): Promise<net.Socket> {
     socket.once("error", reject);
   });
   socket.connect(path);
-  try {
-    return await within(connected, "raw socket connection");
-  } catch (error) {
-    socket.destroy();
-    throw error;
-  }
+  let connectionSucceeded = false;
+  return within(connected, "raw socket connection")
+    .then((value) => {
+      connectionSucceeded = true;
+      return value;
+    })
+    .finally(() => {
+      if (!connectionSucceeded) socket.destroy();
+    });
 }

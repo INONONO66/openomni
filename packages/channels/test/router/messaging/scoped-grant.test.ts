@@ -1,12 +1,8 @@
 import { ledger } from "../../helpers/ledger";
-import { channelRequests } from "../../helpers/channel-requests";
-import { channelTransaction } from "../../helpers/channel-transaction";
 import { runEffect } from "../../helpers/effect";
-import { seededRequests } from "../../helpers/requests";
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Gateway } from "@openomni/protocol";
 
-import { Bus } from "../../helpers/observation";
 import {
   deliverySurfaceKey,
   hasScopedSenderTargetCandidate,
@@ -17,9 +13,9 @@ import {
   expectDenied,
   buildSendInput,
   messagingNow,
-  registerAgentFixture,
 } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
+import { registerSenderAndTarget, sendPorts } from "./_send-fixture";
 
 /**
  * #708 scope-aware grant arm: a rule-materialized (reply-scoped) instance is
@@ -106,15 +102,12 @@ describe("send kernel over reply-scoped instances", () => {
 
   function messaging() {
     return createExistingAgentMessaging({
-      requests: channelRequests(seededRequests()),
-      stores: ledger().stores,
-    transaction: channelTransaction,
+      ...sendPorts(),
       deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };
       },
       grants: () => grants,
-      publish: Bus.publish,
     });
   }
 
@@ -122,9 +115,8 @@ describe("send kernel over reply-scoped instances", () => {
     resetStores();
     delivered = [];
     grants = [scopedInstance()];
-    registerAgentFixture("actor:sender");
     // channel "qa", externalId "target-1" → surface key "qa:target-1".
-    registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
+    registerSenderAndTarget();
   });
 
   test("a send into the initiating container is granted by the scoped instance", async () => {

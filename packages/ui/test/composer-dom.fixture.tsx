@@ -1,13 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
-
-// React DOM caches input-event support at import time. Register the DOM first.
-GlobalRegistrator.register();
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const { act } = await import("react");
-const { createRoot } = await import("react-dom/client");
-const { Composer } = await import("../src/composer");
-afterAll(() => GlobalRegistrator.unregister());
+import { act, Composer, createRoot, unregisterDom } from "./dom-runtime";
+afterAll(unregisterDom);
 
 test("mounted composer dispatches input, send, stop and approval actions", async () => {
   const host = document.createElement("div");

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PlainValueSchema } from "../json.js";
 import { BusEvent } from "../bus/index.js";
 import { EpochMs } from "../time.js";
 
@@ -6,7 +7,7 @@ const Base = z.object({
   traceId: z.string(),
   sessionId: z.string(),
   runId: z.string().optional(),
-  actor: z.record(z.string(), z.unknown()).optional(),
+  actor: z.record(z.string(), PlainValueSchema).optional(),
   toolCallId: z.string(),
   toolName: z.string(),
   time: EpochMs,

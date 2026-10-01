@@ -144,7 +144,7 @@ describe("tool body outcomes", () => {
   it("forwards the caller's abort reason into a timed body's signal", async () => {
     const caller = new AbortController();
     const bodyEntered = Promise.withResolvers<void>();
-    let seenReason: Error | undefined;
+    let sawCallerReason = false;
     const dispatcher = runAgentSync(createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(Effect.provide(catalogLayer([
         tool("abortable", (_input, { signal }) => {
           bodyEntered.resolve();
@@ -152,8 +152,9 @@ describe("tool body outcomes", () => {
             signal.addEventListener(
               "abort",
               () => {
-                seenReason = signal.reason;
-                reject(signal.reason);
+                expect(() => signal.throwIfAborted()).toThrow("caller aborted");
+                sawCallerReason = true;
+                reject(new Error("aborted"));
               },
               { once: true },
             );
@@ -168,7 +169,7 @@ describe("tool body outcomes", () => {
       caller.abort(reason);
       return yield* Fiber.join(fiber);
     }));
-    expect(seenReason?.message).toBe("caller aborted");
+    expect(sawCallerReason).toBe(true);
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   });
 

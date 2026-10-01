@@ -4,25 +4,22 @@
 // proofs: C1 single-writer FIFO and A17 whole-backlog drain (F4).
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { SessionHandleStore } from "@openomni/ledger";
-import {
-  canonicalDigest,
-  type Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type SessionTransition,
-} from "@openomni/protocol";
+import { rmSync } from "node:fs";
+import type { Inbox, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { Effect } from "effect";
 import {
   decideRequestTransition,
   decideSessionAdmission,
-  requestBindingDigest,
 } from "../../src/index";
-import { turnIntentAction, turnTerminalAction } from "../../src/session-record";
 import {
+  fixtureOpenTurn,
+  fixtureTerminal,
+  fixtureTurn,
+} from "../helpers/open-turn-fixture";
+import { openRequest } from "../helpers/open-request";
+import { approvalAnswer, invocationNode } from "../helpers/request-fixtures";
+import {
+  clusterTempDir,
   readChain,
   runCluster,
   type TestTurnInput,
@@ -57,61 +54,10 @@ function sessionRow(state: LedgerSession.State): LedgerSession.Row {
   };
 }
 
-const generation = SessionHandleStore.generationSnapshot({
-  generation: 1,
-  revertTo: 0,
-  tools: [],
-  system: { preset: "", blocks: [] },
-  policyGeneration: 1,
-});
+const turn = fixtureTurn;
+const open: OpenTurn = fixtureOpenTurn;
 
-function node(action: LedgerAction.Append): LedgerAction.Node {
-  return { ...action, ordinal: 1, prevHash: "prev", actionHash: "hash" };
-}
-
-const turn = node(
-  turnIntentAction({
-    id: "T",
-    parentId: null,
-    sessionId: "S",
-    resultId: "R",
-    inboxIds: [],
-    generation,
-    resumeCount: 0,
-    boundaryActionId: null,
-    at: 1,
-  }),
-);
-
-const open: OpenTurn = {
-  turnId: "T",
-  resultId: "R",
-  resumeCount: 0,
-  boundaryActionId: null,
-  action: turn,
-  toolsGeneration: 1,
-  toolsHash: generation.toolsHash,
-  systemHash: generation.systemHash,
-  policyGeneration: 1,
-};
-
-function terminal(kind: "result" | "interrupted"): TurnTerminal {
-  const action = node(
-    turnTerminalAction({
-      id: "R",
-      parentId: "T",
-      sessionId: "S",
-      turnId: "T",
-      result: { kind, text: "" },
-      resumeCount: 0,
-      boundaryActionId: null,
-      at: 2,
-    }),
-  );
-  const effect = SessionHandleStore.turnTerminal(action);
-  if (effect === undefined) throw new Error("invalid terminal fixture");
-  return { action, effect };
-}
+const terminal: (kind: "result" | "interrupted") => TurnTerminal = fixtureTerminal;
 
 let itemSequence = 0;
 function item(kind: Inbox.Kind, sessionId = "S"): Inbox.Row {
@@ -335,82 +281,16 @@ describe("Table A: admission decisions over the chain-derived pending set", () =
 const requestRow = sessionRow("running");
 
 function makeRequest(): SessionTransition.Request {
-  const parsedInput = { path: "original" };
-  const request: SessionTransition.Request = {
+  return openRequest({
     requestId: "invocation",
     sessionId: requestRow.id,
     turnId: "T",
     callId: "call",
-    mode: "approval",
-    parsedInput,
-    inputHash: canonicalDigest(parsedInput),
-    effectHash: canonicalDigest({ category: "mutation" }),
-    generation: 1,
-    toolsGeneration: 1,
-    toolsHash: "tools",
-    systemHash: "system",
-    domainRevisions: {},
-    deadline: 100,
-    expectedResponders: ["owner"],
-    correlation: {},
-    allowedActions: ["report_result"],
-    resolution: "first",
-    threshold: 1,
-    seenReplyIds: [],
-    replies: [],
-    state: "open",
-    outcome: null,
-    createdAt: 1,
-    bindingDigest: "",
-  };
-  request.bindingDigest = requestBindingDigest(request);
-  return request;
+    parsedInput: { path: "original" },
+  });
 }
 
-const invocation: LedgerAction.Node = {
-  id: "invocation",
-  sessionId: requestRow.id,
-  parentId: "T",
-  kind: "tool",
-  ts: 1,
-  ordinal: 1,
-  prevHash: "fixture-prev",
-  actionHash: "fixture-hash",
-  intent: {
-    encodingVersion: 1,
-    value: {
-      phase: "intent",
-      op: "write",
-      value: { path: "original" },
-      effectHash: canonicalDigest({ category: "mutation" }),
-    },
-  },
-  effect: { encodingVersion: 1, value: { phase: "pending" } },
-  irreversible: true,
-};
-
-function approvalAnswer(
-  pending: SessionTransition.Request,
-  inputId: string,
-  receivedAt: number,
-): SessionTransition.Answer {
-  return {
-    inputId,
-    requestId: pending.requestId,
-    sessionId: pending.sessionId,
-    receivedAt,
-    principal: { kind: "owner", principalId: "owner", evidenceId: "authenticated" },
-    bindingDigest: pending.bindingDigest,
-    inputHash: pending.inputHash,
-    effectHash: pending.effectHash,
-    generation: pending.generation,
-    toolsHash: pending.toolsHash,
-    domainRevisions: pending.domainRevisions,
-    decision: "approve",
-    allowedAction: "report_result",
-    content: "yes",
-  };
-}
+const invocation = invocationNode({ sessionId: requestRow.id, parentId: "T" });
 
 interface RequestItem {
   readonly id: string;
@@ -561,10 +441,7 @@ describe("Table B: request commands in FIFO order keep the W1 resolutions", () =
 // Integration on the real entity: C1 single-writer FIFO + A17 backlog drain.
 // ---------------------------------------------------------------------------
 
-const dir = mkdtempSync(join(tmpdir(), "w52-entity-admission-"));
-const sessionsDir = join(dir, "sessions");
-mkdirSync(sessionsDir, { recursive: true });
-const catalogFile = join(dir, "catalog.sqlite");
+const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-entity-admission-");
 
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });

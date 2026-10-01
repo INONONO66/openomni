@@ -6,9 +6,7 @@ import { useSqliteStores } from "../helpers/storage";
 describe("ActorRegistry SQLite persistence", () => {
   const stores = useSqliteStores("actor-registry");
   const registry = () => createActorRegistry(stores.catalog);
-
-  test("resolves registered endpoints across storage re-init", () => {
-    // Given
+  const registerOwnerEndpoint = () => {
     registry().registerIdentity({
       id: "act_owner",
       kind: "human",
@@ -21,6 +19,11 @@ describe("ActorRegistry SQLite persistence", () => {
       externalId: "user-1",
       workspace: "guild",
     });
+  };
+
+  test("resolves registered endpoints across storage re-init", () => {
+    // Given
+    registerOwnerEndpoint();
 
     stores.reopen();
     const resolved = registry().resolveEndpoint("discord", "user-1", "guild");
@@ -86,18 +89,7 @@ describe("ActorRegistry SQLite persistence", () => {
 
   test("rejects duplicate endpoint addresses with different endpoint ids", () => {
     // Given
-    registry().registerIdentity({
-      id: "act_owner",
-      kind: "human",
-      trustTier: "owner",
-    });
-    registry().registerEndpoint({
-      id: "ep_discord_user_1",
-      actorId: "act_owner",
-      channel: "discord",
-      externalId: "user-1",
-      workspace: "guild",
-    });
+    registerOwnerEndpoint();
 
     // When / Then
     expect(() =>
@@ -234,18 +226,7 @@ describe("ActorRegistry SQLite persistence", () => {
 
   test("removing an identity removes its endpoints through SQLite cascade", () => {
     // Given
-    registry().registerIdentity({
-      id: "act_owner",
-      kind: "human",
-      trustTier: "owner",
-    });
-    registry().registerEndpoint({
-      id: "ep_discord_user_1",
-      actorId: "act_owner",
-      channel: "discord",
-      externalId: "user-1",
-      workspace: "guild",
-    });
+    registerOwnerEndpoint();
 
     // When
     registry().removeIdentity("act_owner");

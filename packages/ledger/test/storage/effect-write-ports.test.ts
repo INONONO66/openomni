@@ -55,6 +55,15 @@ function adopt(adapter: L0Adapters) {
   );
 }
 
+function expectUnchanged(
+  f: ReturnType<typeof fixture>,
+  before: ReturnType<L0Adapters["sessions"]["get"]>,
+): void {
+  expect(f.adapter.sessions.get("session")).toEqual(before);
+  expect(sessionTree("session", f.adapter.actions)).toEqual([]);
+  expect(f.observations).toEqual([]);
+}
+
 test("commit refusal is tagged with revision and fence and leaves no partial SQL or observation", () => {
   using db = openLedgerDatabase();
   const f = fixture(db);
@@ -72,9 +81,7 @@ test("commit refusal is tagged with revision and fence and leaves no partial SQL
     fence: 1,
     currentFence: 1,
   });
-  expect(f.adapter.sessions.get("session")).toEqual(before);
-  expect(sessionTree("session", f.adapter.actions)).toEqual([]);
-  expect(f.observations).toEqual([]);
+  expectUnchanged(f, before);
 });
 
 test("a late commit CAS refusal rolls back actions already appended in the same transaction", () => {
@@ -91,9 +98,7 @@ test("a late commit CAS refusal rolls back actions already appended in the same 
     currentFence: 1,
     currentRevision: 0,
   });
-  expect(f.adapter.sessions.get("session")).toEqual(before);
-  expect(sessionTree("session", f.adapter.actions)).toEqual([]);
-  expect(f.observations).toEqual([]);
+  expectUnchanged(f, before);
 });
 
 test("fence adoption races and SQL CAS loss preserve holder and fence in typed refusals", () => {

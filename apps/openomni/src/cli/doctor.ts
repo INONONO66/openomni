@@ -1,4 +1,9 @@
+import { Result } from "effect";
+import { z } from "zod";
 import { assertDeclaredChannelConfig, ConfigurationError, parseWsPort } from "../config";
+
+/** The one failure shape the config gates throw; zod is the narrowing layer for the caught value. */
+const ConfigThrown = z.custom<ConfigurationError>(ConfigurationError.isInstance);
 
 /**
  * Read-only diagnostics. Every fact arrives through `DoctorPorts` so the
@@ -38,16 +43,16 @@ const REQUIRED_KEYS = [
  * one owner instead of deriving a port `start` would never have used.
  */
 async function healthCheck(ports: DoctorPorts): Promise<DoctorCheck> {
-  let port: number;
-  try {
-    port = parseWsPort(ports.effectiveEnv.get("OPENOMNI_WS_PORT"));
-  } catch (error) {
-    if (!ConfigurationError.isInstance(error)) throw error;
+  const port = Result.try({
+    try: () => parseWsPort(ports.effectiveEnv.get("OPENOMNI_WS_PORT")),
+    catch: ConfigThrown.parse,
+  });
+  if (Result.isFailure(port)) {
     // A value that would make `start` throw is the operator's real problem;
     // probing some substituted port would hide that boot failure.
-    return { name: "health", status: "fail", detail: error.data.message };
+    return { name: "health", status: "fail", detail: port.failure.data.message };
   }
-  if (port === 0) {
+  if (port.success === 0) {
     // An ephemeral bind has no port known before the daemon picks one;
     // guessing one resurrects the false failure this check exists to avoid.
     return {
@@ -56,8 +61,9 @@ async function healthCheck(ports: DoctorPorts): Promise<DoctorCheck> {
       detail: "ephemeral WS port (OPENOMNI_WS_PORT=0) — health probe skipped",
     };
   }
-  const url = `http://127.0.0.1:${port}/health`;
-  if (await ports.probeHealth(port)) return { name: "health", status: "pass", detail: `${url} ok` };
+  const url = `http://127.0.0.1:${port.success}/health`;
+  if (await ports.probeHealth(port.success))
+    return { name: "health", status: "pass", detail: `${url} ok` };
   return {
     name: "health",
     status: ports.daemonActive ? "fail" : "warn",
@@ -87,11 +93,12 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
       : { name: "model config", status: "fail", detail: `missing ${missing.join(", ")}` },
   );
 
-  try {
-    assertDeclaredChannelConfig(Object.fromEntries(ports.effectiveEnv));
-  } catch (error) {
-    if (!ConfigurationError.isInstance(error)) throw error;
-    checks.push({ name: "channel config", status: "fail", detail: error.data.message });
+  const channelConfig = Result.try({
+    try: () => assertDeclaredChannelConfig(Object.fromEntries(ports.effectiveEnv)),
+    catch: ConfigThrown.parse,
+  });
+  if (Result.isFailure(channelConfig)) {
+    checks.push({ name: "channel config", status: "fail", detail: channelConfig.failure.data.message });
   }
 
   if (ports.unitInstalled) {

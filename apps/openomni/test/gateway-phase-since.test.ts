@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { canonicalDigest, type LedgerAction, type LedgerSession } from "@openomni/protocol";
+import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { adoptWriter, materializeSession } from "../../../packages/ledger/test/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { readSessionCursor } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";
 import { runSyncEffect } from "./helpers/scoped-effect";
+import { turnIntentAction as intentFor } from "./helpers/turn-intent";
 
 const SESSION = "phase-since";
 
@@ -14,41 +15,8 @@ function readPhase(kernel: SessionKernel): { phase: string; phaseSince: number }
   return { phase: response.phase, phaseSince: response.phaseSince };
 }
 
-function turnIntentAction(kernel: SessionKernel, id: string, ts: number): LedgerAction.Append {
-  const generation = kernel.latestGenerationFor(SESSION);
-  return {
-    id,
-    parentId: `${SESSION}:configure`,
-    sessionId: SESSION,
-    kind: "turn",
-    intent: {
-      encodingVersion: 1,
-      value: {
-        phase: "intent",
-        resultId: `${id}:result`,
-        inboxIds: [],
-        resumeCount: 0,
-        boundaryActionId: null,
-        toolsGeneration: generation.generation,
-        toolsHash: generation.toolsHash,
-        systemHash: generation.systemHash,
-        policyGeneration: generation.policyGeneration,
-        context: {
-          snapshotActionId: id,
-          sourceRevision: kernel.row(SESSION).revision,
-          foldVersion: 1,
-          projectionHash: canonicalDigest([]),
-          messageIds: [],
-          successorActionId: null,
-          projection: [],
-        },
-      },
-    },
-    effect: { encodingVersion: 1, value: { phase: "pending" } },
-    irreversible: true,
-    ts,
-  };
-}
+const turnIntentAction = (kernel: SessionKernel, id: string, ts: number) =>
+  intentFor(kernel, SESSION, id, ts);
 
 function turnTerminalAction(
   turnId: string,

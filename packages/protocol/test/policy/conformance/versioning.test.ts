@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { policyKernelVersion } from "../../../src/policy/definition.js";
 import { Policy } from "../../../src/policy/index.js";
+import type { JsonShapedValue } from "../../../src/json.js";
 
 type PolicyPointContract =
   (typeof Policy.PolicyPoint.Registry)[keyof typeof Policy.PolicyPoint.Registry];
@@ -10,7 +11,7 @@ type DecisionReplayFixture = {
   readonly policyKernelVersion: number;
   readonly policyPoint: PolicyPointContract;
   readonly resource: Policy.Resource.Descriptor;
-  readonly decision: unknown;
+  readonly decision: JsonShapedValue;
 };
 
 type ReplayResult = {
@@ -93,52 +94,50 @@ function getCurrentContract(id: string): PolicyPointContract | undefined {
   return Object.values(Policy.PolicyPoint.Registry).find((contract) => contract.id === id);
 }
 
-function requireCurrentPolicyPointContract(
+// Result-shaped instead of throwing: keeps the migration error typed end to
+// end (a catch binding is forced to `unknown`).
+type ReplayOutcome = { ok: true; result: ReplayResult } | { ok: false; error: PolicyFixtureMigrationError };
+
+function currentContractMigrationError(
   fixtureName: string,
   contract: PolicyPointContract,
-): PolicyPointContract {
+): PolicyFixtureMigrationError | undefined {
   const current = getCurrentContract(contract.id);
 
   if (current === undefined) {
-    throw new PolicyFixtureMigrationError(
-      fixtureName,
-      Policy.PolicyPoint.version,
-      contract.version,
-    );
+    return new PolicyFixtureMigrationError(fixtureName, Policy.PolicyPoint.version, contract.version);
   }
 
   if (current.version !== contract.version || current.inputSchema !== contract.inputSchema) {
-    throw new PolicyFixtureMigrationError(fixtureName, current.version, contract.version);
+    return new PolicyFixtureMigrationError(fixtureName, current.version, contract.version);
   }
 
-  return Policy.PolicyPoint.Contract.parse(contract);
+  return undefined;
 }
 
-function replayDecisionFixture(fixture: DecisionReplayFixture): ReplayResult {
+function replayDecisionFixture(fixture: DecisionReplayFixture): ReplayOutcome {
   if (fixture.policyKernelVersion !== policyKernelVersion) {
-    throw new PolicyFixtureMigrationError(
-      fixture.name,
-      policyKernelVersion,
-      fixture.policyKernelVersion,
-    );
+    return {
+      ok: false,
+      error: new PolicyFixtureMigrationError(
+        fixture.name,
+        policyKernelVersion,
+        fixture.policyKernelVersion,
+      ),
+    };
   }
 
-  requireCurrentPolicyPointContract(fixture.name, fixture.policyPoint);
+  const migration = currentContractMigrationError(fixture.name, fixture.policyPoint);
+  if (migration !== undefined) return { ok: false, error: migration };
+  Policy.PolicyPoint.Contract.parse(fixture.policyPoint);
 
   return {
-    decision: Policy.PolicyDecision.parse(fixture.decision),
-    resource: Policy.Resource.Descriptor.parse(fixture.resource),
+    ok: true,
+    result: {
+      decision: Policy.PolicyDecision.parse(fixture.decision),
+      resource: Policy.Resource.Descriptor.parse(fixture.resource),
+    },
   };
-}
-
-function safeReplay(
-  fixture: DecisionReplayFixture,
-): { ok: true; result: ReplayResult } | { ok: false; error: unknown } {
-  try {
-    return { ok: true, result: replayDecisionFixture(fixture) };
-  } catch (error) {
-    return { ok: false, error };
-  }
 }
 
 function firstDecisionFixture(): DecisionReplayFixture {
@@ -152,8 +151,14 @@ describe("PolicyPoint versioning conformance", () => {
     for (const fixture of oldDecisionFixtures) {
       const replay = replayDecisionFixture(fixture);
 
-      expect(Policy.Resource.Descriptor.parse(replay.resource)).toEqual(replay.resource);
-      expect(replay.decision.policyId).toBe(Policy.PolicyDecision.parse(fixture.decision).policyId);
+      expect(replay.ok).toBe(true);
+      if (!replay.ok) throw replay.error;
+      expect(Policy.Resource.Descriptor.parse(replay.result.resource)).toEqual(
+        replay.result.resource,
+      );
+      expect(replay.result.decision.policyId).toBe(
+        Policy.PolicyDecision.parse(fixture.decision).policyId,
+      );
     }
   });
 
@@ -186,7 +191,7 @@ describe("PolicyPoint versioning conformance", () => {
 
   test("requires explicit migration errors for breaking point schema changes", () => {
     const fixture = firstDecisionFixture();
-    const replay = safeReplay({
+    const replay = replayDecisionFixture({
       ...fixture,
       policyPoint: {
         ...fixture.policyPoint,

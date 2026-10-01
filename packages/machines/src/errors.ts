@@ -1,11 +1,10 @@
 import { Machine } from "@openomni/protocol";
+import type { ForeignFailure } from "@openomni/ipc";
 import { Data } from "effect";
 import { z } from "zod";
 
+export { ForeignFailure } from "@openomni/ipc";
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<z.infer<typeof Diagnostic>> {
-  override get message(): string { return this.cause; }
-}
 const CellFields = Machine.CellRequest.pick({ cellId: true }).extend({
   code: z.enum(["duplicate_cell_id", "unknown_cell_id"]),
   message: z.string(),

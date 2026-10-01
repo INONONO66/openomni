@@ -1,22 +1,11 @@
 import { testExecutor } from "./executor";
 import { Effect } from "effect";
-import { LedgerAction } from "@openomni/protocol";
+import type { LedgerAction } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
-import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
+import { allowAllPolicy } from "./compiled-policy";
+import { recordingLedger } from "./recording-ledger";
 
-export function recordingLedger(committed: LedgerAction.Append[] = []) {
-  let ordinal = 0;
-  return {
-    committed,
-    entropy: () => `action-${ordinal + 1}`,
-    ledger: {
-      commit: (action: LedgerAction.Append) => Effect.sync(() => {
-        committed.push(action); ordinal += 1;
-        return { action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }), revision: ordinal };
-      }),
-    },
-  };
-}
+export { recordingLedger };
 export function recordingExecutor(options: { readonly policy?: CompiledPolicySnapshot; readonly onCommit?: (action: LedgerAction.Append) => void | Promise<void>; readonly onObservation?: (name: string) => void; readonly clock?: () => number } = {}) {
   const record = recordingLedger();
   const executor = testExecutor({

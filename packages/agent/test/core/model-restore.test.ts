@@ -1,3 +1,4 @@
+import { recordingResolveModel } from "../helpers/resolve-model";
 import { testExecutor } from "../helpers/executor";
 import { type ChatFixture, chatServices } from "../helpers/chat-services";
 import { Effect } from "effect";
@@ -55,26 +56,28 @@ async function turn(options: {
     },
   });
   const result = await isolated(
-    Effect.gen(function* () { const fixture: ChatFixture = {
-      executor,
-      execution: executor,
-      events: { publish: () => undefined },
-      model: primary,
-      ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
-      ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
-      llm: {
-        run: (_input: import("@openomni/llm").RunInput, sink: Sink) =>
-          Effect.promise(async () => {
-            sink.onMessage(createAssistantMessage("done", "", "session"));
-            return createStopOutcome();
-          }),
-        resolveModel: (model: Model.Ref) =>
-          Effect.promise(async () => {
-            resolved.push(model);
-            return { id: model.id, name: model.id, providerID: model.provider };
-          }),
-      },
-    }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "go" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
+    Effect.gen(function* () {
+      const fixture: ChatFixture = {
+        executor,
+        execution: executor,
+        events: { publish: () => undefined },
+        model: primary,
+        ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
+        ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
+        llm: {
+          run: (_input: import("@openomni/llm").RunInput, sink: Sink) =>
+            Effect.promise(async () => {
+              sink.onMessage(createAssistantMessage("done", "", "session"));
+              return createStopOutcome();
+            }),
+          resolveModel: recordingResolveModel(resolved),
+        },
+      };
+      const { events: _events, llm: _llm, ...acquiredConfig } = fixture;
+      return yield* runAgent(runInput([{ role: "user", content: "go" }]), acquiredConfig).pipe(
+        Effect.provide(chatServices(fixture)),
+      );
+    }),
   );
   const llm = recording.committed.filter(
     (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === "llm",

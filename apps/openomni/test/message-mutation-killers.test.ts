@@ -30,6 +30,39 @@ function promptActions(plane: AppLedgerPlane, sessionId: string) {
   return tree(plane, sessionId).filter((action) => action.kind === "prompt");
 }
 
+function awaitedActorFixture() {
+  const fixture = messageFixture("resident", {
+    deliveryRoutes: new Map([
+      ["ws", async () => ({ value: "accepted" as const, externalMessageId: "platform-reply" })],
+    ]),
+    grants: () => [
+      { id: "grant", senderId: "sender", targetActorId: "alice", operations: ["awaited"] },
+    ],
+    budgets: () => [
+      { id: "budget", targetActorId: "alice", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
+    ],
+  });
+  directories.push(fixture.directory);
+  fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
+  fixture.plane.stores.actors.registerEndpoint({
+    id: "ws:alice",
+    actorId: "alice",
+    channel: "ws",
+    externalId: "alice",
+  });
+  return fixture;
+}
+
+function awaitedActorSend(fixture: ReturnType<typeof awaitedActorFixture>) {
+  return fixture.send({
+    to: { kind: "actor", actorId: "alice" },
+    type: "message",
+    content: "question",
+    replyTo: "binding",
+    deadline: 200,
+  });
+}
+
 test("worker actor send is blocked by a compiled B row before transport", async () => {
   const { fixture, calls } = ungrantedActor("worker");
   directories.push(fixture.directory);
@@ -201,32 +234,8 @@ test("message observations carry the committed compiled policy rule identity", a
 });
 
 test("an actor answer preserves platform correlation and wins its durable message deadline", async () => {
-  const fixture = messageFixture("resident", {
-    deliveryRoutes: new Map([
-      ["ws", async () => ({ value: "accepted" as const, externalMessageId: "platform-reply" })],
-    ]),
-    grants: () => [
-      { id: "grant", senderId: "sender", targetActorId: "alice", operations: ["awaited"] },
-    ],
-    budgets: () => [
-      { id: "budget", targetActorId: "alice", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
-    ],
-  });
-  directories.push(fixture.directory);
-  fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
-  fixture.plane.stores.actors.registerEndpoint({
-    id: "ws:alice",
-    actorId: "alice",
-    channel: "ws",
-    externalId: "alice",
-  });
-  const sent = await fixture.send({
-    to: { kind: "actor", actorId: "alice" },
-    type: "message",
-    content: "question",
-    replyTo: "binding",
-    deadline: 200,
-  });
+  const fixture = awaitedActorFixture();
+  const sent = await awaitedActorSend(fixture);
   expect(sent.isError).not.toBe(true);
   // W5.2: the durable deadline fact is the open request's own bound; the
   // alarm-row plane it once mirrored is gone.
@@ -401,32 +410,8 @@ test("real compiled B worker cannot interrupt its parent", async () => {
 });
 
 test("an external reply to an awaited message admits with the correlated reply origin", async () => {
-  const fixture = messageFixture("resident", {
-    deliveryRoutes: new Map([
-      ["ws", async () => ({ value: "accepted" as const, externalMessageId: "platform-reply" })],
-    ]),
-    grants: () => [
-      { id: "grant", senderId: "sender", targetActorId: "alice", operations: ["awaited"] },
-    ],
-    budgets: () => [
-      { id: "budget", targetActorId: "alice", maxPerWindow: 10, windowMs: 1000, cooldownMs: 0 },
-    ],
-  });
-  directories.push(fixture.directory);
-  fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "owner" });
-  fixture.plane.stores.actors.registerEndpoint({
-    id: "ws:alice",
-    actorId: "alice",
-    channel: "ws",
-    externalId: "alice",
-  });
-  const sent = await fixture.send({
-    to: { kind: "actor", actorId: "alice" },
-    type: "message",
-    content: "question",
-    replyTo: "binding",
-    deadline: 200,
-  });
+  const fixture = awaitedActorFixture();
+  const sent = await awaitedActorSend(fixture);
   expect(sent.isError).not.toBe(true);
   const db = new Database(sessionDb(fixture, fixture.sessionId));
   const correlated = db

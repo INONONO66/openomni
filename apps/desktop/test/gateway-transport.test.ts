@@ -8,6 +8,8 @@ import {
   createGatewayChatTransport,
   SessionReadSupersessionError,
 } from "../src/renderer/chat/gateway-transport";
+import { signal } from "./helpers";
+import { upgradeWebSocket } from "./helpers/chat-server";
 
 /**
  * The wire is asserted against a REAL socket, not a stubbed WebSocket. What
@@ -595,8 +597,7 @@ describe("createGatewayChatTransport", () => {
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request, self) =>
-        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      fetch: upgradeWebSocket,
       websocket: {
         message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
           const frame = readFrame.parse(JSON.parse(typeof raw === "string" ? raw : raw.toString()));
@@ -725,8 +726,7 @@ describe("session reads over the gateway socket", () => {
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request, self) =>
-        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      fetch: upgradeWebSocket,
       websocket: {
         message(ws: ServerWebSocket<undefined>, raw: string | Buffer) {
           const request = SessionRead.Request.parse(JSON.parse(String(raw)));
@@ -774,8 +774,7 @@ describe("session reads over the gateway socket", () => {
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request, self) =>
-        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      fetch: upgradeWebSocket,
       websocket: {
         message(ws: ServerWebSocket<undefined>) {
           ws.send(JSON.stringify({ type: "error", sessionId: "durable", reason: "session evicted" }));
@@ -789,18 +788,14 @@ describe("session reads over the gateway socket", () => {
   });
 
   test("a socket that closes mid-read rejects the pending read", async () => {
-    let sawRead: (() => void) | undefined;
-    const readSeen = new Promise<void>((resolve) => {
-      sawRead = resolve;
-    });
+    const readSeen = signal();
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request, self) =>
-        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      fetch: upgradeWebSocket,
       websocket: {
         message() {
-          sawRead?.();
+          readSeen.resolve();
         },
       },
     });
@@ -814,7 +809,7 @@ describe("session reads over the gateway socket", () => {
       },
       (error: Error) => error,
     );
-    await readSeen;
+    await readSeen.promise;
     server.stop(true);
 
     expect((await rejection).message).toBe("gateway socket closed unexpectedly");
@@ -854,26 +849,22 @@ describe("session reads over the gateway socket", () => {
   function serveHeldRead() {
     let heldSocket: ServerWebSocket<undefined> | undefined;
     let requests = 0;
-    let sawRead: (() => void) | undefined;
-    const readSeen = new Promise<void>((resolve) => {
-      sawRead = resolve;
-    });
+    const readSeen = signal();
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch: (request, self) =>
-        self.upgrade(request) ? undefined : new Response(null, { status: 400 }),
+      fetch: upgradeWebSocket,
       websocket: {
         message(ws: ServerWebSocket<undefined>) {
           requests += 1;
           heldSocket = ws;
-          sawRead?.();
+          readSeen.resolve();
         },
       },
     });
     servers.push(server);
     return {
-      readSeen,
+      readSeen: readSeen.promise,
       requests: () => requests,
       respond(page: Readonly<Record<string, unknown>>) {
         if (heldSocket === undefined) throw new Error("no read was received");

@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkEffectBoundaries, checkEffectBoundaryFindings, effectServiceInventory, main, type BoundaryFinding } from "./check-effect-boundaries";
+import { decodeJson } from "./quality-json";
+import { verifyPinnedFilesExist } from "./lint-side-effects";
 
 const roots: string[] = [];
 const checker = join(import.meta.dir, "check-effect-boundaries.ts");
@@ -55,6 +57,11 @@ function findings(root: string): readonly BoundaryFinding[] {
 function codes(root: string): readonly string[] {
   return findings(root).map((finding: BoundaryFinding): string => finding.code);
 }
+
+test("rejects a missing pinned lint source before its rule can go vacuous", async (): Promise<void> => {
+  const root = fixture([]);
+  await expect(verifyPinnedFilesExist([join(root, "missing.ts")], (file) => `Missing source: ${file}`)).rejects.toThrow();
+});
 
 test("rejects namespace and direct runner calls", (): void => {
   const root = fixture([
@@ -128,6 +135,14 @@ test("rejects an Effect import in protocol and a forbidden dependency", (): void
     { path: "packages/protocol/package.json", source: JSON.stringify({ dependencies: { effect: "3.22.2" } }) },
   ]);
   expect(codes(root)).toEqual(expect.arrayContaining(["R1_EFFECT_IMPORT", "R1_EFFECT_DEPENDENCY"]));
+  expect(run(root).code).toBe(1);
+});
+
+test("rejects malformed manifest dependency sections before checking boundaries", (): void => {
+  const root = fixture([
+    { path: "packages/protocol/package.json", source: JSON.stringify({ dependencies: { effect: 4 } }) },
+  ]);
+  expect(codes(root)).toEqual(["ANALYSIS_ERROR"]);
   expect(run(root).code).toBe(1);
 });
 
@@ -354,19 +369,20 @@ test("CLI entry reports clean, refused, and analysis-error results", (): void =>
   const clean = fixture([]);
   const denied = fixture([{ path: "packages/ui/src/view.ts", source: 'import { Effect } from "effect";' }]);
   const broken = fixture([{ path: "script/broken.ts", source: "export const broken = ;" }]);
-  const output = spyOn(console, "log").mockImplementation((): void => undefined);
+  const lines: string[] = [];
+  const output = spyOn(console, "log").mockImplementation((value: string): void => { lines.push(value); });
   try {
     expect(checkEffectBoundaries(denied)).toEqual(["packages/ui/src/view.ts:1 R1_EFFECT_IMPORT"]);
     expect(main(["--root", clean])).toBe(0);
-    expect(output.mock.calls).toEqual([]);
+    expect(lines).toEqual([]);
     expect(main(["--root", denied])).toBe(1);
-    expect(output.mock.calls.at(-1)).toEqual(["packages/ui/src/view.ts:1 R1_EFFECT_IMPORT"]);
+    expect(lines.at(-1)).toBe("packages/ui/src/view.ts:1 R1_EFFECT_IMPORT");
     expect(main(["--root", broken])).toBe(1);
-    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toEqual({
+    expect(decodeJson(lines.at(-1) ?? "")).toEqual({
       code: "ANALYSIS_ERROR", file: "script/broken.ts", line: 1, failing: true,
     });
     expect(main(["--update"])).toBe(1);
-    expect(JSON.parse(String(output.mock.calls.at(-1)?.[0]))).toMatchObject({ code: "INVALID_ARGUMENTS" });
+    expect(decodeJson(lines.at(-1) ?? "")).toMatchObject({ code: "INVALID_ARGUMENTS" });
   } finally {
     output.mockRestore();
   }

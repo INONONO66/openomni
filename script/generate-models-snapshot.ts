@@ -1,19 +1,14 @@
 #!/usr/bin/env bun
 // Fetch the models.dev catalog and retain only metadata consumed by @openomni/llm.
-import type { PlainObject } from "../packages/protocol/src/json.js";
+import { CatalogModel } from "../packages/llm/src/model/schema.js";
+import { PlainValueSchema, type PlainObject } from "../packages/protocol/src/json.js";
 import { z } from "zod";
 
-const MODELS_URL = process.env.MODELS_DEV_URL ?? "https://models.dev/api.json";
 const BUNDLED_PROVIDERS = ["anthropic", "openai"] as const;
 const SNAPSHOT_PATH = "packages/llm/src/model/models-snapshot.json";
-const SourceModel = z.object({
-  id: z.string(),
-  name: z.string(),
-  family: z.string().optional(),
+const SourceModel = CatalogModel.extend({
   release_date: z.string().optional(),
   status: z.string().optional(),
-  limit: z.object({ context: z.number() }).optional(),
-  provider: z.object({ npm: z.string() }).optional(),
 });
 type SourceModel = z.infer<typeof SourceModel>;
 const SourceProvider = z.object({
@@ -24,13 +19,14 @@ const SourceProvider = z.object({
   api: z.string().optional(),
   models: z.record(z.string(), SourceModel),
 });
-const SourceCatalog = z.record(z.string(), z.json());
+const SourceCatalog = z.record(z.string(), PlainValueSchema);
 
-export async function main(): Promise<void> {
-  const response = await fetch(MODELS_URL, { signal: AbortSignal.timeout(15_000) });
+export async function main(): Promise<number> {
+  const modelsUrl = process.env.MODELS_DEV_URL ?? "https://models.dev/api.json";
+  const response = await fetch(modelsUrl, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
-    console.error(`[generate-models-snapshot] ${MODELS_URL} → ${response.status}`);
-    process.exit(1);
+    console.error(`[generate-models-snapshot] ${modelsUrl} → ${response.status}`);
+    return 1;
   }
 
   const catalog = SourceCatalog.parse(await response.json());
@@ -41,7 +37,7 @@ export async function main(): Promise<void> {
       console.error(
         `[generate-models-snapshot] provider missing or has no models in catalog: ${providerID}`,
       );
-      process.exit(1);
+      return 1;
     }
     const provider = parsedProvider.data;
     const models: Record<string, PlainObject> = {};
@@ -62,6 +58,7 @@ export async function main(): Promise<void> {
   console.log(
     `[generate-models-snapshot] wrote ${SNAPSHOT_PATH} (${BUNDLED_PROVIDERS.length} providers)`,
   );
+  return 0;
 }
 
 function projectModel(model: SourceModel): PlainObject {
@@ -76,4 +73,4 @@ function projectModel(model: SourceModel): PlainObject {
   };
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) process.exitCode = await main();

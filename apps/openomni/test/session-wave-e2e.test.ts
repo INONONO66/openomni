@@ -38,6 +38,7 @@ import {
   waveTool,
   interruptSecondModel,
 } from "./helpers/session-wave";
+import { approvalPolicy } from "./helpers/approval-policy";
 
 const suite = residentSuite();
 // The booted app's ledger plane, reset per test (W5.2): free helpers below
@@ -58,9 +59,66 @@ async function adoptPlane(runtime: Parameters<typeof planeOf>[0]) {
 }
 
 function bounded<T>(promise: Promise<T>, label = "wave/recovery"): Promise<T> {
-  return waveBounded(promise).catch((cause: unknown) => {
+  return waveBounded(promise).catch((cause: Error) => {
     throw new Error(`missing ${label}`, { cause });
   });
+}
+
+function waveConfig(prefix: string, providerPort: number | undefined) {
+  return suite.config(prefix, {
+    compactionSummarizer: false,
+    wsToken: "wave-token",
+    model: {
+      provider: "anthropic",
+      id: "wave",
+      apiKey: "key",
+      baseUrl: `http://127.0.0.1:${providerPort}/v1`,
+    },
+  });
+}
+
+function waveLlm(): NonNullable<Parameters<typeof suite.boot>[0]>["llm"] {
+  return {
+    resolveModel: () =>
+      Effect.succeed({
+        id: "wave",
+        name: "wave",
+        providerID: "anthropic",
+        api: { npm: "@ai-sdk/anthropic" },
+        limit: { context: 100000 },
+      }),
+  };
+}
+
+/** A contender at the held fence is refused while the live effect retains it. */
+function expectFenceHeld(sessionId: string, contender: string, leaseOwner: string | null) {
+  const held = plane().openKernel(sessionId).row(sessionId);
+  expect(adoptAtFence(plane(), sessionId, contender, held.leaseFence)).toMatchObject({
+    _tag: "Failure",
+    failure: { _tag: "LeaseRefused", reason: "stale" },
+  });
+  expect(held.leaseOwner).toBe(leaseOwner);
+}
+
+/** W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts. */
+function expectFenceHandover(sessionId: string, contender: string) {
+  const released = plane().openKernel(sessionId).row(sessionId);
+  expect(adoptAtFence(plane(), sessionId, contender, released.leaseFence + 1)).toMatchObject({
+    _tag: "Success",
+    success: { fence: released.leaseFence + 1 },
+  });
+}
+
+/** A settled executor refuses stale raw bodies without ever starting them. */
+async function expectStaleClosed<A, E>(
+  stale: () => Effect.Effect<A, E>,
+  bodyStarts: () => number,
+): Promise<void> {
+  expect(await runEffect(Effect.flip(stale()))).toMatchObject({
+    _tag: "InvocationClosed",
+    reason: "settled",
+  });
+  expect(bodyStarts()).toBe(0);
 }
 
 interface ProviderCall {
@@ -109,26 +167,8 @@ test("real provider returns calls before any app tool body starts", async () => 
   });
   suite.defer(() => provider.stop(true));
   const app = await suite.boot({
-    config: suite.config("openomni-937-wave-red-", {
-      compactionSummarizer: false,
-      wsToken: "wave-token",
-      model: {
-        provider: "anthropic",
-        id: "wave",
-        apiKey: "key",
-        baseUrl: `http://127.0.0.1:${provider.port}/v1`,
-      },
-    }),
-    llm: {
-      resolveModel: () =>
-        Effect.succeed({
-          id: "wave",
-          name: "wave",
-          providerID: "anthropic",
-          api: { npm: "@ai-sdk/anthropic" },
-          limit: { context: 100000 },
-        }),
-    },
+    config: waveConfig("openomni-937-wave-red-", provider.port),
+    llm: waveLlm(),
   });
   await adoptPlane(app.runtime);
   suite.defer(
@@ -172,30 +212,12 @@ async function waveApp(
     const probe = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response() });
     await probe.stop(true);
   });
-  const config = suite.config("openomni-937-wave-", {
-    compactionSummarizer: false,
-    wsToken: "wave-token",
-    model: {
-      provider: "anthropic",
-      id: "wave",
-      apiKey: "key",
-      baseUrl: `http://127.0.0.1:${provider.port}/v1`,
-    },
-  });
+  const config = waveConfig("openomni-937-wave-", provider.port);
   const app = await suite.boot({
     config,
     toolDefinitions: definitions,
     sessionRuntime: { closeGraceMs: 0, ...sessionRuntime },
-    llm: {
-      resolveModel: () =>
-        Effect.succeed({
-          id: "wave",
-          name: "wave",
-          providerID: "anthropic",
-          api: { npm: "@ai-sdk/anthropic" },
-          limit: { context: 100000 },
-        }),
-    },
+    llm: waveLlm(),
   });
   await adoptPlane(app.runtime);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
@@ -273,15 +295,7 @@ function nextApproval(app: Awaited<ReturnType<typeof waveApp>>["app"]) {
 function requireBApproval() {
   const policies = plane().catalog.policies;
   expect(
-    policies.append({
-      name: "approve-B",
-      kind: "tool",
-      phase: "pre",
-      generation: 1,
-      priority: 2000,
-      match: { encodingVersion: 1, value: { op: "B" } },
-      verdict: { encodingVersion: 1, value: { type: "require_approval", reason: "owner" } },
-    }),
+    policies.append(approvalPolicy("approve-B")),
   ).toBe(true);
 }
 
@@ -577,28 +591,20 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
     const request = { kind: "tool", op: "nested-effect", intent: {}, effect: {} };
     let signal = new AbortController().signal;
     let sessionId = "";
-    const invoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string | InvocationClosed> => {
-      try {
-        switch (door) {
-          case "captured-cell":
-          case "captured-wave": {
-            const dispatcher = dispatcherFixture([waveTool("inner", rawBody)], { executor });
-            const call = { id: "inner-call", tool: "inner", input: { slot: "inner" } };
-            const context = { sessionId, turnId: "captured-turn", signal };
-            if (door === "captured-cell") {
-              const outcome = await runEffect(dispatcher.executeCell(call, context));
-              return outcome.isError ? "outcome_unknown" : "executed";
-            }
-            const results = await runEffect(dispatcher.executeWave([call], context));
-            return results.every((result) => result.isError) ? "outcome_unknown" : "executed";
-          }
-        }
-      } catch (error) {
-        if (error instanceof InvocationClosed) return error;
-        if (!(error instanceof Error)) throw error;
-        return error.name;
+    const attemptInvoke = async (executor: ReturnType<typeof currentExecutor>): Promise<string> => {
+      const dispatcher = dispatcherFixture([waveTool("inner", rawBody)], { executor });
+      const call = { id: "inner-call", tool: "inner", input: { slot: "inner" } };
+      const context = { sessionId, turnId: "captured-turn", signal };
+      if (door === "captured-cell") {
+        const outcome = await runEffect(dispatcher.executeCell(call, context));
+        return outcome.isError ? "outcome_unknown" : "executed";
       }
+      const results = await runEffect(dispatcher.executeWave([call], context));
+      return results.every((result) => result.isError) ? "outcome_unknown" : "executed";
     };
+    const invoke = (executor: ReturnType<typeof currentExecutor>): Promise<string | InvocationClosed> =>
+      attemptInvoke(executor).catch((error: Error) =>
+        error instanceof InvocationClosed ? error : error.name);
     const { app, socket, received, cleanup } = await waveApp(
       [
         waveTool("A", async () => "A", true),
@@ -651,14 +657,8 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         ["call-A", "executed"],
         ["call-outer", "executed"],
       ]);
-      const held = plane().openKernel(row.id).row(row.id);
       // Then: abort-raced wrapper settlement cannot regress the live effect's fence.
-      const competitor = adoptAtFence(plane(), row.id, "nested-contender", held.leaseFence);
-      expect(competitor).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "LeaseRefused", reason: "stale" },
-      });
-      expect(held.leaseOwner).toBe(row.leaseOwner);
+      expectFenceHeld(row.id, "nested-contender", row.leaseOwner);
       // The gated wrapper's grace outcome lands exactly once under the inner
       // intent: the executor's zero-grace row at wave close. Every other count
       // below excludes that one row.
@@ -679,33 +679,20 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
             return null;
           }),
         );
-      expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-        _tag: "InvocationClosed", reason: "settled",
-      });
-      expect(staleBodyStarts).toBe(0);
+      await expectStaleClosed(stale, () => staleBodyStarts);
       expect(otherRows()).toHaveLength(beforeActions);
       gate.resolve();
       // The raw effect's own completion signal is the join point (close plane gone).
       await bounded(completed.promise);
       expect(readFileSync(marker)).toEqual(Buffer.from(bytes));
-      const released = plane().openKernel(row.id).row(row.id);
-      // W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts.
-      const next = adoptAtFence(plane(), row.id, "nested-contender", released.leaseFence + 1);
-      expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
-      expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-        _tag: "InvocationClosed", reason: "settled",
-      });
-      expect(staleBodyStarts).toBe(0);
-      expect(innerRows().map((action) => ({ kind: action.kind, effect: action.effect.value }))).toEqual([
-        {
-          kind: "tool",
-          effect: expect.objectContaining({
-            phase: "result",
-            terminal: "outcome_unknown",
-            reason: expect.stringMatching(/^(raw_body_unsettled_after_grace|shutdown_grace_exhausted)$/),
-          }),
-        },
-      ]);
+      expectFenceHandover(row.id, "nested-contender");
+      await expectStaleClosed(stale, () => staleBodyStarts);
+      expect(innerRows().map((action) => action.kind)).toEqual(["tool"]);
+      z.object({
+        phase: z.literal("result"),
+        terminal: z.literal("outcome_unknown"),
+        reason: z.enum(["raw_body_unsettled_after_grace", "shutdown_grace_exhausted"]),
+      }).parse(innerRows()[0]?.effect.value);
       // Raw completion commits nothing else; the close plane's interrupt
       // ingress is gone, so no row lands after the wrapper's grace outcome.
       expect(
@@ -802,14 +789,8 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           ["call-A", "executed"],
           ["call-outer", "executed"],
         ]);
-        const held = plane().openKernel(sessionId).row(sessionId);
         // Then: neither timeout nor SDK interruption regresses the live effect's fence.
-        const contender = adoptAtFence(plane(), sessionId, "timed-contender", held.leaseFence);
-        expect(contender).toMatchObject({
-          _tag: "Failure",
-          failure: { _tag: "LeaseRefused", reason: "stale" },
-        });
-        expect(held.leaseOwner).toBe(row.leaseOwner);
+        expectFenceHeld(sessionId, "timed-contender", row.leaseOwner);
         const beforeActions = tree(sessionId).length;
         const db = new Database(sessionDbPath(sessionId), { readonly: true });
         try {
@@ -831,22 +812,13 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
               return null;
             }),
           );
-        expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-          _tag: "InvocationClosed", reason: "settled",
-        });
-        expect(staleStarts).toBe(0);
+        await expectStaleClosed(stale, () => staleStarts);
         expect(tree(sessionId)).toHaveLength(beforeActions);
         rawGate.resolve();
         await bounded(rawDone.promise);
         expect(readFileSync(marker)).toEqual(Buffer.from([9, 3, 7]));
-        const released = plane().openKernel(sessionId).row(sessionId);
-        // W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts.
-        const next = adoptAtFence(plane(), sessionId, "timed-contender", released.leaseFence + 1);
-        expect(next).toMatchObject({ _tag: "Success", success: { fence: released.leaseFence + 1 } });
-        expect(await runEffect(Effect.flip(stale()))).toMatchObject({
-          _tag: "InvocationClosed", reason: "settled",
-        });
-        expect(staleStarts).toBe(0);
+        expectFenceHandover(sessionId, "timed-contender");
+        await expectStaleClosed(stale, () => staleStarts);
         // The close plane's interrupt ingress is gone: raw completion after
         // the fence handover commits nothing.
         expect(

@@ -9,8 +9,7 @@ import {
 } from "@openomni/protocol";
 import type { ExecutionRequest, ResolvedExecutorOptions } from "./executor-contract";
 import { Effect } from "effect";
-import { CommitFailed, type ExecutionError } from "./errors";
-import { failureEvidence } from "./executor-outcome";
+import { CommitFailed } from "./errors";
 
 export type ToolObservationStatus = "success" | "error" | "timed_out";
 type ToolObservationIdentity = NonNullable<ExecutionRequest["toolObservation"]>;
@@ -36,24 +35,6 @@ export function createExecutionRecord(
         return receipt;
       }),
     );
-  }
-
-  function appendFailure(
-    subject: ActionSubject,
-    parentId: string,
-    effect: PlainValue,
-    error: ExecutionError,
-    callId?: string,
-    toolResult?: Tool.Result,
-  ): Effect.Effect<void, CommitFailed> {
-    return appendResult(subject, parentId, {
-      phase: "result",
-      terminal: "executed",
-      effect,
-      evidence: { failures: [failureEvidence(error)], defects: [], interrupted: false },
-      ...(callId === undefined ? {} : { callId }),
-      ...(toolResult === undefined ? {} : { toolResult }),
-    });
   }
 
   function publishToolStarted(request: ExecutionRequest): number | undefined {
@@ -184,7 +165,6 @@ export function createExecutionRecord(
 
   return {
     commit,
-    appendFailure,
     appendIntent,
     appendResult,
     publishToolStarted,

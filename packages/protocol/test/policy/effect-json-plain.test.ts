@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Policy } from "../../src/policy/index";
+import type { JsonShapedValue } from "../../src/json";
 
 test("rejects non-JSON-plain effect values", () => {
   for (const value of [
@@ -16,7 +17,7 @@ test("rejects non-JSON-plain effect values", () => {
 
 test("rejects reserved object keys in effect values", () => {
   for (const key of ["__proto__", "constructor", "prototype"]) {
-    const value = JSON.parse(`{"${key}": "not an ordinary data property"}`);
+    const value: JsonShapedValue = JSON.parse(`{"${key}": "not an ordinary data property"}`);
     expect(
       Policy.PolicyEffect.safeParse({ type: "tool.rewrite_input", input: value }).success,
     ).toBe(false);
@@ -24,12 +25,12 @@ test("rejects reserved object keys in effect values", () => {
 });
 
 test("rejects sparse arrays and arrays carrying named properties", () => {
-  const sparse: unknown[] = [1];
+  const sparse: number[] = [1];
   sparse.length = 2;
   const namedProp = Object.assign([1, 2], { extra: "lost by JSON serialization" });
   // Cancellation shape: one hole + one named property keeps the enumerable
   // key count equal to length — only the canonical-index check refuses it.
-  const cancellation: unknown[] = [1];
+  const cancellation: number[] = [1];
   cancellation.length = 2;
   Object.assign(cancellation, { extra: "x" });
   for (const value of [sparse, namedProp, cancellation]) {
@@ -56,7 +57,7 @@ test("round-trips JSON-plain effect values unchanged", () => {
 
 test("refuses accessor properties without invoking their getters", () => {
   let invoked = false;
-  const hostile: Record<string, unknown> = {};
+  const hostile: Record<string, string> = {};
   Object.defineProperty(hostile, "value", {
     enumerable: true,
     get: () => {
@@ -70,7 +71,7 @@ test("refuses accessor properties without invoking their getters", () => {
 });
 
 test("a throwing getter or Proxy trap yields a parse failure, never a throw", () => {
-  const throwingGetter: Record<string, unknown> = {};
+  const throwingGetter: Record<string, string> = {};
   Object.defineProperty(throwingGetter, "boom", {
     enumerable: true,
     get: () => {

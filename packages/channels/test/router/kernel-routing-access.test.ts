@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 
 import { registerChannelGrant } from "../helpers/channel-grant";
+import { expectEvidenceOnlyCommit } from "./_evidence-only";
 import {
   commits,
   kernelRouter,
@@ -59,13 +60,9 @@ describe("GatewayRouter access routing", () => {
     });
     expect((await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).status).toBe("executed");
     expect(routingDecisions()[0]).toMatchObject({
-      outcome: "route",
       trustTier: "observer",
-      inboundTreatment: "evidence_only",
     });
-    expect(commits).toHaveLength(1);
-    expect(commits[0]?.content).toBe(ownerFacts.render);
-    expect(commits[0]?.origin.value).toMatchObject({ inboundTreatment: "evidence_only" });
+    expectEvidenceOnlyCommit();
   });
   test("blocked channel refuses before inbox commit", async () => {
     registerChannelGrant({ kind: "blocked_channel" });

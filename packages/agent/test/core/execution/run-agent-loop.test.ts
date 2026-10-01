@@ -1,67 +1,38 @@
 import { sessionTree } from "../../helpers/session-tree";
-import { turnTestLayer, catalogLayer } from "../../helpers/service-layers";
-import { prepareChatFixture } from "../../helpers/chat-services";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../../helpers/session-services";
+import { testTurnDispatcher } from "../../helpers/service-layers";
+import {
+  fixtureConfigHead,
+  fixtureTraceContext,
+  prepareChatFixture,
+} from "../../helpers/chat-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "../../helpers/session-services";
 import { Effect, Fiber } from "effect";
-import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "../../helpers/isolated";
+import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { dispatchingRunner } from "../../helpers/effect-g2";
 import { expect, test, spyOn } from "bun:test";
 import { seedPolicy } from "../../helpers/seed-policy";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
 import { Message, canonicalDigest, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { session, closeSessions } from "../../../src/session-handle";
 import { createSessionChatRunner } from "../../../src/session-chat-runner";
 import {
-  createTurnDispatcher,
   sessionTool,
   defineTool,
   eraseTool,
 } from "../../../src/tool-dispatcher";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { createObservationBus } from "../../../src/observation/bus";
+import { reopenableLedger } from "../../helpers/reopenable-ledger";
 import { restoreCompactionProjection } from "../../../src/compaction/durable";
 import { assistantStep } from "../../helpers/dispatching-runner";
 
 const object = (value: PlainValue) =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
-
-/**
- * File-backed isolation (W5.2): the Storage singleton is gone, so reopen is a
- * store close + fresh open over the same SQLite files, behind the isolation's
- * lazy `isolatedLedger()` pointer.
- */
-function reopenableLedger(prefix: string): IsolatedLedgerHandle & { readonly reopen: () => void } {
-  const directory = mkdtempSync(join(tmpdir(), prefix));
-  const bus = createObservationBus();
-  const open = () => {
-    const sessionStore = openSessionStore(join(directory, "chat.sqlite"), bus);
-    const catalog = openCatalogStore(join(directory, "catalog.sqlite"), bus);
-    return { sessionStore, catalog, kernel: SessionHandleStore.createSessionKernel(sessionStore, catalog) };
-  };
-  let current = open();
-  return {
-    get kernel() { return current.kernel; },
-    openKernel: () => current.kernel,
-    listSessions: () => current.kernel.listRows(),
-    get session() { return current.sessionStore; },
-    get catalog() { return current.catalog; },
-    bus,
-    reopen: () => {
-      current.sessionStore.close();
-      current.catalog.close();
-      current = open();
-    },
-    close: () => {
-      current.sessionStore.close();
-      current.catalog.close();
-      rmSync(directory, { recursive: true, force: true });
-    },
-  };
-}
 
 test("reopened SQLite hydrates exact tool-bearing assistant identities and rendered results", () => {
   const ledger = reopenableLedger("937-history-");
@@ -84,7 +55,11 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
         ];
         let calls = 0;
         const inputs: Message.WithParts[][] = [];
-        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
+        let runtime: SessionRuntime = {
+          observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
+          ...isolatedRuntime(),
+        };
         const runner = dispatchingRunner(
           definitions,
           () => runtime,
@@ -114,7 +89,10 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             runner,
             tools: definitions.map(sessionTool),
           };
-          const first = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+          const first = yield* Effect.gen(function* () {
+            const fixture: SessionFixture = runtime;
+            return yield* withSessionServices(session(options, fixture), fixture);
+          });
           expect((yield* first.prompt("first"))?.kind).toBe("result");
           const preserved = inputs[1]?.find(
             (message: import("@openomni/protocol").Message.WithParts) =>
@@ -132,10 +110,17 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           );
           yield* closeSessions(runtime);
           ledger.reopen();
-          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
-          expect((yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("after reopen"))?.kind).toBe(
-            "result",
-          );
+          runtime = {
+            observations: { publish: () => undefined },
+            authorizeConfigure: allowConfigure,
+            ...isolatedRuntime(),
+          };
+          expect(
+            (yield* (yield* Effect.gen(function* () {
+              const fixture: SessionFixture = runtime;
+              return yield* withSessionServices(session(options, fixture), fixture);
+            })).prompt("after reopen"))?.kind,
+          ).toBe("result");
           const restored = inputs[2]?.find(
             (message: import("@openomni/protocol").Message.WithParts) =>
               message.info.id === preserved?.info.id,
@@ -161,82 +146,106 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
   );
 });
 
+/** Mutable witness threaded through the compaction probe's provider calls. */
+interface CompactionProbe {
+  calls: number;
+  reopenedInput: Message.WithParts[];
+  nextBoundary: Message.WithParts[];
+  afterConcurrent: Message.WithParts[];
+}
+
+/** One provider turn of the compaction-reopen scenario, recorded on the probe. */
+function compactionProbeStep(
+  probe: CompactionProbe,
+  sessionId: string,
+  request: import("@openomni/llm").RunInput,
+  sink: import("@openomni/llm").Sink,
+): { type: "stop" } {
+  probe.calls += 1;
+  if (probe.calls === 3) probe.nextBoundary = structuredClone(request.messages);
+  if (probe.calls === 4) probe.reopenedInput = structuredClone(request.messages);
+  const message = createAssistantMessage(
+    probe.calls < 3 ? "evidence ".repeat(1000) : "finished",
+    "",
+    sessionId,
+  );
+  if (message.info.role !== "assistant") throw new Error("assistant required");
+  message.info.tokens.input = probe.calls < 3 ? 6000 : 1;
+  message.parts.push({
+    id: `${message.info.id}:finish`,
+    sessionID: sessionId,
+    messageID: message.info.id,
+    type: "step-finish",
+    reason: "stop",
+    cost: 0,
+    tokens: message.info.tokens,
+  });
+  if (probe.calls === 3) probe.afterConcurrent = structuredClone([...request.messages, message]);
+  sink.onMessage(message);
+  return { type: "stop" };
+}
+
 test("compaction projection and lossless revert survive SQLite reopen without deleting originals", () => {
   const ledger = reopenableLedger("937-compaction-reopen-");
   return isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        let runtime: SessionRuntime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
-        let calls = 0;
-        let reopenedInput: Message.WithParts[] = [];
-        let nextBoundary: Message.WithParts[] = [];
-        let afterConcurrent: Message.WithParts[] = [];
+        let runtime: SessionRuntime = {
+          observations: { publish: () => undefined },
+          authorizeConfigure: allowConfigure,
+          ...isolatedRuntime(),
+        };
+        const probe: CompactionProbe = {
+          calls: 0,
+          reopenedInput: [],
+          nextBoundary: [],
+          afterConcurrent: [],
+        };
         const summarizing = Promise.withResolvers<void>();
         const summary = Promise.withResolvers<string>();
         const runner = createSessionChatRunner({
-          prepare: (input: import("../../../src/session-handle").SessionRunnerInput) => Effect.gen(function* () {
-            const dispatcher = (yield* Effect.gen(function* () { const turnInput = input; const turnRuntime = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
-            return prepareChatFixture({
-              traceContext: { traceId: "trace", sessionId: input.sessionId, runId: input.resultId },
-              config: {
-                events: { publish: () => undefined },
-                executor: dispatcher.executor,
-                model: { provider: "test", id: "test" },
-                compaction: {
-                  contextWindowTokens: 10000,
-                  protectRecentMessages: 1,
-                  speculate: false,
-                  onSummarize: () =>
-                    Effect.gen(function* () {
-                      summarizing.resolve();
-                      return yield* Effect.promise(() => summary.promise);
-                    }),
+          prepare: (input: import("../../../src/session-handle").SessionRunnerInput) =>
+            Effect.gen(function* () {
+              const dispatcher = yield* testTurnDispatcher(input, runtime);
+              return prepareChatFixture({
+                traceContext: fixtureTraceContext(input),
+                config: {
+                  ...fixtureConfigHead(dispatcher.executor),
+                  compaction: {
+                    contextWindowTokens: 10000,
+                    protectRecentMessages: 1,
+                    speculate: false,
+                    onSummarize: () =>
+                      Effect.gen(function* () {
+                        summarizing.resolve();
+                        return yield* Effect.promise(() => summary.promise);
+                      }),
+                  },
+                  llm: {
+                    resolveModel: () =>
+                      Effect.succeed({
+                        providerID: "test",
+                        id: "test",
+                        name: "test",
+                        limit: { context: 10000 },
+                      }),
+                    run: (
+                      request: import("@openomni/llm").RunInput,
+                      sink: import("@openomni/llm").Sink,
+                    ) =>
+                      Effect.sync(() => compactionProbeStep(probe, input.sessionId, request, sink)),
+                  },
                 },
-                llm: {
-                  resolveModel: () =>
-                    Effect.succeed({
-                      providerID: "test",
-                      id: "test",
-                      name: "test",
-                      limit: { context: 10000 },
-                    }),
-                  run: (
-                    request: import("@openomni/llm").RunInput,
-                    sink: import("@openomni/llm").Sink,
-                  ) =>
-                    Effect.sync(() => {
-                      calls += 1;
-                      if (calls === 3) nextBoundary = structuredClone(request.messages);
-                      if (calls === 4) reopenedInput = structuredClone(request.messages);
-                      const message = createAssistantMessage(
-                        calls < 3 ? "evidence ".repeat(1000) : "finished",
-                        "",
-                        input.sessionId,
-                      );
-                      if (message.info.role !== "assistant") throw new Error("assistant required");
-                      message.info.tokens.input = calls < 3 ? 6000 : 1;
-                      message.parts.push({
-                        id: `${message.info.id}:finish`,
-                        sessionID: input.sessionId,
-                        messageID: message.info.id,
-                        type: "step-finish",
-                        reason: "stop",
-                        cost: 0,
-                        tokens: message.info.tokens,
-                      });
-                      if (calls === 3)
-                        afterConcurrent = structuredClone([...request.messages, message]);
-                      sink.onMessage(message);
-                      return { type: "stop" };
-                    }),
-                },
-              },
-            }); }),
+              });
+            }),
         });
         try {
           seedPolicy();
           const options = { id: "compact", role: "resident" as const, runner };
-          const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); });
+          const handle = yield* Effect.gen(function* () {
+            const fixture: SessionFixture = runtime;
+            return yield* withSessionServices(session(options, fixture), fixture);
+          });
           yield* handle.prompt("first");
           const second = yield* Effect.forkScoped(handle.prompt("second"));
           yield* Effect.promise(() => summarizing.promise).pipe(Effect.timeout("5 seconds"));
@@ -246,21 +255,20 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           const kernel = isolatedLedger().kernel;
           const commit = kernel.commit.bind(kernel);
           let count = 0;
-          const tap = spyOn(kernel, "commit").mockImplementation(
-            (input: LedgerSession.Commit) =>
-              commit(input).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    const during = input.actions.filter(
-                      (action) =>
-                        action.kind === "prompt" &&
-                        String(object(action.effect.value)?.content ?? "").startsWith("during-"),
-                    ).length;
-                    count += during;
-                    if (during > 0 && count >= 2) admitted.resolve();
-                  }),
-                ),
+          const tap = spyOn(kernel, "commit").mockImplementation((input: LedgerSession.Commit) =>
+            commit(input).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  const during = input.actions.filter(
+                    (action) =>
+                      action.kind === "prompt" &&
+                      String(object(action.effect.value)?.content ?? "").startsWith("during-"),
+                  ).length;
+                  count += during;
+                  if (during > 0 && count >= 2) admitted.resolve();
+                }),
               ),
+            ),
           );
           yield* Effect.addFinalizer(() => Effect.sync(() => tap.mockRestore()));
           const concurrent = yield* Effect.forEach(["during-1", "during-2"], (content: string) =>
@@ -268,9 +276,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           );
           yield* Effect.promise(() => admitted.promise).pipe(Effect.timeout("5 seconds"));
           const pending = kernel.pendingMessages("compact");
-          expect(
-            pending.map((item) => item.content),
-          ).toEqual(["during-1", "during-2"]);
+          expect(pending.map((item) => item.content)).toEqual(["during-1", "during-2"]);
           summary.resolve("checkpoint");
           yield* Effect.forEach([second, ...concurrent], Fiber.join);
           const before = sessionTree(kernel, "compact");
@@ -287,9 +293,9 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           const projection = payload.projection.map(
             (entry: import("@openomni/protocol").PlainValue) => Message.WithParts.parse(entry),
           );
-          expect(nextBoundary.slice(0, -2)).toEqual(projection);
+          expect(probe.nextBoundary.slice(0, -2)).toEqual(projection);
           expect(
-            nextBoundary
+            probe.nextBoundary
               .slice(-2)
               .map((message: import("@openomni/protocol").Message.WithParts) => message.info.id),
           ).toEqual(pending.map((item) => item.id));
@@ -315,10 +321,19 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           expect(restored.slice(0, record.discarded.count)).toEqual(record.revert.removedEntries);
           yield* closeSessions(runtime);
           ledger.reopen();
-          runtime = { observations: { publish: () => undefined }, authorizeConfigure: allowConfigure, ...isolatedRuntime() };
-          yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session(options, fixture), fixture); })).prompt("reopened");
-          expect(reopenedInput.slice(0, -1)).toEqual(afterConcurrent);
-          expect(sessionTree(isolatedLedger().kernel, "compact").slice(0, before.length)).toEqual(before);
+          runtime = {
+            observations: { publish: () => undefined },
+            authorizeConfigure: allowConfigure,
+            ...isolatedRuntime(),
+          };
+          yield* (yield* Effect.gen(function* () {
+            const fixture: SessionFixture = runtime;
+            return yield* withSessionServices(session(options, fixture), fixture);
+          })).prompt("reopened");
+          expect(probe.reopenedInput.slice(0, -1)).toEqual(probe.afterConcurrent);
+          expect(sessionTree(isolatedLedger().kernel, "compact").slice(0, before.length)).toEqual(
+            before,
+          );
         } finally {
           yield* closeSessions(runtime);
         }

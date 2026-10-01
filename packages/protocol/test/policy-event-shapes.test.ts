@@ -25,8 +25,11 @@ import { Policy } from "../src/policy/index.js";
 const base = { traceId: "trace-1", sessionId: "ses-1", time: 1_700_000_000_000 };
 const actor = { userId: "user-1", role: "admin" };
 
-function issues(result: z.ZodSafeParseResult<unknown>) {
-  if (result.success) throw new Error("expected a parse failure, but parsing succeeded");
+// Structural failure view: accepts a union of ZodSafeParseResult types from
+// different schemas, which a single generic parameter cannot.
+function issues(result: { success: boolean; error?: z.ZodError }) {
+  if (result.success || result.error === undefined)
+    throw new Error("expected a parse failure, but parsing succeeded");
   return result.error.issues.map((issue) => ({
     path: issue.path.join("."),
     code: issue.code,

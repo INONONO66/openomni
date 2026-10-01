@@ -474,21 +474,24 @@ function assertOutboundCut(witness: Witness) {
   return { item, acked, destination };
 }
 
-async function recoverMessagePlane(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
-  const child = Bun.spawn([process.execPath, planeWorker, "recover", point, dbPath], {
+async function recoverChild<S extends z.ZodType>(worker: string, args: string[], label: string, schema: S) {
+  const child = Bun.spawn([process.execPath, worker, "recover", ...args], {
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
-  // Exit and receipt subscriptions precede the worker's explicit start gate.
   const receipt = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
   child.stdin.write("S");
   try {
-    const [code, stdout, stderr] = await bounded(receipt, "fresh message-plane recovery", SPAWNED_CHILD_MS);
+    const [code, stdout, stderr] = await bounded(receipt, label, SPAWNED_CHILD_MS);
     expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-    return messagePlaneProof.parse(JSON.parse(stdout));
+    return schema.parse(JSON.parse(stdout));
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     child.stdin.end();
   }
+}
+
+async function recoverMessagePlane(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
+  return recoverChild(planeWorker, [point, dbPath], "fresh message-plane recovery", messagePlaneProof);
 }
 
 function recoverOutbound(witness: Witness, dbPath: string) {
@@ -664,13 +667,8 @@ async function configureCrashCell(dbPath: string) {
   expect(cut.crashPoint).toBe(configureCrashPoint);
   expect(cut.hibernations).toBe(0);
   expect(cut.snapshot).toMatchObject({ generation: 2, revertTo: 1 });
-  const child = Bun.spawn([process.execPath, worker, "recover", dbPath], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-  const receipt = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-  child.stdin.write("S");
-  try {
-    const [code, stdout, stderr] = await bounded(receipt, "fresh configure recovery", SPAWNED_CHILD_MS);
-    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-    const proof = configureRecoveryProof.parse(JSON.parse(stdout));
+  {
+    const proof = await recoverChild(worker, [dbPath], "fresh configure recovery", configureRecoveryProof);
     expect(proof.before).toEqual(cut.actions);
     expect(proof.idle).toEqual(proof.before);
     expect(proof.snapshot).toEqual(cut.snapshot);
@@ -683,9 +681,6 @@ async function configureCrashCell(dbPath: string) {
     expect(configured(proof.before)).toHaveLength(2);
     expect(configured(proof.after)).toEqual(configured(proof.before));
     return "resumed_without_reexecution";
-  } finally {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-    child.stdin.end();
   }
 }
 

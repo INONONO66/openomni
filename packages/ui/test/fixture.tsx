@@ -253,3 +253,12 @@ export const STRIP: ConsoleStrip = {
     onJump: () => undefined,
   },
 };
+
+export function stripWithActions(
+  tabs: ConsoleStrip["tabs"],
+  onActivate: ConsoleStrip["onActivate"],
+  onClose: ConsoleStrip["onClose"],
+  onCreate: ConsoleStrip["onCreate"] = STRIP.onCreate,
+): ConsoleStrip {
+  return { ...STRIP, tabs, onActivate, onClose, onCreate };
+}

@@ -7,9 +7,13 @@ import {
 import { compilePolicySnapshot } from "@openomni/policy";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { z } from "zod";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
+
+/** `select` throws `BundleError` for an unknown bundle; anything else is a foreign failure. */
+const SelectThrown = z.union([z.instanceof(BundleError), z.coerce.string().transform((cause) => new ForeignFailure({ operation: "generation.select", cause }))]);
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
 
@@ -40,7 +44,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       if (definitions === undefined) return yield* new ForeignFailure({ operation: "generation.initialize", cause: "not_initialized" });
       const selected = yield* Effect.try({
         try: () => installed.select(snapshot.bundles),
-        catch: (error) => error instanceof BundleError ? error : new ForeignFailure({ operation: "generation.select", cause: String(error) }),
+        catch: SelectThrown.parse,
       });
       const role = plane.openKernel(sessionId).row(sessionId).role;
       const offered = new Set(snapshot.tools.map((tool) => tool.name));
@@ -70,8 +74,8 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
           try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
-          catch: (error) => new ForeignFailure({ operation: "generation.policy", cause: String(error) }),
-        });
+          catch: String,
+        }).pipe(Effect.mapError((cause) => new ForeignFailure({ operation: "generation.policy", cause })));
         return Layer.succeed(SessionLayer, { snapshot, policy });
       })).pipe(Layer.provideMerge(registry));
       return { id: { sessionId, generation: snapshot.generation }, snapshot, layer, activate: Effect.sync(() => { active = true; }) };

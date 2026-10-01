@@ -81,33 +81,45 @@ function materializeIn(
   ).pipe(
     Effect.flatMap((snapshot) =>
       sessionWritesIn(context).pipe(
-        Effect.flatMap((sessions) =>
-          sessions.materialize({
-            row: {
-              id: input.id,
-              parentId: input.parentId,
-              role: input.role,
-              leaseOwner: null,
-              leaseFence: 0,
-              revision: 0,
-              state: "idle",
-              toolsGeneration: snapshot.generation,
-              systemHash: snapshot.systemHash,
-              policyGeneration: snapshot.policyGeneration,
-            },
-            initialAction: configureAction({
-              id: input.actionId,
-              sessionId: input.id,
-              parentId: null,
-              operation: "create",
-              snapshot,
-              at: input.at,
-            }),
-          }),
-        ),
+        Effect.flatMap((sessions) => sessions.materialize(materializationSeed(input, snapshot))),
       ),
     ),
   );
+}
+
+/** Canonical first materialization payload: the fresh idle row plus its `create` configure action. */
+export function materializationSeed(
+  input: {
+    readonly id: string;
+    readonly parentId: string | null;
+    readonly role: LedgerSession.Role;
+    readonly actionId: string;
+    readonly at: number;
+  },
+  snapshot: SessionGeneration.Snapshot,
+): LedgerSession.Materialize {
+  return {
+    row: {
+      id: input.id,
+      parentId: input.parentId,
+      role: input.role,
+      leaseOwner: null,
+      leaseFence: 0,
+      revision: 0,
+      state: "idle",
+      toolsGeneration: snapshot.generation,
+      systemHash: snapshot.systemHash,
+      policyGeneration: snapshot.policyGeneration,
+    },
+    initialAction: configureAction({
+      id: input.actionId,
+      sessionId: input.id,
+      parentId: null,
+      operation: "create",
+      snapshot,
+      at: input.at,
+    }),
+  };
 }
 
 function commitIn(

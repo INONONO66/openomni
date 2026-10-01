@@ -3,6 +3,17 @@ import { Operational } from "@openomni/protocol";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { signedWebhook } from "./helpers/github";
 
+function observedGitHub() {
+  const observations: object[] = [];
+  const adapter = new GitHubAdapter("secret", {}, (descriptor, payload) => {
+    if (descriptor.name === Operational.Events.Warn.name) {
+      const warning = Operational.Events.Warn.schema.parse(payload);
+      if (warning.context) observations.push(warning.context);
+    }
+  });
+  return { adapter, observations };
+}
+
 for (const [event, action, reason] of [
   ["pull_request", "opened", "unsupported_event"],
   ["pull_request_review", "submitted", "unsupported_event"],
@@ -12,14 +23,8 @@ for (const [event, action, reason] of [
   ["ping", undefined, "unsupported_event"],
 ] as const) {
   test(`GitHub ${event}.${action} is an explicit observed refusal, not an inbound message`, async () => {
-    const observations: object[] = [];
+    const { adapter, observations } = observedGitHub();
     let ingested = 0;
-    const adapter = new GitHubAdapter("secret", {}, (descriptor, payload) => {
-      if (descriptor.name === Operational.Events.Warn.name) {
-        const warning = Operational.Events.Warn.schema.parse(payload);
-        if (warning.context) observations.push(warning.context);
-      }
-    });
     adapter.onMessage(async () => {
       ingested++;
     });
@@ -38,13 +43,7 @@ for (const [event, action, reason] of [
 }
 
 test("GitHub non-object JSON is also observed rather than silently dropped", async () => {
-  const observations: object[] = [];
-  const adapter = new GitHubAdapter("secret", {}, (descriptor, payload) => {
-    if (descriptor.name === Operational.Events.Warn.name) {
-      const warning = Operational.Events.Warn.schema.parse(payload);
-      if (warning.context) observations.push(warning.context);
-    }
-  });
+  const { adapter, observations } = observedGitHub();
   const response = await adapter.handleWebhook(signedWebhook("[]", "secret", "delivery", "issues"));
   expect(await response.json()).toEqual({
     kind: "unsupported_event",

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { runEffect } from "./helpers/native";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { Auth, Provider } from "../src";
+import { Auth, ModelResolutionError, Provider } from "../src";
 import { ModelsDev } from "../src/model";
 
 const catalog = {
@@ -74,12 +74,15 @@ describe("canonical model and provider-bound credentials", () => {
       baseURL: "https://broken-proxy.example",
     }));
     fetch.mockRejectedValue(new Error("connection refused"));
-    await expect(
-      runEffect(Provider.resolveModel({ provider: "anthropic", id: "absent" })),
-    ).rejects.toMatchObject({
-      reason: "proxy_listing_failed",
-      cause: expect.stringContaining("connection refused"),
-    });
+    const failure = await runEffect(
+      Effect.flip(Provider.resolveModel({ provider: "anthropic", id: "absent" })),
+    );
+    expect(failure).toBeInstanceOf(ModelResolutionError);
+    if (!(failure instanceof ModelResolutionError)) {
+      throw new Error("expected model resolution failure");
+    }
+    expect(failure.reason).toBe("proxy_listing_failed");
+    expect(failure.cause).toContain("connection refused");
   });
 
   test("cross-provider fallback reads its own credential, never the primary key", async () => {

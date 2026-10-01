@@ -1,5 +1,7 @@
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
+import { Result } from "effect";
+import { ThrownError } from "../thrown";
 import type { SessionTransition } from "@openomni/protocol";
 import { ProcessReplyReceipt } from "./process-session";
 
@@ -25,15 +27,22 @@ export function createProcessReplyChannel(input: Readable, write: (line: string)
       first.resolve(line);
       return;
     }
-    try {
-      const receipt = ProcessReplyReceipt.parse(JSON.parse(line));
-      const entry = pending.get(receipt.inputId);
-      if (entry === undefined) throw new Error("unsolicited process receiving receipt");
-      if (receipt.ok) entry.resolve(receipt.resolution);
-      else entry.reject(new Error(receipt.error));
-    } catch (error) {
-      fail(error instanceof Error ? error : new Error(String(error)));
+    const parsed = Result.try({
+      try: () => ProcessReplyReceipt.parse(JSON.parse(line)),
+      catch: ThrownError.parse,
+    });
+    if (Result.isFailure(parsed)) {
+      fail(parsed.failure);
+      return;
     }
+    const receipt = parsed.success;
+    const entry = pending.get(receipt.inputId);
+    if (entry === undefined) {
+      fail(new Error("unsolicited process receiving receipt"));
+      return;
+    }
+    if (receipt.ok) entry.resolve(receipt.resolution);
+    else entry.reject(new Error(receipt.error));
   });
   lines.on("close", () => {
     if (!opened) first.resolve(undefined);

@@ -250,7 +250,7 @@ function valueReference(node: ts.Node): boolean {
   if (!ts.isIdentifier(node)) return false;
   const parent = node.parent;
   if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
-  if ("name" in parent && parent.name === node && !ts.isShorthandPropertyAssignment(parent)) return false;
+  if ((parent as ts.Node & { readonly name?: ts.Node }).name === node && !ts.isShorthandPropertyAssignment(parent)) return false;
   return true;
 }
 function runnerSites(source: ts.SourceFile, file: string, provenance: Provenance, functions: readonly DeclaredFunction[]): RunnerSite[] {

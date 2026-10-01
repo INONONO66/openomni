@@ -2,15 +2,20 @@ import { z } from "zod";
 import { isPlainValue, type PlainObject, type PlainValue } from "../json.js";
 
 export namespace PolicyEffects {
-  const JsonPlainObject = z.custom<PlainObject>(
-    (value): value is PlainObject =>
-      typeof value === "object" && value !== null && !Array.isArray(value) && isPlainValue(value),
-    { message: "Expected a JSON-plain object" },
-  );
-  const JsonPlainArray = z.custom<PlainValue[]>(
-    (value): value is PlainValue[] => Array.isArray(value) && isPlainValue(value),
-    { message: "Expected a JSON-plain array" },
-  );
+  // Named generic guards: z.custom's inline callback parameter would be
+  // contextually typed `unknown`; a generic parameter carries no top type.
+  function isJsonPlainObject<Input>(value: Input): boolean {
+    return typeof value === "object" && value !== null && !Array.isArray(value) && isPlainValue(value);
+  }
+  function isJsonPlainArray<Input>(value: Input): boolean {
+    return Array.isArray(value) && isPlainValue(value);
+  }
+  const JsonPlainObject = z.custom<PlainObject>(isJsonPlainObject, {
+    message: "Expected a JSON-plain object",
+  });
+  const JsonPlainArray = z.custom<PlainValue[]>(isJsonPlainArray, {
+    message: "Expected a JSON-plain array",
+  });
 
   export const PolicyEffectType = z.enum([
     "prompt.append_context",

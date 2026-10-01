@@ -6,7 +6,6 @@ import {
   createPolicyCompiler,
   KERNEL_POLICY_REGISTRY,
   NamedPolicyRegistryError,
-  PolicyCompileError,
   SEEDED_POLICY_ROWS,
 } from "../src/index";
 import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
@@ -52,7 +51,7 @@ describe("immutable named policy registry", () => {
       type === "transform"
         ? { type, ref: "demo/missing" }
         : { type, ref: "demo/missing", metric: "fanout", limit: 2 };
-    try {
+    expect(() =>
       compilePolicySnapshot({
         generation: 7,
         registry: KERNEL_POLICY_REGISTRY,
@@ -60,18 +59,15 @@ describe("immutable named policy registry", () => {
           atGeneration(compaction, 7),
           atGeneration(draft("missing", "tool", "pre", verdict), 7),
         ],
-      });
-      throw new Error("compile unexpectedly succeeded");
-    } catch (error) {
-      expect(error).toBeInstanceOf(PolicyCompileError);
-      if (!(error instanceof PolicyCompileError)) throw error;
-      expect(error.data).toMatchObject({
+      }),
+    ).toThrow(expect.objectContaining({
+      data: expect.objectContaining({
         code: "unknown_ref",
         generation: 7,
         ruleName: "missing",
         ref: "demo/missing",
-      });
-    }
+      }),
+    }));
   });
 
   test("ordered transforms capture copied implementations and deeply immutable configuration", () => {

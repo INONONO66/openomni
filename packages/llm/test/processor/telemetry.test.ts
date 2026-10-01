@@ -100,15 +100,24 @@ describe("Processor telemetry", () => {
     const snapshotEvents = infoEvents.filter((event) => event.msg === "sink.snapshot");
     const toolStarted = infoEvents.find((event) => event.msg === "sink.tool.started");
     const toolCompleted = infoEvents.find((event) => event.msg === "sink.tool.completed");
+    const ToolStartedContext = z.object({
+      toolCallId: z.literal("call-1"),
+      toolName: z.literal("lookup"),
+      inputSummary: z.literal("q"),
+    });
+    const ToolCompletedContext = z.object({
+      toolCallId: z.literal("call-1"),
+      outputLength: z.literal(2),
+    });
 
     expect(messageEvents.length).toBe(messages.length);
     expect(snapshotEvents.length).toBe(2);
-    expect(toolStarted?.context).toMatchObject({
+    expect(ToolStartedContext.parse(toolStarted?.context)).toEqual({
       toolCallId: "call-1",
       toolName: "lookup",
       inputSummary: "q",
     });
-    expect(toolCompleted?.context).toMatchObject({
+    expect(ToolCompletedContext.parse(toolCompleted?.context)).toEqual({
       toolCallId: "call-1",
       outputLength: 2,
     });

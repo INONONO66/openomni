@@ -1,3 +1,4 @@
+import { recordingResolveModel } from "../helpers/resolve-model";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../helpers/isolated";
 import { createTestAgent, runUserMessage, failure } from "../helpers/effect-g2";
@@ -34,11 +35,7 @@ function fallbackHarness(errorMessage: string) {
     resolved,
     llm: {
       run: (input: RunInput, sink: Sink) => Effect.promise(() => run(input, sink)),
-      resolveModel: (model: Model.Ref) =>
-        Effect.promise(async () => {
-          resolved.push(model);
-          return { id: model.id, name: model.id, providerID: model.provider };
-        }),
+      resolveModel: recordingResolveModel(resolved),
     },
   };
 }

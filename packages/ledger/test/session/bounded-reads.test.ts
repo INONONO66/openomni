@@ -174,8 +174,12 @@ test("snapshot pages retain all deliveries for the selected turn without loading
   terminal("current");
   const snapshot = kernel.getSnapshot("bounded");
   expect(snapshot.turns.map((tail) => tail.turnId)).toEqual(["current"]);
+  const deliveries: { role: "user"; text: string }[] = [];
+  for (let index = 0; index < 257; index += 1) {
+    deliveries.push({ role: "user", text: `${index}` });
+  }
   expect(snapshot.turns[0]?.messages).toEqual([
-    ...Array.from({ length: 257 }, (_, index) => ({ role: "user" as const, text: `${index}` })),
+    ...deliveries,
     { role: "assistant", text: "done" },
   ]);
   expect(kernel.getSnapshot("bounded", 2).turns.map((tail) => tail.turnId)).toEqual([

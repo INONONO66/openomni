@@ -33,7 +33,9 @@ async function ask(question: string, options?: AskOptions): Promise<string> {
   if (options?.secret) {
     // Secrets must not echo: readline writes to a sink while the prompt
     // itself goes straight to the real terminal.
-    const muted = new Writable({ write: (_chunk, _encoding, callback) => callback() });
+    const muted = new Writable({
+      write: (_chunk: string | Uint8Array, _encoding, callback) => callback(),
+    });
     const rl = createInterface({ input: process.stdin, output: muted, terminal: true });
     try {
       process.stdout.write(`${question}: `);

@@ -20,6 +20,10 @@ import {
  */
 const SEQUENCE = ["first", "second", "third"] as const;
 
+test("an unrelated key has no search intent", () => {
+  expect(intentFor("Tab", false)).toBeNull();
+});
+
 const run = (state: SearchState, intent: Intent, sequence: readonly string[] = SEQUENCE) =>
   reduce(state, intent, sequence);
 

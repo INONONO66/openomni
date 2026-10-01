@@ -9,7 +9,12 @@ import {
 import { z } from "zod";
 import { Effect } from "effect";
 import { runAgent } from "./executor";
-import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  withSessionServices,
+  type SessionFixture,
+} from "./session-services";
 import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/compaction/successor";
 import { closeSessions, session } from "../../src/session-handle";
@@ -44,17 +49,21 @@ export const foldCrashProof = z
 type Proof = z.infer<typeof foldCrashProof>;
 type Stop = (bodies: string[], pending: LedgerAction.Append | undefined, proof: Proof) => void;
 
-function proof(): Proof {
+/** Canonical fold-state proof for one session, read from the isolated kernel. */
+export function foldProof(sessionId: string): Proof {
   const kernel = isolatedLedger().kernel;
-  const loaded = hydrateSessionHistory(kernel, reconstructionSession);
+  const loaded = hydrateSessionHistory(kernel, sessionId);
   return {
     revision: loaded.revision,
     digest: canonicalDigest(loaded.history),
     stateDigest: canonicalDigest({ foldVersion: 1, state: PlainValueSchema.parse(loaded.state) }),
     messageIds: loaded.history.map((message) => message.info.id),
-    checkpointId:
-      kernel.latestFoldCheckpoint(reconstructionSession).checkpoint?.id ?? null,
+    checkpointId: kernel.latestFoldCheckpoint(sessionId).checkpoint?.id ?? null,
   };
+}
+
+function proof(): Proof {
+  return foldProof(reconstructionSession);
 }
 
 function transactionCut(stop: Stop) {
@@ -89,48 +98,64 @@ async function tamperedCut(stop: Stop) {
     state: hydrateSessionHistory(isolatedLedger().kernel, reconstructionSession).state,
   });
   const effect = FoldCheckpoint.Effect.parse(checkpoint.effect.value);
-  const receipt = await runAgent(recording.ledger.commit({
-    ...checkpoint,
-    effect: {
-      encodingVersion: 1,
-      value: PlainValueSchema.parse({
-        ...effect,
-        result: { ...effect.result, stateHash: "sha256:tampered" },
-      }),
-    },
-  }));
+  const receipt = await runAgent(
+    recording.ledger.commit({
+      ...checkpoint,
+      effect: {
+        encodingVersion: 1,
+        value: PlainValueSchema.parse({
+          ...effect,
+          result: { ...effect.result, stateHash: "sha256:tampered" },
+        }),
+      },
+    }),
+  );
   stop([], undefined, { ...before, revision: receipt.revision, checkpointId: receipt.action.id });
 }
 
 async function contextCut(stop: Stop) {
-  const runtime: SessionFixture = { ...isolatedRuntime(), observations: { publish: () => undefined }, clock: () => 100, authorizeConfigure: allowConfigure };
-  return runAgent(Effect.scoped(withSessionServices(Effect.gen(function* () {
-  const handle = yield* session(
-    {
-      id: reconstructionSession,
-      role: "resident",
-      runner: () => Effect.sync(() => {
-        stop([], undefined, proof());
-        return { kind: "result" as const, text: "" };
-      }),
-    },
-    runtime,
+  const runtime: SessionFixture = {
+    ...isolatedRuntime(),
+    observations: { publish: () => undefined },
+    clock: () => 100,
+    authorizeConfigure: allowConfigure,
+  };
+  return runAgent(
+    Effect.scoped(
+      withSessionServices(
+        Effect.gen(function* () {
+          const handle = yield* session(
+            {
+              id: reconstructionSession,
+              role: "resident",
+              runner: () =>
+                Effect.sync(() => {
+                  stop([], undefined, proof());
+                  return { kind: "result" as const, text: "" };
+                }),
+            },
+            runtime,
+          );
+          yield* handle.prompt("pinned input");
+        }).pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie))),
+        runtime,
+      ),
+    ),
   );
-  yield* handle.prompt("pinned input");
-  }).pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie))), runtime)));
 }
 
 async function resultCut(stop: Stop) {
   const fixture = await reconstructionFixture(
-    (action, recording, bodies, publications) => Effect.gen(function* () {
-      const receipt = yield* recording.ledger.commit(action);
-      if (
-        action.kind === "compaction" &&
-        PlainObjectSchema.parse(action.effect.value).phase === "result"
-      )
-        stop([...bodies], receipt.action, { ...proof(), publicationCount: publications.length });
-      return receipt;
-    }),
+    (action, recording, bodies, publications) =>
+      Effect.gen(function* () {
+        const receipt = yield* recording.ledger.commit(action);
+        if (
+          action.kind === "compaction" &&
+          PlainObjectSchema.parse(action.effect.value).phase === "result"
+        )
+          stop([...bodies], receipt.action, { ...proof(), publicationCount: publications.length });
+        return receipt;
+      }),
     { updates: 2, padding: 0 },
   );
   await fixture.compact();
@@ -139,18 +164,20 @@ async function resultCut(stop: Stop) {
 async function staleCut(stop: Stop) {
   let original: string | undefined;
   const fixture = await reconstructionFixture(
-    (action, recording, bodies) => Effect.gen(function* () {
-      if (action.kind === "compaction") {
-        const intent = PlainObjectSchema.parse(action.intent.value);
-        if (intent.phase === "intent") original ??= action.id;
-        if (action.parentId === original && intent.phase === "boundary")
-          yield* Effect.try({
-            try: () => stop([...bodies], action, proof()),
-            catch: (cause) => new LedgerFailure({ operation: "test.witness", cause: String(cause) }),
-          });
-      }
-      return yield* recording.ledger.commit(action);
-    }),
+    (action, recording, bodies) =>
+      Effect.gen(function* () {
+        if (action.kind === "compaction") {
+          const intent = PlainObjectSchema.parse(action.intent.value);
+          if (intent.phase === "intent") original ??= action.id;
+          if (action.parentId === original && intent.phase === "boundary")
+            yield* Effect.try({
+              try: () => stop([...bodies], action, proof()),
+              catch: (cause) =>
+                new LedgerFailure({ operation: "test.witness", cause: String(cause) }),
+            });
+        }
+        return yield* recording.ledger.commit(action);
+      }),
     { updates: 2, padding: 0 },
   );
   try {

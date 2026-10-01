@@ -91,7 +91,7 @@ export function createLedgerRetryTimerPort(
 
 export function createAttemptRunner(
   options: ResolvedExecutorOptions,
-  record: Pick<RecordPort, "appendIntent" | "appendResult" | "appendFailure">,
+  record: Pick<RecordPort, "appendIntent" | "appendResult">,
   admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
   approve: (request: AttemptRequest, intent: LedgerAction.Receipt, admission: Admission) => Effect.Effect<"approve" | "refuse" | "timeout", ExecutionError>,
 ) {

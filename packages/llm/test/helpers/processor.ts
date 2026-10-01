@@ -5,6 +5,11 @@ import { Processor } from "./native";
 import type { StreamEvent } from "../../src/processor/stream-events";
 import { collector } from "./observation";
 import { anthropicModel, assistantMessage } from "./fixtures";
+import { z } from "zod";
+
+const StatusContext = z.object({
+  context: z.object({ stateType: z.string() }),
+});
 
 export function streamOf(
   chunks: readonly StreamEvent[],
@@ -83,7 +88,7 @@ export function processorInfo(events: ReturnType<typeof collector>) {
 export function statusStates(events: ReturnType<typeof collector>): string[] {
   return processorInfo(events)
     .filter((event) => event.msg === "sink.snapshot")
-    .map((event) => String(event.context?.stateType));
+    .map((event) => StatusContext.parse(event).context.stateType);
 }
 
 export function useProcessor() {

@@ -12,10 +12,10 @@ interface SideEffectViolation {
 
 const hotFiles = ["packages/llm/src/processor/index.ts"];
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const violations: SideEffectViolation[] = [];
 
-  await verifyHotFilesExist();
+  await verifyPinnedFilesExist(hotFiles, (filePath) => `Missing hot file: ${filePath}`);
   for (const filePath of hotFiles) {
     const source = await Bun.file(filePath).text();
     violations.push(...validateSideEffectRules(filePath, source));
@@ -35,10 +35,13 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-async function verifyHotFilesExist(): Promise<void> {
-  for (const filePath of hotFiles) {
+export async function verifyPinnedFilesExist(
+  files: readonly string[],
+  errorMessage: (filePath: string) => string,
+): Promise<void> {
+  for (const filePath of files) {
     if (!(await Bun.file(filePath).exists())) {
-      throw new Error(`Missing hot file: ${filePath}`);
+      throw new Error(errorMessage(filePath));
     }
   }
 }

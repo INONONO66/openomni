@@ -249,8 +249,13 @@ export function auditLanes() {
   ];
 }
 
-export async function auditCommand(args: string[], accepted = [0]) {
-  const child = Bun.spawn(args, { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
+export async function auditCommand(args: string[], accepted = [0], input?: string, cwd = ROOT) {
+  const child = Bun.spawn(args, {
+    cwd,
+    stdin: input === undefined ? "ignore" : new TextEncoder().encode(input),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

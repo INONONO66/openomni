@@ -129,6 +129,19 @@ describe("L0 adapter contracts", () => {
 });
 
 describe("SQLite adapter contract guards", () => {
+  test("decision-fact reads reject malformed persisted JSON", () => {
+    const fact = stores.session.decisionFacts.record({
+      key: "route:corrupt",
+      type: "route.decided",
+      data: { value: "valid" },
+      timeCreated: 10,
+    });
+    expect(fact.kind).toBe("recorded");
+    inspection.query("UPDATE decision_fact SET data = ? WHERE key = ?").run("{", fact.fact.key);
+
+    expect(() => stores.session.decisionFacts.head(fact.fact.key)).toThrow();
+  });
+
   test("fresh session files omit retired lifecycle tables", () => {
     const rows = inspection
       .query(

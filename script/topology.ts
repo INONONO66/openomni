@@ -199,18 +199,15 @@ export function topologyInventoryDrift(
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
   root = REPO_ROOT,
 ): WorkspaceInventoryDrift {
-  const rootManifest = z.object({ workspaces: z.json().optional() }).parse(
+  const rootManifest = z.object({ workspaces: z.array(z.string()) }).safeParse(
     JSON.parse(readFileSync(join(root, "package.json"), "utf8")),
   );
-  if (
-    !Array.isArray(rootManifest.workspaces) ||
-    !rootManifest.workspaces.every((workspace) => typeof workspace === "string")
-  ) {
+  if (!rootManifest.success) {
     throw new Error("root package.json workspaces must be an array of glob strings");
   }
 
   const actualDirs = new Set<string>();
-  for (const workspaceGlob of rootManifest.workspaces) {
+  for (const workspaceGlob of rootManifest.data.workspaces) {
     for (const manifestPath of new Bun.Glob(`${workspaceGlob}/package.json`).scanSync({
       cwd: root,
       onlyFiles: true,

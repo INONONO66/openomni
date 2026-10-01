@@ -4,11 +4,11 @@ import { LlmCall } from "../src/event/llm.js";
 describe("LlmCall BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: Date.now() };
 
-  function parseCompleted(input: unknown): unknown {
+  function parseCompleted<Input>(input: Input) {
     return LlmCall.Events.Completed.schema.parse(input);
   }
 
-  function completedParseFails(input: unknown): boolean {
+  function completedParseFails<Input>(input: Input): boolean {
     try {
       parseCompleted(input);
       return false;

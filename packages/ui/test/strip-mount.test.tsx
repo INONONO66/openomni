@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { STRIP } from "./fixture";
+import { SidebarFrame } from "./sidebar-frame";
 
 /**
  * The strip's history trio is ONE node for the window's life: collapsing and
@@ -21,7 +21,6 @@ GlobalRegistrator.register();
 const { act, useEffect } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { Sidebar } = await import("../src/sidebar");
-const { TabStrip } = await import("../src/tab-strip");
 
 afterAll(() => GlobalRegistrator.unregister());
 
@@ -36,27 +35,12 @@ function MountProbe() {
 
 function Frame({ open, floating = false }: { readonly open: boolean; readonly floating?: boolean }) {
   return (
-    <Sidebar
-      floating={floating}
-      onFloatingChange={() => undefined}
-      onToggle={() => undefined}
-      onWidthCommit={() => undefined}
-      open={open}
-      width={240}
-    >
-      <TabStrip
-        {...STRIP}
-        createLabel={STRIP.createLabel}
-        history={STRIP.history}
-        onCreate={STRIP.onCreate}
-        platform="darwin"
-      />
-      <Sidebar.Gap />
+    <SidebarFrame floating={floating} open={open}>
       <Sidebar.Container>
         <ContainerMountProbe />
       </Sidebar.Container>
       <MountProbe />
-    </Sidebar>
+    </SidebarFrame>
   );
 }
 

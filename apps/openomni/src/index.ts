@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
+import { ThrownError } from "./thrown";
 import { bootResource } from "./composition/boot";
 import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
@@ -194,7 +195,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // host so no path outside their fixture directory is ever touched.
       ...(config.catalogPath === undefined ? {} : resolveClusterStorage(config)),
     });
-  try {
+  const boot = async () => {
     const services = await runAppBoot(
       runtime,
       Effect.gen(function* () {
@@ -855,12 +856,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
         return stopping;
       },
     };
-  } catch (error) {
+  };
+  const outcome = await boot().then(Result.succeed, ThrownError.transform((cause) => Result.fail(cause)).parse);
+  if (Result.isFailure(outcome)) {
     await runtime.dispose().catch((disposal: Error) => {
-      throw new AggregateError([error, disposal], "app boot and disposal failed");
+      throw new AggregateError([outcome.failure, disposal], "app boot and disposal failed");
     });
-    throw error;
+    throw outcome.failure;
   }
+  return outcome.success;
 }
 
 /**

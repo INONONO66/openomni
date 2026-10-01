@@ -27,6 +27,18 @@ const grant = {
   expiresAt: 100,
 };
 
+function withClaimedGrant(check: (db: Database, store: ReturnType<typeof createSqliteReplyGrantAdapter>) => void): void {
+  const db = new Database(":memory:");
+  try {
+    bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+    const store = createSqliteReplyGrantAdapter(db);
+    store.claim(grant, { at: 1, maxLiveInstances: 1 });
+    check(db, store);
+  } finally {
+    db.close();
+  }
+}
+
 describe("durable reply-grant current projection", () => {
   test("independent connections racing for one slot admit exactly one grant", async () => {
     const directory = mkdtempSync(join(tmpdir(), "reply-grant-race-"));
@@ -92,11 +104,7 @@ describe("durable reply-grant current projection", () => {
     // Bun's transaction controller owns statements outside the query cache.
     // Use close() like production; `using` calls strict close(true), which
     // rejects those internal statements on Bun 1.3.6 even after COMMIT.
-    const db = new Database(":memory:");
-    try {
-      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
-      const store = createSqliteReplyGrantAdapter(db);
-      store.claim(grant, { at: 1, maxLiveInstances: 1 });
+    withClaimedGrant((db, store) => {
       db.run(
         "CREATE TRIGGER reject_reply BEFORE INSERT ON reply_grant BEGIN SELECT RAISE(ABORT, 'projection_failure'); END",
       );
@@ -113,17 +121,11 @@ describe("durable reply-grant current projection", () => {
 
       expect(store.listLive(1)).toEqual([grant]);
       expect(store.listLive(101)).toEqual([]);
-    } finally {
-      db.close();
-    }
+    });
   });
 
   test("live queries use the expiry index and exclude expired or malformed historical payloads", () => {
-    const db = new Database(":memory:");
-    try {
-      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
-      const store = createSqliteReplyGrantAdapter(db);
-      store.claim(grant, { at: 1, maxLiveInstances: 1 });
+    withClaimedGrant((db, store) => {
       db.run(
         "INSERT INTO reply_grant VALUES ('old', '{', 'old-rule', 'old-guest', 'old-surface', 0)",
       );
@@ -144,9 +146,7 @@ describe("durable reply-grant current projection", () => {
       expect(db.query("SELECT data FROM reply_grant WHERE id = 'old'").get()).toEqual({
         data: "{",
       });
-    } finally {
-      db.close();
-    }
+    });
   });
 
   test("malformed live rows fail closed at the persisted-data boundary", () => {
@@ -165,11 +165,7 @@ describe("durable reply-grant current projection", () => {
     "UPDATE reply_grant SET data = json_set(data, '$.expiresAt', 200)",
     "UPDATE reply_grant SET data = json_set(data, '$.replyScope.surfaceKey', 'telegram:elsewhere')",
   ])("incoherent indexed authority fails closed: %s", (sql) => {
-    const db = new Database(":memory:");
-    try {
-      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
-      const store = createSqliteReplyGrantAdapter(db);
-      store.claim(grant, { at: 1, maxLiveInstances: 1 });
+    withClaimedGrant((db, store) => {
       db.run(sql);
 
       expect(() => store.listLive(1)).toThrow(
@@ -178,9 +174,7 @@ describe("durable reply-grant current projection", () => {
           grantId: grant.id,
         }),
       );
-    } finally {
-      db.close();
-    }
+    });
   });
 
   test("repeat contact preserves expiry while a later first contact reuses expired capacity", () => {

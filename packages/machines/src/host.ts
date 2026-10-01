@@ -5,6 +5,7 @@ import { type BusEvent, Machine } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
 import { decodeMachineFailure } from "./failure";
+import { listenForAbort } from "./abort";
 
 interface MachineHostOptions {
   readonly socketPath: string;
@@ -157,10 +158,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
             return typedCall(server, Machine.WireMethod.CancelCode, { cellId: request.cellId }).pipe(Effect.asVoid, Effect.mapError(transportFailure("cell.cancel")));
           });
           const cancellation = signal ? yield* Effect.forkScoped(Effect.callback<void>((resume) => {
-            const abort = () => resume(Effect.void);
-            signal.addEventListener("abort", abort, { once: true });
-            if (signal.aborted) abort();
-            return Effect.sync(() => signal.removeEventListener("abort", abort));
+            return Effect.sync(listenForAbort(signal, () => resume(Effect.void)));
           }).pipe(Effect.andThen(cancel))) : undefined;
           server.useConnection(peer.id);
           return yield* typedCall(server, Machine.WireMethod.RunCode, request, request.timeoutMs + 1000).pipe(

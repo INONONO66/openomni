@@ -3,10 +3,9 @@ import { Chat } from "@ai-sdk/react";
 import type { ChatTransport, UIMessage } from "ai";
 import { Window } from "happy-dom";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { SessionContent } from "../src/renderer/chat/session-content";
-import { installGlobals } from "./helpers";
+import { mountWindow } from "./helpers";
 import { makeSession } from "./helpers/session";
 
 /** A decision never sends a message on its own, so any wire use is a failure. */
@@ -34,21 +33,7 @@ test.each([
   ["Deny", false],
 ])("%s in the tray answers the Chat's blocked tool with that decision", async (control, approved) => {
   const window = new Window({ url: "http://localhost" });
-  const restoreGlobals = installGlobals({
-    window,
-    document: window.document,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  });
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
+  const { host, restoreGlobals, root } = mountWindow(window);
   const chat = new Chat<OpenOmniUIMessage>({
     id: "session",
     messages: [blocked()],

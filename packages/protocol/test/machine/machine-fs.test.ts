@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Machine } from "../../src/machine/index.js";
+import type { PlainValue } from "../../src/json.js";
 import { expectIssue } from "../helpers/schema.js";
 
 const enrollment = {
@@ -109,7 +110,7 @@ describe("Machine.Offer.exports", () => {
 
 describe("machine wire compatibility", () => {
   test("an Enrollment JSON written before exports existed still parses", () => {
-    const legacy = JSON.parse(
+    const legacy: PlainValue = JSON.parse(
       '{"machineId":"mac-0","name":"brain-mac","allowedCapabilities":["fs.read"],"enrolledAt":1}',
     );
     const result = Machine.Enrollment.safeParse(legacy);
@@ -120,7 +121,7 @@ describe("machine wire compatibility", () => {
   });
 
   test("an Offer JSON written before exports existed still parses", () => {
-    const legacy = JSON.parse(
+    const legacy: PlainValue = JSON.parse(
       '{"machineId":"mac-0","offeredCapabilities":["fs.read"],"daemonVersion":"0.1.0",' +
         '"platform":"darwin-arm64","offeredAt":2}',
     );

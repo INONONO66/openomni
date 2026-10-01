@@ -7,7 +7,7 @@ import {
 } from "../src/preload/api";
 import type { ShellCommand } from "../src/preload/api";
 
-type Wrapper = (event: { readonly senderId: number }, command: unknown) => void;
+type Wrapper = (event: { readonly senderId: number }, command: string | object) => void;
 const listeners = new Set<Wrapper>();
 const registered: { channel: string; wrapper: Wrapper }[] = [];
 const removed: { channel: string; wrapper: Wrapper }[] = [];
@@ -78,7 +78,7 @@ function api(): DesktopApi {
   return value;
 }
 
-function emit(command: unknown): void {
+function emit(command: string | object): void {
   for (const wrapper of listeners) wrapper({ senderId: 27 }, command);
 }
 

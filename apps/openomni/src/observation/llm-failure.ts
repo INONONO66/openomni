@@ -83,28 +83,26 @@ function unclassifiedText(error: object | undefined): string {
   return "I could not answer: I could not reach the model. Retry shortly.";
 }
 
+const PaymentRequired = z.object({ statusCode: z.literal(402) });
+const DataPaymentRequired = z.object({ data: PaymentRequired });
+const CauseLink = z.object({ cause: z.instanceof(Object) });
+
 /**
  * Read structurally from the error, never from prose: an AI SDK error carries
  * `statusCode` on the object, and the package's typed one carries it under
  * `.data`. Cause links are walked for the same reason the llm classifier
- * walks them — the status can sit one wrapper down.
+ * walks them — the status can sit one wrapper down. zod is the reader, so no
+ * property access on the foreign error shape stays `unknown`.
  */
 function paymentRequired(error: object | undefined): boolean {
   let current: object | undefined = error;
   for (let depth = 0; depth < 8; depth += 1) {
     if (current === undefined) return false;
-    if ("statusCode" in current && current.statusCode === 402) return true;
-    if (
-      "data" in current &&
-      typeof current.data === "object" &&
-      current.data !== null &&
-      "statusCode" in current.data &&
-      current.data.statusCode === 402
-    )
-      return true;
-    const cause = "cause" in current ? current.cause : undefined;
-    if (cause === undefined || cause === current) return false;
-    current = typeof cause === "object" && cause !== null ? cause : undefined;
+    if (PaymentRequired.safeParse(current).success) return true;
+    if (DataPaymentRequired.safeParse(current).success) return true;
+    const link = CauseLink.safeParse(current);
+    if (!link.success || link.data.cause === current) return false;
+    current = link.data.cause;
   }
   return false;
 }

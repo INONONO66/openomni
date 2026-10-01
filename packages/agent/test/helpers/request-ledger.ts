@@ -1,8 +1,12 @@
 import { runAgentSync } from "./executor";
-import { executionReads } from "./execution-reads";
-import { fencedTurnFixture } from "./fenced-writer";
+import { fencedExecutionLedger } from "./execution-reads";
+import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger, runTestSync } from "./isolated";
-import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime } from "./session-services";
+import {
+  allowConfigure,
+  kernelRuntime,
+  type SessionFixture as SessionRuntime,
+} from "./session-services";
 import { Effect, Result } from "effect";
 import type { LedgerError } from "@openomni/ledger";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";
@@ -55,24 +59,9 @@ export function requestLedger(
     ...kernelRuntime(() => kernel),
   };
   const ledger: ExecutionLedger = {
-    ...executionReads(kernel, id),
-    commit(action: LedgerAction.Append) {
-      return Effect.gen(function* () {
-        const row = kernel.row(id);
-        const committed = yield* commitFoldBatch(kernel, {
-          sessionId: id,
-          owner,
-          fence,
-          now: clock(),
-          expectedRevision: row.revision,
-          actions: [action],
-          state: row.state,
-        });
-        const receipt = committed.receipts[0];
-        if (receipt === undefined) throw new Error("test receipt missing");
-        return receipt;
-      });
-    },
+    ...fencedExecutionLedger(kernel, id, { owner, fence }, clock, (batch) =>
+      commitFoldBatch(kernel, batch),
+    ),
     transition(payload: SessionTransition.Payload, inputId: string, at: number) {
       return Effect.gen(function* () {
         const decision = yield* commitSessionRequest(
@@ -90,24 +79,26 @@ export function requestLedger(
     },
   };
   return {
-    commitBatch(actions: readonly LedgerAction.Append[], overrides: Partial<LedgerSession.Commit> = {}) {
+    commitBatch(
+      actions: readonly LedgerAction.Append[],
+      overrides: Partial<LedgerSession.Commit> = {},
+    ) {
       const row = kernel.row(id);
-      return runAgentSync(commitFoldBatch(kernel, {
-        sessionId: id, owner, fence, now: clock(), expectedRevision: row.revision,
-        actions: [...actions], state: row.state,
-        ...overrides,
-      }));
+      return runAgentSync(
+        commitFoldBatch(kernel, {
+          sessionId: id,
+          owner,
+          fence,
+          now: clock(),
+          expectedRevision: row.revision,
+          actions: [...actions],
+          state: row.state,
+          ...overrides,
+        }),
+      );
     },
     ledger,
-    identity: {
-      sessionId: id,
-      role: "resident" as const,
-      parentActionId: turnId,
-      turnId,
-      toolsGeneration: generation.generation,
-      toolsHash: generation.toolsHash,
-      systemHash: generation.systemHash,
-    },
+    identity: fencedTurnIdentity(id, turnId, generation),
     entropy: () => crypto.randomUUID(),
     clock,
   };

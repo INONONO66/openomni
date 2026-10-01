@@ -28,6 +28,21 @@ describe("canonical session lineage", () => {
     ).toEqual([child.id]);
   });
 
+  test("kernel child-session pages read the catalog index in id order", () => {
+    for (const [id, parentId] of [
+      ["b", "root"],
+      ["a", "root"],
+      ["else", "other"],
+    ] as const) {
+      stores.catalog.indexSession({ id, parentId, role: "worker", createdAt: 1 });
+    }
+    expect(stores.kernel.childSessionsPage("root", "", 256).map((row) => row.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(stores.kernel.childSessionsPage("root", "a", 256).map((row) => row.id)).toEqual(["b"]);
+  });
+
   test("external parent identity is retained without inventing a parent row", () => {
     // L0 parent_id is a provenance reference, not a parent-existence admission policy.
     materializeSession(stores.kernel, "child", "external-parent");

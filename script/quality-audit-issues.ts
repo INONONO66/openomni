@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aggregateFiles, type Audit, findingKinds, totalsSchema } from "./quality-audit";
+import { aggregateFiles, auditCommand, type Audit, findingKinds, totalsSchema } from "./quality-audit";
 
 const issueSchema = z.object({
   number: z.number().int().positive(),
@@ -210,18 +210,7 @@ export function planIssues(audit: Audit, issues: readonly Issue[]) {
 }
 
 export async function ghCommand(args: readonly string[], input?: string, executable = "gh") {
-  const child = Bun.spawn([executable, ...args], {
-    stdin: input === undefined ? "ignore" : new TextEncoder().encode(input),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0) throw new Error(`gh ${args.join(" ")} exited ${code}: ${stderr}`);
-  return stdout;
+  return auditCommand([executable, ...args], [0], input, process.cwd());
 }
 
 async function apply(operation: Operation, endpoint: string, run: Gh) {

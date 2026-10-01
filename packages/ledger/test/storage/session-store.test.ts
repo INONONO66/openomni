@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { type LedgerAction, type SessionGeneration, SessionTurn } from "@openomni/protocol";
 import { createSessionKernel } from "../../src/session/kernel";
 import {
-  bootstrapStoreDatabase,
   openCatalogStore,
   openSessionStore,
   SESSION_FILE_SCHEMA,
 } from "../../src/storage/index";
 import { runLedgerSync } from "../helpers/effect";
+import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
 function tableCensus(path: string): Array<{ name: string }> {
   const raw = new Database(path, { readonly: true });
@@ -86,19 +86,7 @@ test("openSessionStore bootstraps a fresh session file: exactly the three sessio
 // NOTADB — observing busy_timeout=5000 after that throw proves the pragma ran
 // strictly before any schema statement.
 test("F9: session-file bootstrap applies busy_timeout before any schema statement", () => {
-  const directory = mkdtempSync(join(tmpdir(), "session-store-"));
-  const path = join(directory, "notadb.sqlite");
-  writeFileSync(path, "this file is deliberately not a sqlite database");
-  const db = new Database(path);
-  try {
-    expect(() => bootstrapStoreDatabase(db, SESSION_FILE_SCHEMA)).toThrow(
-      expect.objectContaining({ code: "SQLITE_NOTADB", errno: 26 }),
-    );
-    expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
-  } finally {
-    db.close();
-    rmSync(directory, { recursive: true });
-  }
+  expectBusyBeforeSchema(SESSION_FILE_SCHEMA);
 });
 
 test("openSessionStore rejects a corrupt payload instead of returning a handle", () => {
@@ -182,15 +170,7 @@ test("createSessionKernel serves session facts from the session file and policy 
 
     // Policy rows come from the catalog, not the session file.
     expect(
-      catalog.policies.append({
-        name: "allow-turn",
-        kind: "turn",
-        phase: "pre",
-        match: { encodingVersion: 1, value: {} },
-        verdict: { encodingVersion: 1, value: { kind: "allow" } },
-        priority: 0,
-        generation: 1,
-      }),
+      catalog.policies.append(policyFixture),
     ).toBe(true);
     expect(kernel.policyRows()).toHaveLength(1);
     expect(kernel.currentPolicyGeneration()).toBe(1);
