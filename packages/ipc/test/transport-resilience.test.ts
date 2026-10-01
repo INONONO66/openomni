@@ -1,8 +1,9 @@
 import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
-import { Effect, Exit, Logger, Scope } from "effect";
+import { Effect, Logger } from "effect";
 import { connectIpcClient as connectNative, createIpcServer as listenNative } from "../src/index";
+import { acquire } from "./helpers/effects";
 import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { createIpcServer } from "./helpers/native";
@@ -126,18 +127,14 @@ describe("IPC transport resilience (#QB1)", () => {
 
     const logged = deferred<string>();
     const collector = collectingLogger("matched no message schema", logged.resolve);
-    const scope = Effect.runSync(Scope.make());
+    const { value: client, close } = await acquire(connectNative(socketPath).pipe(Effect.provide(Logger.layer([collector]))));
     try {
-      const client = await Effect.runPromise(connectNative(socketPath).pipe(
-        Effect.provideService(Scope.Scope, scope),
-        Effect.provide(Logger.layer([collector])),
-      ));
       // The captured log entry carries the Warn level, not a console spy.
       expect(await within(logged.promise, "schema mismatch warning")).toBe("Warn");
       // A drifted peer is surfaced, not fatal: the connection stays usable.
       expect(client.connected).toBe(true);
     } finally {
-      await Effect.runPromise(Scope.close(scope, Exit.void));
+      await close();
       rawServer.close();
     }
   });
@@ -147,14 +144,10 @@ describe("IPC transport resilience (#QB1)", () => {
     const logged = deferred<string>();
     const collector = collectingLogger("request handler defect", logged.resolve);
     const disconnected = deferred<string>();
-    const scope = Effect.runSync(Scope.make());
+    const { close } = await acquire(listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
+      onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
+    }).pipe(Effect.provide(Logger.layer([collector]))));
     try {
-      await Effect.runPromise(listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
-        onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
-      }).pipe(
-        Effect.provideService(Scope.Scope, scope),
-        Effect.provide(Logger.layer([collector])),
-      ));
       const client = await connectIpcClient(socketPath);
       clients.push(client);
 
@@ -165,7 +158,7 @@ describe("IPC transport resilience (#QB1)", () => {
       expect(await within(logged.promise, "handler defect error log")).toBe("Error");
       await within(disconnected.promise, "defect connection removal");
     } finally {
-      await Effect.runPromise(Scope.close(scope, Exit.void));
+      await close();
     }
   });
 
