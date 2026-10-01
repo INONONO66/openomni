@@ -107,12 +107,16 @@ describe("ledger-first observations", () => {
     );
   });
 
-  // Each row is one value a sink may throw: an Error, and an object whose own
-  // String() conversion throws, which must still reach the port as a bounded
-  // diagnostic. The port counts every report and then throws itself.
+  // Each row is one value a sink may throw: an Error; an object whose own
+  // String() conversion throws; and a revoked Proxy, on which even `instanceof`
+  // throws. Each must still reach the port as a bounded diagnostic. The port
+  // counts every report and then throws itself.
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
   test.each([
     ["an Error", new Error("sink failed"), "sink failed"],
     ["a value String() cannot render", { toString: 0 }, "sink threw an unrepresentable object"],
+    ["a revoked Proxy", revoked.proxy, "sink threw an unrepresentable object"],
   ])(
     "a sink throwing %s and a throwing port never unwind materialize, append or a batch commit",
     (_case, thrown, message) => {
