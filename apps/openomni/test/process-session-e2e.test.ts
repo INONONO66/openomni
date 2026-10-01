@@ -534,7 +534,7 @@ test.each([
     );
     if (failTarget) {
       await expect(serving).rejects.toMatchObject({
-        _tag: "ForeignFailure",
+        _tag: "AgentFailure",
         operation: "message.outbound",
       });
     } else await serving;

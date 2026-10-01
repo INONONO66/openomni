@@ -1,5 +1,5 @@
 import { Context, Effect } from "effect";
-import { createExecutor, ForeignFailure, type SessionRuntime } from "@openomni/agent";
+import { createExecutor, AgentFailure, type SessionRuntime } from "@openomni/agent";
 import type { GatewayRouter } from "@openomni/channels";
 import type { LedgerAction } from "@openomni/protocol";
 import type { SessionKernel } from "./cluster-runtime";
@@ -36,7 +36,7 @@ export function dispatchOutboundMessage(
             expectedRevision: row.revision, actions: [action], state: row.state,
           });
           const receipt = result.receipts[0];
-          if (receipt === undefined) throw new Error("outbound policy receipt missing");
+          if (receipt === undefined) return yield* Effect.die(new Error("outbound policy receipt missing"));
           return receipt;
         }),
       },
@@ -52,7 +52,7 @@ export function dispatchOutboundMessage(
           replyTo: message.replyTo,
         },
       );
-      if (admitted.status === "blocked_pre") throw new Error("outbound gateway admission refused");
+      if (admitted.status === "blocked_pre") return yield* new AgentFailure({ operation: "message.outbound", cause: "outbound gateway admission refused" });
       const receipt =
         context.receipt ??
         openKernel(message.destinationSessionId).outboundReceipt(
@@ -60,11 +60,11 @@ export function dispatchOutboundMessage(
           message.messageId,
         );
       if (receipt === undefined)
-        throw new Error("outbound receiving consumer did not commit a receipt");
+        return yield* Effect.die(new Error("outbound receiving consumer did not commit a receipt"));
       return receipt;
     }).pipe(
       Effect.provideService(outboundMessage, context),
-      Effect.mapError((error) => new ForeignFailure({ operation: "message.outbound", cause: String(error) })),
+      Effect.mapError((error) => error._tag === "AgentFailure" ? error : new AgentFailure({ operation: "message.outbound", cause: String(error) })),
     );
   });
 }

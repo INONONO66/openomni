@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { attachMachineDaemon, ForeignFailure } from "@openomni/machines";
+import { attachMachineDaemon, MachinesFailure } from "@openomni/machines";
 import { createCodemode } from "@openomni/codemode";
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
@@ -10,8 +10,8 @@ const Configuration = z.object({ socketPath: z.string().min(1), offer: Machine.O
 /** Production composition of the existing daemon wire, not a second daemon implementation. */
 export function attachConfiguredMachine(configPath: string) {
   return Effect.gen(function* () {
-  const contents = yield* Effect.tryPromise({ try: () => Bun.file(configPath).text(), catch: foreignFailure((fields) => new ForeignFailure(fields), "configuration.read") });
-  const config = yield* Effect.try({ try: () => Configuration.parse(JSON.parse(contents)), catch: foreignFailure((fields) => new ForeignFailure(fields), "configuration.decode") });
+  const contents = yield* Effect.tryPromise({ try: () => Bun.file(configPath).text(), catch: foreignFailure((fields) => new MachinesFailure(fields), "configuration.read") });
+  const config = yield* Effect.try({ try: () => Configuration.parse(JSON.parse(contents)), catch: foreignFailure((fields) => new MachinesFailure(fields), "configuration.decode") });
   const mode = yield* createCodemode();
   return yield* attachMachineDaemon({
     ...config,

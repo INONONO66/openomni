@@ -220,7 +220,7 @@ describe("the completion tool", () => {
       await expect(
         completionFixture({ provider, id, apiKey: "key" }, { run })("hello"),
       ).rejects.toMatchObject({
-        _tag: "ForeignFailure",
+        _tag: "AgentFailure",
         operation: "completion.resolve",
         cause: String(await runEffect(Effect.flip(Provider.resolveModel({ provider, id })))),
       });
@@ -344,7 +344,7 @@ describe("the completion port", () => {
     });
 
     await expect(port("q")).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "AgentFailure",
       operation: "completion",
       cause: "sub-model returned continue",
     });
@@ -365,7 +365,7 @@ describe("the completion port", () => {
     };
 
     await expect(admittedEffect(port({ prompt: "q" }), withoutAttempts)).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "AgentFailure",
       operation: "completion",
     });
     expect(invoked).toBe(0);
@@ -379,7 +379,7 @@ describe("the completion port", () => {
     const refused = scriptedLlmExecutor({ terminal: "blocked_pre", reason: "llm.text denied" });
 
     await expect(admittedEffect(port({ prompt: "q" }), refused)).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "AgentFailure",
       operation: "completion",
     });
   });
@@ -393,7 +393,7 @@ describe("the completion port", () => {
     for (const value of ["bare text", { answer: "no text field" }] as const) {
       const executed = scriptedLlmExecutor({ terminal: "executed", value });
       await expect(admittedEffect(port({ prompt: "q" }), executed)).rejects.toMatchObject({
-        _tag: "ForeignFailure",
+        _tag: "AgentFailure",
         operation: "completion",
         cause: "invalid sub-model result",
       });

@@ -1,5 +1,6 @@
 import { Effect, Result } from "effect";
 import { ThrownError } from "./thrown";
+import { AppInvariantError } from "./invariant";
 import { bootResource } from "./composition/boot";
 import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
@@ -19,7 +20,7 @@ import {
   SessionEntity,
   type SessionHandle,
   type SessionRuntime,
-  ForeignFailure as AgentFailure,
+  AgentFailure,
   ExecutionApprovalError,
 } from "@openomni/agent";
 import { CommitRefused, SessionHandleStore } from "@openomni/ledger";
@@ -28,7 +29,7 @@ import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
   decodeChannelFailure,
-  ForeignFailure as ChannelFailure,
+  ChannelsFailure,
   WebSocketHandler,
 } from "@openomni/channels";
 import { homedir } from "node:os";
@@ -36,7 +37,7 @@ import type { ActorRegistry } from "@openomni/ledger";
 
 import {
   createMachineHost,
-  ForeignFailure as MachineFailure,
+  MachinesFailure,
   type MachineHost,
 } from "@openomni/machines";
 import type { Channel } from "@openomni/protocol";
@@ -87,6 +88,14 @@ import { configureAuthority } from "./composition/generation-layers";
 import { createResident } from "./resident";
 import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
 import { createRequestDomainRevisions } from "./tools/core/request-domain-revisions";
+
+/** A channel message the gateway refused pre-admission: the driver reports it to the sender. */
+class MessageAdmissionRefused extends Error {
+  constructor(reasonCode: string) {
+    super(`message admission refused: ${reasonCode}`);
+    this.name = "MessageAdmissionRefused";
+  }
+}
 
 interface StartOptions {
   readonly runtime?: AppRuntime;
@@ -320,7 +329,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     let gateway: GatewayRouter | undefined;
     const messages = {
       ingest: (...args: Parameters<GatewayRouter["ingest"]>) => {
-        if (gateway === undefined) throw new Error("gateway is not composed");
+        if (gateway === undefined) return Effect.die(new Error("gateway is not composed"));
         return gateway.ingest(...args);
       },
     };
@@ -330,7 +339,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     let channelSupervisor: ChannelSupervisor | undefined;
     const liveSupervisor = (): ChannelSupervisor => {
       if (channelSupervisor === undefined)
-        throw new Error("provisioning used before composition finished");
+        throw new AppInvariantError("provisioning used before composition finished");
       return channelSupervisor;
     };
     const provisioningPort: ProvisionPort = {
@@ -369,7 +378,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   : cells.callTool(call).pipe(
                       Effect.mapError(
                         (error) =>
-                          new MachineFailure({
+                          new MachinesFailure({
                             operation: "codemode.callTool",
                             cause: String(error),
                           }),
@@ -442,12 +451,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
       const admission = await runAppEffect(runtime, messages.ingest(sender, facts));
       if (admission.status === "blocked_pre") {
-        throw new Error(`message admission refused: ${admission.reasonCode}`);
+        throw new MessageAdmissionRefused(admission.reasonCode);
       }
     };
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string, idempotencyKey: string) => {
-      if (wsHandler === undefined) throw new Error("ws delivery used before composition finished");
+      if (wsHandler === undefined) throw new AppInvariantError("ws delivery used before composition finished");
       return wsHandler.push(externalId, body, idempotencyKey);
     };
     // Live table: channel components register and revoke their own outbound
@@ -659,7 +668,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           Effect.flatMap((admission) =>
             admission.status === "blocked_pre"
               ? Effect.fail(
-                  new ChannelFailure({
+                  new ChannelsFailure({
                     operation: "message.admission",
                     cause: admission.reasonCode,
                   }),
@@ -683,7 +692,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
-    if (server.port === undefined) throw new Error("OpenOmni ws server did not bind a TCP port");
+    if (server.port === undefined) throw new AppInvariantError("OpenOmni ws server did not bind a TCP port");
     const boundServer = server;
     const boundPort: number = server.port;
     await acquire(Effect.succeed(boundServer), (resource) =>
@@ -702,7 +711,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const borrowedAuthority = (id: string) => {
       const kernel = plane.openKernel(id);
       const row = kernel.row(id);
-      if (row.leaseOwner === null) throw new Error(`session has no activation authority: ${id}`);
+      if (row.leaseOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
       return { kernel, row, owner: row.leaseOwner, fence: row.leaseFence };
     };
     const sessionFacade = (id: string): AppSessionHandle | undefined => {

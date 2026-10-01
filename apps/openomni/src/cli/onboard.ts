@@ -1,3 +1,4 @@
+import { CliError } from "./errors";
 import type { EnvEntry } from "./env-file";
 
 /**
@@ -27,7 +28,7 @@ async function askRequired(
   const answer = (await ask(question, options)).trim();
   if (answer.length > 0) return answer;
   if (fallback !== undefined) return fallback;
-  throw new Error(`${question} is required`);
+  throw new CliError(`${question} is required`);
 }
 
 export async function gatherOnboarding(ask: Ask): Promise<readonly EnvEntry[]> {
@@ -35,14 +36,14 @@ export async function gatherOnboarding(ask: Ask): Promise<readonly EnvEntry[]> {
     fallback: "anthropic",
   });
   if (provider !== "anthropic" && provider !== "openai") {
-    throw new Error(`Model provider must be "anthropic" or "openai", got "${provider}"`);
+    throw new CliError(`Model provider must be "anthropic" or "openai", got "${provider}"`);
   }
   const modelId = await askRequired(ask, "Model id");
   const apiKey = await askRequired(ask, "Model API key", { secret: true });
   const port = await askRequired(ask, "WebSocket port", { fallback: "3000" });
   // Port 0 would bind an ephemeral, undiscoverable port under the daemon.
   if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65_535) {
-    throw new Error("WebSocket port must be an integer from 1 to 65535");
+    throw new CliError("WebSocket port must be an integer from 1 to 65535");
   }
 
   const entries: EnvEntry[] = [

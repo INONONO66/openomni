@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { createTurnDispatcher } from "@openomni/agent";
 import { createCodemode, type CodeError } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost, ForeignFailure as MachineFailure } from "@openomni/machines";
+import { attachMachineDaemon, createMachineHost, MachinesFailure as MachineFailure } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";
 import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { fixtureHashes } from "../../../packages/agent/test/helpers/compiled-policy";

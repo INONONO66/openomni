@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach } from "bun:test";
 import type { CliDeps } from "../src/cli/commands";
+import { CliError } from "../src/cli/errors";
 import { runCli } from "../src/cli/commands";
 import type { DaemonIo, DaemonTarget, ExecResult } from "../src/cli/daemon";
 import {
@@ -456,8 +457,8 @@ describe("onboarding", () => {
       }),
     );
     await expect(result).rejects.toMatchObject({
-      constructor: Error,
-      name: "Error",
+      constructor: CliError,
+      name: "CliError",
       message: "WebSocket port must be an integer from 1 to 65535",
     });
   });

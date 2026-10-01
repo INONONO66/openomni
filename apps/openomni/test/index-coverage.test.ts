@@ -75,7 +75,7 @@ test.each(["revision", "fence"] as const)(
         expect(commits).toBe(2);
       } else {
         const failure = await bounded(runEffect(Effect.flip(handle.interrupt())));
-        expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "session.interrupt" });
+        expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "session.interrupt" });
         expect(commits).toBe(1);
       }
     } finally {

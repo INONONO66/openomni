@@ -19,7 +19,7 @@ import {
   createSessionRequests,
   currentExecutor,
   Failure,
-  ForeignFailure,
+  AgentFailure,
   scopeObservation,
   attemptUsage,
   toolWallMs,
@@ -530,7 +530,7 @@ export function createResidentGateway(
           const execute = (intent: Parameters<typeof body>[0]) =>
             body(intent).pipe(
               Effect.mapError(
-                (error) => new ForeignFailure({ operation: "message.body", cause: String(error) }),
+                (error) => new AgentFailure({ operation: "message.body", cause: String(error) }),
               ),
             );
           if (sender.kind === "external") return yield* externalRun(sender, request, execute);

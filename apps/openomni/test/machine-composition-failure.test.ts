@@ -15,7 +15,7 @@ test("the app machine host translates a codemode failure at its callback boundar
     callTool = options.callTool;
     return createHost(options);
   });
-  const failure = new Machines.ForeignFailure({ operation: "code.tool", cause: "lost cell" });
+  const failure = new Machines.MachinesFailure({ operation: "code.tool", cause: "lost cell" });
   const failCell = spyOn(Codemode, "composeCodemode").mockImplementation((host: Machines.MachineHost) =>
     compose(host).pipe(Effect.map((mode: Codemode.ComposedCodemode) => ({
       ...mode, callTool: (_call: Machine.ToolCall) => Effect.fail(failure),
@@ -30,7 +30,7 @@ test("the app machine host translates a codemode failure at its callback boundar
     try {
       if (callTool === undefined) throw new Error("machine callback was not installed");
       expect(await runEffect(Effect.flip(callTool({ cellId: "cell", name: "read", arguments: {} })))).toMatchObject({
-        _tag: "ForeignFailure", operation: "codemode.callTool", cause: String(failure),
+        _tag: "MachinesFailure", operation: "codemode.callTool", cause: String(failure),
       });
       expect((await fetch(`http://127.0.0.1:${app.port}/health`)).status).toBe(200);
     } finally {

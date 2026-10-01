@@ -1,5 +1,5 @@
 import {
-  BundleDefinitions, BundleError, type Clock, type Entropy, ForeignFailure,
+  BundleDefinitions, BundleError, type Clock, type Entropy, AgentFailure,
   GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink, SessionLayer,
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
   type GenerationBundle, type SessionError, type SessionRuntime,
@@ -13,7 +13,7 @@ import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
 
 /** `select` throws `BundleError` for an unknown bundle; anything else is a foreign failure. */
-const SelectThrown = z.union([z.instanceof(BundleError), z.coerce.string().transform((cause) => new ForeignFailure({ operation: "generation.select", cause }))]);
+const SelectThrown = z.union([z.instanceof(BundleError), z.coerce.string().transform((cause) => new AgentFailure({ operation: "generation.select", cause }))]);
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
 
@@ -41,7 +41,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
 
   function bundle(sessionId: string, snapshot: SessionGeneration.Snapshot): Effect.Effect<GenerationBundle, SessionError> {
     return Effect.gen(function* () {
-      if (definitions === undefined) return yield* new ForeignFailure({ operation: "generation.initialize", cause: "not_initialized" });
+      if (definitions === undefined) return yield* new AgentFailure({ operation: "generation.initialize", cause: "not_initialized" });
       const selected = yield* Effect.try({
         try: () => installed.select(snapshot.bundles),
         catch: SelectThrown.parse,
@@ -75,7 +75,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         const policy = yield* Effect.try({
           try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
           catch: String,
-        }).pipe(Effect.mapError((cause) => new ForeignFailure({ operation: "generation.policy", cause })));
+        }).pipe(Effect.mapError((cause) => new AgentFailure({ operation: "generation.policy", cause })));
         return Layer.succeed(SessionLayer, { snapshot, policy });
       })).pipe(Layer.provideMerge(registry));
       return { id: { sessionId, generation: snapshot.generation }, snapshot, layer, activate: Effect.sync(() => { active = true; }) };
@@ -84,7 +84,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
 
   function manager(sessionId: string) {
     return lock.withPermits(1)(Effect.gen(function* () {
-      if (stopping) return yield* new ForeignFailure({ operation: "generation.capture", cause: "draining" });
+      if (stopping) return yield* new AgentFailure({ operation: "generation.capture", cause: "draining" });
       let owner = managers.get(sessionId);
       if (owner === undefined) {
         const initial = yield* bundle(sessionId, plane.openKernel(sessionId).latestGenerationFor(sessionId));
@@ -97,7 +97,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
 
   return {
     initialize: (input: GenerationDefinitions) => Effect.suspend(() => {
-      if (definitions !== undefined) return Effect.fail(new ForeignFailure({ operation: "generation.initialize", cause: "already_initialized" }));
+      if (definitions !== undefined) return Effect.fail(new AgentFailure({ operation: "generation.initialize", cause: "already_initialized" }));
       definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer });
       return Effect.void;
     }),
@@ -108,7 +108,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       return yield* owner.capture(yield* bundle(id.sessionId, snapshot));
     }),
     configure: <A>(id: SessionGeneration.Id, snapshot: SessionGeneration.Snapshot, commit: Effect.Effect<A, SessionError>) => Effect.gen(function* () {
-      if (id.generation !== snapshot.generation) return yield* new ForeignFailure({ operation: "generation.configure", cause: "snapshot_identity_mismatch" });
+      if (id.generation !== snapshot.generation) return yield* new AgentFailure({ operation: "generation.configure", cause: "snapshot_identity_mismatch" });
       const owner = yield* manager(id.sessionId);
       return yield* owner.configure(yield* bundle(id.sessionId, snapshot), commit);
     }),

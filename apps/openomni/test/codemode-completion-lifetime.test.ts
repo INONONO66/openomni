@@ -5,7 +5,7 @@ import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-ef
 import { expect, test } from "bun:test";
 import { createTurnDispatcher, currentInvocation } from "@openomni/agent";
 import { createCodemode, type CodeError } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost, ForeignFailure as MachineFailure } from "@openomni/machines";
+import { attachMachineDaemon, createMachineHost, MachinesFailure as MachineFailure } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import { cellPorts } from "./helpers/cell-ports";
@@ -132,7 +132,7 @@ for (const stop of [false, true]) {
       release.resolve();
       const completion = await bounded(completed.promise);
       if (stop) {
-        expect(completion).toMatchObject({ error: { _tag: "ForeignFailure", operation: "code.tool" } });
+        expect(completion).toMatchObject({ error: { _tag: "MachinesFailure", operation: "code.tool" } });
       } else {
         expect(completion).toEqual({ result: { status: "completed", value: "late" } });
       }

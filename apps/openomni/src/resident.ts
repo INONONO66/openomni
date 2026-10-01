@@ -1,3 +1,4 @@
+import { AppInvariantError } from "./invariant";
 import { ObservationSink } from "@openomni/agent";
 import { Effect } from "effect";
 import {
@@ -121,7 +122,7 @@ export function createResident(options: ResidentOptions) {
     definitions,
     materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
-        throw new Error(`runner is not registered: ${runner}`);
+        throw new AppInvariantError(`runner is not registered: ${runner}`);
       }
       return messageMaterialization(options.policyGeneration)({
         id,

@@ -3,6 +3,14 @@ import { SessionTransition } from "@openomni/protocol";
 import { CauseText } from "../thrown";
 import type { ProcessSessionRequest } from "../process-entry";
 
+/** The parent-side child-transport contract broke: an impostor answer or an abnormal exit. */
+class ProcessSessionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProcessSessionError";
+  }
+}
+
 const Doorbell = z.object({ sessionIds: z.array(z.string().min(1)) }).strict();
 const ProcessOutput = z.union([
   Doorbell,
@@ -44,7 +52,7 @@ export function createProcessSessionTransport(options: {
       answer.principal.principalId !== sessionId ||
       answer.outbound?.sourceSessionId !== sessionId
     )
-      throw new Error("process answer principal does not match its authenticated child");
+      throw new ProcessSessionError("process answer principal does not match its authenticated child");
     const receipt: z.infer<typeof ProcessReplyReceipt> = await options.answer(answer).then(
       (resolution) => ({ ok: true as const, inputId: answer.inputId, resolution }),
       CauseText.transform((error) => ({ ok: false as const, inputId: answer.inputId, error })).parse,
@@ -81,7 +89,7 @@ export function createProcessSessionTransport(options: {
             }
           }
           const code = await child.exited;
-          if (code !== 0) throw new Error(`session process exited ${code}: ${sessionId}`);
+          if (code !== 0) throw new ProcessSessionError(`session process exited ${code}: ${sessionId}`);
         } finally {
           reader.releaseLock();
           if (child.exitCode === null) child.kill();

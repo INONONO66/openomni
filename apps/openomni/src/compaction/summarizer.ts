@@ -1,4 +1,4 @@
-import { type ObservationSink, ForeignFailure, type CompactionOptions } from "@openomni/agent";
+import { type ObservationSink, AgentFailure, type CompactionOptions } from "@openomni/agent";
 import type { Llm, RunInput } from "@openomni/llm";
 import { Effect, Result } from "effect";
 import type { Message, PlainObject } from "@openomni/protocol";
@@ -6,7 +6,7 @@ import { runResolvedText } from "../composition/completion";
 
 export type SummarizerErrorKind = "empty" | "overflow";
 
-export class SummarizerError extends ForeignFailure {
+export class SummarizerError extends AgentFailure {
   readonly kind: SummarizerErrorKind;
 
   constructor(kind: SummarizerErrorKind, message: string) {

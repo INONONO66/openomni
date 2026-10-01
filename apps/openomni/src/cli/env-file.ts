@@ -1,3 +1,4 @@
+import { CliError } from "./errors";
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -55,10 +56,10 @@ function unquote(value: string): string {
 export function renderEnvFile(entries: readonly EnvEntry[]): string {
   const lines = entries.map((entry) => {
     if (!KEY_PATTERN.test(entry.key)) {
-      throw new Error(`invalid env key: ${entry.key}`);
+      throw new CliError(`invalid env key: ${entry.key}`);
     }
     if (/[\n\r]/.test(entry.value)) {
-      throw new Error(`env value for ${entry.key} must not contain line breaks`);
+      throw new CliError(`env value for ${entry.key} must not contain line breaks`);
     }
     // Round-trip: a value the parser would unquote gets one protective
     // quote layer, so `"secret"` reads back as `"secret"`, not `secret`.

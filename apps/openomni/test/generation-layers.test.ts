@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bundle, BundlesLive, ForeignFailure, GenerationLayers, ObservationSink, SessionLayer, session } from "@openomni/agent";
+import { bundle, BundlesLive, AgentFailure, GenerationLayers, ObservationSink, SessionLayer, session } from "@openomni/agent";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
@@ -66,7 +66,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
       sink.publish(probe, { acquisition: id });
       return { id, unsubscribe };
     }), ({ id, unsubscribe }) => Effect.sync(() => { unsubscribe(); closed.push(id); }));
-    if (fail) return yield* new ForeignFailure({ operation: "fixture.acquire", cause: String(id.id) });
+    if (fail) return yield* new AgentFailure({ operation: "fixture.acquire", cause: String(id.id) });
   }));
   const definition = bundle({ name: "probe", requires: [ObservationSink], provides: [], layer: live, events: [{ ns: "probe.event", version: 1 }] });
   const runtime = gatewayRuntime({ bundles: BundlesLive([definition]) });
@@ -98,7 +98,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
       const generations = yield* GenerationLayers;
       const plane = yield* AppLedger;
       const before = plane.openKernel(handle.id).latestGenerationFor(handle.id);
-      const failure = new ForeignFailure({ operation: "fixture.commit", cause: "refused" });
+      const failure = new AgentFailure({ operation: "fixture.commit", cause: "refused" });
       expect(yield* Effect.flip(generations.configure({ sessionId: handle.id, generation: 2 }, { ...before, generation: 2 }, Effect.fail(failure)))).toBe(failure);
       expect(yield* Effect.flip(generations.configure({ sessionId: handle.id, generation: 3 }, before, Effect.void))).toMatchObject({ operation: "generation.configure" });
     }));

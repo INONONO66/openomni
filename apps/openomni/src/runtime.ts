@@ -1,3 +1,4 @@
+import { AppInvariantError } from "./invariant";
 import {
   AgentProcessLive,
   Bus,
@@ -103,7 +104,7 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
           owner: options.entity.owner,
           ports: options.entity.ports,
           bind: (): void => {
-            throw new Error("session entity ports were fixed at runtime construction");
+            throw new AppInvariantError("session entity ports were fixed at runtime construction");
           },
         };
   const entity: Layer.Layer<never, never, ClusterServices | AppLedger> = sessionEntityLayer({

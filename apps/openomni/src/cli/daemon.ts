@@ -1,3 +1,4 @@
+import { CliError } from "./errors";
 import { dirname, join } from "node:path";
 
 /**
@@ -51,7 +52,7 @@ function escapeXml(value: string): string {
 function assertUnitSafe(label: string, value: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control chars is the point
   if (/[\u0000-\u001f\u007f]/.test(value)) {
-    throw new Error(
+    throw new CliError(
       `${label} contains control characters and cannot be written into a service unit`,
     );
   }
@@ -125,7 +126,7 @@ function run(io: DaemonIo, argv: readonly string[]): ExecResult {
   const result = io.exec(argv);
   if (result.code !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`;
-    throw new Error(`${argv.join(" ")} failed: ${detail}`);
+    throw new CliError(`${argv.join(" ")} failed: ${detail}`);
   }
   return result;
 }
@@ -159,7 +160,7 @@ export function daemonInstall(target: DaemonTarget, io: DaemonIo): string {
   // boot — the advertised 24/7 contract is unmet, so this failure is hard.
   const linger = io.exec(["loginctl", "enable-linger"]);
   if (linger.code !== 0) {
-    throw new Error(
+    throw new CliError(
       `installed and started (systemd user unit: ${path}), but linger could not be enabled — the daemon dies at logout and does not start at boot. Run \`loginctl enable-linger\` and re-run \`openomni daemon install\`.`,
     );
   }
@@ -175,7 +176,7 @@ function proveLaunchdStopped(target: DaemonTarget, io: DaemonIo): void {
   const notLoaded =
     print.code !== 0 && /could not find service/i.test(`${print.stderr}${print.stdout}`);
   if (!notLoaded) {
-    throw new Error("daemon could not be stopped and may still be loaded — unit left installed");
+    throw new CliError("daemon could not be stopped and may still be loaded — unit left installed");
   }
 }
 
@@ -185,13 +186,13 @@ function proveSystemdStopped(io: DaemonIo): void {
   // Stop and disable are separate outcomes; each must be proven.
   const state = io.exec(["systemctl", "--user", "is-active", SYSTEMD_UNIT]).stdout.trim();
   if (state !== "inactive" && state !== "failed") {
-    throw new Error(
+    throw new CliError(
       `daemon could not be stopped (state: ${state || "unknown"}) — unit left installed`,
     );
   }
   const enabled = io.exec(["systemctl", "--user", "is-enabled", SYSTEMD_UNIT]).stdout.trim();
   if (enabled !== "disabled" && enabled !== "not-found") {
-    throw new Error(
+    throw new CliError(
       `daemon stopped but is still enabled (state: ${enabled || "unknown"}) — unit left installed`,
     );
   }
@@ -217,7 +218,7 @@ export function daemonUninstall(target: DaemonTarget, io: DaemonIo): string {
 export function daemonStart(target: DaemonTarget, io: DaemonIo): string {
   const path = unitPath(target);
   if (!io.fileExists(path)) {
-    throw new Error("not installed — run `openomni daemon install` first");
+    throw new CliError("not installed — run `openomni daemon install` first");
   }
   if (target.platform === "darwin") {
     launchdReload(target, io);

@@ -125,7 +125,7 @@ test("external ingress retry after inbox fault commits once despite a recorded r
       "CREATE TRIGGER fail_external BEFORE INSERT ON action WHEN NEW.kind = 'prompt' BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
     );
     await expect(runEffect(fixture.gateway.ingest(sender, facts))).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "ChannelsFailure",
     });
     db.exec("DROP TRIGGER fail_external");
     const result = await runEffect(fixture.gateway.ingest(sender, facts));

@@ -1,3 +1,4 @@
+import { AppInvariantError } from "../invariant";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import {
   deadlineDelivery,
@@ -336,12 +337,12 @@ export interface SessionEntityPortsSlot {
 export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
   let bound: SessionEntityPorts | undefined;
   const resolve = (): SessionEntityPorts => {
-    if (bound === undefined) throw new Error("session entity ports are not bound yet");
+    if (bound === undefined) throw new AppInvariantError("session entity ports are not bound yet");
     return bound;
   };
   return {
     bind: (ports) => {
-      if (bound !== undefined) throw new Error("session entity ports are already bound");
+      if (bound !== undefined) throw new AppInvariantError("session entity ports are already bound");
       bound = ports;
     },
     ports: {
