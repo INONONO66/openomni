@@ -1,15 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-
-class ReplyGrantProjectionError extends Error {
-  readonly code = "incoherent_reply_grant";
-
-  constructor(readonly grantId: string) {
-    super(`Incoherent reply-grant projection: ${grantId}`);
-    this.name = "ReplyGrantProjectionError";
-  }
-}
+import { ReplyGrantProjectionError } from "../errors";
 
 export function createSqliteReplyGrantAdapter(db: Database): ProtocolStorage.ReplyGrantSubAdapter {
   return {

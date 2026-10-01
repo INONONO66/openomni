@@ -1,5 +1,7 @@
+import { LedgerInvariant } from "../errors";
+
 export function requireSubAdapter<T>(adapter: T | null | undefined, message: string): T {
-  if (!adapter) throw new Error(message);
+  if (!adapter) throw new LedgerInvariant({ operation: "storage.subAdapter", message });
   return adapter;
 }
 

@@ -3,6 +3,7 @@ import { Effect, Result } from "effect";
 import { describe, expect, test } from "bun:test";
 import { LedgerAction, LedgerSession, type ObservationSink } from "@openomni/protocol";
 import { createActions } from "../../src/storage/sqlite-l0-actions";
+import type { ObservationPublishFailure } from "../../src/storage/sqlite-l0-observation";
 import { runLedgerSync } from "../helpers/effect";
 import { openLedgerDatabase, observedL0Adapters } from "../helpers/ledger";
 
@@ -74,15 +75,20 @@ describe("ledger-first observations", () => {
     };
     using throwingDb = openLedgerDatabase();
     using noopDb = openLedgerDatabase();
+    const routedFailures: ObservationPublishFailure[] = [];
     const throwingActions = createActions(
       throwingDb,
       (operation) => throwingDb.transaction(operation).immediate(),
       throwing,
+      (failure) => routedFailures.push(failure),
     );
     const noopActions = createActions(
       noopDb,
       (operation) => noopDb.transaction(operation).immediate(),
       { publish: () => undefined },
+      () => {
+        throw new Error("noop sink must not fail");
+      },
     );
     const { adapter: throwingSessions } = observedL0Adapters(throwingDb);
     const { adapter: noopSessions } = observedL0Adapters(noopDb);
@@ -93,6 +99,7 @@ describe("ledger-first observations", () => {
     const withNoop = noopActions.append(action("action-parity", "session-parity"), 0);
 
     expect(withThrow).toEqual(withNoop);
+    expect(routedFailures).toEqual([{ actionId: "action-parity", cause: new Error("sink failed") }]);
     expect(sessionTree("session-parity", throwingActions)).toEqual(
       sessionTree("session-parity", noopActions),
     );

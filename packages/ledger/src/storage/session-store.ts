@@ -7,6 +7,7 @@ import { SESSION_FILE_SCHEMA } from "./schema-session-file.js";
 import { createSqliteDecisionFacts } from "./sqlite-decision-facts";
 import { createActions } from "./sqlite-l0-actions.js";
 import { createSessions } from "./sqlite-l0-sessions.js";
+import type { ObservationFailurePort } from "./sqlite-l0-observation.js";
 
 // busy_timeout comes FIRST: the pragma is connection-local (it never touches
 // the database file), so applying it before any file-touching statement makes
@@ -90,17 +91,33 @@ export class SessionStore extends StoreHandle {
   readonly sessions: SessionWriteAdapter;
   readonly actions: ProtocolStorage.ActionSubAdapter;
   readonly decisionFacts: ProtocolStorage.DecisionFactSubAdapter;
-  constructor(db: Database, observationSink: ObservationSink) {
+  constructor(
+    db: Database,
+    observationSink: ObservationSink,
+    onObservationFailure: ObservationFailurePort,
+  ) {
     super(db, observationSink);
-    this.sessions = createSessions(db, this.transaction, observationSink);
-    this.actions = createActions(db, this.transaction, observationSink);
+    this.sessions = createSessions(db, this.transaction, observationSink, onObservationFailure);
+    this.actions = createActions(db, this.transaction, observationSink, onObservationFailure);
     this.decisionFacts = createSqliteDecisionFacts(db);
   }
 }
 
+/**
+ * The default failure port is an explicit drop: with the default silent sink a
+ * publish cannot fail, and a host that injects an observing sink is expected
+ * to inject its own port (logging in its runtime) alongside it.
+ */
+const DROP_OBSERVATION_FAILURES: ObservationFailurePort = () => undefined;
+
 export function openSessionStore(
   path: string,
   observationSink: ObservationSink = SILENT_OBSERVATION_SINK,
+  onObservationFailure: ObservationFailurePort = DROP_OBSERVATION_FAILURES,
 ): SessionStore {
-  return new SessionStore(openStoreDatabase(path, SESSION_FILE_SCHEMA), observationSink);
+  return new SessionStore(
+    openStoreDatabase(path, SESSION_FILE_SCHEMA),
+    observationSink,
+    onObservationFailure,
+  );
 }

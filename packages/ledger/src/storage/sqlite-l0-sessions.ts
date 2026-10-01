@@ -16,7 +16,10 @@ import {
   appendAction,
   commitSession,
 } from "./sqlite-l0-write.js";
-import { publishCommitted } from "./sqlite-l0-observation.js";
+import {
+  publishCommitted,
+  type ObservationFailurePort,
+} from "./sqlite-l0-observation.js";
 import { writeEffect, type RefuseWrite } from "./write-effect";
 
 function materializeSession(
@@ -82,6 +85,7 @@ export function createSessions(
   db: Database,
   transaction: <T>(operation: () => T) => T,
   observationSink: ObservationSink,
+  onObservationFailure: ObservationFailurePort,
 ): SessionWriteAdapter {
   return {
     create: (row) =>
@@ -93,7 +97,10 @@ export function createSessions(
         const result = transaction(() =>
           materializeSession(db, LedgerSession.Materialize.parse(input), refuse),
         );
-        if (result.created) publishCommitted(db, observationSink, result.receipt);
+        if (result.created) {
+          const failure = publishCommitted(db, observationSink, result.receipt);
+          if (failure !== undefined) onObservationFailure(failure);
+        }
         return result;
       }),
     get(id) {
@@ -130,7 +137,10 @@ export function createSessions(
             );
           return result;
         });
-        for (const receipt of outcome.receipts) publishCommitted(db, observationSink, receipt);
+        for (const receipt of outcome.receipts) {
+          const failure = publishCommitted(db, observationSink, receipt);
+          if (failure !== undefined) onObservationFailure(failure);
+        }
         return outcome;
       }),
   };

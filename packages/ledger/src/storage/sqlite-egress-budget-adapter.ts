@@ -1,4 +1,5 @@
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
+import { LedgerInvariant } from "../errors";
 import type { Database } from "bun:sqlite";
 import { claimWithinCountedWindow } from "./counted-window-claim.js";
 import { z } from "zod";
@@ -71,7 +72,10 @@ export function createSqliteEgressBudgetAdapter(
             existing.class !== parsed.class ||
             existing.at !== parsed.at
           ) {
-            throw new Error(`egress debit id ${parsed.id} already identifies a different claim`);
+            throw new LedgerInvariant({
+              operation: "egress.debit",
+              message: `egress debit id ${parsed.id} already identifies a different claim`,
+            });
           }
           return true;
         },

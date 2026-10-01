@@ -15,7 +15,7 @@ import {
 } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { StorageUnavailable, type LedgerError } from "../errors";
+import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "../errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "../services";
 import type { CatalogStore } from "../storage/catalog-store.js";
 import type { SessionStore } from "../storage/session-store.js";
@@ -168,7 +168,11 @@ function latestOpenTurnIn(context: SessionKernelContext, sessionId: string): Ope
     latest = page.at(-1) ?? latest;
     if (page.length < 256 || latest === undefined) return latest;
     const intent = requiredActionsIn(context).actionById(latest.turnId);
-    if (intent === undefined) throw new Error(`open turn intent missing: ${latest.turnId}`);
+    if (intent === undefined)
+      throw new LedgerInvariant({
+        operation: "session.openTurns",
+        message: `open turn intent missing: ${latest.turnId}`,
+      });
     cursor = intent.ordinal;
   }
 }
@@ -188,7 +192,10 @@ function resultForIn(context: SessionKernelContext, sessionId: string, parentId:
     !outcome.success ||
     outcome.data === "pending"
   )
-    throw new Error(`invalid result identity: ${result.id}`);
+    throw new LedgerInvariant({
+      operation: "session.resultFor",
+      message: `invalid result identity: ${result.id}`,
+    });
   return result;
 }
 
@@ -199,7 +206,11 @@ function latestGenerationForIn(
   let cursor = Number.MAX_SAFE_INTEGER;
   for (;;) {
     const action = requiredActionsIn(context).configurationActions(sessionId, cursor)[0];
-    if (action === undefined) throw new Error("session has no configured generation");
+    if (action === undefined)
+      throw new LedgerInvariant({
+        operation: "session.generation",
+        message: "session has no configured generation",
+      });
     const snapshot = configurationSnapshot(action);
     if (snapshot !== undefined) return snapshot;
     cursor = action.ordinal;
@@ -234,7 +245,10 @@ function historyPageIn(
 function stateEffect(action: LedgerAction.Node) {
   const effect = action.effect.value;
   if (effect === null || typeof effect !== "object" || Array.isArray(effect))
-    throw new Error(`invalid ${action.kind === "outbound" ? "outbound" : "state"} action effect`);
+    throw new LedgerInvariant({
+      operation: "session.stateEffect",
+      message: `invalid ${action.kind === "outbound" ? "outbound" : "state"} action effect`,
+    });
   return effect;
 }
 
@@ -318,13 +332,13 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
 
 function rowIn(context: SessionKernelContext, sessionId: string): LedgerSession.Row {
   const current = requiredSessionsIn(context).get(sessionId);
-  if (current === undefined) throw new Error(`session not found: ${sessionId}`);
+  if (current === undefined) throw new SessionNotFound({ sessionId });
   return current;
 }
 
 function policyRowsIn(context: SessionKernelContext, generation?: number): PolicyRow.Row[] {
   const policies = context.stores().policies;
-  if (policies === undefined) throw new Error("L0 storage capability is unavailable: policies");
+  if (policies === undefined) throw new StorageUnavailable({ capability: "policies" });
   return policies.rows(generation);
 }
 
@@ -335,7 +349,10 @@ export function latestGeneration(
     const snapshot = configurationSnapshot(actions[index]);
     if (snapshot !== undefined) return snapshot;
   }
-  throw new Error("session has no configured generation");
+  throw new LedgerInvariant({
+    operation: "session.generation",
+    message: "session has no configured generation",
+  });
 }
 
 export function generationByNumber(
@@ -523,7 +540,8 @@ function getSnapshotIn(
   sessionId: string,
   turns = 1,
 ): SessionTurn.Snapshot {
-  if (!Number.isInteger(turns) || turns < 0) throw new Error("turn count must be non-negative");
+  if (!Number.isInteger(turns) || turns < 0)
+    throw new LedgerInvariant({ operation: "session.snapshot", message: "turn count must be non-negative" });
   return context.stores().transaction(() => snapshotFor(context, rowIn(context, sessionId), turns));
 }
 
@@ -561,7 +579,10 @@ function watchSnapshotIn(
 ): SessionTurn.Watch {
   const subscribeObservation = observations.subscribe;
   if (subscribeObservation === undefined) {
-    throw new Error("session watch requires a subscribable observation sink");
+    throw new LedgerInvariant({
+      operation: "session.watch",
+      message: "session watch requires a subscribable observation sink",
+    });
   }
   return context.stores().transaction(() => {
     let revision = 0;
@@ -595,7 +616,8 @@ function watchSnapshotIn(
     return {
       snapshot,
       subscribe(handler: (observation: SessionTurn.Observation) => void) {
-        if (closed) throw new Error("session watch is unsubscribed");
+        if (closed)
+          throw new LedgerInvariant({ operation: "session.watch", message: "session watch is unsubscribed" });
         handlers.add(handler);
         return () => handlers.delete(handler);
       },
@@ -742,13 +764,13 @@ function sessionWritesIn(context: SessionKernelContext) {
 
 function requiredSessionsIn(context: SessionKernelContext) {
   const adapter = context.stores().sessions;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: sessions");
+  if (adapter === undefined) throw new StorageUnavailable({ capability: "sessions" });
   return adapter;
 }
 
 function requiredActionsIn(context: SessionKernelContext) {
   const adapter = context.stores().actions;
-  if (adapter === undefined) throw new Error("L0 storage capability is unavailable: actions");
+  if (adapter === undefined) throw new StorageUnavailable({ capability: "actions" });
   return adapter;
 }
 

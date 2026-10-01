@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   Gateway,
   type Inbox,
@@ -8,7 +8,8 @@ import {
   type ObservationSink,
   SessionTransition,
 } from "@openomni/protocol";
-import { publishCommitted } from "../../src/storage/sqlite-l0-observation";
+import { type ObservationPublishFailure, publishCommitted } from "../../src/storage/sqlite-l0-observation";
+import { createActions } from "../../src/storage/sqlite-l0-actions";
 import { openLedgerDatabase } from "../helpers/ledger";
 
 function action(
@@ -73,7 +74,7 @@ test("a committed reply prompt publishes its scoped platform message identity", 
     replyTo: "platform-0",
   };
 
-  publishCommitted(db, sink, action("prompt", "reply-action", origin));
+  expect(publishCommitted(db, sink, action("prompt", "reply-action", origin))).toBeUndefined();
 
   expect(events).toEqual([
     {
@@ -109,7 +110,7 @@ test("a native outbound message uses its request binding for the reply observati
     digest: "digest",
   };
 
-  publishCommitted(db, sink, action("prompt", "native-reply", outbound));
+  expect(publishCommitted(db, sink, action("prompt", "native-reply", outbound))).toBeUndefined();
 
   expect(events[1]).toEqual({
     name: Gateway.MessageObserved.name,
@@ -155,7 +156,7 @@ test("a reply deadline publishes a timeout from its original source identity", (
     createdAt: 3,
   });
 
-  publishCommitted(db, sink, action("request", "original:resolution", {}, { request }));
+  expect(publishCommitted(db, sink, action("request", "original:resolution", {}, { request }))).toBeUndefined();
 
   expect(events[1]).toEqual({
     name: Gateway.MessageObserved.name,
@@ -164,18 +165,68 @@ test("a reply deadline publishes a timeout from its original source identity", (
   });
 });
 
-test("observation delivery failure does not revoke an already committed action", () => {
+test("observation delivery failure does not revoke the committed action and surfaces as a value", () => {
   using db = openLedgerDatabase();
-  const warning = spyOn(console, "warn").mockImplementation(() => undefined);
+  const cause = new Error("subscriber unavailable");
   const sink: ObservationSink = {
     publish() {
-      throw new Error("subscriber unavailable");
+      throw cause;
     },
   };
-  try {
-    expect(() => publishCommitted(db, sink, action("turn", "committed", {}))).not.toThrow();
-    expect(warning).toHaveBeenCalledWith("post-commit observation failed: committed");
-  } finally {
-    warning.mockRestore();
-  }
+
+  expect(publishCommitted(db, sink, action("turn", "committed", {}))).toEqual({
+    actionId: "committed",
+    cause,
+  });
+});
+
+test("a non-Error publish throw is normalized into the failure's Error cause", () => {
+  using db = openLedgerDatabase();
+  const sink: ObservationSink = {
+    publish() {
+      // biome-ignore lint/style/useThrowOnlyError: the sink is a foreign port; a non-Error throw is the case under test
+      throw "subscriber string";
+    },
+  };
+
+  expect(publishCommitted(db, sink, action("turn", "committed", {}))).toEqual({
+    actionId: "committed",
+    cause: new Error("subscriber string"),
+  });
+});
+
+test("the actions adapter routes a publish failure to its observation failure port", () => {
+  using db = openLedgerDatabase();
+  db.run("INSERT INTO session (id, role, state) VALUES ('session', 'resident', 'idle')");
+  const failures: ObservationPublishFailure[] = [];
+  const transaction = <T,>(operation: () => T): T => db.transaction(operation).immediate();
+  const actions = createActions(
+    db,
+    transaction,
+    {
+      publish() {
+        throw new Error("subscriber unavailable");
+      },
+    },
+    (failure) => failures.push(failure),
+  );
+
+  const receipt = actions.append(
+    {
+      id: "committed",
+      sessionId: "session",
+      parentId: null,
+      kind: "turn",
+      intent: { encodingVersion: 1, value: {} },
+      effect: { encodingVersion: 1, value: {} },
+      irreversible: true,
+      ts: 9,
+    },
+    0,
+  );
+
+  expect(receipt?.action.id).toBe("committed");
+  expect(failures).toEqual([
+    { actionId: "committed", cause: new Error("subscriber unavailable") },
+  ]);
 });

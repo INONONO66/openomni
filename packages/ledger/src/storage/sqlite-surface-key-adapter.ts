@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { LedgerInvariant } from "../errors";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 type SurfaceKeyAdapter = ProtocolStorage.SurfaceKeySubAdapter;
@@ -33,7 +34,10 @@ export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
             // same immediate transaction, so the key MUST exist here. Falling
             // back to the candidate sessionId would fabricate an ownership
             // answer.
-            throw new Error(`surface_key row missing after INSERT OR IGNORE: ${key}`);
+            throw new LedgerInvariant({
+              operation: "surfaceKey.claim",
+              message: `surface_key row missing after INSERT OR IGNORE: ${key}`,
+            });
           }
           return row.session_id;
         })

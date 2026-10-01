@@ -4,6 +4,7 @@ import { bootstrapStoreDatabase } from "../../src/storage";
 import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
 import { SESSION_FILE_SCHEMA } from "../../src/storage/schema-session-file";
 import { createActions } from "../../src/storage/sqlite-l0-actions";
+import type { ObservationPublishFailure } from "../../src/storage/sqlite-l0-observation";
 import { createSessions } from "../../src/storage/sqlite-l0-sessions";
 import type { SessionWriteAdapter } from "../../src/services";
 
@@ -19,6 +20,11 @@ export function openCatalogDatabase(): Database {
   const db = new Database(":memory:");
   bootstrapStoreDatabase(db, CATALOG_SCHEMA);
   return db;
+}
+
+/** Tests fail loudly on a swallowed publish failure instead of hiding it. */
+function rethrowObservationFailure(failure: ObservationPublishFailure): never {
+  throw failure.cause;
 }
 
 export interface L0Adapters {
@@ -41,8 +47,8 @@ export function observedL0Adapters(db: Database): {
   };
   return {
     adapter: {
-      sessions: createSessions(db, transaction, sink),
-      actions: createActions(db, transaction, sink),
+      sessions: createSessions(db, transaction, sink, rethrowObservationFailure),
+      actions: createActions(db, transaction, sink, rethrowObservationFailure),
     },
     observations,
   };

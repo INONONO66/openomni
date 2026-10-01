@@ -2,7 +2,11 @@ import { Data } from "effect";
 
 export class SessionNotFound extends Data.TaggedError("SessionNotFound")<{
   readonly sessionId: string;
-}> {}
+}> {
+  override get message(): string {
+    return `session not found: ${this.sessionId}`;
+  }
+}
 
 export class MaterializeRefused extends Data.TaggedError("MaterializeRefused")<{
   readonly sessionId: string;
@@ -26,18 +30,6 @@ export class CommitRefused extends Data.TaggedError("CommitRefused")<{
   readonly currentFence: number;
 }> {}
 
-export class InboxCommitRefused extends Data.TaggedError("InboxCommitRefused")<{
-  readonly sessionId: string;
-  readonly inboxId: string;
-  readonly reason: "admission" | "identity" | "configuration";
-}> {}
-
-export class AlarmRefused extends Data.TaggedError("AlarmRefused")<{
-  readonly alarmId: string;
-  readonly operation: "arm" | "cancel" | "rearm" | "acquire" | "fire";
-  readonly reason: "missing" | "session" | "state" | "fence" | "occurrence" | "append" | "prompt";
-}> {}
-
 export class PolicyGenerationRefused extends Data.TaggedError("PolicyGenerationRefused")<{
   readonly generation: number;
   readonly reason: "empty" | "conflict";
@@ -51,20 +43,17 @@ export class PolicyGenerationRefused extends Data.TaggedError("PolicyGenerationR
 }
 
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
-  readonly capability: "storage" | "sessions" | "actions" | "inbox" | "alarms" | "policies";
-}> {}
+  readonly capability: "storage" | "sessions" | "actions" | "policies";
+}> {
+  override get message(): string {
+    return `L0 storage capability is unavailable: ${this.capability}`;
+  }
+}
 
 export class CorruptRecord extends Data.TaggedError("CorruptRecord")<{
   readonly operation: string;
   readonly id: string;
 }> {}
-
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
-  readonly operation: string;
-  readonly cause: string;
-}> {
-  override get message(): string { return `${this.operation}: ${this.cause}`; }
-}
 
 /** Ledger-owned failure for a Cause without a typed error (temporary until #1246 folds ledger into agent). */
 export class LedgerFailure extends Data.TaggedError("LedgerFailure")<{
@@ -74,14 +63,45 @@ export class LedgerFailure extends Data.TaggedError("LedgerFailure")<{
   override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
+/**
+ * A broken programmer invariant on a synchronous ledger path — corrupt or
+ * missing stored facts, a capability gap, or caller misuse. Thrown, never
+ * `Effect.fail`ed: these paths are not Effect code and the condition is not a
+ * caller-handleable refusal.
+ */
+export class LedgerInvariant extends Data.TaggedError("LedgerInvariant")<{
+  readonly operation: string;
+  readonly message: string;
+  readonly cause?: Error;
+}> {}
+
+/**
+ * A synchronous actor-registry write the caller can handle: an unknown
+ * identity or endpoint, an already-claimed address, or a wrong standing.
+ * Thrown because the registry surface is not Effect code.
+ */
+export class ActorRegistryRefused extends Data.TaggedError("ActorRegistryRefused")<{
+  readonly operation: "registerEndpoint" | "mintProvisional" | "promote" | "mergeEndpoint";
+  readonly reason: "identity" | "endpoint" | "address" | "standing";
+  readonly message: string;
+}> {}
+
+/** An incoherent reply-grant projection row observed by the SQLite adapter. */
+export class ReplyGrantProjectionError extends Error {
+  readonly code = "incoherent_reply_grant";
+
+  constructor(readonly grantId: string) {
+    super(`Incoherent reply-grant projection: ${grantId}`);
+    this.name = "ReplyGrantProjectionError";
+  }
+}
+
 export type LedgerError =
   | SessionNotFound
   | MaterializeRefused
   | LeaseRefused
   | CommitRefused
-  | InboxCommitRefused
-  | AlarmRefused
   | PolicyGenerationRefused
   | StorageUnavailable
   | CorruptRecord
-  | ForeignFailure;
+  | LedgerFailure;
