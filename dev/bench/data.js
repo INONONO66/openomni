@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790845946940,
+  "lastUpdate": 1790853805501,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75883,6 +75883,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 169675,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb7095681600727e935b76f005fd709f38572435",
+          "message": "protocol/agent/machines: share JSON, failure and interrupt helpers (#1243) (#1261)\n\n* protocol/agent/machines: share JSON, failure and interrupt helpers (#1243)\n\nOne parseJson wire parser and one listenForAbort abort-listener owner in protocol; Failure.of/fromCause plus onAbort/interruptOn in agent; machines connector; listener sets replaced by Deferred; every concurrency: unbounded bounded. Docs receipt in implementation-status.md, SLOP §K, AGENTS stamp.\n\n* agent: keep the entry waiter across an aborted preparation (#1243)\n\nReview r1: a preparation interrupted before its summarizer call leaves started() waiters owed the next entry, so prepare() reuses the unresolved Deferred. Regression test fails by timeout without the fix. interrupt-on tests observe listener registration through a promise continuation instead of a scheduler yield; the discord warn-and-drop test asserts two warnings and one READY instead of prose.\n\n* docs: #1243 receipt with lane totals and artifact paths",
+          "timestamp": "2026-10-01T11:20:58Z",
+          "tree_id": "da0269576f1694bab7c73dcea5095b77e5b0ed3a",
+          "url": "https://github.com/INONONO66/openomni/commit/fb7095681600727e935b76f005fd709f38572435"
+        },
+        "date": 1790853805138,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 688,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1284,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 978,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1129795,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 267957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4952523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 96,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 796,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 461,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 113715,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 597210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 313639,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2370,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9032732,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1111742,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14132,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 134456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 671251,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 171556,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 10905133,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 69,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 88038,
             "unit": "ns/op"
           }
         ]
