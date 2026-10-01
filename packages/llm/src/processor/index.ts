@@ -23,6 +23,14 @@ import {
   type StreamEventState,
 } from "./stream-events.js";
 
+/** A rejected transcript fold is a programmer defect in this package, never a provider fault. */
+class TranscriptRecordingDefect extends Error {
+  constructor(reason: string, factType: string) {
+    super(`transcript recording defect: ${reason} on ${factType}`);
+    this.name = "TranscriptRecordingDefect";
+  }
+}
+
 export namespace Processor {
   const STREAM_CLOSE_GRACE_MS = 250;
 
@@ -81,8 +89,7 @@ export namespace Processor {
 
     function record(fact: Transcript.Fact): void {
       const outcome = Transcript.fold(folded, fact);
-      if ("rejected" in outcome)
-        throw new Error(`transcript recording defect: ${outcome.reason} on ${fact.type}`);
+      if ("rejected" in outcome) throw new TranscriptRecordingDefect(outcome.reason, fact.type);
       folded = outcome.state;
       if (fact.type !== "message.created") sink.onMessage(folded);
     }
@@ -93,7 +100,7 @@ export namespace Processor {
         catch: decodeLlmFailure("stream.close"),
       }).pipe(
         Effect.timeoutOption(STREAM_CLOSE_GRACE_MS),
-        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: error.cause ?? String(error) }))),
+        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: typeof error.cause === "string" ? error.cause : String(error) }))),
         Effect.asVoid,
         Effect.interruptible,
       );

@@ -3,6 +3,7 @@ import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { Auth } from "../auth/storage";
 import { clientIdentity } from "./identity";
+import { ModelResolutionError } from "../errors";
 import type { Provider } from "./index";
 
 type SdkOptions = {
@@ -76,7 +77,12 @@ const CUSTOM_LOADERS = new Map<string, () => CustomLoaderResult>([
     () => ({
       getModel(sdk: ProviderSDK, modelID: string) {
         if (!("responses" in sdk)) {
-          throw new Error("OpenAI responses model loader requires responses support");
+          throw new ModelResolutionError({
+            provider: "openai",
+            model: modelID,
+            reason: "model_not_found",
+            message: "OpenAI responses model loader requires responses support",
+          });
         }
         return sdk.responses(modelID);
       },
@@ -149,7 +155,12 @@ function providerOptions(
 function createUnbundledSDK(model: Provider.Model, npm: string, options: SdkOptions): ProviderSDK {
   const baseURL = options.baseURL ?? model.api?.url;
   if (!baseURL)
-    throw new Error(`No bundled provider for npm package: ${npm} and no API URL available`);
+    throw new ModelResolutionError({
+      provider: model.providerID,
+      model: model.id,
+      reason: "provider_not_found",
+      message: `No bundled provider for npm package: ${npm} and no API URL available`,
+    });
   return createOpenAI({
     name: model.providerID,
     baseURL,

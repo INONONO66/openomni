@@ -1,12 +1,24 @@
 import { spyOn } from "bun:test";
+import { APICallError } from "ai";
 import { APIError } from "../../src/error";
 
-export type APIErrorInput = ConstructorParameters<typeof APIError>[0];
-export const apiError = (input: APIErrorInput) => new APIError(input);
+export type SdkErrorInput = {
+  readonly message: string;
+  readonly isRetryable?: boolean;
+  readonly statusCode?: number;
+  readonly responseHeaders?: Record<string, string>;
+  readonly responseBody?: string;
+};
 
-export function sdkError(fields: APIErrorInput): Error & APIErrorInput {
-  return Object.assign(new Error(fields.message), { name: "AI_APICallError" }, fields);
+export function sdkError(input: SdkErrorInput): APICallError {
+  return new APICallError({
+    url: "https://provider.test/v1/messages",
+    requestBodyValues: {},
+    ...input,
+  });
 }
+
+export const apiError = (input: SdkErrorInput) => new APIError({ cause: sdkError(input) });
 
 export function rateLimitError(headers?: Record<string, string>) {
   return apiError({

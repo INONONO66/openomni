@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { LlmCall, Operational, type BusEvent, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import type { Sink } from "../../src/sink";
-import { APIError } from "../../src/error";
+import { apiError } from "../helpers/retry";
 import { useProcessor, streamOf, statusStates, processorInfo } from "../helpers/processor";
 
 describe("Processor telemetry", () => {
@@ -154,7 +154,7 @@ describe("Processor telemetry", () => {
   });
 
   test("leaves retry publication to the executor and closes a rate-limited attempt", async () => {
-    const error = new APIError({ message: "rate limit", isRetryable: true, statusCode: 429 });
+    const error = apiError({ message: "rate limit", isRetryable: true, statusCode: 429 });
     const processor = createProcessor({
       createStream: async () => {
         throw error;

@@ -4,8 +4,11 @@ type Delay = { ms: number; directive: boolean };
 
 /** Explicit directives outrank inferred reset buckets. */
 export function headerDelay(error?: ApiFailure): Delay | undefined {
-  const headers = error?.responseHeaders;
-  if (headers === undefined) return undefined;
+  const raw = error?.responseHeaders;
+  if (raw === undefined) return undefined;
+  // Fetch normalizes header names to lowercase, but fixtures and proxies may not.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw)) headers[name.toLowerCase()] = value;
   const directive = directiveDelay(headers);
   return directive === undefined ? resetDelay(headers) : { ms: directive, directive: true };
 }

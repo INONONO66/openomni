@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Context, Effect } from "effect";
 import { Llm, Provider, run } from "../src/index";
-import { ForeignFailure } from "../src/errors";
+import { LlmFailure } from "../src/errors";
 import { usePrivateCatalog } from "./helpers/catalog";
 import { runEffect } from "./helpers/native";
 
@@ -15,7 +15,7 @@ test("the LLM service resolves the trusted catalog and preserves resolution fail
   expect(await runEffect(Effect.flip(service.resolveModel({ provider: "absent", id: "model" })))).toMatchObject({
     _tag: "ModelResolutionError", provider: "absent", model: "model", reason: "provider_not_found",
   });
-  const failure = new ForeignFailure({ operation: "transport", cause: "connection_lost" });
+  const failure = new LlmFailure({ operation: "transport", cause: "connection_lost" });
   expect(await runEffect(Effect.flip(failure))).toBe(failure);
   expect(failure.message).toBe("connection_lost");
 });

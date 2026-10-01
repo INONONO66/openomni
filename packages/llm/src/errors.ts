@@ -1,10 +1,8 @@
+import { APICallError } from "ai";
 import { Data } from "effect";
 import { z } from "zod";
 
 type Diagnostic = { readonly operation: string; readonly cause: string };
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<Diagnostic> {
-  override get message(): string { return this.cause; }
-}
 
 /** Llm-owned failure for a Cause without a typed error (temporary until #1246 folds llm into agent). */
 export class LlmFailure extends Data.TaggedError("LlmFailure")<Diagnostic> {
@@ -13,29 +11,32 @@ export class LlmFailure extends Data.TaggedError("LlmFailure")<Diagnostic> {
 
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
-const ProviderFields = MessageFields.extend({
-  providerErrorName: z.string().optional(),
-  statusCode: z.number().optional(),
-  isRetryable: z.boolean(),
-  responseHeaders: z.record(z.string(), z.string()).optional(),
-  responseBody: z.string().optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
-  aborted: z.boolean().optional(),
-  contextOverflow: z.boolean().optional(),
+const ProviderIdentity = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  usageProvenance: z.enum(["reported", "estimated", "unknown"]).optional(),
 });
-export class APIError extends Data.TaggedError("APIError")<z.infer<typeof ProviderFields>> {}
+
+/**
+ * Thin typed identity over the SDK's own `APICallError`: provider facts
+ * (status, headers, body, retryability) live on the SDK error under `cause`
+ * and are never copied; this adds only the call identity the SDK lacks.
+ */
+export class APIError extends Data.TaggedError("APIError")<
+  z.infer<typeof ProviderIdentity> & { readonly cause: APICallError }
+> {
+  override get message(): string { return this.cause.message; }
+}
 
 const UsageFields = z.object({
   inputTokens: z.number(), outputTokens: z.number(), reasoningTokens: z.number(),
   cacheReadTokens: z.number(), cacheWriteTokens: z.number(),
 });
-const RunFields = ProviderFields.partial({ isRetryable: true }).extend({
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  providerErrorName: z.string().optional(),
+const RunFields = ProviderIdentity.extend({
+  message: z.string(),
+  cause: z.union([z.instanceof(APICallError), z.string()]).optional(),
   retryAfterMs: z.number().nonnegative().optional(),
   usage: UsageFields,
-  usageProvenance: z.enum(["reported", "estimated", "unknown"]).optional(),
   aborted: z.boolean(),
   contextOverflow: z.boolean(),
   visibleOutput: z.boolean(),
@@ -57,5 +58,5 @@ const BoundaryFields = Diagnostic.extend({ message: z.string(), aborted: z.boole
 export class TransportFailure extends Data.TaggedError("TransportFailure")<z.infer<typeof BoundaryFields>> {}
 export class InvalidProviderData extends Data.TaggedError("InvalidProviderData")<z.infer<typeof BoundaryFields>> {}
 
-export type LlmError = ForeignFailure | APIError | LlmRunFailure | ModelResolutionError |
+export type LlmError = LlmFailure | APIError | LlmRunFailure | ModelResolutionError |
   AuthInvalidFileError | AuthResolutionError | ProxyModelsError | TransportFailure | InvalidProviderData;

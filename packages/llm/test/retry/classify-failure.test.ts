@@ -1,39 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { APIError, coerceApiError } from "../../src/error";
+import { coerceApiError } from "../../src/error";
 import { type Run, LlmRunFailure } from "../helpers/native";
 import { Retry } from "../../src/retry";
 
-import { sdkError } from "../helpers/retry";
+import { apiError, sdkError } from "../helpers/retry";
 
 function runFailure(cause: Error): Run.Failure {
   const api = coerceApiError(cause);
-  return new LlmRunFailure(
-    {
-      message: api?.message ?? "the model call failed",
-      statusCode: api?.statusCode,
-      isRetryable: api?.isRetryable,
-      responseHeaders: api?.responseHeaders,
-      responseBody: api?.responseBody,
-      cause: String(cause),
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        reasoningTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-      aborted: false,
-      contextOverflow: false,
-      visibleOutput: false,
+  return new LlmRunFailure({
+    message: api?.message ?? "the model call failed",
+    cause: api ?? String(cause),
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
     },
-  );
+    aborted: false,
+    contextOverflow: false,
+    visibleOutput: false,
+  });
 }
 
 describe("Retry.classifyFailure", () => {
   test("classifies a typed APIError directly", () => {
     expect(
       Retry.classifyFailure(
-        new APIError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
+        apiError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
       ),
     ).toBe("rate_limit");
   });
@@ -48,7 +42,7 @@ describe("Retry.classifyFailure", () => {
 
   test("walks the cause chain of the package's own terminal failure", () => {
     const failure = runFailure(
-      new APIError({ message: "insufficient_quota", isRetryable: true, statusCode: 429 }),
+      apiError({ message: "insufficient_quota", isRetryable: true, statusCode: 429 }),
     );
 
     expect(Retry.classifyFailure(failure)).toBe("billing");
@@ -67,7 +61,7 @@ describe("Retry.classifyFailure", () => {
   test("classifies a declined-card billing error as terminal", () => {
     expect(
       Retry.classifyFailure(
-        new APIError({
+        apiError({
           message: "billing_error: card declined",
           isRetryable: false,
           statusCode: 402,
@@ -118,13 +112,13 @@ describe("Retry content-policy classification", () => {
       },
     },
   ])("$name classifies as content_policy", ({ input }) => {
-    expect(Retry.classifyFailure(new APIError(input))).toBe("content_policy");
+    expect(Retry.classifyFailure(apiError(input))).toBe("content_policy");
   });
 
   test("a content-policy refusal is terminal, never retried", () => {
     const decision = Retry.decide(
       1,
-      new APIError({
+      apiError({
         message: "The request was blocked by our content policy",
         isRetryable: true,
         statusCode: 400,
@@ -142,7 +136,7 @@ describe("Retry content-policy classification", () => {
     // merely mentions the words must stay on the server-error path.
     expect(
       Retry.classifyFailure(
-        new APIError({
+        apiError({
           message: "our content policy documentation service is unavailable",
           isRetryable: true,
           statusCode: 503,

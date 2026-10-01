@@ -1,15 +1,15 @@
 import { describe, expect, test, vi } from "bun:test";
-import { APIError } from "../../src/error";
+import { apiError } from "../helpers/retry";
 import { Retry } from "../../src/retry";
 
-function transportError(): InstanceType<typeof APIError> {
+function transportError(): ReturnType<typeof apiError> {
   // A connection-level failure: retryable, but no HTTP response ever arrived,
   // so there is no status code and there are no response headers.
-  return new APIError({ message: "fetch failed", isRetryable: true });
+  return apiError({ message: "fetch failed", isRetryable: true });
 }
 
-function httpError(statusCode: number): InstanceType<typeof APIError> {
-  return new APIError({ message: "boom", isRetryable: true, statusCode });
+function httpError(statusCode: number): ReturnType<typeof apiError> {
+  return apiError({ message: "boom", isRetryable: true, statusCode });
 }
 
 describe("Retry.isInstantTransportFailure", () => {
@@ -33,7 +33,7 @@ describe("Retry.isInstantTransportFailure", () => {
   });
 
   test("false when response headers arrived without a status — the endpoint answered", () => {
-    const headerOnly = new APIError({
+    const headerOnly = apiError({
       message: "rate limited",
       isRetryable: true,
       responseHeaders: { "retry-after-ms": "1" },

@@ -170,6 +170,6 @@ export function drainToolSettlements(
       event = next.value;
     }
   }).pipe(Effect.timeoutOption(ABORT_SETTLE_GRACE_MS), Effect.catch((error) => Effect.sync(() => {
-    context.note("stream.settlement.failed", { error: error.cause ?? String(error) });
+    context.note("stream.settlement.failed", { error: typeof error.cause === "string" ? error.cause : String(error) });
   })), Effect.asVoid);
 }
