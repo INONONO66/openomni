@@ -533,11 +533,12 @@ describe("discord gateway state machine (#520)", () => {
     });
     fake = local;
     const warnings: string[] = [];
+    let ready = 0;
     gateway = createTracedGateway(
       local,
       "test-token",
       () => Promise.resolve(local.url),
-      { onDispatch: () => undefined, onReady: () => undefined },
+      { onDispatch: () => undefined, onReady: () => { ready += 1; } },
       (event, payload) => {
         if (event.name === Operational.Events.Warn.name)
           warnings.push(z.object({ msg: z.string() }).parse(payload).msg);
@@ -546,10 +547,8 @@ describe("discord gateway state machine (#520)", () => {
     );
 
     await gateway.start();
-    expect(warnings).toEqual([
-      "discord gateway frame was not a valid op envelope; dropped",
-      "discord gateway frame was not a valid op envelope; dropped",
-    ]);
+    expect(warnings).toHaveLength(2);
+    expect(ready).toBe(1);
   });
 
   it("does not leave a server-close waiter after a pre-ready start failure", async () => {

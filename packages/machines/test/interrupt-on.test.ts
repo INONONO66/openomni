@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { onAbort } from "../src/interrupt-on";
 import { exit as runExit } from "./helpers/effect";
 
@@ -22,14 +22,15 @@ test("interrupting the waiter before abort detaches the listener", async () => {
   const controller = new AbortController();
   const removed = spyOn(controller.signal, "removeEventListener");
   const exit = await runExit(Effect.scoped(Effect.gen(function* () {
-    const registered = yield* Deferred.make<void>();
+    // Observed through a promise continuation so the waiter's cleanup is installed before the interrupt.
+    const registered = Promise.withResolvers<void>();
     const addEventListener = controller.signal.addEventListener.bind(controller.signal);
     const added = spyOn(controller.signal, "addEventListener").mockImplementation((...args: Parameters<AbortSignal["addEventListener"]>) => {
       addEventListener(...args);
-      Deferred.doneUnsafe(registered, Exit.void);
+      registered.resolve();
     });
     const waiter = yield* Effect.forkScoped(onAbort(controller.signal, Effect.void));
-    yield* Deferred.await(registered);
+    yield* Effect.promise(() => registered.promise);
     added.mockRestore();
     yield* Fiber.interrupt(waiter);
     return yield* Fiber.await(waiter);

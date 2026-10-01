@@ -132,6 +132,25 @@ describe("run-scoped compaction speculation", () => {
       ),
     ));
 
+  it("a waiter from a preparation aborted before entry resolves on the next entry", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { session, calls } = countingSession(() => "candidate");
+          const messages = history();
+          yield* session.prepare(messages, 70, 60, 1000);
+          // Same synchronous continuation: the forked preparation is interrupted before it starts.
+          yield* session.abort();
+          const waiter = yield* Effect.forkScoped(session.started(), { startImmediately: true });
+          expect(calls.count).toBe(0);
+          yield* session.prepare(messages, 80, 60, 1000);
+          yield* session.settled();
+          expect(calls.count).toBe(1);
+          yield* Fiber.join(waiter);
+        }),
+      ),
+    ));
+
   it("promotes a fresh candidate without another summary call", () =>
     isolated(
       Effect.scoped(

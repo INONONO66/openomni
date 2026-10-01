@@ -25,7 +25,7 @@ export class CompactionSession {
   #failureStreak = 0;
   #generation = 0;
   #preparation: Fiber.Fiber<void, never> | undefined;
-  /** Resolved once the current preparation generation has entered its summarizer call; resolved before any prepare. */
+  /** Resolved once a preparation has entered its summarizer call; resolved before any prepare. */
   #entered = Deferred.makeUnsafe<void>();
 
   constructor(config: {
@@ -58,7 +58,9 @@ export class CompactionSession {
       const prepared = prepareSummarizerInput(plan.summarizerInput, contextWindowTokens, plan.previousAnchor);
       if (prepared.messages.length === 0) return Effect.void;
       this.#inFlight = true;
-      const entered = Deferred.makeUnsafe<void>();
+      // A preparation aborted before its summarizer call leaves `#entered` unresolved; the waiters it
+      // collected are owed the next entry, so a fresh Deferred is allotted only after the previous one resolved.
+      const entered = Deferred.isDoneUnsafe(this.#entered) ? Deferred.makeUnsafe<void>() : this.#entered;
       this.#entered = entered;
       const generation = this.#generation;
       const work = Effect.suspend(() => {

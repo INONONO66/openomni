@@ -4,21 +4,33 @@ import { Interrupted } from "../src/errors";
 import { interruptOn, onAbort } from "../src/core/interrupt-on";
 import { runAgent, runAgentSync } from "./helpers/isolated";
 
-/** A real signal whose listener registrations are observable. */
+/**
+ * A real signal whose listener registration is an awaited event, not a scheduler yield. The
+ * registration is observed through a promise continuation: it runs after the registering call
+ * has returned, so the callback's cleanup is installed before the test acts on the signal
+ * (completing a Deferred inside the spy would resume the waiting fiber re-entrantly).
+ */
 function trackedSignal(aborted = false) {
   const controller = new AbortController();
   if (aborted) controller.abort();
-  const added = jest.spyOn(controller.signal, "addEventListener");
+  const registered = Promise.withResolvers<void>();
+  const addEventListener = controller.signal.addEventListener.bind(controller.signal);
+  const added = jest
+    .spyOn(controller.signal, "addEventListener")
+    .mockImplementation((...args: Parameters<AbortSignal["addEventListener"]>) => {
+      addEventListener(...args);
+      registered.resolve();
+    });
   const removed = jest.spyOn(controller.signal, "removeEventListener");
-  return { controller, signal: controller.signal, added, removed };
+  return { controller, signal: controller.signal, added, removed, registered: Effect.promise(() => registered.promise) };
 }
 
 describe("interruptOn", () => {
   it("interrupts the racing fiber when the controller aborts", async () => {
-    const { controller, signal, added } = trackedSignal();
+    const { controller, signal, added, registered } = trackedSignal();
     const exit = await runAgent(Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(Effect.never.pipe(Effect.raceFirst(interruptOn(signal))));
-      yield* Effect.yieldNow;
+      yield* registered;
       expect(added).toHaveBeenCalledTimes(1);
       controller.abort();
       return yield* Fiber.await(fiber);
@@ -27,17 +39,18 @@ describe("interruptOn", () => {
   });
 
   it("interrupts at once on an already-aborted signal", () => {
-    const { signal } = trackedSignal(true);
+    const { signal, added } = trackedSignal(true);
     const exit = runAgentSync(Effect.exit(Effect.never.pipe(Effect.raceFirst(interruptOn(signal)))));
     expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+    expect(added).not.toHaveBeenCalled();
   });
 
   it("detaches when the racing work completes so a later abort resumes nothing", async () => {
-    const { controller, signal, added, removed } = trackedSignal();
+    const { controller, signal, added, removed, registered } = trackedSignal();
     const value = await runAgent(Effect.gen(function* () {
       const work = yield* Deferred.make<string>();
       const fiber = yield* Effect.forkChild(Deferred.await(work).pipe(Effect.raceFirst(interruptOn(signal))));
-      yield* Effect.yieldNow;
+      yield* registered;
       expect(added).toHaveBeenCalledTimes(1);
       yield* Deferred.succeed(work, "done");
       return yield* Fiber.join(fiber);
@@ -52,10 +65,11 @@ describe("interruptOn", () => {
 
 describe("onAbort", () => {
   it("resumes with a success outcome", async () => {
-    const { controller, signal } = trackedSignal();
+    const { controller, signal, added, registered } = trackedSignal();
     const value = await runAgent(Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(onAbort(signal, Effect.succeed(42)));
-      yield* Effect.yieldNow;
+      yield* registered;
+      expect(added).toHaveBeenCalledTimes(1);
       controller.abort();
       return yield* Fiber.join(fiber);
     }));
