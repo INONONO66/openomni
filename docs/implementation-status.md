@@ -17,8 +17,10 @@ identity, and no production module throws a bare `Error`.
   `Data.TaggedError` classes in each package union (the package `*Failure`s,
   `ContextRestoreError`, `CompactionExecutionError`, ...). Broken invariants
   are defects — thrown Errors or `Effect.die` (`AgentInvariantViolation`,
-  `LedgerInvariant`, `ActorRegistryRefused`); `SessionCommitError` is thrown
-  by the synchronous `requireCommit`. Pure tool bodies and protocol/ui/desktop throw
+  `LedgerInvariant`). Two synchronous surfaces throw caller-handleable
+  refusals instead of failing an Effect: `requireCommit` throws
+  `SessionCommitError` and the actor registry throws `ActorRegistryRefused`.
+  Pure tool bodies and protocol/ui/desktop throw
   named error classes (`CliError`, `AppInvariantError`,
   `ConfigurationError`, `TranscriptRecordingDefect`, ...).
   `rg 'throw new Error\\(' packages/*/src apps/*/src` is zero.

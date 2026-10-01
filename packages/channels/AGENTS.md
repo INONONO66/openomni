@@ -1,5 +1,7 @@
 # packages/channels
 
+2026-10-01, #1244 typed failures: `ChannelsFailure` is the package-owned carrier for untyped causes (`decodeChannelFailure`); driver and router errors stay `Data.TaggedError` classes in `src/errors.ts`, bare `throw new Error` is zero in `src/`, and handler/websocket frames report failures through typed ports rather than console logging.
+
 2026-09-07, #969 Owner answers: `router/request/owner-answer.ts` accepts only the typed gateway arm with injected `authenticateAnswer` evidence. WebSocket `onRequestAnswer` composes with that same `ingest`; credentials never enter message recording or request actions. Upgrade-token authentication and ordinary text provenance remain separate.
 
 2026-09-07, #969 request cutover: `router/request/` owns physical correlation and authenticated responder matching only. `GatewayRouterPorts.requests` injects kernel `list/open/answer/receipt`; channels has no request store, lifecycle fold, control API, or deadline sweep. Original message action ids identify requests. All/quorum, chain precedence, endpoint/channel pins, driver receipts, grants, budgets, and physical idempotency remain gateway responsibilities. `@openomni/agent` is a test-only dependency for real kernel/SQLite acceptance tests.
