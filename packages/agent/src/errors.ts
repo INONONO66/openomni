@@ -45,6 +45,13 @@ export class AgentFailure extends Data.TaggedError("AgentFailure")<{
   override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
+/** A context-restore the admission plane refused: the caller-selected compaction target is unknown or was never executed. */
+export class ContextRestoreError extends Data.TaggedError("ContextRestoreError")<{
+  readonly reason: "unknown_compaction" | "not_executed";
+}> {
+  override get message(): string { return `context restore refused: ${this.reason}`; }
+}
+
 /** A compaction execution the admission plane refused or whose recorded output no longer matches. */
 export class CompactionExecutionError extends Data.TaggedError("CompactionExecutionError")<{
   readonly reason: string;
@@ -118,4 +125,4 @@ export type ExecutionError =
   | ExecutionApprovalError
   | AgentStopError;
 
-export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError;
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError | ContextRestoreError;

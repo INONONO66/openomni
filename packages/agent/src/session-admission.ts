@@ -283,9 +283,9 @@ export function createSessionAdmission(
       yield* awaitRetainedRunner();
       const current = kernel.row(sessionId);
       return yield* Effect.scoped(Effect.gen(function* () {
-        const source = requireCompactionIntent(kernel.actionById(compactionId));
+        const source = yield* requireCompactionIntent(kernel.actionById(compactionId));
         if (source.sessionId !== sessionId) return yield* new AgentFailure({ operation: "session.restore", cause: "foreign_compaction" });
-        const record = recordedCompaction(compactionId, kernel.resultFor(sessionId, compactionId));
+        const record = yield* recordedCompaction(compactionId, kernel.resultFor(sessionId, compactionId));
         const history = hydrateSessionHistory(kernel, sessionId).history;
         const restored = restoredContextProjection(history, compactionId, record);
         const projectionHash = canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(history) });

@@ -1641,7 +1641,7 @@ describe("durable session handle", () => {
         expect(successor).not.toBe(first);
 
         expect(
-          yield* failure(awaitSignal(first.restoreContext("missing-compaction"))),
+          yield* Effect.flip(first.restoreContext("missing-compaction")),
         ).toMatchObject({
           _tag: "ContextRestoreError",
           reason: "unknown_compaction",
