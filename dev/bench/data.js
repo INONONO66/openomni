@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790663240048,
+  "lastUpdate": 1790845946940,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -75749,6 +75749,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 147628,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5641cff803619a426e5cf89205b14792097ac829",
+          "message": "quality: fix Quality Audit 36416999469 findings (#1126-#1237) (#1241)\n\n* quality: fix Quality Audit 36416999469 findings (#1126-#1237)\n\nTypes: written any/unknown 0 (check-written-types); owned transitive sites\nscript 13->0, protocol 754->93 (Zod boundary parses remain); openomni prod\nclones consume agent exports (adopt-authority.ts deleted); agent ForeignFailure\nre-exports the ledger class.\nClones: jscpd 0 in production and test scope (agent 48->0, openomni 10->0,\nscript helpers expectExitViolation/captureConsole, CatalogModel.extend).\nComplexity: cognitive/cyclomatic/halstead findings 0, no suppressions.\nCRAP: check-import-cycles.ts covered by check-import-cycles.test.ts (6->0).\nCoverage: lane LCOV feeds the measure; residual CLI main paths listed in SLOP J.\n\nBehavior changes: buildInventory skips git-tracked paths absent from the\nworking tree; policy pin() keeps folding PolicyCompileError into the failed\nsnapshot; scripts-tooling-2 lists lint-side-effects.test.ts; scripts-contracts\nlists check-import-cycles.test.ts; dom-runtime guards GlobalRegistrator.\n\nDeleted: machines socket-path.test.ts clone; ui composer DOM test that only\npassed by test-file order (logic stays covered by composer.test.tsx).\n\nReceipts: docs/SLOP.md J, docs/implementation-status.md audit deltas.\n\n* quality: close PR #1241 CI reds (patch coverage, turn benchmarks)\n\nPatch coverage: the 18 changed executable lines the gate flagged now run in\ntheir owning lanes (check-import-cycles main takes an injectable graph with\na planted-cycle test; import.meta.main guards folded to one line; self-test\nfailure branches restructured; protocol JSON-plain array parse test; cli\ndaemon status success case).\n\nBenchmarks: the extracted recordingLedger fixture parsed every committed node\nthrough Zod inside the commit hot path that turn/first-delta and\nturn/tool-dispatch measure (+34%/+28% in CI). The node is typed by\nconstruction instead; local paired medians are back within 2% of base.",
+          "timestamp": "2026-10-01T18:09:41+09:00",
+          "tree_id": "feb0c69b573b1a0a6ccdabf927020a5973dbfe29",
+          "url": "https://github.com/INONONO66/openomni/commit/5641cff803619a426e5cf89205b14792097ac829"
+        },
+        "date": 1790845946594,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1001,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1806,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1354,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1460308,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 390739,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6808067,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 702,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 188468,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 800191,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 480900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3268,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 12418619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1457843,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18675,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 173243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 867899,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 250683,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14517645,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 169675,
             "unit": "ns/op"
           }
         ]
