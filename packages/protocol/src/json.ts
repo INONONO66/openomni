@@ -1,5 +1,17 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { NamedError } from "./error/index.js";
+
+/**
+ * Typed refusal for values outside the canonical JSON grammar: non-finite
+ * numbers, exotic objects, and undefined slots cannot be rendered or keyed
+ * canonically. One class for the whole concern; the message names the site.
+ */
+export const CanonicalJsonError = NamedError.create(
+  "CanonicalJsonError",
+  z.object({ message: z.string() }),
+);
+export type CanonicalJsonError = InstanceType<typeof CanonicalJsonError>;
 
 /**
  * Internal single owner for plain-JSON validation and canonical JSON
@@ -145,7 +157,8 @@ function renderCanonical(value: CanonicalInput): string {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("canonical JSON accepts finite numbers only");
+    if (!Number.isFinite(value))
+      throw new CanonicalJsonError({ message: "canonical JSON accepts finite numbers only" });
     return Object.is(value, -0) ? "0" : String(value);
   }
   if (typeof value === "string") return JSON.stringify(value);
@@ -153,18 +166,18 @@ function renderCanonical(value: CanonicalInput): string {
   if (typeof value === "object") {
     const prototype: object | null = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error("canonical JSON accepts plain objects only");
+      throw new CanonicalJsonError({ message: "canonical JSON accepts plain objects only" });
     }
     const fields: string[] = [];
     for (const key of Object.keys(value).sort()) {
       const nested = (value as PlainObject)[key];
       if (nested === undefined)
-        throw new Error(`canonical JSON cannot express undefined at ${key}`);
+        throw new CanonicalJsonError({ message: `canonical JSON cannot express undefined at ${key}` });
       fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
     }
     return `{${fields.join(",")}}`;
   }
-  throw new Error(`canonical JSON cannot express a ${typeof value}`);
+  throw new CanonicalJsonError({ message: `canonical JSON cannot express a ${typeof value}` });
 }
 
 /**
@@ -175,7 +188,8 @@ function renderCanonical(value: CanonicalInput): string {
  * grammar above.
  */
 export function canonicalKey(value: PlainValue): string {
-  if (!isPlainValue(value)) throw new Error("canonical key accepts plain JSON values only");
+  if (!isPlainValue(value))
+    throw new CanonicalJsonError({ message: "canonical key accepts plain JSON values only" });
   if (value === null) return "null";
   if (Array.isArray(value)) return `[${value.map(canonicalKey).join(",")}]`;
   if (typeof value === "object") {

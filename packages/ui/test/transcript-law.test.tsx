@@ -8,6 +8,7 @@ import {
   PAIR_GAP,
   PARAGRAPH_GAP,
   type PartKind,
+  SpacingGapError,
   TURN_GAP,
   gapAbove,
   spacingClass,
@@ -132,6 +133,15 @@ describe("the spacing law", () => {
     for (const [previous, part, gap] of cases) {
       expect(spacingClass(previous, part)).toBe(`mt-[${gap}px]`);
     }
+  });
+
+  test("Given a drift between law and table, Then the failure is the named class", () => {
+    // The guard in `spacingClass` is unreachable while the table covers the
+    // four constants (the tests above pin that), so the class is asserted
+    // directly: a drift must fail as this name, never as a bare Error.
+    const failure = new SpacingGapError("no class for this gap");
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.name).toBe("SpacingGapError");
   });
 
   test("Given the first part in the column, When laid out, Then it takes no leading gap", () => {

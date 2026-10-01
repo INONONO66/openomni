@@ -1,4 +1,5 @@
 import { sessionIndex } from "../state/selectors";
+import { RendererInvariantError } from "../errors";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Boundary, Ordered } from "../attention";
 import type { Session, SessionId } from "../state/store";
@@ -100,7 +101,7 @@ export function useSearch({
             onSelect(effect.id, null);
             break;
           default:
-            throw new Error(`unhandled search effect: ${JSON.stringify(effect)}`);
+            throw new RendererInvariantError(`unhandled search effect: ${JSON.stringify(effect)}`);
         }
       }
     },

@@ -5,6 +5,7 @@ import {
   PlainObjectSchema,
   PlainValueSchema,
 } from "../src/index.js";
+import { CanonicalJsonError } from "../src/json.js";
 
 describe("plain JSON owner", () => {
   test("the typed key profile retains its established bytes", () => {
@@ -15,9 +16,7 @@ describe("plain JSON owner", () => {
 
   test("one grammar rejects non-JSON values for live boundaries and typed keys", () => {
     expect(PlainValueSchema.safeParse({ gap: undefined }).success).toBe(false);
-    expect(() => canonicalKey({ gap: undefined } as never)).toThrow(
-      "canonical key accepts plain JSON values only",
-    );
+    expect(() => canonicalKey({ gap: undefined } as never)).toThrow(CanonicalJsonError);
   });
 
   test("the object profile admits one JSON record and refuses every other JSON value", () => {
@@ -45,11 +44,10 @@ describe("plain JSON owner", () => {
   });
 
   test("canonical digest rejects values outside the JSON grammar", () => {
-    expect(() => canonicalDigest(undefined)).toThrow();
-    expect(() => canonicalDigest(new Date(0))).toThrow("canonical JSON accepts plain objects only");
-    expect(() => canonicalDigest({ missing: undefined })).toThrow(
-      "canonical JSON cannot express undefined at missing",
-    );
+    expect(() => canonicalDigest(undefined)).toThrow(CanonicalJsonError);
+    expect(() => canonicalDigest(new Date(0))).toThrow(CanonicalJsonError);
+    expect(() => canonicalDigest({ missing: undefined })).toThrow(CanonicalJsonError);
+    expect(() => canonicalDigest({ gap: Number.NaN })).toThrow(CanonicalJsonError);
   });
 
   test("canonical digest bytes remain pinned independently of object key order", () => {

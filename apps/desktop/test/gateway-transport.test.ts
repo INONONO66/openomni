@@ -8,6 +8,7 @@ import {
   createGatewayChatTransport,
   SessionReadSupersessionError,
 } from "../src/renderer/chat/gateway-transport";
+import { TransportCapabilityError } from "../src/renderer/errors";
 import { signal } from "./helpers";
 import { upgradeWebSocket } from "./helpers/chat-server";
 
@@ -408,7 +409,7 @@ describe("createGatewayChatTransport", () => {
         messages: [userMessage("do not duplicate")],
         abortSignal: undefined,
       }),
-    ).rejects.toThrow("does not support regeneration");
+    ).rejects.toThrow(TransportCapabilityError);
     expect(received).toEqual([]);
   });
 
