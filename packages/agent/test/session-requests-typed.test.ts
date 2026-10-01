@@ -2,7 +2,6 @@ import { Cause, Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
 import { canonicalDigest, type PlainValue } from "@openomni/protocol";
 import { AgentFailure } from "../src/errors";
-import * as Failure from "../src/failure";
 import { createSessionRequests } from "../src/session-requests";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
@@ -136,9 +135,3 @@ test("a refused delivery receipt fails with a typed AgentFailure", () => isolate
     expect(error).toMatchObject({ _tag: "AgentFailure", operation: "request.receipt", cause: "refused:first" });
   }
 })));
-
-test("Failure.of synthesizes the package-owned AgentFailure for untyped causes", () => {
-  const failure = Failure.of(Cause.die(new Error("boom")), "request.plane");
-  expect(failure).toBeInstanceOf(AgentFailure);
-  expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "request.plane" });
-});

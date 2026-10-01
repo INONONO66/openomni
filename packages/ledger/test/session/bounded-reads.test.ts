@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { SessionHandleStore } from "../../src";
+import { LedgerInvariant, SessionHandleStore } from "../../src";
 import { materializeSession } from "../helpers/session";
 import { requestFixture } from "../helpers/request";
 import { sessionTree } from "../helpers/session-tree";
@@ -134,6 +134,23 @@ test("open turns page by original ordinal even when their latest update is beyon
   expect(kernel.openTurnsPage("missing")).toEqual([]);
   expect(kernel.latestTurnTerminal("missing")).toBeUndefined();
   expect(() => kernel.openTurnsPage("bounded", 0, 257)).toThrow();
+});
+
+test("a full open-turn page whose tail intent cannot be re-read is a named invariant", () => {
+  for (let index = 0; index < 256; index += 1) turn(`turn-${index}`);
+  // A store whose action index lost the row behind an open turn: the read must
+  // name the torn intent instead of paging from an undefined ordinal.
+  const torn: typeof stores.session = Object.create(stores.session, {
+    actions: { value: { ...stores.session.actions, actionById: () => undefined } },
+  });
+  const read = SessionHandleStore.createSessionKernel(torn, stores.catalog);
+  let thrown: LedgerInvariant | undefined;
+  try {
+    read.latestOpenTurn("bounded");
+  } catch (error) {
+    if (error instanceof LedgerInvariant) thrown = error;
+  }
+  expect(thrown).toMatchObject({ operation: "session.openTurns", message: "open turn intent missing: turn-255" });
 });
 
 test("a terminal row without a turnId does not hide every open turn", () => {
