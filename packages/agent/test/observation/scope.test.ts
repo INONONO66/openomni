@@ -10,15 +10,6 @@ const TestEvent = BusEvent.define(
   z.object({ component: z.string(), msg: z.string() }).passthrough(),
 );
 
-/** Mirrors the bus's own rendering of a thrown value: String(), else the object tag. */
-function render(value: bigint | boolean | null | number | object | string | symbol | undefined): string {
-  try {
-    return String(value);
-  } catch {
-    return Object.prototype.toString.call(value);
-  }
-}
-
 const identity = {
   traceId: "trace-1",
   sessionId: "session-1",
@@ -117,10 +108,23 @@ describe("scoped observations", () => {
     ]);
   });
 
+  // Each row pins the diagnostic the bus is expected to retain for that thrown
+  // value, written as a literal: String() for most, the object tag when
+  // String() itself throws. The function row is `() => 0` because String() of
+  // a function returns its source text, and that literal survives Bun's
+  // transpiler verbatim.
   it.each([
-    new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
-    false, 1, 1n, "reporter", () => undefined,
-  ])("exposes a reporter failure as data without throwing: %p", (reporterFailure) => {
+    [new Error("reporter failed"), "Error: reporter failed"],
+    [Symbol("reporter"), "Symbol(reporter)"],
+    [{ toString: 0 }, "[object Object]"],
+    [null, "null"],
+    [undefined, "undefined"],
+    [false, "false"],
+    [1, "1"],
+    [1n, "1"],
+    ["reporter", "reporter"],
+    [() => 0, "() => 0"],
+  ])("exposes a reporter failure as data without throwing: %p", (reporterFailure, expected) => {
     // The sink refuses domain events but still accepts the failure report itself.
     const failures: { eventName: string; error: string; reporterError?: string }[] = [];
     const hostile: ObservationSink = {
@@ -144,7 +148,7 @@ describe("scoped observations", () => {
     });
     expect(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })).not.toThrow();
     expect(failures).toEqual([
-      { eventName: TestEvent.name, error: "Error: sink failed", reporterError: render(reporterFailure) },
+      { eventName: TestEvent.name, error: "Error: sink failed", reporterError: expected },
     ]);
   });
 
