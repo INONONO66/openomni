@@ -1,5 +1,66 @@
 # Implementation Status
 
+## #1245 injected configuration, clock and entropy (epic #1260 P3 after #1244, ⏳ pending merge)
+
+On `epic1260/1245-inject-clock-entropy` (2026-10-01, base `a4478b0e`). Ambient
+time, entropy and environment reads are replaced by injection; seven
+permissive defaults become explicit typed outcomes.
+
+- **Three environment owners.** `process.env` is read only by
+  `apps/openomni/src/config.ts` (vault key resolved once into
+  `OpenOmniConfig.kek` via `resolveKek(env, home)` and injected into declared
+  provisioning), `apps/openomni/src/cli/env-file.ts` (`processEnvironment()`
+  for cli/main and watch-sources spawn env), and
+  `packages/llm/src/model/loader.ts` (`resolveAuthFilePath(env)`; auth
+  storage takes the path plus an injected `id`). The desktop reads env only
+  through `bootstrap(process)` → `resolveDesktopConfig(env)` in the new
+  `apps/desktop/src/main/config.ts` (`gateway-endpoint.ts` deleted); the
+  config is pinned once at module load.
+- **Effect Clock and agent Entropy.** The custom agent Clock service is
+  deleted from `packages/agent/src/services.ts`; Effect code uses the
+  built-in `Clock` (`Clock.currentTimeMillis`, TestClock-replaceable).
+  `packages/agent/src/core/entropy.ts` owns the temporary `Entropy` service
+  (`EntropySource { id(): string; random(): number }`, `Entropy.layer`);
+  the executor derives plain `clock`/`entropy`/`random` functions from both
+  services and threads them through execution. #1247 places Entropy finally.
+- **Promise-side injection.** channels, llm, ledger, ipc, codemode and the
+  desktop renderer take required plain function options — `now: () =>
+  number`, `id: () => string`, `random: () => number` — with inline types and
+  no fallback defaults (`?? Date.now` deleted everywhere). Representative
+  owners: `ChannelProvider.create(credentials, config, publish, { now, id,
+  random })`, `GatewayRouterPorts.now/id`, llm `RunInput.now/id` and
+  `Retry.decide(..., { now, random })`, `openCatalogStore`/`openSessionStore`
+  `{ now }`, ipc `PeerRequestTable` required `idSource`, `createCodemode({
+  id })`, renderer `createPlatform({ clock, ids })` bound once in `main.tsx`
+  (`RendererPlatform { now(): number; id(): string }`; minting before
+  `bindStorePlatform` throws `RendererInvariantError`). Composition roots
+  supply sources: `apps/openomni/src/composition/platform.ts`
+  `platformEntropy()` holds the tree's only `node:crypto` randomUUID import,
+  and protocol `traceIdFromUuid` alone formats trace IDs.
+- **Seven defaults replaced.** (1) Unknown-provenance external mail runs
+  with `evidence_only` authority plus a typed `InboundAuthorityViolation`
+  fact (`session.inbound_authority.violation`), never `act`; (2) a missing
+  failure reason becomes typed `reason: "unclassified"`; (3) a missing llm
+  sink snapshot is `Effect.die(AgentInvariantViolation)`, not an empty
+  assistant; (4) the tool wave bills injected-clock elapsed time instead of
+  0ms; (5) absent runner output returns typed `RunnerOutputMissing`, not a
+  policy `invalid_output` refusal; (6) `drain()` refusal is a typed
+  `SessionDrainOutcome` and the append receipt carries required
+  `admission: "stop" | "refused" | "turn"`; (7) a websocket frame without
+  `eventId` returns `{ admitted: false, reason: "missing_key" }` — the
+  perimeter never mints a deduplication key. Anonymous-session admission in
+  `external-message.ts` is kept; only its minter is injected.
+- **Verification.** `rg -n 'Date\.now\('`, `rg -n 'Math\.random\('` and
+  `rg -n 'crypto\.randomUUID\('` over `packages/*/src apps/*/src` print zero
+  lines (122, 2 and 42 sites removed); `rg -l 'process\.env'` over the same
+  scope prints exactly the three owner files. Tests advance time with
+  `TestClock.adjust` or fixed `now`/`id`/`random` stubs — no sleeps, no
+  `Date.now`/`Math.random` spies. Mutation campaign and full CI are not
+  claimed complete.
+- **Receipts:** `.omo/evidence/ulw/01a0f656-c9f6-795d-9bfb-786c6699559b/1245/`
+  holds the issue body, lane briefs and the eight lane reports with
+  per-lane searches and test counts.
+
 ## #1244 package-owned typed failures (epic #1260 P2, ⏳ pending merge)
 
 On `epic1260/1244-typed-failures` (2026-10-01, base `fb709568`). The shared
