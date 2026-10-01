@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createBlacklistStore } from "../../src/index.js";
-import { useSqliteStores } from "../helpers/storage";
+import { testNow, useSqliteStores } from "../helpers/storage";
 
 describe("BlacklistStore SQLite persistence", () => {
   const stores = useSqliteStores("blacklist");
@@ -37,6 +37,6 @@ describe("BlacklistStore SQLite persistence", () => {
   });
 
   test("raw reads fail closed when the blacklist sub-adapter is absent", () => {
-    expect(() => createBlacklistStore({}).list()).toThrow("does not implement blacklist");
+    expect(() => createBlacklistStore({ now: testNow }).list()).toThrow("does not implement blacklist");
   });
 });

@@ -7,7 +7,7 @@ export function requireSubAdapter<T>(adapter: T | null | undefined, message: str
 
 export function withStoreTimestamps<
   T extends { readonly createdAt?: number; readonly updatedAt?: number },
->(record: T, existing?: T, now = Date.now()): T {
+>(record: T, existing: T | undefined, now: number): T {
   return {
     ...record,
     createdAt: record.createdAt ?? existing?.createdAt ?? now,

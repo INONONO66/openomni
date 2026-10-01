@@ -4,10 +4,10 @@ import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 type SurfaceKeyAdapter = ProtocolStorage.SurfaceKeySubAdapter;
 
-export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
+export function createSqliteSurfaceKeyAdapter(db: Database, now: () => number): SurfaceKeyAdapter {
   return {
     claim: (key: string, sessionId: string, expectedSessionId?: string): string => {
-      const now = Date.now();
+      const at = now();
       // Composable db.transaction (savepoint-nesting like every other
       // adapter) instead of a raw BEGIN IMMEDIATE, which threw when a caller
       // already held a transaction on this connection.
@@ -18,13 +18,13 @@ export function createSqliteSurfaceKeyAdapter(db: Database): SurfaceKeyAdapter {
               `UPDATE surface_key
                SET session_id = ?, time_created = ?
                WHERE key = ? AND session_id = ?`,
-            ).run(sessionId, now, key, expectedSessionId);
+            ).run(sessionId, at, key, expectedSessionId);
           }
 
           db.query(
             `INSERT OR IGNORE INTO surface_key (key, session_id, time_created)
              VALUES (?, ?, ?)`,
-          ).run(key, sessionId, now);
+          ).run(key, sessionId, at);
 
           const row = db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
             session_id: string;

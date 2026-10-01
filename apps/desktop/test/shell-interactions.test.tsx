@@ -12,6 +12,7 @@ import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-acti
 import { SIDEBAR_OPEN_KEY, SIDEBAR_WIDTH_KEY } from "../src/renderer/state/shell-preferences";
 import { activeTab, consoleStore, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { mountWindow } from "./helpers";
+import { testPlatform } from "./helpers/platform";
 
 test("mounted shell restores preferences, navigates, creates and searches sessions", async () => {
   const window = new Window({ url: "http://localhost" });
@@ -32,7 +33,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     await act(() =>
       root.render(
         <StateProvider client={client}>
-          <App platform="darwin" storage={window.localStorage} />
+          <App platform="darwin" storage={window.localStorage} host={testPlatform} />
         </StateProvider>,
       ),
     );

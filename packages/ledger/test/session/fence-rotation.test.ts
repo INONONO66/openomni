@@ -16,6 +16,7 @@ import { createSessionKernel, type SessionKernel } from "../../src/session/kerne
 import type { CatalogStore } from "../../src/storage/catalog-store";
 import { openCatalogStore, openSessionStore } from "../../src/storage/index";
 import { runLedgerSync } from "../helpers/effect";
+import { TEST_NOW, testNow } from "../helpers/storage";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
 
@@ -48,7 +49,7 @@ function commitRequest(
     sessionId,
     owner,
     fence,
-    now: Date.now(),
+    now: TEST_NOW,
     expectedRevision: row.revision,
     actions: [action],
     state: row.state,
@@ -79,8 +80,8 @@ function setup(sessionId: string) {
   const directory = mkdtempSync(join(tmpdir(), "fence-rotation-"));
   const sessionPath = join(directory, `${sessionId}.sqlite`);
   const catalogPath = join(directory, "catalog.sqlite");
-  const catalog = openCatalogStore(catalogPath);
-  const session = openSessionStore(sessionPath);
+  const catalog = openCatalogStore(catalogPath, { now: testNow });
+  const session = openSessionStore(sessionPath, { now: testNow });
   const kernel = createSessionKernel(session, catalog);
   runLedgerSync(
     kernel.materialize({
@@ -215,8 +216,8 @@ test("concurrent activations from two processes: one winner, stale loser refused
       import { runLedgerSync } from "./test/helpers/effect.ts";
       const sessionId = String(process.env.FENCE_SESSION_ID);
       const owner = String(process.env.FENCE_OWNER);
-      const catalog = openCatalogStore(String(process.env.FENCE_CATALOG_PATH));
-      const session = openSessionStore(String(process.env.FENCE_SESSION_PATH));
+      const catalog = openCatalogStore(String(process.env.FENCE_CATALOG_PATH), { now: () => 1_700_000_000_000 });
+      const session = openSessionStore(String(process.env.FENCE_SESSION_PATH), { now: () => 1_700_000_000_000 });
       const kernel = createSessionKernel(session, catalog);
       const fence = catalog.rotateFence(sessionId);
       const adoption = runLedgerSync(Effect.result(kernel.adoptFence({ sessionId, owner, fence })));
@@ -226,12 +227,12 @@ test("concurrent activations from two processes: one winner, stale loser refused
       if (adopted) {
         const row = kernel.row(sessionId);
         const outcome = runLedgerSync(Effect.result(kernel.commit({
-          sessionId, owner, fence, now: Date.now(), expectedRevision: row.revision,
+          sessionId, owner, fence, now: 1_700_000_000_000, expectedRevision: row.revision,
           actions: [{
             id: String(process.env.FENCE_ACTION_ID), parentId: null, sessionId, kind: "prompt",
             intent: { encodingVersion: 1, value: { source: owner } },
             effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: owner } },
-            irreversible: true, ts: Date.now(),
+            irreversible: true, ts: 1_700_000_000_000,
           }],
           state: row.state,
         })));
@@ -337,12 +338,12 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
       db.run("BEGIN IMMEDIATE");
       const result = L0Write.commitSession(db, {
         sessionId: "s3", owner: "runner:r8", fence: Number(process.env.FENCE_FENCE),
-        now: Date.now(), expectedRevision: Number(process.env.FENCE_REVISION),
+        now: 1_700_000_000_000, expectedRevision: Number(process.env.FENCE_REVISION),
         actions: [{
           id: "r8-a1", parentId: null, sessionId: "s3", kind: "prompt",
           intent: { encodingVersion: 1, value: { source: "r8" } },
           effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: "r8" } },
-          irreversible: true, ts: Date.now(),
+          irreversible: true, ts: 1_700_000_000_000,
         }],
         state: "idle",
       }, (error) => { throw error; });

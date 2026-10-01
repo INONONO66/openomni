@@ -24,7 +24,7 @@ test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () 
 
 test("actor endpoint filters distinguish no filter from the empty workspace", () => {
   using db = openCatalogDatabase();
-  const store = createSqliteActorRegistryAdapter(db);
+  const store = createSqliteActorRegistryAdapter(db, () => 1_700_000_000_000);
   for (const id of ["a", "b"]) store.setIdentity({ id, kind: "human", trustTier: "observer" });
   for (const [id, actorId, workspace] of [
     ["1", "a", ""],

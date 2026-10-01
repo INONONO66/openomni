@@ -46,7 +46,7 @@ describe("SurfaceKey SQLite persistence", () => {
          DELETE FROM surface_key WHERE key = NEW.key;
        END;`,
     );
-    const adapter = createSqliteSurfaceKeyAdapter(db);
+    const adapter = createSqliteSurfaceKeyAdapter(db, () => 1_700_000_000_000);
 
     expect(() => adapter.claim("telegram:bot:chat:123", "ses-1")).toThrow(
       "surface_key row missing after INSERT OR IGNORE",

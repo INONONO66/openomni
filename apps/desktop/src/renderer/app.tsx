@@ -15,6 +15,7 @@ import { applyAtBoundary, orderByAttention } from "./attention";
 import type { Boundary, Held } from "./attention";
 import { SessionContent, useSessionChats } from "./chat/session-content";
 import { selectChatTransport } from "./chat/select-transport";
+import type { RendererPlatform } from "./platform";
 import { dispatchShellCommand } from "./shell/commands";
 import { jumpFrom } from "./shell/history";
 import { placeIcon } from "./shell/place-icon";
@@ -47,11 +48,11 @@ import {
   toggleSidebar,
 } from "./state/store";
 
-export function App({ platform, storage }: AppEnvironment) {
+export function App({ platform, storage, host }: AppEnvironment) {
   const state = useStore(consoleStore);
-  const now = Date.now();
+  const now = host.now();
   const { sessions: localSessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
-  const { transport, notice } = useChatEndpoint();
+  const { transport, notice } = useChatEndpoint(host.id);
   const sessions = useSessionReadModels(localSessions, transport);
   const queryClient = useQueryClient();
   const tab = activeTab(state);
@@ -76,12 +77,12 @@ export function App({ platform, storage }: AppEnvironment) {
         orderByAttention(listedSessions(consoleStore.state.sessions).map((local) =>
           sessionReadModel(local, queryClient.getQueryData<SessionRead.Page>(
             queryKeys.session(local.durableSessionId ?? ""),
-          ))), Date.now()),
+          ))), host.now()),
         searching ? null : boundary,
       ),
     );
     if (!searching) setSidebarFloating(false);
-  }, [queryClient]);
+  }, [host, queryClient]);
 
   // A session's first prompt earns its title and its place in the list: that
   // appearance is a boundary, not a reorder held for the next navigation.
@@ -271,11 +272,11 @@ function historyControls(
   };
 }
 
-function useChatEndpoint() {
+function useChatEndpoint(id: () => string) {
   const endpoint = useGatewayEndpoint();
   const selected = useMemo(
-    () => (endpoint.data ? selectChatTransport(endpoint.data) : null),
-    [endpoint.data],
+    () => (endpoint.data ? selectChatTransport(endpoint.data, id) : null),
+    [endpoint.data, id],
   );
   const notice = endpoint.isPending
     ? undefined
@@ -317,6 +318,8 @@ function useShellLifecycle(storage: Storage | null): void {
 export interface AppEnvironment {
   readonly platform: WindowPlatform;
   readonly storage: Storage | null;
+  /** Injected clock/entropy (#1245), built once in `main.tsx`. */
+  readonly host: RendererPlatform;
 }
 
 function isEditing(target: EventTarget | null): boolean {

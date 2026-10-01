@@ -6,6 +6,7 @@ import { ATTENTION_LABEL, orderByAttention } from "../src/renderer/attention/ord
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import type { Session } from "../src/renderer/state/store";
 import { makeSession } from "./helpers/session";
+import "./helpers/platform";
 
 /**
  * The rendered wiring between the search field and the tree it filters.

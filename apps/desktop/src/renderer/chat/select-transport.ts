@@ -39,12 +39,15 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  * credential. So the offer is a pair, in that order; a bare token would be an
  * unrecognised protocol and authenticate nothing.
  */
-export function selectChatTransport(endpoint: GatewayEndpoint): SelectedTransport {
+export function selectChatTransport(
+  endpoint: GatewayEndpoint,
+  id: () => string,
+): SelectedTransport {
   // No token means no offer at all, rather than an empty one: a loopback
   // gateway with no configured token has nothing to match an `auth` pair
   // against, and answers the attempt with a 401.
   if (endpoint.token === undefined || endpoint.token.length === 0) {
-    return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url, onSessionBound: bindDurableSession }) };
+    return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url, id, onSessionBound: bindDurableSession }) };
   }
 
   if (!HTTP_TOKEN.test(endpoint.token)) {
@@ -61,7 +64,7 @@ export function selectChatTransport(endpoint: GatewayEndpoint): SelectedTranspor
   const protocols = ["auth", endpoint.token];
   return {
     kind: "gateway",
-    transport: createGatewayChatTransport({ url: endpoint.url, protocols, onSessionBound: bindDurableSession }),
+    transport: createGatewayChatTransport({ url: endpoint.url, protocols, id, onSessionBound: bindDurableSession }),
     protocols,
   };
 }

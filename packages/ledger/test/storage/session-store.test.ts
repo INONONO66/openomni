@@ -11,6 +11,7 @@ import {
   SESSION_FILE_SCHEMA,
 } from "../../src/storage/index";
 import { runLedgerSync } from "../helpers/effect";
+import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
 function tableCensus(path: string): Array<{ name: string }> {
@@ -61,7 +62,7 @@ function turnIntentAction(input: {
 test("openSessionStore bootstraps a fresh session file: exactly the three session tables, WAL", () => {
   const directory = mkdtempSync(join(tmpdir(), "session-store-"));
   const path = join(directory, "s1.sqlite");
-  const store = openSessionStore(path);
+  const store = openSessionStore(path, { now: testNow });
   try {
     expect(tableCensus(path)).toEqual([
       { name: "action" },
@@ -94,7 +95,7 @@ test("openSessionStore rejects a corrupt payload instead of returning a handle",
   const path = join(directory, "notadb.sqlite");
   writeFileSync(path, "this file is deliberately not a sqlite database");
   try {
-    expect(() => openSessionStore(path)).toThrow(
+    expect(() => openSessionStore(path, { now: testNow })).toThrow(
       expect.objectContaining({ code: "SQLITE_NOTADB", errno: 26 }),
     );
   } finally {
@@ -104,8 +105,8 @@ test("openSessionStore rejects a corrupt payload instead of returning a handle",
 
 test("createSessionKernel serves session facts from the session file and policy rows from the catalog", () => {
   const directory = mkdtempSync(join(tmpdir(), "session-store-"));
-  const session = openSessionStore(join(directory, "s1.sqlite"));
-  const catalog = openCatalogStore(join(directory, "catalog.sqlite"));
+  const session = openSessionStore(join(directory, "s1.sqlite"), { now: testNow });
+  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow });
   try {
     const kernel = createSessionKernel(session, catalog);
     const created = runLedgerSync(

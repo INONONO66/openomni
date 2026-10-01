@@ -4,8 +4,8 @@ import type * as Schema from "./schema.js";
 
 /**
  * Pure deterministic Transcript fold (#545): projects an append-only fact
- * stream into Message.WithParts. Time (`at`) is an input — no Date.now(),
- * no randomness. Facts are immutable records, so the fold may share fact
+ * stream into Message.WithParts. Time (`at`) is an input — no ambient clock
+ * read, no randomness. Facts are immutable records, so the fold may share fact
  * objects into the returned state; it never mutates its inputs and every
  * applied outcome is a new state object. A rejection is a recording defect
  * (bad fact order), not a recoverable branch — the ledger projector throws

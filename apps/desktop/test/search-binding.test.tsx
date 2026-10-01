@@ -6,6 +6,7 @@ import { orderByAttention } from "../src/renderer/attention/order";
 import { SessionTree } from "../src/renderer/shell/session-tree";
 import { useSearch, type Search } from "../src/renderer/shell/use-search";
 import { installGlobals, installWindowGlobals } from "./helpers";
+import { TEST_NOW } from "./helpers/platform";
 import { makeSession } from "./helpers/session";
 
 test("search binding translates shortcuts, query edits and navigation into focus and selection", async () => {
@@ -104,11 +105,11 @@ test("session tree arrows move focus only to an adjacent row", async () => {
       root.render(
         <SessionTree
           collapsedProjectIds={new Set()}
-          now={Date.now()}
+          now={TEST_NOW}
           onNavigate={() => undefined}
           onSelect={() => undefined}
           onToggleProject={() => undefined}
-          ordered={orderByAttention(sessions, Date.now())}
+          ordered={orderByAttention(sessions, TEST_NOW)}
           pendingChanges={0}
           route="sessions"
           selectedId={null}

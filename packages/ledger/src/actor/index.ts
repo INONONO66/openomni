@@ -6,6 +6,8 @@ import { StoredIdentity, StoredEndpoint } from "./schema";
 /** The catalog-handle slice the actor registry writes through (W5.2 F1). */
 export interface ActorRegistrySource {
   readonly actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;
+  /** Injected wall clock (#1245): the catalog handle carries it. */
+  readonly now: () => number;
   transaction<T>(operation: () => T): T;
 }
 
@@ -22,7 +24,7 @@ export function createActorRegistry(source: ActorRegistrySource) {
   function registerIdentity(input: Actor.Identity) {
     const adapter = requireAdapter();
     const identity = StoredIdentity.parse(
-      withStoreTimestamps(input, adapter.getIdentity(input.id)),
+      withStoreTimestamps(input, adapter.getIdentity(input.id), source.now()),
     );
     adapter.setIdentity(identity);
     return identity;
@@ -35,7 +37,7 @@ export function createActorRegistry(source: ActorRegistrySource) {
   function registerEndpoint(input: Actor.Endpoint) {
     const adapter = requireAdapter();
     const endpoint = StoredEndpoint.parse(
-      withStoreTimestamps(input, adapter.getEndpoint(input.id)),
+      withStoreTimestamps(input, adapter.getEndpoint(input.id), source.now()),
     );
     if (!adapter.getIdentity(endpoint.actorId)) {
       throw new ActorRegistryRefused({

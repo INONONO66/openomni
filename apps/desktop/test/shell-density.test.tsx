@@ -6,6 +6,7 @@ import { uiMessagesToTranscript } from "../src/renderer/chat/adapter";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
 import { StateProvider } from "../src/renderer/state/provider";
 import { consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { testPlatform } from "./helpers/platform";
 
 /**
  * The renderer reads at Shell density, and every transcript role declares its
@@ -32,7 +33,7 @@ beforeAll(() => {
   createSession(1);
   SHELL = renderToStaticMarkup(
     <StateProvider>
-      <App platform="darwin" storage={null} />
+      <App platform="darwin" storage={null} host={testPlatform} />
     </StateProvider>,
   );
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

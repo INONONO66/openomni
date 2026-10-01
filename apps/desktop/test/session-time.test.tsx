@@ -1,9 +1,10 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { formatRelative, hasActiveState, sessionReason } from "../src/renderer/attention/reason";
 import { consoleStore, INITIAL_CLIENT_STATE, openTab } from "../src/renderer/state/store";
 import type { Session } from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
+import { testId } from "./helpers/platform";
 import { makeSession } from "./helpers/session";
 
 const now = 1_000_000_000;
@@ -22,21 +23,19 @@ for (const [elapsed, expected] of [
   });
 }
 
-/** Both surfaces (sidebar tree, Sessions list) rendered against one frozen clock. */
+/** Both surfaces (sidebar tree, Sessions list) rendered against one injected frozen clock. */
 function renderRows(session: Session) {
   consoleStore.setState(() => ({ ...INITIAL_CLIENT_STATE, sessions: [session] }));
   openTab({ kind: "route", route: "sessions" });
   const document = new Window().document;
-  document.body.innerHTML = renderShell(null, [session]);
+  document.body.innerHTML = renderShell(null, [session], { now: () => now, id: testId });
   return document;
 }
 
 function withClock<T>(run: () => T): T {
-  const clock = spyOn(Date, "now").mockImplementation(() => now);
   try {
     return run();
   } finally {
-    clock.mockRestore();
     consoleStore.setState(() => INITIAL_CLIENT_STATE);
   }
 }

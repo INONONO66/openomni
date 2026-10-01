@@ -14,7 +14,7 @@ const second = { ...first, name: "second" };
 
 for (const backend of ["SQLite"] as const) {
   test(`${backend}: policy generations select, copy and append atomically`, () => {
-    const storage = openCatalogStore(":memory:");
+    const storage = openCatalogStore(":memory:", { now: () => 1_700_000_000_000 });
     const policies = storage.policies;
     try {
       expect(

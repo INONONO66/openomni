@@ -9,7 +9,7 @@ import { type BusEvent, L0Observation, type ObservationSink } from "@openomni/pr
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/index";
 import { runLedgerSync } from "../helpers/effect";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
-import { useSqliteStores } from "../helpers/storage";
+import { testNow, useSqliteStores } from "../helpers/storage";
 
 const stores = useSqliteStores("request-atomicity");
 
@@ -66,8 +66,8 @@ test("commit observations see durable request state after the complete batch", (
       seen.push(receipt.sessionId);
     },
   };
-  const session = openSessionStore(join(directory, "session.sqlite"), sink);
-  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), sink);
+  const session = openSessionStore(join(directory, "session.sqlite"), { now: testNow, observationSink: sink });
+  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow, observationSink: sink });
   try {
     kernel = SessionHandleStore.createSessionKernel(session, catalog);
     const { request, original, commit } = requestFixture(kernel);

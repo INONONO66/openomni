@@ -45,6 +45,12 @@ const {
 } = await import("../src/renderer/state/store");
 const { setSessionTitleIfPlaceholder } = await import("../src/renderer/state/session-actions");
 const { historyMenuEntries } = await import("../src/renderer/state/selectors");
+// Loaded after `GlobalRegistrator.register()` like every DOM-touching module:
+// this import binds the store platform and supplies the suite's entropy.
+const { testId } = await import("./helpers/platform");
+
+/** The suite's injected clock matches its pinned `Date.now` spy (#1245). */
+const suitePlatform = { now: () => 10_000, id: testId };
 const { SessionList } = await import("../src/renderer/shell/session-list");
 
 const cleanups: (() => void)[] = [];
@@ -89,7 +95,7 @@ async function mount(url?: string, strict = false) {
       root.render(
         <Wrapper>
           <StateProvider client={client}>
-            <App platform="darwin" storage={null} />
+            <App platform="darwin" storage={null} host={suitePlatform} />
           </StateProvider>
         </Wrapper>,
       ),

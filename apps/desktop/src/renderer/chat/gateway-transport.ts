@@ -23,6 +23,8 @@ type SocketConstructor = new (url: string, protocols?: string | string[]) => Soc
 interface GatewayChatTransportOptions {
   /** `ws://host:port` — the gateway's WebSocket endpoint. */
   readonly url: string;
+  /** Injected entropy (#1245): mints the text-part id on each answered turn. */
+  readonly id: () => string;
 
   readonly protocols?: string | readonly string[];
   /** Injected in tests. Defaults to the platform `WebSocket`. */
@@ -217,7 +219,7 @@ export function createGatewayChatTransport(
       turn.close();
       return;
     }
-    const id = crypto.randomUUID();
+    const id = options.id();
     turn.emit({ type: "start" });
     turn.emit({ type: "text-start", id });
     turn.emit({ type: "text-delta", id, delta: frame.text });

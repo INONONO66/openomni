@@ -10,6 +10,7 @@ import { openCatalogStore } from "../../src/storage/catalog-store";
 import { createSqliteReplyGrantAdapter } from "../../src/storage/sqlite-reply-grant-adapter";
 import { bootstrapStoreDatabase } from "../../src/storage/session-store";
 import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
+import { testNow } from "../helpers/storage";
 import { z } from "zod";
 
 const ClosedMessage = z.tuple([
@@ -43,7 +44,7 @@ describe("durable reply-grant current projection", () => {
   test("independent connections racing for one slot admit exactly one grant", async () => {
     const directory = mkdtempSync(join(tmpdir(), "reply-grant-race-"));
     const path = join(directory, "ledger.sqlite");
-    const adapter = openCatalogStore(path);
+    const adapter = openCatalogStore(path, { now: testNow });
     const contenders: ChildProcess[] = [];
     const exits: Promise<[number | null, NodeJS.Signals | null]>[] = [];
     const signal = AbortSignal.timeout(10_000);
@@ -79,7 +80,7 @@ describe("durable reply-grant current projection", () => {
         ]),
       );
       expect(await Promise.all(exits)).toEqual(contenders.map(() => [0, null]));
-      const reopened = openCatalogStore(path);
+      const reopened = openCatalogStore(path, { now: testNow });
       try {
         expect(reopened.replyGrant.listLive(1)).toHaveLength(1);
       } finally {
@@ -213,7 +214,7 @@ describe("durable reply-grant current projection", () => {
 
 describe("reply-grant store factory", () => {
   test("delegates claim and listLive to the catalog sub-adapter", () => {
-    const catalog = openCatalogStore(":memory:");
+    const catalog = openCatalogStore(":memory:", { now: testNow });
     try {
       const store = createReplyGrantStore(catalog);
       expect(store.claim(grant, { at: 1, maxLiveInstances: 1 })).toBe("claimed");

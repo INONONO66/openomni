@@ -6,6 +6,8 @@ import { App } from "../src/renderer/app";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import type { Session } from "../src/renderer/state/store";
+import type { RendererPlatform } from "../src/renderer/platform";
+import { testPlatform } from "./helpers/platform";
 import { cacheSession } from "./helpers/session";
 
 /** Install `replacements` as browser globals; the returned function restores the originals. */
@@ -64,13 +66,17 @@ export function signal(): {
 }
 
 /** The shell's static markup with the endpoint query already answered, or still in flight. */
-export function renderShell(endpoint: "pending" | null = null, sessions: readonly Session[] = []): string {
+export function renderShell(
+  endpoint: "pending" | null = null,
+  sessions: readonly Session[] = [],
+  host: RendererPlatform = testPlatform,
+): string {
   const client = new QueryClient();
   for (const session of sessions) cacheSession(client, session);
   if (endpoint !== "pending") client.setQueryData(queryKeys.gatewayEndpoint, endpoint);
   return renderToStaticMarkup(
     <StateProvider client={client}>
-      <App platform="darwin" storage={null} />
+      <App platform="darwin" storage={null} host={host} />
     </StateProvider>,
   );
 }

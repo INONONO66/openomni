@@ -4,7 +4,10 @@ import { sqliteJsonData } from "./sqlite-json-data";
 
 const BlacklistRow = sqliteJsonData(Actor.BlacklistEntry);
 
-export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.BlacklistSubAdapter {
+export function createSqliteBlacklistAdapter(
+  db: Database,
+  now: () => number,
+): ProtocolStorage.BlacklistSubAdapter {
   return {
     get(id) {
       const row = BlacklistRow.nullable().parse(
@@ -13,7 +16,7 @@ export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.Blac
       return row ?? undefined;
     },
     set(entry) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO blacklist (
            id, data, kind, value, expires_at, time_created, time_updated
@@ -30,8 +33,8 @@ export function createSqliteBlacklistAdapter(db: Database): ProtocolStorage.Blac
         entry.kind,
         entry.value,
         entry.expiresAt ?? null,
-        entry.createdAt ?? now,
-        entry.updatedAt ?? now,
+        entry.createdAt ?? at,
+        entry.updatedAt ?? at,
       );
     },
     list() {

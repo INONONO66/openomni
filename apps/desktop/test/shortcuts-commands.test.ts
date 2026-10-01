@@ -7,6 +7,7 @@ import {
   INITIAL_CLIENT_STATE,
   navigate,
 } from "../src/renderer/state/store";
+import "./helpers/platform";
 
 beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
 

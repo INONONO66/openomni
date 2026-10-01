@@ -37,6 +37,7 @@ function secretOfRow(row: z.infer<typeof SecretRowSchema>): Provisioning.Secret 
 
 export function createSqliteProvisioningAdapter(
   db: Database,
+  now: () => number,
 ): ProtocolStorage.ProvisioningSubAdapter {
   return {
     getPerson(id) {
@@ -46,7 +47,7 @@ export function createSqliteProvisioningAdapter(
       );
     },
     setPerson(person) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO person (id, trust_tier, data, revision, time_created, time_updated)
          VALUES (?, ?, ?, ?, ?, ?)
@@ -55,7 +56,7 @@ export function createSqliteProvisioningAdapter(
            data = excluded.data,
            revision = excluded.revision,
            time_updated = excluded.time_updated`,
-      ).run(person.id, person.trustTier, JSON.stringify(person), person.revision, now, now);
+      ).run(person.id, person.trustTier, JSON.stringify(person), person.revision, at, at);
     },
     listPersons() {
       return PersonRow.array().parse(
@@ -73,7 +74,7 @@ export function createSqliteProvisioningAdapter(
       );
     },
     setChannelInstance(instance) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO channel_instance (id, provider, enabled, data, revision, time_created, time_updated)
          VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -89,8 +90,8 @@ export function createSqliteProvisioningAdapter(
         instance.enabled ? 1 : 0,
         JSON.stringify(instance),
         instance.revision,
-        now,
-        now,
+        at,
+        at,
       );
     },
     listChannelInstances() {

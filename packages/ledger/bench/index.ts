@@ -46,8 +46,8 @@ interface BenchStores {
 }
 
 function openBenchStores(): BenchStores {
-  const session = openSessionStore(":memory:");
-  const catalog = openCatalogStore(":memory:");
+  const session = openSessionStore(":memory:", { now: () => 1_700_000_000_000 });
+  const catalog = openCatalogStore(":memory:", { now: () => 1_700_000_000_000 });
   return {
     kernel: SessionHandleStore.createSessionKernel(session, catalog),
     close() {
