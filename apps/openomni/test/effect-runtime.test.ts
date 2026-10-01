@@ -8,6 +8,7 @@ import { startOpenOmni } from "../src/index";
 import { Clock, Entropy } from "@openomni/agent";
 import { AppLifecycleFailure } from "../src/runtime";
 import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
+import { testIds } from "./helpers/test-entropy";
 
 const config = {
   host: "127.0.0.1",
@@ -37,6 +38,8 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
     machines: { get: (): typeof machine => machine } as never,
     completion: (() => Effect.succeed({})) as never,
     messages: { ingest: () => Effect.succeed({}) } as never,
+    now: () => 0,
+    id: testIds("ports"),
   });
   const handle = ports.machines?.get("machine");
   expect((await handle?.fs.read("/file")) === read).toBe(true);

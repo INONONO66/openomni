@@ -7,7 +7,7 @@ import { Machine } from "@openomni/protocol";
 /** Bind product dispatch; interpreter state and cell provenance live in codemode. */
 export type ComposedCodemode = Effect.Success<ReturnType<typeof createCodemode>>;
 
-function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
+function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOptions["bindings"]> {
   return {
     boundary() {
       const { executor } = frame;
@@ -40,7 +40,7 @@ function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
       return (call) => Effect.gen(function* () {
         const result = yield* dispatcher.executeCell(
             {
-              id: `cell:${call.cellId}:${crypto.randomUUID()}`,
+              id: `cell:${call.cellId}:${id()}`,
               tool: call.name,
               input: call.arguments,
             },
@@ -56,9 +56,9 @@ function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
   };
 }
 
-export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
+export function composeCodemode(machines: MachineHost, sources: { readonly id: () => string }): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const mode = yield* createCodemode({ machines });
+    const mode = yield* createCodemode({ id: sources.id, machines });
     return {
       ...mode,
       cell: {
@@ -76,7 +76,7 @@ export function composeCodemode(machines: MachineHost): Effect.Effect<ComposedCo
             };
           } };
           return owned.frame.generation.provide(mode.cell.run(code, tenant, {
-            ...options, ownership, bindings: bindings(owned.frame),
+            ...options, ownership, bindings: bindings(owned.frame, sources.id),
           })).pipe(Effect.onExit((exit) => Effect.sync(() => {
             if (owners === 0) owned.close(Exit.isFailure(exit) ? "interrupted" : "settled");
           })));

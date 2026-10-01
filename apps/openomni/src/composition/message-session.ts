@@ -146,6 +146,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
 
 export function messageMaterialization(
   currentPolicyGeneration: () => number,
+  id: () => string,
 ): (input: {
   readonly id: string;
   readonly parentId: string | null;
@@ -173,7 +174,7 @@ export function messageMaterialization(
         id: input.id,
         parentId: input.parentId,
         role: input.role,
-        actionId: crypto.randomUUID(),
+        actionId: id(),
         at: input.at,
       },
       snapshot,

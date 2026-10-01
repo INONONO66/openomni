@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
-import { Ipc, type PlainValue } from "@openomni/protocol";
+import { type IdSource, Ipc, type PlainValue } from "@openomni/protocol";
 
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, type IpcError } from "./errors";
@@ -15,6 +15,8 @@ function unlinkIfExists(socketPath: string): void {
 }
 
 interface IpcServerOptions {
+  /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly idSource: IdSource;
   /**
    * Fires once per connection after it is torn down (close or error). The
    * connection's in-flight requests have already been failed when this runs.
@@ -65,7 +67,7 @@ function probeSocketLive(socketPath: string): Effect.Effect<boolean> {
 export function createIpcServer(
   socketPath: string,
   handler: RequestHandler,
-  options: IpcServerOptions = {},
+  options: IpcServerOptions,
 ): Effect.Effect<IpcServer, IpcError, Scope.Scope> {
   return Effect.gen(function* () {
   const dispatch = yield* makeDispatcher;
@@ -134,6 +136,7 @@ export function createIpcServer(
   }
 
   const peer = new PeerRequestTable<ConnectionState>({
+    idSource: options.idSource,
     send: sendFrame,
     samePeer: (pendingPeer, inboundPeer) => pendingPeer.id === inboundPeer.id,
     onRequest: (state, method, params, respond, notify) =>

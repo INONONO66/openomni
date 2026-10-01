@@ -9,10 +9,11 @@ import { seedKernelPolicyRows } from "../src/policy-seed";
 import { generationServices } from "./helpers/generation-services";
 import { adoptTestFence, testPlane } from "./helpers/ledger";
 import { runEffect, runSyncEffect, acquireSyncEffect } from "./helpers/effect";
+import { testIds } from "./helpers/test-entropy";
 
 function materialize(plane: AppLedgerPlane) {
   return (id: string, parentId: string | null, role: LedgerSession.Role, runner: string) =>
-    messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration())({
+    messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("typed-materialize"))({
       id, parentId, role, runner, tools: [], preset: "", at: 100,
     });
 }

@@ -14,6 +14,7 @@ import { commitReceivedMessage } from "../../../packages/agent/test/helpers/ingr
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorMessage, ungrantedActor } from "./helpers/message-scenarios";
+import { testIds } from "./helpers/test-entropy";
 
 const directories = storageDirectories(true);
 
@@ -425,7 +426,7 @@ test("an external reply to an awaited message admits with the correlated reply o
   if (correlated === null) throw new Error("missing correlatable message action");
   const messageId = correlated.messageId;
   const prepare = prepareMessage(fixture.plane, (id, parentId, childRole, runner) =>
-    messageMaterialization(() => fixture.plane.openKernel(id).currentPolicyGeneration())({
+    messageMaterialization(() => fixture.plane.openKernel(id).currentPolicyGeneration(), testIds("mutation-materialize"))({
       id,
       parentId,
       role: childRole,

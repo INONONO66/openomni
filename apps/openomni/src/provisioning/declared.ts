@@ -6,7 +6,7 @@ import {
   type PersonStore,
   type SecretStore,
 } from "@openomni/ledger";
-import { type CredentialReader, declaredChannelProfile } from "../channels";
+import { type ChannelRuntimeDeps, type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";
 import type { KekResolution } from "./vault-key";
@@ -51,6 +51,7 @@ export function desiredChannels(
   },
   // Resolved once in config (#1245): provisioning never reads the environment.
   kek: KekResolution,
+  deps: ChannelRuntimeDeps,
 ): DesiredChannels {
   const instances = stores.instances.list();
   const secrets = new Map<string, ReturnType<SecretStore["get"]>>();
@@ -59,7 +60,7 @@ export function desiredChannels(
     return secrets.get(ref);
   };
   const reader = vaultCredentialReader(kek, readSecret);
-  const { rows, statuses } = declaredChannelProfile(instances, reader);
+  const { rows, statuses } = declaredChannelProfile(instances, reader, deps);
   const byId = new Map(instances.map((instance) => [instance.id, instance]));
   return {
     source: "declared",

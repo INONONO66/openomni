@@ -12,6 +12,11 @@ import { execute } from "../src/exec";
 import { createMachineHost } from "../src/host";
 import { enrollment, offer } from "./helpers";
 
+function lifecycleIds(prefix: string): () => string {
+  let n = 0;
+  return () => `${prefix}-${(n += 1)}`;
+}
+
 const command = "sleep 60 & grandchild=$!; printf '%s %s\\n' \"$$\" \"$grandchild\"; wait";
 const pidPair = z.tuple([z.coerce.number().int().positive(), z.coerce.number().int().positive()]);
 
@@ -76,10 +81,10 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
   const path = socketPath("machine-life");
   const detached = deferred();
   const host = await acquire(createMachineHost({
-    socketPath: path, enrollment, now: () => 3,
+    socketPath: path, enrollment, now: () => 3, id: lifecycleIds("life-host"),
     events: { publish: (event) => { if (event.name === Machine.Events.Detached.name) detached.resolve(); } },
   }));
-  const daemon = await acquire(attachMachineDaemon({ socketPath: path, offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));
+  const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));
   const observed = observeProcess();
   try {
     expect(host.value.list()).toHaveLength(1);
@@ -107,10 +112,11 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
   const server = await acquire(createIpcServer(path, (method, _params, respond) => Effect.sync(() => {
     expect(method).toBe(Machine.WireMethod.Attach);
     respond({ status: "invalid" });
-  }), { onDisconnect: () => Effect.sync(() => disconnected.resolve()) }));
+  }), { idSource: lifecycleIds("attach-fail-server"), onDisconnect: () => Effect.sync(() => disconnected.resolve()) }));
   try {
     const error = await captureError(acquire(attachMachineDaemon({
       socketPath: path,
+      id: lifecycleIds("attach-fail-daemon"),
       offer: offer("/tmp"),
       fsExports: new Map([["docs", "/tmp"]]),
       runner: {

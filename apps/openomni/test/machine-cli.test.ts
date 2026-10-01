@@ -12,6 +12,7 @@ import { Machine } from "@openomni/protocol";
 import { composeCodemode, type ComposedCodemode } from "../src/composition/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { socketPath } from "./helpers/socket-path";
+import { testIds } from "./helpers/test-entropy";
 
 test("machine attach CLI composes real runners; eval pipelines two machine handles", async () => {
   const base = mkdtempSync(join(tmpdir(), "om-cli-machine-"));
@@ -24,6 +25,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   let cells: ComposedCodemode;
   const host = await acquireEffect(createMachineHost({
     socketPath: path,
+    id: testIds("cli-host"),
     enrollment: (id) => ({
       machineId: id,
       name: id,
@@ -40,7 +42,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
     now: () => 2,
     callTool: (call) => cells.callTool(call),
   }));
-  cells = await acquireEffect(composeCodemode(host));
+  cells = await acquireEffect(composeCodemode(host, { id: testIds("cli-compose") }));
   const children: ReturnType<typeof spawn>[] = [];
   const exits: Promise<void>[] = [];
   async function attach(id: string, root: string) {

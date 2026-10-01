@@ -28,7 +28,7 @@ export const ProvisionOutput = z.discriminatedUnion("op", [
 ]);
 
 /** The catalog is static: without a composed provisioning port the tool exists and refuses. */
-export function createProvisionTool(port: ProvisionPort | undefined) {
+export function createProvisionTool(port: ProvisionPort | undefined, now: () => number) {
   return defineTool(
     {
       name: "provision",
@@ -38,7 +38,7 @@ export function createProvisionTool(port: ProvisionPort | undefined) {
       input: ProvisionInput,
       output: ProvisionOutput,
       visibility: { model: ["resident"], cell: ["resident"] },
-      execute: executeProvision(port),
+      execute: executeProvision(port, now),
       render: (_args, value) => renderProvision(value),
     },
     provisionApproval(port),

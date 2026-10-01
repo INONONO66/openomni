@@ -27,6 +27,7 @@ import { dispatchOutboundMessage } from "../../src/composition/terminal-message"
 import type { z } from "zod";
 import { Effect } from "effect";
 import { acquireSyncEffect, runEffect, runSyncEffect } from "./effect";
+import { testIds } from "./test-entropy";
 
 /** The model-facing vocabulary is read off the sealed tool, not re-exported for tests. */
 type SendMessageInput = z.output<ReturnType<typeof createSendMessageTool>["input"]>;
@@ -59,7 +60,7 @@ export function messageFixture(
     requests: channelRequests(requests),
     inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
-      messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration())({
+      messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("materialize"))({
         id,
         parentId,
         role: childRole,

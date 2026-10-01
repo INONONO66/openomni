@@ -16,8 +16,8 @@ test("the app machine host translates a codemode failure at its callback boundar
     return createHost(options);
   });
   const failure = new Machines.MachinesFailure({ operation: "code.tool", cause: "lost cell" });
-  const failCell = spyOn(Codemode, "composeCodemode").mockImplementation((host: Machines.MachineHost) =>
-    compose(host).pipe(Effect.map((mode: Codemode.ComposedCodemode) => ({
+  const failCell = spyOn(Codemode, "composeCodemode").mockImplementation((host: Machines.MachineHost, sources: { readonly id: () => string }) =>
+    compose(host, sources).pipe(Effect.map((mode: Codemode.ComposedCodemode) => ({
       ...mode, callTool: (_call: Machine.ToolCall) => Effect.fail(failure),
     }))),
   );

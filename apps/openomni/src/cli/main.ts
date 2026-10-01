@@ -13,6 +13,7 @@ import { loadConfig, resolveClusterStorage } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
+import { platformEntropy } from "../composition/platform";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
 import { applyEnvFile, mergeEnvFile, writeEnvFile } from "./env-file";
@@ -170,7 +171,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     async attachMachine(configPath) {
       const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
-      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
+      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath, platformEntropy().id));
       console.log(JSON.stringify(daemon.attachment));
       if (daemon.attachment.status === "refused") {
         return 1;

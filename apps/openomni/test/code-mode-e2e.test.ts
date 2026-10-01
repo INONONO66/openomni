@@ -27,6 +27,7 @@ import { socketPath as testSocketPath } from "./helpers/socket-path";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { cellDaemonOptions } from "./helpers/cell-daemon";
+import { testIds } from "./helpers/test-entropy";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -45,8 +46,8 @@ const suite = residentSuite(async () => {
 });
 
 // Registration occurs before returning to any fallible test or harness work.
-async function createMachineHost(options: Parameters<typeof createHost>[0]) {
-  const host = await acquireEffect(createHost(options));
+async function createMachineHost(options: Omit<Parameters<typeof createHost>[0], "id">) {
+  const host = await acquireEffect(createHost({ id: testIds("e2e-host"), ...options }));
   suite.defer(async () => {
     await runEffect(host.close());
     expect(existsSync(options.socketPath)).toBe(false);
@@ -62,9 +63,9 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
 }
 
 async function attachMachineDaemon(
-  options: Parameters<typeof attachDaemon>[0],
+  options: Omit<Parameters<typeof attachDaemon>[0], "id">,
 ): Promise<MachineDaemon> {
-  const daemon = await acquireEffect(attachDaemon({ ...options, runner: acquireSyncEffect(createCodemode()).runner }));
+  const daemon = await acquireEffect(attachDaemon({ id: testIds("e2e-daemon"), ...options, runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner }));
   suite.defer(() => runEffect(daemon.close()));
   return daemon;
 }
@@ -423,7 +424,7 @@ async function startCellHarness(ports: Partial<ToolPorts>) {
   });
   const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
-  cells = acquireSyncEffect(composeCodemode(host));
+  cells = acquireSyncEffect(composeCodemode(host, { id: testIds("e2e-compose") }));
   suite.defer(() => runEffect(cells.close()));
   const states: Machine.CellState[] = [];
   const portsForCells = cellPorts(cells);

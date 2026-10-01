@@ -6,6 +6,10 @@ import { decodeMachineFailure } from "../../src/failure";
 import { acquire, run, sync } from "../../../ipc/test/helpers/effects";
 export * from "../../src/errors";
 
+function sequentialIds(prefix: string): () => string {
+  let n = 0;
+  return () => `${prefix}-${(n += 1)}`;
+}
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });
 }
@@ -36,9 +40,9 @@ function machineHandle(native: Native.MachineHandle) {
   };
 }
 export type MachineHandle = ReturnType<typeof machineHandle>;
-export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool"> & { callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
+export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id"> & { id?: () => string; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
   const callTool = options.callTool;
-  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
+  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
   const handles = new Map<string, MachineHandle>();
   return { native, list: native.list,
     get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },
@@ -46,8 +50,8 @@ export async function createMachineHost(options: Omit<Parameters<typeof Native.c
   };
 }
 export type MachineHost = Awaited<ReturnType<typeof createMachineHost>>;
-export async function attachMachineDaemon(options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner"> & { runner?: CodeRunner }) {
-  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, runner: options.runner ? nativeRunner(options.runner) : undefined }));
+export async function attachMachineDaemon(options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner" | "id"> & { id?: () => string; runner?: CodeRunner }) {
+  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), runner: options.runner ? nativeRunner(options.runner) : undefined }));
   return { native, attachment: native.attachment, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {

@@ -10,6 +10,7 @@ import { MachineCellError } from "@openomni/machines";
 import { socketPath } from "./helpers/socket-path";
 
 import { bridgeDaemon, bridgeHost, bridgeOffer, bridgeProbe } from "./helpers/machine-bridge";
+import { testIds } from "./helpers/test-entropy";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -431,7 +432,8 @@ describe("code-mode tool bridge", () => {
     });
     const offer = bridgeOffer();
     const first = await acquireEffect(attachMachineDaemon({
-      runner: acquireSyncEffect(createCodemode()).runner,
+      id: testIds("bridge-first"),
+      runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-first-cell") })).runner,
       socketPath: path,
       offer,
     }));
@@ -453,7 +455,8 @@ describe("code-mode tool bridge", () => {
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
       second = await acquireEffect(attachMachineDaemon({
-        runner: acquireSyncEffect(createCodemode()).runner,
+        id: testIds("bridge-second"),
+        runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-second-cell") })).runner,
         socketPath: path,
         offer,
       }));

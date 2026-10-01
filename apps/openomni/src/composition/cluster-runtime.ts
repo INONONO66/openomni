@@ -87,6 +87,8 @@ type SessionStoreHandle = ReturnType<LedgerHandles["openSession"]>;
 export type SessionKernel = ReturnType<typeof SessionHandleStore.createSessionKernel>;
 
 export interface AppLedgerOptions {
+  /** Injected wall clock (#1245): the ledger plane never reads ambient time. */
+  readonly now: () => number;
   /** Catalog SQLite file; absent = an in-memory catalog (hermetic tests). */
   readonly catalogPath?: string;
   /**
@@ -138,10 +140,13 @@ export interface AppLedgerPlane {
   close(): void;
 }
 
-export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane {
+export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
   const sessionsDir = options.sessionsDir;
   if (sessionsDir !== undefined) mkdirSync(sessionsDir, { recursive: true });
-  const catalog = openCatalogStore(options.catalogPath ?? ":memory:", options.observationSink);
+  const catalog = openCatalogStore(options.catalogPath ?? ":memory:", {
+    now: options.now,
+    ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
+  });
   const onObservationFailure = options.onObservationFailure ?? reportObservationPublishFailure;
   const memo = new Map<string, { store: SessionStoreHandle; kernel: SessionKernel }>();
   function opened(sessionId: string) {
@@ -149,8 +154,11 @@ export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane 
     if (entry === undefined) {
       const store = openSessionStore(
         sessionsDir === undefined ? ":memory:" : sessionFilePath(sessionsDir, sessionId),
-        options.observationSink,
-        onObservationFailure,
+        {
+          now: options.now,
+          onObservationFailure,
+          ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
+        },
       );
       entry = { store, kernel: SessionHandleStore.createSessionKernel(store, catalog) };
       memo.set(sessionId, entry);
@@ -177,8 +185,11 @@ export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane 
           ? opened(sessionId).store
           : openSessionStore(
               sessionFilePath(sessionsDir, sessionId),
-              options.observationSink,
-              onObservationFailure,
+              {
+                now: options.now,
+                onObservationFailure,
+                ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
+              },
             ),
     },
     openKernel: (sessionId) => opened(sessionId).kernel,
@@ -211,7 +222,7 @@ export class AppLedger extends Context.Service<AppLedger, AppLedgerPlane>()(
 ) {}
 
 /** Scoped plane layer: the composition root owns open and close. */
-export function appLedgerLayer(options: AppLedgerOptions = {}): Layer.Layer<AppLedger> {
+export function appLedgerLayer(options: AppLedgerOptions): Layer.Layer<AppLedger> {
   return Layer.effect(
     AppLedger,
     Effect.acquireRelease(
@@ -383,7 +394,7 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
 export interface SessionEntityRuntimeOptions {
   /** Writer identity stamped into `lease_owner` (audit only; the fence authorizes). */
   readonly owner: string;
-  readonly clock?: () => number;
+  readonly clock: () => number;
   /** Turn execution + timer ports; the turn port is composition-owned (plan §1). */
   readonly ports: SessionEntityPorts;
 }
@@ -399,7 +410,7 @@ export function sessionEntityLayer(options: SessionEntityRuntimeOptions) {
       const plane = yield* AppLedger;
       return {
         owner: options.owner,
-        clock: options.clock ?? (() => Date.now()),
+        clock: options.clock,
         catalog: plane.catalog,
         openSession: plane.handles.openSession,
         ports: options.ports,

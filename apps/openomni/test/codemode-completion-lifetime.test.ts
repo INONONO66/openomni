@@ -17,6 +17,7 @@ import { seededPolicy } from "./helpers/executor";
 import { bounded } from "./helpers/protected-dispatch";
 import { residentSuite } from "./helpers/resident-suite";
 import { socketPath } from "./helpers/socket-path";
+import { testIds } from "./helpers/test-entropy";
 
 const suite = residentSuite();
 const ActionPhase = z.object({ op: z.string(), phase: z.string() });
@@ -44,6 +45,7 @@ for (const stop of [false, true]) {
     let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
       socketPath: path,
+      id: testIds("lifetime-host"),
       enrollment: (machineId: string) => ({
         machineId,
         name: "completion-test",
@@ -61,11 +63,11 @@ for (const stop of [false, true]) {
     suite.defer(async () => { await runEffect(host.close()); });
     const daemon = await acquireEffect(attachMachineDaemon({
       ...cellDaemonOptions(path, "completion-test"),
-      runner: acquireSyncEffect(createCodemode()).runner,
+      runner: acquireSyncEffect(createCodemode({ id: testIds("lifetime-cell") })).runner,
     }));
     suite.defer(async () => { await runEffect(daemon.close()); });
     expect(daemon.attachment.status).toBe("attached");
-    cells = acquireSyncEffect(composeCodemode(host));
+    cells = acquireSyncEffect(composeCodemode(host, { id: testIds("lifetime-compose") }));
     suite.defer(async () => { await runEffect(cells.close()); });
     let calls = 0;
     const definitions = catalogDefinitions(

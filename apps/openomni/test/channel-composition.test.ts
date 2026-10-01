@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { fakeProviders } from "./helpers/channel-providers";
 import type { Channel, Provisioning } from "@openomni/protocol";
 import { declaredChannelProfile } from "../src/channels";
+import { testChannelDeps } from "./helpers/test-entropy";
 
 const handler: Channel.MessageHandler = () => Promise.resolve();
 const credentials = {
@@ -22,7 +23,7 @@ function profile(rows = instances) {
     return value === undefined
       ? { kind: "locked", reason: "missing" }
       : { kind: "ok", plaintext: new TextEncoder().encode(value) };
-  }, fakes.providers);
+  }, testChannelDeps(), fakes.providers);
   return { fakes, ...selected };
 }
 

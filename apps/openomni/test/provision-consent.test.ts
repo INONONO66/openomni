@@ -35,7 +35,7 @@ const plane = (): AppLedgerPlane => {
   return planeRef.current;
 };
 const actors = () => plane().stores.actors;
-const provision = () => eraseTool(createProvisionTool(provisionPort(plane())));
+const provision = () => eraseTool(createProvisionTool(provisionPort(plane()), () => 1000));
 /** The provisional contact's current standing in the actor registry. */
 const malloryStanding = () => actors().getIdentity("contact:mallory")?.standing;
 

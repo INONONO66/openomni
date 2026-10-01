@@ -1,6 +1,6 @@
-import { ObservationSink, executorContext, AgentFailure, Interrupted, newTraceId, type ExecutionError } from "@openomni/agent";
+import { ObservationSink, executorContext, AgentFailure, Interrupted, type ExecutionError } from "@openomni/agent";
 import { Llm, type RunInput, type Sink, type Run } from "@openomni/llm";
-import type { Message, PlainObject } from "@openomni/protocol";
+import { traceIdFromUuid, type Message, type PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { LlmCall } from "../tools/completion";
 
@@ -12,6 +12,9 @@ interface ResolvedModel {
 }
 interface ResolvedTextCall {
   readonly model: ResolvedModel;
+  /** Injected clock + id entropy (#1245): timestamps, trace and run identifiers — no ambient Date/crypto. */
+  readonly now: () => number;
+  readonly id: () => string;
   readonly messages: Message.WithParts[];
   readonly system?: string;
   readonly sessionId: string;
@@ -48,7 +51,7 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
     const capture = textCapture();
     const llm = yield* Llm;
     const events = yield* ObservationSink;
-    const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id })
+    const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id, now: call.now })
       .pipe(Effect.mapError((error) => new AgentFailure({ operation: "completion.resolve", cause: String(error) })));
     const input: RunInput = {
       messages: call.messages, tools: [], toolChoice: "none", model: resolved,
@@ -58,7 +61,8 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
       ...(call.signal === undefined ? {} : { signal: call.signal }),
       ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
       ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
-      trace: { traceId: newTraceId(), sessionId: call.sessionId, runId: crypto.randomUUID() }, events,
+      now: call.now, id: call.id,
+      trace: { traceId: traceIdFromUuid(call.id()), sessionId: call.sessionId, runId: call.id() }, events,
     };
     const executor = yield* executorContext;
     const runAttempts = executor.runAttempts;
@@ -85,16 +89,21 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
   });
 }
 
-export function createCompletionPort(model: ResolvedModel) {
+export function createCompletionPort(
+  model: ResolvedModel,
+  sources: { readonly now: () => number; readonly id: () => string },
+) {
   return (call: LlmCall): Effect.Effect<string, ExecutionError, Llm | ObservationSink> => {
     const sessionId = "completion";
-    const messageId = crypto.randomUUID();
+    const messageId = sources.id();
     const target = call.model === undefined ? model : { ...model, id: call.model };
     return runResolvedText({
       model: target,
+      now: sources.now,
+      id: sources.id,
       messages: [{
-        info: { id: messageId, sessionID: sessionId, role: "user", time: { created: Date.now() }, agent: "completion", model: { providerID: target.provider, modelID: target.id } },
-        parts: [{ id: crypto.randomUUID(), sessionID: sessionId, messageID: messageId, type: "text", text: call.prompt }],
+        info: { id: messageId, sessionID: sessionId, role: "user", time: { created: sources.now() }, agent: "completion", model: { providerID: target.provider, modelID: target.id } },
+        parts: [{ id: sources.id(), sessionID: sessionId, messageID: messageId, type: "text", text: call.prompt }],
       }],
       sessionId,
       ...(call.system === undefined ? {} : { system: call.system }),

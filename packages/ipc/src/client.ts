@@ -1,5 +1,5 @@
 import net from "node:net";
-import type { Ipc } from "@openomni/protocol";
+import type { IdSource, Ipc } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, IpcProtocolError, type IpcError } from "./errors";
 import { decodeIpcFailure } from "./failure";
@@ -13,12 +13,14 @@ export interface IpcClient {
   readonly connected: boolean;
 }
 export type ConnectIpcClientOptions = {
+  /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly idSource: IdSource;
   connectTimeoutMs?: number;
   onDisconnect?: () => Effect.Effect<void, IpcError>;
   onRequest?: (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => Effect.Effect<void, IpcError>;
   onNotification?: (method: string, params: Ipc.Notification["params"]) => Effect.Effect<void, IpcError>;
 };
-export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptions = {}): Effect.Effect<IpcClient, IpcError, Scope.Scope> {
+export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptions): Effect.Effect<IpcClient, IpcError, Scope.Scope> {
   return Effect.gen(function* () {
     const dispatch = yield* makeDispatcher;
     const socket = new net.Socket();
@@ -26,6 +28,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
     let connected = false;
     let closed = false;
     const peer = new PeerRequestTable({
+      idSource: opts.idSource,
       send: (_peer, frame) => { if (connected && !closed) socket.write(encode(frame)); },
       onRequest: opts.onRequest ? (_peer, method, params, respond) => opts.onRequest?.(method, params, respond) ?? Effect.void : undefined,
       onNotification: (_peer, method, params) => opts.onNotification?.(method, params) ?? Effect.void,
