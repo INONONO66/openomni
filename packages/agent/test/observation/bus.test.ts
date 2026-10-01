@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
+import { Effect, Logger } from "effect";
 import { createObservationBus } from "../../src/observation/bus";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
@@ -39,9 +40,11 @@ describe("observation bus delivery", () => {
   it("isolates a throwing subscriber while preserving the publish snapshot", async () => {
     const observations = bus();
     const event = BusEvent.define("test.bus.errors", z.string());
-    const warn = mock(() => undefined);
-    const originalWarn = console.warn;
-    console.warn = warn;
+    const logged: { level: string; text: string }[] = [];
+    const collector = Logger.make((options) => {
+      const text = (Array.isArray(options.message) ? options.message : [options.message]).map(String).join(" ");
+      logged.push({ level: options.logLevel, text });
+    });
     const seen: string[] = [];
     const delivered = Promise.withResolvers<void>();
     const unsubscribe = observations.subscribe(event, () => {
@@ -53,14 +56,15 @@ describe("observation bus delivery", () => {
       delivered.resolve();
     });
 
-    try {
-      observations.publish(event, "survived");
-      await bounded(delivered.promise);
-      expect(seen).toEqual(["survived"]);
-      expect(warn).toHaveBeenCalledTimes(1);
-    } finally {
-      console.warn = originalWarn;
-    }
+    // Publishing from Effect code hands the publishing fiber's loggers to the deferred delivery.
+    Effect.runSync(
+      Effect.sync(() => observations.publish(event, "survived")).pipe(
+        Effect.provide(Logger.layer([collector])),
+      ),
+    );
+    await bounded(delivered.promise);
+    expect(seen).toEqual(["survived"]);
+    expect(logged).toEqual([{ level: "Warn", text: expect.stringContaining("ObservationBus handler error") }]);
   });
 
   it("delivers the original handler failure to the injected error sink", async () => {

@@ -46,7 +46,7 @@ it("does not record a denied configuration", () =>
           Effect.gen(function* () {
             const before = sessionTree(handle.id);
             expect(yield* failure(handle.system.blocks.set([]))).toMatchObject({
-              _tag: "ForeignFailure",
+              _tag: "AgentFailure",
               operation: "session.configure",
               cause: "denied",
             });
@@ -87,7 +87,7 @@ it("rejects configuration whose authorization outlives its captured generation",
                 ]);
                 release.resolve();
                 expect(yield* Fiber.join(first)).toMatchObject({
-                  _tag: "ForeignFailure",
+                  _tag: "AgentFailure",
                   operation: "session.configure",
                   cause: "stale",
                 });

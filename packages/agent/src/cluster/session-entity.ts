@@ -153,7 +153,8 @@ function appendReceived(
       state: row.state,
     });
     const receipt = committed.receipts[0];
-    if (receipt === undefined) throw new Error(`commit returned no receipt: ${message.messageId}`);
+    if (receipt === undefined)
+      return yield* Effect.die(new Error(`commit returned no receipt: ${message.messageId}`));
     return { ordinal: receipt.action.ordinal, actionHash: receipt.action.actionHash, deduped: false };
   }));
 }

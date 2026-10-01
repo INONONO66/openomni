@@ -438,7 +438,7 @@ it.each([false, true])("gateway admission intake commits atomically with the req
   };
   const opened = port.open({ ...opening, admission });
   if (fault) {
-    expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "ForeignFailure" } });
+    expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "LedgerFailure" } });
     expect(sessionTree(kernel, "parent")).toEqual(before);
     expect(kernel.requestById("invocation")).toBeUndefined();
     expect(kernel.pendingMessages("parent")).toEqual([]);

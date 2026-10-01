@@ -17,7 +17,7 @@ import { createRawSlots } from "../../../src/executor-raw";
 import { GenerationRawSlots } from "../../../src/session-generations";
 import { createDispatcher } from "../../../src/tool-dispatcher";
 import { executeToolBody } from "../../../src/tool-body";
-import { ForeignFailure } from "../../../src/errors";
+import { AgentFailure } from "../../../src/errors";
 import { allowAllPolicy } from "../../helpers/compiled-policy";
 import { recordingLedger } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";
@@ -303,7 +303,7 @@ for (const failureKind of ["typed", "defect"] as const) {
     const record = recording();
     const siblingEntered = yield* Deferred.make<void>();
     const failed = yield* Deferred.make<void>();
-    const failure = new ForeignFailure({ operation: "A", cause: "body_failed" });
+    const failure = new AgentFailure({ operation: "A", cause: "body_failed" });
     const results = yield* record.executor.runBatch([
       { request: { ...request, op: "A" }, body: () => Deferred.await(siblingEntered).pipe(
         Effect.andThen(failureKind === "typed" ? Effect.fail(failure) : Effect.die(new Error("body_defect"))),
@@ -314,13 +314,13 @@ for (const failureKind of ["typed", "defect"] as const) {
       ) },
     ], { signal: new AbortController().signal }).pipe(Effect.timeout("5 seconds"));
     expect(results).toMatchObject([
-      { terminal: "executed", failure: { _tag: "ForeignFailure" } },
+      { terminal: "executed", failure: { _tag: "AgentFailure" } },
       { terminal: "executed", value: { sibling: "survived" } },
     ]);
     const terminals = toolResults(record.committed).map((action) => PlainObjectSchema.parse(action.effect.value));
     expect(terminals).toHaveLength(2);
     expect(terminals[0]?.evidence).toMatchObject(failureKind === "typed"
-      ? { failures: [{ tag: "ForeignFailure" }], defects: [] }
+      ? { failures: [{ tag: "AgentFailure" }], defects: [] }
       : { failures: [], defects: [{ name: "Error" }] });
     expect(terminals[1]?.result).toEqual({ sibling: "survived" });
   }))));
@@ -387,7 +387,7 @@ it("dispatches zero tools when the canonical assistant call-block write fails", 
   const record = recording({ ledger: { commit: (action) => {
     if (action.kind === "message" && PlainObjectSchema.parse(action.effect.value).phase === "result") {
       failedWrites += 1;
-      return Effect.fail(new ForeignFailure({ operation: "canonical_assistant_write", cause: "injected_failure" }));
+      return Effect.fail(new AgentFailure({ operation: "canonical_assistant_write", cause: "injected_failure" }));
     }
     return ledger.ledger.commit(action);
   } } });
@@ -455,7 +455,7 @@ it("does not enter a body when cancellation predates the wave", () => isolated(E
 
 it("keeps a sequential barrier after preceding rejection and runs later work", () => isolated(Effect.gen(function* () {
   const entered: string[] = [];
-  const failure = new ForeignFailure({ operation: "parallel", cause: "parallel failed" });
+  const failure = new AgentFailure({ operation: "parallel", cause: "parallel failed" });
   const results = yield* recording().executor.runBatch([
     { request, body: () => Effect.sync(() => { entered.push("parallel"); }).pipe(Effect.andThen(Effect.fail(failure))) },
     { request, sequential: true, body: () => Effect.sync(() => { entered.push("barrier"); return null; }) },

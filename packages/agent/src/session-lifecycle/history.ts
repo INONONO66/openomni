@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "../cluster/kernel-registry";
+import { AgentInvariantViolation } from "../errors";
 import {
   canonicalDigest,
   FoldCheckpoint,
@@ -245,7 +246,7 @@ function readHistorySuffix(
   while (cursor < revision) {
     const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
     const suffix = page.actions.filter((action) => action.ordinal <= revision);
-    if (suffix.length === 0) throw new Error("history prefix has a revision gap");
+    if (suffix.length === 0) throw new AgentInvariantViolation("history prefix has a revision gap");
     state = foldHistoryState(sessionId, suffix, state);
     nonCheckpointActions += suffix.filter((action) => action.kind !== "fold.checkpoint").length;
     cursor = suffix.at(-1)?.ordinal ?? cursor;

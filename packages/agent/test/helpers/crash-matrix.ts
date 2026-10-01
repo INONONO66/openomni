@@ -36,7 +36,7 @@ import { providerFailure } from "./mock-llm";
 import { stringQueryTool } from "./query-tool";
 import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
-import { CommitFailed, ForeignFailure, type SessionError } from "../../src/errors";
+import { CommitFailed, AgentFailure, type SessionError } from "../../src/errors";
 
 export const crashPoint = z.enum([
   configureCrashPoint,
@@ -318,7 +318,7 @@ function outboundPort(
     Effect.gen(function* () {
       if (point === "outbound_flood_deadline_before_timer_rearm") {
         bodies.push("flood");
-        return yield* new ForeignFailure({ operation: "outbound.flood", cause: "flood" });
+        return yield* new AgentFailure({ operation: "outbound.flood", cause: "flood" });
       }
       if (point === "platform_send_ambiguous_without_reconciliation") {
         appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
@@ -393,7 +393,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       .pipe(
         Effect.catch((error: SessionError) => {
           if (point !== "outbound_flood_deadline_before_timer_rearm") return Effect.fail(error);
-          if (error._tag !== "ForeignFailure" || error.operation !== "outbound.flood")
+          if (error._tag !== "AgentFailure" || error.operation !== "outbound.flood")
             return Effect.fail(error);
           return Effect.sync(() => stop(point, bodies));
         }),

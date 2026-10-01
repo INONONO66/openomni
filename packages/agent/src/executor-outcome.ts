@@ -8,13 +8,13 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return {
         tag: error._tag,
         message: error.message,
-        providerErrorName: error.providerErrorName ?? null,
+        providerErrorName: typeof error.cause === "object" ? error.cause.name : null,
         retryAfterMs: error.retryAfterMs ?? null,
         usage: error.usage,
         aborted: error.aborted,
         contextOverflow: error.contextOverflow,
         visibleOutput: error.visibleOutput,
-        cause: error.cause ?? null,
+        cause: typeof error.cause === "object" ? error.cause.message : error.cause ?? null,
       };
     case "PolicyDenied":
       return { tag: error._tag, phase: error.phase, ruleIds: [...error.ruleIds] };
@@ -24,8 +24,12 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return { tag: error._tag, tool: error.tool, reason: error.reason };
     case "GenerationUnavailable":
       return { tag: error._tag, generation: error.generation };
-    case "ForeignFailure":
+    case "AgentFailure":
       return { tag: error._tag, operation: error.operation, cause: error.cause };
+    case "LlmFailure":
+      return { tag: error._tag, operation: error.operation, cause: error.cause };
+    case "CompactionExecutionError":
+      return { tag: error._tag, reason: error.reason };
     case "CommitFailed":
       return { tag: error._tag, ledgerTag: error.error._tag, cause: String(error.error) };
     case "ExecutionApprovalError":

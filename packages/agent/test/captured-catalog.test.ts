@@ -38,7 +38,7 @@ test("recovery refuses a missing or changed captured definition instead of execu
   };
   for (const definitions of [[], [definition(z.object({ value: z.string().min(2) }))]]) {
     const refused = yield* Effect.flip(createTurnDispatcher(input, {}).pipe(Effect.provide(catalogLayer(definitions))));
-    expect(refused).toMatchObject({ _tag: "ForeignFailure", operation: "dispatcher.acquire" });
+    expect(refused).toMatchObject({ _tag: "AgentFailure", operation: "dispatcher.acquire" });
   }
   expect(record.committed).toEqual([]);
 })));

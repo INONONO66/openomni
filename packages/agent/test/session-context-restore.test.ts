@@ -202,8 +202,7 @@ describe("restore_context_projection", () => {
           expect(missing._tag).toBe("Failure");
           if (missing._tag === "Failure") {
             expect(Cause.squash(missing.cause)).toMatchObject({
-              name: "ContextRestoreError",
-              code: "context_restore_refused",
+              _tag: "ContextRestoreError",
               reason: "unknown_compaction",
             });
           }
@@ -219,7 +218,7 @@ describe("restore_context_projection", () => {
           expect(unexecuted._tag).toBe("Failure");
           if (unexecuted._tag === "Failure") {
             expect(Cause.squash(unexecuted.cause)).toMatchObject({
-              name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
+              _tag: "ContextRestoreError", reason: "not_executed",
             });
           }
           expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);

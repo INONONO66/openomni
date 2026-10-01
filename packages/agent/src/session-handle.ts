@@ -3,7 +3,7 @@ import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";
-import { ForeignFailure, type SessionError } from "./errors";
+import { AgentFailure, AgentInvariantViolation, type SessionError } from "./errors";
 import { resolveSessionRuntime, type ResolvedSessionRuntime } from "./session-contract";
 import type { SessionEntryServices } from "./services";
 import { toolSnapshot } from "./session-record";
@@ -51,12 +51,12 @@ class SessionRegistry {
   declare(options: SessionCreateOptions): Effect.Effect<SessionHandle, SessionError> {
     const self = this;
     return Effect.gen(function* () {
-      if (self.closed) return yield* new ForeignFailure({ operation: "session.declare", cause: "closed" });
+      if (self.closed) return yield* new AgentFailure({ operation: "session.declare", cause: "closed" });
       const entropy = self.runtime.entropy;
       const id = options.id ?? entropy();
       const existing = self.entries.get(id);
       if (existing !== undefined) {
-        if (existing.runner !== options.runner) return yield* new ForeignFailure({ operation: "session.declare", cause: "runner_conflict" });
+        if (existing.runner !== options.runner) return yield* new AgentFailure({ operation: "session.declare", cause: "runner_conflict" });
         return existing.controller.handle;
       }
       const tools = (options.tools ?? []).map(toolSnapshot);
@@ -85,7 +85,7 @@ class SessionRegistry {
   private install(id: string, runner: SessionRunner): Effect.Effect<RegistryEntry, SessionError> {
     const self = this;
     return Effect.gen(function* () {
-      if (self.closed) return yield* new ForeignFailure({ operation: "session.install", cause: "closed" });
+      if (self.closed) return yield* new AgentFailure({ operation: "session.install", cause: "closed" });
       const existing = self.entries.get(id);
       if (existing !== undefined) return existing;
       let pending = self.installing.get(id);
@@ -113,12 +113,12 @@ class SessionRegistry {
 }
 
 function assertDeclaration(kernel: SessionKernel, row: LedgerSession.Row, options: SessionCreateOptions, tools: readonly SessionGeneration.Tool[], system: Partial<SessionSystem> | undefined): void {
-  if (row.role !== options.role || row.parentId !== (options.parentId ?? null)) throw new Error(`session declaration conflicts with durable identity: ${row.id}`);
+  if (row.role !== options.role || row.parentId !== (options.parentId ?? null)) throw new AgentInvariantViolation(`session declaration conflicts with durable identity: ${row.id}`);
   const snapshot = kernel.latestGenerationFor(row.id);
   const expected = SessionHandleStore.generationSnapshot({
     generation: snapshot.generation, revertTo: snapshot.revertTo, tools,
     system: { preset: system?.preset ?? "", blocks: system?.blocks ?? [] },
     policyGeneration: options.policyGeneration ?? snapshot.policyGeneration,
   });
-  if (snapshot.toolsHash !== expected.toolsHash || snapshot.systemHash !== expected.systemHash) throw new Error(`session declaration conflicts with durable generation: ${row.id}`);
+  if (snapshot.toolsHash !== expected.toolsHash || snapshot.systemHash !== expected.systemHash) throw new AgentInvariantViolation(`session declaration conflicts with durable generation: ${row.id}`);
 }

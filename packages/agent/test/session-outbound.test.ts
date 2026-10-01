@@ -142,7 +142,7 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
         const kernel = isolatedLedger().kernel;
         const before = sessionTree(kernel, "parent");
         expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "receiver",
           cause: "unavailable",
         });
@@ -222,7 +222,7 @@ test("restart after receiving commit reconciles exact bytes without dispatch or 
           );
         });
         expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "source.ack",
           cause: "lost",
         });
@@ -333,7 +333,7 @@ test("outbound insert failure rolls back the source terminal in the same SQLite 
       };
       expect(yield* Effect.flip(commissionedChild(runtime))).toMatchObject({
         _tag: "CommitFailed",
-        error: { _tag: "ForeignFailure" },
+        error: { _tag: "LedgerFailure" },
       });
       const kernel = isolatedLedger().kernel;
       expect(
@@ -418,7 +418,7 @@ test("a child answers the original request once and reconciles a lost ACK after 
           runtime,
         );
         expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "source.ack",
         });
         expect(kernel().requestById(request.requestId)?.state).toBe("resolved");

@@ -11,7 +11,7 @@ import {
   defineTool,
   type Executor,
 } from "./helpers/effect-g3-dispatcher";
-import { ForeignFailure } from "../src/errors";
+import { AgentFailure } from "../src/errors";
 import { currentInvocation, requireOpenInvocation, ExecutorContextError } from "../src/executor-context";
 import { GenerationOwnership, SessionLayer } from "../src/services";
 import { z } from "zod";
@@ -200,7 +200,7 @@ describe("tool body outcomes", () => {
   });
 
   it("propagates an executor failure to the caller", async () => {
-    const failure = new ForeignFailure({ operation: "test", cause: "ledger unavailable" });
+    const failure = new AgentFailure({ operation: "test", cause: "ledger unavailable" });
     const failing: Executor = {
       run() {
         return Effect.fail(failure);
@@ -212,6 +212,6 @@ describe("tool body outcomes", () => {
     const dispatcher = runAgentSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
     const result = await isolated(Effect.result(dispatcher.execute(call("echo"), context)));
-    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "test" } });
+    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "AgentFailure", operation: "test" } });
   });
 });

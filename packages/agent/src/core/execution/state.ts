@@ -2,6 +2,7 @@ import { accumulateUsage, type RunInput } from "@openomni/llm";
 import type { Sink } from "@openomni/llm";
 import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState } from "../budget";
+import { AgentInvariantViolation } from "../../errors";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage } from "../types";
 import { createUserMessage, createAssistantMessage, withMessageId } from "../message-factory";
 import type { CompactionYield } from "../../compaction/geometry";
@@ -71,7 +72,7 @@ export function requireTrace(
       sessionId === undefined ? "sessionId" : undefined,
       runId === undefined ? "runId" : undefined,
     ].filter((field: string | undefined): field is string => field !== undefined);
-    throw new Error(`${subject} requires a trace context with ${missing.join(", ")}`);
+    throw new AgentInvariantViolation(`${subject} requires a trace context with ${missing.join(", ")}`);
   }
   return { ...traceContext, traceId, sessionId, runId };
 }

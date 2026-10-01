@@ -8,7 +8,7 @@ import { createExecutionApprovals } from "./executor-approval";
 import { createExecutionRecovery, recoveryClassification } from "./executor-recovery";
 import { createAttemptRunner } from "./executor-attempts";
 import { createStopJudge } from "./executor-stop";
-import { type CommitFailed, ExecutionApprovalError, ForeignFailure, Interrupted, OutcomeUnknown, type ExecutionError } from "./errors";
+import { type CommitFailed, ExecutionApprovalError, AgentFailure, Interrupted, OutcomeUnknown, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { createRawSlots, RawToolSlots } from "./executor-raw";
 import * as Failure from "./failure";
@@ -64,7 +64,7 @@ function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionErr
 export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExecutor, ExecutionError, ProcessServices | SessionLayer> {
   return Effect.gen(function* () {
   if (input.approvalTimeoutMs !== undefined && (!Number.isSafeInteger(input.approvalTimeoutMs) || input.approvalTimeoutMs < 0))
-    return yield* new ForeignFailure({ operation: "executor.acquire", cause: "invalid_approval_timeout" });
+    return yield* new AgentFailure({ operation: "executor.acquire", cause: "invalid_approval_timeout" });
   const clock = yield* Clock;
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
@@ -137,7 +137,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       return { generation: recorded.generation, verdict, transforms: recorded.transforms,
         value: intent.value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
         receipt: { action, revision: action.ordinal } };
-    }, catch: (cause) => cause instanceof ExecutionApprovalError ? cause : new ForeignFailure({ operation: "executor.recover_admission", cause: String(cause) }) });
+    }, catch: (cause) => cause instanceof ExecutionApprovalError ? cause : new AgentFailure({ operation: "executor.recover_admission", cause: String(cause) }) });
   }
 
   /** Denied stages record nothing; recovered stages reuse the original intent; fresh stages append one. */
@@ -158,7 +158,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       return Effect.suspend<Stage<R>[], ExecutionError, never>(() => {
         const request = { ...item.request, intent: structuredClone(item.request.intent) };
         if (!kinds.has(request.kind))
-          return Effect.fail(new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
+          return Effect.fail(new AgentFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` }));
         const kind = request.kind as LedgerAction.Kind;
         return admit(request).pipe(Effect.flatMap((pre) => {
           const stage = { item, request, kind, pre };
@@ -171,7 +171,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       for (const item of items) {
         const request = { ...item.request, intent: structuredClone(item.request.intent) };
         if (!kinds.has(request.kind))
-          return yield* new ForeignFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` });
+          return yield* new AgentFailure({ operation: "executor.admit", cause: `unregistered_execution_kind:${request.kind}` });
         const kind = request.kind as LedgerAction.Kind;
         const pre = yield* admit(request);
         staged.push({ item, request, kind, pre });

@@ -1,6 +1,6 @@
 import { canonicalDigest, PlainValueSchema, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect";
-import { ForeignFailure, GenerationUnavailable, GenerationUnsettled, type SessionError } from "./errors";
+import { AgentFailure, GenerationUnavailable, GenerationUnsettled, type SessionError } from "./errors";
 import { createRawSlots } from "./executor-raw";
 import { GenerationOwnership, type CapturedGeneration, type GenerationServices } from "./services";
 
@@ -56,7 +56,7 @@ export function makeSessionGenerations(initial: GenerationBundle) {
 
     function validate(bundle: GenerationBundle): Effect.Effect<void, SessionError> {
       return bundle.id.sessionId !== initial.id.sessionId || bundle.id.generation !== bundle.snapshot.generation
-        ? Effect.fail(new ForeignFailure({ operation: "generation.identity", cause: "snapshot_identity_mismatch" }))
+        ? Effect.fail(new AgentFailure({ operation: "generation.identity", cause: "snapshot_identity_mismatch" }))
         : Effect.void;
     }
 
@@ -65,7 +65,7 @@ export function makeSessionGenerations(initial: GenerationBundle) {
       if (stopping) return Effect.fail(new GenerationUnavailable({ generation: bundle.id.generation }));
       if (entry === undefined) return Effect.void;
       if (entry.hash !== snapshotHash(bundle.snapshot))
-        return Effect.fail(new ForeignFailure({ operation: "generation.capture", cause: "snapshot_hash_mismatch" }));
+        return Effect.fail(new AgentFailure({ operation: "generation.capture", cause: "snapshot_hash_mismatch" }));
       if (entry.closed || (entry.retired && entry.owners.pending() === 0))
         return Effect.fail(new GenerationUnavailable({ generation: bundle.id.generation }));
       return Effect.void;

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { CommitFailed, type ExecutionError } from "./errors";
+import { AgentFailure, CommitFailed, type ExecutionError } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import {
@@ -47,7 +47,7 @@ function requestGeneration(
   kernel: SessionKernel,
   sessionId: string,
   turnId: string | null,
-): SessionGeneration.Snapshot {
+): SessionGeneration.Snapshot | undefined {
   if (turnId === null) return kernel.latestGenerationFor(sessionId);
   const turn = SessionHandleStore.turnIntent(kernel.actionById(turnId));
   const generation =
@@ -60,19 +60,57 @@ function requestGeneration(
     generation.toolsHash !== turn.toolsHash ||
     generation.systemHash !== turn.systemHash ||
     generation.policyGeneration !== turn.policyGeneration
-  ) {
-    throw new Error("original request generation is unavailable");
-  }
+  )
+    return undefined;
   return generation;
 }
 
 /** The gateway gets this injected kernel port, never a lifecycle store. */
 /** The recorded invocation a request reopens; anything else is an invariant break, not a session failure. */
-function originalInvocation(kernel: SessionKernel, requestId: string): PlainObject & { readonly value: PlainValue } {
+function originalInvocation(kernel: SessionKernel, requestId: string): (PlainObject & { readonly value: PlainValue }) | undefined {
   const intent = kernel.actionById(requestId)?.intent.value;
   if (intent === null || intent === undefined || typeof intent !== "object" || Array.isArray(intent) || intent.value === undefined)
-    throw new Error(`original invocation missing: ${requestId}`);
+    return undefined;
   return { ...intent, value: intent.value };
+}
+
+/** The reopened durable request row, bound to the recorded invocation and its generation. */
+function openedRequest(
+  input: Parameters<SessionRequestPort["open"]>[0],
+  intent: PlainObject & { readonly value: PlainValue },
+  turnId: string | null,
+  generation: SessionGeneration.Snapshot,
+): SessionTransition.Request {
+  const value: PlainValue = intent.originalArgs ?? intent.value;
+  const request: SessionTransition.Request = {
+    requestId: input.requestId,
+    sessionId: input.sessionId,
+    turnId,
+    callId: typeof intent.callId === "string" ? intent.callId : input.requestId,
+    mode: "reply",
+    parsedInput: value,
+    inputHash: canonicalDigest(value),
+    effectHash: typeof intent.effectHash === "string" ? intent.effectHash : canonicalDigest({}),
+    generation: generation.policyGeneration,
+    toolsGeneration: generation.generation,
+    toolsHash: generation.toolsHash,
+    systemHash: generation.systemHash,
+    domainRevisions: {},
+    deadline: input.deadline,
+    expectedResponders: [...input.expectedResponders],
+    correlation: input.correlation,
+    allowedActions: [...input.allowedActions],
+    bindingDigest: "",
+    resolution: input.resolution,
+    threshold: input.threshold,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt: input.at,
+  };
+  request.bindingDigest = requestBindingDigest(request);
+  return request;
 }
 
 export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<SessionRequestPort, never, Clock | Entropy> {
@@ -107,7 +145,8 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
   function timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError> {
     return Effect.gen(function* () {
     const request = findRequest(requestId);
-    if (request === undefined) throw new Error(`deadline request missing: ${requestId}`);
+    if (request === undefined)
+      return yield* Effect.die(new Error(`deadline request missing: ${requestId}`));
     const result = yield* transition(
       request.sessionId,
       { kind: "request.timeout", requestId },
@@ -149,37 +188,13 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
       return Effect.gen(function* () {
       const kernel = runtime.openKernel(input.sessionId);
       const intent = originalInvocation(kernel, input.requestId);
+      if (intent === undefined)
+        return yield* Effect.die(new Error(`original invocation missing: ${input.requestId}`));
       const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
       const generation = requestGeneration(kernel, input.sessionId, turnId);
-      const value: PlainValue = intent.originalArgs ?? intent.value;
-      const request: SessionTransition.Request = {
-        requestId: input.requestId,
-        sessionId: input.sessionId,
-        turnId,
-        callId: typeof intent.callId === "string" ? intent.callId : input.requestId,
-        mode: "reply",
-        parsedInput: value,
-        inputHash: canonicalDigest(value),
-        effectHash: typeof intent.effectHash === "string" ? intent.effectHash : canonicalDigest({}),
-        generation: generation.policyGeneration,
-        toolsGeneration: generation.generation,
-        toolsHash: generation.toolsHash,
-        systemHash: generation.systemHash,
-        domainRevisions: {},
-        deadline: input.deadline,
-        expectedResponders: [...input.expectedResponders],
-        correlation: input.correlation,
-        allowedActions: [...input.allowedActions],
-        bindingDigest: "",
-        resolution: input.resolution,
-        threshold: input.threshold,
-        seenReplyIds: [],
-        replies: [],
-        state: "open",
-        outcome: null,
-        createdAt: input.at,
-      };
-      request.bindingDigest = requestBindingDigest(request);
+      if (generation === undefined)
+        return yield* new AgentFailure({ operation: "request.open", cause: "original_generation_unavailable" });
+      const request = openedRequest(input, intent, turnId, generation);
       const decision = yield* transition(
         input.sessionId,
         { kind: "request.open", request },
@@ -188,7 +203,7 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
         input.admission,
       );
       if (decision.request === undefined)
-        throw new Error(`request open refused: ${input.requestId}`);
+        return yield* new AgentFailure({ operation: "request.open", cause: `refused:${input.requestId}` });
       return decision.request;
       });
     },
@@ -219,7 +234,7 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
         clock(),
       );
       if (result.request === undefined)
-        throw new Error(`request receipt refused: ${receipt.requestId}`);
+        return yield* new AgentFailure({ operation: "request.receipt", cause: `refused:${receipt.requestId}` });
       return result.request;
       });
     },

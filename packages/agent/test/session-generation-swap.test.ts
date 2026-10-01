@@ -5,7 +5,7 @@ import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { AnyToolDefinition, LedgerAction, PlainValue, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
-import { CommitFailed, ForeignFailure, GenerationUnavailable } from "../src/errors";
+import { CommitFailed, AgentFailure, GenerationUnavailable } from "../src/errors";
 import { createExecutor } from "../src/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
@@ -185,7 +185,7 @@ test("configure denied by the captured pre-policy never acquires or selects the 
     return yield* executor.runExisting({ kind: "session.configure", op: "system.blocks.set", intent: { generation: 2 }, effect: {} }, () =>
       generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.effectDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
         options.ledger.commit(selectAction(candidate.snapshot)).pipe(Effect.mapError((error) => new CommitFailed({ error }))),
-      ).pipe(Effect.as({ generation: 2 }), Effect.mapError((error) => new ForeignFailure({ operation: "generation.configure", cause: String(error) }))),
+      ).pipe(Effect.as({ generation: 2 }), Effect.mapError((error) => new AgentFailure({ operation: "generation.configure", cause: String(error) }))),
     );
   }));
   expect(result).toMatchObject({ terminal: "blocked_pre" });
@@ -216,7 +216,7 @@ for (const corruption of ["system", "tools", "policy"] as const) {
         ...(corruption === "policy" ? { policyGeneration: 2 } : {}),
       };
       const result = yield* Effect.result(generations.capture({ ...original, snapshot }));
-      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "AgentFailure", operation: "generation.capture", cause: "snapshot_hash_mismatch" } });
       expect(bodies).toBe(0);
       expect((yield* generations.capture()).snapshot.generation).toBe(2);
     }));

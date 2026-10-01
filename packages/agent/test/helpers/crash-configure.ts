@@ -3,7 +3,7 @@ import { LedgerAction, SessionGeneration } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
 import { sessionTree } from "./session-tree";
-import { ForeignFailure, type SessionError } from "../../src/errors";
+import { AgentFailure, type SessionError } from "../../src/errors";
 import { closeSessions, session } from "../../src/session-handle";
 import { reactivateSession } from "./wake-session";
 import type { SessionRunnerInput } from "../../src/session-contract";
@@ -69,7 +69,7 @@ function recover() {
       observations: { publish: () => undefined }, clock: () => 100_000,
       authorizeConfigure: () => Effect.suspend(() => {
         configureCalls += 1;
-        return Effect.fail(new ForeignFailure({ operation: "configure.recovery", cause: "unexpected_reexecution" }));
+        return Effect.fail(new AgentFailure({ operation: "configure.recovery", cause: "unexpected_reexecution" }));
       }),
     };
     const runner = (input: SessionRunnerInput) => Effect.gen(function* () {

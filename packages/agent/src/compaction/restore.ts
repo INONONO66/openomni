@@ -1,3 +1,4 @@
+import { Data } from "effect";
 import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionRequest } from "../executor-contract";
@@ -23,12 +24,10 @@ const RecordedCompaction: z.ZodType<CompactionRecord> = z.object({
   revert: RevertRecipe,
 });
 
-class ContextRestoreError extends Error {
-  readonly code = "context_restore_refused";
-  constructor(readonly reason: "unknown_compaction" | "not_executed") {
-    super(`context restore refused: ${reason}`);
-    this.name = "ContextRestoreError";
-  }
+export class ContextRestoreError extends Data.TaggedError("ContextRestoreError")<{
+  readonly reason: "unknown_compaction" | "not_executed";
+}> {
+  override get message(): string { return `context restore refused: ${this.reason}`; }
 }
 
 /** The typed compensation of one compaction; a distinct recorded action, never a mutation of the original. */
@@ -48,9 +47,9 @@ export function restoreContextRequest(
 /** Validate the caller's target before querying any result children or acquiring a lease. */
 export function requireCompactionIntent(action: LedgerAction.Node | undefined): LedgerAction.Node {
   if (action === undefined || action.kind !== "compaction")
-    throw new ContextRestoreError("unknown_compaction");
+    throw new ContextRestoreError({ reason: "unknown_compaction" });
   if (field(action.intent.value, "phase") !== "intent")
-    throw new ContextRestoreError("not_executed");
+    throw new ContextRestoreError({ reason: "not_executed" });
   return action;
 }
 
@@ -64,7 +63,7 @@ export function recordedCompaction(
     result.parentId !== compactionId ||
     field(result.effect.value, "terminal") !== "executed"
   )
-    throw new ContextRestoreError("not_executed");
+    throw new ContextRestoreError({ reason: "not_executed" });
   return RecordedCompaction.parse(field(result.effect.value, "result"));
 }
 

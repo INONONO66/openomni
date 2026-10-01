@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ExecutionError } from "../../errors";
+import { AgentFailure, type ExecutionError } from "../../errors";
 import { accumulateUsage, type Sink } from "@openomni/llm";
 import { Message, PlainValueSchema } from "@openomni/protocol";
 import { measuredContextTokens } from "../../compaction/measure";
@@ -78,13 +78,13 @@ export function recordAssistant(
   message: Message.WithParts,
 ): Effect.Effect<Message.WithParts, ExecutionError> {
   return Effect.gen(function* () {
-  if (config.executor === undefined) throw new Error("missing message authority");
+  if (config.executor === undefined) return yield* Effect.die(new Error("missing message authority"));
   const result = yield* config.executor.run(
     { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
     () => Effect.sync(() => PlainValueSchema.parse(message)),
   );
   if (result.terminal !== "executed")
-    throw new Error(`assistant persistence refused: ${result.reason}`);
+    return yield* new AgentFailure({ operation: "message.assistant", cause: `refused:${result.reason}` });
   return Message.WithParts.parse(result.value);
   });
 }

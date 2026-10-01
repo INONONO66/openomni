@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure, type ExecutionError } from "./errors";
+import { AgentFailure, type ExecutionError } from "./errors";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation } from "@openomni/policy";
 import {
@@ -35,7 +35,7 @@ export function createStopJudge(
         row.limit <= 0 ||
         !Number.isInteger(row.limit)
       )
-        return yield* new ForeignFailure({ operation: "stop.policy", cause: `invalid_stop_policy:${metric}` });
+        return yield* new AgentFailure({ operation: "stop.policy", cause: `invalid_stop_policy:${metric}` });
       return row.limit;
       });
     }

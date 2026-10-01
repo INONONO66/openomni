@@ -2,7 +2,7 @@ import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, kernelRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
-import { ForeignFailure } from "../src/errors";
+import { AgentFailure } from "../src/errors";
 import { expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -134,7 +134,7 @@ it("reopens SQLite and resumes the exact original wave without a model reconstru
   );
   expect(yield* Effect.flip(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
-  )).toMatchObject({ _tag: "ForeignFailure", operation: "process lost after durable suspension" });
+  )).toMatchObject({ _tag: "AgentFailure", operation: "process lost after durable suspension" });
   const originalId = currentRequest().requestId;
   expect(bodies).toEqual([]);
   reopen();
@@ -183,7 +183,7 @@ it("a committed application claim prevents replay after result persistence fails
             !Array.isArray(effect) &&
             effect.phase === "result"
           )
-            return Effect.die(new ForeignFailure({ operation: "result.persist", cause: "crash" }));
+            return Effect.die(new AgentFailure({ operation: "result.persist", cause: "crash" }));
           return commit(action);
         },
       },
@@ -205,7 +205,7 @@ it("a committed application claim prevents replay after result persistence fails
     credential: "proof",
     decision: "approve",
   });
-  expect(yield* Fiber.join(settled)).toMatchObject({ _tag: "ForeignFailure", operation: "result.persist" });
+  expect(yield* Fiber.join(settled)).toMatchObject({ _tag: "AgentFailure", operation: "result.persist" });
   expect(bodies).toHaveLength(3);
   reopen();
   const recovered = yield* dispatcher(yield* requestLedger(), bodies);
@@ -233,7 +233,7 @@ it("a gateway answer adopts a strictly newer fence over a crashed writer and res
   const crashed = yield* dispatcher(crashAfterRequestOpen(initial, "lost"), []);
   expect(yield* Effect.flip(
     crashed.executeWave(calls, { sessionId: initial.identity.sessionId, turnId: "turn" }),
-  )).toMatchObject({ _tag: "ForeignFailure", operation: "lost" });
+  )).toMatchObject({ _tag: "AgentFailure", operation: "lost" });
   const request = currentRequest();
   const before = isolatedLedger().kernel.row(request.sessionId);
   const gateway = (yield* Effect.gen(function* () { const fixture: SessionFixture = {

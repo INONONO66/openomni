@@ -1,5 +1,6 @@
 import { canonicalDigest, type Message } from "@openomni/protocol";
 import { latestCompactionAnchorId } from "./candidate";
+import { AgentInvariantViolation } from "../errors";
 
 export type CanonicalConversationEntry = Message.WithParts;
 
@@ -33,7 +34,7 @@ export function createCompactionPlan(
   const { count: shared, first: sharedFirst } = sharedSuffix(originals, replacement);
   const finalOriginal = originals.at(-1);
   if (finalOriginal === undefined) {
-    throw new Error("compaction requires original history");
+    throw new AgentInvariantViolation("compaction requires original history");
   }
   // A full rewrite still retains one unchanged atomic entry. Replace an
   // elided same-ID copy rather than introducing duplicate entry identities.
@@ -47,7 +48,7 @@ export function createCompactionPlan(
   const firstRemoved = removedEntries[0];
   const lastRemoved = removedEntries.at(-1);
   if (firstRemoved === undefined || lastRemoved === undefined) {
-    throw new Error("compaction projection must discard at least one prior entry");
+    throw new AgentInvariantViolation("compaction projection must discard at least one prior entry");
   }
 
   return {
@@ -75,11 +76,11 @@ export function restoreCompactionProjection(
   record: CompactionRecord,
 ): CanonicalConversationEntry[] {
   if (canonicalDigest(record.revert.removedEntries) !== record.discarded.sha256) {
-    throw new Error("compaction revert payload digest mismatch");
+    throw new AgentInvariantViolation("compaction revert payload digest mismatch");
   }
   const firstKeptIndex = projection.findIndex((entry) => entry.info.id === record.firstKeptEntryId);
   if (firstKeptIndex < 0)
-    throw new Error("compaction projection no longer contains first kept entry");
+    throw new AgentInvariantViolation("compaction projection no longer contains first kept entry");
 
   return [...record.revert.removedEntries, ...projection.slice(firstKeptIndex)];
 }

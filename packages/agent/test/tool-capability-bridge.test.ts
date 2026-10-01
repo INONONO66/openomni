@@ -92,7 +92,7 @@ function detachedRequestCase(rejectBody: boolean, reason: "settled" | "failed") 
   }));
 }
 
-test("bridge: nested failure in an admitted async body preserves its typed outcome, not ForeignFailure", () => isolated(Effect.gen(function* () {
+test("bridge: nested failure in an admitted async body preserves its typed outcome, not AgentFailure", () => isolated(Effect.gen(function* () {
   const observed = yield* Deferred.make<Exit.Exit<ExecutionResult, ExecutionError>>();
   const fixture = yield* setup([tool("outer", async () => {
     const frame = currentInvocation();
@@ -104,7 +104,7 @@ test("bridge: nested failure in an admitted async body preserves its typed outco
   expect(yield* fixture.run).toMatchObject({ output: "handled" });
   const result = yield* awaitSignal(observed);
   expect(failure(result)).toMatchObject({ _tag: "ToolBodyFailed", tool: "nested", cause: "nested-outcome" });
-  expect(failure(result)).not.toMatchObject({ _tag: "ForeignFailure" });
+  expect(failure(result)).not.toMatchObject({ _tag: "AgentFailure" });
   const failures = sessionTree(fiberSessionId)
     .filter((action: LedgerAction.Node) => action.kind === "tool")
     .map(effectValue)

@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, Option } from "effect";
 import type { Message } from "@openomni/protocol";
-import type { ExecutionError } from "../../errors";
+import { AgentInvariantViolation, type ExecutionError } from "../../errors";
 import type { ChatAgentConfig } from "../types";
 import { recordToolCall } from "../budget";
 import { BOUNDED_CONCURRENCY } from "../concurrency";
@@ -34,12 +34,12 @@ export function settleModelTools(
   }));
   const execute = turn.toolExecutor;
   if (config.toolWave === undefined && execute === undefined)
-    throw new Error("tool wave executor is required");
+    return yield* Effect.die(new Error("tool wave executor is required"));
   const executed =
     config.toolWave !== undefined
       ? yield* config.toolWave(calls, config.signal)
       : yield* Effect.forEach(calls, (call) => {
-          if (execute === undefined) throw new Error("tool executor missing");
+          if (execute === undefined) return Effect.die(new Error("tool executor missing"));
           return Effect.exit(Effect.suspend(() => execute(call, { signal: config.signal }))).pipe(
             Effect.flatMap((exit) => {
               if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
@@ -54,7 +54,7 @@ export function settleModelTools(
         }, { concurrency: BOUNDED_CONCURRENCY });
   const results = calls.map((call) => {
     const result = executed.find((result) => result.toolCallId === call.id);
-    if (result === undefined) throw new Error(`missing tool result: ${call.id}`);
+    if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${call.id}`);
     return result;
   });
   const byId = new Map(results.map((result) => [result.toolCallId, result]));
@@ -62,7 +62,7 @@ export function settleModelTools(
   const parts = assistant.parts.map((part): Message.Part => {
     if (part.type !== "tool" || !pending.includes(part)) return part;
     const result = byId.get(part.callID);
-    if (result === undefined) throw new Error(`missing tool result: ${part.callID}`);
+    if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${part.callID}`);
     if (config.toolWave !== undefined) state.budgetState = recordToolCall(state.budgetState, 0);
     return {
       ...part,

@@ -197,7 +197,7 @@ export function handleStop(
     openIntent: [],
     alarmIds: [],
   }));
-  if (config.execution === undefined) throw new Error("missing stop authority");
+  if (config.execution === undefined) return yield* Effect.die(new Error("missing stop authority"));
   const judgment = yield* config.execution.judgeStop(state.stop, {
     ...evidence,
     text: turnText,

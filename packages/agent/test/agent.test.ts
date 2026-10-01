@@ -9,7 +9,7 @@ import { RunEvents } from "../src/core/execution/events";
 import { Bus } from "../src/index";
 import { failureEvidence } from "../src/executor-outcome";
 import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
-import { PolicyDenied, ToolBodyFailed, ForeignFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
+import { PolicyDenied, ToolBodyFailed, AgentFailure, CommitFailed, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
 import type { LedgerError } from "@openomni/ledger";
 import {
   completeModel,
@@ -37,7 +37,7 @@ test("agent foundation tags and failure evidence are runtime contracts", () => {
   ]);
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
-  expect(failureEvidence(new ForeignFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "ForeignFailure", operation: "x", cause: "bad" });
+  expect(failureEvidence(new AgentFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "AgentFailure", operation: "x", cause: "bad" });
   expect(failureEvidence(new InvocationClosed({ tool: "x", reason: "failed" }))).toEqual({ tag: "InvocationClosed", tool: "x", reason: "failed" });
   expect(failureEvidence(new GenerationUnavailable({ generation: 2 }))).toEqual({ tag: "GenerationUnavailable", generation: 2 });
   expect(failureEvidence(new CommitFailed({ error: {} as LedgerError }))).toMatchObject({ tag: "CommitFailed" });
@@ -226,7 +226,7 @@ describe("ChatAgent provider boundary failures", () => {
         events: Bus,
         model: { provider: "missing-provider", id: "missing-model" },
       }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
-      _tag: "ForeignFailure", operation: "llm",
+      _tag: "LlmFailure", operation: "llm",
     });
   });
 
@@ -241,7 +241,7 @@ describe("ChatAgent provider boundary failures", () => {
           events: Bus,
           model: { provider: "anthropic", id: "missing-proxy-model" },
         }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
-        _tag: "ForeignFailure", operation: "llm",
+        _tag: "LlmFailure", operation: "llm",
       });
     } finally {
       listing.mockRestore();
@@ -253,7 +253,7 @@ describe("ChatAgent provider boundary failures", () => {
     expect(await isolated(Effect.flip(createTestAgent({
         events: Bus,
         model: { provider: "anthropic", id: "missing-model" },
-      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "ForeignFailure", operation: "llm" });
+      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "LlmFailure", operation: "llm" });
   });
 
   it("resolves a known model through the default provider path", async () => {

@@ -1,4 +1,5 @@
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
+import { Effect, Logger } from "effect";
 import { newTraceId, scopeObservation } from "../../src/index";
 import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
@@ -111,9 +112,6 @@ describe("scoped observations", () => {
     new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
     false, 1, 1n, "reporter", () => undefined,
   ])("contains reporter failure without changing its identity: %p", (reporterFailure) => {
-    const warn = mock(() => undefined);
-    const originalWarn = console.warn;
-    console.warn = warn;
     const hostile: ObservationSink = {
       publish() {
         throw new Error("sink failed");
@@ -122,36 +120,44 @@ describe("scoped observations", () => {
         return hostile;
       },
     };
-    try {
+    const entries: { level: string; parts: unknown[] }[] = [];
+    const collector = Logger.make((options) => {
+      entries.push({
+        level: options.logLevel,
+        parts: Array.isArray(options.message) ? [...options.message] : [options.message],
+      });
+    });
+    const capture = <A>(body: () => A): A =>
+      Effect.runSync(Effect.sync(body).pipe(Effect.provide(Logger.layer([collector]))));
+
+    capture(() =>
       scopeObservation(hostile, identity).publish(TestEvent, {
         component: "test",
         msg: "default reporter",
-      });
-      expect(warn).toHaveBeenCalledTimes(1);
-    } finally {
-      console.warn = originalWarn;
-    }
+      }),
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ level: "Warn" });
+    expect(entries[0]?.parts.map(String).join(" ")).toContain("observation emit failed");
+    entries.length = 0;
 
-    const errorLog = spyOn(console, "error").mockImplementation(() => undefined);
     const scoped = scopeObservation(hostile, identity, {
       onError() {
         throw reporterFailure;
       },
     });
-    try {
-      expect(() =>
-        scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
-      ).not.toThrow();
-      expect(errorLog).toHaveBeenCalledTimes(1);
-      expect(errorLog.mock.calls[0]?.[1]).toMatchObject({
-        eventName: TestEvent.name,
-        error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
-      });
-      const logged = z.object({ error: z.instanceof(AggregateError) }).parse(errorLog.mock.calls[0]?.[1]);
-      expect(logged.error.errors[1]).toBe(reporterFailure);
-    } finally {
-      errorLog.mockRestore();
-    }
+    expect(() =>
+      capture(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })),
+    ).not.toThrow();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ level: "Error" });
+    const detail = entries[0]?.parts.find((part) => typeof part === "object" && part !== null);
+    expect(detail).toMatchObject({
+      eventName: TestEvent.name,
+      error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
+    });
+    const logged = z.object({ error: z.instanceof(AggregateError) }).parse(detail);
+    expect(logged.error.errors[1]).toBe(reporterFailure);
   });
 
   it("forwards subscriptions when the underlying sink supports them", () => {

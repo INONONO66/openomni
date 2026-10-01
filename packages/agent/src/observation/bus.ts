@@ -1,5 +1,17 @@
 import type { BusEvent, ObservationSink } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { type Context, Effect, Fiber } from "effect";
+
+type LogContext = Context.Context<never> | undefined;
+
+/** Runs one log effect with the publishing fiber's loggers when the caller was Effect code. */
+function runBusLog(effect: Effect.Effect<void>, context: LogContext = Fiber.getCurrent()?.context): void {
+  if (context === undefined) {
+    Effect.runSync(effect);
+    return;
+  }
+  Effect.runSyncWith(context)(effect);
+}
 
 type BusData = bigint | boolean | null | number | object | string | symbol | undefined;
 type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
@@ -59,8 +71,7 @@ namespace ObservationBus {
 }
 
 export function createObservationBus(
-  onError: (error: Error, eventName: string) => void = (error, event) =>
-    console.warn("ObservationBus handler error", { event, error }),
+  onError?: (error: Error, eventName: string) => void,
 ): ObservationBus {
   const rootState = createState();
   const local = new AsyncLocalStorage<BusState>();
@@ -82,13 +93,14 @@ export function createObservationBus(
         ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
       };
       const publishedData = toBusData(data);
+      const logContext = Fiber.getCurrent()?.context;
       for (const observer of [...state.observers]) {
         queueMicrotask(() =>
-          deliver(() => observer(published, publishedData), event.name, onError),
+          deliver(() => observer(published, publishedData), event.name, onError, logContext),
         );
       }
       for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name, onError));
+        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name, onError, logContext));
       }
     },
     scope(identity) {
@@ -137,7 +149,8 @@ export function createObservationBus(
 function deliver(
   operation: () => void,
   eventName: string,
-  onError: (error: Error, eventName: string) => void,
+  onError: ((error: Error, eventName: string) => void) | undefined,
+  logContext?: LogContext,
 ): void {
   try {
     operation();
@@ -146,6 +159,7 @@ function deliver(
       error instanceof Error ? error : new Error(String(error)),
       eventName,
       onError,
+      logContext,
     );
   }
 }
@@ -153,19 +167,27 @@ function deliver(
 function reportObservationFailure(
   error: Error,
   eventName: string,
-  report: (error: Error, eventName: string) => void,
+  report: ((error: Error, eventName: string) => void) | undefined,
+  logContext?: LogContext,
 ): void {
+  if (report === undefined) {
+    runBusLog(Effect.logWarning("ObservationBus handler error", { event: eventName, error }), logContext);
+    return;
+  }
   try {
     report(error, eventName);
   } catch (reporterError) {
     const reportedFailure = toBusData(reporterError);
-    console.error("observation error reporter failed", {
-      eventName,
-      error: new AggregateError(
-        [error, reportedFailure],
-        "observation delivery and reporting failed",
-      ),
-    });
+    runBusLog(
+      Effect.logError("observation error reporter failed", {
+        eventName,
+        error: new AggregateError(
+          [error, reportedFailure],
+          "observation delivery and reporting failed",
+        ),
+      }),
+      logContext,
+    );
   }
 }
 
@@ -195,7 +217,7 @@ export function scopeObservation(
   const report =
     options.onError ??
     ((error, eventName) =>
-      console.warn("observation emit failed", { eventName, error: String(error) }));
+      runBusLog(Effect.logWarning("observation emit failed", { eventName, error: String(error) })));
 
   const subscribe = sink.subscribe?.bind(sink);
   const scoped: ObservationSink = {

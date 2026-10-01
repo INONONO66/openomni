@@ -1,8 +1,9 @@
 import { Cause, Context, Effect, Scope } from "effect";
-import { ForeignFailure, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
+import { AgentFailure, AgentInvariantViolation, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
 import type { LlmError } from "@openomni/llm";
 import {
   Llm,
+  LlmFailure,
   Retry as LlmRetry,
   LlmRunFailure,
   observeRetry,
@@ -60,7 +61,7 @@ export function runAgent(
   assertUnambiguousToolMetadata(config);
   const durableExecutor = config.executor;
   if (durableExecutor === undefined || config.execution === undefined)
-    throw new Error("agent run requires session execution authority");
+    return Effect.die(new Error("agent run requires session execution authority"));
   const state = createRunState({ ...input, traceContext: trace });
   const base = {
     traceId: trace.traceId,
@@ -123,7 +124,7 @@ function runModelStep(
   return Effect.gen(function* () {
   const executor = durableExecutor;
   const execution = config.execution;
-  if (execution === undefined) return yield* new ForeignFailure({ operation: "agent.execution", cause: "missing" });
+  if (execution === undefined) return yield* new AgentFailure({ operation: "agent.execution", cause: "missing" });
   let turn: TurnArtifacts | undefined;
   const priorFailures = [...state.modelFailureReasons];
   let provider = config.model.provider;
@@ -145,7 +146,7 @@ function runModelStep(
     }
     emitTurnStart(config.events, state, base);
     const built = buildTurn(state, config, model, config.toolChoice, trace, sink);
-    if (built.type !== "ready") return yield* new ForeignFailure({ operation: "agent.turn", cause: "not_ready" });
+    if (built.type !== "ready") return yield* new AgentFailure({ operation: "agent.turn", cause: "not_ready" });
     turn = built.turn;
     const prepared = turn;
     return {
@@ -232,8 +233,8 @@ function runModelStep(
   );
   if (outcome.terminal === "interrupted") return yield* new Interrupted();
   if (outcome.terminal !== "executed")
-    return yield* new ForeignFailure({ operation: "agent.llm", cause: `execution_${outcome.terminal}` });
-  if (turn === undefined) return yield* new ForeignFailure({ operation: "agent.llm", cause: "missing_turn" });
+    return yield* new AgentFailure({ operation: "agent.llm", cause: `execution_${outcome.terminal}` });
+  if (turn === undefined) return yield* new AgentFailure({ operation: "agent.llm", cause: "missing_turn" });
   const type = successfulOutcome(outcome.value);
   if (type === "continue") {
     handleContinue(config.events, state, base, turn.turnUsage);
@@ -246,7 +247,7 @@ function runModelStep(
 }
 
 function modelFailure(error: LlmError): ExecutionError {
-  return error instanceof LlmRunFailure ? error : new ForeignFailure({
+  return error instanceof LlmRunFailure ? error : new LlmFailure({
     operation: "llm", cause: error.message,
   });
 }
@@ -260,7 +261,7 @@ function successfulOutcome(value: PlainValue): "stop" | "continue" {
     (value.type === "stop" || value.type === "continue")
   )
     return value.type;
-  throw new Error("invalid llm execution result");
+  throw new AgentInvariantViolation("invalid llm execution result");
 }
 
 function createCompactionSession(config: ChatAgentConfig): CompactionSession | undefined {

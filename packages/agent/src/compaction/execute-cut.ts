@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ExecutionError } from "../errors";
+import { CompactionExecutionError, type ExecutionError } from "../errors";
 import type { CompactionResult } from "./contract";
 import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/protocol";
 import type { Executor } from "../executor";
@@ -16,14 +16,6 @@ interface CompactionExecution {
   readonly dispatch: CompactionArguments[4];
   readonly executor?: Executor;
   readonly signal?: AbortSignal;
-}
-
-class CompactionExecutionError extends Error {
-  readonly code = "compaction_execution_refused";
-  constructor(readonly reason: string) {
-    super(`compaction execution refused: ${reason}`);
-    this.name = "CompactionExecutionError";
-  }
 }
 
 /** Execute the existing strategy under admission; only the receipt releases observations. */
@@ -70,7 +62,8 @@ export function executeCompaction(input: CompactionExecution): Effect.Effect<Com
         );
       }),
     );
-    if (execution.terminal !== "executed") throw new CompactionExecutionError(execution.reason);
+    if (execution.terminal !== "executed")
+      return yield* new CompactionExecutionError({ reason: execution.reason });
     if (
       result === undefined ||
       canonicalDigest(execution.value) !==
@@ -78,7 +71,7 @@ export function executeCompaction(input: CompactionExecution): Effect.Effect<Com
           result.record === undefined ? null : { ...result.record, projection: result.messages },
         )
     ) {
-      throw new CompactionExecutionError("invalid_output");
+      return yield* new CompactionExecutionError({ reason: "invalid_output" });
     }
   }
   for (const publish of completed) publish();

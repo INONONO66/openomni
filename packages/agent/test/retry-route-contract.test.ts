@@ -4,7 +4,7 @@ import { PlainObjectSchema, type LedgerAction, type Model } from "@openomni/prot
 import { Effect } from "effect";
 import type { StreamEvent } from "../../llm/src/processor/stream-events";
 import { runAgent } from "../src/core/execution/run";
-import { ForeignFailure as LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "@openomni/ledger";
 import { isolated } from "./helpers/isolated";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";
