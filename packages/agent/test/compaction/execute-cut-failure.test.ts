@@ -72,12 +72,12 @@ it("fails with a catchTag-able CompactionExecutionError when the durable output 
     executeCompaction(executionInput(tampering, observed)).pipe(
       Effect.map(() => "unexpected success"),
       Effect.catchTag("CompactionExecutionError", (error) =>
-        Effect.succeed(`caught:${error._tag}:${error.reason}`),
+        Effect.succeed(`caught:${error._tag}:${error.reason}|${error.message}`),
       ),
     ),
   );
 
-  // Then: the invalid_output refusal is a typed failure and held observations never fired.
-  expect(recovered).toBe("caught:CompactionExecutionError:invalid_output");
+  // Then: the invalid_output refusal is a typed failure whose message carries the reason, and held observations never fired.
+  expect(recovered).toBe("caught:CompactionExecutionError:invalid_output|compaction execution refused: invalid_output");
   expect(observed).toEqual([]);
 });
