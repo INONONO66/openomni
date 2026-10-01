@@ -7,6 +7,14 @@ export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
   override get message(): string { return this.cause; }
 }
 
+/** Ipc-owned failure for a Cause without a typed error (temporary until #1246 folds ipc into machines). */
+export class IpcFailure extends Data.TaggedError("IpcFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {
+  override get message(): string { return this.cause; }
+}
+
 export class IpcConnectionError extends Data.TaggedError("IpcConnectionError")<{
   readonly message: string;
   readonly cause?: string;

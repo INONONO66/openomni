@@ -6,6 +6,11 @@ export class ForeignFailure extends Data.TaggedError("ForeignFailure")<Diagnosti
   override get message(): string { return this.cause; }
 }
 
+/** Llm-owned failure for a Cause without a typed error (temporary until #1246 folds llm into agent). */
+export class LlmFailure extends Data.TaggedError("LlmFailure")<Diagnostic> {
+  override get message(): string { return this.cause; }
+}
+
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
 const ProviderFields = MessageFields.extend({

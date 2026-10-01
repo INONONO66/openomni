@@ -66,6 +66,14 @@ export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
   override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
+/** Ledger-owned failure for a Cause without a typed error (temporary until #1246 folds ledger into agent). */
+export class LedgerFailure extends Data.TaggedError("LedgerFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
+
 export type LedgerError =
   | SessionNotFound
   | MaterializeRefused

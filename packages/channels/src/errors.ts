@@ -9,6 +9,13 @@ export class ForeignFailure extends Data.TaggedError("ForeignFailure")<
   override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
+/** Channels-owned failure for a Cause without a typed error. */
+export class ChannelsFailure extends Data.TaggedError("ChannelsFailure")<
+  z.infer<typeof ForeignFailureFields>
+> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
+
 export class DeliveryNotSent extends Data.TaggedError("DeliveryNotSent")<
   z.infer<typeof ForeignFailureFields>
 > {}

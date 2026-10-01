@@ -4,6 +4,14 @@ import { Data } from "effect";
 import { z } from "zod";
 
 export { ForeignFailure } from "@openomni/ipc";
+
+/** Machines-owned failure for a Cause without a typed error. */
+export class MachinesFailure extends Data.TaggedError("MachinesFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {
+  override get message(): string { return this.cause; }
+}
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const CellFields = Machine.CellRequest.pick({ cellId: true }).extend({
   code: z.enum(["duplicate_cell_id", "unknown_cell_id"]),

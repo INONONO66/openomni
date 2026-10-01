@@ -39,6 +39,14 @@ export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
 /** The one foreign-failure class: ledger owns it, the agent re-exports it. */
 export { ForeignFailure };
 
+/** Agent-owned failure for a Cause without a typed error; `Failure.of` synthesizes it. */
+export class AgentFailure extends Data.TaggedError("AgentFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
+
 export class SessionMissing extends Data.TaggedError("SessionMissing")<{
   readonly sessionId: string;
 }> {}
