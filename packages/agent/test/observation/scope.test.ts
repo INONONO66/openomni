@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { Effect, Logger } from "effect";
 import { newTraceId, scopeObservation } from "../../src/index";
+import { ObservationDeliveryFailed } from "../../src/observation/bus";
 import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { z } from "zod";
@@ -9,6 +9,15 @@ const TestEvent = BusEvent.define(
   "test.scope",
   z.object({ component: z.string(), msg: z.string() }).passthrough(),
 );
+
+/** Mirrors the bus's own rendering of a thrown value: String(), else the object tag. */
+function render(value: bigint | boolean | null | number | object | string | symbol | undefined): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
 
 const identity = {
   traceId: "trace-1",
@@ -111,7 +120,35 @@ describe("scoped observations", () => {
   it.each([
     new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
     false, 1, 1n, "reporter", () => undefined,
-  ])("contains reporter failure without changing its identity: %p", (reporterFailure) => {
+  ])("exposes a reporter failure as data without throwing: %p", (reporterFailure) => {
+    // The sink refuses domain events but still accepts the failure report itself.
+    const failures: { eventName: string; error: string; reporterError?: string }[] = [];
+    const hostile: ObservationSink = {
+      publish(event, data) {
+        if (event.name !== ObservationDeliveryFailed.name) throw new Error("sink failed");
+        failures.push(ObservationDeliveryFailed.schema.parse(data));
+      },
+      scope() {
+        return hostile;
+      },
+    };
+
+    scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "default reporter" });
+    expect(failures).toEqual([{ eventName: TestEvent.name, error: "Error: sink failed" }]);
+    failures.length = 0;
+
+    const scoped = scopeObservation(hostile, identity, {
+      onError() {
+        throw reporterFailure;
+      },
+    });
+    expect(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })).not.toThrow();
+    expect(failures).toEqual([
+      { eventName: TestEvent.name, error: "Error: sink failed", reporterError: render(reporterFailure) },
+    ]);
+  });
+
+  it("drops the failure when the sink refuses the failure report too", () => {
     const hostile: ObservationSink = {
       publish() {
         throw new Error("sink failed");
@@ -120,44 +157,9 @@ describe("scoped observations", () => {
         return hostile;
       },
     };
-    const entries: { level: string; parts: unknown[] }[] = [];
-    const collector = Logger.make((options) => {
-      entries.push({
-        level: options.logLevel,
-        parts: Array.isArray(options.message) ? [...options.message] : [options.message],
-      });
-    });
-    const capture = <A>(body: () => A): A =>
-      Effect.runSync(Effect.sync(body).pipe(Effect.provide(Logger.layer([collector]))));
-
-    capture(() =>
-      scopeObservation(hostile, identity).publish(TestEvent, {
-        component: "test",
-        msg: "default reporter",
-      }),
-    );
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ level: "Warn" });
-    expect(entries[0]?.parts.map(String).join(" ")).toContain("observation emit failed");
-    entries.length = 0;
-
-    const scoped = scopeObservation(hostile, identity, {
-      onError() {
-        throw reporterFailure;
-      },
-    });
     expect(() =>
-      capture(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })),
+      scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "dropped" }),
     ).not.toThrow();
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ level: "Error" });
-    const detail = entries[0]?.parts.find((part) => typeof part === "object" && part !== null);
-    expect(detail).toMatchObject({
-      eventName: TestEvent.name,
-      error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
-    });
-    const logged = z.object({ error: z.instanceof(AggregateError) }).parse(detail);
-    expect(logged.error.errors[1]).toBe(reporterFailure);
   });
 
   it("forwards subscriptions when the underlying sink supports them", () => {
