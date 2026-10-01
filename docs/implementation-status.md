@@ -53,7 +53,21 @@ every consumer keeps its drop/warn/default and abort-once semantics.
   guard is the named `stopOnAbort` function), lint:tools, topology, deps,
   effect boundaries, written any/unknown 0, dead exports, import cycles,
   tsconfig inheritance, jscpd production clones 0, and
-  `bun test --timeout 15000 --coverage` ({{TESTS}}).
+  `bun run ci test --lane <key>` over the 15 CI lanes (4828 pass / 0 fail across 15 CI lanes (gate r5, 2026-10-01)); patch coverage
+  `all changed executable lines covered` (`script/check-patch-coverage.ts --base origin/main`, lane lcov union).
+- **Receipts (HEAD `ec247818`):** `.omo/evidence/ulw/01a0f656-c9f6-795d-9bfb-786c6699559b/1243/`
+  holds `gate-1243.log` (lane totals), `patch-coverage-1243.txt`, `dod-1243.txt`
+  (ultracite on the 32 changed sources, written any/unknown 0, jscpd 0 clones for the
+  three touched packages and `quality:clones:production` 0 clones over 473 sources,
+  dead-export ratchet 0 new), `verify-1243.txt` (the issue's rg searches), `checks-1243.txt`
+  (CI 30 pass / 0 fail), `review-1243-r1.md` + dispositions, and
+  `gate-1243-watch-sources-flake.md` (a pre-existing `watch-sources` flake met by
+  the local gate on untouched code; its own subgoal, not this PR).
+- **Desktop checks:** the two renderer/main behaviours touched here are covered by
+  automated counterparts, `gateway-transport.test.ts` "ignores malformed frames and
+  retains unsolicited reply correlation" and `window-bounds.test.ts` "Given malformed
+  or undersized JSON, When parsed, Then the default" (desktopApp lane 443 pass / 0
+  fail). A native Electron run was not performed.
 
 ## W5.3 #1113 closure receipt (2026-09-29, ⏳ pending merge)
 
