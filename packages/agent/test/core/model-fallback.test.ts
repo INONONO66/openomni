@@ -84,7 +84,7 @@ describe("model fallback via placement", () => {
           ),
         ),
       ),
-    ).toMatchObject({ _tag: "LlmRunFailure", isRetryable: false, statusCode: 400 });
+    ).toMatchObject({ _tag: "LlmRunFailure", cause: { isRetryable: false, statusCode: 400 } });
     expect(resolved).toEqual([primary]);
   });
 

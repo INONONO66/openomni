@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { createTestAgent, failure as effectFailure } from "../helpers/effect-g2";
@@ -33,8 +34,10 @@ const createProviderStream: NonNullable<Parameters<typeof run>[2]>["createStream
 afterEach(() => Bus.reset());
 
 function providerError(message: string, retryable: boolean): Error {
-  return Object.assign(new Error(message), {
-    name: "AI_APICallError",
+  return new APICallError({
+    message,
+    url: "https://provider.test/v1/messages",
+    requestBodyValues: {},
     isRetryable: retryable,
     statusCode: retryable ? 529 : 400,
     responseHeaders: retryable ? { "Retry-After-Ms": "0" } : {},
@@ -112,7 +115,7 @@ describe("provider retry ownership", () => {
       await isolated(
         effectFailure(createAgent().run(runInput([{ role: "user", content: "invalid" }]))),
       ),
-    ).toMatchObject({ _tag: "LlmRunFailure", isRetryable: false, statusCode: 400 });
+    ).toMatchObject({ _tag: "LlmRunFailure", cause: { isRetryable: false, statusCode: 400 } });
     expect(callsByAttempt).toEqual([1]);
   });
 

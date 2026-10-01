@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { Effect } from "effect";
 import { Auth } from "@openomni/llm";
 import type { FixtureLlm } from "./app-fixture";
@@ -6,15 +7,17 @@ import { assistantMessage } from "./assistant-message";
 import { providerFailure } from "./provider-failure";
 import { fakeProviderModel } from "./resident-suite";
 
-/** Real SDK error shape, with retry facts on the error rather than under data. */
+/** Real SDK error, with retry facts on the error rather than under data. */
 export function providerError(fields: {
   readonly message: string;
   readonly isRetryable: boolean;
   readonly statusCode?: number;
   readonly responseBody?: string;
-}): Error {
-  return Object.assign(new Error(fields.message), {
-    name: "AI_APICallError",
+}): APICallError {
+  return new APICallError({
+    message: fields.message,
+    url: "https://provider.test/v1/messages",
+    requestBodyValues: {},
     isRetryable: fields.isRetryable,
     ...(fields.statusCode === undefined ? {} : { statusCode: fields.statusCode }),
     ...(fields.responseBody === undefined ? {} : { responseBody: fields.responseBody }),

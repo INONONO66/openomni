@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { createTurnDispatcher } from "@openomni/agent";
-import { createCodemode, type CodeError } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost, MachinesFailure as MachineFailure } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
+import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";
 import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { fixtureHashes } from "../../../packages/agent/test/helpers/compiled-policy";
@@ -28,9 +28,8 @@ test("two cells in one turn each own a full completion budget", async () => {
     events: { publish: () => undefined }, now: () => 1,
     callTool: (call: Machine.ToolCall) => Effect.suspend(() => {
       cellCalls.set(call.cellId, (cellCalls.get(call.cellId) ?? 0) + 1);
-      return cells.callTool(call).pipe(
-        Effect.mapError((error: CodeError) => new MachineFailure({ operation: "code.tool", cause: String(error) })),
-      );
+      // callTool already surfaces a MachinesFailure({ operation: "code.tool" }).
+      return cells.callTool(call);
     }),
   }));
   suite.defer(() => runEffect(host.close()));

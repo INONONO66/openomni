@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { sessionTree } from "./helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../src/executor-contract";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
@@ -103,9 +104,10 @@ function providerFailure(): Run.Failure {
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
     },
-    isRetryable: true,
-    statusCode: 529,
-    cause: "Error: overloaded",
+    cause: new APICallError({
+      message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
+      statusCode: 529, responseHeaders: { "retry-after-ms": "0" }, isRetryable: true,
+    }),
   });
 }
 

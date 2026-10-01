@@ -4,8 +4,8 @@ import { Effect, Layer } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
 import { createTurnDispatcher, currentInvocation } from "@openomni/agent";
-import { createCodemode, type CodeError } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost, MachinesFailure as MachineFailure } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
+import { attachMachineDaemon, createMachineHost, type MachinesFailure } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import { cellPorts } from "./helpers/cell-ports";
@@ -52,10 +52,10 @@ for (const stop of [false, true]) {
       }),
       events: { publish: () => undefined },
       now: () => 1,
+      // callTool already surfaces a MachinesFailure({ operation: "code.tool" }).
       callTool: (call: Machine.ToolCall) => cells.callTool(call).pipe(
         Effect.tap((result: Machine.ToolCallResult) => Effect.sync(() => completed.resolve({ result }))),
-        Effect.tapError((error: CodeError) => Effect.sync(() => completed.resolve({ error }))),
-        Effect.mapError((error: CodeError) => new MachineFailure({ operation: "code.tool", cause: String(error) })),
+        Effect.tapError((error: MachinesFailure) => Effect.sync(() => completed.resolve({ error }))),
       ),
     }));
     suite.defer(async () => { await runEffect(host.close()); });
