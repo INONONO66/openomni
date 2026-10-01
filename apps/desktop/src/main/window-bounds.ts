@@ -1,3 +1,4 @@
+import { parseJson } from "@openomni/protocol";
 import { z } from "zod";
 
 /**
@@ -23,13 +24,7 @@ type WindowPlacement = Partial<Pick<WindowBounds, "x" | "y">> &
   Pick<WindowBounds, "width" | "height">;
 
 export function parseWindowBounds(text: string | null): WindowPlacement {
-  if (text === null) return WINDOW_DEFAULT;
-  try {
-    const parsed = BoundsSchema.safeParse(JSON.parse(text));
-    return parsed.success ? parsed.data : WINDOW_DEFAULT;
-  } catch {
-    return WINDOW_DEFAULT;
-  }
+  return text === null ? WINDOW_DEFAULT : (parseJson(BoundsSchema, text) ?? WINDOW_DEFAULT);
 }
 
 export function serializeWindowBounds(bounds: WindowBounds): string {

@@ -1,5 +1,5 @@
 import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, ForeignFailure as MachineForeignFailure } from "@openomni/machines";
-import { Machine } from "@openomni/protocol";
+import { listenForAbort, Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { z } from "zod";
 import { PythonKernel } from "./kernel";
@@ -25,6 +25,8 @@ interface BackgroundCell {
   readonly quarantined: boolean;
 }
 const RETAINED_SETTLED_CELLS = 64;
+/** Upper bound on tenant interpreters shut down at once during close. */
+const CLOSE_CONCURRENCY = 16;
 interface Options {
   readonly machines?: Pick<MachineHost, "list" | "get">;
   readonly completion?: (request: Machine.CompletionRequest) => Effect.Effect<string, Failure>;
@@ -174,8 +176,7 @@ export function createCodemode(options: Options = {}) {
         const handle = yield* Effect.try({ try: () => machines().get(id), catch: decodeCodeFailure("cell.launch") });
         const release = runOptions.ownership?.retain();
         const interrupt = () => runOptions.ownership?.interrupt?.();
-        signal.addEventListener("abort", interrupt, { once: true });
-        if (signal.aborted) interrupt();
+        const detach = listenForAbort(signal, interrupt);
         live.set(cellId, { caller, tenant, timeoutMs, signal, boundary, ownership: runOptions.ownership });
         const settled = yield* Deferred.make<void>();
         running.add(settled);
@@ -189,7 +190,7 @@ export function createCodemode(options: Options = {}) {
         const entry: BackgroundCell = { tenant, machineId: id, controller, execution,
           get done() { return done; }, get quarantined() { return quarantined; } };
         execution.addObserver((exit) => {
-          signal.removeEventListener("abort", interrupt);
+          detach();
           if (Exit.isFailure(exit)) interrupt();
           done = true;
           quarantined = entered && Exit.isFailure(exit) && release !== undefined;
@@ -216,7 +217,7 @@ export function createCodemode(options: Options = {}) {
       },
       close: () => Effect.gen(function* () {
         closed = true; lifetime.abort();
-        yield* Effect.forEach([...kernels.values()], (kernel) => kernel.close(), { discard: true, concurrency: "unbounded" });
+        yield* Effect.forEach([...kernels.values()], (kernel) => kernel.close(), { discard: true, concurrency: CLOSE_CONCURRENCY });
         yield* Effect.forEach([...running], Deferred.await, { discard: true });
         if ([...background.values()].some((entry) => entry.quarantined))
           return yield* new MachineForeignFailure({ operation: "shutdown.cell_unsettled", cause: "physical termination was not witnessed" });

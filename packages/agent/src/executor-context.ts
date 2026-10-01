@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Context, Effect, Option } from "effect";
 import { GenerationUnavailable, InvocationClosed } from "./errors";
+import { onAbort } from "./core/interrupt-on";
 import type { Executor } from "./executor-contract";
 import type { CompiledPolicySnapshot } from "@openomni/policy";
 import type { Dispatcher } from "./tool-dispatcher";
@@ -75,12 +76,7 @@ export function openInvocation(frame: InvocationFrame, tool: string) {
       return new GenerationUnavailable({ generation: frame.generation.id.generation });
     return undefined;
   };
-  const awaitClose = Effect.callback<never, InvocationClosed>((resume) => {
-    const notify = () => resume(Effect.fail(new InvocationClosed({ tool, reason: reason ?? "interrupted" })));
-    closed.signal.addEventListener("abort", notify, { once: true });
-    if (closed.signal.aborted) notify();
-    return Effect.sync(() => closed.signal.removeEventListener("abort", notify));
-  });
+  const awaitClose = onAbort(closed.signal, Effect.suspend(() => Effect.fail(new InvocationClosed({ tool, reason: reason ?? "interrupted" }))));
   const guard = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.suspend<A, E | InvocationClosed | GenerationUnavailable, R>(() => {
     const error = failure();
     return error === undefined ? Effect.raceFirst(frame.generation.provide(work), awaitClose) : Effect.fail(error);

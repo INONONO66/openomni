@@ -12,6 +12,7 @@ import type {
 } from "./executor-contract";
 import { ExecutionApprovalError, type ExecutionError } from "./errors";
 import { createApprovalRequest } from "./session-request";
+import { onAbort } from "./core/interrupt-on";
 
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
@@ -108,7 +109,7 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
             return yield* new ExecutionApprovalError({ code: "stale_approval" });
         }
         notify(durable);
-        return yield* Deferred.await(decision).pipe(Effect.raceFirst(aborted(signal).pipe(Effect.andThen(cancel))));
+        return yield* Deferred.await(decision).pipe(Effect.raceFirst(onAbort(signal, Effect.void).pipe(Effect.andThen(cancel))));
       });
       return yield* wait.pipe(
         Effect.onInterrupt(() => Effect.orDie(cancel)),
@@ -117,13 +118,4 @@ export function createExecutionApprovals(options: ResolvedExecutorOptions) {
     });
   }
   return { approvals, awaitApproval };
-}
-
-function aborted(signal: AbortSignal): Effect.Effect<void> {
-  return Effect.callback<void>((resume) => {
-    const abort = () => resume(Effect.void);
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-    return Effect.sync(() => signal.removeEventListener("abort", abort));
-  });
 }

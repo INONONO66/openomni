@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { interruptOn } from "../core/interrupt-on";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CommitFailed } from "../errors";
 
@@ -176,13 +177,7 @@ export function createRetryTimerPort(deps: RetryTimerDeps): RetryTimerPort {
       Effect.suspend(() => {
         const sleep = Effect.sleep(Math.max(0, fireAt - deps.clock()));
         if (signal === undefined) return sleep;
-        const aborted = Effect.callback<never>((resume) => {
-          const abort = () => resume(Effect.interrupt);
-          signal.addEventListener("abort", abort, { once: true });
-          if (signal.aborted) abort();
-          return Effect.sync(() => signal.removeEventListener("abort", abort));
-        });
-        return sleep.pipe(Effect.raceFirst(aborted));
+        return sleep.pipe(Effect.raceFirst(interruptOn(signal)));
       }),
     settle: () => Effect.void,
   };

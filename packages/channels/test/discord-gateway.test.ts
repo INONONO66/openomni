@@ -1,6 +1,7 @@
 import { bounded } from "./helpers/bounded";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
+import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { DiscordGateway } from "../src/provider/discord/gateway";
 import { GatewayFrameSchema, GatewayOp } from "../src/provider/discord/types";
@@ -518,6 +519,37 @@ describe("discord gateway state machine (#520)", () => {
     await secondReady;
     expect(identifies).toBe(2);
     expect(local.received.filter((p) => p.op === GatewayOp.RESUME)).toHaveLength(0);
+  });
+
+  it("warns and drops frames that are not a valid op envelope, then still reaches READY", async () => {
+    const local = createFakeGateway({
+      heartbeatIntervalMs: 5_000,
+      ackHeartbeats: true,
+      onIdentify: (ws) => {
+        ws.send("this is not json");
+        ws.send(JSON.stringify({ d: "no op" }));
+        sendReady(ws, local.url, "sess-6");
+      },
+    });
+    fake = local;
+    const warnings: string[] = [];
+    gateway = createTracedGateway(
+      local,
+      "test-token",
+      () => Promise.resolve(local.url),
+      { onDispatch: () => undefined, onReady: () => undefined },
+      (event, payload) => {
+        if (event.name === Operational.Events.Warn.name)
+          warnings.push(z.object({ msg: z.string() }).parse(payload).msg);
+      },
+      immediateDelay,
+    );
+
+    await gateway.start();
+    expect(warnings).toEqual([
+      "discord gateway frame was not a valid op envelope; dropped",
+      "discord gateway frame was not a valid op envelope; dropped",
+    ]);
   });
 
   it("does not leave a server-close waiter after a pre-ready start failure", async () => {

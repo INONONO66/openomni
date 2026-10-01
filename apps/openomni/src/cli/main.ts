@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { listenForAbort } from "@openomni/protocol";
 import { gatewayRuntime } from "../gateway";
 import { loadConfig, resolveClusterStorage } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
@@ -151,13 +152,13 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
       };
       const settle = (code: number): void => {
         if (killTimer !== undefined) clearTimeout(killTimer);
-        options.followSignal?.removeEventListener("abort", abort);
+        detach?.();
         resolve(code);
       };
       child.once("exit", (code) => settle(code ?? 1));
       child.once("error", () => settle(1));
-      options.followSignal?.addEventListener("abort", abort, { once: true });
-      if (options.followSignal?.aborted) abort();
+      const detach =
+        options.followSignal === undefined ? undefined : listenForAbort(options.followSignal, abort);
     });
   }
 

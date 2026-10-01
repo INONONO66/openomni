@@ -1,3 +1,4 @@
+import { parseJson } from "@openomni/protocol";
 import { z } from "zod";
 import { type ApiFailure, coerceApiError, declaredContextOverflow } from "../error";
 import { headerDelay } from "./delay";
@@ -335,12 +336,7 @@ export namespace Retry {
   }
 
   function parsePayload(payload: string | undefined): z.infer<typeof Payload> | undefined {
-    if (!payload) return undefined;
-    try {
-      return Payload.parse(JSON.parse(payload));
-    } catch {
-      return undefined;
-    }
+    return payload ? parseJson(Payload, payload) : undefined;
   }
 
   function isRateLimitBody(body: z.infer<typeof Payload>): boolean {

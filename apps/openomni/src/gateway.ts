@@ -18,6 +18,7 @@ import {
   type SessionEntryServices, type BundleDefinitions,
   createSessionRequests,
   currentExecutor,
+  Failure,
   ForeignFailure,
   scopeObservation,
   attemptUsage,
@@ -28,7 +29,7 @@ import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Cause, Effect, Result, Exit, ManagedRuntime, Option, Scope } from "effect";
+import { Effect, Result, Exit, ManagedRuntime, Scope } from "effect";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import type { WatchSources } from "./composition/watch-sources";
 import { createWatchMonitorPorts } from "./composition/monitor-ports";
@@ -100,9 +101,9 @@ export async function runAppBoot<A, E>(
 ): Promise<A> {
   const exit = await runtime.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
-  const failure = Option.getOrElse(
-    Cause.findErrorOption(exit.cause),
-    () => new AppLifecycleFailure({ operation: "app.boot", cause: Cause.pretty(exit.cause) }),
+  const failure = Failure.fromCause(
+    exit.cause,
+    (cause) => new AppLifecycleFailure({ operation: "app.boot", cause }),
   );
   console.error("app boot incident", failure);
   await runtime.dispose().catch((disposal: Error) => {
