@@ -1,6 +1,7 @@
 import type { ChannelStores } from "./stores.js";
 import type { PolicyEvaluationInput } from "@openomni/policy";
 import { Channel, type Gateway } from "@openomni/protocol";
+import { ChannelsFailure } from "../errors";
 import { newTraceId } from "../support/trace";
 import { resolveChannelGrant } from "./channel-grant";
 import { resolveIngressActor } from "./actor-resolver";
@@ -55,7 +56,11 @@ export function externalMessage(
   budgets: readonly Gateway.SocialBudget[],
   requests: GatewayRouterPorts["requests"],
 ) {
-  if (sender.surface !== facts.surface) throw new Error("authenticated surface mismatch");
+  if (sender.surface !== facts.surface)
+    throw new ChannelsFailure({
+      operation: "message.ingress",
+      cause: "authenticated surface mismatch",
+    });
   const surfaceKey = Channel.SurfaceKey.fromChannel({
     surface: facts.surface,
     namespace: facts.workspaceId ?? facts.surface,

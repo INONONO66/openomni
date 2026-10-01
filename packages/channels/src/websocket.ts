@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Effect } from "effect";
-import { decodeChannelFailure, InvalidInbound, type ChannelError } from "./errors";
+import { decodeChannelFailure, DeliveryNotSent, InvalidInbound, type ChannelError } from "./errors";
 import { newTraceId } from "./support/trace";
 import { Channel, Gateway, Operational, SessionRead } from "@openomni/protocol";
 import { authenticateWebSocketUpgrade } from "./authn/websocket";
@@ -103,7 +103,10 @@ export class WebSocketHandler {
   } {
     const connection = this.connections.get(externalId);
     if (connection === undefined) {
-      throw new Error(`no live websocket connection for actor ${externalId}`);
+      throw new DeliveryNotSent({
+        operation: "websocket.push",
+        cause: `no live websocket connection for actor ${externalId}`,
+      });
     }
     const messageId = idempotencyKey;
     connection.send(JSON.stringify({ type: "message", messageId, text: body }));

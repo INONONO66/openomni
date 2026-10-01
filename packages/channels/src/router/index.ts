@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { ChannelsFailure, DeliveryNotSent } from "../errors";
 import { Gateway } from "@openomni/protocol";
 import { executeMessage } from "./message-execution";
 import { createExistingAgentMessaging } from "./messaging/send";
@@ -52,7 +53,10 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
           deliver: (message) => {
             const route = messagingPorts.deliveryRoutes.get(message.target.channel);
             if (route === undefined)
-              throw new Error(`no delivery route: ${message.target.channel}`);
+              throw new DeliveryNotSent({
+                operation: "message.deliver",
+                cause: `no delivery route: ${message.target.channel}`,
+              });
             return route(message.target.externalId, message.body, message.idempotencyKey);
           },
         });
@@ -82,7 +86,11 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
         : prepared.message.sender === "session"
           ? { ...prepared.message, actorSendAllowed }
           : undefined;
-    if (message === undefined) throw new Error("session message projection missing");
+    if (message === undefined)
+      throw new ChannelsFailure({
+        operation: "message.project",
+        cause: "session message projection missing",
+      });
     return message;
   }
 

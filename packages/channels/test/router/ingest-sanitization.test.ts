@@ -32,6 +32,6 @@ test.each([
 test("authenticated surface must match the facts surface", async () => {
   expect(await effectFailure(
     kernelRouter().ingest({ ...ownerSender, surface: "telegram" }, ownerFacts),
-  )).toMatchObject({ message: "authenticated surface mismatch" });
+  )).toMatchObject({ _tag: "ChannelsFailure", operation: "message.ingress" });
   expect(commits).toEqual([]);
 });

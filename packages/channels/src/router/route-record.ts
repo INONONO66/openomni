@@ -28,22 +28,29 @@ export function recordRouteDecided(
     );
   }
   if (outcome.kind === "recorded") return decision;
-  let recorded: Ingress.RoutingDecisionPayload;
+  const fact = outcome.fact;
+  let recorded: Ingress.RoutingDecisionPayload | undefined;
   try {
-    const fact = outcome.fact;
-    if (fact.type !== Ingress.ROUTE_DECIDED_FACT_TYPE) {
-      throw new Error(`key ${streamId} has a different recorded fact type`);
-    }
     // Pre-0025 facts are upcast by the protocol's bounded persisted-wire reader.
-    const upcast = Ingress.recordedRoutingDecision(fact.data);
-    if (upcast === undefined) {
-      throw new Error(`stream ${streamId} recorded route.decided fact failed to parse`);
-    }
-    recorded = upcast;
+    recorded =
+      fact.type === Ingress.ROUTE_DECIDED_FACT_TYPE
+        ? Ingress.recordedRoutingDecision(fact.data)
+        : undefined;
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
       `recorded routing decision read failed: ${error instanceof Error ? error.message : String(error)}`,
+      decision,
+    );
+  }
+  if (recorded === undefined) {
+    throw new IngressRoutingError(
+      "route_record_failed",
+      `recorded routing decision read failed: ${
+        fact.type === Ingress.ROUTE_DECIDED_FACT_TYPE
+          ? `stream ${streamId} recorded route.decided fact failed to parse`
+          : `key ${streamId} has a different recorded fact type`
+      }`,
       decision,
     );
   }

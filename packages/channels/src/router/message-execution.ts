@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { ChannelsFailure, SendAdmissionConflict } from "../errors";
 import type { ChannelError } from "../errors";
 import type { ChannelStores } from "./stores.js";
 import {
@@ -41,18 +42,34 @@ function transformedContent(
   messageId: string,
 ): string {
   if (sender.kind === "session" && intent.action.sessionId !== sender.id)
-    throw new Error("authenticated session sender mismatch");
+    throw new ChannelsFailure({
+      operation: "message.transform",
+      cause: "authenticated session sender mismatch",
+    });
   const stored = intent.action.intent.value;
   if (stored === null || typeof stored !== "object" || Array.isArray(stored))
-    throw new Error("message intent is not an object");
+    throw new ChannelsFailure({
+      operation: "message.transform",
+      cause: "message intent is not an object",
+    });
   const transformed = stored.value;
   if (transformed === null || typeof transformed !== "object" || Array.isArray(transformed))
-    throw new Error("message intent value is not an object");
+    throw new ChannelsFailure({
+      operation: "message.transform",
+      cause: "message intent value is not an object",
+    });
   const { content, ...routing } = transformed;
   const { content: _content, ...originalRouting } = { messageId, sender, ...send };
   if (canonicalDigest(routing) !== canonicalDigest(originalRouting))
-    throw new Error("message routing transform requires readmission");
-  if (typeof content !== "string") throw new Error("message transformed content is not text");
+    throw new ChannelsFailure({
+      operation: "message.transform",
+      cause: "message routing transform requires readmission",
+    });
+  if (typeof content !== "string")
+    throw new ChannelsFailure({
+      operation: "message.transform",
+      cause: "message transformed content is not text",
+    });
   return content;
 }
 
@@ -136,7 +153,13 @@ export function executeMessage(
     if (external.route.requestExecution.kind === "request") return sessionResult;
   }
   if (send.to.kind === "actor") {
-    if (messaging === undefined) throw new Error("actor messaging is not configured");
+    if (messaging === undefined)
+      return yield* Effect.die(
+        new ChannelsFailure({
+          operation: "message.actor_send",
+          cause: "actor messaging is not configured",
+        }),
+      );
     const receipt = yield* messaging.send({
       messageId,
       traceId: intent.action.id,
@@ -147,7 +170,10 @@ export function executeMessage(
       operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
       ...requestSpec(send, intent),
     });
-    if (receipt.kind === "denied") throw new Error(`actor send admission changed: ${receipt.code}`);
+    if (receipt.kind === "denied")
+      return yield* Effect.fail(
+        new SendAdmissionConflict({ message: `actor send admission changed: ${receipt.code}` }),
+      );
     const actorResult: PlainValue = { status: "executed", handle, delivery: { kind: "actor", value: receipt.delivery } };
     return actorResult;
   }

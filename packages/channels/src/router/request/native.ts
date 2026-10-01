@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { ChannelsFailure } from "../../errors";
 import type { ChannelError } from "../../errors";
 import {
   SessionTransition,
@@ -25,10 +26,17 @@ export function answerNativeRequest(
     sender.id !== message.sourceSessionId ||
     content !== message.content
   )
-    throw new Error("native reply binding mismatch");
+    return yield* Effect.fail(
+      new ChannelsFailure({ operation: "native.answer", cause: "native reply binding mismatch" }),
+    );
   const request = requests.list().find((candidate) => candidate.requestId === message.requestId);
   if (request === undefined || request.sessionId !== message.destinationSessionId)
-    throw new Error("native reply original request is missing");
+    return yield* Effect.fail(
+      new ChannelsFailure({
+        operation: "native.answer",
+        cause: "native reply original request is missing",
+      }),
+    );
   yield* requests.answer({
     inputId: message.messageId,
     requestId: request.requestId,

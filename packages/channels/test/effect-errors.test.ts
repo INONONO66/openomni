@@ -5,7 +5,7 @@ import type { ChannelError } from "../src/errors";
 
 const failures = {
   DeliveryNotSent: new Errors.DeliveryNotSent({ operation: "fixture.preflight", cause: "refused" }),
-  ForeignFailure: Errors.decodeChannelFailure("fixture")(new Error("foreign")),
+  ChannelsFailure: Errors.decodeChannelFailure("fixture")(new Error("foreign")),
   InvalidInbound: new Errors.InvalidInbound({ operation: "websocket.frame", reason: "invalid_json" }),
   DiscordGatewayFetchError: new Errors.DiscordGatewayFetchError({ message: "fixture" }),
   DiscordApiError: new Errors.DiscordApiError({ message: "fixture", rejected: true }),
@@ -43,8 +43,8 @@ test.each([new Error("foreign"), { code: 503 }, null, false, "diagnostic"])(
   "foreign channel diagnostics have a string cause",
   (foreign) => {
     const decoded = Errors.decodeChannelFailure("fixture")(foreign);
-    const failure = new Errors.ForeignFailure(decoded);
-    expect(failure._tag).toBe("ForeignFailure");
+    const failure = new Errors.ChannelsFailure(decoded);
+    expect(failure._tag).toBe("ChannelsFailure");
     expect(failure.operation).toBe("fixture");
     expect(typeof failure.cause).toBe("string");
   },

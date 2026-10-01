@@ -1,5 +1,5 @@
 import { ledger, resetLedger } from "../helpers/ledger";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
 import { effectFailure } from "../helpers/effect-failure";
@@ -101,12 +101,136 @@ test.each([
   }));
   const result = sendToChild(router, "secret");
   if (field === "target") {
-    expect(await effectFailure(result)).toMatchObject({ message: "message routing transform requires readmission" });
+    expect(await effectFailure(result)).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transform" });
     expect(commits).toHaveLength(0);
   } else {
     await runEffect(result);
     expect(commits[0]?.content).toBe("redacted");
   }
+});
+
+function executingRun(): GatewayRouterPorts["run"] {
+  return (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+    return {
+      terminal: "executed" as const,
+      matchedRuleIds: [],
+      value: yield* body(messageExecutionReceipt("source", "parent", request.intent)),
+    };
+  });
+}
+
+test("a receipt recorded for a different session refuses the transform with a typed failure", async () => {
+  const { router, commits } = recordingRouter(
+    (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      return {
+        terminal: "executed" as const,
+        matchedRuleIds: [],
+        value: yield* body(messageExecutionReceipt("source", "other", request.intent)),
+      };
+    }),
+  );
+  expect(await effectFailure(sendToChild(router, "work"))).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.transform",
+  });
+  expect(commits).toEqual([]);
+});
+
+test("a receipt whose stored intent is not an object refuses the transform typed", async () => {
+  const { router, commits } = recordingRouter(
+    (_sender: Gateway.IngestSender, _request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      const receipt = messageExecutionReceipt("source", "parent", "ignored");
+      const corrupt = {
+        ...receipt,
+        action: { ...receipt.action, intent: { encodingVersion: 1 as const, value: "bare" } },
+      };
+      return { terminal: "executed" as const, matchedRuleIds: [], value: yield* body(corrupt) };
+    }),
+  );
+  expect(await effectFailure(sendToChild(router, "work"))).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.transform",
+  });
+  expect(commits).toEqual([]);
+});
+
+test("a receipt whose stored intent value is not an object refuses the transform typed", async () => {
+  const { router, commits } = recordingRouter(
+    (_sender: Gateway.IngestSender, _request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      return {
+        terminal: "executed" as const,
+        matchedRuleIds: [],
+        value: yield* body(messageExecutionReceipt("source", "parent", "bare")),
+      };
+    }),
+  );
+  expect(await effectFailure(sendToChild(router, "work"))).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.transform",
+  });
+  expect(commits).toEqual([]);
+});
+
+test("a transform that replaces content with non-text refuses typed", async () => {
+  const { router, commits } = recordingRouter(
+    (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      const value = Gateway.SendMessage.extend({
+        messageId: z.string(),
+        sender: Gateway.IngestSender,
+      }).parse(request.intent);
+      return {
+        terminal: "executed" as const,
+        matchedRuleIds: [],
+        value: yield* body(messageExecutionReceipt("source", "parent", { ...value, content: 7 })),
+      };
+    }),
+  );
+  expect(await effectFailure(sendToChild(router, "secret"))).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.transform",
+  });
+  expect(commits).toEqual([]);
+});
+
+test("an actor send without configured messaging dies with the channels invariant", async () => {
+  const { router, commits } = recordingRouter(executingRun());
+  const exit = await runEffect(Effect.exit(router.ingest(
+    { kind: "session", id: "parent" },
+    { to: { kind: "actor", actorId: "actor:missing" }, type: "message", content: "hi" },
+  )));
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isSuccess(exit)) return;
+  expect(Cause.hasDies(exit.cause)).toBe(true);
+  expect(Cause.squash(exit.cause)).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.actor_send",
+  });
+  expect(commits).toEqual([]);
+});
+
+test("a session send prepared without a session projection dies with the channels invariant", async () => {
+  const commits: Inbox.Commit[] = [];
+  const router = createGatewayRouter({
+    requests: channelRequests(requestPort()),
+    stores: ledger().stores,
+    transaction: channelTransaction,
+    sink: () => undefined,
+    inbox: recordingInbox(commits),
+    prepare: () => Effect.succeed({
+      target: "child",
+      message: { sender: "external" as const, eventIdUnique: true },
+    }),
+    run: executingRun(),
+  });
+  const exit = await runEffect(Effect.exit(sendToChild(router, "work")));
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isSuccess(exit)) return;
+  expect(Cause.hasDies(exit.cause)).toBe(true);
+  expect(Cause.squash(exit.cause)).toMatchObject({
+    _tag: "ChannelsFailure",
+    operation: "message.project",
+  });
+  expect(commits).toEqual([]);
 });
 
 test.each(["interrupted", "outcome_unknown"] as const)("%s preserves the handle without committing an inbox", async (terminal: "interrupted" | "outcome_unknown") => {

@@ -118,7 +118,45 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
 test("a granted endpoint without a channel delivery owner fails closed", async () => {
   const router = makeRouter(new Map());
   await admitFirstContact(router);
-  expect(await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({ _tag: "ForeignFailure", operation: "message.deliver" });
+  expect(await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.deliver" });
+  expect(delivered).toEqual([]);
+});
+
+test("an admission denied after preflight fails as a typed send-admission conflict", async () => {
+  const suppressed = makeFixtureRouter({
+    messaging: {
+      deliveryRoutes: new Map([
+        [
+          "discord",
+          async (externalId: string, body: string, idempotencyKey: string) => {
+            delivered.push({ externalId, body, idempotencyKey });
+            return { value: "accepted" as const };
+          },
+        ],
+      ]),
+      grants: () => [
+        {
+          id: "grant:owner->buyer",
+          senderId: "persona-owner",
+          targetActorId: "actor-buyer",
+          operations: ["fire_and_forget", "awaited"],
+        },
+      ],
+      budgets: () => [
+        {
+          id: "budget:do-not-contact",
+          targetActorId: "actor-buyer",
+          maxPerWindow: 10,
+          windowMs: 60_000,
+          cooldownMs: 0,
+          doNotContact: true,
+        },
+      ],
+    },
+  });
+  expect(await effectFailure(suppressed.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
+    _tag: "SendAdmissionConflict",
+  });
   expect(delivered).toEqual([]);
 });
 
