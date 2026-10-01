@@ -1,12 +1,22 @@
 import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
+import { Effect, Exit, Logger, Scope } from "effect";
+import { connectIpcClient as connectNative, createIpcServer as listenNative } from "../src/index";
 import { connectIpcClient } from "./helpers/native";
 import { IpcConnectionError, IpcRemoteError } from "../src/errors";
 import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { transportFixture } from "./helpers/transport";
+
+/** Collects Effect log entries whose message mentions `marker` and reports the level. */
+function collectingLogger(marker: string, resolve: (logLevel: string) => void) {
+  return Logger.make((options) => {
+    const text = (Array.isArray(options.message) ? options.message : [options.message]).map(String).join(" ");
+    if (text.includes(marker)) resolve(options.logLevel);
+  });
+}
 
 describe("IPC transport resilience (#QB1)", () => {
   const { servers, clients } = transportFixture();
@@ -106,7 +116,7 @@ describe("IPC transport resilience (#QB1)", () => {
     expect(await srv.call("ok", {}, 2_000)).toEqual({ ok: "ok" });
   });
 
-  test("a schema-mismatch frame is logged by the client, not silently dropped", async () => {
+  test("a schema-mismatch frame is logged by the client through the Effect logger, not silently dropped", async () => {
     const socketPath = socketPathForTest("schema-warn");
     // Raw peer that emits valid JSON matching no message schema.
     const rawServer = net.createServer((conn) => {
@@ -114,23 +124,48 @@ describe("IPC transport resilience (#QB1)", () => {
     });
     await new Promise<void>((resolve) => rawServer.listen(socketPath, () => resolve()));
 
-    const warnings: string[] = [];
-    const warned = deferred();
-    const originalWarn = console.warn;
-    console.warn = (message: string) => {
-      warnings.push(message);
-      warned.resolve();
-    };
+    const logged = deferred<string>();
+    const collector = collectingLogger("matched no message schema", logged.resolve);
+    const scope = Effect.runSync(Scope.make());
     try {
-      const client = await connectIpcClient(socketPath);
-      clients.push(client);
-      await within(warned.promise, "schema mismatch warning");
-      expect(warnings.some((w) => w.includes("matched no message schema"))).toBe(true);
+      const client = await Effect.runPromise(connectNative(socketPath).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provide(Logger.layer([collector])),
+      ));
+      // The captured log entry carries the Warn level, not a console spy.
+      expect(await within(logged.promise, "schema mismatch warning")).toBe("Warn");
       // A drifted peer is surfaced, not fatal: the connection stays usable.
       expect(client.connected).toBe(true);
     } finally {
-      console.warn = originalWarn;
+      await Effect.runPromise(Scope.close(scope, Exit.void));
       rawServer.close();
+    }
+  });
+
+  test("a request handler defect is logged through the Effect logger and the connection is removed", async () => {
+    const socketPath = socketPathForTest("defect-log");
+    const logged = deferred<string>();
+    const collector = collectingLogger("request handler defect", logged.resolve);
+    const disconnected = deferred<string>();
+    const scope = Effect.runSync(Scope.make());
+    try {
+      await Effect.runPromise(listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
+        onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
+      }).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provide(Logger.layer([collector])),
+      ));
+      const client = await connectIpcClient(socketPath);
+      clients.push(client);
+
+      // The defect kills the connection: the in-flight call fails as a connection loss.
+      const error = await captureError(client.call("boom", {}, 2_000));
+      expect(error).toBeInstanceOf(IpcConnectionError);
+      // The captured log entry carries the Error level, not a console spy.
+      expect(await within(logged.promise, "handler defect error log")).toBe("Error");
+      await within(disconnected.promise, "defect connection removal");
+    } finally {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
     }
   });
 

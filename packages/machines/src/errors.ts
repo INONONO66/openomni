@@ -1,9 +1,6 @@
 import { Machine } from "@openomni/protocol";
-import type { ForeignFailure } from "@openomni/ipc";
 import { Data } from "effect";
 import { z } from "zod";
-
-export { ForeignFailure } from "@openomni/ipc";
 
 /** Machines-owned failure for a Cause without a typed error. */
 export class MachinesFailure extends Data.TaggedError("MachinesFailure")<{
@@ -32,4 +29,4 @@ export class SpawnFailure extends Data.TaggedError("SpawnFailure")<z.infer<typeo
 export class FilesystemFailure extends Data.TaggedError("FilesystemFailure")<z.infer<typeof BoundaryFields>> {}
 export class TransportFailure extends Data.TaggedError("TransportFailure")<z.infer<typeof BoundaryFields>> {}
 
-export type MachineError = ForeignFailure | MachineCellError | MachineRefusalError | SpawnFailure | FilesystemFailure | TransportFailure;
+export type MachineError = MachinesFailure | MachineCellError | MachineRefusalError | SpawnFailure | FilesystemFailure | TransportFailure;

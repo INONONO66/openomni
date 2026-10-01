@@ -382,11 +382,11 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
 
       const link = readLinkAt(dirfd, segment);
       if (!("target" in link)) {
-        throw new Error(`export root is not a directory: ${configuredRoot}`);
+        throw new FilesystemFailure({ operation: "fs.open", message: `export root is not a directory: ${configuredRoot}`, cause: "export root walk hit a non-directory component" });
       }
       expansions += 1;
       if (expansions > MAX_SYMLINK_EXPANSIONS) {
-        throw new Error(`export root has too many symlink levels: ${configuredRoot}`);
+        throw new FilesystemFailure({ operation: "fs.open", message: `export root has too many symlink levels: ${configuredRoot}`, cause: "symlink expansion exceeded MAX_SYMLINK_EXPANSIONS" });
       }
       // Both branches must be lexically normalized. An absolute target may
       // still carry "."/".." components, and leaving them raw makes
@@ -418,11 +418,11 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
 
 function directoryNames(fd: number, testHooks: FsDriverTestHooks): string[] {
   const duplicate = openAt(fd, ".", constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-  if (!("fd" in duplicate)) throw new Error("directory duplication failed");
+  if (!("fd" in duplicate)) throw new FilesystemFailure({ operation: "fs.list", message: "directory duplication failed", cause: `openat errno ${duplicate.errno}` });
   const directory = (testHooks.openDirectoryStream ?? libc.symbols.fdopendir)(duplicate.fd);
   if (directory === null) {
     closeSync(duplicate.fd);
-    throw new Error("fdopendir failed");
+    throw new FilesystemFailure({ operation: "fs.list", message: "fdopendir failed", cause: "fdopendir returned NULL" });
   }
   const names: string[] = [];
   try {

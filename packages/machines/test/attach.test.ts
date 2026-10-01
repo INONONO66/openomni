@@ -563,7 +563,7 @@ describe("machine attach handshake", () => {
     });
     try {
       await expect(attachMachineDaemon({ socketPath: path, offer: offer() })).rejects.toMatchObject(
-        { _tag: "ForeignFailure", operation: "daemon.attach.response", cause: expect.stringContaining("invalid") },
+        { _tag: "MachinesFailure", operation: "daemon.attach.response", cause: expect.stringContaining("invalid") },
       );
     } finally {
       rogue.close();

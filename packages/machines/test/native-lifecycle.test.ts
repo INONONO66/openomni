@@ -119,7 +119,7 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
         close: () => Effect.sync(() => { closeCount += 1; runnerClosed.resolve(); }),
       },
     })));
-    expect(error).toMatchObject({ _tag: "ForeignFailure", operation: "daemon.attach.response" });
+    expect(error).toMatchObject({ _tag: "MachinesFailure", operation: "daemon.attach.response" });
     await within(runnerClosed.promise, "runner rollback");
     await within(disconnected.promise, "failed daemon socket close");
     expect(closeCount).toBe(1);
