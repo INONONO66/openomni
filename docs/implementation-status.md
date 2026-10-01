@@ -11,13 +11,17 @@ identity, and no production module throws a bare `Error`.
   `ChannelsFailure` (each a `Data.TaggedError` with `operation`/`cause`)
   replace `ForeignFailure`; `Failure.of` synthesizes `AgentFailure`. The
   ledger/llm/ipc/codemode ones are temporary until #1246 folds those packages.
-- **Refusals fail typed, invariants die.** Effect code fails with a named
-  class (`SessionPolicyRefusal`, `SessionCommitError`,
-  `CompactionExecutionError`, `AgentInvariantViolation`, ...) or
-  `Effect.die`s with a named reason; pure tool bodies and
-  protocol/ui/desktop throw named error classes (`CliError`,
-  `AppInvariantError`, `ConfigurationError`, `TranscriptRecordingDefect`,
-  ...). `rg 'throw new Error\\(' packages/*/src apps/*/src` is zero.
+- **Refusals are values, failures are typed, invariants are defects.**
+  Policy refusals are plain result data returned to the caller
+  (`SessionPolicyRefusal`). Expected Effect failures are the typed
+  `Data.TaggedError` classes in each package union (the package `*Failure`s,
+  `ContextRestoreError`, `CompactionExecutionError`, ...). Broken invariants
+  are defects — thrown Errors or `Effect.die` (`AgentInvariantViolation`,
+  `LedgerInvariant`, `ActorRegistryRefused`); `SessionCommitError` is thrown
+  by the synchronous `requireCommit`. Pure tool bodies and protocol/ui/desktop throw
+  named error classes (`CliError`, `AppInvariantError`,
+  `ConfigurationError`, `TranscriptRecordingDefect`, ...).
+  `rg 'throw new Error\\(' packages/*/src apps/*/src` is zero.
 - **Deleted, not replaced.** `AlarmRefused`, `InboxCommitRefused` and the
   never-built `inbox`/`alarms` capability values; the five
   `executor-context` guards fold into `requireExecutor()`;
