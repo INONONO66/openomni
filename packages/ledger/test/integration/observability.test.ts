@@ -107,40 +107,69 @@ describe("ledger-first observations", () => {
     );
   });
 
-  test("a throwing failure port never unwinds a committed append or commit", () => {
-    const throwing: ObservationSink = {
-      publish() {
-        throw new Error("sink failed");
-      },
-    };
-    const port = (): never => {
-      throw new Error("reporter failed");
-    };
-    using db = openLedgerDatabase();
-    const transaction = <T,>(operation: () => T): T => db.transaction(operation).immediate();
-    const actions = createActions(db, transaction, throwing, port);
-    const sessions = createSessions(db, transaction, throwing, port);
-    runLedgerSync(sessions.create(session("session-ported")));
+  // Each row is one value a sink may throw: an Error, and an object whose own
+  // String() conversion throws, which must still reach the port as a bounded
+  // diagnostic. The port counts every report and then throws itself.
+  test.each([
+    ["an Error", new Error("sink failed"), "sink failed"],
+    ["a value String() cannot render", { toString: 0 }, "sink threw an unrepresentable object"],
+  ])(
+    "a sink throwing %s and a throwing port never unwind materialize, append or a batch commit",
+    (_case, thrown, message) => {
+      const throwing: ObservationSink = {
+        publish() {
+          throw thrown;
+        },
+      };
+      const reported: string[] = [];
+      const port = (failure: ObservationPublishFailure): never => {
+        reported.push(`${failure.actionId}:${failure.cause.message}`);
+        throw new Error("reporter failed");
+      };
+      using db = openLedgerDatabase();
+      const transaction = <T,>(operation: () => T): T => db.transaction(operation).immediate();
+      const actions = createActions(db, transaction, throwing, port);
+      const sessions = createSessions(db, transaction, throwing, port);
 
-    const appended = actions.append(action("action-appended", "session-ported"), 0);
-    expect(appended?.revision).toBe(1);
-    runLedgerSync(sessions.adoptFence({ sessionId: "session-ported", owner: "writer", fence: 1 }));
-    const committed = runLedgerSync(
-      sessions.commit({
-        sessionId: "session-ported",
-        owner: "writer",
-        fence: 1,
-        now: 101,
-        expectedRevision: 1,
-        actions: [{ ...action("action-committed", "session-ported"), parentId: "action-appended" }],
-        state: "running",
-      }),
-    );
+      const materialized = runLedgerSync(
+        sessions.materialize({
+          row: session("session-ported"),
+          initialAction: { ...action("action-configured", "session-ported"), kind: "session.configure" },
+        }),
+      );
+      expect(materialized).toMatchObject({ created: true, receipt: { revision: 1 } });
+      const appended = actions.append(action("action-appended", "session-ported"), 1);
+      expect(appended?.revision).toBe(2);
+      runLedgerSync(sessions.adoptFence({ sessionId: "session-ported", owner: "writer", fence: 1 }));
+      const committed = runLedgerSync(
+        sessions.commit({
+          sessionId: "session-ported",
+          owner: "writer",
+          fence: 1,
+          now: 101,
+          expectedRevision: 2,
+          actions: [
+            { ...action("action-first", "session-ported"), parentId: "action-appended" },
+            { ...action("action-second", "session-ported"), parentId: "action-first" },
+          ],
+          state: "running",
+        }),
+      );
 
-    expect(committed.receipts.map((receipt) => receipt.action.id)).toEqual(["action-committed"]);
-    expect(sessionTree("session-ported", actions).map((node) => node.id)).toEqual([
-      "action-appended",
-      "action-committed",
-    ]);
-  });
+      expect(committed.receipts.map((receipt) => receipt.revision)).toEqual([3, 4]);
+      expect(sessions.get("session-ported")?.revision).toBe(4);
+      expect(sessionTree("session-ported", actions).map((node) => node.id)).toEqual([
+        "action-configured",
+        "action-appended",
+        "action-first",
+        "action-second",
+      ]);
+      // Every committed receipt was reported, including the second of the batch.
+      expect(reported).toEqual(
+        ["action-configured", "action-appended", "action-first", "action-second"].map(
+          (id) => `${id}:${message}`,
+        ),
+      );
+    },
+  );
 });
