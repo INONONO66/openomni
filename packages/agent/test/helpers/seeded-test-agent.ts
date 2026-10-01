@@ -35,6 +35,7 @@ export function seededTestAgent(retryAlarm: NonNullable<ExecutorOptions["retryAl
         signal: config.signal,
         clock: () => Date.now(),
         entropy: record.entropy,
+        random: () => 0,
         retryAlarm,
         identity: {
           sessionId: input.traceContext?.sessionId ?? "session",

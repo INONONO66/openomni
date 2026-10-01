@@ -14,7 +14,7 @@ export function recordingExecutor(options: { readonly policy?: CompiledPolicySna
     retryAlarm: { arm: () => Effect.void, wait: () => Effect.void, settle: () => Effect.void },
     ledger: { commit: (action: LedgerAction.Append) => record.ledger.commit(action).pipe(Effect.tap(() => Effect.promise(async () => { await options.onCommit?.(action); }))) },
     observations: { publish: (event) => options.onObservation?.(event.name) },
-    identity: { sessionId: "session-1", role: "resident", parentActionId: null }, clock: options.clock ?? (() => 1), entropy: record.entropy,
+    identity: { sessionId: "session-1", role: "resident", parentActionId: null }, clock: options.clock ?? (() => 1), entropy: record.entropy, random: () => 0,
   });
   return { ...record, executor };
 }

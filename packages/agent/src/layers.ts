@@ -1,16 +1,11 @@
 import { Layer, type Context } from "effect";
-import { Clock, Entropy, ObservationSink } from "./services";
+import { Entropy, type EntropySource } from "./core/entropy";
+import { ObservationSink } from "./services";
 
-export interface AgentProcessOptions {
-  readonly clock?: () => number;
-  readonly entropy?: () => string;
-}
-
-/** Pure clock/entropy values and a borrowed root observation port. */
-export function AgentProcessLive(observations: Context.Service.Shape<typeof ObservationSink>, options: AgentProcessOptions = {}) {
+/** Composition-root-supplied entropy and a borrowed root observation port; time comes from Effect's Clock. */
+export function AgentProcessLive(observations: Context.Service.Shape<typeof ObservationSink>, entropy: EntropySource) {
   return Layer.mergeAll(
-    Layer.succeed(Clock, { now: options.clock ?? Date.now }),
-    Layer.succeed(Entropy, { next: options.entropy ?? (() => crypto.randomUUID()) }),
+    Entropy.layer(entropy),
     Layer.succeed(ObservationSink, observations),
   );
 }

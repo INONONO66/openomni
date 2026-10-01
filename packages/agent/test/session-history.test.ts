@@ -1,3 +1,4 @@
+import { messageSource } from "./helpers/message-source";
 import { expect, test } from "bun:test";
 import {
   type LedgerAction,
@@ -33,7 +34,7 @@ for (const terminal of [undefined, "interrupted", "error"] as const) {
       });
     }
     function assistant(turn: string): Message.WithParts {
-      const message = createAssistantMessage("", "", "history", undefined, 1);
+      const message = createAssistantMessage("", "", "history", messageSource, undefined, 1);
       message.info.id = `${turn}-message`;
       message.parts.push(
         ...["A", "B", "C"].map(

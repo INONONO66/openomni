@@ -18,12 +18,8 @@ import { describe, expect, it } from "bun:test";
 
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
-import {
-  Bus,
-  closeSessions,
-  createSessionChatRunner,
-  type Executor,
-} from "../src/index";
+import { closeSessions, createSessionChatRunner, type Executor,  } from "../src/index";
+import { Bus } from "./helpers/bus";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";

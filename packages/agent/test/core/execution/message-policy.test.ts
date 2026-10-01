@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { testExecutor } from "../../helpers/executor";
 import { type ChatFixture, chatServices } from "../../helpers/chat-services";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
@@ -54,6 +55,7 @@ test("the final result consumes the executor-transformed canonical assistant rat
     observations: { publish: () => undefined },
     clock: () => 1,
     entropy: recording.entropy,
+    random: () => 0,
     identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
   });
   const result = await isolated(
@@ -66,7 +68,7 @@ test("the final result consumes the executor-transformed canonical assistant rat
         resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
         run: (_input: RunInput, sink: Sink) =>
           Effect.sync(() => {
-            sink.onMessage(createAssistantMessage("raw text", "", "session"));
+            sink.onMessage(createAssistantMessage("raw text", "", "session", messageSource));
             return { type: "stop" as const };
           }),
       },

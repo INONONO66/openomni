@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { AgentFailure, CommitFailed, type ExecutionError } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
@@ -11,7 +11,7 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
-import { Clock, Entropy } from "./services";
+import { Entropy } from "./services";
 import { getSessionHandle } from "./session-handle";
 import { requestBindingDigest } from "./session-request";
 import { commitSessionRequest } from "./session-admission";
@@ -113,10 +113,10 @@ function openedRequest(
   return request;
 }
 
-export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<SessionRequestPort, never, Clock | Entropy> {
+export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<SessionRequestPort, never, Entropy> {
   return Effect.gen(function* () {
-  const clock = (yield* Clock).now;
-  const entropy = (yield* Entropy).next;
+  const clock = yield* Clock.clockWith(Effect.succeed).pipe(Effect.map((service) => () => service.currentTimeMillisUnsafe()));
+  const { id } = yield* Entropy;
   function transition(
     sessionId: string,
     payload: SessionTransition.Payload,
@@ -131,7 +131,7 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
     // the session's current activation for exactly this commit. A concurrently
     // live activation elsewhere observes the higher fence and goes stale; on
     // the entity plane these transitions route through the entity instead.
-    const owner = `${runtime.processId ?? process.pid}:request:${entropy()}`;
+    const owner = `${runtime.processId ?? process.pid}:request:${id()}`;
     const kernel = runtime.openKernel(sessionId);
     const now = clock();
     const fence = yield* adoptSessionAuthority(kernel, sessionId, owner).pipe(

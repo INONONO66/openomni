@@ -39,6 +39,7 @@ import { textMessage } from "./messages";
 import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionSession as sessionId } from "./reconstruction-fixture";
 import { seedPolicy } from "./seed-policy";
+import { uniqueEntropy } from "./time";
 import {
   allowConfigure,
   isolatedRuntime,
@@ -332,6 +333,7 @@ function recoverReconstruction(point: Point, dbPath: string) {
             ...isolatedRuntime(),
             observations: { publish: () => undefined },
             clock: () => 100_000,
+            entropy: uniqueEntropy("recover"),
             authorizeConfigure: allowConfigure,
           };
           let runnerHistory: Message.WithParts[] = [];

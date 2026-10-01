@@ -6,7 +6,7 @@ import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../src/core/execution/events";
 import { stepSnapshot } from "../helpers/messages";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { completeModel, mockLlm, createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 

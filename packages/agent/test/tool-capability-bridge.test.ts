@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
@@ -50,7 +51,7 @@ function bundle(generation: number, definitions: readonly AnyToolDefinition[], b
 function setup(definitions: readonly AnyToolDefinition[], signal?: AbortSignal) {
   return Effect.gen(function* () {
     const options = yield* nativeExecutorOptions();
-    const bus = createObservationBus();
+    const bus = testBus();
     const generations = yield* makeSessionGenerations(bundle(1, definitions, bus));
     const captureScope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(captureScope, Exit.void));

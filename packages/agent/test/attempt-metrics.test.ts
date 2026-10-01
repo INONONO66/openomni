@@ -71,6 +71,7 @@ test("a real committed failed attempt contributes billed usage once", () =>
       identity,
       clock,
       entropy,
+      random: () => 0,
       policy: allowAllPolicy,
       observations: { publish: () => undefined },
       retryAlarm: { arm: () => Effect.void, wait: () => Effect.void, settle: () => Effect.void },

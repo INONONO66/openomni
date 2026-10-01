@@ -5,7 +5,7 @@ import { failure as failed } from "../../helpers/g0-signals";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/g0-effect";
 import { failureFacts } from "../../../src/core/retry";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { providerFailure, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 

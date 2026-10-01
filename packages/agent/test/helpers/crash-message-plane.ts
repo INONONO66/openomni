@@ -16,6 +16,7 @@ import { awaitCrashStart, holdCrashBarrier } from "./crash-channel";
 import { receiveOutbound } from "./effect-g2";
 import { seedPolicy } from "./seed-policy";
 import { reactivateSession } from "./wake-session";
+import { uniqueEntropy } from "./time";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./session-services";
 
 export const messagePlanePoint = z.enum([
@@ -62,6 +63,7 @@ function watchCut() {
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
       authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => now,
+      entropy: uniqueEntropy("watch"),
       onHibernate: () => Effect.sync(() => { hibernated += 1; }),
     };
     const handle = yield* withSessionServices(session({
@@ -118,6 +120,7 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
       authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => now,
+      entropy: uniqueEntropy("recover"),
       dispatchOutbound: ({ message }) => Effect.gen(function* () {
         dispatches += 1;
         if (point === "platform_send_committed_before_local_ack_reconciled_sent" || point === "platform_send_ambiguous_without_reconciliation")

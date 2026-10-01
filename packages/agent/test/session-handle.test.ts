@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import type { Inbox, PolicyRow } from "@openomni/protocol";
@@ -28,7 +29,7 @@ import { GenerationRawSlots } from "../src/session-generations";
 import { receivedMessages } from "../src/session-record";
 import { createObservationBus } from "../src/observation/bus";
 import type { SessionKernel } from "../src/cluster/kernel-registry";
-import { Bus } from "../src/index";
+import { Bus } from "./helpers/bus";
 
 // ---------------------------------------------------------------------------
 // Ported to the entity plane (W5.2 #1197): handle-scoped kernels via
@@ -329,8 +330,10 @@ function testProgram<A, E>(
       }),
     ),
     (): IsolatedLedgerHandle => {
-      const sessionStore = openSessionStore(":memory:", sink);
-      const catalogStore = openCatalogStore(":memory:", sink);
+      let storeNow = 0;
+      const storeOptions = { now: () => (storeNow += 1), observationSink: sink };
+      const sessionStore = openSessionStore(":memory:", storeOptions);
+      const catalogStore = openCatalogStore(":memory:", storeOptions);
       const testKernel = SessionHandleStore.createSessionKernel(sessionStore, catalogStore);
       return {
         kernel: testKernel,
@@ -338,7 +341,7 @@ function testProgram<A, E>(
         listSessions: () => testKernel.listRows(),
         session: sessionStore,
         catalog: catalogStore,
-        bus: createObservationBus(),
+        bus: testBus(),
         close: () => {
           sessionStore.close();
           catalogStore.close();

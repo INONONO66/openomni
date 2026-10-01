@@ -5,7 +5,7 @@ import { providerFailure } from "../helpers/mock-llm";
 import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it } from "bun:test";
 import { assistantTextSnapshot } from "../helpers/messages";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { mockLlm, createStopOutcome, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 

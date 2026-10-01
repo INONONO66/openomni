@@ -13,7 +13,8 @@ export type RetryReason =
  * an abort is an instruction to stop, never a fault to classify as retryable,
  * so it can appear on `agent.run.failed` but never on `agent.error.retry`.
  */
-export type TerminalReason = RetryReason | "aborted";
+/** "unclassified": the run died without attaching failure facts — an honest absence, never defaulted to a transient claim. */
+export type TerminalReason = RetryReason | "aborted" | "unclassified";
 
 /**
  * The typed abort the loop throws when it observes its own signal. The name

@@ -80,7 +80,7 @@ export function runBenchEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 export async function firstDelta(now: () => number) {
   const first = Promise.withResolvers<number>();
   const record = recordingLedger();
-  const services = firstDeltaServices.pipe(Context.add(Entropy, { next: record.entropy }));
+  const services = firstDeltaServices.pipe(Context.add(Entropy, { id: record.entropy, random: () => 0 }));
   const input = runInput([{ role: "user", content: "hello" }]);
   const sink = {
     onMessage: () => first.resolve(now() - start),
@@ -117,7 +117,7 @@ export function toolDispatch() {
         identity: { sessionId: "session-1", role: "resident", parentActionId: null },
       });
       return yield* createDispatcher({ executor });
-    }).pipe(Effect.provide(dispatchServices.pipe(Context.add(Entropy, { next: record.entropy })))),
+    }).pipe(Effect.provide(dispatchServices.pipe(Context.add(Entropy, { id: record.entropy, random: () => 0 })))),
   );
   return {
     committed: record.committed,
@@ -134,8 +134,10 @@ export function toolDispatch() {
 export async function roundTrip() {
   // Handle-scoped kernel over fresh in-memory stores (W5.2): the benchmark owns
   // its stores' lifetime and keeps the no-op observation port as the commit sink.
-  const sessionStore = openSessionStore(":memory:", events);
-  const catalog = openCatalogStore(":memory:", events);
+  let tick = 0;
+  const storeOptions = { now: () => (tick += 1), observationSink: events };
+  const sessionStore = openSessionStore(":memory:", storeOptions);
+  const catalog = openCatalogStore(":memory:", storeOptions);
   const kernel: SessionHandleStore.SessionKernel =
     SessionHandleStore.createSessionKernel(sessionStore, catalog);
   seedPolicy([], catalog.policies);

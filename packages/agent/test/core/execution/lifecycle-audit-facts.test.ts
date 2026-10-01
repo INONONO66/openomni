@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { bounded } from "../../helpers/bounded";
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
@@ -5,12 +6,12 @@ import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { runTestAgent } from "../../helpers/effect-g1";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { mockLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 function measuredMessage(outputTokens: number): Message.WithParts {
-  const message = createAssistantMessage("ok", "", "audit-session");
+  const message = createAssistantMessage("ok", "", "audit-session", messageSource);
   if (message.info.role !== "assistant") throw new Error("expected assistant message");
   return {
     ...message,

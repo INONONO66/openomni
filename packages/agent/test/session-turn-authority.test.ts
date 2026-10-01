@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import type { BusEvent } from "@openomni/protocol";
+import type { BusEvent, PlainValue } from "@openomni/protocol";
 import { isolated } from "./helpers/isolated";
 import { seedPolicy } from "./helpers/seed-policy";
 import {
@@ -25,12 +25,13 @@ test("unknown provenance never acts: evidence authority plus a typed violation f
 });
 
 test("known trusted origins keep acting with no violation", () => {
-  for (const origin of [
+  const origins: readonly (PlainValue | undefined)[] = [
     undefined,
     { kind: "session", id: "parent" },
     { kind: "message", messageId: "m1", senderSessionId: "parent", sourceActionId: "a1" },
     { kind: "external", messageId: "m", surface: "ws", externalId: "e", actorId: "", inboundTreatment: "full_access" },
-  ]) {
+  ];
+  for (const origin of origins) {
     expect(inboundAuthority(origin)).toEqual({ authority: "act" });
   }
 });
@@ -39,7 +40,7 @@ test("known trusted origins keep acting with no violation", () => {
 // runner with evidence authority and records the violation observation.
 test("a turn over unknown-provenance mail runs as evidence and records the violation fact", () => {
   const published: { name: string; data: Record<string, unknown> }[] = [];
-  const authorities: string[] = [];
+  const authorities: (string | undefined)[] = [];
   const runner: SessionRunner = (input) =>
     Effect.sync(() => {
       authorities.push(input.authority);

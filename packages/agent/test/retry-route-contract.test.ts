@@ -63,7 +63,7 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
       model: primary, modelFallbacks: [fallback], executor, execution: executor,
       events: { publish: () => undefined },
       llm: {
-        resolveModel: (model) => Effect.sync(() => {
+        resolveModel: ({ now: _now, ...model }) => Effect.sync(() => {
           resolved.push(model);
           return { id: model.id, name: model.id, providerID: model.provider };
         }),

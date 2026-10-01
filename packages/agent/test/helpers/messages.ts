@@ -1,8 +1,9 @@
+import { messageSource } from "./message-source";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { createAssistantMessage } from "../../src/core/message-factory";
 
 export function assistantTextSnapshot(text: string, input: number, output: number): Message.WithParts {
-  const message = createAssistantMessage(text, "", "session");
+  const message = createAssistantMessage(text, "", "session", messageSource);
   if (message.info.role !== "assistant") throw new Error("expected assistant message");
   return {
     ...message,
@@ -21,7 +22,7 @@ export function stepFinish(id: string, reason: string, input = 0, output = 0): M
 }
 
 export function stepSnapshot(id: string, text: string, reason: string, input = 0, output = 0): Message.WithParts {
-  const message = createAssistantMessage(text, "", "session");
+  const message = createAssistantMessage(text, "", "session", messageSource);
   return {
     ...message,
     info: { ...message.info, id },

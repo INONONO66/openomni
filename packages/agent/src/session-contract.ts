@@ -1,4 +1,4 @@
-import { Effect, type Context } from "effect";
+import { Clock, Effect, type Context } from "effect";
 import type { SessionError, ExecutionError } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
 import type { SessionHandleStore } from "@openomni/ledger";
@@ -17,7 +17,7 @@ import type {
 import type { ChatAgentConfig } from "./core/types";
 import type { decideSessionAdmission } from "./session-admission";
 import type { ExecutionApprovals, ExecutionResult, ExecutorOptions } from "./executor";
-import { Clock, Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices } from "./services";
+import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices } from "./services";
 
 export interface SessionTool {
   readonly name: string;
@@ -172,11 +172,11 @@ export interface ResolvedSessionRuntime extends SessionRuntime {
 export function resolveSessionRuntime(runtime: SessionRuntime): Effect.Effect<ResolvedSessionRuntime, never, SessionEntryServices> {
   return Effect.gen(function* () {
     const services = yield* Effect.context<SessionEntryServices>();
-    const clock = yield* Clock;
+    const clock = yield* Clock.clockWith(Effect.succeed);
     const entropy = yield* Entropy;
     const observations = yield* ObservationService;
     const generations = yield* GenerationLayers;
-    return { ...runtime, clock: clock.now, entropy: entropy.next, observations, generations, services };
+    return { ...runtime, clock: () => clock.currentTimeMillisUnsafe(), entropy: entropy.id, observations, generations, services };
   });
 }
 

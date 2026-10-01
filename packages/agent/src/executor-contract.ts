@@ -234,4 +234,6 @@ export interface ResolvedExecutorOptions extends ExecutorOptions {
   readonly observations: ObservationSink | BusEvent.Sink;
   readonly clock: () => number;
   readonly entropy: () => string;
+  /** Uniform [0,1) draw for retry jitter; injected beside clock/entropy (#1245). */
+  readonly random: () => number;
 }

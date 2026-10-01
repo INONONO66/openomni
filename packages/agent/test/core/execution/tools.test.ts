@@ -1,6 +1,7 @@
 import { expect, it } from "bun:test";
 import { scopeObservation } from "../../../src/index";
-import { createObservationBus } from "../../../src/observation/bus";
+import { testBus } from "../../helpers/bus";
+
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -18,7 +19,7 @@ const Event = BusEvent.define(
 );
 
 it("applies scoped action identity after a malicious observation payload", async () => {
-  const bus = createObservationBus();
+  const bus = testBus();
   const seen = Promise.withResolvers<z.infer<typeof Event.schema>>();
   const stop = bus.subscribe(Event, (event) => seen.resolve(event));
   const scoped = scopeObservation(
@@ -29,7 +30,7 @@ it("applies scoped action identity after a malicious observation payload", async
       callId: "trusted-call",
       agentName: "resident",
     },
-    { clock: () => 41, entropy: () => "event-1" },
+    { now: () => 41, id: () => "event-1" },
   );
 
   scoped.publish(Event, {

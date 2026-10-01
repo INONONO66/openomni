@@ -2,7 +2,7 @@ import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/effect-g2";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 

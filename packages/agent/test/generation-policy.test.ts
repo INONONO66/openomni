@@ -1,12 +1,13 @@
+import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "@openomni/policy";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import { Effect, Layer } from "effect";
+import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";
 import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/bundle";
 import { makeSessionGenerations } from "../src/session-generations";
-import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { createTurnDispatcher, defineTool, sessionTool } from "../src/tool-dispatcher";
 import { createObservationBus } from "../src/observation/bus";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -43,9 +44,9 @@ function generationFixture(rows: readonly BundleRow[], bodies: PlainValue[]) {
       tools: selected.tools.map(sessionTool), system: { preset: "", blocks: [] },
     });
     const seed = Layer.mergeAll(
-      Layer.succeed(Clock, yield* Clock), Layer.succeed(Entropy, yield* Entropy),
+      Layer.succeed(Clock.Clock, yield* Clock.clockWith(Effect.succeed)), Layer.succeed(Entropy, yield* Entropy),
       Layer.succeed(ToolCatalog, { definitions: selected.tools }),
-      Layer.succeed(ObservationSink, createObservationBus()),
+      Layer.succeed(ObservationSink, testBus()),
     );
     const layer = Layer.effect(SessionLayer, Effect.gen(function* () {
       const registry = yield* NamedPolicyRegistry;

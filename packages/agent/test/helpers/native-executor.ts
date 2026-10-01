@@ -55,7 +55,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId, handle?: S
     let sequence = kernel.row(id).revision;
     return {
       policy: nativePolicy, ledger, observations: { publish: () => undefined },
-      clock: () => now, entropy: () => `${id}:${now}:${++sequence}`,
+      clock: () => now, entropy: () => `${id}:${now}:${++sequence}`, random: () => 0,
       identity: { sessionId: id, role: "resident", parentActionId: turnId, turnId },
     } satisfies ResolvedExecutorOptions;
   });

@@ -1,3 +1,4 @@
+import { messageSource } from "../helpers/message-source";
 import { recordingResolveModel } from "../helpers/resolve-model";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../helpers/isolated";
@@ -6,8 +7,9 @@ import { describe, expect, it } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
+import type { RunnerServices } from "../../src/services";
 import { createAssistantMessage } from "../../src/core/message-factory";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { createStopOutcome, providerFailure, type MockLlmFn } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 import { stepSnapshot } from "../helpers/messages";
@@ -28,7 +30,7 @@ function fallbackHarness(errorMessage: string) {
           errorMessage === "validation failed" ? { retryable: false, statusCode: 400 } : {},
         ),
       };
-    sink.onMessage(createAssistantMessage("recovered", "", "session"));
+    sink.onMessage(createAssistantMessage("recovered", "", "session", messageSource));
     return createStopOutcome();
   };
   return {
@@ -40,7 +42,7 @@ function fallbackHarness(errorMessage: string) {
   };
 }
 
-function afterFirstRetry<T, E>(operation: () => Effect.Effect<T, E>): Promise<T> {
+function afterFirstRetry<T, E>(operation: () => Effect.Effect<T, E, RunnerServices>): Promise<T> {
   return isolated(
     Effect.scoped(
       Effect.gen(function* () {

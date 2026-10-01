@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { PlainValue } from "@openomni/protocol";
 import { inboundAuthority } from "../src/session-turn";
 
 const external = { kind: "external", messageId: "m1", surface: "ws", externalId: "alice", actorId: "" };
@@ -25,7 +26,8 @@ test("external origins without a decodable treatment fail closed with a violatio
 });
 
 test("an unrecognized origin shape is unknown provenance: evidence plus a violation", () => {
-  for (const origin of [{}, { kind: "mystery" }, { kind: "session" }, "garbage" as const]) {
+  const origins: readonly PlainValue[] = [{}, { kind: "mystery" }, { kind: "session" }, "garbage"];
+  for (const origin of origins) {
     const decision = inboundAuthority(origin);
     expect(decision.authority).toBe("evidence_only");
     expect(decision.violation?.reason).toBe("unknown_origin");

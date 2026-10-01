@@ -152,7 +152,7 @@ export function createAttemptRunner(
     return Effect.gen(function* () {
       if (failureRequiresStop(failure, options.signal)) return yield* terminalFailure(failure, attempt);
       const overflow = Retry.isContextOverflow(failure);
-      const decision = Retry.decide(attempt, failure, instantFailures, prepared.fallbackAvailable);
+      const decision = Retry.decide(attempt, failure, { now: options.clock, random: options.random }, instantFailures, prepared.fallbackAvailable);
       if (attempt >= Retry.MAX_ATTEMPTS) return yield* terminalFailure(failure, attempt);
       const recover = overflow && (yield* attempts.recoverOverflow?.(failure) ?? Effect.succeed(false));
       if (!recover && (overflow || !decision.retry)) return yield* terminalFailure(failure, attempt);

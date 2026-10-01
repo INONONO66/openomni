@@ -1,14 +1,15 @@
-import { Effect, type Scope } from "effect";
-import { type ExecutionError, Interrupted } from "../../errors";
+import { Clock, Effect, type Scope } from "effect";
+import { AgentInvariantViolation, type ExecutionError, Interrupted } from "../../errors";
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
 import type { RunInput, Sink } from "@openomni/llm";
-import { type Message, Operational, type BusEvent } from "@openomni/protocol";
+import type { Message, BusEvent } from "@openomni/protocol";
 import { assistantTextOf, createTrackingSink, recordAssistant } from "./turn-assistant";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";
+import { Entropy } from "../entropy";
 import type { CompactionSession } from "../../compaction";
 import { applyCompaction, prepareCompactionAfterContinue } from "./turn-compaction";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
-import { createAssistantMessage, createUserMessage, withMessageId } from "../message-factory";
+import { createUserMessage, withMessageId, type MessageSource } from "../message-factory";
 import { settleModelTools } from "./tool-wave";
 import { AgentStopError, type StopVerdict } from "./stop-chain";
 import * as Retry from "../retry";
@@ -33,6 +34,7 @@ export function buildTurn(
   providerModel: RunInput["model"],
   configuredToolChoice: RunInput["toolChoice"],
   trace: RunTrace,
+  source: MessageSource,
   sink?: Sink,
 ): BuildTurnResult {
   recordRunTurn(state);
@@ -109,6 +111,8 @@ export function buildTurn(
               },
             }),
         providerOptions: config.providerOptions,
+        now: source.now,
+        id: source.id,
         trace: { traceId: trace.traceId, sessionId: trace.sessionId, runId: trace.runId },
       },
       trackingSink,
@@ -157,10 +161,16 @@ export function handleStop(
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
   compaction: CompactionSession | undefined,
-): Effect.Effect<StopOutcome, ExecutionError, Scope.Scope> {
+): Effect.Effect<StopOutcome, ExecutionError, Scope.Scope | Entropy> {
   return Effect.gen(function* () {
+  const now = yield* Clock.clockWith(Effect.succeed).pipe(
+    Effect.map((clock) => (): number => clock.currentTimeMillisUnsafe()),
+  );
   const assistantIndex = state.messages.length;
-  const snapshot = resolveTurnAssistant(config.events, state, turn, agentBase);
+  const snapshot = turn.turnAssistant.message;
+  // The llm fold owns the turn snapshot; its absence is a wiring defect, not a recoverable state.
+  if (snapshot === undefined)
+    return yield* Effect.die(new AgentInvariantViolation("llm sink emitted no assistant snapshot"));
   const initialAssistant = yield* recordAssistant(config, snapshot);
   turn.turnAssistant.message = initialAssistant;
   appendRunMessages(state, [initialAssistant]);
@@ -172,7 +182,7 @@ export function handleStop(
       config,
       turn.turnAssistant.message ?? initialAssistant,
     );
-  emitTurnComplete(config.events, state, agentBase, turn.turnUsage);
+  emitTurnComplete(config.events, state, agentBase, turn.turnUsage, now);
   const turnText = assistantTextOf(turn.turnAssistant.message);
   const step = { type: "text" as const, content: turnText };
   appendRunStep(state, step);
@@ -207,7 +217,7 @@ export function handleStop(
     interrupted: config.signal?.aborted === true,
     exhausted:
       yielded === "steps" ||
-      publishBudgetTelemetry(state.budgetState, agentBase, config.events, config.budget) ===
+      publishBudgetTelemetry(state.budgetState, agentBase, config.events, now, config.budget) ===
         "exceeded",
   });
   state.stop = judgment.state;
@@ -233,42 +243,27 @@ export function handleContinue(
   state: RunState,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
+  now: () => number,
 ): void {
-  emitTurnComplete(events, state, agentBase, turnUsage);
+  emitTurnComplete(events, state, agentBase, turnUsage, now);
   advanceRunTurn(state);
-}
-
-function resolveTurnAssistant(
-  events: BusEvent.Sink,
-  state: RunState,
-  turn: TurnArtifacts,
-  agentBase: AgentRunBase,
-): Message.WithParts {
-  if (turn.turnAssistant.message !== undefined) return turn.turnAssistant.message;
-  events.publish(Operational.Events.Error, {
-    traceId: agentBase.traceId,
-    time: Date.now(),
-    sessionId: agentBase.sessionId,
-    component: "agent.turn",
-    msg: "llm sink emitted no assistant snapshot — test stub?",
-  });
-  const parentID = state.messages.at(-1)?.info.id ?? "";
-  return createAssistantMessage("", parentID, state.sessionId);
 }
 
 export function drainStepBoundary(
   state: RunState,
   config: ChatAgentConfig,
   boundary: "before_llm" | "after_llm" | "after_tools",
-): Effect.Effect<number, ExecutionError> {
+): Effect.Effect<number, ExecutionError, Entropy> {
   if (config.boundary === undefined) return Effect.suspend(() =>
     config.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.succeed(0));
   return Effect.gen(function* () {
   const drained = yield* (config.boundary?.(boundary) ?? Effect.succeed(undefined));
   if (drained?.interrupted || config.signal?.aborted) return yield* Effect.fail(new Interrupted());
+  const { id } = yield* Entropy;
+  const created = yield* Clock.currentTimeMillis;
   for (const message of drained?.messages ?? []) {
     appendRunMessages(state, [
-      withMessageId(createUserMessage(message.text, state.sessionId), message.id),
+      withMessageId(createUserMessage(message.text, state.sessionId, { now: () => created, id }), message.id),
     ]);
   }
   return drained?.messages.length ?? 0;

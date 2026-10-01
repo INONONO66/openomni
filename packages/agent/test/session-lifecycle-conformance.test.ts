@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
@@ -283,8 +284,10 @@ function replayEffectFree(expected: ReadonlyMap<string, SessionSnapshot>, dispat
         // A second independent handle over the same durable image (W5.2 F1):
         // opening it commits nothing, publishes nothing, dispatches nothing.
         const replaySink = new TraceSink();
-        const reopenedSession = openSessionStore(dbPath, replaySink);
-        const reopenedCatalog = openCatalogStore(`${dbPath}.catalog`, replaySink);
+        let replayNow = 0;
+        const replayOptions = { now: () => (replayNow += 1), observationSink: replaySink };
+        const reopenedSession = openSessionStore(dbPath, replayOptions);
+        const reopenedCatalog = openCatalogStore(`${dbPath}.catalog`, replayOptions);
         const reopened = SessionHandleStore.createSessionKernel(reopenedSession, reopenedCatalog);
         try {
             for (const [sessionId, snapshot] of expected) {
@@ -1558,12 +1561,14 @@ function traceTest(body: () => Effect.Effect<void, SessionError | Error, Scope.S
  })), (): IsolatedLedgerHandle => {
  sink = new TraceSink();
  directory = mkdtempSync(join(tmpdir(), "lifecycle-conformance-")); dbPath = join(directory, "ledger.sqlite");
- const sessionStore = openSessionStore(dbPath, sink);
- const catalogStore = openCatalogStore(`${dbPath}.catalog`, sink);
+ let storeNow = 0;
+ const storeOptions = { now: () => (storeNow += 1), observationSink: sink };
+ const sessionStore = openSessionStore(dbPath, storeOptions);
+ const catalogStore = openCatalogStore(`${dbPath}.catalog`, storeOptions);
  const traceKernel = SessionHandleStore.createSessionKernel(sessionStore, catalogStore);
  return {
   kernel: traceKernel, openKernel: () => traceKernel, listSessions: () => traceKernel.listRows(),
-  session: sessionStore, catalog: catalogStore, bus: createObservationBus(),
+  session: sessionStore, catalog: catalogStore, bus: testBus(),
   close: () => { sessionStore.close(); catalogStore.close(); rmSync(directory, {recursive: true, force: true}); },
  };
  });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { newTraceId, scopeObservation } from "../../src/index";
+import { scopeObservation } from "../../src/index";
+import { newTraceId } from "../helpers/bus";
 import { ObservationDeliveryFailed } from "../../src/observation/bus";
 import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
@@ -17,12 +18,18 @@ const identity = {
   actorId: "actor-1",
 };
 
+/** Required stamp sources for scopes that do not assert on them. */
+function stamps() {
+  let n = 0;
+  return { now: () => 0, id: () => `event-${++n}` };
+}
+
 describe("scoped observations", () => {
   it("stamps authoritative identity, event id, and time onto payloads", () => {
     const sink = collector();
     const scoped = scopeObservation(sink, identity, {
-      clock: () => 42,
-      entropy: () => "event-1",
+      now: () => 42,
+      id: () => "event-1",
     });
 
     scoped.publish(TestEvent, {
@@ -59,7 +66,7 @@ describe("scoped observations", () => {
         extra: z.string(),
       }).parse(data)),
       scope: () => scoped,
-    }, identity, { clock: () => 42, entropy: () => "event-strict" });
+    }, identity, { now: () => 42, id: () => "event-strict" });
     scoped.publish(StrictEvent, { component: "test", msg: "strict", extra: "kept" } as never);
     expect(received[0]).toMatchObject({ component: "test", msg: "strict", extra: "kept" });
   });
@@ -67,8 +74,8 @@ describe("scoped observations", () => {
   it("merges child identity while retaining parent fields", () => {
     const sink = collector();
     const parent = scopeObservation(sink, identity, {
-      clock: () => 42,
-      entropy: () => "event-2",
+      now: () => 42,
+      id: () => "event-2",
     });
     const child = parent.scope?.({ runId: "run-2" });
     if (child === undefined) throw new Error("scoped sink must support child scopes");
@@ -94,6 +101,8 @@ describe("scoped observations", () => {
       },
     };
     const scoped = scopeObservation(hostile, identity, {
+      now: () => 0,
+      id: () => "event-error",
       onError: (error, name) => errors.push({ name, type: error.name }),
     });
 
@@ -137,11 +146,12 @@ describe("scoped observations", () => {
       },
     };
 
-    scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "default reporter" });
+    scopeObservation(hostile, identity, stamps()).publish(TestEvent, { component: "test", msg: "default reporter" });
     expect(failures).toEqual([{ eventName: TestEvent.name, error: "Error: sink failed" }]);
     failures.length = 0;
 
     const scoped = scopeObservation(hostile, identity, {
+      ...stamps(),
       onError() {
         throw reporterFailure;
       },
@@ -162,7 +172,7 @@ describe("scoped observations", () => {
       },
     };
     expect(() =>
-      scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "dropped" }),
+      scopeObservation(hostile, identity, stamps()).publish(TestEvent, { component: "test", msg: "dropped" }),
     ).not.toThrow();
   });
 
@@ -180,7 +190,7 @@ describe("scoped observations", () => {
         };
       },
     };
-    const scoped = scopeObservation(sink, identity);
+    const scoped = scopeObservation(sink, identity, stamps());
 
     const unsubscribe = scoped.subscribe?.(TestEvent, () => undefined);
     expect(subscribed).toBe(true);

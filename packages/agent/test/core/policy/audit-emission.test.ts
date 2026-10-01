@@ -40,6 +40,7 @@ it("awaits policy.decision commit before publishing its observation", async () =
     identity: { sessionId: "session-audit", role: "resident", parentActionId: "turn-parent" },
     clock: () => 42,
     entropy: (() => { let index = 0; return () => `audit-${++index}`; })(),
+    random: () => 0,
   });
   const running = yield* Effect.forkScoped(executor.run({ kind: "tool", op: "read", intent: { path: "/tmp/a" }, effect: { ok: true } }, () => Effect.succeed("done")));
   yield* Effect.promise(() => reached.promise).pipe(Effect.timeout("5 seconds"));

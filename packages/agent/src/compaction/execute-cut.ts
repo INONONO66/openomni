@@ -5,6 +5,7 @@ import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/prot
 import type { Executor } from "../executor";
 import { RunEvents } from "../core/execution/events";
 import { Compaction } from "./compact";
+import { Entropy } from "../core/entropy";
 
 type CompactionArguments = Parameters<typeof Compaction.compact>;
 
@@ -19,7 +20,7 @@ interface CompactionExecution {
 }
 
 /** Execute the existing strategy under admission; only the receipt releases observations. */
-export function executeCompaction(input: CompactionExecution): Effect.Effect<CompactionResult, ExecutionError> {
+export function executeCompaction(input: CompactionExecution): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
   const snapshot = structuredClone(input.history);
   const completed: (() => void)[] = [];

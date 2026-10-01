@@ -1,10 +1,11 @@
-import { Cause, Effect } from "effect";
+import { Cause, Clock, Effect } from "effect";
 import type { ExecutionError } from "../errors";
 import type { Message, BusEvent } from "@openomni/protocol";
 import { RunEvents } from "../core/execution/events";
 import type { CompactionYield } from "./geometry";
 import type { CompactionCandidate } from "./speculate";
 import type { ResolvedCompactionOptions, CompactionResult } from "./contract";
+import { Entropy } from "../core/entropy";
 import {
   resolveThresholdTokens,
   estimateMessagesTokens,
@@ -57,12 +58,13 @@ export namespace Compaction {
        * runs and the result reports the discard. */
       readonly candidate?: CompactionCandidate;
     },
-  ): Effect.Effect<CompactionResult, ExecutionError> {
-    return Effect.suspend(() => {
+  ): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
+    return Clock.clockWith(Effect.succeed).pipe(Effect.flatMap((clock) => Effect.suspend(() => {
+    const now = (): number => clock.currentTimeMillisUnsafe();
     const messagesBefore = messages.length;
     events.publish(RunEvents.CompactionStarted, {
       ...identity,
-      time: Date.now(),
+      time: now(),
       messagesBefore,
       ...(dispatch.measuredTokens === undefined ? {} : { contextTokens: dispatch.measuredTokens }),
       trigger: dispatch.trigger,
@@ -93,7 +95,7 @@ export namespace Compaction {
         : result;
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
-        time: Date.now(),
+        time: now(),
         outcome,
         messagesBefore,
         messagesAfter: result.messages.length,
@@ -130,7 +132,7 @@ export namespace Compaction {
       // the throw propagates unchanged into the seam's fail-closed contract.
       events.publish(RunEvents.CompactionCompleted, {
         ...identity,
-        time: Date.now(),
+        time: now(),
         outcome: "failed",
         messagesBefore,
         messagesAfter: messagesBefore,
@@ -139,6 +141,6 @@ export namespace Compaction {
         error: message,
       });
       })));
-    });
+    })));
   }
 }

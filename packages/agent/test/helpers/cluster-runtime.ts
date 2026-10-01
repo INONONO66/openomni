@@ -47,6 +47,9 @@ import {
   SessionEntityLive,
   type SessionEntityEnv,
 } from "../../src/cluster/session-entity";
+
+/** Integration-helper composition root: cluster fixtures run on the real wall clock. */
+const wallClock = () => Date.now();
 import {
   deadlineDelivery,
   retryDelivery,
@@ -300,9 +303,9 @@ function entityEnvLayer(options: TestClusterOptions) {
         (): SessionEntityEnv => ({
           owner: `test-runner-${process.pid}`,
           clock: () => Date.now(),
-          catalog: openCatalogStore(options.catalogFile),
+          catalog: openCatalogStore(options.catalogFile, { now: wallClock }),
           openSession: (sessionId) =>
-            openSessionStore(sessionFileFor(options.sessionsDir, sessionId)),
+            openSessionStore(sessionFileFor(options.sessionsDir, sessionId), { now: wallClock }),
           ports: {
             runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok"), options.detachTurns),
             timers: makeTimerPort(),
@@ -368,8 +371,8 @@ function provisionSession(options: TestClusterOptions, sessionId: string): Effec
     if (pending === undefined) {
       pending = runAgent(
         Effect.gen(function* () {
-          const catalog = openCatalogStore(options.catalogFile);
-          const store = openSessionStore(file);
+          const catalog = openCatalogStore(options.catalogFile, { now: wallClock });
+          const store = openSessionStore(file, { now: wallClock });
           const kernel = SessionHandleStore.createSessionKernel(store, catalog);
           const exists = (() => {
             try {

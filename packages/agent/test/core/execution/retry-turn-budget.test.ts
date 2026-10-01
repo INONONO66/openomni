@@ -6,13 +6,14 @@ import { RunEvents } from "../../../src/core/execution/events";
 import { runTestAgent } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";
 import { advanceRunTurn, createRunState, recordRunTurn } from "../../../src/core/execution/state";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
+import { testMessageSource } from "../../helpers/message-source";
 
 describe("turn budget across retries", () => {
   it("charges the same turn once and a subsequent turn once", () => {
-    const state = createRunState(runInput([{ role: "user", content: "hi" }]));
+    const state = createRunState(runInput([{ role: "user", content: "hi" }]), testMessageSource());
     recordRunTurn(state);
     recordRunTurn(state);
     expect(state.budgetState.turns).toBe(1);

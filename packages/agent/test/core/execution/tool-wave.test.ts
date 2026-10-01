@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { testExecutor, runAgentSync } from "../../helpers/executor";
 import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
 import { catalogLayer } from "../../helpers/service-layers";
@@ -42,6 +43,7 @@ function recording(overrides: Partial<ResolvedExecutorOptions> = {}) {
       identity: { sessionId: "session-1", role: "resident", parentActionId: null },
       clock: () => 1,
       entropy: record.entropy,
+      random: () => 0,
       closeGraceMs: 0,
       ...overrides,
     }),
@@ -59,8 +61,8 @@ function fallbackTurn(
   onToolResult: (result: { toolCallId: string }) => void = () => undefined,
 ) {
   const input = runInput([]);
-  const state = createRunState(input);
-  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, {
+  const state = createRunState(input, messageSource);
+  const built = buildTurn(state, config, { providerID: "test", id: "test", name: "test" }, undefined, input.traceContext, messageSource, {
     onMessage: () => undefined, onToolCall: () => undefined, onToolResult,
   });
   if (built.type !== "ready") throw new Error("turn unavailable");
@@ -374,7 +376,7 @@ it("holds the entire wave until every captured approval has a durable answer", (
 }))));
 
 function pendingAssistant(ids: readonly string[]): Message.WithParts {
-  const message = createAssistantMessage("", "", context.sessionId);
+  const message = createAssistantMessage("", "", context.sessionId, messageSource);
   return { ...message, parts: ids.map((id) => ({
     id: `${id}:part`, sessionID: context.sessionId, messageID: message.info.id,
     type: "tool", callID: id, tool: "timed", state: { status: "pending", input: {} },

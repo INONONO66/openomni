@@ -1,3 +1,4 @@
+import { messageSource } from "./helpers/message-source";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
 import { createTestAgent } from "./helpers/effect-g3";
@@ -6,9 +7,9 @@ import { Auth, LlmFailure } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
-import { Bus } from "../src/index";
+import { Bus } from "./helpers/bus";
 import { failureEvidence } from "../src/executor-outcome";
-import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { PolicyDenied, ToolBodyFailed, AgentFailure, CommitFailed, CompactionExecutionError, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
 import type { LedgerError } from "@openomni/ledger";
 import {
@@ -32,8 +33,8 @@ function agent(run: MockLlmFn) {
 
 
 test("agent foundation tags and failure evidence are runtime contracts", () => {
-  expect([Clock.key, Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
-    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
+  expect([Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
+    "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
   ]);
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
@@ -97,7 +98,7 @@ describe("ChatAgent public run contract", () => {
         seen.push(step);
       }),
       llm: mockLlm(async (_input, sink) => {
-        sink.onMessage(createAssistantMessage("done", "", "session"));
+        sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
         return createStopOutcome();
       }),
     }).run(runInput([{ role: "user", content: "hello" }])));
@@ -194,7 +195,13 @@ describe("ChatAgent public run contract", () => {
 
 describe("ChatAgent provider boundary failures", () => {
   it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
-    expect(await isolated(Effect.flip(agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
+    // #1245: the llm fold owns the empty-assistant fallback — a provider stop
+    // without model output still emits the empty snapshot through the sink,
+    // built from the injected now/id sources, and the toolless run fails.
+    expect(await isolated(Effect.flip(agent(async (input, sink) => {
+      sink.onMessage(createAssistantMessage("", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId, { now: input.now, id: input.id }));
+      return createStopOutcome();
+    }).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
   });
   it.each([
     {

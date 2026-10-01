@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Clock, Effect, Exit, Option } from "effect";
 import type { Message } from "@openomni/protocol";
 import { AgentInvariantViolation, type ExecutionError } from "../../errors";
 import type { ChatAgentConfig } from "../types";
@@ -33,6 +33,7 @@ export function settleModelTools(
     input: part.state.input,
   }));
   const execute = turn.toolExecutor;
+  const startedAt = yield* Clock.currentTimeMillis;
   if (config.toolWave === undefined && execute === undefined)
     return yield* Effect.die(new Error("tool wave executor is required"));
   const executed =
@@ -58,12 +59,19 @@ export function settleModelTools(
     return result;
   });
   const byId = new Map(results.map((result) => [result.toolCallId, result]));
-  const at = Date.now();
+  const settledAt = yield* Clock.currentTimeMillis;
+  // The out-of-process wave bills its real wall time once; the in-process
+  // executor path already billed per call inside prepareTurnTools.
+  if (config.toolWave !== undefined) {
+    const elapsedMs = settledAt - startedAt;
+    for (let index = 0; index < calls.length; index += 1) {
+      state.budgetState = recordToolCall(state.budgetState, index === 0 ? elapsedMs : 0);
+    }
+  }
   const parts = assistant.parts.map((part): Message.Part => {
     if (part.type !== "tool" || !pending.includes(part)) return part;
     const result = byId.get(part.callID);
     if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${part.callID}`);
-    if (config.toolWave !== undefined) state.budgetState = recordToolCall(state.budgetState, 0);
     return {
       ...part,
       state: result.isError
@@ -71,7 +79,7 @@ export function settleModelTools(
             status: "error",
             input: part.state.input,
             error: result.output,
-            time: { start: at, end: at },
+            time: { start: startedAt, end: settledAt },
           }
         : {
             status: "completed",
@@ -79,13 +87,16 @@ export function settleModelTools(
             output: result.output,
             title: part.tool,
             metadata: {},
-            time: { start: at, end: at },
+            time: { start: startedAt, end: settledAt },
           },
     };
   });
   turn.turnAssistant.message = { ...assistant, parts };
   for (const result of results) turn.trackingSink.onToolResult(result);
   turn.trackingSink.onMessage(turn.turnAssistant.message);
+  // Exhaustion is judged (and its telemetry published) once, in handleStop's
+  // stop judgment — an early fail here would terminate the run without the
+  // guaranteed "budget exceeded" operational record.
   return calls.length;
   });
 }

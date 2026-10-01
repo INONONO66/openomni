@@ -1,3 +1,4 @@
+import { messageSource } from "./helpers/message-source";
 import { PlainValueSchema } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { testTurnDispatcher } from "./helpers/service-layers";
@@ -25,6 +26,7 @@ import { createSessionChatRunner } from "../src/session-chat-runner";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { reopenableLedger } from "./helpers/reopenable-ledger";
 import { commitReceivedMessage } from "./helpers/ingress";
+import { uniqueEntropy } from "./helpers/time";
 
 for (const mode of ["interrupted", "crash-open"] as const) {
   test(`reopened SQLite ${mode} chooses the correct IDs and generation with no stale-fence writes`, () => {
@@ -36,6 +38,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             authorizeConfigure: allowConfigure,
             observations: { publish: () => undefined },
             clock: () => 1000,
+            entropy: uniqueEntropy("boot1"),
             ...isolatedRuntime(),
           };
           const entered = Promise.withResolvers<void>();
@@ -67,7 +70,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                             entered.resolve();
                             return yield* Effect.never;
                           }
-                          sink.onMessage(createAssistantMessage("recovered", "", input.sessionId));
+                          sink.onMessage(createAssistantMessage("recovered", "", input.sessionId, messageSource));
                           return { type: "stop" };
                         }),
                     },
@@ -191,6 +194,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
           runtime = {
             observations: { publish: () => undefined },
             clock: () => 2000,
+            entropy: uniqueEntropy("boot2"),
             authorizeConfigure: allowConfigure,
             ...isolatedRuntime(),
           };

@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import { SessionHandleStore } from "@openomni/ledger";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
@@ -19,7 +20,7 @@ function bundle(generation: number, closed: number[]): GenerationBundle {
     id: { sessionId: "generation-drain", generation }, snapshot, activate: Effect.void,
     layer: Layer.mergeAll(
       AgentGenerationLive({ snapshot, policy: allowAllPolicy, definitions: [] }),
-      Layer.succeed(ObservationSink, createObservationBus()),
+      Layer.succeed(ObservationSink, testBus()),
       Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
       Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => { closed.push(generation); }))),
     ),

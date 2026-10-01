@@ -13,6 +13,7 @@ import { elideToolOutputs } from "./reduce";
 import { resolveThresholdTokens, ESTIMATED_CHARS_PER_TOKEN } from "./estimate";
 import { isAnchorMessage, isWarmCandidateValid } from "./candidate";
 import { attemptAnchoredCut } from "./summary";
+import { Entropy } from "../core/entropy";
 import type { CompactionCandidate } from "./speculate";
 
 function reduceHistoryBeforeCut(
@@ -153,7 +154,7 @@ export function compactUnbracketed(
     anchored?: boolean,
     summarizerError?: Error,
   ) => CompactionResult,
-): Effect.Effect<CompactionResult, ExecutionError> {
+): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
   // A reversible cut names original content as its kept boundary. Even a
   // zero-tail strategy must retain one atomic call/result entry unchanged.

@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { isolated } from "./helpers/isolated";
 import { runAgentSync } from "./helpers/executor";
 import { expect, test } from "bun:test";
@@ -17,7 +18,7 @@ function generation(number: number, close: () => void) {
     layer: Layer.mergeAll(
       Layer.succeed(SessionLayer, { snapshot, policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
         generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) }) }),
-      Layer.succeed(ToolCatalog, { definitions: [] }), Layer.succeed(ObservationSink, createObservationBus()),
+      Layer.succeed(ToolCatalog, { definitions: [] }), Layer.succeed(ObservationSink, testBus()),
       Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
       Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(close))),
     ),

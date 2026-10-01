@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { LlmRunFailure, run as llmRun, type run } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { failureFacts } from "../../src/core/retry";
 import { runInput } from "../helpers/run-input";
 
@@ -135,6 +135,8 @@ describe("provider retry ownership", () => {
           },
           auth: { type: "api", key: "test-key" },
           trace: { traceId: "trace", sessionId: "session", runId: "run" },
+          now: () => 0,
+          id: (() => { let n = 0; return () => `id-${++n}`; })(),
         },
         { onMessage: () => undefined, onToolCall: () => undefined, onToolResult: () => undefined },
         { createStream: createProviderStream },

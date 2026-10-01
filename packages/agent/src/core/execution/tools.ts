@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { AgentInvariantViolation } from "../../errors";
 import type { ChatAgentConfig } from "../types";
 import type { RunState } from "./state";
@@ -85,12 +85,14 @@ export function prepareTurnTools(state: RunState, config: ChatAgentConfig): Prep
   const allTools = config.tools ?? [];
   const configuredExecutor = config.toolExecutor;
   const executor = configuredExecutor
-    ? (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.suspend(() => {
-        const startedAt = Date.now();
-        return configuredExecutor(call, context).pipe(Effect.ensuring(Effect.sync(() => {
-          state.budgetState = recordToolCall(state.budgetState, Date.now() - startedAt);
-        })));
-      })
+    ? (call: Tool.Call, context?: Tool.ExecutionContext) =>
+        Clock.currentTimeMillis.pipe(Effect.flatMap((startedAt) =>
+          configuredExecutor(call, context).pipe(Effect.ensuring(
+            Clock.currentTimeMillis.pipe(Effect.map((endedAt) => {
+              state.budgetState = recordToolCall(state.budgetState, endedAt - startedAt);
+            })),
+          )),
+        ))
     : undefined;
   return { allTools, executor };
 }

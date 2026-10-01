@@ -3,7 +3,7 @@ import { isolated } from "../helpers/isolated";
 import { createTestAgent } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
 import type { Model } from "@openomni/protocol";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
 

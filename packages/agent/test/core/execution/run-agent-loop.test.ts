@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { sessionTree } from "../../helpers/session-tree";
 import { testTurnDispatcher } from "../../helpers/service-layers";
 import {
@@ -30,12 +31,15 @@ import { createAssistantMessage } from "../../../src/core/message-factory";
 import { reopenableLedger } from "../../helpers/reopenable-ledger";
 import { restoreCompactionProjection } from "../../../src/compaction/durable";
 import { assistantStep } from "../../helpers/dispatching-runner";
+import { entropySource } from "../../helpers/time";
 
 const object = (value: PlainValue) =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 
 test("reopened SQLite hydrates exact tool-bearing assistant identities and rendered results", () => {
   const ledger = reopenableLedger("937-history-");
+  // One id source spans the reopen: persisted action ids must stay unique (#1245).
+  const ids = entropySource("history-run");
   return isolated(
     Effect.scoped(
       Effect.gen(function* () {
@@ -58,6 +62,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
         let runtime: SessionRuntime = {
           observations: { publish: () => undefined },
           authorizeConfigure: allowConfigure,
+          entropy: ids.id,
           ...isolatedRuntime(),
         };
         const runner = dispatchingRunner(
@@ -113,6 +118,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           runtime = {
             observations: { publish: () => undefined },
             authorizeConfigure: allowConfigure,
+            entropy: ids.id,
             ...isolatedRuntime(),
           };
           expect(
@@ -168,6 +174,7 @@ function compactionProbeStep(
     probe.calls < 3 ? "evidence ".repeat(1000) : "finished",
     "",
     sessionId,
+    messageSource,
   );
   if (message.info.role !== "assistant") throw new Error("assistant required");
   message.info.tokens.input = probe.calls < 3 ? 6000 : 1;
@@ -187,12 +194,15 @@ function compactionProbeStep(
 
 test("compaction projection and lossless revert survive SQLite reopen without deleting originals", () => {
   const ledger = reopenableLedger("937-compaction-reopen-");
+  // One id source spans the reopen: persisted action ids must stay unique (#1245).
+  const ids = entropySource("compact-run");
   return isolated(
     Effect.scoped(
       Effect.gen(function* () {
         let runtime: SessionRuntime = {
           observations: { publish: () => undefined },
           authorizeConfigure: allowConfigure,
+          entropy: ids.id,
           ...isolatedRuntime(),
         };
         const probe: CompactionProbe = {
@@ -324,6 +334,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           runtime = {
             observations: { publish: () => undefined },
             authorizeConfigure: allowConfigure,
+            entropy: ids.id,
             ...isolatedRuntime(),
           };
           yield* (yield* Effect.gen(function* () {

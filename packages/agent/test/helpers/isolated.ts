@@ -1,7 +1,8 @@
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
 import type { LedgerSession } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
-import { createObservationBus } from "../../src/observation/bus";
+import type { createObservationBus } from "../../src/observation/bus";
+import { testBus } from "./bus";
 import type { RunnerServices } from "../../src/services";
 import { runnerTestLayer } from "./service-layers";
 
@@ -25,9 +26,11 @@ export interface IsolatedLedger {
 export type IsolatedLedgerHandle = IsolatedLedger & { close: () => void };
 
 function makeIsolatedLedger(): IsolatedLedgerHandle {
-  const bus = createObservationBus();
-  const session = openSessionStore(":memory:", bus);
-  const catalog = openCatalogStore(":memory:", bus);
+  const bus = testBus();
+  let now = 0;
+  const storeOptions = { now: () => (now += 1), observationSink: bus };
+  const session = openSessionStore(":memory:", storeOptions);
+  const catalog = openCatalogStore(":memory:", storeOptions);
   const kernel = SessionHandleStore.createSessionKernel(session, catalog);
   const materialize = kernel.materialize;
   // Match the app composition's catalog registration for this shared-file fixture.

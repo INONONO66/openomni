@@ -83,7 +83,7 @@ function harness() {
     identity: { sessionId: "session", role: "resident", parentActionId: "turn", turnId: "turn" },
     policy: compiledPolicy(),
     clock: () => 100,
-    entropy: () => `action:${++sequence}`,
+    entropy: () => `action:${++sequence}`, random: () => 0,
     observations: { publish: () => undefined },
     ledger: {
       ...memoryExecutionReads(() => actions),
