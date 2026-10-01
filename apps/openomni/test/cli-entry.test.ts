@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCliDeps, main } from "../src/cli/main";
+import { CliError } from "../src/cli/errors";
 import { replaceEnvironment } from "./helpers/environment";
 import { measuredEntry } from "./helpers/measured-entry";
 
@@ -493,7 +494,7 @@ describe("real CLI entry", () => {
       Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
       try {
         await expect(deps.ask("question")).rejects.toEqual(
-          new Error("onboarding requires an interactive terminal"),
+          new CliError("onboarding requires an interactive terminal"),
         );
       } finally {
         if (isTty) Object.defineProperty(process.stdin, "isTTY", isTty);

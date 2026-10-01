@@ -1,4 +1,4 @@
-import { ForeignFailure as LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "@openomni/ledger";
 import {
   canonicalDigest,
   FoldCheckpoint,

@@ -66,7 +66,7 @@ test("the receiving consumer may only commit the exact outbound letter", async (
     plane.openKernel,
   );
   // W5.2: the receipt-missing invariant surfaces as a dispatch defect (the
-  // throw inside the outbound program), not a typed ForeignFailure; the
+  // throw inside the outbound program), not a typed AgentFailure; the
   // observable contract is that the outbound send fails as a whole.
   await expect(
     runEffect(

@@ -1,10 +1,11 @@
+import { APICallError } from "ai";
 import { expect, test } from "bun:test";
 import { APIError, Retry, run as runLlm, type RunInput } from "@openomni/llm";
 import { PlainObjectSchema, type LedgerAction, type Model } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { StreamEvent } from "../../llm/src/processor/stream-events";
 import { runAgent } from "../src/core/execution/run";
-import { ForeignFailure as LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "@openomni/ledger";
 import { isolated } from "./helpers/isolated";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";
@@ -19,8 +20,10 @@ type Prefix = "none" | "reasoning" | "text" | "tool";
 
 function providerFailure(floor: number) {
   return new APIError({
-    message: "overloaded", isRetryable: true, statusCode: 529,
-    responseHeaders: { "retry-after-ms": String(floor) },
+    cause: new APICallError({
+      message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
+      statusCode: 529, responseHeaders: { "retry-after-ms": String(floor) }, isRetryable: true,
+    }),
   });
 }
 

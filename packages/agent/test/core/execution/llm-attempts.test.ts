@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { sessionTree } from "../../helpers/session-tree";
 import { testExecutor } from "../../helpers/executor";
 import type { ResolvedExecutorOptions } from "../../../src/executor-contract";
@@ -5,7 +6,7 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
-import { ForeignFailure } from "../../../src/errors";
+import { AgentFailure } from "../../../src/errors";
 import { LlmRunFailure } from "@openomni/llm";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
@@ -26,11 +27,11 @@ function providerFailure(visibleOutput = false) {
       contextOverflow: false,
       visibleOutput,
       usage,
-      isRetryable: true,
-      statusCode: 529,
       retryAfterMs: 0,
-      responseHeaders: { "retry-after-ms": "0" },
-      cause: "Error: overloaded",
+      cause: new APICallError({
+        message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
+        statusCode: 529, responseHeaders: { "retry-after-ms": "0" }, isRetryable: true,
+      }),
   });
 }
 
@@ -197,7 +198,7 @@ test("retry re-evaluates policy and context before admitting another child", () 
         executor.runAttempts(parent, {
           prepare: (attempt: number) => Effect.succeed({
             request: { op: attempt === 1 ? "chat" : "retry", intent: {}, effect: {} },
-            admit: () => attempt > 1 ? Effect.fail(new ForeignFailure({ operation: "context.admit", cause: "denied" })) : Effect.void,
+            admit: () => attempt > 1 ? Effect.fail(new AgentFailure({ operation: "context.admit", cause: "denied" })) : Effect.void,
             body: () => Effect.gen(function* () {
               calls += 1;
               return yield* providerFailure();
@@ -205,7 +206,7 @@ test("retry re-evaluates policy and context before admitting another child", () 
           }),
         }),
       ),
-    )).toMatchObject({ _tag: refuse === "policy" ? "PolicyDenied" : "ForeignFailure" });
+    )).toMatchObject({ _tag: refuse === "policy" ? "PolicyDenied" : "AgentFailure" });
     expect(calls).toBe(1);
     expect(intents(committed, "attempt")).toHaveLength(1);
   }

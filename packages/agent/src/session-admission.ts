@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { CommitRefused, SessionHandleStore, type CommitReceipt, type LedgerError } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure, SessionHandleStore, type CommitReceipt, type LedgerError } from "@openomni/ledger";
 import { ObservationSink, type RunnerServices } from "./services";
 import {
   canonicalDigest,
@@ -13,7 +13,7 @@ import {
 } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "./compaction/restore";
-import { ForeignFailure, CommitFailed, type ExecutionError, type SessionError } from "./errors";
+import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./errors";
 import {
   SessionPolicyRefusal,
   type SessionRuntime,
@@ -167,7 +167,7 @@ export function createSessionAdmission(
       observeDrained(pending, turnId, "before_llm", clock(), observations);
       if (pending.some((item) => item.kind === "interrupt")) {
         const action = kernel.actionById(turnId);
-        if (action === undefined) return yield* new ForeignFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
+        if (action === undefined) return yield* new AgentFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
         yield* seal({
           turnId,
           resultId,
@@ -257,7 +257,7 @@ export function createSessionAdmission(
         return Effect.gen(function* () {
           const current = kernel.row(sessionId);
           if (current.leaseFence !== executionFence || (turnId !== undefined && kernel.turnTerminalFor(sessionId, turnId) !== undefined))
-            return yield* new ForeignFailure({ operation: "session.request.transition", cause: "stale" });
+            return yield* new AgentFailure({ operation: "session.request.transition", cause: "stale" });
           return yield* commitSessionRequest(kernel, sessionId, { owner, fence: executionFence }, payload, inputId, at, runtime);
         });
       },
@@ -271,7 +271,7 @@ export function createSessionAdmission(
           });
           const committed = yield* commitSession({ expectedRevision: current.revision, actions: [action], state: current.state });
           const receipt = committed.receipts[0];
-          if (receipt === undefined) return yield* new ForeignFailure({ operation: "session.commit", cause: "missing_receipt" });
+          if (receipt === undefined) return yield* new LedgerFailure({ operation: "session.commit", cause: "missing_receipt" });
           return receipt;
         });
       },
@@ -283,9 +283,9 @@ export function createSessionAdmission(
       yield* awaitRetainedRunner();
       const current = kernel.row(sessionId);
       return yield* Effect.scoped(Effect.gen(function* () {
-        const source = requireCompactionIntent(kernel.actionById(compactionId));
-        if (source.sessionId !== sessionId) return yield* new ForeignFailure({ operation: "session.restore", cause: "foreign_compaction" });
-        const record = recordedCompaction(compactionId, kernel.resultFor(sessionId, compactionId));
+        const source = yield* requireCompactionIntent(kernel.actionById(compactionId));
+        if (source.sessionId !== sessionId) return yield* new AgentFailure({ operation: "session.restore", cause: "foreign_compaction" });
+        const record = yield* recordedCompaction(compactionId, kernel.resultFor(sessionId, compactionId));
         const history = hydrateSessionHistory(kernel, sessionId).history;
         const restored = restoredContextProjection(history, compactionId, record);
         const projectionHash = canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(history) });

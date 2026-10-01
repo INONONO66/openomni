@@ -109,7 +109,7 @@ export type SessionRunnerResult =
   | {
       readonly kind: "error";
       readonly text: string;
-      readonly cause?: Error;
+      readonly cause?: Error | SessionPolicyRefusal;
       readonly reported?: true;
     };
 
@@ -218,19 +218,15 @@ export interface SessionHandle {
   close(): Effect.Effect<void, SessionError>;
 }
 
-export class SessionPolicyRefusal extends Error {
+/** A policy refusal is ordinary session data, not an exception: the turn settled as refused. */
+export class SessionPolicyRefusal {
+  readonly _tag = "SessionPolicyRefusal";
   readonly code = "session_policy_refused";
 
-  constructor(readonly reason: string) {
-    super("session policy refused");
-    this.name = "SessionPolicyRefusal";
-  }
-}
+  constructor(readonly reason: string) {}
 
-export class SessionCommitError extends Error {
-  constructor(readonly result: Exclude<LedgerSession.CommitResult, { readonly ok: true }>) {
-    super(`session commit ${result.reason}`);
-    this.name = "SessionCommitError";
+  get message(): string {
+    return "session policy refused";
   }
 }
 

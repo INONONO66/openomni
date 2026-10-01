@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure, type SessionEntity } from "@openomni/agent";
+import { AgentFailure, type SessionEntity } from "@openomni/agent";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
@@ -48,7 +48,7 @@ export function materializeInboxTarget(
   plane: AppLedgerPlane,
   input: Inbox.Commit,
   clock: () => number,
-): Effect.Effect<void, ForeignFailure> {
+): Effect.Effect<void, AgentFailure> {
   return Effect.gen(function* () {
     const create = input.createSession;
     if (create === undefined) return;
@@ -68,7 +68,7 @@ export function materializeInboxTarget(
           .listSessions()
           .filter((row) => row.parentId === create.row.parentId);
         if (children.length >= limits.fanout)
-          return yield* new ForeignFailure({
+          return yield* new AgentFailure({
             operation: "message.commit",
             cause: "child fanout limit exhausted",
           });
@@ -90,7 +90,7 @@ export function materializeInboxTarget(
         })
         .pipe(
           Effect.mapError(
-            (error) => new ForeignFailure({ operation: "message.materialize", cause: error._tag }),
+            (error) => new AgentFailure({ operation: "message.materialize", cause: error._tag }),
           ),
         );
     }
@@ -106,7 +106,7 @@ export function materializeInboxTarget(
 export function createMessageInboxCommit(deps: MessageInboxDeps) {
   return function commitMessageInbox(
     input: Inbox.Commit,
-  ): Effect.Effect<Inbox.Row, ForeignFailure> {
+  ): Effect.Effect<Inbox.Row, AgentFailure> {
     return Effect.gen(function* () {
       const outbound = yield* outboundMessage;
       const message = outbound?.input.message;
@@ -116,7 +116,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
           input.sessionId !== message.destinationSessionId ||
           input.content !== message.content)
       ) {
-        return yield* new ForeignFailure({
+        return yield* new AgentFailure({
           operation: "message.commit",
           cause: "outbound inbox binding mismatch",
         });
@@ -136,7 +136,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
             : entity.Prompt(payload);
       const receipt = yield* send.pipe(
         Effect.mapError(
-          (error) => new ForeignFailure({ operation: "message.deliver", cause: String(error) }),
+          (error) => new AgentFailure({ operation: "message.deliver", cause: String(error) }),
         ),
       );
       return pendingInboxRow(input, receipt.ordinal);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Cause } from "effect";
-import { ForeignFailure, Interrupted } from "../src/errors";
+import { AgentFailure, Interrupted } from "../src/errors";
 import * as Failure from "../src/failure";
 
 describe("Failure.of", () => {
@@ -9,16 +9,16 @@ describe("Failure.of", () => {
     expect(Failure.of(Cause.fail(error), "op")).toBe(error);
   });
 
-  it("synthesizes a ForeignFailure for a defect, carrying the pretty-printed cause", () => {
+  it("synthesizes a AgentFailure for a defect, carrying the pretty-printed cause", () => {
     const cause = Cause.die(new Error("boom"));
     const failure = Failure.of(cause, "stage.op");
-    expect(failure).toBeInstanceOf(ForeignFailure);
-    expect(failure).toMatchObject({ _tag: "ForeignFailure", operation: "stage.op", cause: expect.stringContaining("boom") });
+    expect(failure).toBeInstanceOf(AgentFailure);
+    expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "stage.op", cause: expect.stringContaining("boom") });
   });
 
-  it("synthesizes a ForeignFailure for an interrupt", () => {
+  it("synthesizes a AgentFailure for an interrupt", () => {
     const failure = Failure.of(Cause.interrupt(), "stage.op.completion");
-    expect(failure).toBeInstanceOf(ForeignFailure);
+    expect(failure).toBeInstanceOf(AgentFailure);
     expect(failure).toMatchObject({ operation: "stage.op.completion" });
   });
 });

@@ -5,6 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { attentionKind } from "../src/renderer/attention/order";
 import { createGatewayChatTransport } from "../src/renderer/chat/gateway-transport";
+import { GatewayUnavailableError } from "../src/renderer/errors";
 import {
   fetchGatewayEndpoint,
   queryKeys,
@@ -83,6 +84,14 @@ function serveReads() {
     },
   };
 }
+
+test("a session read without a configured gateway refuses with the named class", async () => {
+  const client = new QueryClient();
+  cleanups.push(() => client.clear());
+  await expect(client.fetchQuery(sessionReadOptions(client, null, "durable"))).rejects.toThrow(
+    GatewayUnavailableError,
+  );
+});
 
 test("session_read repairs a stale cursor with a fresh snapshot on the existing transport", async () => {
   const wire = serveReads();

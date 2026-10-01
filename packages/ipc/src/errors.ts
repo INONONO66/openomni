@@ -1,6 +1,7 @@
 import { Data } from "effect";
 
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<{
+/** Ipc-owned failure for a Cause without a typed error (temporary until #1246 folds ipc into machines). */
+export class IpcFailure extends Data.TaggedError("IpcFailure")<{
   readonly operation: string;
   readonly cause: string;
 }> {
@@ -29,4 +30,4 @@ export class IpcRemoteError extends Data.TaggedError("IpcRemoteError")<{
   readonly code: number;
 }> {}
 
-export type IpcError = ForeignFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;
+export type IpcError = IpcFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;

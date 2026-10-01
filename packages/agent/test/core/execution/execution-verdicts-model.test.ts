@@ -133,7 +133,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             body,
           );
           expect(yield* effectFailure(refused)).toMatchObject({
-            _tag: "ForeignFailure",
+            _tag: "AgentFailure",
             operation: "executor.admit",
             cause: "unregistered_execution_kind:channel.send",
           });
@@ -323,7 +323,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             terminal: "executed",
             effect: { completed: false },
             evidence: {
-              failures: [{ tag: "ForeignFailure", operation: "test" }],
+              failures: [{ tag: "AgentFailure", operation: "test" }],
               defects: [],
               interrupted: false,
             },

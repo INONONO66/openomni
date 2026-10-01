@@ -1,4 +1,5 @@
 import type { SessionRead } from "@openomni/protocol";
+import { GatewayUnavailableError } from "../errors";
 import { queryOptions, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { GatewayChatTransport } from "../chat/gateway-transport";
@@ -42,7 +43,7 @@ export function sessionReadOptions(client: QueryClient, transport: GatewayChatTr
     queryKey: queryKeys.session(sessionId),
     enabled: transport !== null,
     queryFn: async () => {
-      if (transport === null) throw new Error("gateway not configured");
+      if (transport === null) throw new GatewayUnavailableError("gateway not configured");
       const prior = client.getQueryData<SessionRead.Page>(queryKeys.session(sessionId));
       const page = await transport.readSession(sessionId, prior === undefined ? undefined : {
         revision: prior.actions[prior.actions.length - 1]?.revision ?? prior.afterRevision,

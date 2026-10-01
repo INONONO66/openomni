@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { LlmRunFailure, type Run, type RunInput, type Sink } from "@openomni/llm";
 import { Effect } from "effect";
@@ -38,18 +39,16 @@ export function providerFailure(
     aborted?: boolean;
   } = {},
 ): Run.Failure {
-  const cause = Object.assign(new Error(message), {
-    name: "AI_APICallError",
-    isRetryable: options.retryable ?? true,
+  const cause = new APICallError({
+    message,
+    url: "https://provider.test/v1/messages",
+    requestBodyValues: {},
     statusCode: options.statusCode ?? 529,
     responseHeaders: { "retry-after-ms": "0" },
+    isRetryable: options.retryable ?? true,
   });
   return new LlmRunFailure({
-      cause: String(cause),
-      providerErrorName: cause.name,
-      isRetryable: cause.isRetryable,
-      statusCode: cause.statusCode,
-      responseHeaders: cause.responseHeaders,
+      cause,
       retryAfterMs: 0,
       message,
       aborted: options.aborted ?? false,

@@ -18,7 +18,7 @@ import type {
   ExecutionResult,
 } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
-import { CommitRefused, ForeignFailure as LedgerFailure } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure } from "@openomni/ledger";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -67,7 +67,7 @@ function expectIrreversibleDefect(
   result: PlainObject,
   cause: string,
 ) {
-  expect(results[0]).toMatchObject({ terminal: "executed", failure: { _tag: "ForeignFailure" } });
+  expect(results[0]).toMatchObject({ terminal: "executed", failure: { _tag: "AgentFailure" } });
   expect(effect(nth(resultsOf(actions, "tool"), 0))).toMatchObject({
     terminal: "executed",
     disposition: "irreversible",
@@ -367,7 +367,7 @@ describe("completion recovery", () => {
     const { error, bodies } = await failedToolRun(executor, { status: "success" });
     expect(error).toMatchObject({
       _tag: "CommitFailed",
-      error: { _tag: "ForeignFailure", cause: "decision_lost" },
+      error: { _tag: "LedgerFailure", cause: "decision_lost" },
     });
     expect(actions.filter((action) => action.kind === "policy.decision")).toHaveLength(1);
     expect(resultsOf(actions, "tool")).toHaveLength(0);
@@ -428,7 +428,7 @@ describe("completion recovery", () => {
     expect(reverted).toBe(1);
     expect(error).toMatchObject({
       _tag: "CommitFailed",
-      error: { _tag: "ForeignFailure", cause: "storage_lost" },
+      error: { _tag: "LedgerFailure", cause: "storage_lost" },
     });
     const before = structuredClone(actions);
     await recover(executor);
@@ -754,7 +754,7 @@ describe("crash-open recovery", () => {
           terminal: "executed",
           effect: {},
           evidence: {
-            failures: [{ tag: "ForeignFailure", operation: "chat", cause: "APIError" }],
+            failures: [{ tag: "AgentFailure", operation: "chat", cause: "APIError" }],
             defects: [],
             interrupted: false,
           },

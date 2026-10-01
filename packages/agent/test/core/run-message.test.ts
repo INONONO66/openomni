@@ -76,6 +76,6 @@ describe("run terminal message result contract", () => {
           })).run(runInput([{ role: "user", content: "hello" }])),
         ),
       ),
-    ).toMatchObject({ _tag: "LlmRunFailure", statusCode: 400, isRetryable: false });
+    ).toMatchObject({ _tag: "LlmRunFailure", cause: { statusCode: 400, isRetryable: false } });
   });
 });

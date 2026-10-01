@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server";
 import { attributes, classes } from "./markup";
+import { SidebarContextError, useSidebar } from "../src/sidebar";
 import { EpochRule } from "../src/primitives/epoch-rule";
 import { GutterLine } from "../src/primitives/gutter";
 import { StatusDot } from "../src/primitives/state";
@@ -140,5 +142,15 @@ describe("history menu first paint", () => {
       );
       expect(markup.filter((element) => element.role === "menuitem")).toEqual([]);
     }
+  });
+});
+
+describe("sidebar context guard", () => {
+  test("a primitive rendered outside <Sidebar> fails with the named class", () => {
+    function Orphan() {
+      useSidebar();
+      return null;
+    }
+    expect(() => renderToStaticMarkup(<Orphan />)).toThrow(SidebarContextError);
   });
 });

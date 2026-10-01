@@ -10,8 +10,12 @@ export const ConfigurationError = NamedError.create(
     code: z.enum([
       "invalid_compaction_summarizer",
       "invalid_entity_idle_ms",
+      "invalid_env_json",
+      "invalid_model_fallbacks",
       "invalid_ws_port",
       "legacy_channel_credentials",
+      "missing_env",
+      "ws_token_required",
     ]),
     message: z.string(),
     replacement: z.object({ tool: z.literal("provision"), op: z.literal("channel_add") }).optional(),
@@ -114,7 +118,7 @@ export function modelTransport(
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {
-    throw new Error(`${name} is required`);
+    throw new ConfigurationError({ code: "missing_env", message: `${name} is required` });
   }
   return value;
 }
@@ -198,7 +202,10 @@ export function assertWsExposure(config: Pick<OpenOmniConfig, "host" | "wsToken"
     !LOOPBACK_HOSTS.has(config.host) &&
     (config.wsToken === undefined || config.wsToken.length === 0)
   ) {
-    throw new Error("OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback");
+    throw new ConfigurationError({
+      code: "ws_token_required",
+      message: "OPENOMNI_WS_TOKEN is required when OPENOMNI_WS_HOST is not loopback",
+    });
   }
 }
 
@@ -240,14 +247,16 @@ function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
     const provider = separator === -1 ? "" : trimmed.slice(0, separator);
     const id = separator === -1 ? "" : trimmed.slice(separator + 1);
     if (provider.length === 0 || id.length === 0 || /\s/.test(trimmed)) {
-      throw new Error(
-        `OPENOMNI_MODEL_FALLBACKS is invalid: "${entry}" is not a "provider/model" entry`,
-      );
+      throw new ConfigurationError({
+        code: "invalid_model_fallbacks",
+        message: `OPENOMNI_MODEL_FALLBACKS is invalid: "${entry}" is not a "provider/model" entry`,
+      });
     }
     if (!CATALOG_PROVIDER_IDS.has(provider)) {
-      throw new Error(
-        `OPENOMNI_MODEL_FALLBACKS is invalid: provider "${provider}" is not in the bundled catalog`,
-      );
+      throw new ConfigurationError({
+        code: "invalid_model_fallbacks",
+        message: `OPENOMNI_MODEL_FALLBACKS is invalid: provider "${provider}" is not in the bundled catalog`,
+      });
     }
     return { provider, id };
   });
@@ -277,11 +286,11 @@ function parseEnvJson<T>(name: string, schema: z.ZodType<T>): T | undefined {
   if (raw === undefined || raw.length === 0) return undefined;
   const json = Result.try({ try: (): PlainValue => JSON.parse(raw), catch: String });
   if (Result.isFailure(json)) {
-    throw new Error(`${name} is invalid JSON: ${json.failure}`);
+    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid JSON: ${json.failure}` });
   }
   const parsed = schema.safeParse(json.success);
   if (!parsed.success) {
-    throw new Error(`${name} is invalid: ${parsed.error.issues[0]?.message}`);
+    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid: ${parsed.error.issues[0]?.message}` });
   }
   return parsed.data;
 }

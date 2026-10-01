@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Channel } from "../src/channel/index.js";
+import { Channel, SurfaceKeyError } from "../src/channel/index.js";
 
 const SurfaceKey = Channel.SurfaceKey;
 
@@ -16,11 +16,11 @@ describe("Channel.SurfaceKey codec", () => {
     });
 
     test("throws error on empty parts", () => {
-      expect(() => SurfaceKey.create([])).toThrow("SurfaceKey parts cannot be empty");
+      expect(() => SurfaceKey.create([])).toThrow(SurfaceKeyError);
     });
 
     test("throws error if format validation fails (no colon)", () => {
-      expect(() => SurfaceKey.create(["singlepart"])).toThrow(/Invalid surfaceKey format/);
+      expect(() => SurfaceKey.create(["singlepart"])).toThrow(SurfaceKeyError);
     });
 
     test("creates complex keys with multiple colons", () => {
@@ -35,7 +35,7 @@ describe("Channel.SurfaceKey codec", () => {
     });
 
     test("throws on a key without a surface prefix", () => {
-      expect(() => SurfaceKey.assertWellFormed("invalid")).toThrow(/Invalid surfaceKey format/);
+      expect(() => SurfaceKey.assertWellFormed("invalid")).toThrow(SurfaceKeyError);
     });
   });
 

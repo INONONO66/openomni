@@ -3,7 +3,7 @@ import { mkdirSync, rmdirSync, statSync } from "node:fs";
 import net from "node:net";
 import { Ipc } from "@openomni/protocol";
 import { connectIpcClient } from "./helpers/native";
-import { ForeignFailure, IpcConnectionError, IpcTimeoutError } from "../src/errors";
+import { IpcFailure, IpcConnectionError, IpcTimeoutError } from "../src/errors";
 import { LineDecoder } from "../src/framing";
 import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
@@ -47,8 +47,8 @@ describe("server edge branches", () => {
     mkdirSync(path);
     try {
       const error = await captureError(createIpcServer(path, () => undefined));
-      expect(error).toBeInstanceOf(ForeignFailure);
-      if (!(error instanceof ForeignFailure)) throw error;
+      expect(error).toBeInstanceOf(IpcFailure);
+      if (!(error instanceof IpcFailure)) throw error;
       expect(error.operation).toBe("socket.unlink");
       expect(error.cause).toContain("EISDIR");
       expect(statSync(path).isDirectory()).toBe(true);

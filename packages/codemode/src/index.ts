@@ -1,4 +1,4 @@
-import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, ForeignFailure as MachineForeignFailure } from "@openomni/machines";
+import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, MachinesFailure } from "@openomni/machines";
 import { listenForAbort, Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { z } from "zod";
@@ -210,7 +210,7 @@ export function createCodemode(options: Options = {}) {
         let kernel = kernels.get(tenant);
         if (!kernel) { kernel = new PythonKernel(); kernels.set(tenant, kernel); }
         return yield* kernel.run(request, call, signal);
-      }).pipe(Effect.mapError((error) => new MachineForeignFailure({ operation: "code.run", cause: error.message || String(error) }))),
+      }).pipe(Effect.mapError((error) => new MachinesFailure({ operation: "code.run", cause: error.message || String(error) }))),
       peekCode(cellId) {
         for (const kernel of kernels.values()) { const output = kernel.peek(cellId); if (output !== undefined) return output; }
         return undefined;
@@ -220,15 +220,15 @@ export function createCodemode(options: Options = {}) {
         yield* Effect.forEach([...kernels.values()], (kernel) => kernel.close(), { discard: true, concurrency: CLOSE_CONCURRENCY });
         yield* Effect.forEach([...running], Deferred.await, { discard: true });
         if ([...background.values()].some((entry) => entry.quarantined))
-          return yield* new MachineForeignFailure({ operation: "shutdown.cell_unsettled", cause: "physical termination was not witnessed" });
+          return yield* new MachinesFailure({ operation: "shutdown.cell_unsettled", cause: "physical termination was not witnessed" });
         live.clear(); kernels.clear();
-      }).pipe(Effect.mapError((error) => new MachineForeignFailure({ operation: "code.close", cause: String(error) }))),
+      }).pipe(Effect.mapError((error) => new MachinesFailure({ operation: "code.close", cause: String(error) }))),
     };
     yield* Effect.addFinalizer(() => Effect.orDie(runner.close()));
     return {
       listMachines: (): MachineInfo[] => machines().list(), getMachine,
       findMachine: (query: { tag: string }) => getMachine(select(query)),
-      callTool: (call: Machine.ToolCall) => callTool(call).pipe(Effect.mapError((error) => new MachineForeignFailure({ operation: "code.tool", cause: error.message || String(error) }))),
+      callTool: (call: Machine.ToolCall) => callTool(call).pipe(Effect.mapError((error) => new MachinesFailure({ operation: "code.tool", cause: error.message || String(error) }))),
       runner, close: runner.close,
       cell: {
         run: (code: string, tenant: string, runOptions: RunOptions = {}): Effect.Effect<Machine.CellState, Failure> => Effect.gen(function* () {

@@ -267,7 +267,7 @@ it("refuses compaction before the summarizer when compiled pre policy denies it"
   });
   const observed: string[] = [];
   // When: the projection is submitted through the executor.
-  expect(await isolated(failure(executeCompaction(executionInput(recording.executor, observed))))).toMatchObject({ code: "compaction_execution_refused", reason: "hold" });
+  expect(await isolated(failure(executeCompaction(executionInput(recording.executor, observed))))).toMatchObject({ _tag: "CompactionExecutionError", reason: "hold" });
   // Then: neither compaction work nor observations ran.
   expect(observed).toEqual([]);
   expect(recording.committed.every((action) => action.kind === "policy.decision")).toBe(true);
@@ -303,7 +303,7 @@ it("forwards session cancellation into an in-flight compaction summarizer", () =
     const exit = yield* Fiber.join(pending).pipe(Effect.timeout("5 seconds"));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toMatchObject({
-      code: "compaction_execution_refused", reason: "fiber_interrupted",
+      _tag: "CompactionExecutionError", reason: "fiber_interrupted",
     });
     expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
     const terminals = recording.committed.filter((action) => action.kind === "compaction" && typeof action.effect.value === "object" && action.effect.value !== null && "terminal" in action.effect.value);

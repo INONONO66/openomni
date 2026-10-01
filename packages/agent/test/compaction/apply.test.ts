@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/errors";
 import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
@@ -72,7 +72,7 @@ describe("compaction geometry and application", () => {
           contextWindowTokens: 1000,
           protectRecentMessages: 2,
           onSummarize: () =>
-            Effect.fail(new ForeignFailure({ operation: "test", cause: "summarizer unavailable" })),
+            Effect.fail(new AgentFailure({ operation: "test", cause: "summarizer unavailable" })),
         },
         identity,
         collector(),

@@ -1,5 +1,6 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { listenForAbort, parseJson, SessionRead } from "@openomni/protocol";
+import { GatewayUnavailableError, TransportCapabilityError } from "../errors";
 import { z } from "zod";
 
 /** The subset of `WebSocket` this transport uses, so a test can serve its own. */
@@ -249,7 +250,7 @@ export function createGatewayChatTransport(
   return {
     async readSession(sessionId, cursor) {
       const live = await connectUntilAborted(undefined);
-      if (live === undefined) throw new Error("gateway socket unavailable");
+      if (live === undefined) throw new GatewayUnavailableError("gateway socket unavailable");
       const cursorKey = cursor === undefined ? "" : `${cursor.revision}:${cursor.epoch}`;
       const inFlight = reads.get(sessionId);
       if (inFlight !== undefined) {
@@ -287,7 +288,7 @@ export function createGatewayChatTransport(
     },
     async sendMessages({ trigger, chatId, messages, abortSignal }) {
       if (trigger === "regenerate-message") {
-        throw new Error("gateway transport does not support regeneration");
+        throw new TransportCapabilityError("gateway transport does not support regeneration");
       }
       if (abortSignal?.aborted) return emptyStream();
 

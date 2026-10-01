@@ -4,7 +4,8 @@ import type { ChatTransport, UIMessage } from "ai";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { OpenOmniUIMessage } from "../src/renderer/chat/message";
-import { SessionContent } from "../src/renderer/chat/session-content";
+import { SessionContent, useSessionChats } from "../src/renderer/chat/session-content";
+import { GatewayUnavailableError } from "../src/renderer/errors";
 import { mountWindow } from "./helpers";
 import { makeSession } from "./helpers/session";
 
@@ -60,6 +61,28 @@ test.each([
     ]);
     expect(host.querySelector('[data-ui="ApprovalTray"]')).toBeNull();
     expect(host.querySelector('[data-tool-row="call-7"]')).not.toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    restoreGlobals();
+    await window.happyDOM.close();
+  }
+});
+
+test("a send without a configured gateway surfaces the named class on the chat", async () => {
+  const window = new Window({ url: "http://localhost" });
+  const { host, restoreGlobals, root } = mountWindow(window);
+  let chatFor: ReturnType<typeof useSessionChats> | undefined;
+  function Probe() {
+    chatFor = useSessionChats(null);
+    return null;
+  }
+  try {
+    await act(() => root.render(<Probe />));
+    const chat = chatFor?.("session");
+    if (chat === undefined) throw new Error("the probe did not mount");
+    await act(() => chat.sendMessage({ text: "hello" }));
+    expect(chat.error).toBeInstanceOf(GatewayUnavailableError);
   } finally {
     await act(() => root.unmount());
     host.remove();

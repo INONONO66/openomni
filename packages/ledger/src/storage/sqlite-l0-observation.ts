@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LedgerInvariant } from "../errors";
 import { parseStoredJson } from "./sqlite-json-data";
 import type { Database } from "bun:sqlite";
 import {
@@ -11,11 +12,46 @@ import {
   type ObservationSink,
 } from "@openomni/protocol";
 
+/** A post-commit observation publish that failed without unwinding the committed write. */
+export interface ObservationPublishFailure {
+  readonly actionId: string;
+  readonly cause: Error;
+}
+
+/** Routes an observation publish failure; the composing host logs it in its own runtime. */
+export type ObservationFailurePort = (failure: ObservationPublishFailure) => void;
+
+/**
+ * Publishes one committed receipt and routes a publish failure to the port.
+ * Both run after the transaction committed, so neither may unwind the write:
+ * a port that throws has refused the last report channel there is, and that
+ * second failure is dropped so the committed result still reaches the caller.
+ */
+export function reportCommitted(
+  db: Database,
+  sink: ObservationSink,
+  port: ObservationFailurePort,
+  receipt: LedgerAction.Receipt,
+): void {
+  const failure = publishCommitted(db, sink, receipt);
+  if (failure === undefined) return;
+  try {
+    port(failure);
+  } catch {
+    // The port was the last channel; the write is committed and stands.
+  }
+}
+
+/**
+ * Post-commit observation must never unwind the committed write, so a publish
+ * failure is returned as a value for the store's failure port — never thrown
+ * and never silently swallowed here.
+ */
 export function publishCommitted(
   db: Database,
   sink: ObservationSink,
   receipt: LedgerAction.Receipt,
-): void {
+): ObservationPublishFailure | undefined {
   try {
     sink.publish(L0Observation.ActionCommittedEvent, {
       id: receipt.action.id,
@@ -24,8 +60,23 @@ export function publishCommitted(
       kind: receipt.action.kind,
     });
     publishMessageTerminal(db, sink, receipt.action);
+    return undefined;
+  } catch (cause) {
+    return { actionId: receipt.action.id, cause: thrownAsError(cause) };
+  }
+}
+
+/**
+ * The thrown sink value as an Error. Both `instanceof` (a revoked Proxy) and
+ * `String()` (the value's own conversion) may throw again; the fallback names
+ * only its `typeof`, so no user-controlled code runs on the post-commit path
+ * after this point.
+ */
+function thrownAsError<T>(cause: T): Error {
+  try {
+    return cause instanceof Error ? cause : new Error(String(cause));
   } catch {
-    console.warn(`post-commit observation failed: ${receipt.action.id}`);
+    return new Error(`sink threw an unrepresentable ${typeof cause}`);
   }
 }
 
@@ -78,7 +129,11 @@ function requestMessageIdentity(
     .parse(
       db.query("SELECT intent, ts FROM action WHERE id = ? AND session_id = ?").get(id, sessionId),
     );
-  if (source === null) throw new Error("committed reply source is missing");
+  if (source === null)
+    throw new LedgerInvariant({
+      operation: "observation.replySource",
+      message: "committed reply source is missing",
+    });
   const intent = PlainValueSchema.parse(parseStoredJson(source.intent));
   const value =
     intent !== null && typeof intent === "object" && !Array.isArray(intent)

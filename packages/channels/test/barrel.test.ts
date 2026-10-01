@@ -4,7 +4,7 @@ import * as barrel from "../src/index";
 test("channels barrel exposes only its runtime public surface", () => {
   expect(Object.keys(barrel).sort()).toEqual([
     "ChannelProviders",
-    "ForeignFailure",
+    "ChannelsFailure",
     "SendAdmissionConflict",
     "WebSocketHandler",
     "createChannelStores",

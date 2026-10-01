@@ -86,10 +86,10 @@ test("native reply rejects an altered authenticated sender, content, or destinat
   await runEffect(await openRequest("original", { expectedResponders: [sender.id], correlation: {} }));
   const port = channelRequests(requestPort());
   const before = sessionTree("request-owner", ledger().sessions.actions);
-  expect(await effectFailure(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2))).toBeInstanceOf(Error);
-  expect(await effectFailure(answerNativeRequest(port, sender, outbound(), "altered", 2))).toBeInstanceOf(Error);
-  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2))).toBeInstanceOf(Error);
-  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2))).toBeInstanceOf(Error);
+  expect(await effectFailure(answerNativeRequest(port, { kind: "session", id: "stranger" }, outbound(), "answer", 2))).toMatchObject({ _tag: "ChannelsFailure", operation: "native.answer" });
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound(), "altered", 2))).toMatchObject({ _tag: "ChannelsFailure", operation: "native.answer" });
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ destinationSessionId: "other" }), "answer", 2))).toMatchObject({ _tag: "ChannelsFailure", operation: "native.answer" });
+  expect(await effectFailure(answerNativeRequest(port, sender, outbound({ requestId: "missing" }), "answer", 2))).toMatchObject({ _tag: "ChannelsFailure", operation: "native.answer" });
   expect(await runEffect(answerNativeRequest(port, sender, undefined, "ordinary", 2))).toBe(false);
   expect(sessionTree("request-owner", ledger().sessions.actions)).toEqual(before);
 });

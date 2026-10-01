@@ -4,6 +4,7 @@ import { bootstrapStoreDatabase } from "../../src/storage";
 import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
 import { SESSION_FILE_SCHEMA } from "../../src/storage/schema-session-file";
 import { createActions } from "../../src/storage/sqlite-l0-actions";
+import type { ObservationPublishFailure } from "../../src/storage/sqlite-l0-observation";
 import { createSessions } from "../../src/storage/sqlite-l0-sessions";
 import type { SessionWriteAdapter } from "../../src/services";
 
@@ -26,12 +27,21 @@ export interface L0Adapters {
   readonly actions: Storage.ActionSubAdapter;
 }
 
-/** Session-file adapters over one connection plus a capture of every committed action. */
+/**
+ * Session-file adapters over one connection plus a capture of every committed
+ * action. Publish failures are captured too (the store drops a throwing port,
+ * so a rethrowing port could not make a test fail): assert on `failures`.
+ */
 export function observedL0Adapters(db: Database): {
   adapter: L0Adapters;
   observations: L0Observation.ActionCommitted[];
+  failures: ObservationPublishFailure[];
 } {
   const observations: L0Observation.ActionCommitted[] = [];
+  const failures: ObservationPublishFailure[] = [];
+  const report = (failure: ObservationPublishFailure): void => {
+    failures.push(failure);
+  };
   const transaction = <T>(operation: () => T): T => db.transaction(operation).immediate();
   const sink: ObservationSink = {
     publish(event, payload) {
@@ -41,9 +51,10 @@ export function observedL0Adapters(db: Database): {
   };
   return {
     adapter: {
-      sessions: createSessions(db, transaction, sink),
-      actions: createActions(db, transaction, sink),
+      sessions: createSessions(db, transaction, sink, report),
+      actions: createActions(db, transaction, sink, report),
     },
     observations,
+    failures,
   };
 }

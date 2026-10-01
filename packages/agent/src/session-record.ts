@@ -14,9 +14,8 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { RunReasonCode } from "./core/policy/reason-codes";
-import { GenerationUnavailable } from "./errors";
+import { GenerationUnavailable, SessionCommitError } from "./errors";
 import {
-  SessionCommitError,
   SessionPolicyRefusal,
   type SessionRunnerResult,
   type SessionTool,
@@ -76,7 +75,7 @@ export function internalOrigin(sessionId: string): Inbox.Origin {
 }
 
 export function requireCommit(result: LedgerSession.CommitResult): LedgerSession.Row {
-  if (!result.ok) throw new SessionCommitError(result);
+  if (!result.ok) throw new SessionCommitError({ result });
   return result.row;
 }
 

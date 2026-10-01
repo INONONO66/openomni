@@ -1,5 +1,5 @@
 import { executeToolBody, ToolBodyOutcome } from "./tool-body";
-import { activeInvocation, ExecutorContextError, type InvocationFrame } from "./executor-context";
+import { activeInvocation, requireExecutor, type InvocationFrame } from "./executor-context";
 export { currentExecutor } from "./executor-context";
 import {
   type AnyToolDefinition,
@@ -19,7 +19,7 @@ import { Effect } from "effect";
 import { GenerationOwnership, ToolCatalog, type ProcessServices, SessionLayer } from "./services";
 
 const NEVER_ABORTED = new AbortController().signal;
-import { ForeignFailure, type ExecutionError } from "./errors";
+import { AgentFailure, AgentInvariantViolation, type ExecutionError } from "./errors";
 import type { RawToolSlots } from "./executor-raw";
 import {
   createExecutor,
@@ -94,10 +94,10 @@ export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
   approval?: (input: z.output<In>) => NonNullable<ExecutionRequest["approval"]>,
 ): ToolDispatchDefinition<In, Out> {
-  if (definition.name.trim() === "") throw new Error("tool name must not be empty");
-  if (definition.description.trim() === "") throw new Error("tool description must not be empty");
+  if (definition.name.trim() === "") throw new AgentInvariantViolation("tool name must not be empty");
+  if (definition.description.trim() === "") throw new AgentInvariantViolation("tool description must not be empty");
   if (toolInputSchema(definition).type !== "object") {
-    throw new Error(`${definition.name} input schema root must be an object`);
+    throw new AgentInvariantViolation(`${definition.name} input schema root must be an object`);
   }
   return {
     ...definition,
@@ -120,7 +120,7 @@ export function toolInputSchema(definition: AnyToolDefinition): JsonSchemaObject
     .record(z.string(), PlainValueSchema)
     .parse(z.toJSONSchema(definition.input, { io: "input", target: "draft-7" }));
   if (projected.type !== "object") {
-    throw new Error(`${definition.name} input schema root must be an object`);
+    throw new AgentInvariantViolation(`${definition.name} input schema root must be an object`);
   }
   return projected;
 }
@@ -264,10 +264,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
       };
     }
 
-    const executor = resolveExecutor();
-    if (executor === undefined) {
-      throw new ExecutorContextError();
-    }
+    const executor = requireExecutor(resolveExecutor());
     const parsedValue = PlainValueSchema.parse(parsedInput.data);
     const approval = approvalFromOriginal(originalAction?.intent.value, binding?.(parsedValue));
     const request: ExecutionRequest = {
@@ -320,7 +317,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
               toolResult: (execution: ExecutionBatchResult): Tool.Result => {
                 const result = finish(execution);
                 if (typeof result.output !== "string")
-                  throw new Error("model tool output must be rendered text");
+                  throw new AgentInvariantViolation("model tool output must be rendered text");
                 modelResult = { ...result, output: result.output };
                 return modelResult;
               },
@@ -337,12 +334,11 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     return Effect.suspend(() => {
       const prepared = prepare(call, context, door);
       if (prepared.kind === "refused") return Effect.succeed(prepared.result);
-      const executor = prepared.executor;
-      if (executor.runBatch === undefined) throw new ExecutorContextError();
-      return executor.runBatch([prepared], { signal: context.signal ?? NEVER_ABORTED }).pipe(
+      const runBatch = requireExecutor(prepared.executor.runBatch);
+      return runBatch([prepared], { signal: context.signal ?? NEVER_ABORTED }).pipe(
         Effect.flatMap((results) => {
           const result = results[0];
-          if (result === undefined) throw new Error("single dispatch lost its result");
+          if (result === undefined) return Effect.die(new Error("single dispatch lost its result"));
           if (door === "cell" && result.terminal === "interrupted") return Effect.interrupt;
           return Effect.succeed(prepared.finish(result));
         }),
@@ -355,9 +351,8 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     context: DispatchContext,
     retain?: (effect: Promise<void>) => void,
   ) {
-    const executor = resolveExecutor();
-    if (executor?.runBatch === undefined) throw new ExecutorContextError();
-    return executor.runBatch(ready, {
+    const runBatch = requireExecutor(resolveExecutor()?.runBatch);
+    return runBatch(ready, {
       signal: context.signal ?? NEVER_ABORTED,
       ...(retain === undefined ? {} : { retain }),
     });
@@ -377,7 +372,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
       return prepared.map((item) => {
         if (item.kind === "refused") return item.result;
         const result = results[index++];
-        if (result === undefined) throw new Error("wave result missing");
+        if (result === undefined) throw new AgentInvariantViolation("wave result missing");
         return renderedResult(item.finish(result));
       });
     });
@@ -407,7 +402,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
         if (!approvalWaves.has(waveId)) continue;
         const prepared = group.map(({ action, call }) => prepare(call, context, "model", action));
         if (prepared.some((item) => item.kind === "refused"))
-          throw new Error("captured invocation no longer parses");
+          return yield* Effect.die(new Error("captured invocation no longer parses"));
         const ready = prepared.filter(
           (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
         );
@@ -493,7 +488,7 @@ function recoverableWaves(actions: readonly LedgerAction.Node[], turnId: string 
     if (settledIntents.has(action.id)) continue;
     const parsed = PlainValueSchema.parse(intent.originalArgs ?? intent.value);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error(`invalid durable invocation: ${action.id}`);
+      throw new AgentInvariantViolation(`invalid durable invocation: ${action.id}`);
     const group = groups.get(intent.waveId) ?? [];
     group.push({ action, call: { id: intent.callId, tool: intent.op, input: parsed } });
     groups.set(intent.waveId, group);
@@ -528,7 +523,7 @@ export function createTurnDispatcher(
       definition === undefined ||
       canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
     ) {
-      return yield* new ForeignFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
+      return yield* new AgentFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
     }
   }
   const executor = yield* createExecutor({
@@ -611,7 +606,7 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
 }
 
 function renderedResult(result: ToolDispatchResult | CellToolDispatchResult): ToolDispatchResult {
-  if (typeof result.output !== "string") throw new Error("model tool output must be rendered text");
+  if (typeof result.output !== "string") throw new AgentInvariantViolation("model tool output must be rendered text");
   return { ...result, output: result.output };
 }
 

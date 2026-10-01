@@ -1,7 +1,7 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
 import { LeaseRefused } from "@openomni/ledger";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
-import { CommitFailed, ExecutionApprovalError, ForeignFailure, type SessionError } from "./errors";
+import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./errors";
 import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session-record";
 import { createSessionTurn } from "./session-turn";
 import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session-admission";
@@ -61,7 +61,7 @@ export function createController(
     });
     function replacement(): Effect.Effect<SessionHandle | undefined, SessionError> {
       return Effect.gen(function* () {
-        if (state.closed) return yield* new ForeignFailure({ operation: "session.handle", cause: "closed" });
+        if (state.closed) return yield* new AgentFailure({ operation: "session.handle", cause: "closed" });
         if (!state.released) return undefined;
         state.successor ??= yield* lifecycle.reactivate();
         return state.successor;
@@ -188,7 +188,7 @@ export function createController(
 
     function enqueue(kind: Inbox.Kind, content: string, origin: Inbox.Origin) {
       return Effect.gen(function* () {
-        if (state.closed) return yield* new ForeignFailure({ operation: "session.enqueue", cause: "closed" });
+        if (state.closed) return yield* new AgentFailure({ operation: "session.enqueue", cause: "closed" });
         const running = kernel.row(sessionId).state === "running";
         yield* recordIngress(kind, content, origin);
         if (kind === "resume" && running) return undefined;
@@ -220,7 +220,7 @@ export function createController(
         });
         switch (decision.kind) {
           case "stop": return { stop: true };
-          case "refused": return yield* new ForeignFailure({ operation: "session.admission", cause: "invalid_state" });
+          case "refused": return yield* new AgentFailure({ operation: "session.admission", cause: "invalid_state" });
           case "start": return { stop: false, result: yield* admission.startTurn() };
           case "recover": return { stop: false, result: yield* admission.resumeTurn(decision.open) };
           case "resume": return { stop: false, result: yield* admission.resumeInterrupted(decision.item) };

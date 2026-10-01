@@ -3,7 +3,7 @@ import { PlainValueSchema, type LedgerAction } from "@openomni/protocol";
 import { requireCommit, turnTerminalAction } from "../../src/session-record";
 import type { ExecutionLedger } from "../../src/executor";
 import { Effect } from "effect";
-import { ForeignFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/errors";
 import { testExecutor } from "./executor";
 import { runAgent } from "./executor";
 import { RunEvents } from "../../src/core/execution/events";
@@ -176,7 +176,7 @@ export async function reconstructionFixture(
         protectRecentMessages: 2,
         onSummarize: () => Effect.gen(function* () {
           bodies.push("summary");
-          return yield* Effect.tryPromise({ try: summarize, catch: (cause) => new ForeignFailure({ operation: "test.summarize", cause: String(cause) }) });
+          return yield* Effect.tryPromise({ try: summarize, catch: (cause) => new AgentFailure({ operation: "test.summarize", cause: String(cause) }) });
         }),
       },
       identity: { traceId: "restart", sessionId: reconstructionSession },

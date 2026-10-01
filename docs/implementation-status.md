@@ -1,5 +1,54 @@
 # Implementation Status
 
+## #1244 package-owned typed failures (epic #1260 P2, ⏳ pending merge)
+
+On `epic1260/1244-typed-failures` (2026-10-01, base `fb709568`). The shared
+`ForeignFailure` tag is gone; every runtime package owns its failure
+identity, and no production module throws a bare `Error`.
+
+- **Seven package-owned failures.** `AgentFailure`, `LedgerFailure`,
+  `LlmFailure`, `IpcFailure`, `MachinesFailure`, `CodemodeFailure` and
+  `ChannelsFailure` (each a `Data.TaggedError` with `operation`/`cause`)
+  replace `ForeignFailure`; `Failure.of` synthesizes `AgentFailure`. The
+  ledger/llm/ipc/codemode ones are temporary until #1246 folds those packages.
+- **Refusals are values, failures are typed, invariants are defects.**
+  Policy refusals are plain result data returned to the caller
+  (`SessionPolicyRefusal`). Expected Effect failures are the typed
+  `Data.TaggedError` classes in each package union (the package `*Failure`s,
+  `ContextRestoreError`, `CompactionExecutionError`, ...). Broken invariants
+  are defects — thrown Errors or `Effect.die` (`AgentInvariantViolation`,
+  `LedgerInvariant`). Two synchronous surfaces throw caller-handleable
+  refusals instead of failing an Effect: `requireCommit` throws
+  `SessionCommitError` and the actor registry throws `ActorRegistryRefused`.
+  Pure tool bodies and protocol/ui/desktop throw
+  named error classes (`CliError`, `AppInvariantError`,
+  `ConfigurationError`, `TranscriptRecordingDefect`, ...).
+  `rg 'throw new Error\\(' packages/*/src apps/*/src` is zero.
+- **Deleted, not replaced.** `AlarmRefused`, `InboxCommitRefused` and the
+  never-built `inbox`/`alarms` capability values; the five
+  `executor-context` guards fold into `requireExecutor()`;
+  `SessionCommitError` and `ReplyGrantProjectionError` move into their
+  packages' errors modules; `DataPaymentRequired` (no producer puts a status
+  under `.data`).
+- **llm keeps the SDK error.** `APIError` is a thin tagged identity over the
+  AI SDK's own `APICallError` (`cause`); provider facts (status, headers,
+  body, retryability) are read from the SDK error and never copied, detection
+  is `APICallError.isInstance`, and `LlmRunFailure.cause` carries the SDK
+  error for classification. `ai` becomes a devDependency of agent and app so
+  fixtures construct real `APICallError`s.
+- **Logging without runners.** ipc/ledger/agent `console.*` calls are gone.
+  ledger returns publish failures to an injected `ObservationFailurePort`;
+  the agent observation bus reports a subscriber or sink failure through an
+  injected reporter, else as an `observation.delivery_failed` fact on the
+  same sink (a throwing reporter yields both failures in that fact; a failing
+  failure report is dropped). Effect code logs through `Effect.log*`, asserted
+  with a captured `Logger` through each package's one test-runner owner. No
+  new runner site: `effect-runner-sites.json` stays `[]`.
+- **Receipts:** `.omo/evidence/ulw/01a0f656-c9f6-795d-9bfb-786c6699559b/1244/` holds
+  `gate-1244.log` (static gates + 15 CI lanes), `verify-1244.txt` (the
+  issue's four searches), `patch-coverage-1244.txt`, `dod-1244.txt`,
+  `checks-1244.txt`, the lane briefs/reports and review rounds.
+
 ## #1243 shared JSON/failure/interrupt helpers (epic #1260 P1, ⏳ pending merge)
 
 On `epic1260/1243-shared-helpers` (2026-10-01, base `5641cff8`). Three
@@ -16,7 +65,7 @@ every consumer keeps its drop/warn/default and abort-once semantics.
 - **One Cause-to-failure fold.** `packages/agent/src/failure.ts` exports
   `fromCause(cause, synthesize)` (typed error if the Cause carries one, else
   `synthesize(Cause.pretty(cause))`) and the agent profile `of(cause,
-  operation)` that synthesizes `ForeignFailure`. Consumers: executor tool and
+  operation)` that synthesizes `AgentFailure` (#1244; `ForeignFailure` until then). Consumers: executor tool and
   completion outcomes, `session-turn` results, and app boot (`Failure.fromCause`
   with the app-owned `AppLifecycleFailure`). The remaining
   `Cause.findErrorOption` sites are Option extractions, not synthesis.

@@ -261,7 +261,7 @@ for (const operation of [PROMOTE, MERGE]) {
           const call = { id: "original", tool: "provision", input: { operation } };
           expect(yield* Effect.result(crashed.executeWave([call], {
             sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
-          }))).toMatchObject({ _tag: "Failure", failure: { _tag: "ForeignFailure", operation: "provision.crash" } });
+          }))).toMatchObject({ _tag: "Failure", failure: { _tag: "AgentFailure", operation: "provision.crash" } });
           const original = first.kernel.requestRows()[0];
           if (original === undefined) throw new Error("missing Owner request");
           expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SessionEntityTimerContext } from "@openomni/agent";
-import { CommitRefused, ForeignFailure } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure } from "@openomni/ledger";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { AppLedgerPlane, SessionKernel } from "../src/composition/cluster-runtime";
@@ -100,7 +100,7 @@ test("watch arm does not retry a commit failure that is not a revision race", as
   let commits = 0;
   const brokenCommit: SessionKernel["commit"] = () => {
     commits += 1;
-    return Effect.fail(new ForeignFailure({ operation: "commit", cause: "disk full" }));
+    return Effect.fail(new LedgerFailure({ operation: "commit", cause: "disk full" }));
   };
   const brokenKernel: SessionKernel = { ...state.kernel, commit: brokenCommit };
   const ports = portsFor({
@@ -120,7 +120,7 @@ test("watch arm does not retry a commit failure that is not a revision race", as
         },
         new AbortController().signal,
       ),
-    ).rejects.toThrow("watch commit failed: ForeignFailure");
+    ).rejects.toThrow("watch commit failed: LedgerFailure");
     expect(commits).toBe(1);
     expect(state.installed).toEqual([]);
   } finally {

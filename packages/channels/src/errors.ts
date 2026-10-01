@@ -2,15 +2,16 @@ import { Ingress } from "@openomni/protocol";
 import { Data } from "effect";
 import { z } from "zod";
 
-const ForeignFailureFields = z.object({ operation: z.string(), cause: z.string() });
-export class ForeignFailure extends Data.TaggedError("ForeignFailure")<
-  z.infer<typeof ForeignFailureFields>
+const ChannelsFailureFields = z.object({ operation: z.string(), cause: z.string() });
+/** Channels-owned failure for a Cause without a typed error. */
+export class ChannelsFailure extends Data.TaggedError("ChannelsFailure")<
+  z.infer<typeof ChannelsFailureFields>
 > {
   override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
 export class DeliveryNotSent extends Data.TaggedError("DeliveryNotSent")<
-  z.infer<typeof ForeignFailureFields>
+  z.infer<typeof ChannelsFailureFields>
 > {}
 
 const InvalidInboundFields = z.object({
@@ -87,7 +88,7 @@ export class RateLimited extends Data.TaggedError("RateLimited")<
 > {}
 
 export type ChannelError =
-  | ForeignFailure
+  | ChannelsFailure
   | DeliveryNotSent
   | InvalidInbound
   | DiscordGatewayFetchError
@@ -105,6 +106,6 @@ export type ChannelError =
 export function decodeChannelFailure(operation: string) {
   return z
     .preprocess(String, z.string())
-    .transform((cause) => new ForeignFailure({ operation, cause }))
+    .transform((cause) => new ChannelsFailure({ operation, cause }))
     .parse;
 }

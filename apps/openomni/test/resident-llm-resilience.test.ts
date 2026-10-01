@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { Auth, ForeignFailure } from "@openomni/llm";
+import { Auth, LlmFailure } from "@openomni/llm";
 import type { Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { runSyncEffect } from "./helpers/effect";
@@ -192,7 +192,7 @@ describe("Resident terminal LLM failure surfacing", () => {
       apiKey: "test-key",
       tools: { ...testToolPorts,},
       llm: {
-        resolveModel: () => Effect.fail(new ForeignFailure({ operation: "resolveModel", cause: "catalog invariant failed" })),
+        resolveModel: () => Effect.fail(new LlmFailure({ operation: "resolveModel", cause: "catalog invariant failed" })),
       },
     });
 

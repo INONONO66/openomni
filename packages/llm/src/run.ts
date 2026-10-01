@@ -302,19 +302,15 @@ export function run(
     const retryAfterMs = Retry.retryAfterMs(source);
     const failure = new LlmRunFailure({
         message: err.message || String(err),
-        providerErrorName: "providerErrorName" in err ? err.providerErrorName ?? err.name : err.name,
         provider, model: modelId,
         retryAfterMs,
-        statusCode: apiError?.statusCode,
-        isRetryable: apiError?.isRetryable,
-        responseHeaders: apiError?.responseHeaders,
-        responseBody: apiError?.responseBody,
         usage: attemptUsage(processor.usageTotals),
         usageProvenance: processor.usageProvenance,
         aborted,
         contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
         visibleOutput: processor.visibleOutput,
-        cause: source.cause ?? String(source),
+        // The SDK error itself is the provider-fact carrier for classification.
+        cause: apiError ?? err.cause ?? String(err),
     });
     if (err.stack !== undefined) failure.stack = err.stack;
 

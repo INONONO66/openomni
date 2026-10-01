@@ -1,4 +1,5 @@
 import { setSessionTitleIfPlaceholder } from "../state/session-actions";
+import { GatewayUnavailableError } from "../errors";
 import { Chat, useChat } from "@ai-sdk/react";
 import { ConsoleContent, StatusGlyph } from "@openomni/ui";
 import { useStore } from "@tanstack/react-store";
@@ -104,7 +105,7 @@ export function SessionContent({
 }
 
 function current(transport: ChatTransport<UIMessage> | null): ChatTransport<UIMessage> {
-  if (transport === null) throw new Error("gateway not configured");
+  if (transport === null) throw new GatewayUnavailableError("gateway not configured");
   return transport;
 }
 

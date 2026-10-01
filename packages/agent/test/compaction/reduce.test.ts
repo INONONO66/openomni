@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/errors";
 import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
@@ -171,7 +171,7 @@ describe("Compaction.compact with elision configured", () => {
           protectRecentMessages: 2,
           elideToolOutputs: options,
           onSummarize: () =>
-            Effect.fail(new ForeignFailure({ operation: "test", cause: "summary unavailable" })),
+            Effect.fail(new AgentFailure({ operation: "test", cause: "summary unavailable" })),
         },
         trace,
         sink,

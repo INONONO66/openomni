@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
-import { ForeignFailure } from "../src/errors";
+import { ChannelsFailure } from "../src/errors";
 import { websocketCallbacks } from "./helpers/websocket-server";
 import { runEffect } from "./helpers/effect";
 import type { Channel } from "@openomni/protocol";
@@ -194,13 +194,13 @@ describe("WebSocketHandler ingress and receipts", () => {
   });
 
   it("sends only the typed failure tag and never a receipt or private cause on handler refusal", async () => {
-    const failure = new ForeignFailure({ operation: "fixture.ingress", cause: "private credential" });
+    const failure = new ChannelsFailure({ operation: "fixture.ingress", cause: "private credential" });
     const handler = new WebSocketHandler(() => Effect.fail(failure), noopPublish);
     const { ws, sent } = connection({
       surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
     });
     await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "fixture" }));
-    expect(sent).toEqual([JSON.stringify({ type: "error", reason: "ForeignFailure" })]);
+    expect(sent).toEqual([JSON.stringify({ type: "error", reason: "ChannelsFailure" })]);
     expect(await runEffect(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture"}')))).toBe(failure);
   });
 
@@ -224,6 +224,17 @@ describe("WebSocketHandler ingress and receipts", () => {
       messageId: "message-1",
       text: "review",
     });
+  });
+
+  it("push without a live connection throws a typed delivery failure", () => {
+    const handler = createHandler();
+    let caught: unknown;
+    try {
+      handler.push("ghost", "body", "message-x");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ _tag: "DeliveryNotSent", operation: "websocket.push" });
   });
 
   it("reconnects without losing the current delivery target", () => {

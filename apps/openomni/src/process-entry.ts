@@ -6,7 +6,7 @@ import {
   createSessionEntityRunTurn,
   currentExecutor,
   decideSessionAdmission,
-  ForeignFailure,
+  AgentFailure,
   adoptSessionAuthority,
   receivedMessageAction,
   type SessionEntryServices,
@@ -69,14 +69,14 @@ export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
  * turn's awaits and the turn's continuation drain consumes it.
  */
 export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
-  return (input: Inbox.Commit): Effect.Effect<Inbox.Row, ForeignFailure> =>
+  return (input: Inbox.Commit): Effect.Effect<Inbox.Row, AgentFailure> =>
     Effect.gen(function* () {
       yield* materializeInboxTarget(plane, input, clock);
       const kernel = plane.openKernel(input.sessionId);
       const existing = kernel.actionById(input.id);
       if (existing !== undefined) return pendingInboxRow(input, existing.ordinal);
       const refuse = (error: { readonly _tag: string }) =>
-        new ForeignFailure({ operation: "message.commit", cause: error._tag });
+        new AgentFailure({ operation: "message.commit", cause: error._tag });
       const live = kernel.row(input.sessionId);
       const authority =
         live.state === "running" && live.leaseOwner !== null
@@ -102,7 +102,7 @@ export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: ()
         .pipe(Effect.mapError(refuse));
       const receipt = committed.receipts[0];
       if (receipt === undefined)
-        return yield* new ForeignFailure({ operation: "message.commit", cause: "no receipt" });
+        return yield* new AgentFailure({ operation: "message.commit", cause: "no receipt" });
       return pendingInboxRow(input, receipt.action.ordinal);
     });
 }
@@ -167,9 +167,9 @@ export function serveProcessSession(
       const outbound = yield* outboundMessage;
       const result = yield* (outbound?.executor ?? currentExecutor()).run(
         execution,
-        (intent) => body(intent).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "message.body", cause: String(error) }))),
+        (intent) => body(intent).pipe(Effect.mapError((error) => new AgentFailure({ operation: "message.body", cause: String(error) }))),
       );
-      if (sender.kind !== "session") throw new Error("process gateway requires a session sender");
+      if (sender.kind !== "session") return yield* Effect.die(new Error("process gateway requires a session sender"));
       return {
         ...result,
         matchedRuleIds: messageDecisionRules(plane.openKernel(sender.id), sender.id, execution),
@@ -196,7 +196,7 @@ export function serveProcessSession(
   );
   const drain = Effect.gen(function* () {
     const fence = yield* adoptSessionAuthority(kernel, request.sessionId, owner).pipe(
-      Effect.mapError((error) => new ForeignFailure({ operation: "process.adopt", cause: error._tag })),
+      Effect.mapError((error) => new AgentFailure({ operation: "process.adopt", cause: error._tag })),
     );
     const authority = { sessionId: request.sessionId, owner, fence };
     for (;;) {

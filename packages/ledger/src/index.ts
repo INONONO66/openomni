@@ -4,6 +4,7 @@ import { commitSession, insertSession, selectSession } from "./storage/sqlite-l0
 export { replaceFileAtomically } from "./storage";
 // W5.2 handle-scoped stores (plan F1): opened per entity activation / composition root.
 export { openCatalogStore, openSessionStore } from "./storage";
+export type { ObservationFailurePort, ObservationPublishFailure } from "./storage";
 export { createDecisionFactPort } from "./storage/decision-fact-port";
 export * as SessionHandleStore from "./session/kernel.js";
 export { createSurfaceKeyStore } from "./surface-key";

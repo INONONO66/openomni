@@ -97,13 +97,13 @@ export class PeerRequestTable<TPeer = undefined> {
       const failure = Cause.findErrorOption(cause);
       if (Option.isNone(failure)) return Effect.failCause(cause);
       const error = failure.value;
-      const message = error._tag === "ForeignFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
+      const message = error._tag === "IpcFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
       return send(Ipc.createErrorResponse(request.id, 1000, message));
     }));
   }
   private dispatchNotification(notification: Ipc.Notification, peer: TPeer): Effect.Effect<void> {
     return Effect.suspend(() => this.options.onNotification?.(peer, notification.method, notification.params) ?? Effect.void).pipe(
-      Effect.catchCause((cause) => Effect.sync(() => console.warn("IPC notification handler failed:", Cause.pretty(cause)))),
+      Effect.catchCause((cause) => Effect.logWarning("IPC notification handler failed", Cause.pretty(cause))),
     );
   }
   private rejectPending(error: IpcError, matches: (peer: TPeer) => boolean): void {

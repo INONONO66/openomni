@@ -1,5 +1,5 @@
 import { Effect, Result } from "effect";
-import { ForeignFailure, type ExecutionError } from "../errors";
+import { AgentFailure, type ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
 import { latestAnchorBody, isAnchorMessage } from "./candidate";
@@ -37,7 +37,7 @@ export function withSummarizerDeadline(
   return (messages, previousAnchor, budget, operationSignal = signal) => Effect.gen(function* () {
     if (operationSignal?.aborted) return yield* Effect.interrupt;
     return yield* summarize(messages, previousAnchor, budget, operationSignal).pipe(
-      Effect.timeoutOrElse({ duration: deadlineMs, orElse: () => Effect.fail(new ForeignFailure({
+      Effect.timeoutOrElse({ duration: deadlineMs, orElse: () => Effect.fail(new AgentFailure({
         operation: "compaction.summarize", cause: `summarizer_deadline:${deadlineMs}`,
       }))}),
     );

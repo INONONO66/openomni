@@ -1,5 +1,26 @@
-import type { BusEvent, ObservationSink } from "@openomni/protocol";
+import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { z } from "zod";
+
+const DeliveryFailure = z.object({
+  eventName: z.string(),
+  error: z.string(),
+  reporterError: z.string().optional(),
+});
+type DeliveryFailure = z.infer<typeof DeliveryFailure>;
+
+/**
+ * A subscriber or sink failure is reported as data on the plane it failed on;
+ * this runner-free package neither throws it nor logs it. Delivery of this
+ * event is never reported again: a failing failure report is dropped.
+ */
+export const ObservationDeliveryFailed = BusEvent.define(
+  "observation.delivery_failed",
+  DeliveryFailure,
+  { visibility: "internal" },
+);
+
+type FailureReporter = (error: Error, eventName: string) => void;
 
 type BusData = bigint | boolean | null | number | object | string | symbol | undefined;
 type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
@@ -30,6 +51,18 @@ function toBusData<T>(value: T): BusData {
   return undefined;
 }
 
+function describeFailure(value: BusData): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
+}
+
+function asError(value: BusData): Error {
+  return value instanceof Error ? value : new Error(describeFailure(value));
+}
+
 function isEventData<T, U>(
   expected: BusEvent.Descriptor<T>,
   published: BusEvent.Descriptor<U>,
@@ -58,10 +91,7 @@ namespace ObservationBus {
   }
 }
 
-export function createObservationBus(
-  onError: (error: Error, eventName: string) => void = (error, event) =>
-    console.warn("ObservationBus handler error", { event, error }),
-): ObservationBus {
+export function createObservationBus(onError?: FailureReporter): ObservationBus {
   const rootState = createState();
   const local = new AsyncLocalStorage<BusState>();
   const current = () => local.getStore() ?? rootState;
@@ -83,12 +113,10 @@ export function createObservationBus(
       };
       const publishedData = toBusData(data);
       for (const observer of [...state.observers]) {
-        queueMicrotask(() =>
-          deliver(() => observer(published, publishedData), event.name, onError),
-        );
+        queueMicrotask(() => deliver(bus, () => observer(published, publishedData), event.name, onError));
       }
       for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(() => subscription.handler(event, data), event.name, onError));
+        queueMicrotask(() => deliver(bus, () => subscription.handler(event, data), event.name, onError));
       }
     },
     scope(identity) {
@@ -135,36 +163,45 @@ export function createObservationBus(
 }
 
 function deliver(
+  sink: ObservationSink,
   operation: () => void,
   eventName: string,
-  onError: (error: Error, eventName: string) => void,
+  onError: FailureReporter | undefined,
 ): void {
   try {
     operation();
   } catch (error) {
-    reportObservationFailure(
-      error instanceof Error ? error : new Error(String(error)),
-      eventName,
-      onError,
-    );
+    reportObservationFailure(sink, asError(toBusData(error)), eventName, onError);
   }
 }
 
+function exposeFailure(sink: ObservationSink, failure: DeliveryFailure): void {
+  if (failure.eventName === ObservationDeliveryFailed.name) return;
+  try {
+    sink.publish(ObservationDeliveryFailed, failure);
+  } catch {
+    // The plane itself is unavailable; there is nothing left to report to.
+  }
+}
+
+/** An injected reporter owns the failure; if it throws, both failures reach the plane. */
 function reportObservationFailure(
+  sink: ObservationSink,
   error: Error,
   eventName: string,
-  report: (error: Error, eventName: string) => void,
+  report: FailureReporter | undefined,
 ): void {
+  if (report === undefined) {
+    exposeFailure(sink, { eventName, error: describeFailure(error) });
+    return;
+  }
   try {
     report(error, eventName);
   } catch (reporterError) {
-    const reportedFailure = toBusData(reporterError);
-    console.error("observation error reporter failed", {
+    exposeFailure(sink, {
       eventName,
-      error: new AggregateError(
-        [error, reportedFailure],
-        "observation delivery and reporting failed",
-      ),
+      error: describeFailure(error),
+      reporterError: describeFailure(toBusData(reporterError)),
     });
   }
 }
@@ -182,7 +219,7 @@ export const Bus = createObservationBus();
 interface ScopeObservationOptions {
   readonly clock?: () => number;
   readonly entropy?: () => string;
-  readonly onError?: (error: Error, eventName: string) => void;
+  readonly onError?: FailureReporter;
 }
 
 export function scopeObservation(
@@ -192,10 +229,6 @@ export function scopeObservation(
 ): ObservationSink {
   const clock = options.clock ?? Date.now;
   const entropy = options.entropy ?? (() => crypto.randomUUID());
-  const report =
-    options.onError ??
-    ((error, eventName) =>
-      console.warn("observation emit failed", { eventName, error: String(error) }));
 
   const subscribe = sink.subscribe?.bind(sink);
   const scoped: ObservationSink = {
@@ -207,11 +240,7 @@ export function scopeObservation(
         const stamp = { eventId: entropy(), time: clock(), ...identity };
         sink.publish(event, { ...data, ...stamp });
       } catch (error) {
-        reportObservationFailure(
-          error instanceof Error ? error : new Error(String(error)),
-          event.name,
-          report,
-        );
+        reportObservationFailure(sink, asError(toBusData(error)), event.name, options.onError);
       }
     },
     scope(childIdentity) {

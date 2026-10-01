@@ -72,6 +72,42 @@ describe("GitHubClient", () => {
     ]);
   });
 
+  it("wraps a failed comment listing in a typed delivery error", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async (_input: string | URL | Request, init?: RequestInit) =>
+        init?.method === "GET" ? new Response("boom", { status: 500 }) : Response.json({ id: 1 }),
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const client = new GitHubClient(() => undefined, "token");
+      await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
+        _tag: "DeliveryNotSent",
+        operation: "github.listComments",
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("wraps an invalid comment listing in a typed delivery error", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async (_input: string | URL | Request, init?: RequestInit) =>
+        init?.method === "GET" ? Response.json({ nope: true }) : Response.json({ id: 1 }),
+      { preconnect: realFetch.preconnect },
+    );
+    try {
+      const client = new GitHubClient(() => undefined, "token");
+      await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
+        _tag: "DeliveryNotSent",
+        operation: "github.listComments",
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("exhausts rate-limit retries with one trace and a typed failure", async () => {
     const realFetch = globalThis.fetch;
     const warningSchema = z.object({

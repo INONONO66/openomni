@@ -1,12 +1,15 @@
 import { LlmRunFailure, type Run } from "@openomni/llm";
+import { APICallError } from "ai";
 
 export function providerFailure(
   message: string,
-  cause: Error & { readonly isRetryable?: boolean; readonly statusCode?: number } = Object.assign(new Error(message), {
-    name: "AI_APICallError",
-    isRetryable: true,
+  cause: Error = new APICallError({
+    message,
+    url: "https://provider.test/v1/messages",
+    requestBodyValues: {},
     statusCode: 529,
     responseHeaders: { "retry-after-ms": "0" },
+    isRetryable: true,
   }),
 ): Run.Failure {
   return new LlmRunFailure({
@@ -21,10 +24,7 @@ export function providerFailure(
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
-      cause: String(cause),
-      providerErrorName: cause.name,
-      isRetryable: cause.isRetryable === true,
-      statusCode: cause.statusCode,
+      cause: APICallError.isInstance(cause) ? cause : String(cause),
       retryAfterMs: 0,
   });
 }

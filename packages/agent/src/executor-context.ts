@@ -35,10 +35,14 @@ export class ExecutorContextError extends Error {
   }
 }
 
+/** The one guard over rebuilt executor context: absent context is a programmer invariant and dies. */
+export function requireExecutor<T>(value: T | undefined): T {
+  if (value === undefined) throw new ExecutorContextError();
+  return value;
+}
+
 export function currentExecutor(): Executor {
-  const executor = activeInvocation.getStore()?.executor;
-  if (executor === undefined) throw new ExecutorContextError();
-  return executor;
+  return requireExecutor(activeInvocation.getStore()?.executor);
 }
 
 /** Re-enter only executor authority; callers must not carry unrelated ALS scopes across RPC. */
@@ -48,9 +52,7 @@ export function withExecutor<T>(executor: Executor, body: () => T): T {
 }
 
 export function currentInvocation(): InvocationFrame {
-  const frame = activeInvocation.getStore()?.captured;
-  if (frame === undefined) throw new ExecutorContextError();
-  return frame;
+  return requireExecutor(activeInvocation.getStore()?.captured);
 }
 
 export function requireOpenInvocation(): InvocationFrame {

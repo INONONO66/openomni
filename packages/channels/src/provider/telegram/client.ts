@@ -131,7 +131,7 @@ export class TelegramClient implements ChannelClient {
 
     const envelope = EnvelopeSchema.safeParse(await response.json());
     if (!envelope.success) {
-      throw new Error(`Telegram API ${method} returned a malformed envelope`);
+      throw new TelegramApiError({ message: `Telegram API ${method} returned a malformed envelope` });
     }
     if (!envelope.data.ok) {
       throw new TelegramApiError({
@@ -141,7 +141,7 @@ export class TelegramClient implements ChannelClient {
     }
     const result = schema.safeParse(envelope.data.result);
     if (!result.success) {
-      throw new Error(`Telegram API ${method} returned a malformed result`);
+      throw new TelegramApiError({ message: `Telegram API ${method} returned a malformed result` });
     }
     return result.data;
   }

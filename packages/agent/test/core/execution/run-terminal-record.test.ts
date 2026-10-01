@@ -99,7 +99,7 @@ describe("one terminal record per started run", () => {
         events: Bus,
         model,
         llm: timingOutLlm,
-      })))).toMatchObject({ _tag: "LlmRunFailure", statusCode: 408 });
+      })))).toMatchObject({ _tag: "LlmRunFailure", cause: { statusCode: 408 } });
       expect((await bounded(failed.promise, "run failed")).context).toEqual({
         reason: "timeout",
         attempt: 3,

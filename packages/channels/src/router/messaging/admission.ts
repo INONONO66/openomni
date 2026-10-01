@@ -1,4 +1,4 @@
-import { SendAdmissionConflict } from "../../errors";
+import { ChannelsFailure, SendAdmissionConflict } from "../../errors";
 import { Gateway, type DecisionFact } from "@openomni/protocol";
 import type { ChannelStores } from "../stores.js";
 import { z } from "zod";
@@ -48,9 +48,10 @@ function existingAdmission(
 ): SendAdmission | SendAdmissionConflict | undefined {
   const decisionFacts = stores.decisionFacts.port();
   if (decisionFacts === undefined)
-    throw new Error(
-      "Storage adapter does not implement decision facts — gateway sends fail closed",
-    );
+    throw new ChannelsFailure({
+      operation: "message.admission",
+      cause: "storage adapter does not implement decision facts — gateway sends fail closed",
+    });
   const fact = decisionFacts.head(sendStreamId(input.messageId));
   return fact === undefined ? undefined : recordedAdmission(fact, input, target);
 }
@@ -62,9 +63,16 @@ function recordedAdmission(
 ): SendAdmission | SendAdmissionConflict {
   const streamId = fact.key;
   if (fact.type !== SEND_ADMITTED_FACT)
-    throw new Error(`unexpected fact type on send stream ${streamId}: ${fact.type}`);
+    throw new ChannelsFailure({
+      operation: "message.admission",
+      cause: `unexpected fact type on send stream ${streamId}: ${fact.type}`,
+    });
   const parsed = SendAdmission.safeParse(fact.data);
-  if (!parsed.success) throw new Error(`corrupt send admission fact on ${streamId}`);
+  if (!parsed.success)
+    throw new ChannelsFailure({
+      operation: "message.admission",
+      cause: `corrupt send admission fact on ${streamId}`,
+    });
   const admission = parsed.data;
   if (admission.signature !== sendSignature(input, target)) {
     return new SendAdmissionConflict({
@@ -83,9 +91,10 @@ function recordAdmission(
 ): SendAdmission {
   const decisionFacts = stores.decisionFacts.port();
   if (decisionFacts === undefined)
-    throw new Error(
-      "Storage adapter does not implement decision facts — gateway sends fail closed",
-    );
+    throw new ChannelsFailure({
+      operation: "message.admission",
+      cause: "storage adapter does not implement decision facts — gateway sends fail closed",
+    });
   const key = sendStreamId(input.messageId);
   const admission = { signature: sendSignature(input, target), budgeted, sendClass } as const;
   const outcome = decisionFacts.record({

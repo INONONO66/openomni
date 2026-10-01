@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LedgerInvariant } from "../errors";
 import { parseStoredJson, SqliteCount, SqliteEpochMs } from "./sqlite-json-data";
 import { LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
@@ -70,7 +71,8 @@ export const PolicySqlRow = z.object({
 export type PolicySqlRow = z.infer<typeof PolicySqlRow>;
 
 export function decodeSession(row: SessionSqlRow): LedgerSession.Row {
-  if (row.role === null) throw new Error(`session ${row.id} has no L0 role`);
+  if (row.role === null)
+    throw new LedgerInvariant({ operation: "session.decode", message: `session ${row.id} has no L0 role` });
   return LedgerSession.Row.parse({
     id: row.id,
     parentId: row.parent_id,

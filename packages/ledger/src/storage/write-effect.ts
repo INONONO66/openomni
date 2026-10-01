@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { ForeignFailure, type LedgerError } from "../errors";
+import { LedgerFailure, type LedgerError } from "../errors";
 
 export type RefuseWrite = (error: LedgerError) => never;
 
@@ -17,6 +17,6 @@ export function writeEffect<A>(
           throw error;
         }),
       catch: String,
-    }).pipe(Effect.mapError((cause) => refusal ?? new ForeignFailure({ operation, cause })));
+    }).pipe(Effect.mapError((cause) => refusal ?? new LedgerFailure({ operation, cause })));
   });
 }

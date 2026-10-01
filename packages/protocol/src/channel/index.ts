@@ -13,6 +13,20 @@
  *   - `Gateway.InboundMessage`: the gateway→brain zod delivery schema
  *     (gateway/schema.ts), validated at the trust boundary.
  */
+import { z } from "zod";
+import { NamedError } from "../error/index.js";
+
+/**
+ * Typed refusal for a malformed or empty surface key: the wire-format
+ * invariant lives in `Channel.SurfaceKey`, and every violation is this one
+ * concern regardless of which validator caught it.
+ */
+export const SurfaceKeyError = NamedError.create(
+  "SurfaceKeyError",
+  z.object({ message: z.string() }),
+);
+export type SurfaceKeyError = InstanceType<typeof SurfaceKeyError>;
+
 export namespace Channel {
   export interface InboundMessage {
     sender: import("../gateway/index.js").Gateway.IngestSender & { kind: "external" };
@@ -81,9 +95,9 @@ export namespace Channel {
      */
     export function assertWellFormed(key: string): string {
       if (!key.includes(":")) {
-        throw new Error(
-          `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
-        );
+        throw new SurfaceKeyError({
+          message: `Invalid surfaceKey format: "${key}". Must include surface type prefix (e.g., "slack:...")`,
+        });
       }
       return key;
     }
@@ -96,7 +110,7 @@ export namespace Channel {
      */
     export function create(parts: string[]): string {
       if (parts.length === 0) {
-        throw new Error("SurfaceKey parts cannot be empty");
+        throw new SurfaceKeyError({ message: "SurfaceKey parts cannot be empty" });
       }
 
       return assertWellFormed(parts.join(":"));

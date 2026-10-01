@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { ForeignFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/errors";
 import { Compaction, CompactionSession } from "../../src/compaction";
 import type { SummarizationBudget } from "../../src/compaction/contract";
 import { collector } from "../helpers/observation-collector";
@@ -283,7 +283,7 @@ describe("run-scoped compaction speculation", () => {
                 calls += 1;
                 if (calls === 1)
                   return Effect.fail(
-                    new ForeignFailure({ operation: "test", cause: "provider down" }),
+                    new AgentFailure({ operation: "test", cause: "provider down" }),
                   );
                 return Effect.succeed("recovered");
               }).pipe(Effect.flatten),
@@ -450,7 +450,7 @@ describe("run-scoped compaction speculation", () => {
               Effect.suspend(() => {
                 calls += 1;
                 return Effect.fail(
-                  new ForeignFailure({ operation: "test", cause: "provider down" }),
+                  new AgentFailure({ operation: "test", cause: "provider down" }),
                 );
               }),
           });

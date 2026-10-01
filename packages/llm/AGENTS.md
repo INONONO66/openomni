@@ -13,7 +13,7 @@ src/
 ├── services.ts       # Llm Context.Service tag ("@openomni/llm/Llm": run + resolveModel)
 ├── layers.ts         # LlmLive = Layer.succeed(Llm, { run, resolveModel })
 ├── sink.ts           # Streaming callbacks: message snapshots and paired tool projections
-├── errors.ts         # Data.TaggedError classes (APIError, LlmRunFailure, ForeignFailure, ...) — the LlmError union
+├── errors.ts         # Data.TaggedError classes (APIError, LlmRunFailure, LlmFailure, ...) — the LlmError union
 ├── error.ts          # coerceApiError + error-fact extraction over the errors.ts classes
 ├── message/index.ts  # toModelMessages() — Message.WithParts[] → AI SDK messages
 ├── processor/        # index.ts (one attempt, transcript fold), stream-events.ts (part projection + usageProvenance fork), tool-events.ts, event-schema.ts, normalize.ts

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
+import { LedgerInvariant } from "../errors";
 import {
   LedgerAction,
   SessionTransition,
@@ -10,19 +11,23 @@ import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
 import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./sqlite-l0-rows.js";
 import { createActionReads } from "./sqlite-action-reads";
 import { appendAction } from "./sqlite-l0-write.js";
-import { publishCommitted } from "./sqlite-l0-observation.js";
+import {
+  reportCommitted,
+  type ObservationFailurePort,
+} from "./sqlite-l0-observation.js";
 
 export function createActions(
   db: Database,
   transaction: <T>(operation: () => T) => T,
   observationSink: ObservationSink,
+  onObservationFailure: ObservationFailurePort,
 ): ProtocolStorage.ActionSubAdapter {
   return {
     ...createActionReads(db),
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
-      if (receipt !== undefined) publishCommitted(db, observationSink, receipt);
+      if (receipt !== undefined) reportCommitted(db, observationSink, onObservationFailure, receipt);
       return receipt;
     },
     actionById(id) {
@@ -78,7 +83,11 @@ export function createActions(
         .object({ matchedRuleIds: z.array(z.string()) })
         .safeParse(JSON.parse(row.intent));
       if (!parsed.success)
-        throw new Error("invalid message decision rule identity", { cause: parsed.error });
+        throw new LedgerInvariant({
+          operation: "policy.decision",
+          message: "invalid message decision rule identity",
+          cause: parsed.error,
+        });
       return parsed.data.matchedRuleIds;
     },
     messageActionByPlatformId(sessionId, messageId) {

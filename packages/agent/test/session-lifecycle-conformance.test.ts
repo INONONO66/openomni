@@ -2,7 +2,7 @@ import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
-import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "../src/errors";
+import { CommitFailed, AgentFailure, type ExecutionError, type SessionError } from "../src/errors";
 import type { SessionHandle } from "../src/session-contract";
 import { Cause, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, test } from "bun:test";
@@ -1479,7 +1479,7 @@ function childParentFixture() {
                     const received = (yield* receiveOutbound(message, now));
                     yield* Effect.gen(function* () { const fixture: SessionFixture = value; return yield* withSessionServices(reactivateSession(message.destinationSessionId, parentRunner, fixture), fixture); }).pipe(
                         Effect.provideService(Scope.Scope, scope),
-                        Effect.mapError((error: SessionError) => new ForeignFailure({ operation: "reactivateSession", cause: error.message })),
+                        Effect.mapError((error: SessionError) => new AgentFailure({ operation: "reactivateSession", cause: error.message })),
                     );
                     if (loseAck)
                         throw new Error("source ack lost");

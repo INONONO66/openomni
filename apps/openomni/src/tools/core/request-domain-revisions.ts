@@ -1,3 +1,4 @@
+import { AppInvariantError } from "../../invariant";
 import type { ActorRegistry, PersonStore } from "@openomni/ledger";
 import type { PlainValue, SessionTransition } from "@openomni/protocol";
 import { ContactOperation, contactDomainRevisions } from "./contact-mutations";
@@ -43,6 +44,6 @@ export function createRequestDomainRevisions(deps: RequestDomainDeps) {
       const revisions = operationDomainRevisions(deps, input.operation);
       if (revisions !== undefined) return revisions;
     }
-    throw new Error(`unrecognized request domain preconditions: ${request.requestId}`);
+    throw new AppInvariantError(`unrecognized request domain preconditions: ${request.requestId}`);
   };
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { LlmCall, Operational } from "@openomni/protocol";
 import { Retry, observeRetry } from "../../src";
-import { APIError } from "../../src/error";
+import { apiError, sdkError } from "../helpers/retry";
 import { collector } from "../helpers/observation";
 
 const identity = {
@@ -17,7 +17,7 @@ for (const message of [
   JSON.stringify({ type: "error", error: { type: "rate_limit_error" } }),
 ]) {
   test(`canonical retry telemetry for ${message}`, () => {
-    const error = new APIError({
+    const error = apiError({
       message,
       isRetryable: true,
       statusCode: 429,
@@ -38,14 +38,14 @@ for (const message of [
 }
 
 test("explicit over-cap directive declines; inferred reset demotes and publishes its selected delay", () => {
-  const explicit = new APIError({
+  const explicit = apiError({
     message: "limit",
     isRetryable: true,
     statusCode: 429,
     responseHeaders: { "retry-after": "3600" },
   });
   expect(Retry.decide(1, explicit)).toMatchObject({ retry: false, reason: "rate_limit" });
-  const inferred = new APIError({
+  const inferred = apiError({
     message: "limit",
     isRetryable: true,
     statusCode: 429,
@@ -62,10 +62,7 @@ test("explicit over-cap directive declines; inferred reset demotes and publishes
 });
 
 test("raw and wrapped transport failures use short probes and terminate on the third instant failure", () => {
-  const error = Object.assign(new Error("connection refused"), {
-    name: "AI_APICallError",
-    isRetryable: true,
-  });
+  const error = sdkError({ message: "connection refused", isRetryable: true });
   const wrapped = new Error("provider call failed", { cause: error });
   expect(Retry.isInstantTransportFailure(wrapped, 1)).toBe(true);
   expect([1, 2].map((attempt) => Retry.decide(attempt, wrapped, attempt))).toEqual([

@@ -5,7 +5,7 @@ import { canonicalDigest, type PlainValue, type SessionGeneration, type SessionT
 import { createExecutor, type ExecutionResult } from "./executor";
 import * as Failure from "./failure";
 import { interruptOn } from "./core/interrupt-on";
-import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
+import { CommitFailed, AgentFailure, type ExecutionError, type SessionError } from "./errors";
 import { hydrateSessionHistory } from "./session-lifecycle/history";
 import { commitFoldBatch } from "./session-fold-commit";
 import { sessionStopEvidence } from "./session-stop-evidence";
@@ -160,7 +160,7 @@ export function createSessionTurn(
       const refusal = yield* ports.evaluatePromptPolicies(pending);
       if (refusal !== undefined) {
         yield* ports.consumePolicyBlockedInbox(pending);
-        return yield* new ForeignFailure({ operation: "session.prompt", cause: refusal.reason });
+        return yield* new AgentFailure({ operation: "session.prompt", cause: refusal.reason });
       }
       const checkpointId = entropy();
       const deliveries = deliveryActions(

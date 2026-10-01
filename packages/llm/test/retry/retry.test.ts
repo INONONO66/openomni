@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "bun:test";
 import { Retry } from "../../src/retry";
 
-import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
+import { apiError, rateLimitError, withRandom, type SdkErrorInput } from "../helpers/retry";
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
@@ -146,7 +146,7 @@ describe("Retry", () => {
       });
     });
 
-    const reasonCases: Array<{ name: string; input: APIErrorInput; expected: Retry.Reason }> = [
+    const reasonCases: Array<{ name: string; input: SdkErrorInput; expected: Retry.Reason }> = [
       {
         name: "classifies APIError with isRetryable false as non_retryable",
         input: { message: "Not found", statusCode: 404, isRetryable: false },

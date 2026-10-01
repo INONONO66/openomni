@@ -206,11 +206,10 @@ export function createIpcServer(
     const message = classifyIpcMessage(msg);
     if (message === undefined) return Effect.sync(() => sendFrame(state, Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg))));
     if (message.kind === "response") return peer.dispatchMessage(message, state);
-    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchCause((cause) => Effect.sync(() => {
-      console.warn("IPC request handler defect:", cause);
+    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchCause((cause) => Effect.logError("IPC request handler defect", cause).pipe(Effect.andThen(Effect.sync(() => {
       removeConnection(state.id, "request handler defect");
       state.socket.end();
-    })))));
+    })))))));
   }
 
   const server = yield* Effect.try({ try: () => Bun.listen({

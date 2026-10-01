@@ -1,4 +1,5 @@
 import type { Actor, Storage as ProtocolStorage } from "@openomni/protocol";
+import { ActorRegistryRefused } from "../errors";
 import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
 import { StoredIdentity, StoredEndpoint } from "./schema";
 
@@ -37,7 +38,11 @@ export function createActorRegistry(source: ActorRegistrySource) {
       withStoreTimestamps(input, adapter.getEndpoint(input.id)),
     );
     if (!adapter.getIdentity(endpoint.actorId)) {
-      throw new Error(`Actor identity not found: ${endpoint.actorId}`);
+      throw new ActorRegistryRefused({
+        operation: "registerEndpoint",
+        reason: "identity",
+        message: `Actor identity not found: ${endpoint.actorId}`,
+      });
     }
     const existingForAddress = adapter.findEndpoint(
       endpoint.channel,
@@ -45,9 +50,11 @@ export function createActorRegistry(source: ActorRegistrySource) {
       endpoint.workspace,
     );
     if (existingForAddress && existingForAddress.id !== endpoint.id) {
-      throw new Error(
-        `Actor endpoint already registered for ${endpoint.channel}:${endpoint.workspace ?? ""}:${endpoint.externalId}`,
-      );
+      throw new ActorRegistryRefused({
+        operation: "registerEndpoint",
+        reason: "address",
+        message: `Actor endpoint already registered for ${endpoint.channel}:${endpoint.workspace ?? ""}:${endpoint.externalId}`,
+      });
     }
     adapter.setEndpoint(endpoint);
     return endpoint;
@@ -84,7 +91,11 @@ export function createActorRegistry(source: ActorRegistrySource) {
      */
     mintProvisional(identity: Actor.Identity, endpoint: Omit<Actor.Endpoint, "actorId">) {
       if (identity.standing !== "provisional") {
-        throw new Error(`Provisional mint requires standing "provisional": ${identity.id}`);
+        throw new ActorRegistryRefused({
+          operation: "mintProvisional",
+          reason: "standing",
+          message: `Provisional mint requires standing "provisional": ${identity.id}`,
+        });
       }
       return source.transaction(() => ({
         identity: registerIdentity(identity),
@@ -105,7 +116,11 @@ export function createActorRegistry(source: ActorRegistrySource) {
     promote(actorId: string) {
       const identity = getIdentity(actorId);
       if (!identity) {
-        throw new Error(`Actor identity not found: ${actorId}`);
+        throw new ActorRegistryRefused({
+          operation: "promote",
+          reason: "identity",
+          message: `Actor identity not found: ${actorId}`,
+        });
       }
       if (identity.standing !== "provisional") return identity;
       return registerIdentity({ ...identity, standing: "registered" });
@@ -120,10 +135,18 @@ export function createActorRegistry(source: ActorRegistrySource) {
       const adapter = requireAdapter();
       const endpoint = adapter.getEndpoint(endpointId);
       if (!endpoint) {
-        throw new Error(`Actor endpoint not found: ${endpointId}`);
+        throw new ActorRegistryRefused({
+          operation: "mergeEndpoint",
+          reason: "endpoint",
+          message: `Actor endpoint not found: ${endpointId}`,
+        });
       }
       if (!adapter.getIdentity(toActorId)) {
-        throw new Error(`Actor identity not found: ${toActorId}`);
+        throw new ActorRegistryRefused({
+          operation: "mergeEndpoint",
+          reason: "identity",
+          message: `Actor identity not found: ${toActorId}`,
+        });
       }
       return registerEndpoint({ ...endpoint, actorId: toActorId });
     },

@@ -101,6 +101,14 @@ const GAP_CLASS: Readonly<Record<number, string>> = {
 };
 
 /**
+ * The gap law broke: `gapAbove` produced a pixel step the class table does not
+ * know. Only reachable if the two drift apart, which the tests forbid.
+ */
+export class SpacingGapError extends Error {
+  override readonly name = "SpacingGapError";
+}
+
+/**
  * The gap as a Tailwind margin class.
  *
  * An arbitrary-value class rather than a named spacing token, because these
@@ -116,6 +124,6 @@ export function spacingClass(previous: PartKind | null, part: PartKind): string 
   // Unreachable while the table above covers the four constants, and asserted
   // by the tests. Falling back to the interpolated form would reintroduce the
   // exact silent failure this table exists to prevent, so it throws instead.
-  if (cls === undefined) throw new Error(`no class for a ${gap}px gap`);
+  if (cls === undefined) throw new SpacingGapError(`no class for a ${gap}px gap`);
   return cls;
 }

@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { posix } from "node:path";
-import { type IpcClient, connectIpcClient, typedCall, ForeignFailure as IpcForeignFailure } from "@openomni/ipc";
+import { type IpcClient, connectIpcClient, typedCall, IpcFailure } from "@openomni/ipc";
 import { Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, type Scope } from "effect";
 import type { z } from "zod";
@@ -145,13 +145,13 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     };
     return yield* Effect.gen(function* () {
       client = yield* connectIpcClient(options.socketPath, {
-        onDisconnect: () => close.pipe(Effect.mapError((error) => new IpcForeignFailure({ operation: "daemon.disconnect", cause: String(error) }))),
+        onDisconnect: () => close.pipe(Effect.mapError((error) => new IpcFailure({ operation: "daemon.disconnect", cause: String(error) }))),
         onRequest: (method, params, respond) => Deferred.await(attached).pipe(Effect.andThen(Effect.gen(function* () {
           const serve = wire[method];
           if (serve === undefined) return yield* new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
           const body = yield* Effect.try({ try: () => serve(<T>(schema: z.ZodType<T>): T => schema.parse(params)), catch: decodeMachineFailure("daemon.request") });
           respond(yield* body);
-        })), Effect.mapError((error) => new IpcForeignFailure({ operation: "daemon.request", cause: error.message || String(error) }))),
+        })), Effect.mapError((error) => new IpcFailure({ operation: "daemon.request", cause: error.message || String(error) }))),
       }).pipe(Effect.mapError(transportFailure("daemon.connect")));
       const raw = yield* typedCall(client, Machine.WireMethod.Attach, offer, options.attachTimeoutMs).pipe(Effect.mapError(transportFailure("daemon.attach")));
       attachment = yield* Effect.try({ try: () => Machine.AttachResult.parse(raw), catch: decodeMachineFailure("daemon.attach.response") });

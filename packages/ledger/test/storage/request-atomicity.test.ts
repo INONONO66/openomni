@@ -21,7 +21,7 @@ test("failed request insert rolls back original action, revision and observation
   const before = stores.kernel.row(request.sessionId);
   const tree = sessionTree(request.sessionId, stores.session.actions);
   expect(() => commit([original, requestStateAction(request)])).toThrow(
-    expect.objectContaining({ _tag: "ForeignFailure" }),
+    expect.objectContaining({ _tag: "LedgerFailure" }),
   );
   expect(stores.kernel.row(request.sessionId)).toEqual(before);
   expect(sessionTree(request.sessionId, stores.session.actions)).toEqual(tree);

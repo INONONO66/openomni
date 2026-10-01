@@ -44,6 +44,7 @@ export class GitHubClient {
     };
     const marker = `<!-- openomni-delivery:${encodeURIComponent(deliveryId)} -->`;
     const posted = await this.hasComment(url, headers, marker, traceId).catch((error) => {
+      if (error instanceof DeliveryNotSent) throw error;
       throw new DeliveryNotSent({ operation: "github.listComments", cause: String(error) });
     });
     if (posted) {
@@ -116,11 +117,18 @@ export class GitHubClient {
       );
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(`GitHub API failed (${response.status}): ${text}`);
+        throw new DeliveryNotSent({
+          operation: "github.listComments",
+          cause: `GitHub API failed (${response.status}): ${text}`,
+        });
       }
 
       const listing = CommentsPageSchema.safeParse(await response.json());
-      if (!listing.success) throw new Error("GitHub API returned invalid comments");
+      if (!listing.success)
+        throw new DeliveryNotSent({
+          operation: "github.listComments",
+          cause: "GitHub API returned invalid comments",
+        });
       if (listing.data.some((comment) => comment.body?.includes(marker))) return true;
       if (listing.data.length < perPage) return false;
     }

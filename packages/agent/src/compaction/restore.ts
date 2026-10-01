@@ -1,7 +1,9 @@
+import { Effect } from "effect";
 import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionRequest } from "../executor-contract";
 import { type CompactionRecord, restoreCompactionProjection } from "./durable";
+import { ContextRestoreError } from "../errors";
 
 const DiscardedRange = z
   .object({
@@ -23,14 +25,6 @@ const RecordedCompaction: z.ZodType<CompactionRecord> = z.object({
   revert: RevertRecipe,
 });
 
-class ContextRestoreError extends Error {
-  readonly code = "context_restore_refused";
-  constructor(readonly reason: "unknown_compaction" | "not_executed") {
-    super(`context restore refused: ${reason}`);
-    this.name = "ContextRestoreError";
-  }
-}
-
 /** The typed compensation of one compaction; a distinct recorded action, never a mutation of the original. */
 export function restoreContextRequest(
   compactionId: string,
@@ -46,26 +40,28 @@ export function restoreContextRequest(
 }
 
 /** Validate the caller's target before querying any result children or acquiring a lease. */
-export function requireCompactionIntent(action: LedgerAction.Node | undefined): LedgerAction.Node {
+export function requireCompactionIntent(
+  action: LedgerAction.Node | undefined,
+): Effect.Effect<LedgerAction.Node, ContextRestoreError> {
   if (action === undefined || action.kind !== "compaction")
-    throw new ContextRestoreError("unknown_compaction");
+    return Effect.fail(new ContextRestoreError({ reason: "unknown_compaction" }));
   if (field(action.intent.value, "phase") !== "intent")
-    throw new ContextRestoreError("not_executed");
-  return action;
+    return Effect.fail(new ContextRestoreError({ reason: "not_executed" }));
+  return Effect.succeed(action);
 }
 
 /** The executed child of the already validated original compaction intent. */
 export function recordedCompaction(
   compactionId: string,
   result: LedgerAction.Node | undefined,
-): CompactionRecord {
+): Effect.Effect<CompactionRecord, ContextRestoreError> {
   if (
     result?.kind !== "compaction" ||
     result.parentId !== compactionId ||
     field(result.effect.value, "terminal") !== "executed"
   )
-    throw new ContextRestoreError("not_executed");
-  return RecordedCompaction.parse(field(result.effect.value, "result"));
+    return Effect.fail(new ContextRestoreError({ reason: "not_executed" }));
+  return Effect.succeed(RecordedCompaction.parse(field(result.effect.value, "result")));
 }
 
 /**

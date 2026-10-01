@@ -1,5 +1,5 @@
-import { createCodemode, ForeignFailure as CodeFailure, type RunOptions } from "@openomni/codemode";
-import { forkInvocation, ForeignFailure, type InvocationFrame } from "@openomni/agent";
+import { createCodemode, CodemodeFailure, type RunOptions } from "@openomni/codemode";
+import { forkInvocation, AgentFailure, type InvocationFrame } from "@openomni/agent";
 import { Effect, Exit, type Scope } from "effect";
 import type { MachineHost } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
@@ -28,12 +28,12 @@ function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
                   : "execution",
             },
           },
-          () => body().pipe(Effect.mapError((error) => new ForeignFailure({ operation: call.name, cause: String(error) }))),
+          () => body().pipe(Effect.mapError((error) => new AgentFailure({ operation: call.name, cause: String(error) }))),
         );
         return result.terminal === "executed"
           ? Machine.ToolCallResult.parse(result.value)
           : { status: "failed" as const, error: result.reason };
-      }).pipe(Effect.mapError((error) => new CodeFailure({ operation: call.name, cause: String(error) })));
+      }).pipe(Effect.mapError((error) => new CodemodeFailure({ operation: call.name, cause: String(error) })));
     },
     tools(tenant) {
       const { cell: dispatcher } = frame;
@@ -51,7 +51,7 @@ function bindings(frame: InvocationFrame): NonNullable<RunOptions["bindings"]> {
             ? { status: "failed", error: String(result.output) }
             : { status: "completed", value: result.output },
         );
-      }).pipe(Effect.mapError((error) => new CodeFailure({ operation: call.name, cause: String(error) })));
+      }).pipe(Effect.mapError((error) => new CodemodeFailure({ operation: call.name, cause: String(error) })));
     },
   };
 }

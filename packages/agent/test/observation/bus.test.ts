@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
-import { createObservationBus } from "../../src/observation/bus";
+import { afterEach, describe, expect, it } from "bun:test";
+import { createObservationBus, ObservationDeliveryFailed } from "../../src/observation/bus";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -39,11 +39,9 @@ describe("observation bus delivery", () => {
   it("isolates a throwing subscriber while preserving the publish snapshot", async () => {
     const observations = bus();
     const event = BusEvent.define("test.bus.errors", z.string());
-    const warn = mock(() => undefined);
-    const originalWarn = console.warn;
-    console.warn = warn;
     const seen: string[] = [];
     const delivered = Promise.withResolvers<void>();
+    const reported = Promise.withResolvers<{ eventName: string; error: string }>();
     const unsubscribe = observations.subscribe(event, () => {
       unsubscribe();
       throw new Error("subscriber failed");
@@ -52,15 +50,31 @@ describe("observation bus delivery", () => {
       seen.push(value);
       delivered.resolve();
     });
+    observations.subscribe(ObservationDeliveryFailed, (failure) => reported.resolve(failure));
 
-    try {
-      observations.publish(event, "survived");
-      await bounded(delivered.promise);
-      expect(seen).toEqual(["survived"]);
-      expect(warn).toHaveBeenCalledTimes(1);
-    } finally {
-      console.warn = originalWarn;
-    }
+    observations.publish(event, "survived");
+    await bounded(delivered.promise);
+    expect(seen).toEqual(["survived"]);
+    // Without an injected reporter the failure is a fact on the bus itself, not a log line.
+    expect(await bounded(reported.promise)).toEqual({ eventName: event.name, error: "Error: subscriber failed" });
+  });
+
+  it("never reports a failing delivery of the failure report itself", async () => {
+    const observations = bus();
+    const event = BusEvent.define("test.bus.failure-loop", z.string());
+    const observed: string[] = [];
+    const settled = Promise.withResolvers<void>();
+    observations.observe((published) => {
+      observed.push(published.name);
+      if (published.name === ObservationDeliveryFailed.name) {
+        queueMicrotask(() => queueMicrotask(() => settled.resolve()));
+      }
+      throw new Error("observer always fails");
+    });
+
+    observations.publish(event, "once");
+    await bounded(settled.promise);
+    expect(observed).toEqual([event.name, ObservationDeliveryFailed.name]);
   });
 
   it("delivers the original handler failure to the injected error sink", async () => {

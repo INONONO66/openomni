@@ -1,4 +1,4 @@
-import { ObservationSink, executorContext, ForeignFailure, Interrupted, newTraceId, type ExecutionError } from "@openomni/agent";
+import { ObservationSink, executorContext, AgentFailure, Interrupted, newTraceId, type ExecutionError } from "@openomni/agent";
 import { Llm, type RunInput, type Sink, type Run } from "@openomni/llm";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -39,7 +39,7 @@ function textOutcome(outcome: Run.Outcome, text: string): Effect.Effect<{ readon
   if (outcome.type === "stop") return Effect.succeed({ text });
   if (outcome.type === "error") return Effect.fail(outcome.error);
   if (outcome.type === "aborted") return Effect.fail(new Interrupted());
-  return Effect.fail(new ForeignFailure({ operation: "completion", cause: "sub-model returned continue" }));
+  return Effect.fail(new AgentFailure({ operation: "completion", cause: "sub-model returned continue" }));
 }
 
 /** The app composes the native attempt; only the tool adapter at the gateway runs it. */
@@ -49,7 +49,7 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
     const llm = yield* Llm;
     const events = yield* ObservationSink;
     const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id })
-      .pipe(Effect.mapError((error) => new ForeignFailure({ operation: "completion.resolve", cause: String(error) })));
+      .pipe(Effect.mapError((error) => new AgentFailure({ operation: "completion.resolve", cause: String(error) })));
     const input: RunInput = {
       messages: call.messages, tools: [], toolChoice: "none", model: resolved,
       auth: { type: "api", key: call.model.apiKey }, authProvider: call.model.provider,
@@ -63,24 +63,24 @@ export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, E
     const executor = yield* executorContext;
     const runAttempts = executor.runAttempts;
     if (runAttempts === undefined)
-      return yield* new ForeignFailure({ operation: "completion", cause: "sub-model requires session attempt authority" });
+      return yield* new AgentFailure({ operation: "completion", cause: "sub-model requires session attempt authority" });
     const intent = { provider: resolved.providerID, model: resolved.id };
     const result = yield* executor.run({ kind: "llm", op: "text", intent, effect: {} }, (parent) => runAttempts(parent, {
       prepare: (attempt) => Effect.succeed({
         request: { op: "text", intent: { attempt, ...intent }, effect: {} },
         admit: () => call.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.void,
         body: () => llm.run(input, capture.sink).pipe(
-          Effect.mapError((error): ExecutionError => error._tag === "LlmRunFailure" ? error : new ForeignFailure({ operation: "completion.run", cause: String(error) })),
+          Effect.mapError((error): ExecutionError => error._tag === "LlmRunFailure" ? error : new AgentFailure({ operation: "completion.run", cause: String(error) })),
           Effect.flatMap((outcome) => textOutcome(outcome, capture.text())),
         ),
       }),
     }));
     if (result.terminal === "interrupted") return yield* new Interrupted();
     if (result.terminal !== "executed")
-      return yield* new ForeignFailure({ operation: "completion", cause: `sub-model refused: ${result.reason}` });
+      return yield* new AgentFailure({ operation: "completion", cause: `sub-model refused: ${result.reason}` });
     const value = result.value;
     if (value === null || typeof value !== "object" || Array.isArray(value) || typeof value.text !== "string")
-      return yield* new ForeignFailure({ operation: "completion", cause: "invalid sub-model result" });
+      return yield* new AgentFailure({ operation: "completion", cause: "invalid sub-model result" });
     return value.text;
   });
 }

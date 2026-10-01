@@ -35,7 +35,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   const initial = yield* createDispatcher({ executor: crashed }).pipe(Effect.provide(catalogLayer([definition])));
   const context = { sessionId: recorded.identity.sessionId, turnId: recorded.identity.turnId };
   expect(yield* failure(initial.execute({ id: "write-call", tool: "write", input: { text: "original" } }, context)))
-    .toMatchObject({ _tag: "ForeignFailure", operation: "crash" });
+    .toMatchObject({ _tag: "AgentFailure", operation: "crash" });
   expect(executed).toEqual([]);
   expect(transformations).toBe(1);
   const ready = Promise.withResolvers<void>();

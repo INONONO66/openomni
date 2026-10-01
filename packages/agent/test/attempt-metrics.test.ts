@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { expect, test } from "bun:test";
 import { LedgerAction } from "@openomni/protocol";
 import { LlmRunFailure, run } from "@openomni/llm";
@@ -79,8 +80,11 @@ test("a real committed failed attempt contributes billed usage once", () =>
       attempts += 1;
       if (attempts === 1) return yield* new LlmRunFailure({
         message: "overloaded", aborted: false, contextOverflow: false,
-        visibleOutput: false, isRetryable: true, statusCode: 529,
-        retryAfterMs: 0, responseHeaders: { "retry-after-ms": "0" },
+        visibleOutput: false, retryAfterMs: 0,
+        cause: new APICallError({
+          message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
+          statusCode: 529, responseHeaders: { "retry-after-ms": "0" }, isRetryable: true,
+        }),
         usageProvenance: "reported",
         usage: {
           inputTokens: 7, outputTokens: 0, reasoningTokens: 0,

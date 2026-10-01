@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { CommitFailed, } from "./errors";
+import { AgentInvariantViolation, CommitFailed } from "./errors";
 import { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import {
@@ -42,7 +42,7 @@ function toolsGeneration(kernel: SessionKernel, message: SessionTransition.Outbo
     terminal === undefined
       ? undefined
       : SessionHandleStore.turnIntent(kernel.actionById(terminal.turnId));
-  if (intent === undefined) throw new Error("outbound original turn is missing");
+  if (intent === undefined) throw new AgentInvariantViolation("outbound original turn is missing");
   return intent.toolsGeneration;
 }
 
@@ -64,7 +64,7 @@ function acknowledge(
     receipt.action.sessionId !== message.destinationSessionId ||
     canonicalDigest(payload) !== canonicalDigest(PlainValueSchema.parse(message))
   ) {
-    throw new Error("outbound destination receipt does not match its recorded payload");
+    throw new AgentInvariantViolation("outbound destination receipt does not match its recorded payload");
   }
   return {
     id: `${message.messageId}:ack`,

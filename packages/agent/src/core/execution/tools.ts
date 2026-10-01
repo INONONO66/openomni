@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { AgentInvariantViolation } from "../../errors";
 import type { ChatAgentConfig } from "../types";
 import type { RunState } from "./state";
 import { recordToolCall } from "../budget";
@@ -20,7 +21,7 @@ export function buildSystemPrompt(
 
 export function assertToolExecutor(config: ChatAgentConfig): void {
   if ((config.tools?.length ?? 0) > 0 && !config.toolExecutor && !config.toolWave) {
-    throw new Error("toolExecutor is required when tools are provided");
+    throw new AgentInvariantViolation("toolExecutor is required when tools are provided");
   }
 }
 
@@ -52,7 +53,7 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
   const claim = (key: string, tool: { name: string }, value: ToolPolicyMetadata): void => {
     const owner = owners.get(key);
     if (owner !== undefined && owner.tool !== tool) {
-      throw new Error(
+      throw new AgentInvariantViolation(
         `tool metadata collision: "${key}" is claimed by both "${owner.name}" and "${tool.name}"`,
       );
     }

@@ -1,7 +1,7 @@
 import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { describe, expect, spyOn, test } from "bun:test";
-import { Cause, Effect } from "effect";
+import { Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
 import { nth } from "./helpers/nth";
 import { answerThenCompact } from "./helpers/effect-g2";
@@ -198,30 +198,25 @@ describe("restore_context_projection", () => {
       program((handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
         Effect.gen(function* () {
           const compaction = compactionIntent(before);
-          const missing = yield* Effect.exit(handle.restoreContext("nope"));
-          expect(missing._tag).toBe("Failure");
-          if (missing._tag === "Failure") {
-            expect(Cause.squash(missing.cause)).toMatchObject({
-              name: "ContextRestoreError",
-              code: "context_restore_refused",
-              reason: "unknown_compaction",
-            });
-          }
+          const missing = yield* Effect.flip(handle.restoreContext("nope"));
+          expect(missing).toMatchObject({
+            _tag: "ContextRestoreError",
+            reason: "unknown_compaction",
+            message: "context restore refused: unknown_compaction",
+          });
           // No release plane: the adopted fence owner stays durable.
           expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
           const result = before.find(
             (action: LedgerAction.Node) =>
               action.kind === "compaction" && action.parentId === compaction.id,
           );
-          const unexecuted = yield* Effect.exit(
+          const unexecuted = yield* Effect.flip(
             handle.restoreContext(result?.id ?? ""),
           );
-          expect(unexecuted._tag).toBe("Failure");
-          if (unexecuted._tag === "Failure") {
-            expect(Cause.squash(unexecuted.cause)).toMatchObject({
-              name: "ContextRestoreError", code: "context_restore_refused", reason: "not_executed",
-            });
-          }
+          expect(unexecuted).toMatchObject({
+            _tag: "ContextRestoreError", reason: "not_executed",
+            message: "context restore refused: not_executed",
+          });
           expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);
           // No release plane: the adopted fence owner stays durable.
           expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();

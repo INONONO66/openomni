@@ -398,7 +398,7 @@ describe("durable send admission faults", () => {
     });
     expect(recorded.kind).toBe("recorded");
 
-    expect(await effectFailure(messaging().send(input))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(messaging().send(input))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -422,7 +422,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      expect(await effectFailure(reentrant.send(input))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+      expect(await effectFailure(reentrant.send(input))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
       expect(
         detachedFacts.head(`gateway_send:${encodeURIComponent(input.messageId)}`),
       ).toBeUndefined();
@@ -443,7 +443,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+      expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
       expect(deliveries).toEqual([]);
     } finally {
       ledger().setDecisionFacts(detachedFacts);
@@ -456,7 +456,7 @@ describe("durable send admission faults", () => {
       return facts.record(fact);
     });
 
-    expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -468,7 +468,7 @@ describe("durable send admission faults", () => {
       );
       return facts.record(fact);
     });
-    expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -502,7 +502,7 @@ describe("durable send admission faults", () => {
       grants: () => grants,
       publish: Bus.publish,
     });
-    expect(await effectFailure(service.send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(service.send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -510,7 +510,7 @@ describe("durable send admission faults", () => {
     const first = buildSendInput({ messageId: "message:immutable" });
     expect((await runEffect(messaging().send(first))).kind).toBe("sent");
 
-    expect(await effectFailure(messaging().send({ ...first, body: "mutated body" }))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(messaging().send({ ...first, body: "mutated body" }))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
   });
 
@@ -524,7 +524,7 @@ describe("durable send admission faults", () => {
     });
 
     expect((await runEffect(messaging().send(first))).kind).toBe("sent");
-    expect(await effectFailure(messaging().send(second))).toMatchObject({ _tag: "ForeignFailure", operation: "message.transaction" });
+    expect(await effectFailure(messaging().send(second))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
     expect(ledger().kernel.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
       "message:first-owner",
@@ -602,7 +602,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
           })(),
         });
 
-  expect(await effectFailure(messaging.send(input))).toMatchObject(point === "after_receipt_cas" ? { name: "Error" } : { _tag: "ForeignFailure", operation: "message.deliver" });
+  expect(await effectFailure(messaging.send(input))).toMatchObject(point === "after_receipt_cas" ? { name: "Error" } : { _tag: "ChannelsFailure", operation: "message.deliver" });
   const resumed = await runEffect(messaging.send(input));
 
   return {

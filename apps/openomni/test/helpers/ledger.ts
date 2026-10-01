@@ -4,7 +4,7 @@ import {
   createSessionEntityRunTurn,
   decideSessionAdmission,
   Entropy,
-  ForeignFailure,
+  AgentFailure,
   GenerationLayers,
   ObservationSink,
   type SessionEntryServices,
@@ -108,11 +108,11 @@ export function drainSession(deps: {
         case "stop":
           return kernel.latestTurnTerminal(deps.sessionId)?.effect;
         case "refused":
-          return yield* new ForeignFailure({ operation: "session.admission", cause: "invalid_state" });
+          return yield* new AgentFailure({ operation: "session.admission", cause: "invalid_state" });
         case "consume":
           // The consume fold is entity-owned; a fixture reaching it is a
           // wiring defect, not backlog to silently drop.
-          return yield* new ForeignFailure({ operation: "session.admission", cause: "consume_in_fixture" });
+          return yield* new AgentFailure({ operation: "session.admission", cause: "consume_in_fixture" });
         case "start":
           // Inline detach: this drain owns the whole turn's lifetime itself.
           yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach: (body) => body });

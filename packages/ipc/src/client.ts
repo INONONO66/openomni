@@ -51,7 +51,7 @@ export function connectIpcClient(socketPath: string, opts: ConnectIpcClientOptio
       for (const raw of frames) {
         const message = classifyIpcMessage(raw);
         if (message === undefined) {
-          console.warn(`IPC frame matched no message schema: ${String(JSON.stringify(raw)).slice(0, 200)}`);
+          yield* Effect.logWarning(`IPC frame matched no message schema: ${String(JSON.stringify(raw)).slice(0, 200)}`);
         } else if (message.kind === "response") {
           yield* peer.dispatchMessage(message, undefined);
         } else {

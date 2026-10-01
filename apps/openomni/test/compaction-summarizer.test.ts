@@ -74,7 +74,7 @@ function failingRun(failure: Run.Failure, onCall: (input: Parameters<NonNullable
   });
 }
 
-async function expectForeignFailure(
+async function expectSummarizerFailure(
   run: NonNullable<FixtureLlm["run"]>,
   spans: Message.WithParts[],
   kind: "empty" | "overflow",
@@ -82,7 +82,7 @@ async function expectForeignFailure(
   const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
   const error = await runEffect(Effect.flip(summarize(spans, undefined, BUDGET)));
   expect(error).toBeInstanceOf(SummarizerError);
-  expect(error).toMatchObject({ _tag: "ForeignFailure", kind });
+  expect(error).toMatchObject({ _tag: "AgentFailure", kind });
 }
 
 describe("production compaction summarizer", () => {
@@ -111,14 +111,14 @@ describe("production compaction summarizer", () => {
       sink.onMessage(answer("   "));
       return { type: "stop" };
     });
-    await expectForeignFailure(run, [message("m1", "span")], "empty");
+    await expectSummarizerFailure(run, [message("m1", "span")], "empty");
   });
 
   it("uses the typed overflow flag to shrink twice before a typed overflow error", async () => {
     const inputLengths: number[] = [];
     const failure = runFailure(true, "opaque upstream failure");
     const run = failingRun(failure, (input) => { inputLengths.push(input.messages.length); });
-    await expectForeignFailure(
+    await expectSummarizerFailure(
       run,
       [message("m1", "oldest"), message("m2", "middle"), message("m3", "newest")],
       "overflow",

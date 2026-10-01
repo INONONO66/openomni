@@ -1,7 +1,8 @@
 import { Data } from "effect";
 import type { AgentStopError } from "./core/execution/stop-chain";
-import { ForeignFailure, type LedgerError } from "@openomni/ledger";
-import type { LlmRunFailure } from "@openomni/llm";
+import type { LedgerError } from "@openomni/ledger";
+import type { LlmFailure, LlmRunFailure } from "@openomni/llm";
+import type { LedgerSession } from "@openomni/protocol";
 
 export { AgentStopError } from "./core/execution/stop-chain";
 
@@ -36,8 +37,42 @@ export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
   readonly reason: string;
 }> {}
 
-/** The one foreign-failure class: ledger owns it, the agent re-exports it. */
-export { ForeignFailure };
+/** Agent-owned failure for a Cause without a typed error; `Failure.of` synthesizes it. */
+export class AgentFailure extends Data.TaggedError("AgentFailure")<{
+  readonly operation: string;
+  readonly cause: string;
+}> {
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
+}
+
+/** A context-restore the admission plane refused: the caller-selected compaction target is unknown or was never executed. */
+export class ContextRestoreError extends Data.TaggedError("ContextRestoreError")<{
+  readonly reason: "unknown_compaction" | "not_executed";
+}> {
+  override get message(): string { return `context restore refused: ${this.reason}`; }
+}
+
+/** A compaction execution the admission plane refused or whose recorded output no longer matches. */
+export class CompactionExecutionError extends Data.TaggedError("CompactionExecutionError")<{
+  readonly reason: string;
+}> {
+  override get message(): string { return `compaction execution refused: ${this.reason}`; }
+}
+
+/** A session commit the ledger refused; carries the full refusal verdict. */
+export class SessionCommitError extends Data.TaggedError("SessionCommitError")<{
+  readonly result: Exclude<LedgerSession.CommitResult, { readonly ok: true }>;
+}> {
+  override get message(): string { return `session commit ${this.result.reason}`; }
+}
+
+/** Named carrier for programmer-invariant violations thrown from non-Effect code paths. */
+export class AgentInvariantViolation extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "AgentInvariantViolation";
+  }
+}
 
 export class SessionMissing extends Data.TaggedError("SessionMissing")<{
   readonly sessionId: string;
@@ -76,6 +111,7 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
 
 export type ExecutionError =
   | LlmRunFailure
+  | LlmFailure
   | PolicyDenied
   | ToolBodyFailed
   | InvocationClosed
@@ -84,8 +120,9 @@ export type ExecutionError =
   | ContextAdmissionError
   | CommitFailed
   | OutcomeUnknown
-  | ForeignFailure
+  | AgentFailure
+  | CompactionExecutionError
   | ExecutionApprovalError
   | AgentStopError;
 
-export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError;
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError | ContextRestoreError;

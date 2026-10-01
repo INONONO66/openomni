@@ -11,6 +11,7 @@ import { Bus, collector } from "./helpers/observation";
 import { Auth } from "../src/auth";
 import type { Provider } from "../src/provider";
 import { newTraceId } from "./helpers/observation";
+import { sdkError } from "./helpers/retry";
 
 const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "run-test" };
 
@@ -150,11 +151,11 @@ describe("run", () => {
   });
 
   test("preserves typed terminal provider facts in the error outcome", async () => {
-    const source = Object.assign(new Error("opaque provider failure"), {
+    const source = sdkError({
+      message: "opaque provider failure",
       isRetryable: false,
       statusCode: 400,
       responseHeaders: { "retry-after-ms": "1234" },
-      contextOverflow: true,
     });
     mockStreamChunks = [
       { type: "finish-step", finishReason: "error", usage: { inputTokens: 17, outputTokens: 5 } },
@@ -166,25 +167,24 @@ describe("run", () => {
       mockSink,
     );
 
-    expect(outcome.type).toBe("error");
-    if (outcome.type !== "error" || !(outcome.error instanceof Error)) {
-      throw new Error("expected a typed failure");
-    }
-    const failure = outcome.error;
-    expect(failure).toMatchObject({
-      retryAfterMs: 1_234,
-      usage: { inputTokens: 17, outputTokens: 5 },
-      aborted: false,
-      contextOverflow: true,
+    expect(outcome).toMatchObject({
+      type: "error",
+      error: {
+        _tag: "LlmRunFailure",
+        retryAfterMs: 1_234,
+        usage: { inputTokens: 17, outputTokens: 5 },
+        aborted: false,
+        cause: {
+          statusCode: 400,
+          isRetryable: false,
+          responseHeaders: { "retry-after-ms": "1234" },
+        },
+      },
     });
-    expect(failure.cause).toContain(source.message);
   });
 
   test("preserves a provider abort fact in the aborted outcome", async () => {
-    const source = Object.assign(new Error("provider cancelled"), {
-      isRetryable: false,
-      aborted: true,
-    });
+    const source = Object.assign(new Error("provider cancelled"), { name: "AbortError" });
     mockStreamChunks = [{ type: "error", error: source }];
 
     const outcome = await run(

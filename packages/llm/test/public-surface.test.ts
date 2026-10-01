@@ -2,15 +2,16 @@ import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 import type { Sink } from "../src";
 import { Llm } from "../src/services";
-import { APIError, ForeignFailure, InvalidProviderData } from "../src/errors";
+import { LlmFailure, InvalidProviderData } from "../src/errors";
+import { apiError } from "./helpers/retry";
 import { Context } from "effect";
 
 test("LLM service and error values retain their machine tags", () => {
   const service = { run: (): never => { throw new Error("fixture"); }, resolveModel: (): never => { throw new Error("fixture"); } };
   expect(Llm.key).toBe("@openomni/llm/Llm");
   expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
-  expect(new APIError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
-  expect(new ForeignFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
+  expect(apiError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
+  expect(new LlmFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
   expect(
     new InvalidProviderData({
       operation: "provider.data",
@@ -59,9 +60,9 @@ describe("@openomni/llm root public surface", () => {
       "Auth",
       "AuthInvalidFileError",
       "AuthResolutionError",
-      "ForeignFailure",
       "InvalidProviderData",
       "Llm",
+      "LlmFailure",
       "LlmLive",
       "LlmRunFailure",
       "ModelResolutionError",

@@ -5,7 +5,7 @@ import { Processor as NativeProcessor } from "../../src/processor";
 import { anthropicModel } from "../helpers/fixtures";
 import { runEffect } from "../helpers/native";
 
-import { APIError } from "../../src/error";
+import { apiError, sdkError } from "../helpers/retry";
 import { useProcessor, capturingSink, failingStream, statusStates } from "../helpers/processor";
 import type { StreamEvent } from "../../src/processor/stream-events";
 
@@ -35,7 +35,7 @@ describe("Processor failures", () => {
   const { createProcessor, events } = fixture;
 
   test("settles the failed attempt's tool calls before surfacing the failure", async () => {
-    const error = new APIError({ message: "failure fixture", isRetryable: true });
+    const error = apiError({ message: "failure fixture", isRetryable: true });
     const stream = failingStream(error, [
       { type: "tool-call", toolCallId: "call-attempt-1", toolName: "lookup", input: {} },
     ]);
@@ -48,7 +48,7 @@ describe("Processor failures", () => {
   });
 
   test("a synchronous provider refusal settles without scheduling another attempt", async () => {
-    const error = new APIError({
+    const error = apiError({
       message: "failure fixture",
       isRetryable: true,
       responseHeaders: { "retry-after-ms": "0" },
@@ -91,7 +91,7 @@ describe("Processor failures", () => {
   });
 
   test("retains inferred-reset failure for the executor without owning backoff", async () => {
-    const error = new APIError({
+    const error = apiError({
       message: "failure fixture",
       isRetryable: true,
       statusCode: 429,
@@ -104,25 +104,25 @@ describe("Processor failures", () => {
   });
 
   test.each([
-    Object.assign(new Error("SDK fixture"), {
-      name: "AI_APICallError",
+    sdkError({
+      message: "SDK fixture",
       isRetryable: true,
       statusCode: 529,
       responseHeaders: { "Retry-After-Ms": "1" },
     }),
-    new APIError({
+    apiError({
       message: JSON.stringify({ type: "error", error: { type: "too_many_requests" } }),
       isRetryable: true,
     }),
   ])("propagates %s after exactly one attempt", async (error) => {
     const stream = failingStream(error);
     const processor = createProcessor({ createStream: stream });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "APIError", message: error.message, isRetryable: true });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "APIError", message: error.message, cause: { isRetryable: true } });
     expect(stream).toHaveBeenCalledTimes(1);
   });
 
   test("preserves the Anthropic 429 identity for canonical classification", async () => {
-    const error = new APIError({
+    const error = apiError({
       message: JSON.stringify({ type: "error", error: { type: "rate_limit_error" } }),
       statusCode: 429,
       isRetryable: true,
@@ -134,7 +134,7 @@ describe("Processor failures", () => {
   });
 
   test("throws the original non-retryable error and settles its tool once", async () => {
-    const error = new APIError({ message: "failure fixture", statusCode: 500, isRetryable: false });
+    const error = apiError({ message: "failure fixture", statusCode: 500, isRetryable: false });
     const capture = capturingSink();
     const processor = createProcessor({
       sink: capture.sink,

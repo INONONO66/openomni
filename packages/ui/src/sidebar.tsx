@@ -97,9 +97,14 @@ interface SidebarState {
 
 const SidebarContext = createContext<SidebarState | null>(null);
 
+/** A sidebar primitive rendered outside its provider: a wiring bug, not a runtime condition. */
+export class SidebarContextError extends Error {
+  override readonly name = "SidebarContextError";
+}
+
 export function useSidebar(): SidebarState {
   const state = useContext(SidebarContext);
-  if (state === null) throw new Error("useSidebar: no <Sidebar> above this element");
+  if (state === null) throw new SidebarContextError("useSidebar: no <Sidebar> above this element");
   return state;
 }
 

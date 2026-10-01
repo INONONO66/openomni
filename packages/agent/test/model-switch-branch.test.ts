@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { APICallError } from "ai";
 import { LlmRunFailure } from "@openomni/llm";
 import { PlainObjectSchema, type LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -19,8 +20,10 @@ function retryFailure() {
   return new LlmRunFailure({
     message: "overloaded", aborted: false, contextOverflow: false, visibleOutput: false,
     usage: { inputTokens: 1, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
-    isRetryable: true, statusCode: 503,
-    responseHeaders: { "retry-after-ms": "0" },
+    cause: new APICallError({
+      message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
+      statusCode: 503, responseHeaders: { "retry-after-ms": "0" }, isRetryable: true,
+    }),
   });
 }
 

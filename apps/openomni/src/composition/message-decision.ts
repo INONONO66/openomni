@@ -1,3 +1,4 @@
+import { AppInvariantError } from "../invariant";
 import { canonicalDigest } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
 import type { SessionKernel } from "./cluster-runtime";
@@ -19,6 +20,6 @@ export function messageDecisionRules(
     value: request.intent,
   });
   const ids = kernel.policyDecisionRuleIds(sessionId, inputHash);
-  if (ids === undefined) throw new Error("message pre decision is missing");
+  if (ids === undefined) throw new AppInvariantError("message pre decision is missing");
   return ids;
 }

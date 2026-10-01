@@ -138,7 +138,7 @@ function restoreCut(recording: ReturnType<typeof requestLedger>, stop: Stop) {
       source?.parentId === null ? undefined : kernel.actionById(source?.parentId ?? "");
     if (result?.parentId === null || result === undefined)
       throw new Error("missing compacted source");
-    const record = recordedCompaction(result.parentId, result);
+    const record = yield* recordedCompaction(result.parentId, result);
     const history = hydrateSessionHistory(kernel, sessionId).history;
     yield* executor.run(
       restoreContextRequest(

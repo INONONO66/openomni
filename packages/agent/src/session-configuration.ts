@@ -3,7 +3,7 @@ import { commitFoldBatch } from "./session-fold-commit";
 import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import type { SessionGeneration, LedgerSession } from "@openomni/protocol";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import { CommitFailed, ForeignFailure, type SessionError } from "./errors";
+import { CommitFailed, AgentFailure, type SessionError } from "./errors";
 import type { ResolvedSessionRuntime, SessionSystem } from "./session-contract";
 import type { SessionControllerState } from "./session-controller-state";
 
@@ -53,11 +53,11 @@ export function createSessionConfiguration(
       const accepted = yield* runtime.authorizeConfigure({
         sessionId, role: kernel.row(sessionId).role, operation, generation,
       });
-      if (!accepted) return yield* new ForeignFailure({ operation: "session.configure", cause: "denied" });
+      if (!accepted) return yield* new AgentFailure({ operation: "session.configure", cause: "denied" });
       const current = kernel.row(sessionId);
       const previous = kernel.latestGenerationFor(sessionId);
       if (previous.generation !== before.generation)
-        return yield* new ForeignFailure({ operation: "session.configure", cause: "stale" });
+        return yield* new AgentFailure({ operation: "session.configure", cause: "stale" });
       const snapshot = SessionHandleStore.generationSnapshot({
         generation, revertTo: previous.generation, tools: nextTools,
         system: nextSystem, policyGeneration: previous.policyGeneration,

@@ -6,7 +6,7 @@ import { expect, it } from "bun:test";
 
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect, Fiber } from "effect";
-import { ExecutionApprovalError, ForeignFailure } from "../src/errors";
+import { ExecutionApprovalError, AgentFailure } from "../src/errors";
 import { createExecutor, } from "../src/executor";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
@@ -240,7 +240,7 @@ it("rejects invalid deadlines before admitting execution", () => isolated(Effect
           observations: { publish: () => undefined },
         })),
       ),
-    )).toMatchObject({ _tag: "ForeignFailure", operation: "executor.acquire", cause: "invalid_approval_timeout" });
+    )).toMatchObject({ _tag: "AgentFailure", operation: "executor.acquire", cause: "invalid_approval_timeout" });
   }
 })));
 
@@ -290,7 +290,7 @@ it("propagates a failed deadline commit without settling the live suspension", (
   const recording = yield* requestLedger({ id: "deadline-failure" });
   const transition = recording.ledger.transition;
   if (transition === undefined) throw new Error("missing transition");
-  const failure = new ForeignFailure({ operation: "request.timeout", cause: "deadline storage unavailable" });
+  const failure = new AgentFailure({ operation: "request.timeout", cause: "deadline storage unavailable" });
   const opened = Promise.withResolvers<SessionTransition.Request>();
   const f = yield* fixture({
     ...recording,

@@ -102,7 +102,7 @@ test("inbox target materialization refuses a child beyond its pinned fanout", as
         ),
       ),
     ).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "AgentFailure",
       operation: "message.commit",
       cause: "child fanout limit exhausted",
     });
@@ -169,7 +169,7 @@ test("entity inbox refuses bytes that do not match the outbound letter", async (
         ),
       ),
     ).rejects.toMatchObject({
-      _tag: "ForeignFailure",
+      _tag: "AgentFailure",
       operation: "message.commit",
       cause: "outbound inbox binding mismatch",
     });

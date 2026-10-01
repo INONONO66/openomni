@@ -11,7 +11,7 @@ import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
-import { ForeignFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { LedgerFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
 import {
   type BusEvent,
   type LedgerAction,
@@ -556,7 +556,7 @@ describe("durable session handle", () => {
         const result = yield* awaitSignal(handle.prompt("blocked prompt"));
         expect(result).toMatchObject({
           kind: "error",
-          cause: { name: "SessionPolicyRefusal", reason },
+          cause: { _tag: "SessionPolicyRefusal", reason },
         });
         expect(calls).toBe(0);
         expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
@@ -610,7 +610,7 @@ describe("durable session handle", () => {
 
         expect(result).toMatchObject({
           kind: "error",
-          cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+          cause: { _tag: "SessionPolicyRefusal", reason: "invalid_output" },
         });
         expect(calls).toBe(0);
         expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
@@ -658,7 +658,7 @@ describe("durable session handle", () => {
           } else {
             expect(result).toMatchObject({
               kind: "error",
-              cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+              cause: { _tag: "SessionPolicyRefusal", reason: "invalid_output" },
             });
           }
         }),
@@ -748,7 +748,7 @@ describe("durable session handle", () => {
           } else {
             expect(result).toMatchObject({
               kind: "error",
-              cause: { name: "SessionPolicyRefusal", reason: "invalid_output" },
+              cause: { _tag: "SessionPolicyRefusal", reason: "invalid_output" },
             });
           }
           expect(terminals(handle.id)).toMatchObject([{ kind: sample.valid ? "result" : "error" }]);
@@ -797,7 +797,7 @@ describe("durable session handle", () => {
             .map(policyHook);
           expect(result).toMatchObject({
             kind: "error",
-            cause: { name: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
+            cause: { _tag: "SessionPolicyRefusal", reason: `turn ${phase} refused` },
           });
           expect(calls).toBe(phase === "pre" ? 0 : 1);
           expect(hooks).toEqual(
@@ -843,7 +843,7 @@ describe("durable session handle", () => {
         expect(calls).toBe(0);
         expect(result).toMatchObject({
           kind: "error",
-          cause: { name: "SessionPolicyRefusal", code: "session_policy_refused" },
+          cause: { _tag: "SessionPolicyRefusal", code: "session_policy_refused" },
         });
       }),
       { seedPolicies: false },
@@ -938,7 +938,7 @@ describe("durable session handle", () => {
         const late = input.ledger.transition({ kind: "request.open", request }, "late:open", now);
         const refused = yield* Effect.flip(late);
         expect(refused).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "session.request.transition",
           cause: "stale",
         });
@@ -1018,7 +1018,7 @@ describe("durable session handle", () => {
             if (decision === undefined || policyHook(decision) !== "turn.pre") return commit(input);
             explode.mockRestore();
             return Effect.fail(
-              new ForeignFailure({ operation: "session.commit", cause: "admission fixture" }),
+              new LedgerFailure({ operation: "session.commit", cause: "admission fixture" }),
             );
           },
         );
@@ -1030,7 +1030,7 @@ describe("durable session handle", () => {
           cause: {
             _tag: "CommitFailed",
             error: {
-              _tag: "ForeignFailure",
+              _tag: "LedgerFailure",
               operation: "session.commit",
               cause: "admission fixture",
             },
@@ -1641,20 +1641,19 @@ describe("durable session handle", () => {
         expect(successor).not.toBe(first);
 
         expect(
-          yield* failure(awaitSignal(first.restoreContext("missing-compaction"))),
+          yield* Effect.flip(first.restoreContext("missing-compaction")),
         ).toMatchObject({
-          name: "ContextRestoreError",
-          code: "context_restore_refused",
+          _tag: "ContextRestoreError",
           reason: "unknown_compaction",
         });
         yield* awaitSignal(bounded(first.close(), "close through successor"));
         expect(yield* Effect.flip(successor.prompt("after close"))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "session.handle",
           cause: "closed",
         });
         expect(yield* Effect.flip(first.prompt("after close"))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "session.handle",
           cause: "closed",
         });
@@ -1960,7 +1959,7 @@ describe("session crash recovery and observation", () => {
           });
         yield* awaitSignal(bounded(reactivate("boundary-deny", runner), "reactivation terminal"));
         expect(yield* awaitSignal(bounded(drained.promise, "boundary refusal"))).toMatchObject({
-          _tag: "ForeignFailure",
+          _tag: "AgentFailure",
           operation: "session.prompt",
           cause: "late prompt refused",
         });

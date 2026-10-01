@@ -12,7 +12,7 @@ import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutorOptions, ExecutionLedger } from "../../src/executor-contract";
 import type {} from "../../src/session-contract";
 import { commitSessionRequest } from "../../src/session-admission";
-import { ForeignFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/errors";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger } from "./isolated";
@@ -139,7 +139,7 @@ export function crashAfterRequestOpen(initial: RequestLedger, operation: string)
         transition(payload, inputId, at).pipe(
           Effect.flatMap((decision) =>
             payload.kind === "request.open"
-              ? Effect.fail(new ForeignFailure({ operation, cause: "crash" }))
+              ? Effect.fail(new AgentFailure({ operation, cause: "crash" }))
               : Effect.succeed(decision),
           ),
         ),

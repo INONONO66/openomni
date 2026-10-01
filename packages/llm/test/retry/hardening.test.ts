@@ -1,9 +1,9 @@
 import { describe, expect, test, vi } from "bun:test";
 import { Retry } from "../../src/retry";
 
-import { apiError, rateLimitError, withRandom, type APIErrorInput } from "../helpers/retry";
+import { apiError, rateLimitError, withRandom, type SdkErrorInput } from "../helpers/retry";
 
-function retryableError(overrides: Partial<APIErrorInput> = {}) {
+function retryableError(overrides: Partial<SdkErrorInput> = {}) {
   return apiError({ message: "boom", isRetryable: true, ...overrides });
 }
 
@@ -55,7 +55,7 @@ describe("Retry backoff jitter", () => {
 });
 
 describe("Retry billing classification", () => {
-  const billingCases: Array<{ name: string; input: APIErrorInput }> = [
+  const billingCases: Array<{ name: string; input: SdkErrorInput }> = [
     {
       name: "insufficient_quota code",
       input: {

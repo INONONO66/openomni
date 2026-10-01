@@ -30,7 +30,7 @@ import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "@openomni/llm";
 import type { ExecutorOptions, DurableExecutor } from "../../src/executor-contract";
 import type { SessionHandle } from "../../src/session-handle";
-import { ForeignFailure, CommitFailed } from "../../src/errors";
+import { AgentFailure, CommitFailed } from "../../src/errors";
 import { allowAllPolicy } from "./compiled-policy";
 import { runInput } from "./run-input";
 
@@ -185,7 +185,7 @@ export function dispatchingRunner(
 }
 
 export function foreign(operation: string, cause: unknown) {
-  return new ForeignFailure({ operation, cause: String(cause) });
+  return new AgentFailure({ operation, cause: String(cause) });
 }
 
 /** Inspect typed failures and defects without Promise rejection wrappers. */

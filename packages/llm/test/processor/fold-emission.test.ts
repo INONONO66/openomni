@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { APIError } from "../../src/error";
+import { apiError } from "../helpers/retry";
 import {
   useProcessor,
   capturingSink,
@@ -11,7 +11,7 @@ import type { StreamEvent } from "../../src/processor/stream-events";
 
 describe("Processor fold emission", () => {
   const { createProcessor } = useProcessor();
-  const failure = () => new APIError({ message: "failure fixture", isRetryable: true });
+  const failure = () => apiError({ message: "failure fixture", isRetryable: true });
 
   async function project(chunks: StreamEvent[]) {
     const capture = capturingSink();

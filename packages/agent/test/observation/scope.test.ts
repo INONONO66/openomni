@@ -1,5 +1,6 @@
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { newTraceId, scopeObservation } from "../../src/index";
+import { ObservationDeliveryFailed } from "../../src/observation/bus";
 import { collector } from "../helpers/observation-collector";
 import { BusEvent, type ObservationSink } from "@openomni/protocol";
 import { z } from "zod";
@@ -107,13 +108,51 @@ describe("scoped observations", () => {
     ]);
   });
 
+  // Each row pins the diagnostic the bus is expected to retain for that thrown
+  // value, written as a literal: String() for most, the object tag when
+  // String() itself throws. The function row is `() => 0` because String() of
+  // a function returns its source text, and that literal survives Bun's
+  // transpiler verbatim.
   it.each([
-    new Error("reporter failed"), Symbol("reporter"), { toString: 0 }, null, undefined,
-    false, 1, 1n, "reporter", () => undefined,
-  ])("contains reporter failure without changing its identity: %p", (reporterFailure) => {
-    const warn = mock(() => undefined);
-    const originalWarn = console.warn;
-    console.warn = warn;
+    [new Error("reporter failed"), "Error: reporter failed"],
+    [Symbol("reporter"), "Symbol(reporter)"],
+    [{ toString: 0 }, "[object Object]"],
+    [null, "null"],
+    [undefined, "undefined"],
+    [false, "false"],
+    [1, "1"],
+    [1n, "1"],
+    ["reporter", "reporter"],
+    [() => 0, "() => 0"],
+  ])("exposes a reporter failure as data without throwing: %p", (reporterFailure, expected) => {
+    // The sink refuses domain events but still accepts the failure report itself.
+    const failures: { eventName: string; error: string; reporterError?: string }[] = [];
+    const hostile: ObservationSink = {
+      publish(event, data) {
+        if (event.name !== ObservationDeliveryFailed.name) throw new Error("sink failed");
+        failures.push(ObservationDeliveryFailed.schema.parse(data));
+      },
+      scope() {
+        return hostile;
+      },
+    };
+
+    scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "default reporter" });
+    expect(failures).toEqual([{ eventName: TestEvent.name, error: "Error: sink failed" }]);
+    failures.length = 0;
+
+    const scoped = scopeObservation(hostile, identity, {
+      onError() {
+        throw reporterFailure;
+      },
+    });
+    expect(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })).not.toThrow();
+    expect(failures).toEqual([
+      { eventName: TestEvent.name, error: "Error: sink failed", reporterError: expected },
+    ]);
+  });
+
+  it("drops the failure when the sink refuses the failure report too", () => {
     const hostile: ObservationSink = {
       publish() {
         throw new Error("sink failed");
@@ -122,36 +161,9 @@ describe("scoped observations", () => {
         return hostile;
       },
     };
-    try {
-      scopeObservation(hostile, identity).publish(TestEvent, {
-        component: "test",
-        msg: "default reporter",
-      });
-      expect(warn).toHaveBeenCalledTimes(1);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    const errorLog = spyOn(console, "error").mockImplementation(() => undefined);
-    const scoped = scopeObservation(hostile, identity, {
-      onError() {
-        throw reporterFailure;
-      },
-    });
-    try {
-      expect(() =>
-        scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
-      ).not.toThrow();
-      expect(errorLog).toHaveBeenCalledTimes(1);
-      expect(errorLog.mock.calls[0]?.[1]).toMatchObject({
-        eventName: TestEvent.name,
-        error: { errors: [expect.objectContaining({ message: "sink failed" }), reporterFailure] },
-      });
-      const logged = z.object({ error: z.instanceof(AggregateError) }).parse(errorLog.mock.calls[0]?.[1]);
-      expect(logged.error.errors[1]).toBe(reporterFailure);
-    } finally {
-      errorLog.mockRestore();
-    }
+    expect(() =>
+      scopeObservation(hostile, identity).publish(TestEvent, { component: "test", msg: "dropped" }),
+    ).not.toThrow();
   });
 
   it("forwards subscriptions when the underlying sink supports them", () => {

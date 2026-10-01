@@ -1,6 +1,6 @@
 import { chmodSync } from "node:fs";
 import { posix } from "node:path";
-import { createIpcServer, typedCall, ForeignFailure as IpcForeignFailure } from "@openomni/ipc";
+import { createIpcServer, typedCall, IpcFailure } from "@openomni/ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
@@ -91,7 +91,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       if (method !== Machine.WireMethod.Attach) return yield* new MachineRefusalError({ reason: "invalid_method", message: `invalid method: ${method}` });
       const offer = yield* Effect.try({ try: () => Machine.Offer.parse(params), catch: decodeMachineFailure("attach.decode") });
       yield* attach(offer, respond, connectionId);
-    }).pipe(Effect.mapError((error) => new IpcForeignFailure({ operation: "machine.request", cause: error.message || String(error) }))), {
+    }).pipe(Effect.mapError((error) => new IpcFailure({ operation: "machine.request", cause: error.message || String(error) }))), {
       onDisconnect: (id) => Effect.sync(() => detach(id, "connection_closed")),
     }).pipe(Effect.mapError((error) => new TransportFailure({ operation: "host.listen", message: error.message, cause: String(error) })));
     yield* Effect.try({ try: () => chmodSync(options.socketPath, 0o600), catch: decodeMachineFailure("host.chmod") });

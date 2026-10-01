@@ -1,6 +1,6 @@
 import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
-import { adoptSessionAuthority, createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, ForeignFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
+import { adoptSessionAuthority, createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, AgentFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
 import { CorruptRecord } from "@openomni/ledger";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
@@ -32,7 +32,7 @@ export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<Nati
     return (_sender, request, body) => serial.withPermits(1)(Effect.scoped(Effect.gen(function* () {
       const row = kernel.row(id);
       const owner = next();
-      const captured = yield* generations.capture({ sessionId: id, generation: row.toolsGeneration }).pipe(Effect.mapError((error) => new ForeignFailure({ operation: "ingress.capture", cause: String(error) })));
+      const captured = yield* generations.capture({ sessionId: id, generation: row.toolsGeneration }).pipe(Effect.mapError((error) => new AgentFailure({ operation: "ingress.capture", cause: String(error) })));
       const fence = yield* adoptSessionAuthority(kernel, id, owner).pipe(
         Effect.mapError((error) => new CommitFailed({ error })),
       );

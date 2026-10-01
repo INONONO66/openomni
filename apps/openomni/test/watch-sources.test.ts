@@ -158,43 +158,65 @@ test("path watch native callback observes a created target", async () => {
   }
 });
 
-test("command close accepts EPERM after readback finds no live group members", async () => {
+/** The stderr each process tool fails with (exit 1); `/bin/kill` still kills the group so the held shell exits. */
+interface ProcessToolFailures {
+  readonly kill: string;
+  readonly ps?: string;
+}
+
+/** Holds one command, then closes it while the process tools fail as declared. */
+function closeUnderFailingProcessTools(failing: ProcessToolFailures) {
   const failures: Error[] = [];
-  const source = commandSource(
-    "read hold",
-    () => undefined,
-    () => undefined,
-    (error) => failures.push(error),
-  );
+  const reported = Promise.withResolvers<Error>();
+  const source = commandSource("read hold", () => undefined, () => undefined, (error) => {
+    failures.push(error);
+    reported.resolve(error);
+  });
   const spawn = Bun.spawn;
-  const epermSpawn = new Proxy(spawn, {
+  const failing_ = (stderr: string, before = "") => ["/bin/sh", "-c", `${before}printf '${stderr}\\n' >&2; exit 1`];
+  const failingSpawn = new Proxy(spawn, {
     apply(
       target,
       thisArg: typeof Bun,
       args: Parameters<typeof Bun.spawn>,
     ): ReturnType<typeof Bun.spawn> {
       const [command, options] = args;
-      if (Array.isArray(command) && command[0] === "/bin/kill") {
-        const pid = command.at(-1);
-        return Reflect.apply(target, thisArg, [
-          [
-            "/bin/sh",
-            "-c",
-            `/bin/kill -KILL -- ${pid}; printf 'Operation not permitted\\n' >&2; exit 1`,
-          ],
-          options,
-        ]);
-      }
+      if (!Array.isArray(command)) return Reflect.apply(target, thisArg, args);
+      if (command[0] === "/bin/kill")
+        return Reflect.apply(target, thisArg, [failing_(failing.kill, `/bin/kill -KILL -- ${command.at(-1)}; `), options]);
+      if (command[0] === "ps" && failing.ps !== undefined)
+        return Reflect.apply(target, thisArg, [failing_(failing.ps), options]);
       return Reflect.apply(target, thisArg, args);
     },
   });
-  Reflect.set(Bun, "spawn", epermSpawn);
-  try {
-    await source.close();
-    expect(failures).toEqual([]);
-  } finally {
-    Reflect.set(Bun, "spawn", spawn);
-  }
+  Reflect.set(Bun, "spawn", failingSpawn);
+  const closed = source.close().finally(() => Reflect.set(Bun, "spawn", spawn));
+  return { closed, failures, reported: reported.promise };
+}
+
+test("command close accepts EPERM after readback finds no live group members", async () => {
+  const { closed, failures } = closeUnderFailingProcessTools({ kill: "Operation not permitted" });
+  await closed;
+  expect(failures).toEqual([]);
+});
+
+test.each([
+  [
+    "a kill failure that is neither ESRCH nor EPERM",
+    { kill: "kill: unexpected failure" },
+    /^alarm process group \d+ termination failed: kill: unexpected failure$/,
+  ],
+  [
+    "an EPERM whose process readback fails",
+    { kill: "Operation not permitted", ps: "ps: readback unavailable" },
+    /^alarm process-group readback failed: ps: readback unavailable$/,
+  ],
+])("command close reports %s as a named process-group failure", async (_case, failing, message) => {
+  const { closed, reported } = closeUnderFailingProcessTools(failing);
+  // Both the caller's close and the source's failure port receive the one typed error.
+  const [rejection, failure] = await Promise.all([closed.then(() => undefined, (error: Error) => error), reported]);
+  expect(rejection).toBe(failure);
+  expect(failure).toMatchObject({ name: "AlarmProcessGroupError", message: expect.stringMatching(message) });
 });
 
 test("a faulting path source sends a terminal source_error summary and the typed failure", async () => {

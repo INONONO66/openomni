@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Token } from "@openomni/protocol";
 import { accumulateUsage, Retry } from "../src";
-import { APIError } from "../src/error";
+import { apiError } from "./helpers/retry";
 
 describe("public accounting and attempt classification", () => {
   test("accumulates billed counts without billing auxiliary counters twice", () => {
@@ -41,9 +41,9 @@ describe("public accounting and attempt classification", () => {
 
   test.each([
     [new Error("context_length_exceeded"), "context_overflow"],
-    [new APIError({ message: "fixture", statusCode: 408, isRetryable: true }), "timeout"],
-    [new APIError({ message: "fixture", statusCode: 400, isRetryable: false }), "validation_error"],
-    [new APIError({ message: "fixture", statusCode: 503, isRetryable: true }), "transient_error"],
+    [apiError({ message: "fixture", statusCode: 408, isRetryable: true }), "timeout"],
+    [apiError({ message: "fixture", statusCode: 400, isRetryable: false }), "validation_error"],
+    [apiError({ message: "fixture", statusCode: 503, isRetryable: true }), "transient_error"],
     [new Error("fixture"), "transient_error"],
   ] as const)("classifies the attempt %s as %s", (error, expected) => {
     expect(Retry.attemptReason(error)).toBe(expected);

@@ -363,7 +363,7 @@ describe("daemon filesystem driver", () => {
       }
 
       // The foreign diagnostic survives serialization without retaining an Error object.
-      expect(thrown).toMatchObject({ _tag: "ForeignFailure", operation: "fs.open", cause: String(reopenFailure) });
+      expect(thrown).toMatchObject({ _tag: "MachinesFailure", operation: "fs.open", cause: String(reopenFailure) });
       expect(rootDirectoryOpens).toBe(2);
       // Invariant 1: every acquisition is closed exactly once and none leaks.
       const closes = ledger.closesPerAcquisition();

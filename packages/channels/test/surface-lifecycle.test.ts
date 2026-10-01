@@ -15,9 +15,10 @@ afterEach(() => {
 describe("GitHubAdapter lifecycle", () => {
   it("refuses to start without a message handler", async () => {
     const adapter = new GitHubAdapter("secret", config, () => undefined);
-    await expect(adapter.start("trace-gh-1")).rejects.toThrow(
-      "[github] No message handler registered. Call onMessage() before start().",
-    );
+    await expect(adapter.start("trace-gh-1")).rejects.toMatchObject({
+      _tag: "ChannelsFailure",
+      operation: "github.start",
+    });
   });
 
   it("starts after a handler is registered and publishes readiness", async () => {
@@ -60,6 +61,32 @@ describe("TelegramClient send result normalization", () => {
     });
     const client = new TelegramClient("token", () => undefined);
     expect(await client.send("chat-1", "hi", "trace-1")).toBe("42");
+  });
+
+  it("wraps a malformed envelope in the telegram typed error", async () => {
+    globalThis.fetch = Object.assign(
+      async () => new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
+      { preconnect: realFetch.preconnect },
+    );
+    const client = new TelegramClient("token", () => undefined);
+    await expect(client.send("chat-1", "hi", "trace-1")).rejects.toMatchObject({
+      _tag: "TelegramApiError",
+    });
+  });
+
+  it("wraps a malformed result in the telegram typed error", async () => {
+    globalThis.fetch = Object.assign(
+      async () =>
+        new Response(JSON.stringify({ ok: true, result: { message_id: true } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      { preconnect: realFetch.preconnect },
+    );
+    const client = new TelegramClient("token", () => undefined);
+    await expect(client.send("chat-1", "hi", "trace-1")).rejects.toMatchObject({
+      _tag: "TelegramApiError",
+    });
   });
 
   it("returns undefined when Telegram omits the message id", async () => {

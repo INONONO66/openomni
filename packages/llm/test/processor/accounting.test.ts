@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { APIError } from "../../src/error";
+import { apiError } from "../helpers/retry";
 import type { Provider } from "../../src/provider";
 import type { EstimateUsage } from "../../src/token";
 import {
@@ -247,7 +247,7 @@ describe("Processor accounting", () => {
   });
 
   test("usageTotals retains billed usage on a failed attempt", async () => {
-    const error = new APIError({ message: "accounting fixture", isRetryable: true });
+    const error = apiError({ message: "accounting fixture", isRetryable: true });
     const stream = failingStream(error, [
       { type: "step-finish", finishReason: "stop", usage: { inputTokens: 100, outputTokens: 40 } },
     ]);

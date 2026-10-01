@@ -1,3 +1,4 @@
+import { CliError } from "./errors";
 import { Effect, Layer, ManagedRuntime, Scope } from "effect";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -24,12 +25,12 @@ import type { AskOptions } from "./onboard";
  */
 function resolvePlatform(): "darwin" | "linux" {
   if (process.platform === "darwin" || process.platform === "linux") return process.platform;
-  throw new Error(`unsupported platform: ${process.platform} (darwin and linux only)`);
+  throw new CliError(`unsupported platform: ${process.platform} (darwin and linux only)`);
 }
 
 async function ask(question: string, options?: AskOptions): Promise<string> {
   if (!process.stdin.isTTY) {
-    throw new Error("onboarding requires an interactive terminal");
+    throw new CliError("onboarding requires an interactive terminal");
   }
   if (options?.secret) {
     // Secrets must not echo: readline writes to a sink while the prompt
@@ -73,7 +74,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
   const io: DaemonIo = {
     exec: (argv: readonly string[]): ExecResult => {
       const [command, ...rest] = argv;
-      if (command === undefined) throw new Error("exec requires a command");
+      if (command === undefined) throw new CliError("exec requires a command");
       const result = spawnSync(command, rest, {
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
