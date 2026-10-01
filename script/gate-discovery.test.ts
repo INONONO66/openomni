@@ -45,11 +45,13 @@ function fixture(): string {
     put(root, `${workspace.dir}/src/index.ts`, "export {};\n");
   }
   // The copied gates import ../packages/protocol/src/json.js; mirror the real
-  // module so the fixture resolves it exactly like the repository does.
-  copyFileSync(
-    join(import.meta.dir, "../packages/protocol/src/json.ts"),
-    join(root, "packages/protocol/src/json.ts"),
-  );
+  // module and its one relative import (the NamedError factory behind
+  // CanonicalJsonError) so the fixture resolves it exactly like the repository does.
+  for (const name of ["json.ts", "error/index.ts"]) {
+    const target = join(root, "packages/protocol/src", name);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../packages/protocol/src", name), target);
+  }
   return root;
 }
 
