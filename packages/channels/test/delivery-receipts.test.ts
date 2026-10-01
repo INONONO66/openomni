@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { SlackAdapter } from "../src/provider/slack/surface";
 import { deliveryFixture, installDeliveryFetch } from "./helpers/delivery";
 
@@ -67,7 +68,7 @@ test("invalid Slack destination throws before any HTTP request or external recei
     { preconnect: originalFetch.preconnect },
   );
   try {
-    const adapter = new SlackAdapter({ botToken: "token", appToken: "app" }, {}, () => undefined);
+    const adapter = new SlackAdapter({ botToken: "token", appToken: "app" }, {}, () => undefined, injectedOptions());
     await expect(adapter.deliver("USER", "message", "invalid")).rejects.toMatchObject({
       _tag: "SlackEndpointKeyError",
     });

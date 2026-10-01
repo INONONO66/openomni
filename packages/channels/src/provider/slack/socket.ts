@@ -33,16 +33,25 @@ export class SlackSocket {
     private readonly fetchSocketUrl: (traceId: string) => Promise<string>,
     private readonly callbacks: SocketCallbacks,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
     delay: (ms: number) => Promise<void> = sleep,
   ) {
-    this.shell = new SocketReconnectShell(publish, SLACK_SHELL_MESSAGES, delay, (url) =>
-      this.openSocket(url),
+    this.shell = new SocketReconnectShell(
+      publish,
+      SLACK_SHELL_MESSAGES,
+      delay,
+      (url) => this.openSocket(url),
+      options,
     );
   }
 
   async start(): Promise<void> {
     this.shell.begin();
-    await this.shell.connect(() => this.fetchSocketUrl(newTraceId()));
+    await this.shell.connect(() => this.fetchSocketUrl(newTraceId(this.options.id)));
   }
 
   stop(): void {
@@ -108,8 +117,8 @@ export class SlackSocket {
     if (envelope.type === "disconnect") {
       // Routine connection refresh: close non-1000 so the close handler reconnects.
       this.publish(Operational.Events.Info, {
-        traceId: newTraceId(),
-        time: Date.now(),
+        traceId: newTraceId(this.options.id),
+        time: this.options.now(),
         component: "server",
         msg: "slack server requested reconnect",
         context: { reason: envelope.reason },
@@ -119,13 +128,13 @@ export class SlackSocket {
     }
     if (envelope.type !== "events_api") return;
     // Origin: the first frame of an inbound Slack event (D11).
-    const traceId = newTraceId();
+    const traceId = newTraceId(this.options.id);
     try {
       this.callbacks.onEvent(envelope, traceId);
     } catch (err) {
       this.publish(Operational.Events.Error, {
         traceId,
-        time: Date.now(),
+        time: this.options.now(),
         component: "server",
         msg: "slack event dispatch error",
         context: { err: err instanceof Error ? err.message : String(err) },

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { signedWebhook } from "./helpers/github";
 
@@ -28,7 +29,7 @@ const config = {};
 
 describe("GitHubAdapter retryable delivery failures", () => {
   it("returns 5xx when the message handler throws", async () => {
-    const adapter = new GitHubAdapter(secret, config, () => undefined);
+    const adapter = new GitHubAdapter(secret, config, () => undefined, injectedOptions());
     let attempts = 0;
     adapter.onMessage(async () => {
       attempts += 1;

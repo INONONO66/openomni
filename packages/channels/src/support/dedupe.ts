@@ -6,7 +6,11 @@ export class Dedupe {
   private readonly maxSize: number;
   private ops = 0;
 
-  constructor(maxAge = 5 * 60_000, maxSize = 10_000) {
+  constructor(
+    private readonly now: () => number,
+    maxAge = 5 * 60_000,
+    maxSize = 10_000,
+  ) {
     this.maxAge = maxAge;
     this.maxSize = maxSize;
   }
@@ -24,7 +28,7 @@ export class Dedupe {
       this.prune();
     }
 
-    const now = Date.now();
+    const now = this.now();
     const existing = this.seen.get(id);
     // allow re-processing if the previous entry has expired
     if (existing !== undefined && now - existing.at <= this.maxAge) return { duplicate: true };
@@ -35,7 +39,7 @@ export class Dedupe {
   }
 
   private prune(): void {
-    const cutoff = Date.now() - this.maxAge;
+    const cutoff = this.now() - this.maxAge;
     for (const [id, entry] of this.seen) {
       if (entry.at < cutoff) this.seen.delete(id);
     }

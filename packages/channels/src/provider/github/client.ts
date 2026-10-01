@@ -11,6 +11,7 @@ const CommentsPageSchema = z.array(z.object({ body: z.string().optional() }));
 export class GitHubClient {
   constructor(
     private readonly publish: PublishPort,
+    private readonly now: () => number,
     private readonly token?: string,
   ) {}
 
@@ -27,7 +28,7 @@ export class GitHubClient {
       // reply. The run's work must not vanish without a record.
       this.publish(Operational.Events.Warn, {
         traceId,
-        time: Date.now(),
+        time: this.now(),
         component: "server",
         msg: "github token missing — reply not posted",
         context: { repo, issueNumber },
@@ -50,7 +51,7 @@ export class GitHubClient {
     if (posted) {
       this.publish(Operational.Events.Debug, {
         traceId,
-        time: Date.now(),
+        time: this.now(),
         component: "server",
         msg: "github comment already posted",
         context: { repo, issueNumber, deliveryId },
@@ -67,6 +68,7 @@ export class GitHubClient {
       },
       {
         traceId,
+        now: this.now,
         publish: this.publish,
         label: "github/postComment",
       },
@@ -76,7 +78,7 @@ export class GitHubClient {
       const text = await response.text();
       this.publish(Operational.Events.Warn, {
         traceId,
-        time: Date.now(),
+        time: this.now(),
         component: "github",
         msg: "GitHub rejected comment delivery",
         context: { status: response.status, detail: text },
@@ -87,7 +89,7 @@ export class GitHubClient {
 
     this.publish(Operational.Events.Debug, {
       traceId,
-      time: Date.now(),
+      time: this.now(),
       component: "server",
       msg: "github comment posted",
       context: { repo, issueNumber },
@@ -111,6 +113,7 @@ export class GitHubClient {
         { method: "GET", headers },
         {
           traceId,
+          now: this.now,
           publish: this.publish,
           label: "github/listComments",
         },

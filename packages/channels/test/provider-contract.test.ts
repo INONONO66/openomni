@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import type { ProviderRuntime } from "../src/provider/contract";
 import { ChannelProviders } from "../src/provider/registry";
 import type { PublishPort } from "../src/types";
@@ -32,14 +33,14 @@ const cases: readonly ConformanceCase[] = [
     rendered: "*hi* `code`",
     limit: 4096,
     credential: { token: "tg-token" },
-    build: (publish) => ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish),
+    build: (publish) => ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish, injectedOptions()),
   },
   {
     provider: ChannelProviders.discord,
     rendered: "**hi** `code`",
     limit: 2000,
     credential: { token: "dc-token" },
-    build: (publish) => ChannelProviders.discord.create({ token: "dc-token" }, {}, publish),
+    build: (publish) => ChannelProviders.discord.create({ token: "dc-token" }, {}, publish, injectedOptions()),
   },
   {
     provider: ChannelProviders.github,
@@ -51,6 +52,7 @@ const cases: readonly ConformanceCase[] = [
         { secret: "hook-secret", token: "api", botUsername: "omni-bot" },
         {},
         publish,
+        injectedOptions(),
       ),
   },
   {
@@ -59,7 +61,7 @@ const cases: readonly ConformanceCase[] = [
     limit: 4000,
     credential: { botToken: "xoxb-test", appToken: "xapp-test" },
     build: (publish) =>
-      ChannelProviders.slack.create({ botToken: "xoxb-test", appToken: "xapp-test" }, {}, publish),
+      ChannelProviders.slack.create({ botToken: "xoxb-test", appToken: "xapp-test" }, {}, publish, injectedOptions()),
   },
 ];
 

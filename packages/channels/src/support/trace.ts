@@ -1,6 +1,6 @@
 import { traceIdFromUuid } from "@openomni/protocol";
 
-/** Channel-driver trace origin; entropy stays in the consuming runtime package. */
-export function newTraceId(): string {
-  return traceIdFromUuid(crypto.randomUUID());
+/** Channel-driver trace origin over the injected UUID source; entropy stays with the caller. */
+export function newTraceId(id: () => string): string {
+  return traceIdFromUuid(id());
 }

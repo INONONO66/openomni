@@ -1,4 +1,5 @@
 import { DiscordAdapter } from "../../src/provider/discord/surface";
+import { injectedOptions } from "./injected";
 import { SlackAdapter } from "../../src/provider/slack/surface";
 import { TelegramAdapter } from "../../src/provider/telegram/surface";
 import { ChannelProviders } from "../../src/provider/registry";
@@ -9,10 +10,10 @@ type Provider = "discord" | "slack" | "telegram";
 export function deliveryFixture(provider: Provider, publish: PublishPort = () => undefined) {
   const adapter =
     provider === "discord"
-      ? new DiscordAdapter("token", {}, publish)
+      ? new DiscordAdapter("token", {}, publish, injectedOptions())
       : provider === "slack"
-        ? new SlackAdapter({ botToken: "token", appToken: "app" }, {}, publish)
-        : new TelegramAdapter("token", {}, publish);
+        ? new SlackAdapter({ botToken: "token", appToken: "app" }, {}, publish, injectedOptions())
+        : new TelegramAdapter("token", {}, publish, injectedOptions());
   const limit = ChannelProviders[provider].capabilities.render.messageLimit;
   if (limit === null) throw new Error("delivery fixture requires a bounded provider");
   return { adapter, limit, address: provider === "slack" ? "TEAM:USER" : "123" };

@@ -37,8 +37,8 @@ export const SlackProvider: ChannelProvider<SlackCredentials, "slack"> = {
     "bot scopes: chat:write, im:write, app_mentions:read",
     "bot invited to the target channels",
   ],
-  create(credentials, config, publish) {
-    const surface = new SlackAdapter(credentials, config, publish);
+  create(credentials, config, publish, options) {
+    const surface = new SlackAdapter(credentials, config, publish, options);
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>

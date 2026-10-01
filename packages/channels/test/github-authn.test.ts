@@ -1,4 +1,5 @@
 import { expect, it } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import type { ChannelAuthnDecisionObserver } from "../src/authn/types";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { signGitHubBody } from "./helpers/github";
@@ -16,7 +17,7 @@ it.each([
   verdict,
 }) => {
   const decisions: ChannelAuthnDecision[] = [];
-  const adapter = new GitHubAdapter(secret, {}, () => undefined, undefined, {
+  const adapter = new GitHubAdapter(secret, {}, () => undefined, injectedOptions(), undefined, {
     onDecision: (decision) => {
       decisions.push(decision);
     },

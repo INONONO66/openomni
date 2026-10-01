@@ -33,11 +33,18 @@ export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
   preconditions: [
     "repository webhook posts issues/issue_comment events to the public endpoint with the shared secret",
   ],
-  create(credentials, config, publish) {
-    const surface = new GitHubAdapter(credentials.secret, config, publish, credentials.token);
+  create(credentials, config, publish, options) {
+    const surface = new GitHubAdapter(
+      credentials.secret,
+      config,
+      publish,
+      { now: options.now, id: options.id },
+      credentials.token,
+    );
     return {
       surface,
-      deliveryRoute: (externalId, body, key) => surface.deliver(externalId, body, key).then(kernelDeliveryReceipt),
+      deliveryRoute: (externalId, body, key) =>
+        surface.deliver(externalId, body, key).then(kernelDeliveryReceipt),
       webhookHandler: (request) => surface.handleWebhook(request),
     };
   },

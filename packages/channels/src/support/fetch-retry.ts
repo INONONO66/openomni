@@ -15,6 +15,8 @@ export async function fetchWithRetry(
   options: {
     /** The logical request's trace (D11): every retry of one request shares this ONE id — never re-minted per attempt. */
     traceId: string;
+    /** Injected wall clock for telemetry timestamps. */
+    now: () => number;
     /** retry-after seconds from 429 body; defaults to 5s */
     retryAfterSchema?: z.ZodType<number>;
     retries?: number;
@@ -47,7 +49,7 @@ export async function fetchWithRetry(
 
     options.publish?.(Operational.Events.Warn, {
       traceId: options.traceId,
-      time: Date.now(),
+      time: options.now(),
       component: "server",
       msg: "rate limited, retrying",
       context: {

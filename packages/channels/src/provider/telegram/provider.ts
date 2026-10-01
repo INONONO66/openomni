@@ -17,8 +17,8 @@ export const TelegramProvider: ChannelProvider<TelegramCredentials, "telegram"> 
   credentials: z.object({ token: z.string().min(1) }).strict(),
   settings: z.record(z.string(), z.never()),
   preconditions: [],
-  create(credentials, config, publish) {
-    const surface = new TelegramAdapter(credentials.token, config, publish);
+  create(credentials, config, publish, options) {
+    const surface = new TelegramAdapter(credentials.token, config, publish, options);
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>

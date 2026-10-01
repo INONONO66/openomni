@@ -72,9 +72,10 @@ export function deliverKeyed(
   send: (traceId: string) => Promise<string | undefined>,
   isRejected: (error: Error) => boolean,
   publish: PublishPort,
+  options: { readonly now: () => number; readonly id: () => string },
 ): Promise<DeliveryReceipt> {
   const attempt = async (): Promise<DeliveryReceipt> => {
-    const traceId = newTraceId();
+    const traceId = newTraceId(options.id);
     try {
       const externalMessageId = await send(traceId);
       return externalMessageId === undefined
@@ -85,7 +86,7 @@ export function deliverKeyed(
       if (error instanceof PartialDeliveryError) {
         publish(Operational.Events.Warn, {
           traceId,
-          time: Date.now(),
+          time: options.now(),
           component: "server",
           msg: "partial message delivery",
           context: {

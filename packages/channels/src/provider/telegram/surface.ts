@@ -17,7 +17,7 @@ export class TelegramAdapter implements Channel.Surface {
   readonly id = "telegram";
 
   private readonly client: TelegramClient;
-  private readonly dedupe = new Dedupe();
+  private readonly dedupe: Dedupe;
   private readonly outbound = new DeliveryReconciliation();
   private normalizer: TelegramNormalizer | null = null;
   private poller: TelegramPoller | null = null;
@@ -27,8 +27,14 @@ export class TelegramAdapter implements Channel.Surface {
     token: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
   ) {
-    this.client = new TelegramClient(token, publish);
+    this.dedupe = new Dedupe(options.now);
+    this.client = new TelegramClient(token, publish, options.now);
   }
 
   onMessage(handler: Channel.MessageHandler): void {
@@ -43,7 +49,7 @@ export class TelegramAdapter implements Channel.Surface {
     const botUsername = me.username ?? "";
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "telegram bot started",
       context: { username: me.username ?? me.first_name, botId: me.id },
@@ -58,11 +64,12 @@ export class TelegramAdapter implements Channel.Surface {
       this.client,
       {
         onMessage: (message) => {
-          const messageTraceId = newTraceId();
+          const messageTraceId = newTraceId(this.options.id);
           return handoffInbound({
             dedupe: this.dedupe,
             key: `${message.chat.id}:${message.message_id}`,
             traceId: messageTraceId,
+            now: this.options.now,
             publish: this.publish,
             errorMessage: "telegram message handling failed",
             rethrowFailure: true,
@@ -71,6 +78,7 @@ export class TelegramAdapter implements Channel.Surface {
         },
       },
       this.publish,
+      this.options,
     );
 
     this.poller.start();
@@ -80,7 +88,7 @@ export class TelegramAdapter implements Channel.Surface {
     this.poller?.stop();
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "telegram bot stopped",
     });
@@ -103,6 +111,7 @@ export class TelegramAdapter implements Channel.Surface {
         (error instanceof TelegramApiError && error.rejected) ||
         (error instanceof RateLimited && error.status === 429),
       this.publish,
+      this.options,
     );
   }
 
@@ -118,7 +127,7 @@ export class TelegramAdapter implements Channel.Surface {
 
     this.publish(Operational.Events.Debug, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "telegram message received",
       context: { chatId },

@@ -20,6 +20,11 @@ export class TelegramPoller {
     private readonly client: Pick<TelegramClient, "getUpdates">,
     private readonly callbacks: PollerCallbacks,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
     private readonly delay: (ms: number) => Promise<void> = sleep,
   ) {}
 
@@ -39,11 +44,7 @@ export class TelegramPoller {
     const generation = this.generation;
     const controller = new AbortController();
     this.pollController = controller;
-    const updates = await this.client.getUpdates(
-      this.offset,
-      pollTraceId,
-      controller.signal,
-    );
+    const updates = await this.client.getUpdates(this.offset, pollTraceId, controller.signal);
 
     // Telegram returns updates in update_id order. Process the batch in that
     // order and stop at the first failed handoff, leaving it and every later
@@ -64,7 +65,7 @@ export class TelegramPoller {
     while (this.running && generation === this.generation) {
       // Origin: one long-poll cycle is one logical request — its getUpdates
       // call (retries included) and any poll-error warn share this ONE id.
-      const pollTraceId = newTraceId();
+      const pollTraceId = newTraceId(this.options.id);
       try {
         await this.pollOnce(pollTraceId);
         attempt = 0;
@@ -72,12 +73,12 @@ export class TelegramPoller {
         if (!this.running || generation !== this.generation) break;
         this.publish(Operational.Events.Warn, {
           traceId: pollTraceId,
-          time: Date.now(),
+          time: this.options.now(),
           component: "server",
           msg: "telegram poll error",
           context: { err: String(err) },
         });
-        await this.delay(calculateBackoff(++attempt));
+        await this.delay(calculateBackoff(++attempt, this.options.random));
       }
     }
   }

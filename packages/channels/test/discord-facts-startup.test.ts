@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import type { ServerWebSocket } from "bun";
 import type { Channel } from "@openomni/protocol";
 import { z } from "zod";
@@ -43,7 +44,7 @@ test("Discord READY binds the facts-only handler on a real gateway connection", 
     async () => Response.json({ url: `ws://127.0.0.1:${server.port}` }),
     { preconnect: realFetch.preconnect },
   );
-  const adapter = new DiscordAdapter("token", {}, () => undefined);
+  const adapter = new DiscordAdapter("token", {}, () => undefined, injectedOptions());
   adapter.onMessage(async (message) => {
     incoming.resolve(message);
   });

@@ -47,9 +47,10 @@ async function evaluateGitHubHmac(state: GitHubAuthState): Promise<Policy.Policy
 export async function authenticateGitHubWebhook(input: {
   readonly request: Request;
   readonly secret: string;
+  readonly now: () => number;
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }): Promise<GitHubAuthResult> {
-  const startedAt = Date.now();
+  const startedAt = input.now();
   const state: GitHubAuthState = {
     request: input.request,
     secret: input.secret,
@@ -58,7 +59,7 @@ export async function authenticateGitHubWebhook(input: {
   await recordDecision(
     "channel-authn:github-hmac",
     verdict,
-    Date.now() - startedAt,
+    input.now() - startedAt,
     input.onDecision,
   );
 

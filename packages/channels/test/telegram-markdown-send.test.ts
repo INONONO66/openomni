@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { FIXED_NOW } from "./helpers/injected";
 import { TelegramClient } from "../src/provider/telegram/client";
 
 type SentBody = { text?: string; parse_mode?: string };
@@ -40,7 +41,7 @@ function parseRejection(): Response {
 describe("TelegramClient.sendMarkdown", () => {
   it("sends with MarkdownV2 parse mode and returns the message id", async () => {
     const { calls } = mockSendMessage(() => okResponse());
-    const client = new TelegramClient("token", () => undefined);
+    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
 
     const id = await client.sendMarkdown("chat-1", "*bold*", "trace-1");
 
@@ -57,7 +58,7 @@ describe("TelegramClient.sendMarkdown", () => {
     const warnings: string[] = [];
     const client = new TelegramClient("token", (_, event) => {
       warnings.push((event as { msg: string }).msg);
-    });
+    }, () => FIXED_NOW);
 
     const id = await client.sendMarkdown("chat-1", "*broken", "trace-1");
 
@@ -69,7 +70,7 @@ describe("TelegramClient.sendMarkdown", () => {
 
   it("rethrows non-parse failures without a plain resend", async () => {
     const { calls } = mockSendMessage(() => new Response("forbidden", { status: 403 }));
-    const client = new TelegramClient("token", () => undefined);
+    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
 
     await expect(client.sendMarkdown("chat-1", "text", "trace-1")).rejects.toThrow(
       "Telegram API sendMessage failed (403)",
@@ -79,7 +80,7 @@ describe("TelegramClient.sendMarkdown", () => {
 
   it("send keeps the plain path free of parse mode", async () => {
     const { calls } = mockSendMessage(() => okResponse());
-    const client = new TelegramClient("token", () => undefined);
+    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
 
     const id = await client.send("chat-1", "hello", "trace-1");
 
