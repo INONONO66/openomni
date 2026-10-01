@@ -2,15 +2,20 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import {
   SessionEntity,
   type SessionEntityPorts,
   type SessionEntityTimerContext,
   type SessionEntityTurnInput,
 } from "@openomni/agent";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
-import type { Inbox } from "@openomni/protocol";
+import {
+  type ObservationPublishFailure,
+  openCatalogStore,
+  openSessionStore,
+  SessionHandleStore,
+} from "@openomni/ledger";
+import type { Inbox, ObservationSink } from "@openomni/protocol";
 import { Effect } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import {
@@ -24,6 +29,14 @@ import {
   requestFixture,
   requestStateAction,
 } from "../../../packages/ledger/test/helpers/request";
+import { materializeSession } from "../../../packages/ledger/test/helpers/session";
+
+/** A sink that refuses every post-commit publish. */
+const REFUSING_SINK: ObservationSink = {
+  publish() {
+    throw new Error("sink failed");
+  },
+};
 
 const directories: string[] = [];
 afterAll(() => {
@@ -164,6 +177,46 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
     await runtime.dispose();
   }
 }, 20_000);
+
+test("a post-commit publish failure reaches the injected port and leaves the write result intact", () => {
+  const failures: ObservationPublishFailure[] = [];
+  const plane = createAppLedger({
+    observationSink: REFUSING_SINK,
+    onObservationFailure: (failure) => failures.push(failure),
+  });
+  try {
+    const kernel = plane.openKernel("request-session");
+    const fixture = requestFixture(kernel);
+    fixture.commit([fixture.original]);
+    expect(kernel.actionById("original")?.id).toBe("original");
+    expect(failures.map((failure) => [failure.actionId, failure.cause.message])).toEqual([
+      ["request-session:configure", "sink failed"],
+      ["original", "sink failed"],
+    ]);
+  } finally {
+    plane.close();
+  }
+});
+
+test("without an injected port a publish failure on a file-mode handle is an incident log line", () => {
+  const incident = spyOn(console, "error").mockImplementation((): void => undefined);
+  const plane = createAppLedger({
+    sessionsDir: join(tempDir(), "sessions"),
+    observationSink: REFUSING_SINK,
+  });
+  const store = plane.handles.openSession("ported-session");
+  try {
+    materializeSession(SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
+    expect(store.sessions.get("ported-session")?.id).toBe("ported-session");
+    expect(incident.mock.calls).toEqual([
+      ["ledger observation publish failed: ported-session:configure", new Error("sink failed")],
+    ]);
+  } finally {
+    incident.mockRestore();
+    store.close();
+    plane.close();
+  }
+});
 
 test("deadline delivery expires an open request through the activation fence", async () => {
   const plane = createAppLedger();

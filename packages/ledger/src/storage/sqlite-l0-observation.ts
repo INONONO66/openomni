@@ -22,6 +22,27 @@ export interface ObservationPublishFailure {
 export type ObservationFailurePort = (failure: ObservationPublishFailure) => void;
 
 /**
+ * Publishes one committed receipt and routes a publish failure to the port.
+ * Both run after the transaction committed, so neither may unwind the write:
+ * a port that throws has refused the last report channel there is, and that
+ * second failure is dropped so the committed result still reaches the caller.
+ */
+export function reportCommitted(
+  db: Database,
+  sink: ObservationSink,
+  port: ObservationFailurePort,
+  receipt: LedgerAction.Receipt,
+): void {
+  const failure = publishCommitted(db, sink, receipt);
+  if (failure === undefined) return;
+  try {
+    port(failure);
+  } catch {
+    // The port was the last channel; the write is committed and stands.
+  }
+}
+
+/**
  * Post-commit observation must never unwind the committed write, so a publish
  * failure is returned as a value for the store's failure port — never thrown
  * and never silently swallowed here.

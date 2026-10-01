@@ -22,22 +22,26 @@ export function openCatalogDatabase(): Database {
   return db;
 }
 
-/** Tests fail loudly on a swallowed publish failure instead of hiding it. */
-function rethrowObservationFailure(failure: ObservationPublishFailure): never {
-  throw failure.cause;
-}
-
 export interface L0Adapters {
   readonly sessions: SessionWriteAdapter;
   readonly actions: Storage.ActionSubAdapter;
 }
 
-/** Session-file adapters over one connection plus a capture of every committed action. */
+/**
+ * Session-file adapters over one connection plus a capture of every committed
+ * action. Publish failures are captured too (the store drops a throwing port,
+ * so a rethrowing port could not make a test fail): assert on `failures`.
+ */
 export function observedL0Adapters(db: Database): {
   adapter: L0Adapters;
   observations: L0Observation.ActionCommitted[];
+  failures: ObservationPublishFailure[];
 } {
   const observations: L0Observation.ActionCommitted[] = [];
+  const failures: ObservationPublishFailure[] = [];
+  const report = (failure: ObservationPublishFailure): void => {
+    failures.push(failure);
+  };
   const transaction = <T>(operation: () => T): T => db.transaction(operation).immediate();
   const sink: ObservationSink = {
     publish(event, payload) {
@@ -47,9 +51,10 @@ export function observedL0Adapters(db: Database): {
   };
   return {
     adapter: {
-      sessions: createSessions(db, transaction, sink, rethrowObservationFailure),
-      actions: createActions(db, transaction, sink, rethrowObservationFailure),
+      sessions: createSessions(db, transaction, sink, report),
+      actions: createActions(db, transaction, sink, report),
     },
     observations,
+    failures,
   };
 }

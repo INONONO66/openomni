@@ -12,7 +12,7 @@ import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./sqlite-l
 import { createActionReads } from "./sqlite-action-reads";
 import { appendAction } from "./sqlite-l0-write.js";
 import {
-  publishCommitted,
+  reportCommitted,
   type ObservationFailurePort,
 } from "./sqlite-l0-observation.js";
 
@@ -27,10 +27,7 @@ export function createActions(
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
-      if (receipt !== undefined) {
-        const failure = publishCommitted(db, observationSink, receipt);
-        if (failure !== undefined) onObservationFailure(failure);
-      }
+      if (receipt !== undefined) reportCommitted(db, observationSink, onObservationFailure, receipt);
       return receipt;
     },
     actionById(id) {

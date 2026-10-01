@@ -24,6 +24,8 @@ import {
   openSessionStore,
   SessionHandleStore,
   type LedgerHandles,
+  type ObservationFailurePort,
+  type ObservationPublishFailure,
 } from "@openomni/ledger";
 import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
@@ -95,6 +97,16 @@ export interface AppLedgerOptions {
    */
   readonly sessionsDir?: string;
   readonly observationSink?: ObservationSink;
+  /** Where a post-commit observation publish failure is reported; absent = the app incident log. */
+  readonly onObservationFailure?: ObservationFailurePort;
+}
+
+/**
+ * A publish that failed after its write committed is an incident for the
+ * composition root's log, never a write failure: the receipt already left.
+ */
+function reportObservationPublishFailure(failure: ObservationPublishFailure): void {
+  console.error(`ledger observation publish failed: ${failure.actionId}`, failure.cause);
 }
 
 /** Catalog-backed durable stores the app composes tools and boot over. */
@@ -130,6 +142,7 @@ export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane 
   const sessionsDir = options.sessionsDir;
   if (sessionsDir !== undefined) mkdirSync(sessionsDir, { recursive: true });
   const catalog = openCatalogStore(options.catalogPath ?? ":memory:", options.observationSink);
+  const onObservationFailure = options.onObservationFailure ?? reportObservationPublishFailure;
   const memo = new Map<string, { store: SessionStoreHandle; kernel: SessionKernel }>();
   function opened(sessionId: string) {
     let entry = memo.get(sessionId);
@@ -137,6 +150,7 @@ export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane 
       const store = openSessionStore(
         sessionsDir === undefined ? ":memory:" : sessionFilePath(sessionsDir, sessionId),
         options.observationSink,
+        onObservationFailure,
       );
       entry = { store, kernel: SessionHandleStore.createSessionKernel(store, catalog) };
       memo.set(sessionId, entry);
@@ -161,7 +175,11 @@ export function createAppLedger(options: AppLedgerOptions = {}): AppLedgerPlane 
       openSession: (sessionId) =>
         sessionsDir === undefined
           ? opened(sessionId).store
-          : openSessionStore(sessionFilePath(sessionsDir, sessionId), options.observationSink),
+          : openSessionStore(
+              sessionFilePath(sessionsDir, sessionId),
+              options.observationSink,
+              onObservationFailure,
+            ),
     },
     openKernel: (sessionId) => opened(sessionId).kernel,
     sessionStore: (sessionId) => opened(sessionId).store,
