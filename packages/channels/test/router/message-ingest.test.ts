@@ -18,12 +18,19 @@ afterEach(() => {
   resetLedger();
 });
 
+function testId(prefix: string): () => string {
+  const state = { value: 0 };
+  return () => `${prefix}-${(state.value += 1)}`;
+}
+
 function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {
   const commits: Inbox.Commit[] = [];
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
     stores: ledger().stores,
     transaction: channelTransaction,
+    now: () => 1,
+    id: testId("ingest"),
     sink: () => undefined,
     inbox: recordingInbox(commits),
     prepare: () => Effect.succeed({
@@ -214,6 +221,8 @@ test("a session send prepared without a session projection dies with the channel
     requests: channelRequests(requestPort()),
     stores: ledger().stores,
     transaction: channelTransaction,
+    now: () => 1,
+    id: testId("projection"),
     sink: () => undefined,
     inbox: recordingInbox(commits),
     prepare: () => Effect.succeed({

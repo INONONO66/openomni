@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runEffect } from "./helpers/effect";
 import { Effect } from "effect";
 import { decodeChannelFailure } from "../src/errors";
-import { websocketCallbacks } from "./helpers/websocket-server";
+import { testWebSocketId, websocketCallbacks } from "./helpers/websocket-server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -114,7 +114,7 @@ function router(
   } = {},
 ) {
   return makeRouter({
-    clock: () => at,
+    now: () => at,
     requests: channelRequests(requestPort(() => at, undefined, {
       requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
     })),
@@ -160,6 +160,8 @@ async function connect(
     },
     {
       token: "upgrade-secret",
+      now: () => at,
+      id: testWebSocketId(),
       onRequestAnswer: (who: Gateway.IngestSender, answer: Gateway.RequestAnswer) => gateway.ingest(who, answer),
     },
   );

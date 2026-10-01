@@ -22,7 +22,7 @@ describe("blacklist perimeter matching", () => {
       createdBy: "act_owner",
     });
 
-    expect(matchBlacklist(ledger().stores, { actorId: "act_bad" })?.id).toBe("bl-actor");
+    expect(matchBlacklist(ledger().stores, { actorId: "act_bad" }, 1)?.id).toBe("bl-actor");
     expect(matchBlacklist(ledger().stores, { endpointId: "ep_old" }, 1)?.id).toBe("bl-endpoint");
     expect(matchBlacklist(ledger().stores, { endpointId: "ep_old" }, 2)).toBeUndefined();
   });
@@ -35,8 +35,8 @@ describe("blacklist perimeter matching", () => {
       createdBy: "act_owner",
     });
 
-    expect(matchBlacklist(ledger().stores, { candidates: ["discord:guild:dev"] })?.id).toBe("bl-pattern");
-    expect(matchBlacklist(ledger().stores, { candidates: ["discord:other:prod"] })).toBeUndefined();
+    expect(matchBlacklist(ledger().stores, { candidates: ["discord:guild:dev"] }, 1)?.id).toBe("bl-pattern");
+    expect(matchBlacklist(ledger().stores, { candidates: ["discord:other:prod"] }, 1)).toBeUndefined();
   });
 
   test("matches channel facts against the canonical channel and candidates", () => {
@@ -47,7 +47,7 @@ describe("blacklist perimeter matching", () => {
       createdBy: "act_owner",
     });
 
-    expect(matchBlacklist(ledger().stores, { channel: "dev" })?.id).toBe("bl-channel");
-    expect(matchBlacklist(ledger().stores, { candidates: ["dev"] })?.id).toBe("bl-channel");
+    expect(matchBlacklist(ledger().stores, { channel: "dev" }, 1)?.id).toBe("bl-channel");
+    expect(matchBlacklist(ledger().stores, { candidates: ["dev"] }, 1)?.id).toBe("bl-channel");
   });
 });

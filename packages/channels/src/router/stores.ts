@@ -26,6 +26,8 @@ export interface ChannelStoreSource {
   readonly egressBudget?: ProtocolStorage.EgressBudgetSubAdapter;
   readonly surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;
   readonly decisionFacts?: ProtocolStorage.DecisionFactSubAdapter;
+  /** Injected wall clock (#1245): the store plane never reads ambient time. */
+  readonly now: () => number;
   transaction<T>(operation: () => T): T;
 }
 
@@ -46,6 +48,6 @@ export function createChannelStores(source: ChannelStoreSource) {
 export type ChannelStores = ReturnType<typeof createChannelStores>;
 
 /** The unconfigured plane: every store keeps its own fail-closed refusal. */
-export function unconfiguredChannelStores(): ChannelStores {
-  return createChannelStores({ transaction: (operation) => operation() });
+export function unconfiguredChannelStores(now: () => number): ChannelStores {
+  return createChannelStores({ now, transaction: (operation) => operation() });
 }

@@ -8,6 +8,7 @@ export function recordRouteDecided(
   stores: ChannelStores,
   streamId: string,
   decision: Ingress.RoutingDecisionPayload,
+  at: number,
 ): Ingress.RoutingDecisionPayload {
   const decisionFacts = stores.decisionFacts.port();
   if (!decisionFacts) {
@@ -19,7 +20,7 @@ export function recordRouteDecided(
   }
   let outcome: ReturnType<typeof decisionFacts.record>;
   try {
-    outcome = decisionFacts.record(Ingress.routeDecidedFact(streamId, decision, Date.now()));
+    outcome = decisionFacts.record(Ingress.routeDecidedFact(streamId, decision, at));
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",

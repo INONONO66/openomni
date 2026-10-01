@@ -44,7 +44,7 @@ test("native reply reaches the canonical receiving inbox once and retains its or
   ));
   const message = outbound();
   const gateway = makeRouter({
-    clock: () => 2,
+    now: () => 2,
     requests: port,
     prepare: () => Effect.succeed({
       target: message.destinationSessionId,

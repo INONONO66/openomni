@@ -19,6 +19,7 @@ function recordRouteNotDelivered(
   event: Gateway.DeliveredEvent,
   decision: Ingress.RoutingDecisionPayload,
   reason: string,
+  at: number,
 ): void {
   // The route was just recorded through this synchronous adapter.
   const decisionFacts = stores.decisionFacts.port();
@@ -33,7 +34,7 @@ function recordRouteNotDelivered(
   const correction: RouteNotDelivered = { inboundId: event.id, reason };
   let outcome: ReturnType<typeof decisionFacts.record>;
   try {
-    outcome = decisionFacts.record(Ingress.routeNotDeliveredFact(streamId, correction, Date.now()));
+    outcome = decisionFacts.record(Ingress.routeNotDeliveredFact(streamId, correction, at));
   } catch (error) {
     throw new IngressRoutingError(
       "route_record_failed",
@@ -126,7 +127,7 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   }
   if (outcome === "attached" || outcome === "resolved") return;
   const reason = `request reply rejected: ${outcome}`;
-  recordRouteNotDelivered(stores, resolution.event, decision, reason);
+  recordRouteNotDelivered(stores, resolution.event, decision, reason, at);
   return yield* new IngressRoutingError("request_reply_rejected", reason, decision);
   });
 }

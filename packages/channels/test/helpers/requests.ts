@@ -1,6 +1,6 @@
 import { sessionTree } from "../../../ledger/test/helpers/session-tree";
-import { Effect, Layer } from "effect";
-import { Clock, Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
+import { Clock, Effect } from "effect";
+import { Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
 import { runEffect } from "./effect";
 import {
   canonicalDigest,
@@ -12,6 +12,26 @@ import { adoptLedgerFence, ledger } from "./ledger";
 
 /** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */
 const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
+
+/** A deterministic effect Clock over the injected test clock; no ambient time. */
+function fixedClock(clock: () => number): Clock.Clock {
+  const nanos = () => BigInt(clock()) * 1_000_000n;
+  return {
+    currentTimeMillisUnsafe: () => clock(),
+    currentTimeMillis: Effect.sync(() => clock()),
+    currentTimeNanosUnsafe: nanos,
+    currentTimeNanos: Effect.sync(nanos),
+    monotonicTimeNanosUnsafe: nanos,
+    monotonicTimeNanos: Effect.sync(nanos),
+    sleep: () => Effect.void,
+  };
+}
+
+const entropyCounter = { value: 0 };
+const testEntropy = {
+  id: () => `entropy-${(entropyCounter.value += 1)}`,
+  random: () => 0,
+};
 
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
@@ -28,10 +48,8 @@ export function requestPort(
       processId: "channels-test",
       onInboxCommitted,
     }).pipe(
-      Effect.provide(Layer.mergeAll(
-        Layer.succeed(Clock, { now: clock }),
-        Layer.succeed(Entropy, { next: () => crypto.randomUUID() }),
-      )),
+      Effect.provide(Entropy.layer(testEntropy)),
+      Effect.provideService(Clock.Clock, fixedClock(clock)),
     ),
     "sync",
   );

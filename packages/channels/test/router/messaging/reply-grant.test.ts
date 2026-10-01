@@ -207,7 +207,7 @@ describe("reply-grant instance materialization", () => {
   });
 
   test("an absent projection fails closed instead of creating memory authority", () => {
-    const stores = unconfiguredChannelStores();
+    const stores = unconfiguredChannelStores(() => NOW);
     const instances = createReplyGrantInstances({
       stores,
       rules: () => [rule()],

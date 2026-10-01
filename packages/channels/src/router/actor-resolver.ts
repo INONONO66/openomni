@@ -44,14 +44,18 @@ function mintProvisionalContact(
   const policy = resolution.grant.provisionalMint;
   const tier = resolution.grant.defaultTier;
   if (policy === undefined || tier === undefined) return undefined;
-  const blacklisted = matchBlacklist(stores, {
-    channel: event.surface,
-    candidates: [
-      event.surface,
-      ...(event.channel === undefined ? [] : [event.channel]),
-      `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
-    ],
-  });
+  const blacklisted = matchBlacklist(
+    stores,
+    {
+      channel: event.surface,
+      candidates: [
+        event.surface,
+        ...(event.channel === undefined ? [] : [event.channel]),
+        `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
+      ],
+    },
+    now,
+  );
   if (blacklisted !== undefined) return undefined;
   const minted = stores.actors.countProvisionalMints(
     event.surface,
@@ -113,6 +117,7 @@ function resolvedActorEvent(
 export function resolveIngressActor(
   stores: ChannelStores,
   event: Gateway.DeliveredEvent,
+  now: number,
 ): Gateway.DeliveredEvent {
   const externalId = externalActorId(event);
   // Identity provenance is the authenticated sender, never inbound meta.actor.
@@ -124,7 +129,7 @@ export function resolveIngressActor(
 
   const resolved =
     stores.actors.resolveEndpoint(event.surface, externalId, event.workspace) ??
-    mintProvisionalContact(stores, event, externalId, Date.now());
+    mintProvisionalContact(stores, event, externalId, now);
   if (!resolved) return projected;
 
   return resolvedActorEvent(event, resolved);

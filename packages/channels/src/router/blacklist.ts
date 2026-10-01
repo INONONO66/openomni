@@ -44,7 +44,7 @@ function entryMatches(entry: Actor.BlacklistEntry, input: BlacklistMatchInput): 
 export function matchBlacklist(
   stores: ChannelStores,
   input: BlacklistMatchInput,
-  now = Date.now(),
+  now: number,
 ): Actor.BlacklistEntry | undefined {
   return stores.blacklist.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
 }

@@ -161,21 +161,26 @@ function blacklistState(
   stores: ChannelStores,
   event: Gateway.DeliveredEvent,
   correlation: ScopedCorrelation | undefined,
+  at: number,
 ): RouteState["blacklist"] {
   const actor = event.meta?.actor;
-  const entry = matchBlacklist(stores, {
-    actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
-    endpointId:
-      (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
-      correlation?.endpointId,
-    channel: correlation?.channelId ?? event.surface,
-    candidates: [
-      event.surface,
-      ...(event.channel === undefined ? [] : [event.channel]),
-      ...(correlation === undefined ? [] : [correlation.channelId]),
-      `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
-    ],
-  });
+  const entry = matchBlacklist(
+    stores,
+    {
+      actorId: typeof actor?.actorId === "string" ? actor.actorId : undefined,
+      endpointId:
+        (typeof actor?.endpointId === "string" ? actor.endpointId : undefined) ??
+        correlation?.endpointId,
+      channel: correlation?.channelId ?? event.surface,
+      candidates: [
+        event.surface,
+        ...(event.channel === undefined ? [] : [event.channel]),
+        ...(correlation === undefined ? [] : [correlation.channelId]),
+        `${event.surface}:${event.workspace ?? ""}:${event.channel ?? ""}`,
+      ],
+    },
+    at,
+  );
   if (entry === undefined) return undefined;
   return {
     id: entry.id,
@@ -191,6 +196,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   traceId: string,
   requests: GatewayRouterPorts["requests"],
   at: number,
+  id: () => string,
 ): KernelRouteResolution<Event> {
   const correlation = parseCorrelation(event);
   const payload = RequestActionPayload.safeParse(event.payload);
@@ -203,7 +209,7 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
   const request = routeRequestState(gatheredRequest);
   const target = targetKey(resolveTarget(event));
   const surfaceSessionId = stores.surfaceKeys.lookup(surfaceKey);
-  const blacklist = blacklistState(stores, event, correlation);
+  const blacklist = blacklistState(stores, event, correlation, at);
   const channelResolution = resolveChannelGrant(stores, {
     surface: event.surface,
     workspace: event.workspace,
@@ -235,10 +241,10 @@ function resolveKernelRoute<Event extends Gateway.DeliveredEvent>(
     decision.stage === "surface_default" &&
     decision.sessionId === undefined
   ) {
-    const id = stores.surfaceKeys.claim(surfaceKey, crypto.randomUUID());
-    decision.sessionId = id;
+    const sessionId = stores.surfaceKeys.claim(surfaceKey, id());
+    decision.sessionId = sessionId;
     decision.factsUsed = decision.factsUsed.map((fact) =>
-      fact === "surface.default:new" ? `surface.default:${id}` : fact,
+      fact === "surface.default:new" ? `surface.default:${sessionId}` : fact,
     );
   }
   const requestExecution = kernelRequestExecution(gatheredRequest, correlation, requestedAction);
@@ -291,14 +297,15 @@ export function resolveAndRecordRoute<Event extends Gateway.DeliveredEvent>(
   publish: BusEvent.Sink["publish"],
   requests: GatewayRouterPorts["requests"],
   at: number,
+  id: () => string,
 ): KernelRouteResolution<Event> {
-  const resolution = resolveKernelRoute(stores, event, surfaceKey, traceId, requests, at);
+  const resolution = resolveKernelRoute(stores, event, surfaceKey, traceId, requests, at, id);
   const decision = Ingress.Events.RoutingDecision.schema.parse(
     pinReplyGrantEndpoint(resolution.decision, event),
   );
   // Redelivery passes the equivalence gate or fails closed — execution below
   // always uses the fresh decision with its own fresh resolution.
-  const effective = recordRouteDecided(stores, Ingress.routeStreamId(event), decision);
+  const effective = recordRouteDecided(stores, Ingress.routeStreamId(event), decision, at);
   // Observe-only projection — strictly after the append (or after the gated
   // equivalent replay); lossy by contract, published through the injected
   // sink (channels never imports the observation channel). A divergent

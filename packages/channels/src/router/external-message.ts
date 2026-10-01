@@ -55,6 +55,7 @@ export function externalMessage(
   at: number,
   budgets: readonly Gateway.SocialBudget[],
   requests: GatewayRouterPorts["requests"],
+  id: () => string,
 ) {
   if (sender.surface !== facts.surface)
     throw new ChannelsFailure({
@@ -70,32 +71,36 @@ export function externalMessage(
   });
   const reply = facts.reply ?? { chain: [] };
   admitWebSocketOwner(stores, sender);
-  const event = resolveIngressActor(stores, {
-    id: [facts.surface, facts.workspaceId ?? "", facts.channelId, facts.eventId]
-      .map(encodeURIComponent)
-      .join(":"),
-    traceId: newTraceId(),
-    surface: facts.surface,
-    ...(facts.workspaceId === undefined ? {} : { workspace: facts.workspaceId }),
-    channel: facts.channelId,
-    userId: sender.externalId,
-    payload: facts.payload,
-    mode: "direct",
-    meta: {
-      surfaceKey,
-      correlation: {
-        ...reply,
-        endpointId:
-          stores.actors.resolveEndpoint(sender.surface, sender.externalId, facts.workspaceId)
-            ?.endpoint.id ?? `${sender.surface}:${sender.externalId}`,
-        channelId: facts.channelId,
-        externalConversationId: reply.externalConversationId ?? surfaceKey,
+  const event = resolveIngressActor(
+    stores,
+    {
+      id: [facts.surface, facts.workspaceId ?? "", facts.channelId, facts.eventId]
+        .map(encodeURIComponent)
+        .join(":"),
+      traceId: newTraceId(id),
+      surface: facts.surface,
+      ...(facts.workspaceId === undefined ? {} : { workspace: facts.workspaceId }),
+      channel: facts.channelId,
+      userId: sender.externalId,
+      payload: facts.payload,
+      mode: "direct",
+      meta: {
+        surfaceKey,
+        correlation: {
+          ...reply,
+          endpointId:
+            stores.actors.resolveEndpoint(sender.surface, sender.externalId, facts.workspaceId)
+              ?.endpoint.id ?? `${sender.surface}:${sender.externalId}`,
+          channelId: facts.channelId,
+          externalConversationId: reply.externalConversationId ?? surfaceKey,
+        },
       },
     },
-  });
-  const route = resolveAndRecordRoute(stores, event, surfaceKey, event.traceId, sink, requests, at);
+    at,
+  );
+  const route = resolveAndRecordRoute(stores, event, surfaceKey, event.traceId, sink, requests, at, id);
   const addressee = resolveAddressee(stores, facts);
-  const target = route.decision.sessionId ?? stores.surfaceKeys.lookup(surfaceKey) ?? crypto.randomUUID();
+  const target = route.decision.sessionId ?? stores.surfaceKeys.lookup(surfaceKey) ?? id();
   const actorId = event.meta?.actor?.actorId;
   const budget = budgets.find((candidate) => candidate.targetActorId === actorId);
   // Table A applies declared peer restrictions to unrelated ingress, without
