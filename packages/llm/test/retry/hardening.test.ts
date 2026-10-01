@@ -1,27 +1,25 @@
-import { describe, expect, test, vi } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Retry } from "../../src/retry";
 
-import { apiError, rateLimitError, withRandom, type SdkErrorInput } from "../helpers/retry";
+import { apiError, rateLimitError, sources, type SdkErrorInput } from "../helpers/retry";
 
 function retryableError(overrides: Partial<SdkErrorInput> = {}) {
   return apiError({ message: "boom", isRetryable: true, ...overrides });
 }
 
-function delayOf<E>(attempt: number, error: E): number {
-  const decision = Retry.decide(attempt, error);
+function delayOf<E>(attempt: number, error: E, random: () => number = () => 0): number {
+  const decision = Retry.decide(attempt, error, sources({ random }));
   if (!decision.retry) throw new Error(`expected a retry decision, got ${decision.reason}`);
   return decision.delayMs;
 }
 
 describe("Retry backoff jitter", () => {
-  test("subtracts up to 25% of the ladder delay, scaled by the random draw", () => {
+  test("subtracts up to 25% of the ladder delay, scaled by the injected random draw", () => {
     // random=0 → the full delay; random=1 → the 25% floor. Both ends pinned so
     // the multiplier itself is the assertion, not a tolerance band.
-    expect(withRandom(0, () => delayOf(1, retryableError()))).toBe(Retry.RETRY_INITIAL_DELAY);
-    expect(withRandom(1, () => delayOf(1, retryableError()))).toBe(
-      Retry.RETRY_INITIAL_DELAY * 0.75,
-    );
-    expect(withRandom(0.5, () => delayOf(2, retryableError()))).toBe(4000 * 0.875);
+    expect(delayOf(1, retryableError(), () => 0)).toBe(Retry.RETRY_INITIAL_DELAY);
+    expect(delayOf(1, retryableError(), () => 1)).toBe(Retry.RETRY_INITIAL_DELAY * 0.75);
+    expect(delayOf(2, retryableError(), () => 0.5)).toBe(4000 * 0.875);
   });
 
   test("two consecutive decisions on the same attempt do not collide", () => {
@@ -29,28 +27,18 @@ describe("Retry backoff jitter", () => {
     // instead of stampeding the endpoint on the same tick.
     const draws = [0.1, 0.9];
     let index = 0;
-    const random = vi.spyOn(Math, "random").mockImplementation(() => draws[index++] ?? 0);
-    try {
-      expect(delayOf(3, retryableError())).not.toBe(delayOf(3, retryableError()));
-    } finally {
-      random.mockRestore();
-    }
+    const random = () => draws[index++] ?? 0;
+    expect(delayOf(3, retryableError(), random)).not.toBe(delayOf(3, retryableError(), random));
   });
 
   test("never jitters a server-directed wait — retry-after is honored exactly", () => {
-    expect(withRandom(1, () => delayOf(1, rateLimitError({ "retry-after": "10" })))).toBe(10_000);
-    expect(withRandom(1, () => delayOf(1, rateLimitError({ "retry-after-ms": "5000" })))).toBe(
-      5000,
-    );
+    expect(delayOf(1, rateLimitError({ "retry-after": "10" }), () => 1)).toBe(10_000);
+    expect(delayOf(1, rateLimitError({ "retry-after-ms": "5000" }), () => 1)).toBe(5000);
   });
 
   test("stays within the headless cap at every draw", () => {
-    expect(withRandom(0, () => delayOf(20, retryableError()))).toBe(
-      Retry.RETRY_MAX_DELAY_NO_HEADERS,
-    );
-    expect(withRandom(1, () => delayOf(20, retryableError()))).toBe(
-      Retry.RETRY_MAX_DELAY_NO_HEADERS * 0.75,
-    );
+    expect(delayOf(20, retryableError(), () => 0)).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS);
+    expect(delayOf(20, retryableError(), () => 1)).toBe(Retry.RETRY_MAX_DELAY_NO_HEADERS * 0.75);
   });
 });
 
@@ -106,7 +94,7 @@ describe("Retry billing classification", () => {
   ];
 
   test.each(billingCases)("$name is terminal, never retried", ({ input }) => {
-    const decision = Retry.decide(1, apiError(input));
+    const decision = Retry.decide(1, apiError(input), sources());
 
     expect(decision.retry).toBe(false);
     if (decision.retry) expect.unreachable("billing exhaustion must not be retryable");
@@ -118,6 +106,7 @@ describe("Retry billing classification", () => {
     const decision = Retry.decide(
       1,
       apiError({ message: "insufficient_quota", isRetryable: true }),
+      sources(),
       Retry.INSTANT_FAILURE_STREAK_LIMIT - 1,
     );
 
@@ -133,6 +122,7 @@ describe("Retry billing classification", () => {
         statusCode: 429,
         responseHeaders: { "retry-after": "5" },
       }),
+      sources(),
     );
 
     expect(decision).toMatchObject({ retry: false, reason: "billing" });
@@ -155,9 +145,7 @@ describe("Retry billing classification", () => {
     statusCode,
     reason,
   }) => {
-    const decision = withRandom(0, () =>
-      Retry.decide(1, apiError({ message, isRetryable: true, statusCode })),
-    );
+    const decision = Retry.decide(1, apiError({ message, isRetryable: true, statusCode }), sources());
 
     expect(decision).toMatchObject({ retry: true, reason });
   });
@@ -174,20 +162,21 @@ describe("Retry billing classification", () => {
         statusCode: 429,
         responseHeaders: { "retry-after": "5" },
       }),
+      sources(),
     );
 
     expect(decision).toEqual({ retry: true, reason: "rate_limit", delayMs: 5000 });
   });
 
   test("a bare 429 with no retry-after and no quota headers stays retryable and bounded", () => {
-    const decision = withRandom(0, () => Retry.decide(1, rateLimitError()));
+    const decision = Retry.decide(1, rateLimitError(), sources());
 
     expect(decision).toEqual({
       retry: true,
       reason: "rate_limit",
       delayMs: Retry.RETRY_INITIAL_DELAY,
     });
-    const late = withRandom(0, () => Retry.decide(20, rateLimitError()));
+    const late = Retry.decide(20, rateLimitError(), sources());
     if (!late.retry) expect.unreachable("a bare 429 must stay retryable");
     expect(late.delayMs).toBeLessThanOrEqual(Retry.RETRY_MAX_DELAY_NO_HEADERS);
   });
@@ -199,6 +188,7 @@ describe("Retry billing classification", () => {
       Retry.decide(
         1,
         apiError({ message: JSON.stringify({ code: "quota_exhausted" }), isRetryable: true }),
+        sources(),
       ).reason,
     ).toBe("overloaded");
   });
@@ -212,7 +202,7 @@ describe("Retry billing classification", () => {
     void widened;
 
     // Runtime half: no retryable Decision can carry it.
-    const decision = Retry.decide(1, apiError({ message: "billing required", isRetryable: true }));
+    const decision = Retry.decide(1, apiError({ message: "billing required", isRetryable: true }), sources());
     expect(decision.retry).toBe(false);
   });
 });

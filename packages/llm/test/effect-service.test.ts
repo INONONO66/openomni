@@ -3,16 +3,17 @@ import { Context, Effect } from "effect";
 import { Llm, Provider, run } from "../src/index";
 import { LlmFailure } from "../src/errors";
 import { usePrivateCatalog } from "./helpers/catalog";
+import { fixedNow } from "./helpers/fixtures";
 import { runEffect } from "./helpers/native";
 
 usePrivateCatalog();
 
 test("the LLM service resolves the trusted catalog and preserves resolution failures", async () => {
   const service = Context.get(Context.make(Llm, { run, resolveModel: Provider.resolveModel }), Llm);
-  expect(await runEffect(service.resolveModel({ provider: "anthropic", id: "fixture-claude" }))).toMatchObject({
+  expect(await runEffect(service.resolveModel({ provider: "anthropic", id: "fixture-claude", now: fixedNow }))).toMatchObject({
     id: "fixture-claude", providerID: "anthropic", name: "Fixture Claude",
   });
-  expect(await runEffect(Effect.flip(service.resolveModel({ provider: "absent", id: "model" })))).toMatchObject({
+  expect(await runEffect(Effect.flip(service.resolveModel({ provider: "absent", id: "model", now: fixedNow })))).toMatchObject({
     _tag: "ModelResolutionError", provider: "absent", model: "model", reason: "provider_not_found",
   });
   const failure = new LlmFailure({ operation: "transport", cause: "connection_lost" });

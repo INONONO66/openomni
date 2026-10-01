@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import * as llmPackage from "../src/index";
 import type { StreamEvent } from "../src/processor/stream-events";
 import { usePrivateCatalog } from "./helpers/catalog";
+import { fixedNow, sequentialIds } from "./helpers/fixtures";
 import { runEffect } from "./helpers/native";
 
 usePrivateCatalog();
@@ -15,8 +16,8 @@ afterEach(() => mock.restore());
 test("LlmLive resolves catalog models and preserves typed resolution failure", async () => {
   const resolved = await runEffect(Effect.gen(function* () {
     const llm = yield* llmPackage.Llm;
-    const model = yield* llm.resolveModel({ provider: "anthropic", id: "fixture-claude" });
-    const failure = yield* Effect.flip(llm.resolveModel({ provider: "absent", id: "missing" }));
+    const model = yield* llm.resolveModel({ provider: "anthropic", id: "fixture-claude", now: fixedNow });
+    const failure = yield* Effect.flip(llm.resolveModel({ provider: "absent", id: "missing", now: fixedNow }));
     return { model, failure };
   }).pipe(Effect.provide(llmPackage.LlmLive)));
 
@@ -30,9 +31,10 @@ test.each([false, true])("LlmLive runs one real processor attempt (transport fai
   let attempts = 0;
   const outcome = await runEffect(Effect.gen(function* () {
     const llm = yield* llmPackage.Llm;
-    const model = yield* llm.resolveModel({ provider: "anthropic", id: "fixture-claude" });
+    const model = yield* llm.resolveModel({ provider: "anthropic", id: "fixture-claude", now: fixedNow });
     return yield* llm.run({
       messages: [], tools: [], model,
+      now: fixedNow, id: sequentialIds(),
       trace: { traceId: "layer-trace", sessionId: "layer-session", runId: "layer-run" },
       events: { publish: () => undefined },
     }, {

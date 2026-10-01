@@ -4,7 +4,7 @@ import type { Sink } from "../../src/sink";
 import { Processor } from "./native";
 import type { StreamEvent } from "../../src/processor/stream-events";
 import { collector } from "./observation";
-import { anthropicModel, assistantMessage } from "./fixtures";
+import { anthropicModel, assistantMessage, fixedNow, sequentialIds } from "./fixtures";
 import { z } from "zod";
 
 const StatusContext = z.object({
@@ -118,6 +118,8 @@ export function useProcessor() {
         abort: abort.signal,
         events,
         trace: { traceId: "trace-processor-test", sessionId: "session-456" },
+        now: fixedNow,
+        id: sequentialIds(),
         createStream: streamOf([{ type: "finish" }]),
         ...overrides,
       });

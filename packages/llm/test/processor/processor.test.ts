@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { useProcessor, capturingSink, streamOf, textEvents } from "../helpers/processor";
 
 describe("Processor processor", () => {
@@ -13,24 +13,20 @@ describe("Processor processor", () => {
   });
 
   test("fails loudly when generated part identities collide", async () => {
-    const uuid = spyOn(crypto, "randomUUID").mockReturnValue(
-      "00000000-0000-4000-8000-000000000000",
-    );
-    try {
-      const processor = createProcessor({
-        createStream: streamOf([
-          { type: "step-start" },
-          { type: "step-start" },
-          { type: "finish" },
-        ]),
-      });
+    // The injected id source is the collision vector: a constant id makes the
+    // second step-start fold reject (#1245).
+    const processor = createProcessor({
+      id: () => "00000000-0000-4000-8000-000000000000",
+      createStream: streamOf([
+        { type: "step-start" },
+        { type: "step-start" },
+        { type: "finish" },
+      ]),
+    });
 
-      await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow(
-        "transcript recording defect",
-      );
-    } finally {
-      uuid.mockRestore();
-    }
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow(
+      "transcript recording defect",
+    );
   });
 
   test("projects text events into a completed TextPart", async () => {

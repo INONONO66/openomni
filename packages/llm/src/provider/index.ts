@@ -65,6 +65,8 @@ export namespace Provider {
   export function resolveModel(input: {
     readonly provider: string;
     readonly id: string;
+    /** Wall-clock source for proxy-listing cache expiry (#1245). */
+    readonly now: () => number;
   }): Effect.Effect<Model, LlmError> {
     return Effect.gen(function* () {
     const data = yield* ModelsDev.get();
@@ -82,7 +84,7 @@ export namespace Provider {
     if (exact !== undefined) return exact;
     const auth = yield* Auth.get(input.provider);
     if (auth?.type === "proxy") {
-      const ids = yield* fetchProxyModels(auth.baseURL, auth.apiKey).pipe(Effect.mapError((error) =>
+      const ids = yield* fetchProxyModels(auth.baseURL, input.now, auth.apiKey).pipe(Effect.mapError((error) =>
         new ModelResolutionError({
           message: `Proxy model listing failed for provider: ${input.provider}`,
           provider: input.provider, model: input.id, reason: "proxy_listing_failed", cause: String(error),

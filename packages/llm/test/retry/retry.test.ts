@@ -1,7 +1,7 @@
-import { describe, expect, test, vi } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Retry } from "../../src/retry";
 
-import { apiError, rateLimitError, withRandom, type SdkErrorInput } from "../helpers/retry";
+import { apiError, FIXED_RETRY_NOW, rateLimitError, sources, type SdkErrorInput } from "../helpers/retry";
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
@@ -13,25 +13,13 @@ function retryableError(headers?: Record<string, string>) {
 
 /**
  * The backoff ladder is jittered by `1 - random*RETRY_JITTER_RATIO`, so every
- * assertion about a LADDER delay pins the draw instead of allowing a range: a
- * draw of 0 is the full ladder value, which is exactly what these cases are
- * about. Header-directed delays are never jittered and need no pin.
+ * assertion about a LADDER delay pins the injected draw instead of allowing a
+ * range: a draw of 0 is the full ladder value, which is exactly what these
+ * cases are about. Header-directed delays are never jittered and need no pin.
+ * The injected clock is pinned to FIXED_RETRY_NOW (#1245).
  */
-function withoutJitter<T>(fn: () => T): T {
-  return withRandom(0, fn);
-}
-
 function decideWithoutJitter<E>(attempt: number, error: E): Retry.Decision {
-  return withoutJitter(() => Retry.decide(attempt, error));
-}
-
-function withNow<T>(now: number, fn: () => T): T {
-  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-  try {
-    return fn();
-  } finally {
-    clock.mockRestore();
-  }
+  return Retry.decide(attempt, error, sources());
 }
 
 function delayOf<E>(attempt: number, error: E): number {
@@ -114,11 +102,8 @@ describe("Retry", () => {
       assert(delayOf(attempt, retryableError(headers as Record<string, string> | undefined))));
 
     test("parses Retry-After as HTTP date if not a number", () => {
-      const now = Date.parse("2030-01-01T00:00:00.000Z");
-      const futureDate = new Date(now + 5000).toUTCString();
-      expect(withNow(now, () => delayOf(1, retryableError({ "retry-after": futureDate })))).toBe(
-        5000,
-      );
+      const futureDate = new Date(FIXED_RETRY_NOW + 5000).toUTCString();
+      expect(delayOf(1, retryableError({ "retry-after": futureDate }))).toBe(5000);
     });
 
     test("does not throw when error payload code fields are not strings", () => {
@@ -126,7 +111,7 @@ describe("Retry", () => {
         message: JSON.stringify({ type: "error", error: { code: 42, message: 7 } }),
         isRetryable: true,
       });
-      expect(Retry.decide(1, error)).toMatchObject({ retry: true, reason: "server_error" });
+      expect(Retry.decide(1, error, sources())).toMatchObject({ retry: true, reason: "server_error" });
     });
 
     test("does not expose the removed delay dual path", async () => {
@@ -140,7 +125,7 @@ describe("Retry", () => {
 
   describe("decide(attempt, error) reason classification", () => {
     test("classifies non-APIError as non_retryable", () => {
-      expect(Retry.decide(1, new Error("Retry failed"))).toEqual({
+      expect(Retry.decide(1, new Error("Retry failed"), sources())).toEqual({
         retry: false,
         reason: "non_retryable",
       });
@@ -244,14 +229,14 @@ describe("Retry", () => {
     ];
 
     test.each(reasonCases)("$name", ({ input, expected }) => {
-      expect(Retry.decide(1, apiError(input)).reason).toBe(expected);
+      expect(Retry.decide(1, apiError(input), sources()).reason).toBe(expected);
     });
 
     test("trusts the provider retryable flag when payload and status are opaque", () => {
       const plainText = apiError({ message: "Plain text error", isRetryable: true });
       const invalidJson = apiError({ message: "{ invalid json", isRetryable: true });
-      expect(Retry.decide(1, plainText)).toMatchObject({ retry: true, reason: "server_error" });
-      expect(Retry.decide(1, invalidJson)).toMatchObject({ retry: true, reason: "server_error" });
+      expect(Retry.decide(1, plainText, sources())).toMatchObject({ retry: true, reason: "server_error" });
+      expect(Retry.decide(1, invalidJson, sources())).toMatchObject({ retry: true, reason: "server_error" });
     });
 
     test("does not expose the folded-away prose classifier", () => {
@@ -284,12 +269,9 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   });
 
   test("ignores an expired reset timestamp", () => {
-    const now = Date.parse("2030-01-01T00:00:00.000Z");
-    const expired = new Date(now - 1000).toISOString();
+    const expired = new Date(FIXED_RETRY_NOW - 1000).toISOString();
     expect(
-      withNow(now, () =>
-        decideWithoutJitter(1, rateLimitError({ "anthropic-ratelimit-requests-reset": expired })),
-      ),
+      decideWithoutJitter(1, rateLimitError({ "anthropic-ratelimit-requests-reset": expired })),
     ).toEqual({ retry: true, reason: "rate_limit", delayMs: 2000 });
   });
 
@@ -314,13 +296,10 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
   });
 
   test("anthropic-ratelimit reset timestamp is used when retry-after is absent", () => {
-    const now = Date.parse("2030-01-01T00:00:00.000Z");
-    const resetAt = new Date(now + 5000).toISOString();
-    expect(
-      withNow(now, () =>
-        delayOf(1, rateLimitError({ "anthropic-ratelimit-requests-reset": resetAt })),
-      ),
-    ).toBe(5000);
+    const resetAt = new Date(FIXED_RETRY_NOW + 5000).toISOString();
+    expect(delayOf(1, rateLimitError({ "anthropic-ratelimit-requests-reset": resetAt }))).toBe(
+      5000,
+    );
   });
 
   test("retry-after still wins over ratelimit resets", () => {
@@ -332,11 +311,11 @@ describe("Retry.decide ratelimit-reset parsing (#532 candidate 3)", () => {
 
 describe("Retry.decide (#532 candidate 3)", () => {
   test("non-retryable errors decide against retry", () => {
-    expect(Retry.decide(1, new Error("plain")).retry).toBe(false);
+    expect(Retry.decide(1, new Error("plain"), sources()).retry).toBe(false);
   });
 
   test("header delay within the cap is honored", () => {
-    expect(Retry.decide(1, rateLimitError({ "retry-after": "45" }))).toEqual({
+    expect(Retry.decide(1, rateLimitError({ "retry-after": "45" }), sources())).toEqual({
       retry: true,
       reason: "rate_limit",
       delayMs: 45_000,
@@ -344,7 +323,7 @@ describe("Retry.decide (#532 candidate 3)", () => {
   });
 
   test("header delay above the cap fails fast instead of silently stalling", () => {
-    const decision = Retry.decide(1, rateLimitError({ "retry-after": "3600" }));
+    const decision = Retry.decide(1, rateLimitError({ "retry-after": "3600" }), sources());
     expect(decision.retry).toBe(false);
     if (!decision.retry) {
       expect(decision.reason).toBe("rate_limit");

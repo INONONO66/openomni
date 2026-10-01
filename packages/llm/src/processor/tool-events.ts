@@ -47,7 +47,7 @@ export function handleToolCall(
   // the serialized arguments, so the estimator must see them (#933).
   state.stepEmittedAssistant += `${String(event.toolName)}${JSON.stringify(input)}`;
   const part: Message.ToolPart = {
-    id: crypto.randomUUID(),
+    id: context.id(),
     sessionID: context.sessionID,
     messageID: context.messageID,
     type: "tool",
@@ -58,7 +58,7 @@ export function handleToolCall(
   appendPart(part, context);
   // Paired standalone traces enter running here. A session-owned provider
   // step returns pending data; its receiving executor owns execution timing.
-  if (!context.externalTools) advancePart(part.id, { to: "running", at: Date.now() }, context);
+  if (!context.externalTools) advancePart(part.id, { to: "running", at: context.now() }, context);
   state.pendingTools.set(callID, part.id);
   context.sink.onToolCall({ id: callID, tool: part.tool, input });
 }
@@ -82,7 +82,7 @@ export function handleToolResult(
       toolCallId,
     });
     const synthetic: Message.ToolPart = {
-      id: crypto.randomUUID(),
+      id: context.id(),
       sessionID: context.sessionID,
       messageID: context.messageID,
       type: "tool",
@@ -91,7 +91,7 @@ export function handleToolResult(
         event.toolName !== undefined ? resolveToolName(String(event.toolName), context) : "unknown",
       state: { status: "pending", input: {} },
     };
-    const at = Date.now();
+    const at = context.now();
     appendPart(synthetic, context);
     advancePart(synthetic.id, { to: "running", at }, context);
     advancePart(
@@ -103,14 +103,14 @@ export function handleToolResult(
   }
 
   state.pendingTools.delete(toolCallId);
-  if (context.externalTools) advancePart(partId, { to: "running", at: Date.now() }, context);
+  if (context.externalTools) advancePart(partId, { to: "running", at: context.now() }, context);
   advancePart(
     partId,
     isError
-      ? { to: "error", at: Date.now(), error: outputPayload.output }
+      ? { to: "error", at: context.now(), error: outputPayload.output }
       : {
           to: "completed",
-          at: Date.now(),
+          at: context.now(),
           output: outputPayload.output,
           ...(event.toolName !== undefined
             ? { title: resolveToolName(String(event.toolName), context) }
@@ -119,7 +119,7 @@ export function handleToolResult(
     context,
   );
   context.sink.onToolResult({
-    id: crypto.randomUUID(),
+    id: context.id(),
     toolCallId,
     output: outputPayload.output,
     ...(isError && { isError: true }),

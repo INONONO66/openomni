@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   anthropicModel as model,
   assistantMessage as buildAssistantMessage,
+  fixedNow,
+  sequentialIds,
 } from "../helpers/fixtures";
 import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../src/sink";
@@ -57,6 +59,8 @@ describe("Processor emission measurement (#545 T2)", () => {
       sessionID: "session-measure",
       model,
       abort: new AbortController().signal,
+      now: fixedNow,
+      id: sequentialIds(),
       sink,
       events: { publish: Bus.publish },
       trace: { traceId: "trace-processor-test", sessionId: "session-measure" },

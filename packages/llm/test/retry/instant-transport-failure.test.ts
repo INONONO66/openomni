@@ -1,5 +1,5 @@
-import { describe, expect, test, vi } from "bun:test";
-import { apiError } from "../helpers/retry";
+import { describe, expect, test } from "bun:test";
+import { apiError, sources } from "../helpers/retry";
 import { Retry } from "../../src/retry";
 
 function transportError(): ReturnType<typeof apiError> {
@@ -49,7 +49,7 @@ describe("Retry.isInstantTransportFailure", () => {
 
 describe("Retry.decide with an instant-failure streak", () => {
   test("below the limit: retries on the short probe delay, not the backoff ladder", () => {
-    const decision = Retry.decide(2, transportError(), 2);
+    const decision = Retry.decide(2, transportError(), sources(), 2);
     expect(decision.retry).toBe(true);
     if (decision.retry) {
       expect(decision.delayMs).toBe(Retry.INSTANT_FAILURE_PROBE_DELAY_MS);
@@ -58,7 +58,7 @@ describe("Retry.decide with an instant-failure streak", () => {
   });
 
   test("at the limit: declines with a detail naming the transport streak", () => {
-    const decision = Retry.decide(3, transportError(), Retry.INSTANT_FAILURE_STREAK_LIMIT);
+    const decision = Retry.decide(3, transportError(), sources(), Retry.INSTANT_FAILURE_STREAK_LIMIT);
     expect(decision.retry).toBe(false);
     if (!decision.retry) {
       expect(decision.reason).toBe("server_error");
@@ -69,9 +69,7 @@ describe("Retry.decide with an instant-failure streak", () => {
   test("a zero streak keeps the existing backoff behavior byte-identical", () => {
     // Ladder delays are jittered; a pinned zero draw is the full ladder value,
     // which is the fact this case is about.
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    const decision = Retry.decide(1, transportError(), 0);
-    random.mockRestore();
+    const decision = Retry.decide(1, transportError(), sources(), 0);
     expect(decision.retry).toBe(true);
     if (decision.retry) {
       expect(decision.delayMs).toBe(Retry.RETRY_INITIAL_DELAY);
@@ -79,7 +77,7 @@ describe("Retry.decide with an instant-failure streak", () => {
   });
 
   test("the streak never overrides non_retryable classification", () => {
-    const decision = Retry.decide(1, new Error("not api"), Retry.INSTANT_FAILURE_STREAK_LIMIT);
+    const decision = Retry.decide(1, new Error("not api"), sources(), Retry.INSTANT_FAILURE_STREAK_LIMIT);
     expect(decision.retry).toBe(false);
     if (!decision.retry) {
       expect(decision.reason).toBe("non_retryable");

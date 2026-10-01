@@ -58,6 +58,16 @@ export interface RunInput {
   /** Provider namespaces forwarded verbatim to the SDK; the shape is the provider's, the values are JSON. */
   providerOptions?: PlainObject;
   /**
+   * Wall-clock source for every timestamp this call emits. Required: the
+   * host injects it so identical runs are reproducible (#1245).
+   */
+  now: () => number;
+  /**
+   * Unique-id source for the assistant message identity. Required for the
+   * same reason as `now` (#1245).
+   */
+  id: () => string;
+  /**
    * The run this call belongs to. Required, and not defaulted: a model round
    * trip that cannot name its run and session produces an assistant message
    * detached from the conversation it is part of, and telemetry that
@@ -183,7 +193,7 @@ export function run(
   if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
     return new InvalidProviderData({ operation: "run.trace", cause: "empty trace identity", message: "llm run requires a non-empty traceId, sessionId, and runId" });
   }
-  const messageID = `msg-${crypto.randomUUID()}`;
+  const messageID = `msg-${input.id()}`;
   const parentID = messages[messages.length - 1]?.info.id || "";
 
   // Wire names and history share the sanitizer; invocation identity stays dotted.
@@ -193,7 +203,7 @@ export function run(
     id: messageID,
     sessionID,
     role: "assistant",
-    time: { created: Date.now() },
+    time: { created: input.now() },
     parentID,
     modelID: model.id,
     providerID: model.providerID,
@@ -237,6 +247,8 @@ export function run(
     sessionID,
     model,
     abort: abortSignal,
+    now: input.now,
+    id: input.id,
     sink,
     toolNames: originalByWire,
     externalTools: true,
@@ -256,14 +268,14 @@ export function run(
     model: modelId,
     messageCount: messages.length,
     toolCount: input.tools.length,
-    time: Date.now(),
+    time: input.now(),
   });
 
-  const startMs = Date.now();
+  const startMs = input.now();
 
   return processor.process({ system, promptText: serializePrompt(system, input, model) }).pipe(Effect.match({
     onSuccess: (): Run.Outcome => {
-    const durationMs = Date.now() - startMs;
+    const durationMs = input.now() - startMs;
     // Usage belongs to this single provider attempt.
     const finalTokens = processor.usageTotals;
     const finishReason = processor.message.finish ?? "unknown";
@@ -281,7 +293,7 @@ export function run(
       cacheReadTokens: finalTokens.cache.read,
       cacheWriteTokens: finalTokens.cache.write,
       finishReason,
-      time: Date.now(),
+      time: input.now(),
     });
 
     return {
@@ -299,7 +311,7 @@ export function run(
     const source = apiError ?? err;
     const sourceFacts = errorFacts(source);
     const aborted = abortSignal.aborted || sourceFacts.aborted === true;
-    const retryAfterMs = Retry.retryAfterMs(source);
+    const retryAfterMs = Retry.retryAfterMs(source, input.now);
     const failure = new LlmRunFailure({
         message: err.message || String(err),
         provider, model: modelId,
@@ -320,10 +332,10 @@ export function run(
       runId: input.trace.runId,
       provider,
       model: modelId,
-      durationMs: Date.now() - startMs,
+      durationMs: input.now() - startMs,
       error: err.message,
       aborted,
-      time: Date.now(),
+      time: input.now(),
     });
 
     if (aborted) {

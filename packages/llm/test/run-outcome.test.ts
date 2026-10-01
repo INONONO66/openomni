@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Policy, type Message } from "@openomni/protocol";
 import { run, runEffect, LlmRunFailure } from "./helpers/native";
+import { fixedNow, sequentialIds } from "./helpers/fixtures";
 import { Auth } from "../src/auth";
 import type { StreamEvent } from "../src/processor/stream-events";
 import { streamArguments } from "../src/provider/stream";
@@ -10,6 +11,8 @@ const input = {
   messages: [],
   tools: [],
   model: { id: "model", name: "model", providerID: "provider" },
+  now: fixedNow,
+  id: sequentialIds(),
   trace: { traceId: "trace", sessionId: "session", runId: "run" },
   events: { publish: () => undefined },
 };

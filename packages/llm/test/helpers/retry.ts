@@ -1,4 +1,3 @@
-import { spyOn } from "bun:test";
 import { APICallError } from "ai";
 import { APIError } from "../../src/error";
 
@@ -29,11 +28,10 @@ export function rateLimitError(headers?: Record<string, string>) {
   });
 }
 
-export function withRandom<T>(value: number, action: () => T): T {
-  const random = spyOn(Math, "random").mockReturnValue(value);
-  try {
-    return action();
-  } finally {
-    random.mockRestore();
-  }
+/** Fixed injection sources for `Retry.decide` (#1245): pinned clock, zero jitter draw unless overridden. */
+export const FIXED_RETRY_NOW = Date.parse("2030-01-01T00:00:00.000Z");
+export function sources(
+  overrides: Partial<{ now: () => number; random: () => number }> = {},
+): { now: () => number; random: () => number } {
+  return { now: () => FIXED_RETRY_NOW, random: () => 0, ...overrides };
 }

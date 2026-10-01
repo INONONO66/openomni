@@ -3,7 +3,7 @@ import { coerceApiError } from "../../src/error";
 import { type Run, LlmRunFailure } from "../helpers/native";
 import { Retry } from "../../src/retry";
 
-import { apiError, sdkError } from "../helpers/retry";
+import { apiError, sdkError, sources } from "../helpers/retry";
 
 function runFailure(cause: Error): Run.Failure {
   const api = coerceApiError(cause);
@@ -123,6 +123,7 @@ describe("Retry content-policy classification", () => {
         isRetryable: true,
         statusCode: 400,
       }),
+      sources(),
     );
 
     expect(decision.retry).toBe(false);

@@ -32,12 +32,12 @@ function credentialFingerprint(apiKey: string | undefined): string {
 const ModelEntry = z.object({ id: z.string().min(1) }).loose();
 const ModelListing = z.object({ data: z.array(z.json()) });
 
-export function fetchProxyModels(baseURL: string, apiKey?: string): Effect.Effect<string[], LlmError> {
+export function fetchProxyModels(baseURL: string, now: () => number, apiKey?: string): Effect.Effect<string[], LlmError> {
   return Effect.gen(function* () {
   const url = normalizeModelsURL(baseURL);
   const cacheKey = `${url}:${credentialFingerprint(apiKey)}`;
   const cached = modelCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.ids;
+  if (cached && cached.expiresAt > now()) return cached.ids;
 
   const headers: Record<string, string> = {};
   if (apiKey) {
@@ -68,7 +68,7 @@ export function fetchProxyModels(baseURL: string, apiKey?: string): Effect.Effec
     const parsed = ModelEntry.safeParse(entry);
     return parsed.success ? [parsed.data.id] : [];
   });
-  modelCache.set(cacheKey, { ids, expiresAt: Date.now() + CACHE_TTL_MS });
+  modelCache.set(cacheKey, { ids, expiresAt: now() + CACHE_TTL_MS });
   return ids;
   });
 }
