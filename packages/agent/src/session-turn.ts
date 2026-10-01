@@ -1,11 +1,11 @@
 import { Cause, Effect, Exit, type Scope } from "effect";
 import { z } from "zod";
 import type { SessionHandleStore } from "@openomni/ledger";
-import { canonicalDigest, type PlainValue, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
+import { BusEvent, canonicalDigest, Inbox, type PlainValue, type SessionGeneration, type SessionTurn, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import * as Failure from "./failure";
 import { interruptOn } from "./core/interrupt-on";
-import { CommitFailed, AgentFailure, type ExecutionError, type SessionError } from "./errors";
+import { CommitFailed, AgentFailure, InboundAuthorityViolation, RunnerOutputMissing, type ExecutionError, type SessionError } from "./errors";
 import { hydrateSessionHistory } from "./session-lifecycle/history";
 import { commitFoldBatch } from "./session-fold-commit";
 import { sessionStopEvidence } from "./session-stop-evidence";
@@ -17,19 +17,51 @@ import { GenerationOwnership, ObservationSink, type RunnerServices } from "./ser
 import { parentReply } from "./session-parent-reply";
 import { dispatchSessionOutbound, outboundOpen } from "./session-outbound";
 import { observeDrained } from "./session-message-observation";
+import { scopeObservation } from "./observation/bus";
 
 const ExternalOrigin = z.object({ kind: z.literal("external") });
 const FullAccessOrigin = ExternalOrigin.extend({ inboundTreatment: z.literal("full_access") });
+const EvidenceOnlyOrigin = ExternalOrigin.extend({ inboundTreatment: z.literal("evidence_only") });
+const SessionOrigin = z.object({ kind: z.literal("session"), id: z.string() });
+/** Provenance this kernel minted itself: session handles, inter-session mail, reply terminals. */
+const TrustedOrigin = z.union([SessionOrigin, Inbox.MessageOrigin, Inbox.ReplyOrigin]);
+
+/** The violation fact published when mail of unknown provenance reaches a turn. */
+export const InboundAuthorityViolated = BusEvent.define(
+  "session.inbound_authority.violation",
+  z.object({
+    reason: z.enum(["unknown_origin", "undeclared_treatment"]),
+    messageId: z.string().optional(),
+  }),
+  { visibility: "user_audit" },
+);
+
+export interface InboundAuthorityDecision {
+  readonly authority: "act" | "evidence_only";
+  readonly violation?: InboundAuthorityViolation;
+}
 
 /**
- * Turn authority from the prompt's inbox origin. Internal senders (session
- * messages, fixtures) act; an external origin acts only when the perimeter
- * recorded `full_access` verbatim — a missing or unrecognised treatment on an
- * external origin fails closed to evidence-only.
+ * Turn authority from the prompt's inbox origin. A missing origin (fixture
+ * prompt) or a kernel-minted origin acts; an external origin acts only when
+ * the perimeter recorded `full_access` verbatim, and is evidence when it
+ * recorded `evidence_only`. Everything else is mail of unknown provenance:
+ * evidence authority plus a recorded violation fact — never `act`.
  */
-export function inboundAuthority(origin: PlainValue | undefined): "act" | "evidence_only" {
-  if (!ExternalOrigin.safeParse(origin).success) return "act";
-  return FullAccessOrigin.safeParse(origin).success ? "act" : "evidence_only";
+export function inboundAuthority(origin: PlainValue | undefined): InboundAuthorityDecision {
+  if (origin === undefined || TrustedOrigin.safeParse(origin).success) return { authority: "act" };
+  if (ExternalOrigin.safeParse(origin).success) {
+    if (FullAccessOrigin.safeParse(origin).success) return { authority: "act" };
+    if (EvidenceOnlyOrigin.safeParse(origin).success) return { authority: "evidence_only" };
+    return { authority: "evidence_only", violation: new InboundAuthorityViolation({ reason: "undeclared_treatment" }) };
+  }
+  return { authority: "evidence_only", violation: new InboundAuthorityViolation({ reason: "unknown_origin" }) };
+}
+
+/** The turn's result when the runner never produced one: a typed missing-output failure, not a policy refusal. */
+export function runnerOutputMissingResult(turnId: string): SessionRunnerResult {
+  const cause = new RunnerOutputMissing({ turnId });
+  return { kind: "error", text: cause.message, cause };
 }
 
 interface TurnInput {
@@ -97,14 +129,22 @@ export function createSessionTurn(
         if (drained.interrupted) controller.abort();
         return { messages: drained.messages, interrupted: drained.interrupted };
       }).pipe(Effect.provide(services));
-      let runnerResult: SessionRunnerResult = policyRefusalResult("invalid_output");
+      let runnerResult: SessionRunnerResult = runnerOutputMissingResult(input.turnId);
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
         const hydrated = hydrateSessionHistory(kernel, sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
         const origin = receivedMessages(kernel, sessionId).rows.find((item) => item.id === promptId)?.origin;
+        const inbound = inboundAuthority(origin?.value);
+        if (inbound.violation !== undefined) {
+          const observations = yield* ObservationSink;
+          scopeObservation(observations, { sessionId, turnId: input.turnId }, { now: clock, id: entropy }).publish(
+            InboundAuthorityViolated,
+            { reason: inbound.violation.reason, ...(promptId === undefined ? {} : { messageId: promptId }) },
+          );
+        }
         runnerResult = yield* runner({
-          authority: inboundAuthority(origin?.value),
+          authority: inbound.authority,
           sessionId, kernel, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
           ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
           stopEvidence: sessionStopEvidence(kernel, sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
@@ -179,7 +219,7 @@ export function createSessionTurn(
         actions: [checkpoint, ...deliveries],
         state: current.state === "interrupted" ? "interrupted" : "running",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      observeDrained(pending, input.turnId, boundary, clock(), observations);
+      observeDrained(pending, input.turnId, boundary, clock(), observations, entropy);
       return {
         messages: pending.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
         interrupted: pending.some((item) => item.kind === "interrupt"),
@@ -209,7 +249,7 @@ export function createSessionTurn(
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
         state: result.kind === "interrupted" ? "interrupted" : "idle",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations);
+      observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations, runtime.entropy);
       if (reply !== undefined) yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
     });
   }

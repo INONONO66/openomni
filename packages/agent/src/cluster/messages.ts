@@ -17,6 +17,8 @@ export const ChainAppendReceipt = Schema.Struct({
   ordinal: Schema.Number,
   actionHash: Schema.String,
   deduped: Schema.Boolean,
+  /** The post-append drain outcome: callers distinguish a refused admission from a clean stop (issue #1245). */
+  admission: Schema.Literals(["stop", "refused", "turn"]),
 });
 export type ChainAppendReceipt = typeof ChainAppendReceipt.Type;
 
