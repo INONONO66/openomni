@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@effect/sql-sqlite-bun": "4.0.0-rc.118",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "ai": "^6.0.141"
   }
 }

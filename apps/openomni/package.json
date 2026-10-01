@@ -28,6 +28,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "ai": "^6.0.141"
   }
 }
