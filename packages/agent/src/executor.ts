@@ -11,6 +11,9 @@ import { createStopJudge } from "./executor-stop";
 import { type CommitFailed, ExecutionApprovalError, ForeignFailure, Interrupted, OutcomeUnknown, type ExecutionError } from "./errors";
 import { causeEvidence } from "./executor-outcome";
 import { createRawSlots, RawToolSlots } from "./executor-raw";
+import * as Failure from "./failure";
+import { listenForAbort } from "@openomni/protocol";
+import { BOUNDED_CONCURRENCY } from "./core/concurrency";
 import { GenerationRawSlots } from "./session-generations";
 import { Clock, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "./services";
 import type {
@@ -243,12 +246,10 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         const owned = Effect.scopedWith((scope) => Effect.provide(
           body, Context.make(RawToolSlots, slots).pipe(Context.add(Scope.Scope, scope)),
         ));
-        const abort = () => fiber.interruptUnsafe(fiber.id);
-        signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) abort();
+        const detach = listenForAbort(signal, () => fiber.interruptUnsafe(fiber.id));
         const exitEffect = Effect.exit(Effect.interruptible(owned)).pipe(
           Effect.flatMap((exit) => {
-            signal.removeEventListener("abort", abort);
+            detach();
             if (slots.pending() === 0) return Effect.succeed(exit);
             const grace = Effect.forkScoped(Effect.interruptible(slots.awaitSettled).pipe(
               Effect.timeoutOption(options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS),
@@ -305,8 +306,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       if (Exit.isFailure(exit)) {
         const commitFailure = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).find((error) => error._tag === "CommitFailed");
         if (commitFailure !== undefined) return Effect.fail(commitFailure);
-        const failure = Option.getOrElse(Cause.findErrorOption(exit.cause), () =>
-          new ForeignFailure({ operation: stage.request.op, cause: Cause.pretty(exit.cause) }));
+        const failure = Failure.of(exit.cause, stage.request.op);
         return appendOutcome(stage, failedOutcome(exit.cause, failure), { evidence: causeEvidence(exit.cause) });
       }
       return complete(stage, exit.value).pipe(
@@ -323,8 +323,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     if (failures.some((error) => error._tag === "CommitFailed")) return Effect.failCause(cause);
     const terminalExists = stage.intent !== undefined && options.ledger.resultFor?.(stage.intent.action.id) !== undefined;
     if (terminalExists) return Effect.failCause(cause);
-    const failure = Option.getOrElse(Cause.findErrorOption(cause), () =>
-      new ForeignFailure({ operation: `${stage.request.op}.completion`, cause: Cause.pretty(cause) }));
+    const failure = Failure.of(cause, `${stage.request.op}.completion`);
     return appendOutcome(stage, { terminal: "executed", value, failure }, {
       disposition: "irreversible", evidence: causeEvidence(cause),
     }, false);
@@ -377,7 +376,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
 
   function runStages<R>(stages: readonly Stage<R>[], signal: AbortSignal, controller: AbortController, guarded: boolean, restore: Restore, scope: Scope.Scope) {
     return Effect.gen(function* () {
-      const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: "unbounded" });
+      const decisions = yield* Effect.forEach(stages, (stage) => restore(approval(stage, signal)), { concurrency: BOUNDED_CONCURRENCY });
       const exits = new Map<number, BodyExit>();
       const group: Fiber.Fiber<void, never>[] = [];
       const join = Effect.suspend(() => Effect.gen(function* () {

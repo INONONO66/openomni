@@ -1,5 +1,5 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { SessionRead } from "@openomni/protocol";
+import { listenForAbort, parseJson, SessionRead } from "@openomni/protocol";
 import { z } from "zod";
 
 /** The subset of `WebSocket` this transport uses, so a test can serve its own. */
@@ -45,13 +45,12 @@ const serverFrameSchema = z.union([
 type ServerFrame = z.infer<typeof serverFrameSchema>;
 
 function parseFrame(raw: string | ArrayBuffer | Blob): ServerFrame | undefined {
-  if (typeof raw !== "string") return undefined;
-  try {
-    const result = serverFrameSchema.safeParse(JSON.parse(raw));
-    return result.success ? result.data : undefined;
-  } catch {
-    return undefined;
-  }
+  return typeof raw === "string" ? parseJson(serverFrameSchema, raw) : undefined;
+}
+
+/** Wires `stop` to a turn's abort signal; the AI SDK may send a turn without one. */
+function stopOnAbort(signal: AbortSignal | undefined, stop: () => void): (() => void) | undefined {
+  return signal === undefined ? undefined : listenForAbort(signal, stop);
 }
 
 function lastUserText(messages: readonly UIMessage[]): string {
@@ -338,13 +337,8 @@ export function createGatewayChatTransport(
         },
       });
 
-      const abort = () => stopTurn();
-      removeAbortListener = () => abortSignal?.removeEventListener("abort", abort);
-      abortSignal?.addEventListener("abort", abort, { once: true });
-      if (abortSignal?.aborted) {
-        abort();
-        return stream;
-      }
+      removeAbortListener = stopOnAbort(abortSignal, stopTurn);
+      if (abortSignal?.aborted) return stream;
 
       pending.push(turn);
       let sent = false;
@@ -447,13 +441,12 @@ function createConnection(
       settleAbort?.();
       closeSocket(connection.socket);
     };
-    abortSignal.addEventListener("abort", abort, { once: true });
-    if (abortSignal.aborted) abort();
+    const detach = listenForAbort(abortSignal, abort);
 
     try {
       return await Promise.race([connection.opened, aborted]);
     } finally {
-      abortSignal.removeEventListener("abort", abort);
+      detach();
     }
   }
 

@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import { Effect, Fiber, type Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope } from "effect";
 import { isWarmCandidateValid, latestCompactionAnchorId, planAnchoredCut } from "./candidate";
 import { prepareSummarizerInput } from "./estimate";
 import { withSummarizerDeadline } from "./summary";
@@ -25,8 +25,8 @@ export class CompactionSession {
   #failureStreak = 0;
   #generation = 0;
   #preparation: Fiber.Fiber<void, never> | undefined;
-  #entered = true;
-  readonly #listeners = new Set<() => void>();
+  /** Resolved once a preparation has entered its summarizer call; resolved before any prepare. */
+  #entered = Deferred.makeUnsafe<void>();
 
   constructor(config: {
     readonly protectRecentMessages: number;
@@ -35,6 +35,7 @@ export class CompactionSession {
   }) {
     this.#protectRecentMessages = config.protectRecentMessages;
     this.#summarize = withSummarizerDeadline(config.summarize, config.summarizerDeadlineMs);
+    Deferred.doneUnsafe(this.#entered, Exit.void);
   }
 
   prepare(
@@ -57,11 +58,13 @@ export class CompactionSession {
       const prepared = prepareSummarizerInput(plan.summarizerInput, contextWindowTokens, plan.previousAnchor);
       if (prepared.messages.length === 0) return Effect.void;
       this.#inFlight = true;
-      this.#entered = false;
+      // A preparation aborted before its summarizer call leaves `#entered` unresolved; the waiters it
+      // collected are owed the next entry, so a fresh Deferred is allotted only after the previous one resolved.
+      const entered = Deferred.isDoneUnsafe(this.#entered) ? Deferred.makeUnsafe<void>() : this.#entered;
+      this.#entered = entered;
       const generation = this.#generation;
       const work = Effect.suspend(() => {
-        this.#entered = true;
-        for (const notify of this.#listeners) notify();
+        Deferred.doneUnsafe(entered, Exit.void);
         return this.#summarize(prepared.messages, plan.previousAnchor, prepared.budget);
       }).pipe(
         Effect.match({
@@ -127,12 +130,7 @@ export class CompactionSession {
   }
 
   started(): Effect.Effect<void> {
-    return Effect.callback((resume) => {
-      const notify = () => resume(Effect.void);
-      this.#listeners.add(notify);
-      if (this.#entered) notify();
-      return Effect.sync(() => { this.#listeners.delete(notify); });
-    });
+    return Effect.suspend(() => Deferred.await(this.#entered));
   }
 
   settled(): Effect.Effect<void> {

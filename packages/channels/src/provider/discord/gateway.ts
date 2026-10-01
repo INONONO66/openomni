@@ -1,5 +1,5 @@
 import { newTraceId } from "../../support/trace";
-import { Operational } from "@openomni/protocol";
+import { Operational, parseJson } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
 import { SocketReconnectShell, type SocketSettle } from "../../support/socket-shell";
 import type { PublishPort } from "../../types";
@@ -104,20 +104,14 @@ export class DiscordGateway {
   private wireSocket(ws: WebSocket, settle: SocketSettle): void {
     ws.addEventListener("message", (event) => {
       if (!settle.current()) return;
-      let frame: ReturnType<typeof GatewayFrameSchema.safeParse>;
-      try {
-        frame = GatewayFrameSchema.safeParse(JSON.parse(String(event.data)));
-      } catch {
-        // One malformed frame must not become an uncaught listener throw;
-        // drop it — the gateway's own heartbeat/close handling recovers.
-        this.shell.warnDrop("discord gateway frame was not valid JSON; dropped");
+      // One malformed frame must not become an uncaught listener throw;
+      // drop it — the gateway's own heartbeat/close handling recovers.
+      const frame = parseJson(GatewayFrameSchema, String(event.data));
+      if (frame === undefined) {
+        this.shell.warnDrop("discord gateway frame was not a valid op envelope; dropped");
         return;
       }
-      if (!frame.success) {
-        this.shell.warnDrop("discord gateway frame had no op envelope; dropped");
-        return;
-      }
-      if (this.handlePayload(frame.data)) settle.resolveOnce();
+      if (this.handlePayload(frame)) settle.resolveOnce();
     });
 
     ws.addEventListener("close", async (event) => {

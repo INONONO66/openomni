@@ -515,3 +515,11 @@ produced under the ignored `.omo/quality-sweep/` directory and are not shipped.
   as obsolete: #1140, #1202, #1205, #1230.
 - Measured totals (`quality-audit --dry-run` with local LCOV): see the
   "Honest audit deltas" table in `docs/implementation-status.md`.
+
+## §K epic #1260 ladder (2026-10-01, base `5641cff8`)
+
+One row closes per PR; each row names the deleted duplicate and the single owner that replaced it.
+
+| Row | Issue | Status and receipt |
+| --- | --- | --- |
+| Six JSON parsers, four Cause unwraps, three abort bridges, two listener sets, five unbounded fan-outs | #1243 | ⏳ pending merge on `epic1260/1243-shared-helpers`: `parseJson` (protocol), `Failure.of`/`fromCause` (agent), `listenForAbort` (protocol) + `onAbort`/`interruptOn` (agent) + machines connector; `packages/machines/src/abort.ts` and the desktop renderer copy deleted; `rg -l 'addEventListener\("abort"' packages/*/src apps/*/src` = `packages/protocol/src/platform.ts` only; `Set<\(\) => void>` 0; `concurrency: "unbounded"` 0; jscpd production clones 0. Four `Promise.withResolvers` promise handles kept (runner-site law). Review r1 (gpt-6-astra) REQUEST_CHANGES → fixed in `ec247818` (speculate entry waiter kept across an aborted preparation; registration observed by continuation; prose pin dropped); r2 verdict recorded in the PR. |

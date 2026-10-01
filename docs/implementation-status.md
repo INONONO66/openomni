@@ -1,5 +1,74 @@
 # Implementation Status
 
+## #1243 shared JSON/failure/interrupt helpers (epic #1260 P1, ⏳ pending merge)
+
+On `epic1260/1243-shared-helpers` (2026-10-01, base `5641cff8`). Three
+behaviours that were repeated across packages now have one owner each;
+every consumer keeps its drop/warn/default and abort-once semantics.
+
+- **One JSON wire parser.** `parseJson(schema, text)` in
+  `packages/protocol/src/json.ts` returns the schema-typed value or
+  `undefined` for text that is not JSON, a value that fails the schema, or a
+  validation that throws. Consumers: discord gateway frames, slack socket
+  envelopes (each now emits one warn string per dropped frame), ipc
+  `LineDecoder` malformed reporting, llm retry payloads, the desktop renderer
+  transport frame and saved window bounds (`?? WINDOW_DEFAULT`).
+- **One Cause-to-failure fold.** `packages/agent/src/failure.ts` exports
+  `fromCause(cause, synthesize)` (typed error if the Cause carries one, else
+  `synthesize(Cause.pretty(cause))`) and the agent profile `of(cause,
+  operation)` that synthesizes `ForeignFailure`. Consumers: executor tool and
+  completion outcomes, `session-turn` results, and app boot (`Failure.fromCause`
+  with the app-owned `AppLifecycleFailure`). The remaining
+  `Cause.findErrorOption` sites are Option extractions, not synthesis.
+- **One abort listener owner.** `listenForAbort(signal, listener)` in
+  `packages/protocol/src/platform.ts` is the only `addEventListener("abort")`
+  in `packages/*/src` and `apps/*/src`; an already aborted signal fires at once
+  and registers nothing. Effect bridges are `onAbort`/`interruptOn` in
+  `packages/agent/src/core/interrupt-on.ts` and the one-expression `onAbort`
+  connector in `packages/machines/src/interrupt-on.ts` (agent and machines
+  cannot import each other; protocol is their common dependency). Consumers:
+  executor body fibers, `tool-body`, `session-turn`, retry timers, approval
+  waits, invocation close, machines exec/host cancellation, codemode kernel
+  cancellation and cell launch, the CLI follow signal, and the desktop
+  transport. `packages/machines/src/abort.ts` and the desktop renderer copy are
+  deleted.
+- **Waiters and fan-out.** The `Set<() => void>` listener sets in
+  `executor-raw.ts` and `compaction/speculate.ts` are `Deferred`s (per raw
+  slot; per preparation generation). `concurrency: "unbounded"` is gone:
+  `BOUNDED_CONCURRENCY = 16` (`packages/agent/src/core/concurrency.ts`) for
+  session close, tool waves and approval stages, `CLOSE_CONCURRENCY = 16` for
+  codemode kernel close, and `2` for the two-element app shutdown join.
+- **Kept, with reason.** The four `Promise.withResolvers` sites
+  (`executor-raw.ts` retain settlement, `process-replies.ts` first/answer,
+  `watch-sources.ts` eof) hand promises to promise-world callbacks; a
+  `Deferred` there would need a `runPromise` runner site, which the
+  `effect-runner-sites.json` `[]` law forbids. They are promise handles, not
+  waiters, and stay.
+- **Deviation from the issue text.** #1243 proposed three local
+  `interrupt-on.ts` copies; two identical copies measured as one jscpd
+  production clone (main is at 0), so `listenForAbort` lives in protocol and
+  only the Effect wrappers are local.
+- **Gates on the branch:** build, check-types, lint (including
+  `noExcessiveCognitiveComplexity`; the desktop `sendMessages` optional-signal
+  guard is the named `stopOnAbort` function), lint:tools, topology, deps,
+  effect boundaries, written any/unknown 0, dead exports, import cycles,
+  tsconfig inheritance, jscpd production clones 0, and
+  `bun run ci test --lane <key>` over the 15 CI lanes (4828 pass / 0 fail across 15 CI lanes (gate r5, 2026-10-01)); patch coverage
+  `all changed executable lines covered` (`script/check-patch-coverage.ts --base origin/main`, lane lcov union).
+- **Receipts (HEAD `ec247818`):** `.omo/evidence/ulw/01a0f656-c9f6-795d-9bfb-786c6699559b/1243/`
+  holds `gate-1243.log` (lane totals), `patch-coverage-1243.txt`, `dod-1243.txt`
+  (ultracite on the 32 changed sources, written any/unknown 0, jscpd 0 clones for the
+  three touched packages and `quality:clones:production` 0 clones over 473 sources,
+  dead-export ratchet 0 new), `verify-1243.txt` (the issue's rg searches), `checks-1243.txt`
+  (CI 30 pass / 0 fail), `review-1243-r1.md` + dispositions, and
+  `gate-1243-watch-sources-flake.md` (a pre-existing `watch-sources` flake met by
+  the local gate on untouched code; its own subgoal, not this PR).
+- **Desktop checks:** the two renderer/main behaviours touched here are covered by
+  automated counterparts, `gateway-transport.test.ts` "ignores malformed frames and
+  retains unsolicited reply correlation" and `window-bounds.test.ts` "Given malformed
+  or undersized JSON, When parsed, Then the default" (desktopApp lane 443 pass / 0
+  fail). A native Electron run was not performed.
+
 ## W5.3 #1113 closure receipt (2026-09-29, ⏳ pending merge)
 
 W5.3 on `kernel/1113-w5-closure-20260929` (draft PR #1240, HEAD `03f70089` plus this docs commit,

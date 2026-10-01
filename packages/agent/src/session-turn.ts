@@ -1,8 +1,10 @@
-import { Cause, Effect, Exit, Option, type Scope } from "effect";
+import { Cause, Effect, Exit, type Scope } from "effect";
 import { z } from "zod";
 import type { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, type PlainValue, type SessionGeneration, type SessionTurn, type Inbox, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
+import * as Failure from "./failure";
+import { interruptOn } from "./core/interrupt-on";
 import { CommitFailed, ForeignFailure, type ExecutionError, type SessionError } from "./errors";
 import { hydrateSessionHistory } from "./session-lifecycle/history";
 import { commitFoldBatch } from "./session-fold-commit";
@@ -215,19 +217,13 @@ export function createSessionTurn(
 }
 
 function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) {
-  const aborted = Effect.callback<never>((resume) => {
-    const listener = () => resume(Effect.interrupt);
-    signal.addEventListener("abort", listener, { once: true });
-    if (signal.aborted) listener();
-    return Effect.sync(() => signal.removeEventListener("abort", listener));
-  });
-  return work.pipe(Effect.raceFirst(aborted));
+  return work.pipe(Effect.raceFirst(interruptOn(signal)));
 }
 
 function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: SessionRunnerResult): SessionRunnerResult {
   if (Exit.isFailure(exit)) {
     if (Cause.hasInterrupts(exit.cause)) return { kind: "interrupted", text: "" };
-    const cause = Option.getOrElse(Cause.findErrorOption(exit.cause), () => new ForeignFailure({ operation: "session.turn", cause: Cause.pretty(exit.cause) }));
+    const cause = Failure.of(exit.cause, "session.turn");
     return { kind: "error", text: cause.message, cause };
   }
   const outcome = exit.value;

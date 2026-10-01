@@ -8,6 +8,7 @@ import { Effect, Option } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "./errors";
 import { RawToolSlots } from "./executor-raw";
+import { listenForAbort } from "@openomni/protocol";
 import { openInvocation, withExecutor, withInvocation, type InvocationFrame } from "./executor-context";
 import type { Executor } from "./executor-contract";
 
@@ -41,12 +42,10 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
         signal: AbortSignal.any([context.signal, controller.signal]),
       };
       const owned = invocation === undefined ? undefined : openInvocation(invocation, definition.name);
-      const abort = () => owned?.close("interrupted");
-      scopedContext.signal.addEventListener("abort", abort, { once: true });
-      if (scopedContext.signal.aborted) abort();
+      const detach = listenForAbort(scopedContext.signal, () => owned?.close("interrupted"));
       const settle = (reason: "settled" | "failed") => {
         owned?.close(reason);
-        scopedContext.signal.removeEventListener("abort", abort);
+        detach();
         release();
       };
       const activeExecutor = owned?.frame.executor ?? executor;

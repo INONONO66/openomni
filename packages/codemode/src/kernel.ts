@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
-import type { MachineError } from "@openomni/machines";
+import { type MachineError, onAbort } from "@openomni/machines";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
@@ -296,14 +296,8 @@ export class PythonKernel {
       const output = { stdout: "", stderr: "" };
       const cancelled = (): Machine.CellResult => ({ status: "cancelled", cellId: request.cellId, output: { ...output } });
       if (cancellation.aborted) return Effect.succeed(cancelled());
-      const abort = Effect.callback<Machine.CellResult>((resume) => {
-        const listener = () => resume(Effect.sync(cancelled));
-        cancellation.addEventListener("abort", listener, { once: true });
-        if (cancellation.aborted) listener();
-        return Effect.sync(() => cancellation.removeEventListener("abort", listener));
-      });
       return this.lock.withPermits(1)(this.execute(request, callTool, output)).pipe(
-        Effect.raceFirst(abort),
+        Effect.raceFirst(onAbort(cancellation, Effect.sync(cancelled))),
         Effect.timeoutOption(request.timeoutMs),
         Effect.map((result): Machine.CellResult => result._tag === "Some" ? result.value : { status: "timed_out", cellId: request.cellId, output: { ...output } }),
       );

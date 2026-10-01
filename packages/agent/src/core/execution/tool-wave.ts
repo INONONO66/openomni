@@ -3,6 +3,7 @@ import type { Message } from "@openomni/protocol";
 import type { ExecutionError } from "../../errors";
 import type { ChatAgentConfig } from "../types";
 import { recordToolCall } from "../budget";
+import { BOUNDED_CONCURRENCY } from "../concurrency";
 import type { RunState, TurnArtifacts } from "./state";
 
 export interface WaveControl {
@@ -50,7 +51,7 @@ export function settleModelTools(
               return Effect.succeed({ id: call.id, toolCallId: call.id, toolName: call.tool, output, isError: true });
             }),
           );
-        }, { concurrency: "unbounded" });
+        }, { concurrency: BOUNDED_CONCURRENCY });
   const results = calls.map((call) => {
     const result = executed.find((result) => result.toolCallId === call.id);
     if (result === undefined) throw new Error(`missing tool result: ${call.id}`);

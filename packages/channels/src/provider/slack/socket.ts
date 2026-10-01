@@ -1,4 +1,4 @@
-import { Operational } from "@openomni/protocol";
+import { Operational, parseJson } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
 import { SocketReconnectShell } from "../../support/socket-shell";
 import { newTraceId } from "../../support/trace";
@@ -90,19 +90,12 @@ export class SlackSocket {
   }
 
   private parseEnvelope(data: string): SocketEnvelope | undefined {
-    let envelope: ReturnType<typeof SocketEnvelopeSchema.safeParse>;
-    try {
-      envelope = SocketEnvelopeSchema.safeParse(JSON.parse(data));
-    } catch {
-      // One malformed frame must not become an uncaught listener throw.
-      this.shell.warnDrop("slack socket frame was not valid JSON; dropped");
-      return undefined;
+    // One malformed frame must not become an uncaught listener throw.
+    const envelope = parseJson(SocketEnvelopeSchema, data);
+    if (envelope === undefined) {
+      this.shell.warnDrop("slack socket frame was not a valid envelope; dropped");
     }
-    if (!envelope.success) {
-      this.shell.warnDrop("slack socket frame had no envelope shape; dropped");
-      return undefined;
-    }
-    return envelope.data;
+    return envelope;
   }
 
   private handleEnvelope(envelope: SocketEnvelope, ws: WebSocket): void {

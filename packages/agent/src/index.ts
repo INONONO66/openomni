@@ -6,6 +6,7 @@ export { receivedMessageAction } from "./session-record";
 export { decideRequestTransition, requestBindingDigest } from "./session-request";
 export { decideSessionAdmission, requestAuthorityKernel } from "./session-admission";
 export { failureFacts } from "./core/retry";
+export * as Failure from "./failure";
 export type { CompactionOptions } from "./compaction";
 export { createSessionChatRunner } from "./session-chat-runner";
 export { attemptUsage, toolWallMs } from "./session-lifecycle/metrics";

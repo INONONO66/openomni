@@ -8,6 +8,7 @@ import { resolveSessionRuntime, type ResolvedSessionRuntime } from "./session-co
 import type { SessionEntryServices } from "./services";
 import { toolSnapshot } from "./session-record";
 import { createController } from "./session-controller";
+import { BOUNDED_CONCURRENCY } from "./core/concurrency";
 export type { SessionCreateOptions, SessionRunnerInput, SessionRunnerResult, SessionRunner, SessionRuntime, SessionHandle } from "./session-contract";
 
 const registries = new WeakMap<SessionRuntime, SessionRegistry>();
@@ -77,7 +78,7 @@ class SessionRegistry {
       this.closed = true;
       const entries = [...this.entries.values()];
       this.entries.clear();
-      return Effect.forEach(entries, (entry) => entry.controller.handle.close(), { concurrency: "unbounded", discard: true });
+      return Effect.forEach(entries, (entry) => entry.controller.handle.close(), { concurrency: BOUNDED_CONCURRENCY, discard: true });
     });
   }
 

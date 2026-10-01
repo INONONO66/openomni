@@ -195,3 +195,17 @@ export function canonicalKey(value: PlainValue): string {
 export function canonicalDigest(value: PlainValue | object | undefined): string {
   return `sha256:${createHash("sha256").update(renderCanonical(value)).digest("hex")}`;
 }
+
+/**
+ * ONE JSON wire parser. Text that is not JSON, a value that fails `schema`,
+ * or a validation that throws (a hostile exotic value) all yield undefined;
+ * the caller owns the drop, the warning, or the default that follows.
+ */
+export function parseJson<Output>(schema: z.ZodType<Output>, text: string): Output | undefined {
+  try {
+    const result = schema.safeParse(JSON.parse(text));
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
