@@ -12,8 +12,9 @@ import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
 const config = {
   host: "127.0.0.1",
   wsPort: 0,
+  kek: { kind: "locked", reason: "no vault key in this fixture" },
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
-};
+} as const;
 
 
 test("tool ports bridge machine filesystem and exec effects through the app runtime", async () => {

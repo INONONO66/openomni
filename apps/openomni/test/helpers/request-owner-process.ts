@@ -147,6 +147,7 @@ async function serve() {
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: OWNER_TOKEN,
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       actors: [{ actorId: "owner", externalId: "owner", kind: "human", trustTier: "owner" }],
       model: { provider: "fake", id: "request-owner-e2e", apiKey: "fixture-key" },
     },

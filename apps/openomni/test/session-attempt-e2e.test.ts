@@ -219,7 +219,7 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     if (old === undefined) delete process.env.OPENOMNI_AUTH_FILE;
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
-  await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }));
+  await runEffect(Auth.set("openai", { type: "api", key: "fallback-key" }, { id: () => "tmp-fallback" }));
   const plane = await bootAndAwaitTurn(config, "fallback");
   expect(authorization.map((request) => request.key)).toEqual([
     "primary-key",

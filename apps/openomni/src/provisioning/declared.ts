@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { Result } from "effect";
 import {
   Vault,
@@ -10,7 +9,7 @@ import {
 import { type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";
-import { type KekResolution, resolveKek } from "./vault-key";
+import type { KekResolution } from "./vault-key";
 
 /**
  * Boot-time reconciliation of the provisioning store
@@ -50,8 +49,8 @@ export function desiredChannels(
     readonly instances: Pick<ChannelInstanceStore, "list">;
     readonly secrets: Pick<SecretStore, "get">;
   },
-  env: Record<string, string | undefined> = process.env,
-  home: string = homedir(),
+  // Resolved once in config (#1245): provisioning never reads the environment.
+  kek: KekResolution,
 ): DesiredChannels {
   const instances = stores.instances.list();
   const secrets = new Map<string, ReturnType<SecretStore["get"]>>();
@@ -59,7 +58,7 @@ export function desiredChannels(
     if (!secrets.has(ref)) secrets.set(ref, stores.secrets.get(ref));
     return secrets.get(ref);
   };
-  const reader = vaultCredentialReader(resolveKek(env, home), readSecret);
+  const reader = vaultCredentialReader(kek, readSecret);
   const { rows, statuses } = declaredChannelProfile(instances, reader);
   const byId = new Map(instances.map((instance) => [instance.id, instance]));
   return {

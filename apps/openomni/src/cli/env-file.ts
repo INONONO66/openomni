@@ -98,12 +98,24 @@ export function writeEnvFile(path: string, entries: readonly EnvEntry[]): void {
 }
 
 /**
+ * The app's ambient-environment owner alongside `src/config.ts` (#1245):
+ * every other module receives environment values from here rather than
+ * reading `process.env` itself.
+ */
+export function processEnvironment(): Record<string, string | undefined> {
+  return process.env;
+}
+
+/**
  * Loads the env file into `env` without overriding keys the process already
  * has — an explicit `OPENOMNI_*` export always beats the file. A missing
  * file is not an error: `openomni start` with a fully exported environment
  * is a supported shape.
  */
-export function applyEnvFile(path: string, env: Record<string, string | undefined>): void {
+export function applyEnvFile(
+  path: string,
+  env: Record<string, string | undefined> = processEnvironment(),
+): void {
   if (!existsSync(path)) return;
   for (const [key, value] of mergeEnvFile(readFileSync(path, "utf-8"), env)) {
     env[key] = value;
@@ -112,7 +124,7 @@ export function applyEnvFile(path: string, env: Record<string, string | undefine
 
 export function mergeEnvFile(
   text: string,
-  env: Readonly<Record<string, string | undefined>>,
+  env: Readonly<Record<string, string | undefined>> = processEnvironment(),
 ): ReadonlyMap<string, string> {
   const merged = new Map(parseEnvFile(text));
   for (const [key, value] of Object.entries(env)) {

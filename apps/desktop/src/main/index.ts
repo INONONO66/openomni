@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, ipcMain, nativeTheme } from "electron";
 import { CLOSE_WINDOW_CHANNEL, GATEWAY_CHANNEL } from "../preload/api";
-import { resolveGatewayEndpoint } from "./gateway-endpoint";
+import { type DesktopConfig, resolveDesktopConfig } from "./config";
 import { buildMenuTemplate, createShellCommandSender } from "./menu";
 import {
   BOUNDS_WRITE_DELAY_MS,
@@ -10,24 +10,6 @@ import {
   serializeWindowBounds,
   WINDOW_MIN,
 } from "./window-bounds";
-
-/**
- * The environment is read ONCE, at startup.
- *
- * A window opened an hour later must not connect somewhere else because a
- * variable changed under the process, and re-reading per request would make the
- * endpoint a moving fact that no log line could pin down.
- */
-const gateway = resolveGatewayEndpoint({
-  OPENOMNI_WS_URL: process.env.OPENOMNI_WS_URL,
-  OPENOMNI_WS_PORT: process.env.OPENOMNI_WS_PORT,
-  OPENOMNI_WS_TOKEN: process.env.OPENOMNI_WS_TOKEN,
-});
-const development = Boolean(process.env.ELECTRON_RENDERER_URL);
-const applicationWindows = new Map<number, BrowserWindow>();
-let lastFocusedWindowId: number | null = null;
-
-if (development) app.commandLine.appendSwitch("remote-debugging-port", "9333");
 
 const BACKGROUND = { dark: "#0A0A0C", light: "#EFEFF0" } as const;
 
@@ -39,58 +21,6 @@ function readBounds() {
   } catch {
     return parseWindowBounds(null);
   }
-}
-
-function createWindow(): void {
-  const window = new BrowserWindow({
-    ...readBounds(),
-    minWidth: WINDOW_MIN.width,
-    minHeight: WINDOW_MIN.height,
-    show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
-    // Custom chrome: the native title bar is hidden and the traffic lights sit
-    // in the 42px tab strip (`--shell-top` / `--spacing-shell-strip` in
-    // @openomni/ui), which drags the window via `-webkit-app-region` (see
-    // `drag-region` / `no-drag`). `y` is the TOP of the lights, so centring
-    // them on the strip's midline is y = (strip - lights) / 2 = (42 - 14) / 2
-    // = 14: the lights measure 14pt tall on this macOS (screen-captured, Darwin
-    // 25; the classic 12pt would give 15), and the strip's 28px controls sit at
-    // top 7, so both centre on 21. `x: 17` + the 52px cluster + 12 = the
-    // strip's 81px traffic safe zone.
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 17, y: 14 },
-    webPreferences: {
-      preload: join(import.meta.dirname, "../preload/index.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      // Off until first paint so a hidden window still renders; back on once
-      // shown so a backgrounded window stops burning frames.
-      backgroundThrottling: false,
-    },
-  });
-  const windowId = window.id;
-  applicationWindows.set(windowId, window);
-  const rememberFocus = () => {
-    lastFocusedWindowId = windowId;
-  };
-  window.on("focus", rememberFocus);
-  window.webContents.on("devtools-focused", rememberFocus);
-  window.once("closed", () => {
-    applicationWindows.delete(windowId);
-    if (lastFocusedWindowId === windowId) lastFocusedWindowId = null;
-  });
-  window.once("ready-to-show", () => {
-    window.show();
-    window.webContents.setBackgroundThrottling(true);
-  });
-  persistBounds(window);
-  const devUrl = process.env.ELECTRON_RENDERER_URL;
-  const target = devUrl ?? join(import.meta.dirname, "../renderer/index.html");
-  if (devUrl) {
-    attachRendererDebugging(window);
-  }
-  void (devUrl ? window.loadURL(target) : window.loadFile(target));
 }
 
 /** The last bounds win, once the window has been still for half a second. */
@@ -132,30 +62,118 @@ function attachRendererDebugging(window: BrowserWindow): void {
   });
 }
 
-app.whenReady().then(() => {
-  // Registered before the first window exists: the renderer asks for the
-  // endpoint on its first paint, and a handler installed inside `createWindow`
-  // would be a race with it on the second window.
-  ipcMain.handle(GATEWAY_CHANNEL, () => gateway);
-  // The sender decides which window closes: a menu-focused window and the
-  // focused window can differ, and only the renderer knows it has no tab left.
-  ipcMain.on(CLOSE_WINDOW_CHANNEL, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close();
+function createWindow(
+  config: DesktopConfig,
+  windows: Map<number, BrowserWindow>,
+  onFocus: (windowId: number) => void,
+  onClosed: (windowId: number) => void,
+): void {
+  const window = new BrowserWindow({
+    ...readBounds(),
+    minWidth: WINDOW_MIN.width,
+    minHeight: WINDOW_MIN.height,
+    show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
+    // Custom chrome: the native title bar is hidden and the traffic lights sit
+    // in the 42px tab strip (`--shell-top` / `--spacing-shell-strip` in
+    // @openomni/ui), which drags the window via `-webkit-app-region` (see
+    // `drag-region` / `no-drag`). `y` is the TOP of the lights, so centring
+    // them on the strip's midline is y = (strip - lights) / 2 = (42 - 14) / 2
+    // = 14: the lights measure 14pt tall on this macOS (screen-captured, Darwin
+    // 25; the classic 12pt would give 15), and the strip's 28px controls sit at
+    // top 7, so both centre on 21. `x: 17` + the 52px cluster + 12 = the
+    // strip's 81px traffic safe zone.
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 17, y: 14 },
+    webPreferences: {
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      // Off until first paint so a hidden window still renders; back on once
+      // shown so a backgrounded window stops burning frames.
+      backgroundThrottling: false,
+    },
   });
-  const send = createShellCommandSender({
-    getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
-    getApplicationWindows: () => [...applicationWindows.values()],
-    getLastFocusedWindowId: () => lastFocusedWindowId,
+  const windowId = window.id;
+  windows.set(windowId, window);
+  const rememberFocus = () => onFocus(windowId);
+  window.on("focus", rememberFocus);
+  window.webContents.on("devtools-focused", rememberFocus);
+  window.once("closed", () => {
+    windows.delete(windowId);
+    onClosed(windowId);
   });
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate(buildMenuTemplate({ platform: process.platform, development, send })),
-  );
-  createWindow();
-  app.on("activate", () => {
-    if (applicationWindows.size === 0) createWindow();
+  window.once("ready-to-show", () => {
+    window.show();
+    window.webContents.setBackgroundThrottling(true);
   });
-});
+  persistBounds(window);
+  // The config is the boot-time resolution (#1245): a window opened an hour
+  // later must not connect somewhere else because a variable changed under
+  // the process.
+  const devUrl = config.rendererDevUrl;
+  const target = devUrl ?? join(import.meta.dirname, "../renderer/index.html");
+  if (devUrl !== undefined) {
+    attachRendererDebugging(window);
+  }
+  void (devUrl !== undefined ? window.loadURL(target) : window.loadFile(target));
+}
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+/**
+ * The Electron entry hands the host process in exactly once (#1245): the
+ * environment is resolved here, at startup, and every later read is of the
+ * resolved config — re-reading per request would make the endpoint a moving
+ * fact that no log line could pin down.
+ */
+function bootstrap(host: { readonly env: Parameters<typeof resolveDesktopConfig>[0] }): void {
+  const config = resolveDesktopConfig(host.env);
+  const development = config.rendererDevUrl !== undefined;
+  const applicationWindows = new Map<number, BrowserWindow>();
+  let lastFocusedWindowId: number | null = null;
+
+  if (development) app.commandLine.appendSwitch("remote-debugging-port", "9333");
+
+  const openWindow = () =>
+    createWindow(
+      config,
+      applicationWindows,
+      (windowId) => {
+        lastFocusedWindowId = windowId;
+      },
+      (windowId) => {
+        if (lastFocusedWindowId === windowId) lastFocusedWindowId = null;
+      },
+    );
+
+  app.whenReady().then(() => {
+    // Registered before the first window exists: the renderer asks for the
+    // endpoint on its first paint, and a handler installed inside `createWindow`
+    // would be a race with it on the second window.
+    ipcMain.handle(GATEWAY_CHANNEL, () => config.gateway);
+    // The sender decides which window closes: a menu-focused window and the
+    // focused window can differ, and only the renderer knows it has no tab left.
+    ipcMain.on(CLOSE_WINDOW_CHANNEL, (event) => {
+      BrowserWindow.fromWebContents(event.sender)?.close();
+    });
+    const send = createShellCommandSender({
+      getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
+      getApplicationWindows: () => [...applicationWindows.values()],
+      getLastFocusedWindowId: () => lastFocusedWindowId,
+    });
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(buildMenuTemplate({ platform: process.platform, development, send })),
+    );
+    openWindow();
+    app.on("activate", () => {
+      if (applicationWindows.size === 0) openWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+}
+
+
+bootstrap(process);

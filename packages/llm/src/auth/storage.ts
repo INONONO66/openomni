@@ -1,19 +1,19 @@
 import z from "zod";
-import { join, dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { Effect } from "effect";
 import { AuthInvalidFileError, AuthResolutionError, type LlmError } from "../errors";
 import { decodeLlmFailure } from "../error";
+import { resolveAuthFilePath } from "../model/loader";
 
 const Info = z.discriminatedUnion("type", [
   z.object({ type: z.literal("api"), key: z.string() }),
   z.object({ type: z.literal("proxy"), baseURL: z.string(), apiKey: z.string().optional() }),
 ]);
 const AuthFile = z.record(z.string(), z.json());
-const getAuthFilePath = () => process.env.OPENOMNI_AUTH_FILE
-  ? resolve(process.env.OPENOMNI_AUTH_FILE)
-  : join(homedir(), ".openomni", "auth.json");
+// The credential file location is the model loader's environment resolution
+// (#1245): storage itself reads no environment.
+const getAuthFilePath = () => resolveAuthFilePath();
 
 function readAuthFile(filepath: string): Record<string, Auth.Info> {
   if (!existsSync(filepath)) return {};
@@ -62,14 +62,22 @@ export namespace Auth {
   export function all(): Effect.Effect<Record<string, Info>, LlmError> {
     return Effect.try({ try: () => readAuthFile(getAuthFilePath()), catch: decodeLlmFailure("auth.read") });
   }
-  /** One synchronous read/atomic rename boundary: concurrent effects cannot lose credentials. */
-  export function set(key: string, info: Info): Effect.Effect<void, LlmError> {
+  /**
+   * One synchronous read/atomic rename boundary: concurrent effects cannot
+   * lose credentials. The temp-file suffix comes from the injected `id`
+   * source (#1245), never ambient entropy.
+   */
+  export function set(
+    key: string,
+    info: Info,
+    options: { readonly id: () => string },
+  ): Effect.Effect<void, LlmError> {
     return Effect.try({
       try: () => {
         const filepath = getAuthFilePath();
         mkdirSync(dirname(filepath), { recursive: true });
         const data = readAuthFile(filepath);
-        const tmpPath = `${filepath}.${crypto.randomUUID()}.tmp`;
+        const tmpPath = `${filepath}.${options.id()}.tmp`;
         writeFileSync(tmpPath, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 });
         let swapped = false;
         try { renameSync(tmpPath, filepath); swapped = true; }

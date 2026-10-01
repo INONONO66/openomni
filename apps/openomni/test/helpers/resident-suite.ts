@@ -90,6 +90,7 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
         sessionsDir: join(directory, "sessions"),
         host: "127.0.0.1",
         wsPort: 0,
+        kek: { kind: "locked", reason: "no vault key in this fixture" },
         model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
         ...overrides,
       };

@@ -1,4 +1,4 @@
-import { expect, jest, mock, spyOn, test } from "bun:test";
+import { expect, jest, mock, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,23 +24,6 @@ function snapshotHost(globals: Globals): () => void {
       restore(globals, key, previous[key]);
     for (const [key, value] of environment) restore(process.env, key, value);
   };
-}
-
-interface DebugEvents {
-  "console-message": [{ level: number; message: string; sourceId: string; lineNumber: number }];
-  "render-process-gone": [object, { reason: string; exitCode: number }];
-  "did-fail-load": [object, number, string, string];
-}
-type DebugListeners = { [K in keyof DebugEvents]?: (...args: DebugEvents[K]) => void };
-/** Fire the webContents debug listener registered under `name` with `args`. */
-function fireDebug<K extends keyof DebugEvents>(
-  listeners: DebugListeners | undefined,
-  name: K,
-  ...args: DebugEvents[K]
-): void {
-  const listener = listeners?.[name];
-  if (!listener) throw new Error(`Missing debug listener: ${name}`);
-  listener(...args);
 }
 
 test("desktop entries register IPC before window creation and render without awaiting the gateway", async () => {
@@ -71,13 +54,10 @@ test("desktop entries register IPC before window creation and render without awa
     }
     readonly id = windows.length;
     readonly listeners = new Map<string, () => void>();
-    readonly debug: DebugListeners = {};
     readonly webContents = {
       setBackgroundThrottling: mock((_enabled: boolean) => undefined),
       openDevTools: mock((_options: { mode: string }) => undefined),
-      on: <K extends keyof DebugEvents>(name: K, callback: DebugListeners[K]) => {
-        this.debug[name] = callback;
-      },
+      on: () => undefined,
     };
     readonly once = (name: string, callback: () => void) => this.listeners.set(name, callback);
     readonly on = (name: string, callback: () => void) => this.listeners.set(name, callback);
@@ -208,27 +188,14 @@ test("desktop entries register IPC before window creation and render without awa
     expect(windows).toHaveLength(1);
     windows[0]?.listeners.get("closed")?.();
     windows.length = 0;
+    // The env is resolved once at bootstrap (#1245): flipping variables after
+    // startup must not switch a later window into dev mode or move the gateway.
     process.env.ELECTRON_RENDERER_URL = "http://localhost:5173";
+    process.env.OPENOMNI_WS_URL = "ws://127.0.0.1:43211/ws";
     events.get("activate")?.();
     expect(windows).toHaveLength(1);
-    expect(loaded.at(-1)).toBe("http://localhost:5173");
-    expect(windows[0]?.webContents.openDevTools).toHaveBeenCalledWith({ mode: "detach" });
-    const log = spyOn(console, "log").mockImplementation(() => undefined);
-    const error = spyOn(console, "error").mockImplementation(() => undefined);
-    const debug = windows[0]?.debug;
-    fireDebug(debug, "console-message", {
-      level: 1,
-      message: "fixture",
-      sourceId: "test",
-      lineNumber: 2,
-    });
-    fireDebug(debug, "render-process-gone", {}, { reason: "crashed", exitCode: 1 });
-    fireDebug(debug, "did-fail-load", {}, 3, "failed", "test");
-    expect(log).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledTimes(2);
-    log.mockRestore();
-    error.mockRestore();
-    process.env.OPENOMNI_WS_URL = "ws://127.0.0.1:43211/ws";
+    expect(loaded.at(-1)?.endsWith("/renderer/index.html")).toBe(true);
+    expect(windows[0]?.webContents.openDevTools).not.toHaveBeenCalled();
     await import("../src/preload/index");
     if (!exposed) throw new Error("Preload did not expose the desktop bridge");
     expect(await exposed.gateway()).toEqual({

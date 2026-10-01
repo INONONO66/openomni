@@ -232,6 +232,7 @@ describe("ws exposure enforcement", () => {
           catalogPath: "/dev/null/never-created.sqlite",
           host: "0.0.0.0",
           wsPort: 0,
+          kek: { kind: "locked", reason: "no vault key in this fixture" },
           model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
         },
       }),

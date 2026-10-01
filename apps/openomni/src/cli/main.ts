@@ -93,7 +93,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
   };
 
   async function startApp(): Promise<void> {
-    applyEnvFile(envPath, process.env);
+    applyEnvFile(envPath);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
     const runtime = gatewayRuntime(resolveClusterStorage(config, home));
@@ -108,10 +108,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
 
   async function doctorPorts(): Promise<DoctorPorts> {
     const envFilePresent = existsSync(envPath);
-    const effectiveEnv = mergeEnvFile(
-      envFilePresent ? await Bun.file(envPath).text() : "",
-      process.env,
-    );
+    const effectiveEnv = mergeEnvFile(envFilePresent ? await Bun.file(envPath).text() : "");
     const lingerEnabled = ((): boolean | undefined => {
       if (target.platform !== "linux") return undefined;
       const result = io.exec(["loginctl", "show-user", String(target.uid), "--property=Linger"]);

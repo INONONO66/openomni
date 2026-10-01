@@ -108,6 +108,7 @@ try {
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: "fixture-token",
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       compactionSummarizer: false,
       model: {
         provider: "anthropic",

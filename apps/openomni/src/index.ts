@@ -32,7 +32,6 @@ import {
   ChannelsFailure,
   WebSocketHandler,
 } from "@openomni/channels";
-import { homedir } from "node:os";
 import type { ActorRegistry } from "@openomni/ledger";
 
 import {
@@ -44,7 +43,6 @@ import type { Channel } from "@openomni/protocol";
 import { Bus, newTraceId } from "@openomni/agent";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
-import { resolveKek } from "./provisioning/vault-key";
 import type { ProvisionPort } from "./provisioning/channels";
 import {
   assertWsExposure,
@@ -348,7 +346,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       secrets: plane.stores.secrets,
       actors: plane.stores.actors,
       transaction: plane.catalog.transaction,
-      kek: resolveKek(process.env, homedir()),
+      kek: config.kek,
       supervisor: {
         reconcile: () => liveSupervisor().reconcile(),
         resume: (instanceId) => liveSupervisor().resume(instanceId),
@@ -469,7 +467,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
       desired: () =>
-        desiredChannels({ instances: plane.stores.instances, secrets: plane.stores.secrets }),
+        desiredChannels(
+          { instances: plane.stores.instances, secrets: plane.stores.secrets },
+          config.kek,
+        ),
       build: (component) => component.build(routingHandler),
       // The tier is the row's, never this call site's: mounting a named
       // surface materializes no owner authority (#931).

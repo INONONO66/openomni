@@ -142,6 +142,7 @@ const CONFIG_ENV = [
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_VAULT_KEY",
 ] as const;
 
 describe("OpenOmni Resident WebSocket", () => {

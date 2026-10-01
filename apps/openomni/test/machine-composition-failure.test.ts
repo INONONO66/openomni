@@ -24,6 +24,7 @@ test("the app machine host translates a codemode failure at its callback boundar
   try {
     const app = await startOpenOmni({ config: {
       host: "127.0.0.1", wsPort: 0,
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
       machines: { socketPath: socketPath(), enrolled: [] },
     } });

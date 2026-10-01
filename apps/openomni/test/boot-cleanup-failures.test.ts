@@ -35,6 +35,7 @@ test("server bind failure preserves its cleanup failure and closes storage", asy
   try {
     const failed = startOpenOmni({ runtime, config: {
       host: "127.0.0.1", wsPort: port,
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
     } });
     await expect(failed).rejects.toBeInstanceOf(AggregateError);
