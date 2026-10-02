@@ -77,7 +77,7 @@ function dispatch(rows: readonly BundleRow[], bodies: PlainValue[]) {
 test("captured bundle data resolves custom transforms and obligations alongside kernel refs", () => isolated(Effect.scoped(Effect.gen(function* () {
   const bodies: PlainValue[] = [];
   const { result, policy } = yield* dispatch([
-    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { value: "bundle", secret: "hidden" } }, 300),
+    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", "secret"], value: "bundle", secret: "hidden" } }, 300),
     policyRow("demo/redact-row", { type: "transform", ref: "kernel/redact", config: { paths: ["secret"] } }, 200),
     policyRow("demo/cap-row", { type: "obligation", ref: "demo/cap", metric: "fanout", limit: 2 }),
   ], bodies);

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "bun:test";
+import type { PlainValue } from "@openomni/protocol";
 import { compileGateRows, type GateHandler } from "../src/kernel/gate/compose";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 const table = fullPointTable();
+
+function plainModel(value: PlainValue): string {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return "";
+  const model = value.model;
+  return typeof model === "string" ? model : "";
+}
 
 describe("decision replay (#1251)", () => {
   it("replays a recorded decision for the same input hash without re-running handlers", () => {
@@ -61,14 +68,14 @@ describe("decision replay (#1251)", () => {
   });
 
   it("replay of chained rewrites restores the final folded value and untouched fields (#1251 r1)", () => {
-    const upgrade: GateHandler = (input) => {
-      const value = input.value as { model: string };
-      return { value: { model: `${value.model}+a` }, payload: { step: "a" } };
-    };
-    const suffix: GateHandler = (input) => {
-      const value = input.value as { model: string };
-      return { value: { model: `${value.model}+b` }, payload: { step: "b" } };
-    };
+    const upgrade: GateHandler = (input) => ({
+      value: { model: `${plainModel(input.value)}+a` },
+      payload: { step: "a" },
+    });
+    const suffix: GateHandler = (input) => ({
+      value: { model: `${plainModel(input.value)}+b` },
+      payload: { step: "b" },
+    });
     const handlers = new Map<string, GateHandler>([
       ["rewrite/upgrade", upgrade],
       ["rewrite/suffix", suffix],

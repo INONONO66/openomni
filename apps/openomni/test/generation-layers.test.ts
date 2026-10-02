@@ -118,6 +118,38 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
   expect(closed.sort()).toEqual(acquired.sort());
 });
 
+test("a generation carrying a row outside the composition's point table fails closed at capture (#1251 r2)", async () => {
+  const runtime = gatewayRuntime({ observations: Bus });
+  try {
+    await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
+      const generations = yield* GenerationLayers;
+      const plane = yield* AppLedger;
+      seedKernelPolicyRows(plane.catalog.policies);
+      // A later generation smuggles in a row no registered point can own:
+      // the generation Layer compiles against the composition's table and
+      // must fail closed instead of defaulting capabilities present.
+      const orphaned = plane.catalog.policies.appendGeneration((current) => [
+        ...current.map(({ generation: _generation, ...rest }) => rest),
+        {
+          name: "orphan", kind: "fold.checkpoint", phase: "pre", priority: 1,
+          match: { encodingVersion: 1, value: {} },
+          verdict: { encodingVersion: 1, value: { type: "allow" } },
+        },
+      ]);
+      yield* generations.initialize({ resident: [], worker: [] });
+      yield* plane.openKernel("orphaned").materialize({
+        id: "orphaned", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+        policyGeneration: orphaned, actionId: "orphaned-create", at: 1,
+      });
+      const failure = yield* Effect.flip(Effect.gen(function* () {
+        const captured = yield* generations.capture({ sessionId: "orphaned", generation: 1 });
+        return yield* captured.provide(SessionLayer);
+      }));
+      expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "generation.policy" });
+    })));
+  } finally { await runtime.dispose(); }
+});
+
 for (const verdict of ["require_approval", "deny"] as const) {
   test(`configureAuthority refuses session.configure when the pinned pre-policy yields ${verdict}`, async () => {
     const runtime = gatewayRuntime({ observations: Bus });

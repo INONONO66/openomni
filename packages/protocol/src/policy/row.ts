@@ -27,6 +27,8 @@ export type GateVerdict = z.infer<typeof GateVerdict>;
 export const GateHow = z
   .object({
     ref: GateHandlerRef.optional(),
+    /** Declared dependency collection: extra service refs the handler may resolve. */
+    requires: z.array(GateHandlerRef).optional(),
     verdict: GateVerdict.optional(),
     emit: z.string().min(1).optional(),
     intent: PlainValueSchema.optional(),

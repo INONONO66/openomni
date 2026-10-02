@@ -109,11 +109,46 @@ describe("gate-row compose rejections (#1251)", () => {
     expect(
       rejectionCode(() =>
         compile(
-          [gateRow("tool.pre", { do: "rewrite", how: { ref: "guard/rewrite", fields: ["output"] } })],
+          [gateRow("compaction.pre", { do: "rewrite", how: { ref: "guard/rewrite", fields: ["output"] } })],
           ["guard/rewrite"],
         ),
       ),
     ).toBe("bad_field");
+  });
+
+  it("rejects an observe row carrying a verdict, obligation, or rewrite fields with `bad_action` (#1251 r2)", () => {
+    expect(
+      rejectionCode(() =>
+        compile([gateRow("tool.pre", { do: "observe", how: { ref: "audit/log", verdict: "deny" } })], ["audit/log"]),
+      ),
+    ).toBe("bad_action");
+    expect(
+      rejectionCode(() =>
+        compile(
+          [gateRow("tool.pre", { do: "observe", how: { ref: "audit/log", metric: "calls", limit: 1 } })],
+          ["audit/log"],
+        ),
+      ),
+    ).toBe("bad_action");
+    expect(
+      rejectionCode(() =>
+        compile(
+          [gateRow("tool.pre", { do: "observe", how: { ref: "audit/log", fields: ["input"] } })],
+          ["audit/log"],
+        ),
+      ),
+    ).toBe("bad_action");
+  });
+
+  it("rejects a declared requires entry without a registered handler with `unknown_handler`", () => {
+    expect(
+      rejectionCode(() =>
+        compile(
+          [gateRow("tool.pre", { how: { ref: "guard/main", requires: ["guard/helper"] } })],
+          ["guard/main"],
+        ),
+      ),
+    ).toBe("unknown_handler");
   });
 
   it("rejects a post-end emit with `post_end_emit`", () => {

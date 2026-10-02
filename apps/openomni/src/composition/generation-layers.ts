@@ -24,6 +24,7 @@ import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { z } from "zod";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
+import { POINT_TABLE } from "../policy-seed";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
 import { captureNow } from "./platform";
 
@@ -91,7 +92,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const layer = Layer.unwrap(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
-          try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
+          try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry, table: POINT_TABLE }),
           catch: String,
         }).pipe(Effect.mapError((cause) => new AgentFailure({ operation: "generation.policy", cause })));
         return Layer.succeed(SessionLayer, { snapshot, policy });

@@ -25,7 +25,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
     ...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
     { name: "normalize", kind: "tool", phase: "pre", generation: 1, priority: 1,
       match: { encodingVersion: 1, value: { op: "write" } },
-      verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/normalize" } } },
+      verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/normalize", config: { fields: ["text"] } } } },
   ] });
   const definition = defineTool({ name: "write", description: "Write", category: "mutation",
     input: z.object({ text: z.string() }), output: z.string(), visibility: { model: ["resident"], cell: ["resident"] },

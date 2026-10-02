@@ -2,8 +2,12 @@ import { Kernel } from "@openomni/agent";
 const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
 const { assertPointGenerationRows, composePointTable, KERNEL_CAPABILITY_POINTS, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Kernel;
 
-/** The merged core+capability point registration table the boot validates rows against (#1251). */
-const POINT_TABLE = composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
+/**
+ * The merged core+capability point registration table of this app's
+ * composition (#1251): the boot validates rows against it and every
+ * generation Layer compiles its policy snapshot against it.
+ */
+export const POINT_TABLE = composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
 import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
 import { PROVISION_POLICY_ROWS } from "./tools/provision";

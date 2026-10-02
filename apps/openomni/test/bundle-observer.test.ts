@@ -83,7 +83,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   const policy = Layer.succeed(Policy, { transformers: [{ name: "demo/redact-home", apply: () => ({ text: "redacted" }) }], obligations: [] });
   const definition = bundle({ name: "demo", requires: [], provides: [Policy], layer: policy, tools: [demo], rows: [{
     name: "demo/redact", kind: "tool", phase: "pre", priority: 1000,
-    match: { encodingVersion: 1, value: { op: "echo" } }, verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/redact-home" } },
+    match: { encodingVersion: 1, value: { op: "echo" } }, verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/redact-home", config: { fields: ["text"] } } },
   }] });
   const offered: string[][] = [];
   const provider = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async (request) => {

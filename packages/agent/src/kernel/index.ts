@@ -15,7 +15,7 @@ export { decisionFromEvaluation, evaluatePermission } from "./gate/match";
 export {
   composePointTable, executionPoint, GateComposeError, KERNEL_CAPABILITY_POINTS,
 } from "./points";
-export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/compose";
+export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/migrate";
 export {
   createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, sessionTool,
   ToolRefused, toolInputSchema, toolSpec,

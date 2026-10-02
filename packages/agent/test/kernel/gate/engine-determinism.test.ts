@@ -60,7 +60,7 @@ describe("compiled policy snapshot determinism", () => {
     expect(current.evaluate(request)).toMatchObject({
       generation: 2,
       verdict: "deny",
-      matchedRuleIds: ["deny-read"],
+      matchedRuleIds: ["deny-read", "allow-read"],
       reason: "read suspended",
     });
     expect(oldEvaluator.evaluate(request)).toEqual(before);

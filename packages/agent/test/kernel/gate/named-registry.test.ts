@@ -70,7 +70,7 @@ describe("immutable named policy registry", () => {
     };
     const transformers = [transformer];
     const registry = createNamedPolicyRegistry({ transformers, obligations: [] });
-    const config = { nested: ["first"] };
+    const config = { fields: ["args", "config"], nested: ["first"] };
     const rows = [
       atGeneration(compaction, 1),
       atGeneration(
@@ -84,7 +84,13 @@ describe("immutable named policy registry", () => {
         1,
       ),
       atGeneration(
-        draft("b", "tool", "pre", { type: "transform", ref: transformer.name }, { priority: 10 }),
+        draft(
+          "b",
+          "tool",
+          "pre",
+          { type: "transform", ref: transformer.name, config: { fields: ["args", "config"] } },
+          { priority: 10 },
+        ),
         1,
       ),
     ];
@@ -94,9 +100,15 @@ describe("immutable named policy registry", () => {
     transformers.length = 0;
     config.nested[0] = "changed";
     const evaluation = snapshot.evaluate(input);
+    const afterA = {
+      ...input.value,
+      args: input.value,
+      config: { fields: ["args", "config"], nested: ["first"] },
+    };
     expect(evaluation.value).toEqual({
-      args: { args: input.value, config: { nested: ["first"] } },
-      config: null,
+      ...input.value,
+      args: afterA,
+      config: { fields: ["args", "config"] },
     });
     expect(evaluation.transforms).toEqual([
       { ruleId: "a", ref: "demo/wrap" },
@@ -180,7 +192,7 @@ describe("immutable named policy registry", () => {
       ],
       obligations: [],
     });
-    const config = { nested: [1] };
+    const config = { nested: [1], fields: ["keep"] };
     const snapshot = compilePolicySnapshot({
       generation: 1,
       registry,

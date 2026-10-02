@@ -2,8 +2,10 @@ import {
   canonicalDigest,
   Gateway,
   NamedError,
+  type GateRow,
   type PlainValue,
   PlainValueSchema,
+  type PointId,
   PolicyRef,
   RowVerdictRead,
   type RowVerdict,
@@ -15,7 +17,8 @@ import {
 import { z } from "zod";
 import { clonePlain, freezePlain, matchesMessage, type MessagePolicyContext } from "./match";
 import { composePointTable, GateComposeError, KERNEL_CAPABILITY_POINTS, type GatePointTable } from "../points";
-import { compileGateRows, legacyGateRow, translateLegacyPolicyRow } from "./compose";
+import { compileGateRows, type CompiledGate, type GateHandler } from "./compose";
+import { legacyPointOf, translateLegacyPolicyRow } from "./migrate";
 
 
 interface NamedTransformer {
@@ -260,11 +263,6 @@ interface CompiledRow {
   readonly verdict: CompiledVerdict;
 }
 
-interface BucketSet {
-  readonly wildcard: readonly CompiledRow[];
-  readonly operations: ReadonlyMap<string, readonly CompiledRow[]>;
-}
-
 export interface CompilePolicySnapshotOptions {
   readonly registry: NamedPolicyRegistry;
   readonly generation: number;
@@ -281,20 +279,8 @@ function rowKey(row: Pick<PolicyRow.Row, "name" | "kind" | "phase">): string {
   return `${row.name}\u0000${row.kind}\u0000${row.phase}`;
 }
 
-function pointKey(kind: string, phase: PolicyRow.Phase): string {
-  return `${kind}\u0000${phase}`;
-}
-
 function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
   return `${kind}/${phase}/${op ?? "*"}`;
-}
-
-function ordered(rows: readonly CompiledRow[]): readonly CompiledRow[] {
-  return Object.freeze(
-    [...rows].sort(
-      (left, right) => right.priority - left.priority || left.name.localeCompare(right.name),
-    ),
-  );
 }
 
 function parseRow(
@@ -428,35 +414,6 @@ function contentIdentity(rows: readonly PolicyRow.Row[]): PlainValue {
     }));
 }
 
-function buildBuckets(rows: readonly CompiledRow[]): ReadonlyMap<string, BucketSet> {
-  const grouped = new Map<string, CompiledRow[]>();
-  for (const row of rows) {
-    const key = pointKey(row.kind, row.phase);
-    const entries = grouped.get(key) ?? [];
-    entries.push(row);
-    grouped.set(key, entries);
-  }
-
-  const buckets = new Map<string, BucketSet>();
-  for (const [key, entries] of grouped) {
-    const wildcard = entries.filter((entry) => entry.match.op === undefined);
-    const operationNames = new Set(
-      entries.flatMap((entry) => (entry.match.op === undefined ? [] : [entry.match.op])),
-    );
-    const operations = new Map<string, readonly CompiledRow[]>();
-    for (const operation of operationNames) {
-      operations.set(
-        operation,
-        ordered(
-          entries.filter((entry) => entry.match.op === undefined || entry.match.op === operation),
-        ),
-      );
-    }
-    buckets.set(key, Object.freeze({ wildcard: ordered(wildcard), operations }));
-  }
-  return buckets;
-}
-
 function innerOperation(value: PlainValue): string | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
   const operation = value.operation;
@@ -465,159 +422,244 @@ function innerOperation(value: PlainValue): string | undefined {
   return typeof operation.op === "string" ? operation.op : undefined;
 }
 
-function matches(row: CompiledRow, input: PolicyEvaluationInput): boolean {
-  return (
-    (row.match.operation === undefined || row.match.operation === innerOperation(input.value)) &&
-    (row.match.role === undefined || row.match.role === input.role) &&
-    (row.match.sessionId === undefined || row.match.sessionId === input.sessionId) &&
-    (row.match.message === undefined || matchesMessage(row.match.message, input.message))
+// ─── projection: historical rows onto the fourteen-point gate (#1251) ───
+
+/**
+ * The compiled gate plus the row identities behind each projected gate row;
+ * the gate is the single production evaluator and this metadata only formats
+ * its decision back into the legacy `PolicyEvaluation` shape.
+ */
+interface ProjectedGeneration {
+  readonly gate: CompiledGate<MessagePolicyContext>;
+  readonly rowById: ReadonlyMap<string, CompiledRow>;
+}
+
+/** The legacy row's condition fields, carried verbatim in the gate row's `when`. */
+function projectedWhen(match: Match): Record<string, PlainValue> {
+  const when: Record<string, PlainValue> = {};
+  if (match.op !== undefined) when.op = match.op;
+  if (match.operation !== undefined) when.operation = match.operation;
+  if (match.role !== undefined) when.role = match.role;
+  if (match.sessionId !== undefined) when.sessionId = match.sessionId;
+  return when;
+}
+
+/** A rewrite row's real fields: the first path segments its transform touches. */
+function transformFields(config: PlainValue | undefined): string[] {
+  if (config === null || typeof config !== "object" || Array.isArray(config) || config === undefined)
+    return [];
+  const declared = Array.isArray(config.fields) ? config.fields : undefined;
+  const paths = Array.isArray(config.paths) ? config.paths : undefined;
+  const segments = (declared ?? paths ?? []).flatMap((entry) =>
+    typeof entry === "string" ? [declared === undefined ? (entry.split(".")[0] ?? entry) : entry] : [],
   );
+  return [...new Set(segments)];
 }
 
-interface CandidateEvaluation {
-  readonly matchedRuleIds: string[];
-  readonly transforms: PolicyTransform[];
-  readonly effects: Policy.PolicyEffect[];
-  readonly obligations: CompiledObligation[];
-  readonly value: PlainValue;
-  readonly verdict: EffectiveRowVerdict;
-  readonly reason?: string;
+function projectedDoHow(row: CompiledRow): Pick<GateRow, "do" | "how"> {
+  switch (row.verdict.type) {
+    case "transform":
+      return {
+        do: "rewrite",
+        how: {
+          ref: row.verdict.ref,
+          fields: transformFields(row.verdict.config),
+          ...(row.verdict.config === undefined ? {} : { params: row.verdict.config }),
+        },
+      };
+    case "obligation":
+      return {
+        do: "gate",
+        how: {
+          verdict: "allow",
+          ref: row.verdict.ref,
+          metric: row.verdict.metric,
+          limit: row.verdict.limit,
+        },
+      };
+    default:
+      return { do: "gate", how: { verdict: row.verdict.type } };
+  }
 }
 
-interface CandidateState {
-  matchedRuleIds: string[];
-  transforms: PolicyTransform[];
-  effects: Policy.PolicyEffect[];
-  obligations: CompiledObligation[];
-  value: PlainValue;
-  verdict: EffectiveRowVerdict;
-  reason?: string | undefined;
+/**
+ * Every point one historical row governs. The removed `policyPoint()` routed
+ * compaction operations through `turn/post`, so a wildcard `turn/post` row is
+ * projected onto the compaction point too; op-specific compaction rows were
+ * already converted onto `compaction/pre` before parsing.
+ */
+function projectedPoints(row: CompiledRow, table: GatePointTable): PointId[] {
+  const point = legacyPointOf(row.kind, row.phase);
+  if (point === undefined || !table.has(point))
+    throw new GateComposeError({ code: "unknown_point", point: `${row.kind}.${row.phase}` });
+  if (point === "turn.post" && row.match.op === undefined && table.has("compaction.pre"))
+    return [point, "compaction.pre"];
+  return [point];
 }
 
-function applyCandidate(
-  candidate: CompiledVerdict,
-  ruleId: string,
-  state: CandidateState,
-): "stop" | "next" {
-  if (candidate.type === "deny") {
-    state.verdict = "deny";
-    state.reason = candidate.reason ?? "denied";
-    return "stop";
-  }
-  if (candidate.type === "require_approval") {
-    state.verdict = "require_approval";
-    state.reason = candidate.reason;
-    return "stop";
-  }
-  if (candidate.type === "transform") {
-    state.verdict = "transform";
-    state.value = candidate.apply(freezePlain(state.value), candidate.config ?? null);
-    state.transforms.push(Object.freeze({ ruleId, ref: candidate.ref }));
-    return "next";
-  }
-  if (candidate.type === "obligation") {
-    if (state.verdict === "allow") state.verdict = "obligation";
-    state.obligations.push({
-      ref: candidate.ref,
-      metric: candidate.metric,
-      limit: candidate.limit,
-    });
-    return "next";
-  }
-  state.effects.push(...(candidate.effects ?? []));
-  state.reason ??= candidate.reason ?? candidate.reasonCodes?.[0];
-  return "next";
-}
-
-function applyCandidates(
-  selected: readonly CompiledRow[],
-  input: PolicyEvaluationInput,
-  initialValue: PlainValue,
-): CandidateEvaluation {
-  const missingMessageContext =
-    input.kind === "message" && input.op === "send_message" && input.message === undefined;
-  const state: CandidateState = {
-    matchedRuleIds: [],
-    transforms: [],
-    effects: [],
-    obligations: [],
-    value: initialValue,
-    verdict: missingMessageContext ? "deny" : "allow",
-    reason: missingMessageContext ? "message_context_missing" : undefined,
+function wrapTransformer(transformer: NamedTransformer): GateHandler {
+  return (input) => {
+    const output = transformer.apply(freezePlain(input.value), input.params ?? null);
+    return {
+      value: output,
+      payload: { ref: transformer.name, output: canonicalDigest(output) },
+    };
   };
-
-  for (const compiled of selected) {
-    if (missingMessageContext) break;
-    if (!matches(compiled, input)) continue;
-    state.matchedRuleIds.push(compiled.name);
-    if (applyCandidate(compiled.verdict, compiled.name, state) === "stop") break;
-  }
-
-  return state;
 }
 
-function evaluateSnapshot(
+/**
+ * Compiles the generation's rows through the gate-row compiler — the single
+ * production evaluator (#1251). Rows are ordered by legacy precedence
+ * (priority descending, name ascending); conditions the exact-equality `when`
+ * cannot express (message rule tables) compile to per-row matchers.
+ */
+function projectGeneration(
+  parsed: readonly CompiledRow[],
+  generation: number,
+  table: GatePointTable,
+  registry: NamedPolicyRegistry,
+): ProjectedGeneration {
+  const ordered = [...parsed].sort(
+    (left, right) => right.priority - left.priority || left.name.localeCompare(right.name),
+  );
+  const gateRows: GateRow[] = [];
+  const rowById = new Map<string, CompiledRow>();
+  const matchers = new Map<string, (context: MessagePolicyContext | undefined) => boolean>();
+  ordered.forEach((row, index) => {
+    for (const point of projectedPoints(row, table)) {
+      const id = `legacy/${point}#${index}`;
+      gateRows.push({
+        id,
+        on: point,
+        when: projectedWhen(row.match),
+        ...projectedDoHow(row),
+        order: index,
+        generation,
+      });
+      rowById.set(id, row);
+      const rule = row.match.message;
+      if (rule !== undefined) matchers.set(id, (context) => matchesMessage(rule, context));
+    }
+  });
+  const gate = compileGateRows<MessagePolicyContext>({
+    table,
+    rows: gateRows,
+    handlers: [...registry.transformers, ...registry.obligations].map(({ name }) => name),
+    generation,
+    matchers,
+  });
+  return { gate, rowById };
+}
+
+const VERDICT_PRECEDENCE: Record<"deny" | "require_approval" | "allow", readonly RowVerdict["type"][]> = {
+  deny: ["deny"],
+  require_approval: ["require_approval"],
+  allow: ["allow"],
+};
+
+function evaluateProjected(
+  projected: ProjectedGeneration,
+  handlers: ReadonlyMap<string, GateHandler>,
   generation: number,
   contentHash: string,
-  buckets: ReadonlyMap<string, BucketSet>,
+  table: GatePointTable,
   input: PolicyEvaluationInput,
 ): PolicyEvaluation {
-  const point = buckets.get(pointKey(input.kind, input.phase));
-  const bucket =
-    input.op === undefined ? point?.wildcard : (point?.operations.get(input.op) ?? point?.wildcard);
-  const selected = bucket ?? [];
-  const evaluation = applyCandidates(selected, input, clonePlain(input.value));
+  const refused = (reason: string): PolicyEvaluation =>
+    Object.freeze({
+      generation,
+      snapshotHash: contentHash,
+      inputHash: canonicalDigest(input),
+      matchedRuleIds: Object.freeze([]),
+      transforms: Object.freeze([]),
+      verdict: "deny" as const,
+      reason,
+      value: clonePlain(input.value),
+      effects: Object.freeze([]),
+      obligations: Object.freeze([]),
+      bucket: publicBucket(input.kind, input.phase, input.op),
+      evaluatedRuleCount: 0,
+    });
+  const point = legacyPointOf(input.kind, input.phase);
+  if (point === undefined || !table.has(point)) return refused("unknown_point");
+  if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
+    return refused("message_context_missing");
+
+  const when: Record<string, PlainValue> = {};
+  if (input.op !== undefined) when.op = input.op;
+  const operation = innerOperation(input.value);
+  if (operation !== undefined) when.operation = operation;
+  if (input.role !== undefined) when.role = input.role;
+  if (input.sessionId !== undefined) when.sessionId = input.sessionId;
+
+  const outcome = projected.gate.decide(
+    point,
+    { when, value: clonePlain(input.value), context: input.message },
+    { handlers: (ref) => handlers.get(ref) },
+  );
+  const matched = outcome.decision.rowIds.flatMap((id) => {
+    const row = projected.rowById.get(id);
+    return row === undefined ? [] : [row];
+  });
+  const transforms = matched.flatMap((row) =>
+    row.verdict.type === "transform" ? [Object.freeze({ ruleId: row.name, ref: row.verdict.ref })] : [],
+  );
+  const obligations = matched.flatMap((row) =>
+    row.verdict.type === "obligation"
+      ? [{ ref: row.verdict.ref, metric: row.verdict.metric, limit: row.verdict.limit }]
+      : [],
+  );
+  const effects = matched.flatMap((row) =>
+    row.verdict.type === "allow" ? (row.verdict.effects ?? []) : [],
+  );
+  const verdict: EffectiveRowVerdict =
+    outcome.decision.verdict !== "allow"
+      ? outcome.decision.verdict
+      : transforms.length > 0
+        ? "transform"
+        : obligations.length > 0
+          ? "obligation"
+          : "allow";
+  const reason = projectedReason(outcome.decision.verdict, matched);
 
   return Object.freeze({
     generation,
     snapshotHash: contentHash,
     inputHash: canonicalDigest(input),
-    matchedRuleIds: Object.freeze(evaluation.matchedRuleIds),
-    transforms: Object.freeze(evaluation.transforms),
-    ...(evaluation.transforms.length === 1 ? { ref: evaluation.transforms[0]?.ref } : {}),
-    verdict: evaluation.verdict,
-    ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }),
-    value: evaluation.value,
-    effects: Object.freeze(evaluation.effects),
-    obligations: Object.freeze(evaluation.obligations),
+    matchedRuleIds: Object.freeze(matched.map((row) => row.name)),
+    transforms: Object.freeze(transforms),
+    ...(transforms.length === 1 ? { ref: transforms[0]?.ref } : {}),
+    verdict,
+    ...(reason === undefined ? {} : { reason }),
+    value: outcome.value,
+    effects: Object.freeze(effects),
+    obligations: Object.freeze(obligations),
     bucket: publicBucket(input.kind, input.phase, input.op),
-    evaluatedRuleCount: evaluation.matchedRuleIds.length,
+    evaluatedRuleCount: matched.length,
   });
+}
+
+/** The highest-precedence matched row's reason: deny defaults to `denied`. */
+function projectedReason(
+  verdict: "deny" | "require_approval" | "allow",
+  matched: readonly CompiledRow[],
+): string | undefined {
+  const types = VERDICT_PRECEDENCE[verdict];
+  for (const row of matched) {
+    if (!types.includes(row.verdict.type)) continue;
+    if (row.verdict.type === "deny") return row.verdict.reason ?? "denied";
+    if (row.verdict.type === "require_approval") return row.verdict.reason;
+    if (row.verdict.type === "allow") {
+      const reason = row.verdict.reason ?? row.verdict.reasonCodes?.[0];
+      if (reason !== undefined) return reason;
+    }
+  }
+  return undefined;
 }
 
 /** The kernel's default composition: core plus every built-in capability. */
 function kernelPointTable(): GatePointTable {
   return composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
-}
-
-/**
- * Admits a generation through the fourteen-point gate compiler (#1251): every
- * row must map onto a registered point and satisfy its record. A rejection is
- * the typed `compose_rejected` compile error carrying the #1255 code.
- */
-function admitRows(
-  rows: readonly PolicyRow.Row[],
-  generation: number,
-  table: GatePointTable,
-  registry: NamedPolicyRegistry,
-): void {
-  try {
-    compileGateRows({
-      table,
-      rows: rows.map((row, index) => legacyGateRow(row, index, generation, table)),
-      handlers: [...registry.transformers, ...registry.obligations].map(({ name }) => name),
-      generation,
-    });
-  } catch (cause) {
-    if (!GateComposeError.isInstance(cause)) throw cause;
-    throw new PolicyCompileError({
-      code: "compose_rejected",
-      generation,
-      composeCode: cause.data.code,
-      ...(cause.data.point === undefined ? {} : { kind: cause.data.point }),
-      ...(cause.data.ref === undefined ? {} : { ref: cause.data.ref }),
-    });
-  }
 }
 
 export function compilePolicySnapshot(
@@ -641,15 +683,29 @@ export function compilePolicySnapshot(
   // refusing summarization (#1251).
   const translated = options.rows.map(translateLegacyPolicyRow);
   const rows = translated.map((row) => parseRow(row, options.generation, kinds, registry));
-  admitRows(translated, options.generation, table, registry);
+  let projected: ProjectedGeneration;
+  try {
+    projected = projectGeneration(rows, options.generation, table, registry);
+  } catch (cause) {
+    if (!GateComposeError.isInstance(cause)) throw cause;
+    throw new PolicyCompileError({
+      code: "compose_rejected",
+      generation: options.generation,
+      composeCode: cause.data.code,
+      ...(cause.data.point === undefined ? {} : { kind: cause.data.point }),
+      ...(cause.data.ref === undefined ? {} : { ref: cause.data.ref }),
+    });
+  }
+  const handlers = new Map(
+    registry.transformers.map((transformer) => [transformer.name, wrapTransformer(transformer)]),
+  );
   const contentHash = canonicalDigest(contentIdentity(options.rows));
-  const buckets = buildBuckets(rows);
   return Object.freeze({
     generation: options.generation,
     contentHash,
     pointTable: table,
     evaluate: (input: PolicyEvaluationInput) =>
-      evaluateSnapshot(options.generation, contentHash, buckets, input),
+      evaluateProjected(projected, handlers, options.generation, contentHash, table, input),
   });
 }
 

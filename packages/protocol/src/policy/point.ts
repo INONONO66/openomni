@@ -41,7 +41,19 @@ export interface PointRecord {
   readonly whenFields: readonly string[];
   /** Turn end: nothing may be emitted at or after this point (post-end emit rejects). */
   readonly end?: boolean;
+  /**
+   * The consulted value at this point is caller-shaped (a tool's own input or
+   * output), so a rewrite row's declared fields are validated nonempty but
+   * not against a fixed field list.
+   */
+  readonly rewriteOpen?: boolean;
 }
+
+/**
+ * Condition fields every consultation supplies today (the v3 execution
+ * context); every point accepts them in `when` alongside its own fields.
+ */
+const CONTEXT_WHEN_FIELDS = ["op", "operation", "role", "sessionId"] as const;
 
 function point(
   id: PointId,
@@ -49,15 +61,19 @@ function point(
   allowedDo: readonly PointDo[],
   rewritableFields: readonly string[],
   whenFields: readonly string[],
-  end?: boolean,
+  flags?: { end?: boolean; rewriteOpen?: boolean },
 ): PointRecord {
   return Object.freeze({
     id,
     owner,
     allowedDo: Object.freeze([...allowedDo]),
     rewritableFields: Object.freeze([...rewritableFields]),
-    whenFields: Object.freeze([...whenFields]),
-    ...(end === true ? { end } : {}),
+    whenFields: Object.freeze([
+      ...CONTEXT_WHEN_FIELDS,
+      ...whenFields.filter((field) => !CONTEXT_WHEN_FIELDS.includes(field as never)),
+    ]),
+    ...(flags?.end === true ? { end: true } : {}),
+    ...(flags?.rewriteOpen === true ? { rewriteOpen: true } : {}),
   });
 }
 
@@ -70,7 +86,8 @@ export const CORE_POINT_RECORDS: readonly PointRecord[] = Object.freeze([
   point("session.open", "core", ["gate", "emit", "observe"], [], ["generation"]),
   point("prompt.pre", "core", ["gate", "rewrite", "emit", "observe"], ["body", "visibility"], ["kind", "origin", "delivery"]),
   point("turn.pre", "core", ["gate", "rewrite", "emit", "observe"], ["budget"], ["kind"]),
-  point("turn.post", "core", ["gate", "rewrite", "observe"], ["budget", "stop"], ["kind", "stopReason", "metric"], true),
+  // `result` is the v3 stop-judge surface a turn-post rewrite may touch.
+  point("turn.post", "core", ["gate", "rewrite", "observe"], ["budget", "stop", "result"], ["kind", "stopReason", "metric"], { end: true }),
   point("llm.pre", "core", ["gate", "rewrite", "emit", "observe"], ["messages", "model", "tools"], ["model"]),
   point("llm.post", "core", ["gate", "rewrite", "emit", "observe"], ["finishReason", "classify"], ["finishReason", "classify"]),
   point("message.pre", "core", ["gate", "rewrite", "observe"], ["body", "to"], ["to", "kind"]),
@@ -78,8 +95,8 @@ export const CORE_POINT_RECORDS: readonly PointRecord[] = Object.freeze([
 
 /** Six capability points, present only while their owner is composed. */
 export const CAPABILITY_POINT_RECORDS: readonly PointRecord[] = Object.freeze([
-  point("tool.pre", "tool", ["gate", "rewrite", "emit", "observe"], ["input"], ["op", "argsPattern", "annotations"]),
-  point("tool.post", "tool", ["gate", "rewrite", "emit", "observe"], ["output"], ["op", "status"]),
+  point("tool.pre", "tool", ["gate", "rewrite", "emit", "observe"], ["input"], ["op", "argsPattern", "annotations"], { rewriteOpen: true }),
+  point("tool.post", "tool", ["gate", "rewrite", "emit", "observe"], ["output"], ["op", "status"], { rewriteOpen: true }),
   point("compaction.pre", "compaction", ["gate", "rewrite", "emit", "observe"], ["summary"], ["reason"]),
   point("compaction.post", "compaction", ["emit", "observe"], [], []),
   point("alarm.fired", "alarm", ["emit", "observe"], [], ["tag", "payloadPath"]),
