@@ -556,7 +556,7 @@ function acquire(bundle: GenerationBundle): Effect.Effect<Entry, SessionError> {
 }
 
 // ─── from session-outbound.ts (#1247) ───
-export function outboundOpen(
+function outboundOpen(
   message: SessionTransition.OutboundMessage,
   at: number,
 ): LedgerAction.Append {

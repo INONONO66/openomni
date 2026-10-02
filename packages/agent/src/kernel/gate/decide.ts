@@ -57,7 +57,7 @@ interface ToolObservationIdentity {
 }
 
 /** How an interrupted effect may be settled from evidence; nothing here permits a replay. */
-export type RecoveryClassification =
+type RecoveryClassification =
   | "local_transactional"
   | "endpoint_idempotent"
   | "read_back_reconcilable"
@@ -92,7 +92,7 @@ export interface ExecutionRequest {
   readonly originalAction?: LedgerAction.Node;
 }
 
-export interface AttemptRequest {
+interface AttemptRequest {
   readonly op: string;
   readonly intent: PlainValue;
   readonly effect: PlainValue;
@@ -313,7 +313,7 @@ export function failureEvidence(error: ExecutionError): PlainObject {
   }
 }
 
-export function causeEvidence(cause: Cause.Cause<ExecutionError>): PlainObject {
+function causeEvidence(cause: Cause.Cause<ExecutionError>): PlainObject {
   return {
     failures: cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error).map(failureEvidence),
     defects: Cause.hasDies(cause)
@@ -442,7 +442,7 @@ export function withInvocation<T>(frame: InvocationFrame, body: () => T): T {
 }
 
 // ─── from executor-record.ts (#1247) ───
-export type ToolObservationStatus = "success" | "error" | "timed_out";
+type ToolObservationStatus = "success" | "error" | "timed_out";
 
 interface ActionSubject {
   readonly kind: LedgerAction.Kind;
@@ -450,7 +450,7 @@ interface ActionSubject {
 }
 
 /** One record-before-observe adapter over the session's existing fenced ledger port. */
-export function createExecutionRecord(
+function createExecutionRecord(
   options: Pick<ResolvedExecutorOptions, "ledger" | "observations" | "identity" | "clock" | "entropy">,
 ) {
   function commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, CommitFailed> {
@@ -606,7 +606,7 @@ export function createExecutionRecord(
 // ─── from executor-approval.ts (#1247) ───
 type ApprovalDecision = "approve" | "refuse" | "timeout";
 
-export function createExecutionApprovals(options: ResolvedExecutorOptions) {
+function createExecutionApprovals(options: ResolvedExecutorOptions) {
   const pending = new Map<string, {
     request: ExecutionApprovalRequest;
     signal: AbortSignal;
@@ -790,7 +790,7 @@ export function createLedgerRetryAlarmPort(
   });
 }
 
-export function createAttemptRunner(
+function createAttemptRunner(
   options: ResolvedExecutorOptions,
   record: Pick<RecordPort, "appendIntent" | "appendResult">,
   admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
@@ -899,7 +899,7 @@ export function createAttemptRunner(
 
 // ─── from executor-stop.ts (#1247) ───
 /** Projects limits from the captured compiler; never repeats policy row names or numeric limits. */
-export function createStopJudge(
+function createStopJudge(
   options: ResolvedExecutorOptions,
   decide: (op: string, value: PlainValue) => Effect.Effect<PolicyEvaluation, ExecutionError>,
   commit: (action: LedgerAction.Append) => Effect.Effect<LedgerAction.Receipt, ExecutionError>,
@@ -973,7 +973,7 @@ interface RecoveryVerdict {
 }
 
 /** Kernel-local projections settle in the ledger transaction; everything else may have left the process. */
-export function recoveryClassification(
+function recoveryClassification(
   request: Pick<ExecutionRequest, "kind" | "recovery">,
 ): RecoveryClassification {
   if (request.recovery !== undefined) return request.recovery;
@@ -1026,7 +1026,7 @@ function crashVerdict(action: LedgerAction.Node): RecoveryVerdict {
  * Recovery reads the original terminal slot first and never runs a body.
  * A refused recovery commit propagates: the durable intent stays recovery-pending.
  */
-export function createExecutionRecovery(options: ExecutorOptions, record: RecoveryRecordPort) {
+function createExecutionRecovery(options: ExecutorOptions, record: RecoveryRecordPort) {
   function terminal(intentId: string): LedgerAction.Node | undefined {
     return options.ledger.resultFor?.(intentId);
   }

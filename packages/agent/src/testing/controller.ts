@@ -10,7 +10,7 @@ import { dispatchSessionOutbound } from "../session/run";
 import { inspectSession } from "../inspect";
 import { createRawSlots } from "../kernel/gate/decide";
 import { commitFoldBatch } from "../session/commit";
-import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "../session/run";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, } from "../session/run";
 import type { SessionControllerState } from "../session/run";
 import type { SessionKernel } from "../session/entity";
 
