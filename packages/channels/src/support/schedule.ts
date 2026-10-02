@@ -4,7 +4,7 @@ import { Schedule } from "effect";
  * Shared reconnect schedule (discord gateway, slack Socket Mode, telegram
  * poll errors): exponential from 1s, capped by the 60s spaced schedule
  * (`Schedule.min` picks the lesser interval — this Effect pin has no
- * `Schedule.either`), with ±20% jitter so multiple surfaces never
+ * the retired either combinator), with ±20% jitter so multiple surfaces never
  * thundering-herd a platform after one network blip. Jitter draws from the
  * Effect Random service, so tests stay deterministic under a provided seed
  * and TestClock owns every delay.
