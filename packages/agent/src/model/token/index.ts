@@ -63,7 +63,6 @@ export namespace TokenTracker {
       ),
       cacheReadTokens: firstCount(
         input.cacheReadTokens,
-        usage.cachedInputTokens,
         usage.cacheReadTokens,
         usage.cache_read_input_tokens,
         metadata.anthropic.cacheReadInputTokens,

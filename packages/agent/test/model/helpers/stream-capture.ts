@@ -10,6 +10,7 @@ import { fixedNow, sequentialIds } from "./fixtures";
 
 export type Condition = (input: { steps: Array<{ usage?: { inputTokens?: number } }> }) => boolean;
 interface Arguments {
+  instructions?: ModelMessage[];
   messages: ModelMessage[];
   tools: ToolSet;
   toolChoice?: string;

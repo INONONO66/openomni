@@ -367,7 +367,7 @@ function handleStepFinish(
  * T1. Tools follow the #543 grace-settle semantics: after the abort grace
  * expires they advance to interrupted (the tool may have produced a real
  * side effect we can no longer observe); on every other unsettled exit
- * (clean stream end after stepCountIs, retryable failure, non-retryable
+ * (clean stream end after isStepCount, retryable failure, non-retryable
  * error) they advance to error.
  */
 export function settleAttempt(
