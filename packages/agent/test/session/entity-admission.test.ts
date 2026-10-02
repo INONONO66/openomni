@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { Inbox, LedgerSession, SessionTransition } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { decideRequestTransition } from "../../src/session/request";
 import { decideSessionAdmission } from "../../src/session/mailbox";
 import {
@@ -456,14 +456,22 @@ function sessionState(file: string): string | undefined {
 
 describe("Integration: entity mailbox is a single writer with whole-backlog drain", () => {
   test("C1 three concurrent prompts serialize: distinct ascending receipts, no handler overlap, linear chain", async () => {
-    const spans: { start: number; end: number }[] = [];
-    const runner: TestTurnRunner = () =>
+    // Deferred-ordered admission probe (no clocks): every handler run posts a
+    // start event, resolves its one-shot entry signal, then suspends through
+    // explicit scheduler yields before posting its end event. If the mailbox
+    // ever admitted two handlers at once, the second fiber would run during
+    // those suspension points and interleave its start between another
+    // handler's start/end pair.
+    const events: string[] = [];
+    const runner: TestTurnRunner = (input) =>
       Effect.gen(function* () {
-        const start = performance.now();
-        // Measured workload (not synchronization): widens the window the
-        // no-overlap assertion inspects so interleaving could not hide.
-        yield* Effect.sleep(40);
-        spans.push({ start, end: performance.now() });
+        const entered = yield* Deferred.make<void>();
+        events.push(`start:${input.turnId}`);
+        yield* Deferred.succeed(entered, undefined);
+        yield* Deferred.await(entered);
+        yield* Effect.yieldNow;
+        yield* Effect.yieldNow;
+        events.push(`end:${input.turnId}`);
         return { kind: "result" as const, text: "done" };
       });
 
@@ -481,14 +489,15 @@ describe("Integration: entity mailbox is a single writer with whole-backlog drai
 
     const ordinals = replies.map((reply) => reply.ordinal);
     expect(new Set(ordinals).size).toBe(3);
-    // Single writer: each handler run observed the previous one finished.
-    expect(spans).toHaveLength(3);
-    const ordered = [...spans].sort((a, b) => a.start - b.start);
-    for (let index = 1; index < ordered.length; index += 1) {
-      const previous = ordered[index - 1];
-      const current = ordered[index];
-      if (previous === undefined || current === undefined) throw new Error("span fixture");
-      expect(current.start).toBeGreaterThanOrEqual(previous.end);
+    // Single writer: start/end events come in strict pairs — each handler run
+    // observed the previous one finished before its own start was admitted.
+    expect(events).toHaveLength(6);
+    for (let index = 0; index < events.length; index += 2) {
+      const start = events[index];
+      const end = events[index + 1];
+      if (start === undefined || end === undefined) throw new Error("event fixture");
+      expect(start.startsWith("start:")).toBe(true);
+      expect(end).toBe(`end:${start.slice("start:".length)}`);
     }
     // OUR hash chain stayed linear under concurrency.
     const file = sessionFileFor(sessionsDir, "c1");

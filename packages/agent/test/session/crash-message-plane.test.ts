@@ -1,41 +1,41 @@
-import { sessionTree } from "./helpers/session-tree";
-import { testExecutor } from "./helpers/executor";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import { isolated, isolatedLedger, isolatedRun } from "./helpers/isolated";
-import { openCrashStores } from "./helpers/crash-stores";
-import type { ExecutionError } from "../src/kernel/failure";
+import { sessionTree } from "../helpers/session-tree";
+import { testExecutor } from "../helpers/executor";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "../helpers/session-services";
+import { isolated, isolatedLedger, isolatedRun } from "../helpers/isolated";
+import { openCrashStores } from "../helpers/crash-stores";
+import type { ExecutionError } from "../../src/kernel/failure";
 import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../../src/store/fence";
 import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { renderAnchorText } from "../src/plugins/compaction/summary";
-import { retryDelivery, type AlarmChainReads } from "../src/session/alarm";
-import { closeSessions } from "../src/session/run";
-import { reactivateSession } from "./helpers/wake-session";
-import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/inspect/history";
-import { receivedMessages } from "../src/session/commit";
-import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "./helpers/crash-configure";
-import { killAtCrashBarrier } from "./helpers/crash-channel";
-import { messagePlanePoint, messagePlaneProof } from "./helpers/crash-message-plane";
-import { corruptCheckpoint, reconstructionPoint, reconstructionRecovery } from "./helpers/crash-reconstruction";
-import { bounded } from "./helpers/bounded";
-import { fiberCrashCell } from "./helpers/fiber-outcome-crash";
-import { compiledPolicy } from "./helpers/compiled-policy";
-import { countingRunner } from "./helpers/counting-runner-g1";
-import { nth } from "./helpers/nth";
-import { receiveOutbound } from "./helpers/effect-g2";
-import { requestLedger } from "./helpers/effect-g1";
-import { checkpointEvidence, committedCompactionPoints, crashPoint, crashWitness, effectOf, intentOf, matrixSchema, observations, outboundPoints, recovery, sessionId, type CrashPoint, } from "./helpers/crash-matrix";
+import { renderAnchorText } from "../../src/plugins/compaction/summary";
+import { retryDelivery, type AlarmChainReads } from "../../src/session/alarm";
+import { closeSessions } from "../../src/session/run";
+import { reactivateSession } from "../helpers/wake-session";
+import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../../src/inspect/history";
+import { receivedMessages } from "../../src/session/commit";
+import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "../helpers/crash-configure";
+import { killAtCrashBarrier } from "../helpers/crash-channel";
+import { messagePlanePoint, messagePlaneProof } from "../helpers/crash-message-plane";
+import { corruptCheckpoint, reconstructionPoint, reconstructionRecovery } from "../helpers/crash-reconstruction";
+import { bounded } from "../helpers/bounded";
+import { fiberCrashCell } from "../helpers/fiber-outcome-crash";
+import { compiledPolicy } from "../helpers/compiled-policy";
+import { countingRunner } from "../helpers/counting-runner-g1";
+import { nth } from "../helpers/nth";
+import { receiveOutbound } from "../helpers/effect-g2";
+import { requestLedger } from "../helpers/effect-g1";
+import { checkpointEvidence, committedCompactionPoints, crashPoint, crashWitness, effectOf, intentOf, matrixSchema, observations, outboundPoints, recovery, sessionId, type CrashPoint, } from "../helpers/crash-matrix";
 
 const matrix = matrixSchema.parse(
-  await Bun.file(new URL("../../../script/conformance/crash-matrix.json", import.meta.url)).json(),
+  await Bun.file(new URL("../../../../script/conformance/crash-matrix.json", import.meta.url)).json(),
 );
-const worker = new URL("./helpers/crash-matrix-g1.ts", import.meta.url).pathname;
-const planeWorker = new URL("./helpers/crash-message-plane.ts", import.meta.url).pathname;
+const worker = new URL("../helpers/crash-matrix-g1.ts", import.meta.url).pathname;
+const planeWorker = new URL("../helpers/crash-message-plane.ts", import.meta.url).pathname;
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
@@ -582,7 +582,7 @@ async function recoverReconstructionCell(point: z.infer<typeof reconstructionPoi
     return Promise.resolve({ before, full, projection });
   }, () => openCrashStores(dbPath));
   if (point === "fold_checkpoint_tampered_before_load") corruptCheckpoint(dbPath);
-  const reopened = Bun.spawn([process.execPath, new URL("./helpers/crash-reconstruction.ts", import.meta.url).pathname, point, dbPath], {
+  const reopened = Bun.spawn([process.execPath, new URL("../helpers/crash-reconstruction.ts", import.meta.url).pathname, point, dbPath], {
     stdin: "ignore", stdout: "pipe", stderr: "pipe",
   });
   const [code, stdout, stderr] = await bounded(Promise.all([
@@ -649,7 +649,7 @@ async function recoverReconstructionCell(point: z.infer<typeof reconstructionPoi
 }
 
 async function configureCrashCell(dbPath: string) {
-  const worker = new URL("./helpers/crash-configure.ts", import.meta.url).pathname;
+  const worker = new URL("../helpers/crash-configure.ts", import.meta.url).pathname;
   const cut = configureCutProof.parse(JSON.parse(await killAtCrashBarrier(worker, ["crash", dbPath])));
   expect(cut.crashPoint).toBe(configureCrashPoint);
   expect(cut.hibernations).toBe(0);
