@@ -2,12 +2,12 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import type {
-  ExecutionApprovalRequest,
-} from "@openomni/agent";
+import { Kernel, Journal } from "@openomni/agent";
+type ExecutionApprovalRequest = Kernel.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
-import { CommitRefused } from "@openomni/agent";
+const CommitRefused = Journal.CommitRefused;
+type CommitRefused = Journal.CommitRefused;
 import { L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src/index";
 import {

@@ -1,6 +1,11 @@
 import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { Clock, Effect } from "effect";
-import { Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
+import { Kernel, Session } from "@openomni/agent";
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
+const createSessionRequests = Session.createSessionRequests;
+const decideRequestTransition = Session.decideRequestTransition;
+type SessionRuntime = Session.SessionRuntime;
 import { runEffect } from "./effect";
 import { canonicalDigest, type Gateway, type PlainValue, type SessionTransition, } from "@openomni/protocol";
 import { adoptLedgerFence, ledger } from "./ledger";

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { toolInputSchema, toolSpec } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const toolInputSchema = Kernel.toolInputSchema;
+const toolSpec = Kernel.toolSpec;
 import type { AnyToolDefinition, PlainValue } from "@openomni/protocol";
 import { catalogDefinitions, type ToolPorts } from "../src/tools/core/catalog";
 import type { LlmCall } from "../src/tools/completion";

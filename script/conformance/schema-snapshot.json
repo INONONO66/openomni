@@ -581,8 +581,8 @@
   "LedgerSession.MaterializeResult#1": ["created", "row"],
   "LedgerSession.Row": [
     "id",
-    "leaseFence",
-    "leaseOwner",
+    "fence",
+    "fenceOwner",
     "parentId",
     "policyGeneration",
     "revision",

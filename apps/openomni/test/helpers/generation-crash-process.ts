@@ -1,4 +1,8 @@
-import { BundlesLive, GenerationLayers, session } from "@openomni/agent";
+import { Bundle, Kernel, Testing } from "@openomni/agent";
+const BundlesLive = Bundle.BundlesLive;
+const GenerationLayers = Kernel.GenerationLayers;
+type GenerationLayers = Kernel.GenerationLayers;
+const session = Testing.session;
 import { Deferred, Effect } from "effect";
 import { z } from "zod";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../../src/gateway";

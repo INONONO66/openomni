@@ -1,5 +1,9 @@
 import { Effect, Result } from "effect";
-import { ExecutorContext, type ExecutionError, type Executor } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const ExecutorContext = Kernel.ExecutorContext;
+type ExecutorContext = Kernel.ExecutorContext;
+type ExecutionError = Kernel.ExecutionError;
+type Executor = Kernel.Executor;
 import { executor as productionExecutor } from "./executor";
 import { runEffect } from "./effect";
 

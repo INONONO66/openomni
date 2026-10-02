@@ -10,20 +10,25 @@ import {
   type WsConnection,
 } from "@openomni/channels";
 import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
-import type { SessionHandleStore } from "@openomni/agent";
+import { Kernel, Session, Bundle, Journal, Inspect } from "@openomni/agent";
 import type { ChannelGrantStore } from "@openomni/channels";
 import type { Actor, Gateway } from "@openomni/protocol";
-import {
-  Entropy, GenerationLayers, ObservationSink, currentInvocation,
-  type SessionEntryServices, type BundleDefinitions,
-  createSessionRequests,
-  currentExecutor,
-  Failure,
-  AgentFailure,
-  scopeObservation,
-  attemptUsage,
-  toolWallMs,
-} from "@openomni/agent";
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
+const GenerationLayers = Kernel.GenerationLayers;
+type GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+const currentInvocation = Kernel.currentInvocation;
+type SessionEntryServices = Kernel.SessionEntryServices;
+type BundleDefinitions = Bundle.BundleDefinitions;
+const createSessionRequests = Session.createSessionRequests;
+const currentExecutor = Kernel.currentExecutor;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const scopeObservation = Session.scopeObservation;
+const attemptUsage = Inspect.attemptUsage;
+const toolWallMs = Inspect.toolWallMs;
 import { Gateway as GatewayProtocol, L0Observation, SessionRead } from "@openomni/protocol";
 import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -102,7 +107,7 @@ export async function runAppBoot<A, E>(
 ): Promise<A> {
   const exit = await runtime.runPromiseExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
-  const failure = Failure.fromCause(
+  const failure = Kernel.fromCause(
     exit.cause,
     (cause) => new AppLifecycleFailure({ operation: "app.boot", cause }),
   );
@@ -167,10 +172,10 @@ export function toolPorts(
 
 /** Phase inputs captured from the kernel BEFORE the final consistency check. */
 interface PhaseSources {
-  readonly terminal: ReturnType<SessionHandleStore.SessionKernel["latestTurnTerminal"]>;
-  readonly latest: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>;
-  readonly openTurnIntent: ReturnType<SessionHandleStore.SessionKernel["actionById"]>;
-  readonly genesis: ReturnType<SessionHandleStore.SessionKernel["latestAction"]>;
+  readonly terminal: ReturnType<Journal.SessionHandleStore.SessionKernel["latestTurnTerminal"]>;
+  readonly latest: ReturnType<Journal.SessionHandleStore.SessionKernel["latestAction"]>;
+  readonly openTurnIntent: ReturnType<Journal.SessionHandleStore.SessionKernel["actionById"]>;
+  readonly genesis: ReturnType<Journal.SessionHandleStore.SessionKernel["latestAction"]>;
 }
 
 /**
@@ -210,7 +215,7 @@ function phaseFacts(
  * paging; an epoch change or a cursor ahead of the durable head is a typed gap.
  */
 export function readSessionCursor(
-  kernel: SessionHandleStore.SessionKernel,
+  kernel: Journal.SessionHandleStore.SessionKernel,
   input: SessionRead.Request,
 ): SessionRead.Response {
   const frame = SessionRead.Request.parse(input);
@@ -281,7 +286,7 @@ export function webSocketCallbacks(
   runtime: AppRuntime,
   handler: WebSocketHandler,
   sink: Context.Service.Shape<typeof ObservationSink>,
-  openSession?: (sessionId: string) => SessionHandleStore.SessionKernel | undefined,
+  openSession?: (sessionId: string) => Journal.SessionHandleStore.SessionKernel | undefined,
 ) {
   const inflight = new Set<Promise<void>>();
   const readers = new Map<WsConnection, Map<string, () => void>>();
@@ -519,7 +524,7 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
+): Effect.Effect<GatewayRouter, Kernel.ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
   return Effect.gen(function* () {
     const plane = yield* AppLedger;
     const observations = yield* ObservationSink;

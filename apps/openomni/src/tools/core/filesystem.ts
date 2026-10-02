@@ -1,7 +1,9 @@
 import type { Dirent } from "node:fs";
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const ToolRefused = Kernel.ToolRefused;
+type ToolRefused = Kernel.ToolRefused;
 import { MachineRefusalError } from "@openomni/machines";
 import type { Machine } from "@openomni/protocol";
 import { parseLocus, type Locus } from "../locus";

@@ -1,17 +1,18 @@
 import { AppInvariantError } from "./invariant";
-import {
-  type BundleDefinitions,
-  BundlesLive,
-  type Entropy,
-  type EntropySource,
-  type ObservationSink,
-  type SessionEntityPorts,
-  type SessionError,
-  type GenerationLayers,
-} from "@openomni/agent";
+import { Kernel, Session, Bundle, Journal, Model } from "@openomni/agent";
+type BundleDefinitions = Bundle.BundleDefinitions;
+const BundlesLive = Bundle.BundlesLive;
+type Entropy = Kernel.Entropy;
+type EntropySource = Kernel.EntropySource;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+type SessionEntityPorts = Session.SessionEntityPorts;
+type SessionError = Kernel.SessionError;
+type GenerationLayers = Kernel.GenerationLayers;
 import { AgentProcessLive } from "./agent-layers";
-import type { LedgerError } from "@openomni/agent";
-import { LlmLive, type Llm } from "@openomni/agent";
+type LedgerError = Journal.LedgerError;
+const LlmLive = Model.LlmLive;
+type Llm = Model.Llm;
 import { pid } from "node:process";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
 import {

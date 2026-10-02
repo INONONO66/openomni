@@ -6,7 +6,7 @@ import { describe, expect, it } from "bun:test";
 import { stringQueryTool, valueTool } from "./helpers/query-tool";
 import { compilePolicySnapshot, type CompiledPolicySnapshot } from "../src/kernel/gate/compile";
 import type { LedgerAction } from "@openomni/protocol";
-import { createDispatcher } from "../src/index";
+import { createDispatcher } from "../src/kernel/tool";
 import { allowAllPolicy as allowAll, opPhaseOf } from "./helpers/compiled-policy";
 import { turnExecutor } from "./helpers/effect-g1";
 import { isolated } from "./helpers/isolated";

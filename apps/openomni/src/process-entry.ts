@@ -1,17 +1,24 @@
 import type { Readable } from "node:stream";
-import {
-  BundleDefinitions, Entropy, GenerationLayers, ObservationSink,
-  closeSessions,
-  createSessionRequests,
-  createSessionEntityRunTurn,
-  currentExecutor,
-  decideSessionAdmission,
-  AgentFailure,
-  adoptSessionAuthority,
-  receivedMessageAction,
-  type SessionEntryServices,
-  type SessionRuntime,
-} from "@openomni/agent";
+import { Bundle, Kernel, Session } from "@openomni/agent";
+const BundleDefinitions = Bundle.BundleDefinitions;
+type BundleDefinitions = Bundle.BundleDefinitions;
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
+const GenerationLayers = Kernel.GenerationLayers;
+type GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+const closeSessions = Session.closeSessions;
+const createSessionRequests = Session.createSessionRequests;
+const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
+const currentExecutor = Kernel.currentExecutor;
+const decideSessionAdmission = Session.decideSessionAdmission;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const adoptSessionAuthority = Session.adoptSessionAuthority;
+const receivedMessageAction = Session.receivedMessageAction;
+type SessionEntryServices = Kernel.SessionEntryServices;
+type SessionRuntime = Session.SessionRuntime;
 import { createChannelStores, createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
 import { Effect } from "effect";
 import {

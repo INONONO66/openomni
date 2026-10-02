@@ -19,7 +19,7 @@ import * as SessionHandleStore from "../src/store/fence";
 import type { SessionKernel } from "../src/session/entity";
 import { receivedMessages } from "../src/session/commit";
 import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
-import { createExecutor } from "../src/index";
+import { createExecutor } from "../src/kernel/gate/decide";
 import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/kernel/gate/decide";
 import { closeSessions, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/session/run";
 import { session } from "../src/testing/registry";

@@ -1,5 +1,7 @@
 import type { Machine } from "@openomni/protocol";
-import { ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const ToolRefused = Kernel.ToolRefused;
+type ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 
 function schemaInstruction(schema: NonNullable<Machine.CompletionRequest["schema"]>): string {

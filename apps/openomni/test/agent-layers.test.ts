@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
 import { AgentProcessLive } from "../src/agent-layers";
-import { Entropy } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
 import { Bus } from "./helpers/bus";
 
 describe("agent process layers", () => {

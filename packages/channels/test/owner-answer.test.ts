@@ -9,7 +9,9 @@ import { testWebSocketId, websocketCallbacks } from "./helpers/websocket-server"
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decideRequestTransition, requestBindingDigest } from "@openomni/agent";
+import { Session } from "@openomni/agent";
+const decideRequestTransition = Session.decideRequestTransition;
+const requestBindingDigest = Session.requestBindingDigest;
 import { Gateway, PlainValueSchema, canonicalDigest, type Channel, type SessionTransition, } from "@openomni/protocol";
 import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";

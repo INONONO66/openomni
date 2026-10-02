@@ -1,5 +1,16 @@
-import { ObservationSink, executorContext, AgentFailure, Interrupted, type ExecutionError } from "@openomni/agent";
-import { Llm, type RunInput, type Sink, type Run } from "@openomni/agent";
+import { Kernel, Model } from "@openomni/agent";
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+const executorContext = Kernel.executorContext;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const Interrupted = Kernel.Interrupted;
+type Interrupted = Kernel.Interrupted;
+type ExecutionError = Kernel.ExecutionError;
+const Llm = Model.Llm;
+type Llm = Model.Llm;
+type RunInput = Model.RunInput;
+type Sink = Model.Sink;
 import { traceIdFromUuid, type Message, type PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { LlmCall } from "../tools/completion";
@@ -38,7 +49,7 @@ function textCapture(): { readonly sink: Sink; readonly text: () => string } {
   };
 }
 
-function textOutcome(outcome: Run.Outcome, text: string): Effect.Effect<{ readonly text: string }, ExecutionError> {
+function textOutcome(outcome: Model.Run.Outcome, text: string): Effect.Effect<{ readonly text: string }, ExecutionError> {
   if (outcome.type === "stop") return Effect.succeed({ text });
   if (outcome.type === "error") return Effect.fail(outcome.error);
   if (outcome.type === "aborted") return Effect.fail(new Interrupted());

@@ -1,16 +1,21 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { Llm } from "@openomni/agent";
-import { ObservationSink } from "@openomni/agent";
+import { Kernel, Model } from "@openomni/agent";
+const Llm = Model.Llm;
+type Llm = Model.Llm;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
 import { Bus } from "./helpers/bus";
 import type { FixtureLlm } from "./helpers/app-fixture";
-import { LlmRunFailure, type Run } from "@openomni/agent";
+const LlmRunFailure = Model.LlmRunFailure;
+type LlmRunFailure = Model.LlmRunFailure;
 import type { Message } from "@openomni/protocol";
 import {
   createCompactionSummarizer as summarizer,
   SummarizerError,
 } from "../src/compaction/summarizer";
-import { ExecutorContext } from "@openomni/agent";
+const ExecutorContext = Kernel.ExecutorContext;
+type ExecutorContext = Kernel.ExecutorContext;
 import { executor } from "./helpers/executor";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { testIds } from "./helpers/test-entropy";
@@ -53,7 +58,7 @@ const resolveModel: NonNullable<FixtureLlm["resolveModel"]> = (model) => Effect.
   providerID: model.provider,
 });
 
-function runFailure(contextOverflow: boolean, message: string): Run.Failure {
+function runFailure(contextOverflow: boolean, message: string): Model.Run.Failure {
   return new LlmRunFailure({
     visibleOutput: false,
     message,
@@ -69,7 +74,7 @@ function runFailure(contextOverflow: boolean, message: string): Run.Failure {
   });
 }
 
-function failingRun(failure: Run.Failure, onCall: (input: Parameters<NonNullable<FixtureLlm["run"]>>[0]) => void): NonNullable<FixtureLlm["run"]> {
+function failingRun(failure: Model.Run.Failure, onCall: (input: Parameters<NonNullable<FixtureLlm["run"]>>[0]) => void): NonNullable<FixtureLlm["run"]> {
   return (input) => Effect.sync(() => {
     onCall(input);
     return { type: "error", error: failure };

@@ -1,4 +1,7 @@
-import { defineTool, ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const defineTool = Kernel.defineTool;
+const ToolRefused = Kernel.ToolRefused;
+type ToolRefused = Kernel.ToolRefused;
 import { Gateway } from "@openomni/protocol";
 import { z } from "zod";
 

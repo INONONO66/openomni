@@ -1,10 +1,31 @@
-import {
-  BundleDefinitions, BundleError, Entropy, AgentFailure,
-  GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink, SessionLayer,
-  ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
-  type GenerationBundle, type SessionError, type SessionRuntime,
-} from "@openomni/agent";
-import { compilePolicySnapshot } from "@openomni/agent";
+import { Kernel, Session, Bundle } from "@openomni/agent";
+const BundleDefinitions = Bundle.BundleDefinitions;
+type BundleDefinitions = Bundle.BundleDefinitions;
+const BundleError = Kernel.BundleError;
+type BundleError = Kernel.BundleError;
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const GenerationLayers = Kernel.GenerationLayers;
+type GenerationLayers = Kernel.GenerationLayers;
+const GenerationUnavailable = Kernel.GenerationUnavailable;
+type GenerationUnavailable = Kernel.GenerationUnavailable;
+const NamedPolicyRegistry = Bundle.NamedPolicyRegistry;
+type NamedPolicyRegistry = Bundle.NamedPolicyRegistry;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+const SessionLayer = Kernel.SessionLayer;
+type SessionLayer = Kernel.SessionLayer;
+const ToolCatalog = Kernel.ToolCatalog;
+type ToolCatalog = Kernel.ToolCatalog;
+const createObservationBus = Session.createObservationBus;
+const makeSessionGenerations = Session.makeSessionGenerations;
+const scopeObservation = Session.scopeObservation;
+type GenerationBundle = Session.GenerationBundle;
+type SessionError = Kernel.SessionError;
+type SessionRuntime = Session.SessionRuntime;
+const compilePolicySnapshot = Kernel.compilePolicySnapshot;
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { z } from "zod";

@@ -1,5 +1,9 @@
 import { closeSync, openSync, writeSync } from "node:fs";
-import { bundle, ObservationSink, type BundleDefinition } from "@openomni/agent";
+import { Bundle, Kernel } from "@openomni/agent";
+const bundle = Bundle.bundle;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+type BundleDefinition = Bundle.BundleDefinition;
 import { Tool } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
 import { z } from "zod";

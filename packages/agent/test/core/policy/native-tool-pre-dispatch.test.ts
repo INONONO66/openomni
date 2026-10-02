@@ -9,7 +9,8 @@ import { Cause, Effect, Fiber } from "effect";
 import { createNamedPolicyRegistry } from "../../../src/kernel/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
-import { createExecutor, createDispatcher, defineTool } from "../../../src/index";
+import { createExecutor } from "../../../src/kernel/gate/decide";
+import { createDispatcher, defineTool } from "../../../src/kernel/tool";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 
 test("approval recovery executes recorded admitted bytes without transforming again", () => isolated(Effect.scoped(Effect.gen(function* () {

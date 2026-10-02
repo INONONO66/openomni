@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
 import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
-import { createTurnDispatcher } from "../src/index";
+import { createTurnDispatcher } from "../src/kernel/tool";
 import type { DurableExecutor, ExecutionBatchItem, ExecutionResult, } from "../src/kernel/gate/decide";
 import type { WaveControl } from "../src/kernel/tool";
 import { CommitRefused, AgentFailure } from "../src/store/errors";

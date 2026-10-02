@@ -5,7 +5,9 @@ import { createSessionEntityPortsSlot } from "../src/composition/cluster-runtime
 import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
 
 import { startOpenOmni } from "../src/index";
-import { Entropy } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
 import { Clock } from "effect";
 import { AppLifecycleFailure } from "../src/runtime";
 import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";

@@ -3,18 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, spyOn, test } from "bun:test";
-import {
-  SessionEntity,
-  type SessionEntityPorts,
-  type SessionEntityTimerContext,
-  type SessionEntityTurnInput,
-} from "@openomni/agent";
-import {
-  type ObservationPublishFailure,
-  openCatalogStore,
-  openSessionStore,
-  SessionHandleStore,
-} from "@openomni/agent";
+import { Session, Journal } from "@openomni/agent";
+const SessionEntity = Session.SessionEntity;
+type SessionEntityPorts = Session.SessionEntityPorts;
+type SessionEntityTimerContext = Session.SessionEntityTimerContext;
+type SessionEntityTurnInput = Session.SessionEntityTurnInput;
+type ObservationPublishFailure = Journal.ObservationPublishFailure;
+const openCatalogStore = Journal.openCatalogStore;
+const openSessionStore = Journal.openSessionStore;
 import type { Inbox, ObservationSink } from "@openomni/protocol";
 import { Effect } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
@@ -62,7 +58,7 @@ async function provisionSession(
   const catalog = openCatalogStore(catalogPath, { now });
   const store = openSessionStore(sessionFilePath(sessionsDir, sessionId), { now });
   try {
-    const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+    const kernel = Journal.SessionHandleStore.createSessionKernel(store, catalog);
     await runEffect(
       kernel.materialize({
         actionId: `${sessionId}:materialize`,
@@ -209,7 +205,7 @@ test("without an injected port a publish failure on a file-mode handle is an inc
   });
   const store = plane.handles.openSession("ported-session");
   try {
-    materializeSession(SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
+    materializeSession(Journal.SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
     expect(store.sessions.get("ported-session")?.id).toBe("ported-session");
     expect(incident.mock.calls).toEqual([
       ["ledger observation publish failed: ported-session:configure", new Error("sink failed")],

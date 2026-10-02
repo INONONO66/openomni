@@ -1,12 +1,16 @@
 import { testToolPorts } from "./tool-ports";
 import { Context, Effect, Layer, Scope } from "effect";
-import { Llm, LlmLive } from "@openomni/agent";
+import { Session, Model } from "@openomni/agent";
+const Llm = Model.Llm;
+type Llm = Model.Llm;
+const LlmLive = Model.LlmLive;
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";
 import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
-import { closeSessions, type SessionRuntime } from "@openomni/agent";
+const closeSessions = Session.closeSessions;
+type SessionRuntime = Session.SessionRuntime;
 import { Bus } from "./bus";
 import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";

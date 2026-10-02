@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool } from "../../src/index";
+import { defineTool } from "../../src/kernel/tool";
 import type { ExecutionRequest } from "../../src/kernel/gate/decide";
 import type { ToolExecutionContext } from "@openomni/protocol";
 

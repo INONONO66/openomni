@@ -460,3 +460,6 @@ function object(value: PlainValue | undefined): PlainObject {
 function text(value: PlainValue | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
+
+// Inspect metrics surface (#1247).
+export { attemptUsage, toolWallMs } from "./metrics";

@@ -1,4 +1,7 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/agent";
+import { Journal } from "@openomni/agent";
+const openCatalogStore = Journal.openCatalogStore;
+const openSessionStore = Journal.openSessionStore;
+type LedgerError = Journal.LedgerError;
 import { Effect } from "effect";
 import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";
@@ -14,7 +17,7 @@ import { runEffect } from "./effect";
 export interface TestLedger {
   readonly catalog: ReturnType<typeof openCatalogStore>;
   readonly sessions: ReturnType<typeof openSessionStore>;
-  readonly kernel: SessionHandleStore.SessionKernel;
+  readonly kernel: Journal.SessionHandleStore.SessionKernel;
   readonly stores: ChannelStores;
   /** Swaps only the decision-fact seam, live, for routers already built over this plane. */
   readonly setDecisionFacts: (
@@ -30,7 +33,7 @@ export interface TestLedgerPaths {
 function createTestLedger(paths?: TestLedgerPaths): TestLedger {
   const catalog = openCatalogStore(paths?.catalog ?? ":memory:", { now: () => 1 });
   const sessions = openSessionStore(paths?.sessions ?? ":memory:", { now: () => 1 });
-  const kernel = SessionHandleStore.createSessionKernel(sessions, catalog);
+  const kernel = Journal.SessionHandleStore.createSessionKernel(sessions, catalog);
   const seam: { facts: ProtocolStorage.DecisionFactSubAdapter | undefined } = {
     facts: sessions.decisionFacts,
   };

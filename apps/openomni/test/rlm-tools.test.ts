@@ -4,9 +4,11 @@ import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { catalogDefinitions } from "../src/tools/core/catalog";
-import { toolSpec, type Executor } from "@openomni/agent";
+import { Kernel, Model as AgentModel } from "@openomni/agent";
+const toolSpec = Kernel.toolSpec;
+type Executor = Kernel.Executor;
 import { completionFixture as completionPort } from "./helpers/completion-fixture";
-import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/agent";
+type RunInput = AgentModel.RunInput;
 
 import { assistantMessage } from "./helpers/assistant-message";
 import { providerFailure } from "./helpers/provider-failure";
@@ -205,11 +207,11 @@ describe("the completion tool", () => {
         },
       },
     };
-    spyOn(ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
-    spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
+    spyOn(AgentModel.ModelsDev, "get").mockReturnValue(Effect.succeed(catalog));
+    spyOn(AgentModel.Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const run = mock(() => Effect.succeed({ type: "stop" as const }));
     expect(
-      await runEffect(Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider: "anthropic", id: "listed", now: () => 0 })),
+      await runEffect(AgentModel.Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider: "anthropic", id: "listed", now: () => 0 })),
     ).toMatchObject({
       id: "listed",
       providerID: "anthropic",
@@ -224,7 +226,7 @@ describe("the completion tool", () => {
       ).rejects.toMatchObject({
         _tag: "AgentFailure",
         operation: "completion.resolve",
-        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider, id, now: () => 0 })))),
+        cause: String(await runEffect(Effect.flip(AgentModel.Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider, id, now: () => 0 })))),
       });
     }
     expect(run).not.toHaveBeenCalled();

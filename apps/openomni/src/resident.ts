@@ -1,16 +1,17 @@
 import { AppInvariantError } from "./invariant";
-import { ObservationSink } from "@openomni/agent";
+import { Kernel, Session } from "@openomni/agent";
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
 import { Effect } from "effect";
-import {
-  createSessionChatRunner,
-  createTurnDispatcher,
-  failureFacts,
-  sessionTool,
-  ToolRefused,
-  type ChatAgentConfig,
-  type SessionRunner,
-  type SessionRuntime,
-} from "@openomni/agent";
+const createSessionChatRunner = Session.createSessionChatRunner;
+const createTurnDispatcher = Kernel.createTurnDispatcher;
+const failureFacts = Kernel.failureFacts;
+const sessionTool = Kernel.sessionTool;
+const ToolRefused = Kernel.ToolRefused;
+type ToolRefused = Kernel.ToolRefused;
+type ChatAgentConfig = Kernel.ChatAgentConfig;
+type SessionRunner = Session.SessionRunner;
+type SessionRuntime = Session.SessionRuntime;
 import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { messageMaterialization } from "./composition/message-session";
@@ -40,7 +41,7 @@ export interface ResidentOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly bundles?: readonly string[];
-  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>, never, import("@openomni/agent").Llm | ObservationSink>;
+  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>,  never, import("@openomni/agent").Model.Llm | ObservationSink>;
   readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;

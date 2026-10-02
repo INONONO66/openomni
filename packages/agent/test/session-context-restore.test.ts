@@ -8,7 +8,8 @@ import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
-import { createTurnDispatcher, type SessionRunner } from "../src/index";
+import { createTurnDispatcher } from "../src/kernel/tool";
+import { type SessionRunner } from "../src/session/run";
 import { Bus } from "./helpers/bus";
 import { session } from "../src/testing/registry";
 import type { SessionHandle, SessionRunnerInput } from "../src/session/run";

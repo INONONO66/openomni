@@ -1,5 +1,9 @@
 import { Context, Effect } from "effect";
-import { createExecutor, AgentFailure, type SessionRuntime } from "@openomni/agent";
+import { Kernel, Session } from "@openomni/agent";
+const createExecutor = Kernel.createExecutor;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+type SessionRuntime = Session.SessionRuntime;
 import type { GatewayRouter } from "@openomni/channels";
 import type { LedgerAction } from "@openomni/protocol";
 import type { SessionKernel } from "./cluster-runtime";

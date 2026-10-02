@@ -1,16 +1,19 @@
-import {
-  adoptSessionAuthority,
-  createSessionEntityRunTurn,
-  decideSessionAdmission,
-  Entropy,
-  AgentFailure,
-  GenerationLayers,
-  ObservationSink,
-  type SessionEntryServices,
-  type SessionError,
-  type SessionRuntime,
-} from "@openomni/agent";
-import type { LedgerError } from "@openomni/agent";
+import { Kernel, Session, Journal } from "@openomni/agent";
+const adoptSessionAuthority = Session.adoptSessionAuthority;
+const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
+const decideSessionAdmission = Session.decideSessionAdmission;
+const Entropy = Kernel.Entropy;
+type Entropy = Kernel.Entropy;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const GenerationLayers = Kernel.GenerationLayers;
+type GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+type ObservationSink = Kernel.ObservationSink;
+type SessionEntryServices = Kernel.SessionEntryServices;
+type SessionError = Kernel.SessionError;
+type SessionRuntime = Session.SessionRuntime;
+type LedgerError = Journal.LedgerError;
 import type { SessionTurn } from "@openomni/protocol";
 import { Clock, Context, Effect, type Scope } from "effect";
 import {

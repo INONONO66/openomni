@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { scopeObservation } from "../../src/index";
+import { scopeObservation } from "../../src/session/bus";
 import { newTraceId } from "../helpers/bus";
 import { ObservationDeliveryFailed } from "../../src/session/bus";
 import { collector } from "../helpers/observation-collector";
