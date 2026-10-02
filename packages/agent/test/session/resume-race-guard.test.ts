@@ -17,6 +17,7 @@ import {
 import { createSessionAdmission } from "../../src/session/mailbox";
 import type { ResolvedSessionRuntime, SessionControllerState } from "../../src/session/run";
 import { openCrashStores } from "../helpers/crash-stores";
+import { runAgent } from "../helpers/isolated";
 import { fencedTurnFixture } from "../helpers/fenced-writer";
 
 const dir = mkdtempSync(join(tmpdir(), "resume-race-guard-"));
@@ -30,7 +31,7 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
     const clock = () => (now += 1);
     let ids = 0;
     const entropy = () => `race:id-${(ids += 1)}`;
-    await Effect.runPromise(
+    await runAgent(
       Effect.gen(function* () {
         const fixture = yield* fencedTurnFixture(kernel, { id: "race", clock });
         // The foreign writer settled the open turn with a RESULT terminal and
