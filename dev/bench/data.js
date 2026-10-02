@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790869249204,
+  "lastUpdate": 1790917611655,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76151,6 +76151,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 120286,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1d5ebd2f9fdfb2e59a12fdb7e1f12823b89ded0",
+          "message": "#1245 Inject configuration, clock, and entropy; close seven permissive defaults (#1263)\n\n* #1245 channels-router: inject required now/id clock+entropy through router and websocket; refuse keyless frames with typed missing_key\n\n* #1245 channels-providers: inject required now/id/random options through provider, authn, and support modules\n\n* #1245 llm: inject required now/id/random sources; no ambient clock or entropy in packages/llm/src\n\n* #1245 env-owners: config/env-file/llm-loader own process.env; kek resolved once into config; desktop bootstrap(process)\n\n* #1245 small-packages: inject clock/entropy into ledger stores, ipc request table, codemode and desktop renderer; no ambient Date/crypto fallbacks\n\n* #1245 agent-session: typed inbound-authority violations, RunnerOutputMissing, refusal-aware drain receipts\n\n* #1245 app-wiring: thread required idSource through ipc/machines natives; app-owned platform entropy layer; inject now/id through provisioning, completion, summarizer, codemode, channels, ledger plane and tool ports\n\n* #1245 docs: implementation-status receipt for injected config/clock/entropy, SLOP §K row, AGENTS stamp\n\n* #1245 agent-core: effect Clock + Entropy service replace ambient time/entropy; executor clock/entropy/random options; test helpers and bench supply deterministic sources\n\n* #1245: app tests on injected clock/entropy, fact classes as tagged records, AppLive walk memoised, lint/script-contract receipts\n\n- apps/openomni tests: fixture bus with counter ids/times (test/helpers/bus.ts), external full_access prompts in resident-runner, keyed WS frames\n- agent: InboundAuthorityViolation / RunnerOutputMissing / SessionAdmissionRefused follow the SessionPolicyRefusal record shape (not Error); SessionRunnerResult.cause widened\n- script/check-effect-boundaries: memoise AppLive reachability per binding frame (walk 10.5s -> 3.1s, identical inventory/findings)\n- script/lint-tools: schema ports carry the required id entropy port; effect-service-contract expects Entropy, not the deleted custom Clock tag\n- ultracite: 24 warnings -> 0 (noAssignInExpressions in test helpers, unused createObservationBus imports)\n- budget-clock test moved to test/core/ per the issue's verification command\n\n* #1245: split AppLive walk into memo wrapper + walk (cognitive complexity 36 -> under 21)\n\n* #1245: cover injected-platform lines (entropy random/id, InboundAuthorityViolation message, github deliveryRoute, desktop bindStorePlatform)\n\n* #1245: renderer root lookup extracted so the entry is evaluated once per test process (Bun lcov shadowing)\n\n* #1245: auth file path resolved once in LlmLive and injected into Auth storage; raw run/resolveModel take it explicitly\n\n* #1245: docs — LlmLive resolves the auth file path once (llm AGENTS.md, implementation-status)\n\n* #1245: assert the missing-snapshot invariant defect and the unclassified run-failed reason (review r2 M1/M2)",
+          "timestamp": "2026-10-02T05:04:17Z",
+          "tree_id": "8b5e4903e84e4d50b2614f46f4cc2158817a7efc",
+          "url": "https://github.com/INONONO66/openomni/commit/c1d5ebd2f9fdfb2e59a12fdb7e1f12823b89ded0"
+        },
+        "date": 1790917610928,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 991,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1222420,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 291012,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5160602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 111,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 833,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 116701,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 613911,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 326446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2410,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9253359,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1213211,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14569,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 139208,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 680390,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 178194,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11342679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 71,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 92509,
             "unit": "ns/op"
           }
         ]
