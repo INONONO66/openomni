@@ -26,7 +26,7 @@ import {
   type LedgerHandles,
   type ObservationFailurePort,
   type ObservationPublishFailure,
-} from "@openomni/ledger";
+} from "@openomni/agent";
 import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";

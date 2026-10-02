@@ -1,10 +1,10 @@
-import type { RunInput } from "@openomni/llm";
+import type { RunInput } from "../../src/model";
 import type { Message } from "@openomni/protocol";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it, mock } from "bun:test";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { Tool } from "@openomni/protocol";
 import {
   createStopOutcome,

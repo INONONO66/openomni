@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { Bus } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";

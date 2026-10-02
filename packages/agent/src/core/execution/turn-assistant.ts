@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { AgentFailure, type ExecutionError } from "../../errors";
-import { accumulateUsage, type Sink } from "@openomni/llm";
+import { accumulateUsage, type Sink } from "../../model";
 import { Message, PlainValueSchema } from "@openomni/protocol";
 import { measuredContextTokens } from "../../compaction/measure";
 import type { ChatAgentConfig, TokenUsage } from "../types";

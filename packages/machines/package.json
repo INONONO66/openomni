@@ -10,7 +10,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/ipc": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "effect": "4.0.0-rc.118",
     "zod": "^4.5.4"

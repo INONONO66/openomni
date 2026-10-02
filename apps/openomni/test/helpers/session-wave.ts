@@ -4,7 +4,7 @@ import { defineTool, eraseTool } from "@openomni/agent";
 import { Bus } from "./bus";
 import type { AppSessionHandle } from "../../src/index";
 import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/protocol";
-import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/ledger";
+import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/agent";
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
 import { runEffect, runSyncResult } from "./effect";

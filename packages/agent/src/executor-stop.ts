@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { AgentFailure, type ExecutionError } from "./errors";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import type { PolicyEvaluation } from "@openomni/policy";
+import type { PolicyEvaluation } from "./kernel/gate";
 import {
   judgeStop,
   type StopState,

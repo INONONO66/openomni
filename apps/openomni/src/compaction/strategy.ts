@@ -1,5 +1,5 @@
 import type { CompactionOptions, ObservationSink } from "@openomni/agent";
-import type { Llm } from "@openomni/llm";
+import type { Llm } from "@openomni/agent";
 import { Effect } from "effect";
 import type { OpenOmniConfig } from "../config";
 import { modelTransport } from "../config";

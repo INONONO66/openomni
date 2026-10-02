@@ -11,7 +11,7 @@ import { openCrashStores } from "./crash-stores";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { SessionHandleStore, type LedgerError } from "../../src/store";
 import {
   LedgerAction,
   Message,

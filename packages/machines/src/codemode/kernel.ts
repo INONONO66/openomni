@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
-import { type MachineError, onAbort } from "@openomni/machines";
+import { type MachineError, onAbort } from "..";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";

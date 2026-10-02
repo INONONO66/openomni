@@ -1,4 +1,4 @@
-import type { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "../store";
 
 /**
  * The handle-scoped kernel as a declaration-nameable interface: the ledger

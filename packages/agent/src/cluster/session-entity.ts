@@ -1,4 +1,4 @@
-import { CommitRefused, LeaseRefused, SessionHandleStore, SessionNotFound, type LedgerError } from "@openomni/ledger";
+import { CommitRefused, LeaseRefused, SessionHandleStore, SessionNotFound, type LedgerError } from "../store";
 import {
   PlainValueSchema,
   SessionTransition,

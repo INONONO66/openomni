@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, PlainValueSchema, SessionTurn } from "@openomni/protocol";
 import {

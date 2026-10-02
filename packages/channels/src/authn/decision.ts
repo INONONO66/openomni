@@ -1,5 +1,5 @@
 import { type Policy, PolicyDecision } from "@openomni/protocol";
-import { decisionFromEvaluation, evaluatePermission } from "@openomni/policy";
+import { decisionFromEvaluation, evaluatePermission } from "@openomni/agent";
 import type { ChannelAuthnDecisionObserver } from "./types";
 
 export function evaluateChannelPermission(input: {

@@ -1,7 +1,7 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { SessionHandleStore, type LedgerError } from "../src/store";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
 import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";

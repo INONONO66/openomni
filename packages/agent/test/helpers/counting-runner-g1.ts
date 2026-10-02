@@ -2,7 +2,7 @@ import { testTurnDispatcher } from "./service-layers";
 import { fixtureConfigHead, fixtureTraceContext, prepareChatFixture } from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
 import { Effect } from "effect";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "../../src/model";
 import type { SessionRunnerInput, SessionRunner } from "../../src/session-handle";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import type { ExecutionError } from "../../src/errors";

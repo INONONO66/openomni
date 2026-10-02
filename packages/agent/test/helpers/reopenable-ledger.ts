@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/store";
 import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 

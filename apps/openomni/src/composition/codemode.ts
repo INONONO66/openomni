@@ -1,4 +1,4 @@
-import { createCodemode, CodemodeFailure, type RunOptions } from "@openomni/codemode";
+import { createCodemode, CodemodeFailure, type RunOptions } from "@openomni/machines";
 import { forkInvocation, AgentFailure, type InvocationFrame } from "@openomni/agent";
 import { Effect, Exit, type Scope } from "effect";
 import type { MachineHost } from "@openomni/machines";

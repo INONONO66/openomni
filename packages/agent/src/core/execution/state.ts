@@ -1,5 +1,5 @@
-import { accumulateUsage, type RunInput } from "@openomni/llm";
-import type { Sink } from "@openomni/llm";
+import { accumulateUsage, type RunInput } from "../../model";
+import type { Sink } from "../../model";
 import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState } from "../budget";
 import { AgentInvariantViolation } from "../../errors";

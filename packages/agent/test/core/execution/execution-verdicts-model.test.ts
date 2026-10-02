@@ -1,5 +1,5 @@
 import { testExecutor } from "../../helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it, mock } from "bun:test";
@@ -9,7 +9,7 @@ import {
   failure as effectFailure,
   foreign,
 } from "../../helpers/effect-g2";
-import { compilePolicySnapshot } from "@openomni/policy";
+import { compilePolicySnapshot } from "../../../src/kernel/gate";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 
 const kinds = ["prompt", "turn", "llm", "tool"] as const;

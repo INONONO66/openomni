@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RunInput } from "@openomni/llm";
+import type { RunInput } from "@openomni/agent";
 import { assistantMessage } from "./assistant-message";
 import { testIds } from "./test-entropy";
 

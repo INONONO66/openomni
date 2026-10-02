@@ -1,6 +1,6 @@
-import { Retry } from "@openomni/llm";
+import { Retry } from "./model";
 import { canonicalDigest, LedgerAction, type PlainValue } from "@openomni/protocol";
-import type { PolicyEvaluation } from "@openomni/policy";
+import type { PolicyEvaluation } from "./kernel/gate";
 import { Cause, Effect, Exit, Option } from "effect";
 import type { AttemptRequest, ExecutionLedger, ResolvedExecutorOptions, LlmAttempts } from "./executor-contract";
 import { createRetryTimerPort, type RetryTimerPort, type TimerSenders } from "./cluster/timers";

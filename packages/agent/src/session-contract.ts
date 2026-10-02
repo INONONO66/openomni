@@ -1,7 +1,7 @@
 import { Clock, Effect, type Context } from "effect";
 import type { SessionError, ExecutionError, RunnerOutputMissing } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
-import type { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "./store";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import type { InspectRequest, InspectionPage } from "./session-lifecycle/inspect";
 import type {

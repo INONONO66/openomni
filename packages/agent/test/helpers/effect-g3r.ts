@@ -1,7 +1,7 @@
 import { memoryExecutionReads } from "./execution-reads";
 import { testExecutor } from "./executor";
-import type { LedgerError } from "@openomni/ledger";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import type { LedgerError } from "../../src/store";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
 import { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import { compiledPolicy, fixtureHashes } from "./compiled-policy";

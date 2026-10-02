@@ -1,4 +1,4 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/store";
 import type { LedgerSession } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
 import type { createObservationBus } from "../../src/observation/bus";

@@ -1,7 +1,7 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { SessionHandleStore } from "../src/store";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
 import { Effect, Fiber, Layer } from "effect";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { AgentGenerationLive } from "./helpers/generation-layer";

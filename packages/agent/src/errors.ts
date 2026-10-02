@@ -1,7 +1,7 @@
 import { Data } from "effect";
 import type { AgentStopError } from "./core/execution/stop-chain";
-import type { LedgerError } from "@openomni/ledger";
-import type { LlmFailure, LlmRunFailure } from "@openomni/llm";
+import type { LedgerError } from "./store";
+import type { LlmFailure, LlmRunFailure } from "./model";
 import type { LedgerSession } from "@openomni/protocol";
 
 export { AgentStopError } from "./core/execution/stop-chain";

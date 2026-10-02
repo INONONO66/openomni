@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { posix } from "node:path";
-import { type IpcClient, connectIpcClient, typedCall, IpcFailure } from "@openomni/ipc";
+import { type IpcClient, connectIpcClient, typedCall, IpcFailure } from "./ipc";
 import { Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, type Scope } from "effect";
 import type { z } from "zod";
@@ -54,7 +54,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     const attached = yield* Deferred.make<void>();
     const closed = yield* Deferred.make<void, MachineError>();
     let closing = false;
-    const transportFailure = (operation: string) => (error: import("@openomni/ipc").IpcError) => new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
+    const transportFailure = (operation: string) => (error: import("./ipc").IpcError) => new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
     const close: Effect.Effect<void, MachineError> = Effect.suspend(() => {
       if (closing) return Deferred.await(closed);
       closing = true;

@@ -1,11 +1,11 @@
 import { Database } from "bun:sqlite";
 import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate";
 import { NamedPolicyRegistry } from "../../src/bundle";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/session-generations";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../../src/store";
 import {
   canonicalDigest,
   FoldCheckpoint,

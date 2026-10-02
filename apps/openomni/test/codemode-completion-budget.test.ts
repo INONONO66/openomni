@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { createTurnDispatcher } from "@openomni/agent";
-import { createCodemode } from "@openomni/codemode";
+import { createCodemode } from "@openomni/machines";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";
 import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";

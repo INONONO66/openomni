@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber, Option } from "effect";
 import { runAgent } from "../helpers/executor";
 import { TestClock } from "effect/testing";
-import { CommitRefused } from "@openomni/ledger";
+import { CommitRefused } from "../../src/store";
 import { sessionTree as kernelSessionTree } from "../helpers/session-tree";
 import { Alarm, LedgerAction, type SessionTransition } from "@openomni/protocol";
 import { CommitFailed } from "../../src/errors";

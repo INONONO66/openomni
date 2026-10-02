@@ -12,7 +12,7 @@ import { Database } from "bun:sqlite";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import { session, closeSessions, type SessionRunner } from "../src/session-handle";
 import { resolveSessionRuntime } from "../src/session-contract";
 import { createController } from "../src/session-controller";

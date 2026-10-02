@@ -4,7 +4,7 @@ import {
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
   type GenerationBundle, type SessionError, type SessionRuntime,
 } from "@openomni/agent";
-import { compilePolicySnapshot } from "@openomni/policy";
+import { compilePolicySnapshot } from "@openomni/agent";
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 import { chmodSync } from "node:fs";
 import { posix } from "node:path";
-import { createIpcServer, typedCall, IpcFailure } from "@openomni/ipc";
+import { createIpcServer, typedCall, IpcFailure } from "./ipc";
 import { type BusEvent, Machine } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
@@ -117,7 +117,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       if (candidates[1]?.path === root.path) throw new MachineRefusalError({ reason: "ambiguous_export", message: "multiple exports name the same root" });
       return { connectionId: peer.id, export: root.name, path: posix.relative(root.path, absolute) };
     }
-    const transportFailure = (operation: string) => (error: import("@openomni/ipc").IpcError) => new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
+    const transportFailure = (operation: string) => (error: import("./ipc").IpcError) => new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
     function filesystem<O extends Machine.FsValue["op"]>(id: string, path: string, op: O, extra: { data?: string; offset?: number; limit?: number } = {}): Effect.Effect<Value<O>, MachineError> {
       return Effect.gen(function* () {
         const target = yield* Effect.try({ try: () => location(id, path), catch: decodeMachineFailure("fs.location") });

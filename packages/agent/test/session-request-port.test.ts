@@ -3,7 +3,7 @@ import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServic
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
 import { createSessionRequests } from "../src/session-requests";
 

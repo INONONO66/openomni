@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { CommitRefused, LedgerFailure, SessionHandleStore, type CommitReceipt, type LedgerError } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure, SessionHandleStore, type CommitReceipt, type LedgerError } from "./store";
 import { ObservationSink, type RunnerServices } from "./services";
 import {
   canonicalDigest,

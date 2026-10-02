@@ -14,7 +14,7 @@ import {
   openCatalogStore,
   openSessionStore,
   SessionHandleStore,
-} from "@openomni/ledger";
+} from "@openomni/agent";
 import type { Inbox, ObservationSink } from "@openomni/protocol";
 import { Effect } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";

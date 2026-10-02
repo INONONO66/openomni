@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
 import { createTestAgent, failure } from "./helpers/effect-g3";
 import { describe, expect, it, mock, spyOn, test } from "bun:test";
-import { Auth, LlmFailure } from "@openomni/llm";
+import { Auth, LlmFailure } from "../src/model";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
@@ -11,7 +11,7 @@ import { Bus } from "./helpers/bus";
 import { failureEvidence } from "../src/executor-outcome";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { PolicyDenied, ToolBodyFailed, AgentFailure, AgentInvariantViolation, AgentStopError, CommitFailed, CompactionExecutionError, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "../src/store";
 import {
   completeModel,
   mockLlm,

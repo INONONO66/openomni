@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { commitFoldBatch } from "./session-fold-commit";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { SessionHandleStore, type LedgerError } from "./store";
 import type { SessionGeneration, LedgerSession } from "@openomni/protocol";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import { CommitFailed, AgentFailure, type SessionError } from "./errors";

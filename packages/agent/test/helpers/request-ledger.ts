@@ -9,7 +9,7 @@ import {
   type SessionFixture as SessionRuntime,
 } from "./session-services";
 import { Effect, Result } from "effect";
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "../../src/store";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import type { ExecutionLedger } from "../../src/executor";
 import { commitSessionRequest } from "../../src/session-admission";

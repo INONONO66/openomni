@@ -1,4 +1,4 @@
-import type { ActorRegistry } from "@openomni/ledger";
+import type { ActorRegistry } from "@openomni/agent";
 import { type Actor, canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 

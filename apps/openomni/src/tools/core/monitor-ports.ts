@@ -1,5 +1,5 @@
 import { currentInvocation, ToolRefused } from "@openomni/agent";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { SessionHandleStore, type LedgerError } from "@openomni/agent";
 import { Alarm, EncodedPayload, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import type { SessionKernel } from "../../composition/cluster-runtime";

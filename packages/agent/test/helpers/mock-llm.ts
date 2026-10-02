@@ -1,7 +1,7 @@
 import { messageSource } from "./message-source";
 import { APICallError } from "ai";
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
-import { LlmRunFailure, type Run, type RunInput, type Sink } from "@openomni/llm";
+import { LlmRunFailure, type Run, type RunInput, type Sink } from "../../src/model";
 import { Effect } from "effect";
 import type {} from "../../src/core/types";
 import { createAssistantMessage } from "../../src/core/message-factory";

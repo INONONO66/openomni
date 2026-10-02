@@ -10,7 +10,7 @@ import {
 } from "../../helpers/session-services";
 import { Effect, Queue } from "effect";
 import { expect, test } from "bun:test";
-import { SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { SEEDED_POLICY_ROWS } from "../../../src/kernel/gate";
 import { z } from "zod";
 import type { PolicyRow } from "@openomni/protocol";
 import { session, closeSessions } from "../../../src/session-handle";

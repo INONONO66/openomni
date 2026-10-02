@@ -13,16 +13,15 @@
     "test:ci": "bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage"
   },
   "dependencies": {
-    "@openomni/ledger": "workspace:*",
-    "@openomni/llm": "workspace:*",
-    "@openomni/policy": "workspace:*",
+    "@ai-sdk/anthropic": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.48",
     "@openomni/protocol": "workspace:*",
+    "ai": "^6.0.141",
     "effect": "4.0.0-rc.118",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@effect/sql-sqlite-bun": "4.0.0-rc.118",
-    "@types/bun": "latest",
-    "ai": "^6.0.141"
+    "@types/bun": "latest"
   }
 }

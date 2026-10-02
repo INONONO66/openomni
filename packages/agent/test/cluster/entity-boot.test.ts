@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
-import { L0Write } from "@openomni/ledger";
+import { L0Write } from "../../src/store";
 import { Effect } from "effect";
 import {
   clusterTempDir,

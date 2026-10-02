@@ -1,4 +1,4 @@
-import type { CommitReceipt, LedgerError } from "@openomni/ledger";
+import type { CommitReceipt, LedgerError } from "../../src/store";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";

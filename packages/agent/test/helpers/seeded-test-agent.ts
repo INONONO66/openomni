@@ -8,9 +8,9 @@ import {
   compilePolicySnapshot,
   KERNEL_POLICY_REGISTRY,
   SEEDED_POLICY_ROWS,
-} from "@openomni/policy";
+} from "../../src/kernel/gate";
 import { Effect } from "effect";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { ChatAgentInput } from "../../src/core/types";
 import type { ExecutorOptions } from "../../src/executor-contract";
 import { runAgent } from "../../src/core/execution/run";

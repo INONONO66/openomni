@@ -1,5 +1,5 @@
 import { ObservationSink, executorContext, AgentFailure, Interrupted, type ExecutionError } from "@openomni/agent";
-import { Llm, type RunInput, type Sink, type Run } from "@openomni/llm";
+import { Llm, type RunInput, type Sink, type Run } from "@openomni/agent";
 import { traceIdFromUuid, type Message, type PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { LlmCall } from "../tools/completion";

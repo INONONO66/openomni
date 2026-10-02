@@ -1,4 +1,4 @@
-import { LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "../../src/store";
 import {
   canonicalDigest,
   FoldCheckpoint,

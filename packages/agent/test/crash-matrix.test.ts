@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";

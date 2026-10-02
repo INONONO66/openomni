@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { providerFailure } from "./helpers/provider-failure";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { Auth, LlmFailure } from "@openomni/llm";
+import { Auth, LlmFailure } from "@openomni/agent";
 import type { Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { runSyncEffect } from "./helpers/effect";

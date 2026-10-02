@@ -13,7 +13,7 @@ import { reactivateSession } from "./helpers/wake-session";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "../src/store";
 import type { SessionKernel } from "../src/cluster/kernel-registry";
 import { receivedMessages } from "../src/session-record";
 import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";

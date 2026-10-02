@@ -40,7 +40,7 @@ export interface ResidentOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly bundles?: readonly string[];
-  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>, never, import("@openomni/llm").Llm | ObservationSink>;
+  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>, never, import("@openomni/agent").Llm | ObservationSink>;
   readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;

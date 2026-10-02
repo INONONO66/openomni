@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Vault } from "@openomni/ledger";
+import { Vault } from "@openomni/agent";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { testPlane } from "./helpers/ledger";
 import { Actor, type Provisioning } from "@openomni/protocol";

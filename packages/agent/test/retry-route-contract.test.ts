@@ -1,11 +1,11 @@
 import { APICallError } from "ai";
 import { expect, test } from "bun:test";
-import { APIError, Retry, run as runLlm, type RunInput } from "@openomni/llm";
+import { APIError, Retry, run as runLlm, type RunInput } from "../src/model";
 import { PlainObjectSchema, type LedgerAction, type Model } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { StreamEvent } from "../../llm/src/processor/stream-events";
 import { runAgent } from "../src/core/execution/run";
-import { LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "../src/store";
 import { isolated } from "./helpers/isolated";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";

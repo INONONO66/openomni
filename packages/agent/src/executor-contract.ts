@@ -1,4 +1,4 @@
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "./store";
 import type { Effect, Scope } from "effect";
 import type { RawToolSlots } from "./executor-raw";
 import type { ExecutionError } from "./errors";
@@ -11,7 +11,7 @@ import type {
   SessionTransition,
   Tool,
 } from "@openomni/protocol";
-import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "@openomni/policy";
+import type { CompiledPolicySnapshot, PolicyEvaluationInput } from "./kernel/gate";
 import type { RetryTimerPort } from "./cluster/timers";
 import type { WaveControl } from "./core/execution/tool-wave";
 
@@ -113,7 +113,7 @@ export interface LlmAttempts<T extends PlainValue> {
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly delayMs: number;
-    readonly decision: import("@openomni/llm").Retry.Decision;
+    readonly decision: import("./model").Retry.Decision;
     readonly error: Error;
     readonly reason: string;
   }): void;

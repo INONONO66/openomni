@@ -1,12 +1,12 @@
 import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommitRefused } from "@openomni/ledger";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { CommitRefused } from "../src/store";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "../src/errors";

@@ -3,7 +3,7 @@ import { Context, Effect, Option } from "effect";
 import { GenerationUnavailable, InvocationClosed } from "./errors";
 import { onAbort } from "./core/interrupt-on";
 import type { Executor } from "./executor-contract";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import type { CompiledPolicySnapshot } from "./kernel/gate";
 import type { Dispatcher } from "./tool-dispatcher";
 import type { CapturedGeneration } from "./services";
 

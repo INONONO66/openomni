@@ -3,7 +3,7 @@ import { isolated } from "../../helpers/isolated";
 import { completeModel, providerFailure } from "../../helpers/mock-llm";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/effect-g1";
-import { Retry } from "@openomni/llm";
+import { Retry } from "../../../src/model";
 import { collector } from "../../helpers/observation-collector";
 import { runInput } from "../../helpers/run-input";
 import { overflowCompactionConfig } from "../../helpers/run-config";

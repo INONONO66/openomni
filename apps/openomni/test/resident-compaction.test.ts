@@ -1,7 +1,7 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "@openomni/agent";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { assistantMessage } from "./helpers/assistant-message";
 import { testPlane } from "./helpers/ledger";

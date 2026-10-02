@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SessionEntityTimerContext } from "@openomni/agent";
-import { CommitRefused, LedgerFailure } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure } from "@openomni/agent";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { AppLedgerPlane, SessionKernel } from "../src/composition/cluster-runtime";

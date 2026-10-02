@@ -1,6 +1,6 @@
 import { Cause, Clock, Context, Effect, Scope } from "effect";
 import { AgentFailure, AgentInvariantViolation, Interrupted, ContextAdmissionError, type ExecutionError } from "../../errors";
-import type { LlmError } from "@openomni/llm";
+import type { LlmError } from "../../model";
 import {
   Llm,
   LlmFailure,
@@ -8,8 +8,8 @@ import {
   LlmRunFailure,
   observeRetry,
   type Sink,
-} from "@openomni/llm";
-import { selectModel } from "@openomni/llm";
+} from "../../model";
+import { selectModel } from "../../model";
 import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { CompactionSession } from "../../compaction";
 import { DEFAULT_PROTECT_RECENT } from "../../compaction/contract";

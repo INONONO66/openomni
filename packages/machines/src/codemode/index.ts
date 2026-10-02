@@ -1,4 +1,4 @@
-import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, MachinesFailure } from "@openomni/machines";
+import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, MachinesFailure } from "..";
 import { listenForAbort, Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { z } from "zod";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Retry } from "@openomni/llm";
+import { Retry } from "../../../src/model";
 import { providerFailure } from "../../helpers/mock-llm";
 
 /** Deterministic injected sources: frozen clock, zero jitter (#1245). */

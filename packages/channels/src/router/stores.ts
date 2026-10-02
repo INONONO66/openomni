@@ -6,7 +6,7 @@ import {
   createEgressBudgetStore,
   createReplyGrantStore,
   createSurfaceKeyStore,
-} from "@openomni/ledger";
+} from "@openomni/agent";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 /**

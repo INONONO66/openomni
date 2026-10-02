@@ -5,7 +5,7 @@ import {
   type ChannelInstanceStore,
   type PersonStore,
   type SecretStore,
-} from "@openomni/ledger";
+} from "@openomni/agent";
 import { type ChannelRuntimeDeps, type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";

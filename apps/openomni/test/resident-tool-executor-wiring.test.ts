@@ -2,7 +2,7 @@ import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/agent";
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";

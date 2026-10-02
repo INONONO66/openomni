@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { bundle, bundlePolicyTag, BundlesLive, defineTool, eraseTool, sessionTool } from "@openomni/agent";
-import { Llm, run } from "@openomni/llm";
+import { Llm, run } from "@openomni/agent";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
 import { Effect, Layer } from "effect";

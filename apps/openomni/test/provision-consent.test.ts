@@ -12,7 +12,7 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { createRequestDomainRevisions } from "../src/tools/core/request-domain-revisions";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/agent";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { testPlane } from "./helpers/ledger";
 import { eraseTool } from "@openomni/agent";

@@ -1,7 +1,7 @@
 /** Channel rendering of kernel-classified failures; raw provider details stay private. */
 
 import { failureFacts } from "@openomni/agent";
-import { Retry } from "@openomni/llm";
+import { Retry } from "@openomni/agent";
 import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 

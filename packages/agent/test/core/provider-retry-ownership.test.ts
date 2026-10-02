@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { createTestAgent, failure as effectFailure } from "../helpers/effect-g2";
 import { afterEach, describe, expect, it } from "bun:test";
-import { LlmRunFailure, run as llmRun, type run } from "@openomni/llm";
+import { LlmRunFailure, run as llmRun, type run } from "../../src/model";
 import type { Model } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
 import { Bus } from "../helpers/bus";
@@ -58,7 +58,7 @@ function createAgent(signal?: AbortSignal) {
     auth: { type: "api", key: "test-key" },
     signal,
     llm: {
-      run: (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) =>
+      run: (input: import("../../src/model").RunInput, sink: import("../../src/model").Sink) =>
         llmRun({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, { createStream: createProviderStream }),
       resolveModel: (model: Model.Ref) =>
         Effect.promise(async () => {

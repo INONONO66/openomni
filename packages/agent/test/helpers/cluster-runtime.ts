@@ -36,7 +36,7 @@ export function clusterTempDir(prefix: string): {
 
 import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import { L0Write, SessionHandleStore } from "@openomni/ledger";
+import { L0Write, SessionHandleStore } from "../../src/store";
 import type { Inbox } from "@openomni/protocol";
 import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";

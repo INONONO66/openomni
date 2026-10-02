@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineTool, eraseTool } from "@openomni/agent";
 import { Bus, newTraceId } from "./bus";
-import { run, type Provider } from "@openomni/llm";
+import { run, type Provider } from "@openomni/agent";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";

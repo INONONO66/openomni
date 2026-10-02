@@ -18,7 +18,7 @@ import type {
   ExecutionResult,
 } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
-import { CommitRefused, LedgerFailure } from "@openomni/ledger";
+import { CommitRefused, LedgerFailure } from "../src/store";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";

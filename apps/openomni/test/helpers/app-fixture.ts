@@ -1,4 +1,4 @@
-import { Llm, LlmLive } from "@openomni/llm";
+import { Llm, LlmLive } from "@openomni/agent";
 import { Context, Effect, Layer } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
 import { startOpenOmni } from "../../src/index";

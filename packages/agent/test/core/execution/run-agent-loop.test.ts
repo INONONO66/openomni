@@ -69,8 +69,8 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           definitions,
           () => runtime,
           async (
-            request: import("@openomni/llm").RunInput,
-            sink: import("@openomni/llm").Sink,
+            request: import("../../../src/model").RunInput,
+            sink: import("../../../src/model").Sink,
             input: import("../../../src/session-handle").SessionRunnerInput,
           ) => {
             inputs.push(structuredClone(request.messages));
@@ -164,8 +164,8 @@ interface CompactionProbe {
 function compactionProbeStep(
   probe: CompactionProbe,
   sessionId: string,
-  request: import("@openomni/llm").RunInput,
-  sink: import("@openomni/llm").Sink,
+  request: import("../../../src/model").RunInput,
+  sink: import("../../../src/model").Sink,
 ): { type: "stop" } {
   probe.calls += 1;
   if (probe.calls === 3) probe.nextBoundary = structuredClone(request.messages);
@@ -240,8 +240,8 @@ test("compaction projection and lossless revert survive SQLite reopen without de
                         limit: { context: 10000 },
                       }),
                     run: (
-                      request: import("@openomni/llm").RunInput,
-                      sink: import("@openomni/llm").Sink,
+                      request: import("../../../src/model").RunInput,
+                      sink: import("../../../src/model").Sink,
                     ) =>
                       Effect.sync(() => compactionProbeStep(probe, input.sessionId, request, sink)),
                   },

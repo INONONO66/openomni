@@ -1,6 +1,6 @@
-import type { SessionHandleStore } from "@openomni/ledger";
+import type { SessionHandleStore } from "./store";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
-import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
+import type { PolicyEvaluation, PolicyEvaluationInput } from "./kernel/gate";
 import { Cause, Clock, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";

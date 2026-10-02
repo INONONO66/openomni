@@ -1,5 +1,5 @@
 import { AppInvariantError } from "../../invariant";
-import type { ActorRegistry, PersonStore } from "@openomni/ledger";
+import type { ActorRegistry, PersonStore } from "@openomni/agent";
 import type { PlainValue, SessionTransition } from "@openomni/protocol";
 import { ContactOperation, contactDomainRevisions } from "./contact-mutations";
 

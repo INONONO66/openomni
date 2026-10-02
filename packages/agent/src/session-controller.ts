@@ -1,5 +1,5 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
-import { LeaseRefused } from "@openomni/ledger";
+import { LeaseRefused } from "./store";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./errors";
 import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session-record";

@@ -1,4 +1,4 @@
-import { Vault } from "@openomni/ledger";
+import { Vault } from "@openomni/agent";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import type { ProvisionPort } from "../../src/provisioning/channels";
 import { testPlane } from "./ledger";

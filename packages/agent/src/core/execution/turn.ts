@@ -1,7 +1,7 @@
 import { Clock, Effect, type Scope } from "effect";
 import { AgentInvariantViolation, type ExecutionError, Interrupted } from "../../errors";
 import { buildSystemPrompt, prepareTurnTools } from "./tools";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "../../model";
 import type { Message, BusEvent } from "@openomni/protocol";
 import { assistantTextOf, createTrackingSink, recordAssistant } from "./turn-assistant";
 import { effectiveMaxToolCalls, publishBudgetTelemetry } from "../budget";

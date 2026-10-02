@@ -1,4 +1,4 @@
-import { Vault, type createSecretStore } from "@openomni/ledger";
+import { Vault, type createSecretStore } from "@openomni/agent";
 
 export function putChannelCredential(
   secrets: ReturnType<typeof createSecretStore>,

@@ -17,7 +17,7 @@ import type { SessionFixture as SessionRuntime } from "./session-services";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
 import type { AnyToolDefinition } from "@openomni/protocol";
-import type { Run, RunInput } from "@openomni/llm";
+import type { Run, RunInput } from "../../src/model";
 import type {} from "../../src/session-contract";
 import { PlainValueSchema } from "@openomni/protocol";
 import { createCompactionPlan } from "../../src/compaction/durable";
@@ -26,9 +26,9 @@ import { foldSessionHistory } from "../../src/session-lifecycle/history";
 import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
 import type { ChatAgentInput } from "../../src/core/types";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { ExecutorOptions, DurableExecutor } from "../../src/executor-contract";
 import type { SessionHandle } from "../../src/session-handle";
 import { AgentFailure, CommitFailed } from "../../src/errors";
@@ -117,7 +117,7 @@ export function receiveOutbound(message: SessionTransition.OutboundMessage, crea
       parentActionId: null,
     }),
   ).pipe(
-    Effect.mapError((error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error })),
+    Effect.mapError((error: import("../../src/store").LedgerError) => new CommitFailed({ error })),
   );
 }
 export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>) {

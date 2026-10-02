@@ -1,4 +1,4 @@
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "../../src/store";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";

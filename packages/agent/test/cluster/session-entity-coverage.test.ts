@@ -6,7 +6,7 @@ import {
   openSessionStore,
   SessionHandleStore,
   StorageUnavailable,
-} from "@openomni/ledger";
+} from "../../src/store";
 import { Effect } from "effect";
 import { SessionEntity } from "../../src/cluster/session-entity";
 import {

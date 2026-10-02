@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../store";
 import type { SessionKernel } from "../cluster/kernel-registry";
 import { AgentInvariantViolation } from "../errors";
 import {

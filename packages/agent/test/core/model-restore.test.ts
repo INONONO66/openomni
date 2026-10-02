@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { recordingLedger } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { LedgerAction, Model, PlainObject, PolicyRow } from "@openomni/protocol";
 import { runAgent } from "../../src/core/execution/run";
 import { createAssistantMessage } from "../../src/core/message-factory";
@@ -67,7 +67,7 @@ async function turn(options: {
         ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
         ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
         llm: {
-          run: (_input: import("@openomni/llm").RunInput, sink: Sink) =>
+          run: (_input: import("../../src/model").RunInput, sink: Sink) =>
             Effect.promise(async () => {
               sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
               return createStopOutcome();

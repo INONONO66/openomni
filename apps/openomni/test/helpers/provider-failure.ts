@@ -1,4 +1,4 @@
-import { LlmRunFailure, type Run } from "@openomni/llm";
+import { LlmRunFailure, type Run } from "@openomni/agent";
 import { APICallError } from "ai";
 
 export function providerFailure(

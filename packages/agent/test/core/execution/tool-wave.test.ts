@@ -19,7 +19,7 @@ import { GenerationRawSlots } from "../../../src/session-generations";
 import { createDispatcher } from "../../../src/tool-dispatcher";
 import { executeToolBody } from "../../../src/tool-body";
 import { AgentFailure } from "../../../src/errors";
-import { LedgerFailure } from "@openomni/ledger";
+import { LedgerFailure } from "../../../src/store";
 import { allowAllPolicy } from "../../helpers/compiled-policy";
 import { recordingLedger } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";

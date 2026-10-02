@@ -1,5 +1,5 @@
-import type { CompiledPolicySnapshot } from "@openomni/policy";
-import type { Llm } from "@openomni/llm";
+import type { CompiledPolicySnapshot } from "./kernel/gate";
+import type { Llm } from "./model";
 import type {
   AnyToolDefinition,
   ObservationSink as ObservationPort,

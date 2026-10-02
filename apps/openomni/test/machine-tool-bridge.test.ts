@@ -1,8 +1,8 @@
 import { runEffect, acquireEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { Effect } from "effect";
-import { createCodemode } from "@openomni/codemode";
+import { createCodemode } from "@openomni/machines";
 import { describe, expect, test } from "bun:test";
-import { connectIpcClient, typedCall } from "@openomni/ipc";
+import { connectIpcClient, typedCall } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "@openomni/machines";
 import type { MachineHost } from "@openomni/machines";

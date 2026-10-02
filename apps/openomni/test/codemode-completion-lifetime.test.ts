@@ -4,7 +4,7 @@ import { Effect, Layer } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
 import { createTurnDispatcher, currentInvocation } from "@openomni/agent";
-import { createCodemode } from "@openomni/codemode";
+import { createCodemode } from "@openomni/machines";
 import { attachMachineDaemon, createMachineHost, type MachinesFailure } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";

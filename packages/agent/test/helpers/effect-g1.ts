@@ -17,7 +17,7 @@ import { AgentFailure } from "../../src/errors";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger } from "./isolated";
-import type { CompiledPolicySnapshot } from "@openomni/policy";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
 export { createTestAgent, runTestAgent, runChatAttempts } from "./effect-g2";
 export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = {
   arm: () => Effect.void,

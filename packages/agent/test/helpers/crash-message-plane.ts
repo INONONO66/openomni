@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs";
 import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "../../src/store";
 import { Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { sessionTree } from "./session-tree";

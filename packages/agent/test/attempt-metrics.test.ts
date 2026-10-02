@@ -1,7 +1,7 @@
 import { APICallError } from "ai";
 import { expect, test } from "bun:test";
 import { LedgerAction } from "@openomni/protocol";
-import { LlmRunFailure, run } from "@openomni/llm";
+import { LlmRunFailure, run } from "../src/model";
 import { Effect } from "effect";
 import { testExecutor } from "./helpers/executor";
 import { allowAllPolicy } from "./helpers/compiled-policy";

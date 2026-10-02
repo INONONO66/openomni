@@ -1,6 +1,6 @@
 import { APICallError } from "ai";
 import { Effect } from "effect";
-import { Auth } from "@openomni/llm";
+import { Auth } from "@openomni/agent";
 import type { FixtureLlm } from "./app-fixture";
 import type { Model } from "@openomni/protocol";
 import { assistantMessage } from "./assistant-message";

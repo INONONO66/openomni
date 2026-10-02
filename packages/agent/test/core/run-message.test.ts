@@ -1,4 +1,4 @@
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "../../src/model";
 import { isolated } from "../helpers/isolated";
 import { failure } from "../helpers/g0-signals";
 import { providerFailure } from "../helpers/mock-llm";

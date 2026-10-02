@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../store";
 import type { SessionKernel } from "../cluster/kernel-registry";
 import {
   canonicalDigest,

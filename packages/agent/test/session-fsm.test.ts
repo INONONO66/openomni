@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import {
   canonicalDigest,
   PlainObjectSchema,

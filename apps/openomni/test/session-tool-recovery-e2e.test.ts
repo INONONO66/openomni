@@ -20,7 +20,7 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import { Bus } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";

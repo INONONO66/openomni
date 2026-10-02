@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { runAgentSync } from "./helpers/executor";
 import { expect, spyOn, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../src/store";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
 import { foldHistoryState, hydrateSessionHistory } from "../src/session-lifecycle/history";

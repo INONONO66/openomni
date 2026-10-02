@@ -12,7 +12,7 @@ import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
-import { LedgerFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { LedgerFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "../src/store";
 import {
   type BusEvent,
   type LedgerAction,

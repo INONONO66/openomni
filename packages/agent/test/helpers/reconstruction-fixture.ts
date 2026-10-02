@@ -1,4 +1,4 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "../../src/store";
 import { PlainValueSchema, type LedgerAction } from "@openomni/protocol";
 import { requireCommit, turnTerminalAction } from "../../src/session-record";
 import type { ExecutionLedger } from "../../src/executor";

@@ -22,7 +22,7 @@ export type { InvocationFrame } from "./executor-context";
 export { makeSessionGenerations } from "./session-generations";
 export type { GenerationBundle } from "./session-generations";
 export type { ExecutionApprovalRequest } from "./executor";
-export { SEEDED_POLICY_ROWS } from "@openomni/policy";
+export { SEEDED_POLICY_ROWS } from "./kernel/gate";
 export type { Executor } from "./executor";
 export {
   createDispatcher,
@@ -51,3 +51,6 @@ export type {
 } from "./session-contract";
 export { createObservationBus, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";
+export * from "./kernel/gate";
+export * from "./store";
+export * from "./model";

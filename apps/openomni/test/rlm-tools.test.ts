@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { catalogDefinitions } from "../src/tools/core/catalog";
 import { toolSpec, type Executor } from "@openomni/agent";
 import { completionFixture as completionPort } from "./helpers/completion-fixture";
-import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/llm";
+import { Auth, ModelsDev, Provider, type RunInput } from "@openomni/agent";
 
 import { assistantMessage } from "./helpers/assistant-message";
 import { providerFailure } from "./helpers/provider-failure";
