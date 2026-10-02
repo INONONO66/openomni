@@ -1,9 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { canonicalDigest, emittedRowKey } from "@openomni/protocol";
+import { canonicalDigest, emittedRowKey, type PlainValue } from "@openomni/protocol";
 import { compileGateRows, type GateHandler } from "../src/kernel/gate/compose";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 const table = fullPointTable();
+
+function plainModel(value: PlainValue): string {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return "";
+  const model = value.model;
+  return typeof model === "string" ? model : "";
+}
 
 describe("gate decision fold (#1251)", () => {
   it("folds deny > require_approval > allow and records every matched row id in order", () => {
@@ -73,14 +79,14 @@ describe("gate decision fold (#1251)", () => {
   });
 
   it("applies rewrites in row order, each over the prior output, to declared fields only", () => {
-    const upgrade: GateHandler = (input) => {
-      const value = input.value as { model: string };
-      return { value: { model: `${value.model}+a`, extra: "dropped" }, payload: { step: "a" } };
-    };
-    const suffix: GateHandler = (input) => {
-      const value = input.value as { model: string };
-      return { value: { model: `${value.model}+b` }, payload: { step: "b" } };
-    };
+    const upgrade: GateHandler = (input) => ({
+      value: { model: `${plainModel(input.value)}+a`, extra: "dropped" },
+      payload: { step: "a" },
+    });
+    const suffix: GateHandler = (input) => ({
+      value: { model: `${plainModel(input.value)}+b` },
+      payload: { step: "b" },
+    });
     const handlers = new Map<string, GateHandler>([
       ["rewrite/upgrade", upgrade],
       ["rewrite/suffix", suffix],
@@ -133,6 +139,76 @@ describe("gate decision fold (#1251)", () => {
       { rowId: "audit/tool.pre#1", ref: "audit/log", payload: { audit: "seen" } },
     ]);
     expect(outcome.decision.consulted).toEqual([]);
+  });
+
+  it("an observer's in-place mutation of the consulted value never reaches the decision (#1251 r2)", () => {
+    const hostile: GateHandler = (input) => {
+      const value = input.value;
+      if (value !== null && typeof value === "object" && !Array.isArray(value))
+        value.input = "hijacked";
+      return { payload: { seen: true } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#3", do: "observe", how: { ref: "audit/mutate" } }),
+      ],
+      handlers: ["audit/mutate"],
+      generation: 1,
+    });
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { input: "original", nested: { keep: true } } },
+      { handlers: () => hostile },
+    );
+    expect(outcome.value).toEqual({ input: "original", nested: { keep: true } });
+    expect(outcome.decision.output).toEqual({ input: "original", nested: { keep: true } });
+    expect(outcome.decision.annotations).toHaveLength(1);
+  });
+
+  it("a consult handler's in-place mutation is equally isolated from the decision value", () => {
+    const hostile: GateHandler = (input) => {
+      const value = input.value;
+      if (value !== null && typeof value === "object" && !Array.isArray(value))
+        value.input = "hijacked";
+      return { verdict: "allow", payload: { ok: true } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("tool.pre", { how: { ref: "guard/scan" } })],
+      handlers: ["guard/scan"],
+      generation: 1,
+    });
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { input: "original" } },
+      { handlers: () => hostile },
+    );
+    expect(outcome.value).toEqual({ input: "original" });
+  });
+
+  it("an observer's ordinary throw records a fact and the decision stands (#1251 r2)", () => {
+    const broken: GateHandler = () => {
+      throw new Error("observer broke");
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#4", do: "observe", how: { ref: "audit/broken" } }),
+      ],
+      handlers: ["audit/broken"],
+      generation: 1,
+    });
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { input: "original" } },
+      { handlers: () => broken },
+    );
+    expect(outcome.decision.verdict).toBe("allow");
+    expect(outcome.value).toEqual({ input: "original" });
+    expect(outcome.decision.facts).toEqual([
+      { rowId: "audit/tool.pre#4", ref: "audit/broken", code: "observer_failed" },
+    ]);
   });
 
   it("an observer's requirement escape records a fact but never fails the decision (#1251 r1)", () => {
