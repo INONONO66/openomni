@@ -12,7 +12,7 @@ import {
   watchTimeoutDelivery,
   type SessionEntityPorts,
   type SessionEntityTimerContext,
-  type TimerChainReads,
+  type AlarmChainReads,
 } from "@openomni/agent";
 import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerHandles, type ObservationFailurePort, type ObservationPublishFailure } from "@openomni/agent";
 import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
@@ -221,7 +221,7 @@ export function appLedgerLayer(options: AppLedgerOptions): Layer.Layer<AppLedger
   );
 }
 
-function chainReads(context: SessionEntityTimerContext): TimerChainReads {
+function chainReads(context: SessionEntityTimerContext): AlarmChainReads {
   const { kernel, authority } = context;
   return {
     actionById: kernel.actionById,

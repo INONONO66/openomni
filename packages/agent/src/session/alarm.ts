@@ -2,6 +2,9 @@ import { Effect } from "effect";
 import { interruptOn } from "../kernel/ports";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CommitFailed } from "../kernel/failure";
+import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
+
+export type { AlarmDisposition, AlarmChainReads, AlarmSenders, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
 
 /**
  * Timer plane over cluster DeliverAt (W5.2 review F2, plan D5/D8): a persisted
@@ -10,62 +13,20 @@ import type { CommitFailed } from "../kernel/failure";
  * dispositions below are those chain guards; the entity handler acks a "skip"
  * without committing anything.
  */
-type TimerSkipReason =
-  | "malformed_alarm_id"
-  | "unknown_attempt"
-  | "attempt_settled"
-  | "superseded"
-  | "unknown_request"
-  | "request_terminal"
-  | "duplicate_occurrence"
-  | "duplicate_timeout";
 
-export type TimerDisposition =
-  | { readonly op: "run" }
-  | { readonly op: "skip"; readonly reason: TimerSkipReason };
 
-const RUN: TimerDisposition = { op: "run" };
-const skip = (reason: TimerSkipReason): TimerDisposition => ({ op: "skip", reason });
+const RUN: AlarmDisposition = { op: "run" };
+const skip = (reason: AlarmSkipReason): AlarmDisposition => ({ op: "skip", reason });
 
-/** Chain reads a delivery guard decides over; the entity supplies its kernel's read ports. */
-export interface TimerChainReads {
-  actionById(id: string): LedgerAction.Node | undefined;
-  resultFor(intentId: string): LedgerAction.Node | undefined;
-  operationChildrenPage(parentId: string, cursor: number): readonly LedgerAction.Node[];
-  requestById(requestId: string): SessionTransition.Request | undefined;
-}
 
-/** `RetryScheduled` DeliverAt payload; `alarmId` = `<attemptActionId>:retry:<n>`. */
-interface RetryRearm {
-  readonly alarmId: string;
-  readonly attempt: number;
-  readonly notBefore: number;
-}
 
-/** `Deadline` DeliverAt payload; chain key = `<requestId>:deadline`. */
-interface DeadlineArm {
-  readonly requestId: string;
-  readonly deadlineAt: number;
-}
 
-/** `WatchTimeout` DeliverAt payload; chain key = `<watchId>:timeout:<epoch>`. */
-export interface WatchTimeoutArm {
-  readonly watchId: string;
-  readonly epoch: number;
-  readonly fireAt: number;
-}
 
-/** DeliverAt self-senders, implemented over the Session entity client by the cluster runtime. */
-export interface TimerSenders {
-  retryScheduled(message: RetryRearm): Effect.Effect<void, CommitFailed>;
-  deadline(message: DeadlineArm): Effect.Effect<void, CommitFailed>;
-  watchTimeout(message: WatchTimeoutArm): Effect.Effect<void, CommitFailed>;
-}
 
 const RETRY_SEPARATOR = ":retry:";
 const PAGE_LIMIT = 256;
 
-function hasNewerAttempt(reads: TimerChainReads, attempt: LedgerAction.Node): boolean {
+function hasNewerAttempt(reads: AlarmChainReads, attempt: LedgerAction.Node): boolean {
   if (attempt.parentId === null) return false;
   let cursor = 0;
   for (;;) {
@@ -82,7 +43,7 @@ function hasNewerAttempt(reads: TimerChainReads, attempt: LedgerAction.Node): bo
  * armed attempt is still the live, unsettled one: a settled terminal or a newer
  * attempt intent means the in-process residual wait already won (plan D8).
  */
-export function retryDelivery(reads: TimerChainReads, alarmId: string): TimerDisposition {
+export function retryDelivery(reads: AlarmChainReads, alarmId: string): AlarmDisposition {
   const separator = alarmId.lastIndexOf(RETRY_SEPARATOR);
   if (separator <= 0) return skip("malformed_alarm_id");
   const attemptId = alarmId.slice(0, separator);
@@ -98,7 +59,7 @@ export function retryDelivery(reads: TimerChainReads, alarmId: string): TimerDis
  * (resolved/refused/expired/cancelled) acks silently so the resolution tokens
  * `duplicate`/`late_unknown` of the request plane stay intact (check4 F7).
  */
-export function deadlineDelivery(reads: TimerChainReads, requestId: string): TimerDisposition {
+export function deadlineDelivery(reads: AlarmChainReads, requestId: string): AlarmDisposition {
   const request = reads.requestById(requestId);
   if (request === undefined) return skip("unknown_request");
   if (request.state !== "open") return skip("request_terminal");
@@ -106,7 +67,7 @@ export function deadlineDelivery(reads: TimerChainReads, requestId: string): Tim
 }
 
 /** A `WatchFired` delivery commits at most once per committed occurrence id. */
-export function watchFiredDelivery(reads: TimerChainReads, occurrenceId: string): TimerDisposition {
+export function watchFiredDelivery(reads: AlarmChainReads, occurrenceId: string): AlarmDisposition {
   if (reads.actionById(occurrenceId) !== undefined) return skip("duplicate_occurrence");
   return RUN;
 }
@@ -118,44 +79,16 @@ export function watchTimeoutKey(message: Pick<WatchTimeoutArm, "watchId" | "epoc
 
 /** A `WatchTimeout` delivery is idempotent per (watchId, epoch). */
 export function watchTimeoutDelivery(
-  reads: TimerChainReads,
+  reads: AlarmChainReads,
   message: Pick<WatchTimeoutArm, "watchId" | "epoch">,
-): TimerDisposition {
+): AlarmDisposition {
   if (reads.actionById(watchTimeoutKey(message)) !== undefined) return skip("duplicate_timeout");
   return RUN;
 }
 
-/**
- * Durable retry schedule port over the timer plane. Structurally a drop-in for
- * `ExecutorOptions["retryAlarm"]`: `arm` commits the `retry.scheduled` chain
- * action (durable evidence) and then persists the DeliverAt rearm; `wait`
- * keeps the live in-process residual sleep; `settle` is a no-op because
- * supersede happens at delivery time via `retryDelivery`, never as a cancel.
- */
-export interface RetryTimerPort {
-  arm(input: {
-    readonly id: string;
-    readonly attempt: number;
-    readonly reason: string;
-    readonly fireAt: number;
-  }): Effect.Effect<void, CommitFailed>;
-  wait(fireAt: number, signal?: AbortSignal): Effect.Effect<void>;
-  settle(id: string): Effect.Effect<void, CommitFailed>;
-}
 
-export interface RetryTimerDeps {
-  /** Commits the `retry.scheduled` chain action under the activation's fence. */
-  readonly commitScheduled: (input: {
-    readonly id: string;
-    readonly attempt: number;
-    readonly reason: string;
-    readonly notBefore: number;
-  }) => Effect.Effect<void, CommitFailed>;
-  readonly send: TimerSenders["retryScheduled"];
-  readonly clock: () => number;
-}
 
-export function createRetryTimerPort(deps: RetryTimerDeps): RetryTimerPort {
+export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
   return {
     // Chain evidence strictly before the persisted rearm: a crash between the
     // two resumes from the chain on activation; a crash inside the wait is

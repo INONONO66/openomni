@@ -1,6 +1,6 @@
 
 import * as SessionHandleStore from "../store/fence";
-import { CommitRefused, LeaseRefused, SessionNotFound, type LedgerError } from "../store/errors";
+import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "../store/errors";
 import { PlainValueSchema, SessionTransition, type Inbox } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
@@ -93,13 +93,13 @@ function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority): E
   const { sessionId, owner, fence } = authority;
   return Effect.suspend(() => {
     const current = kernel.row(sessionId);
-    if (current.leaseFence === fence && current.leaseOwner === owner) return Effect.void;
-    if (current.leaseFence >= fence)
-      return Effect.fail(new LeaseRefused({
+    if (current.fence === fence && current.fenceOwner === owner) return Effect.void;
+    if (current.fence >= fence)
+      return Effect.fail(new FenceRefused({
         sessionId,
         reason: "stale",
-        holder: current.leaseOwner,
-        fence: current.leaseFence,
+        holder: current.fenceOwner,
+        fence: current.fence,
         expiresAt: null,
       }));
     return kernel.adoptFence({ sessionId, owner, fence }).pipe(Effect.asVoid);
@@ -210,7 +210,7 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
             const error = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
             if (
               error instanceof LeaseLost ||
-              (error instanceof LeaseRefused && error.reason === "stale") ||
+              (error instanceof FenceRefused && error.reason === "stale") ||
               (error instanceof CommitRefused && error.reason === "fence")
             ) return Effect.void;
           }

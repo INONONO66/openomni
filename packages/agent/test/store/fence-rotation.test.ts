@@ -61,9 +61,9 @@ function commitRequest(
 /** The activation protocol twin: rotate the catalog fence, then adopt it into the file fence CAS. */
 function adoptFence(kernel: SessionKernel, sessionId: string, owner: string, fence: number): void {
   const current = kernel.row(sessionId);
-  if (current.leaseFence === fence && current.leaseOwner === owner) return;
-  if (current.leaseFence >= fence)
-    throw new Error(`stale activation: ${current.leaseFence} >= ${fence}`);
+  if (current.fence === fence && current.fenceOwner === owner) return;
+  if (current.fence >= fence)
+    throw new Error(`stale activation: ${current.fence} >= ${fence}`);
   runLedgerSync(kernel.adoptFence({ sessionId, owner, fence }));
 }
 
@@ -153,7 +153,7 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
     // Second activation takes over without any expiry clock: the catalog CAS
     // win IS the takeover authority.
     expect(activate(catalog, kernel, "s1", "runner:b")).toBe(2);
-    expect(kernel.row("s1")).toMatchObject({ leaseOwner: "runner:b", leaseFence: 2 });
+    expect(kernel.row("s1")).toMatchObject({ fenceOwner: "runner:b", fence: 2 });
     expect(
       runLedgerSync(
         kernel.commit(
@@ -289,7 +289,7 @@ test("concurrent activations from two processes: one winner, stale loser refused
     if (!loser.committed) expect(loser.reason).toMatch(/^(fence|activation_stale)$/);
 
     const { kernel } = world;
-    expect(kernel.row("s2")).toMatchObject({ leaseOwner: winner.owner, leaseFence: 2 });
+    expect(kernel.row("s2")).toMatchObject({ fenceOwner: winner.owner, fence: 2 });
     expect(kernel.actionById("race-1") ?? kernel.actionById("race-0")).toBeDefined();
     expect(kernel.verifyChain("s2")).toMatchObject({ kind: "intact" });
 

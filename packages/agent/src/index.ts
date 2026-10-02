@@ -27,7 +27,7 @@ export type { Executor } from "./kernel/gate/decide";
 export { createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec, } from "./kernel/tool";
 // W5.2 #1197 cluster surface (plan F6): the Session entity and its composition seams.
 export { SessionEntity, SessionEntityContext, SessionEntityLive } from "./session/entity";
-export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type TimerChainReads, } from "./session/alarm";
+export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "./session/alarm";
 export type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "./session/run";
 export { createObservationBus, scopeObservation } from "./session/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session/run";

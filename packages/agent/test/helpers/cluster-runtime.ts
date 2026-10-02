@@ -47,7 +47,7 @@ import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEnt
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type TimerChainReads, } from "../../src/session/alarm";
+import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/session/alarm";
 import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session/run";
 import type { SessionError } from "../../src/kernel/failure";
 import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session/commit";
@@ -255,7 +255,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
 
 /** Chain-guarded timer folds straight from `src/cluster/timers` (C2/F2). */
 function makeTimerPort(): SessionEntityPorts["timers"] {
-  const reads = (context: SessionEntityTimerContext): TimerChainReads => ({
+  const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
     actionById: context.kernel.actionById,
     requestById: context.kernel.requestById,
     resultFor: (intentId) => context.kernel.resultFor(context.authority.sessionId, intentId),

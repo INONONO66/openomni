@@ -24,7 +24,7 @@ function usurpedTransitionRefusal(handle: SessionHandle, turnId: string) {
     yield* kernel.adoptFence({
       sessionId: handle.id,
       owner: "other",
-      fence: kernel.row(handle.id).leaseFence + 1,
+      fence: kernel.row(handle.id).fence + 1,
     });
     const before = kernel.row(handle.id);
     const request = openRequest({
@@ -39,7 +39,7 @@ function usurpedTransitionRefusal(handle: SessionHandle, turnId: string) {
       ),
     ).toMatchObject({
       _tag: "CommitFailed",
-      error: { _tag: "LeaseRefused", reason: "stale", holder: "other", fence: before.leaseFence },
+      error: { _tag: "FenceRefused", reason: "stale", holder: "other", fence: before.fence },
     });
     expect(kernel.row(handle.id)).toEqual(before);
     expect(kernel.requestRows(handle.id)).toEqual([]);
@@ -255,7 +255,7 @@ for (const count of [1, 257]) {
           expect(kernel.openTurnsPage(handle.id)).toEqual([]);
           expect(kernel.openOperationsPage(handle.id, input.turnId)).toEqual([]);
           // No release plane: the adopted fence owner stays durable after shutdown.
-          expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
+          expect(kernel.row(handle.id).fenceOwner).not.toBeNull();
         }),
       ),
     ));
@@ -344,7 +344,7 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
             .map((action) => PlainObjectSchema.parse(action.effect.value).inboxKind),
         ).toEqual(["prompt", "interrupt"]);
         // No release plane: the adopted fence owner stays durable after shutdown.
-        expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
+        expect(kernel.row(handle.id).fenceOwner).not.toBeNull();
       }),
     ),
   ));

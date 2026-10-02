@@ -266,7 +266,7 @@ test("process session drain defers entity-owned resume consumption", async () =>
       kernel.adoptFence({
         sessionId: fixture.sessionId,
         owner,
-        fence: initial.leaseFence + 1,
+        fence: initial.fence + 1,
       }),
     );
     const row = kernel.row(fixture.sessionId);
@@ -337,7 +337,7 @@ test("process session drain recovers an open turn through the default admission 
       kernel.adoptFence({
         sessionId: fixture.sessionId,
         owner,
-        fence: row.leaseFence + 1,
+        fence: row.fence + 1,
       }),
     );
     const current = kernel.row(fixture.sessionId);

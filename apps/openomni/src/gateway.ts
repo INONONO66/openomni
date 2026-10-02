@@ -217,11 +217,11 @@ export function readSessionCursor(
   const before = kernel.row(frame.sessionId);
   const afterRevision = frame.cursor?.revision ?? 0;
   if (frame.cursor !== undefined &&
-      (frame.cursor.epoch !== before.leaseFence || afterRevision > before.revision)) {
+      (frame.cursor.epoch !== before.fence || afterRevision > before.revision)) {
     return {
       type: "session_gap" as const,
       sessionId: frame.sessionId,
-      epoch: before.leaseFence,
+      epoch: before.fence,
       headRevision: before.revision,
       oldestRevision: 0,
     };
@@ -237,13 +237,13 @@ export function readSessionCursor(
   const openTurnIntent = openTurn === undefined ? undefined : kernel.actionById(openTurn.turnId);
   const genesis = kernel.latestAction(frame.sessionId, 1);
   const after = kernel.row(frame.sessionId);
-  if (before.leaseFence !== after.leaseFence || before.revision !== page.headRevision ||
+  if (before.fence !== after.fence || before.revision !== page.headRevision ||
       after.revision !== page.headRevision ||
       (page.actions[0] !== undefined && page.actions[0].ordinal !== afterRevision + 1)) {
     return {
       type: "session_gap" as const,
       sessionId: frame.sessionId,
-      epoch: after.leaseFence,
+      epoch: after.fence,
       headRevision: after.revision,
       oldestRevision: 0,
     };
@@ -255,7 +255,7 @@ export function readSessionCursor(
     state: after.state,
     phase,
     phaseSince,
-    epoch: after.leaseFence,
+    epoch: after.fence,
     afterRevision,
     headRevision: page.headRevision,
     nextRevision: page.nextRevision,

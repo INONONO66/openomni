@@ -41,8 +41,8 @@ test("fence adoption reports a refused SQL compare-and-set without advancing its
         id: "fenced",
         parentId: null,
         role: "resident",
-        leaseOwner: null,
-        leaseFence: 0,
+        fenceOwner: null,
+        fence: 0,
         revision: 0,
         state: "idle",
       }),
@@ -53,8 +53,8 @@ test("fence adoption reports a refused SQL compare-and-set without advancing its
   );
   expect(() =>
     run(adapter.sessions.adoptFence({ sessionId: "fenced", owner: "worker", fence: 1 })),
-  ).toThrow(expect.objectContaining({ _tag: "LeaseRefused", reason: "stale", fence: 0 }));
-  expect(adapter.sessions.get("fenced")?.leaseOwner).toBeNull();
+  ).toThrow(expect.objectContaining({ _tag: "FenceRefused", reason: "stale", fence: 0 }));
+  expect(adapter.sessions.get("fenced")?.fenceOwner).toBeNull();
 });
 
 test("materialization refuses a mismatched initial action before creating any row", () => {
@@ -71,8 +71,8 @@ test("materialization refuses a mismatched initial action before creating any ro
     id: "source",
     parentId: null,
     role: "resident",
-    leaseOwner: null,
-    leaseFence: 0,
+    fenceOwner: null,
+    fence: 0,
     revision: 0,
     state: "idle",
     toolsGeneration: 1,
@@ -116,8 +116,8 @@ test("session commit savepoints roll back every refused write unit", () => {
         id: "savepoint",
         parentId: null,
         role: "resident",
-        leaseOwner: null,
-        leaseFence: 0,
+        fenceOwner: null,
+        fence: 0,
         revision: 0,
         state: "idle",
       }),

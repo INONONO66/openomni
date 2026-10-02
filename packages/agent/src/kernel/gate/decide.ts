@@ -4,7 +4,8 @@ import * as Failure from "../failure";
 import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFailed, ExecutionApprovalError, PolicyDenied, AgentFailure, Interrupted, OutcomeUnknown } from "../failure";
 import { type BusEvent, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import { type CompiledPolicySnapshot, type PolicyEvaluationInput, type PolicyEvaluation } from "./compile";
-import { type RetryTimerPort, createRetryTimerPort, type TimerSenders } from "../../session/alarm";
+import type { RetryAlarmPort, AlarmSenders } from "../alarm";
+import { createRetryAlarmPort } from "../../session/alarm";
 import { type WaveControl, type Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
@@ -216,7 +217,7 @@ export interface DurableExecutor extends Executor {
 
 export interface ExecutorOptions {
   /** Durable retry schedule port; the default commits the `retry.scheduled` chain action through the ledger (cluster/timers). */
-  readonly retryAlarm?: RetryTimerPort;
+  readonly retryAlarm?: RetryAlarmPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly closeGraceMs?: number;
@@ -747,13 +748,13 @@ function usageProvenance(evidence: PlainValue, failure: ExecutionError | undefin
  * the live residual sleep carries the in-process wait. Composition injects
  * the full port (with the entity-client sender) via `ExecutorOptions.retryAlarm`.
  */
-export function createLedgerRetryTimerPort(
+export function createLedgerRetryAlarmPort(
   ledger: Pick<ExecutionLedger, "commit">,
   sessionId: string,
   clock: () => number,
-  send: TimerSenders["retryScheduled"] = () => Effect.void,
-): RetryTimerPort {
-  return createRetryTimerPort({
+  send: AlarmSenders["retryScheduled"] = () => Effect.void,
+): RetryAlarmPort {
+  return createRetryAlarmPort({
     commitScheduled: (input) =>
       ledger
         .commit(LedgerAction.Append.parse({
@@ -792,7 +793,7 @@ export function createAttemptRunner(
   admit: (request: AttemptRequest, parent: LedgerAction.Receipt) => Effect.Effect<Admission, ExecutionError>,
   approve: (request: AttemptRequest, intent: LedgerAction.Receipt, admission: Admission) => Effect.Effect<"approve" | "refuse" | "timeout", ExecutionError>,
 ) {
-  const retryAlarm = options.retryAlarm ?? createLedgerRetryTimerPort(options.ledger, options.identity.sessionId, options.clock);
+  const retryAlarm = options.retryAlarm ?? createLedgerRetryAlarmPort(options.ledger, options.identity.sessionId, options.clock);
   function approveAttempt(request: AttemptRequest, intent: LedgerAction.Receipt, policy: Admission | undefined) {
     if (policy?.verdict !== "require_approval") return Effect.void;
     return Effect.gen(function* () {

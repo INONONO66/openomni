@@ -87,11 +87,11 @@ export function adoptLedgerFence(sessionId: string, owner: string): number {
   const kernel = current.plane.kernel;
   for (;;) {
     const row = kernel.row(sessionId);
-    if (row.leaseOwner === owner) return row.leaseFence;
+    if (row.fenceOwner === owner) return row.fence;
     const adopted = runEffect(
-      kernel.adoptFence({ sessionId, owner, fence: row.leaseFence + 1 }).pipe(
+      kernel.adoptFence({ sessionId, owner, fence: row.fence + 1 }).pipe(
         Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => Effect.succeed(undefined)),
+        Effect.catchTag("FenceRefused", () => Effect.succeed(undefined)),
       ),
       "sync",
     );

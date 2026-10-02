@@ -28,8 +28,8 @@ const row: LedgerSession.Row = {
   id: "S",
   parentId: null,
   role: "resident",
-  leaseOwner: "owner",
-  leaseFence: 1,
+  fenceOwner: "owner",
+  fence: 1,
   revision: 1,
   state: "running",
   toolsGeneration: 1,
@@ -111,7 +111,7 @@ function commitAsForeignOwner(
     const lease = yield* kernel.adoptFence({
       sessionId: "S",
       owner,
-      fence: kernel.row("S").leaseFence + 1,
+      fence: kernel.row("S").fence + 1,
     });
     yield* kernel.commit({
       sessionId: "S",
@@ -537,7 +537,7 @@ describe("T01-T15 real controller transition witnesses", () => {
           expect(SessionHandleStore.turnTerminal(endings[0])?.kind).toBe(kind);
           // W5.2: terminals keep the fence owner durable; there is no lease release.
           expect(isolatedLedger().kernel.row("S").state).toBe("idle");
-          expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         }),
       ));
 
@@ -623,7 +623,7 @@ describe("T01-T15 real controller transition witnesses", () => {
             source === "current" ? "waiting" : "error",
           );
           // W5.2: waiting/error terminals keep the fence owner durable.
-          expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         }),
       ));
 
@@ -752,7 +752,7 @@ describe("T01-T15 real controller transition witnesses", () => {
         expect((yield* handle.restoreContext(compaction.id)).terminal).toBe("executed");
         expect(sessionTree(isolatedLedger().kernel, "S").slice(0, before.length)).toEqual(before);
         // W5.2: no lease release; the restore's fence owner stays durable.
-        expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+        expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         expect(canonicalDigest(sessionTree(isolatedLedger().kernel, "S"))).not.toBe(
           canonicalDigest(before),
         );

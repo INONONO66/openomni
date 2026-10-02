@@ -110,7 +110,7 @@ function commitReceived(
   return Effect.suspend(() => {
     const kernel = plane.openKernel(sessionId);
     const row = kernel.row(sessionId);
-    if (row.leaseOwner === null)
+    if (row.fenceOwner === null)
       return Effect.fail(new Error(`session has no activation authority: ${sessionId}`));
     const action: LedgerAction.Append = {
       id,
@@ -125,8 +125,8 @@ function commitReceived(
     return kernel
       .commit({
         sessionId,
-        owner: row.leaseOwner,
-        fence: row.leaseFence,
+        owner: row.fenceOwner,
+        fence: row.fence,
         now: Date.now(),
         expectedRevision: row.revision,
         actions: [action],

@@ -16,7 +16,7 @@ import type { LedgerError } from "../../src/store/errors";
 import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionLedger } from "../../src/kernel/gate/decide";
-import { createLedgerRetryTimerPort } from "../../src/kernel/gate/decide";
+import { createLedgerRetryAlarmPort } from "../../src/kernel/gate/decide";
 import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
 import { session } from "../../src/testing/registry";
 import { reactivateSession } from "./wake-session";
@@ -141,7 +141,7 @@ function stop(point: z.infer<typeof allCrashPoints>, bodies: string[], pending?:
     crashPoint: point,
     bodies,
     ...(fold === undefined ? {} : { fold }),
-    lease: { owner: row.leaseOwner, fence: row.leaseFence },
+    lease: { owner: row.fenceOwner, fence: row.fence },
     openTurns: SessionHandleStore.openTurns(sessionTree(kernel, sessionId)),
     ...(pending === undefined
       ? {}
@@ -206,7 +206,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
       // The durable arm (retry.scheduled chain action) commits before the cut:
       // only the wait itself is lost.
       retryAlarm: {
-        ...createLedgerRetryTimerPort(ledger, sessionId, recording.clock),
+        ...createLedgerRetryAlarmPort(ledger, sessionId, recording.clock),
         wait: () => Effect.sync(() => stop(point, bodies)),
       },
     });

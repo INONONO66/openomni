@@ -162,8 +162,8 @@ function transitionExisting(
 function ownsRequestRevision(command: SessionTransition.Command, row: LedgerSession.Row): boolean {
   return all(
     row.id === command.sessionId,
-    row.leaseOwner === command.authority.owner,
-    row.leaseFence === command.authority.fence,
+    row.fenceOwner === command.authority.owner,
+    row.fence === command.authority.fence,
     row.revision === command.expectedRevision,
   );
 }

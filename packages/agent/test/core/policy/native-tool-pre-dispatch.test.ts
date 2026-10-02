@@ -70,7 +70,7 @@ for (const door of ["model", "cell", "wave"] as const) {
         policyGeneration: 1, actionId: `${id}:configure`, at: 100,
       });
       const lease = yield* kernel.adoptFence({
-        sessionId: id, owner: id, fence: materialized.row.leaseFence + 1,
+        sessionId: id, owner: id, fence: materialized.row.fence + 1,
       });
       let sequence = 0;
       const executed: string[] = [];

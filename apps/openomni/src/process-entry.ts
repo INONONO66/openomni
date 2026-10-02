@@ -80,8 +80,8 @@ export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: ()
         new AgentFailure({ operation: "message.commit", cause: error._tag });
       const live = kernel.row(input.sessionId);
       const authority =
-        live.state === "running" && live.leaseOwner !== null
-          ? { owner: live.leaseOwner, fence: live.leaseFence }
+        live.state === "running" && live.fenceOwner !== null
+          ? { owner: live.fenceOwner, fence: live.fence }
           : {
               owner,
               fence: yield* adoptSessionAuthority(kernel, input.sessionId, owner).pipe(

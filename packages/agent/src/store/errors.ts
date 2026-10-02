@@ -16,7 +16,7 @@ export class MaterializeRefused extends Data.TaggedError("MaterializeRefused")<{
   readonly reason: "input" | "configuration" | "state";
 }> {}
 
-export class LeaseRefused extends Data.TaggedError("LeaseRefused")<{
+export class FenceRefused extends Data.TaggedError("FenceRefused")<{
   readonly sessionId: string;
   readonly reason: "held" | "stale";
   readonly holder: string | null;
@@ -83,7 +83,7 @@ export class ReplyGrantProjectionError extends Error {
 export type LedgerError =
   | SessionNotFound
   | MaterializeRefused
-  | LeaseRefused
+  | FenceRefused
   | CommitRefused
   | PolicyGenerationRefused
   | StorageUnavailable

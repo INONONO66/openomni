@@ -237,7 +237,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         ).toHaveLength(1);
         // The crashed activation's fence is still on the row; the recovery
         // drain adopts a higher fence and settles the open turn from evidence.
-        expect(crashPlane.openKernel(sessionId).row(sessionId).leaseOwner).not.toBeNull();
+        expect(crashPlane.openKernel(sessionId).row(sessionId).fenceOwner).not.toBeNull();
         const crashRuntime: SessionRuntime = {
           authorizeConfigure: allowConfigure,
           openKernel: crashPlane.openKernel,

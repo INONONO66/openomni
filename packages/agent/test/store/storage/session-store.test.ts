@@ -121,7 +121,7 @@ test("createSessionKernel serves session facts from the session file and policy 
     expect(created.row).toMatchObject({ id: "s1", state: "idle" });
 
     const adopted = runLedgerSync(
-      kernel.adoptFence({ sessionId: "s1", owner: "owner", fence: created.row.leaseFence + 1 }),
+      kernel.adoptFence({ sessionId: "s1", owner: "owner", fence: created.row.fence + 1 }),
     );
     expect(adopted).toEqual({ ok: true, fence: 1 });
 

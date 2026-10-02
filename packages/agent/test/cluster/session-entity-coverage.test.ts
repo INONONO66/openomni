@@ -185,7 +185,7 @@ test("a received prompt retries exactly one revision refusal", async () => {
             return Effect.fail(new CommitRefused({
               sessionId: input.sessionId, reason: "revision",
               expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
-              fence: input.fence, currentFence: row.leaseFence,
+              fence: input.fence, currentFence: row.fence,
             }));
           }
           return target.commit(input);

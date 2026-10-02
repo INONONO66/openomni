@@ -91,21 +91,21 @@ function waveLlm(): NonNullable<Parameters<typeof suite.boot>[0]>["llm"] {
 }
 
 /** A contender at the held fence is refused while the live effect retains it. */
-function expectFenceHeld(sessionId: string, contender: string, leaseOwner: string | null) {
+function expectFenceHeld(sessionId: string, contender: string, fenceOwner: string | null) {
   const held = plane().openKernel(sessionId).row(sessionId);
-  expect(adoptAtFence(plane(), sessionId, contender, held.leaseFence)).toMatchObject({
+  expect(adoptAtFence(plane(), sessionId, contender, held.fence)).toMatchObject({
     _tag: "Failure",
-    failure: { _tag: "LeaseRefused", reason: "stale" },
+    failure: { _tag: "FenceRefused", reason: "stale" },
   });
-  expect(held.leaseOwner).toBe(leaseOwner);
+  expect(held.fenceOwner).toBe(fenceOwner);
 }
 
 /** W5.2: the turn's adopted fence is permanent; a strictly newer fence still adopts. */
 function expectFenceHandover(sessionId: string, contender: string) {
   const released = plane().openKernel(sessionId).row(sessionId);
-  expect(adoptAtFence(plane(), sessionId, contender, released.leaseFence + 1)).toMatchObject({
+  expect(adoptAtFence(plane(), sessionId, contender, released.fence + 1)).toMatchObject({
     _tag: "Success",
-    success: { fence: released.leaseFence + 1 },
+    success: { fence: released.fence + 1 },
   });
 }
 
@@ -549,13 +549,13 @@ test("noncooperative bodies release the wave but retain fence ownership and cann
       ["call-A", "executed"],
       ["call-B", "outcome_unknown"],
     ]);
-    expect(plane().openKernel(row.id).row(row.id).leaseOwner).not.toBeNull();
+    expect(plane().openKernel(row.id).row(row.id).fenceOwner).not.toBeNull();
     expect(received).toHaveLength(1);
     gate.resolve();
     expect(await bounded(late.promise)).toBe("failed");
     // W5.2: the close plane is gone; the turn's fence adoption is permanent,
     // so the durable owner stays on the row after the raw body settles.
-    expect(plane().openKernel(row.id).row(row.id).leaseOwner).not.toBeNull();
+    expect(plane().openKernel(row.id).row(row.id).fenceOwner).not.toBeNull();
     expect(
       tree(row.id).some(
         (action) =>
@@ -658,7 +658,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         ["call-outer", "executed"],
       ]);
       // Then: abort-raced wrapper settlement cannot regress the live effect's fence.
-      expectFenceHeld(row.id, "nested-contender", row.leaseOwner);
+      expectFenceHeld(row.id, "nested-contender", row.fenceOwner);
       // The gated wrapper's grace outcome lands exactly once under the inner
       // intent: the executor's zero-grace row at wave close. Every other count
       // below excludes that one row.
@@ -790,7 +790,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
           ["call-outer", "executed"],
         ]);
         // Then: neither timeout nor SDK interruption regresses the live effect's fence.
-        expectFenceHeld(sessionId, "timed-contender", row.leaseOwner);
+        expectFenceHeld(sessionId, "timed-contender", row.fenceOwner);
         const beforeActions = tree(sessionId).length;
         const db = new Database(sessionDbPath(sessionId), { readonly: true });
         try {

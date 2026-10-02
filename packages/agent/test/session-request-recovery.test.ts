@@ -245,8 +245,8 @@ it("a gateway answer adopts a strictly newer fence over a crashed writer and res
   expect(yield* gateway.answer(ownerAnswer(request))).toBe("resolved");
   expect(currentRequest().state).toBe("resolved");
   const after = isolatedLedger().kernel.row(request.sessionId);
-  expect(after.leaseFence).toBe(before.leaseFence + 1);
-  expect(after.leaseOwner).not.toBe(before.leaseOwner);
+  expect(after.fence).toBe(before.fence + 1);
+  expect(after.fenceOwner).not.toBe(before.fenceOwner);
 })));
 
 it.each(["answer", "timeout", "cancel"] as const)("%s wins once across a request-port restart", (winner: "answer" | "timeout" | "cancel") => fileRequest((dbPath) => Effect.gen(function* () {

@@ -306,7 +306,7 @@ export function prepareMessage(
       }
       const kernel = plane.openKernel(sender.id);
       const source = kernel.row(sender.id);
-      if (source.leaseOwner === null)
+      if (source.fenceOwner === null)
         return yield* new SendAdmissionConflict({ message: "session sender has no active lease" });
       const rows = plane.listSessions();
       const recipient =
@@ -332,7 +332,7 @@ export function prepareMessage(
               messageId: outbound.input.message.messageId,
               origin: outbound.input.message,
             }),
-        sender: { sessionId: sender.id, owner: source.leaseOwner, fence: source.leaseFence },
+        sender: { sessionId: sender.id, owner: source.fenceOwner, fence: source.fence },
         ...(send.to.kind === "new_session"
           ? {
               createSession: materialize(target, sender.id, send.to.role, send.to.runner),

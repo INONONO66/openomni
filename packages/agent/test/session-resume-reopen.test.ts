@@ -122,7 +122,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             const lease = yield* kernel().adoptFence({
               sessionId: "resume",
               owner: "crashed",
-              fence: kernel().row("resume").leaseFence + 1,
+              fence: kernel().row("resume").fence + 1,
             });
             const newer = SessionHandleStore.generationSnapshot({
               generation: 2,

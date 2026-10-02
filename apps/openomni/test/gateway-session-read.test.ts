@@ -82,7 +82,7 @@ test("a commit interleaved with the page read yields a typed session gap at the 
     expect(response).toEqual({
       type: "session_gap",
       sessionId,
-      epoch: kernel.row(sessionId).leaseFence,
+      epoch: kernel.row(sessionId).fence,
       headRevision: headBefore + 1,
       oldestRevision: 0,
     });

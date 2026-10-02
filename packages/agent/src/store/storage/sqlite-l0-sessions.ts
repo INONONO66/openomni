@@ -3,7 +3,7 @@ import { LedgerSession, type ObservationSink } from "@openomni/protocol";
 import {
   CommitRefused,
   CorruptRecord,
-  LeaseRefused,
+  FenceRefused,
   MaterializeRefused,
   SessionNotFound,
 } from "../errors";
@@ -49,12 +49,12 @@ function materializeSession(
   return { created: true, row, receipt };
 }
 
-function staleLeaseRefusal(current: LedgerSession.Row): LeaseRefused {
-  return new LeaseRefused({
+function staleLeaseRefusal(current: LedgerSession.Row): FenceRefused {
+  return new FenceRefused({
     sessionId: current.id,
     reason: "stale",
-    holder: current.leaseOwner,
-    fence: current.leaseFence,
+    holder: current.fenceOwner,
+    fence: current.fence,
     expiresAt: null,
   });
 }
@@ -67,10 +67,10 @@ function staleLeaseRefusal(current: LedgerSession.Row): LeaseRefused {
 function adoptFence(db: Database, request: LedgerSession.AdoptFence, refuse: RefuseWrite) {
   const current = selectSession(db, request.sessionId);
   if (current === undefined) return refuse(new SessionNotFound({ sessionId: request.sessionId }));
-  if (current.leaseOwner === request.owner && current.leaseFence === request.fence) {
+  if (current.fenceOwner === request.owner && current.fence === request.fence) {
     return { ok: true as const, fence: request.fence };
   }
-  if (current.leaseFence >= request.fence) return refuse(staleLeaseRefusal(current));
+  if (current.fence >= request.fence) return refuse(staleLeaseRefusal(current));
   const updated = db
     .query(
       `UPDATE session SET lease_owner = ?, lease_fence = ?

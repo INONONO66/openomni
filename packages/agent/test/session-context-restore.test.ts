@@ -152,7 +152,7 @@ describe("restore_context_projection", () => {
             ),
           );
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
           expect(handle.inspect().compactions).toEqual([
             expect.objectContaining({
               compactionId: compaction.id,
@@ -206,7 +206,7 @@ describe("restore_context_projection", () => {
             message: "context restore refused: unknown_compaction",
           });
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
           const result = before.find(
             (action: LedgerAction.Node) =>
               action.kind === "compaction" && action.parentId === compaction.id,
@@ -220,7 +220,7 @@ describe("restore_context_projection", () => {
           });
           expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
         }),
       ),
     ));

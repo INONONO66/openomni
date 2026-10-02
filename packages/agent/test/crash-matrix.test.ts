@@ -13,7 +13,7 @@ import * as SessionHandleStore from "../src/store/fence";
 import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/plugins/compaction/summary";
-import { retryDelivery, type TimerChainReads } from "../src/session/alarm";
+import { retryDelivery, type AlarmChainReads } from "../src/session/alarm";
 import { closeSessions } from "../src/session/run";
 import { reactivateSession } from "./helpers/wake-session";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../src/inspect/history";
@@ -376,7 +376,7 @@ function recoverRetryAlarm(witness: Witness) {
   // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
   // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
   const kernel = isolatedLedger().kernel;
-  const reads: TimerChainReads = {
+  const reads: AlarmChainReads = {
     actionById: kernel.actionById,
     requestById: kernel.requestById,
     resultFor: (id) => kernel.resultFor(sessionId, id),
@@ -407,8 +407,8 @@ function recoverStaleOwner(witness: Witness) {
     const current = kernel.row(sessionId);
     // The entity wake pinned a strictly newer fence; the crashed activation's
     // authority is dead the moment the successor adopts, with no timer involved.
-    expect(current.leaseOwner).not.toBe(owner);
-    expect(current.leaseFence).toBeGreaterThan(witness.lease.fence);
+    expect(current.fenceOwner).not.toBe(owner);
+    expect(current.fence).toBeGreaterThan(witness.lease.fence);
     const before = actions();
     const refused = yield* Effect.result(kernel.commit({
       sessionId, owner, fence: witness.lease.fence, now: 200_000,

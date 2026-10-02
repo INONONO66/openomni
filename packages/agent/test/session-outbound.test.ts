@@ -288,7 +288,7 @@ test("a fence stolen during dispatch surfaces the ack refusal and never marks de
                 .adoptFence({
                   sessionId: message.sourceSessionId,
                   owner: "other-runtime",
-                  fence: kernel.row(message.sourceSessionId).leaseFence + 1,
+                  fence: kernel.row(message.sourceSessionId).fence + 1,
                 })
                 .pipe(Effect.orDie);
               return (yield* receiveOutbound(message, 100)).receipt;
@@ -308,7 +308,7 @@ test("a fence stolen during dispatch surfaces the ack refusal and never marks de
         ]);
         const kernel = isolatedLedger().kernel;
         expect(kernel.outboundRows("child")).toMatchObject([{ state: "pending" }]);
-        expect(kernel.row("child").leaseOwner).toBe("other-runtime");
+        expect(kernel.row("child").fenceOwner).toBe("other-runtime");
       }),
     ),
   ));

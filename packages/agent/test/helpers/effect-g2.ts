@@ -126,7 +126,7 @@ export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>
       running,
       settled: Fiber.await(running),
       request,
-      fence: kernel.row(handle.id).leaseFence,
+      fence: kernel.row(handle.id).fence,
     };
   });
 }

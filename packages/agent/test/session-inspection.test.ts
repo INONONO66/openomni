@@ -308,7 +308,7 @@ function lifecycle() {
     // wake is the fired occurrence's received message plus a fresh activation.
     const kernel = isolatedLedger().kernel;
     const monitorWriter = yield* kernel.adoptFence({
-      sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").leaseFence + 1,
+      sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").fence + 1,
     });
     yield* monitorCommit(kernel, monitorWriter.fence, {
       id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
@@ -344,7 +344,7 @@ describe("action-based history and diagnostic projections", () => {
           const kernel = isolatedLedger().kernel;
           const firstRevision = kernel.row("parent").revision;
           const adopted = yield* kernel.adoptFence({
-            sessionId: "parent", owner: "inspection-page", fence: kernel.row("parent").leaseFence + 1,
+            sessionId: "parent", owner: "inspection-page", fence: kernel.row("parent").fence + 1,
           });
           yield* kernel.commit({
             sessionId: "parent", owner: "inspection-page", fence: adopted.fence, now: 1_000,
@@ -770,7 +770,7 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         });
         const adopted = yield* kernel.adoptFence({
           sessionId: "long-chain", owner: "chain-writer",
-          fence: kernel.row("long-chain").leaseFence + 1,
+          fence: kernel.row("long-chain").fence + 1,
         });
         yield* commitLongChain(kernel, {
           sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence,

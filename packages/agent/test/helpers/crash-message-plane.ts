@@ -6,7 +6,7 @@ import { Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { sessionTree } from "./session-tree";
 import type { SessionKernel } from "../../src/session/entity";
-import { watchFiredDelivery, type TimerChainReads } from "../../src/session/alarm";
+import { watchFiredDelivery, type AlarmChainReads } from "../../src/session/alarm";
 import { CommitFailed } from "../../src/kernel/failure";
 import { receivedMessageAction, receivedMessages } from "../../src/session/commit";
 import { closeSessions } from "../../src/session/run";
@@ -40,7 +40,7 @@ const sessionId = "crash-session";
 const watchId = "doorbell";
 const occurrenceId = `${watchId}:fired:1`;
 
-function timerReads(kernel: SessionKernel): TimerChainReads {
+function timerReads(kernel: SessionKernel): AlarmChainReads {
   return {
     actionById: kernel.actionById,
     requestById: kernel.requestById,
@@ -75,9 +75,9 @@ function watchCut() {
     if (watchFiredDelivery(timerReads(kernel), occurrenceId).op !== "run")
       throw new Error("fresh occurrence must be admitted");
     const row = kernel.row(sessionId);
-    if (row.leaseOwner === null) throw new Error("hibernated session lost its pinned writer");
+    if (row.fenceOwner === null) throw new Error("hibernated session lost its pinned writer");
     yield* kernel.commit({
-      sessionId, owner: row.leaseOwner, fence: row.leaseFence, now,
+      sessionId, owner: row.fenceOwner, fence: row.fence, now,
       expectedRevision: row.revision, state: row.state,
       actions: [
         {
@@ -95,7 +95,7 @@ function watchCut() {
     const after = kernel.row(sessionId);
     return holdCrashBarrier(JSON.stringify({
       crashPoint: "watch_fired_committed_before_entity_wake", bodies: [],
-      lease: { owner: after.leaseOwner, fence: after.leaseFence }, openTurns: [],
+      lease: { owner: after.fenceOwner, fence: after.fence }, openTurns: [],
     }));
   });
 }

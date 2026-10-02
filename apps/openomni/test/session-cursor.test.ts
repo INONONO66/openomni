@@ -80,7 +80,7 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
   const stale = nextFrame(staleReconnect, (frame) => frame.type === "session_gap");
   staleReconnect.send(JSON.stringify({
     type: "session_read", sessionId, limit: 256,
-    cursor: { revision: kernel.row(sessionId).revision + 1, epoch: kernel.row(sessionId).leaseFence },
+    cursor: { revision: kernel.row(sessionId).revision + 1, epoch: kernel.row(sessionId).fence },
   }));
   expect(await stale).toMatchObject({ type: "session_gap", sessionId, headRevision: kernel.row(sessionId).revision });
   const repaired = nextFrame(staleReconnect, (frame) => frame.type === "session_snapshot");

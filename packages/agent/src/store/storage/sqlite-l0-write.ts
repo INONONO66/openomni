@@ -22,8 +22,8 @@ export function insertSession(db: Database, row: LedgerSession.Row): boolean {
       row.id,
       row.parentId,
       row.role,
-      row.leaseOwner,
-      row.leaseFence,
+      row.fenceOwner,
+      row.fence,
       row.revision,
       row.state,
       row.toolsGeneration,
@@ -161,7 +161,7 @@ function sessionAuthorityRefusal(
   request: LedgerSession.Commit,
   current: LedgerSession.Row,
 ): LedgerSession.CommitResult | undefined {
-  if (current.leaseOwner !== request.owner || current.leaseFence !== request.fence) {
+  if (current.fenceOwner !== request.owner || current.fence !== request.fence) {
     return refusedSessionCommit("stale", current);
   }
   if (current.revision !== request.expectedRevision) {
@@ -205,7 +205,7 @@ function refusedSessionCommit(
   return {
     ok: false,
     reason,
-    currentFence: current.leaseFence,
+    currentFence: current.fence,
     currentRevision: current.revision,
   };
 }

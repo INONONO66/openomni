@@ -725,8 +725,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const borrowedAuthority = (id: string) => {
       const kernel = plane.openKernel(id);
       const row = kernel.row(id);
-      if (row.leaseOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
-      return { kernel, row, owner: row.leaseOwner, fence: row.leaseFence };
+      if (row.fenceOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
+      return { kernel, row, owner: row.fenceOwner, fence: row.fence };
     };
     const sessionFacade = (id: string): AppSessionHandle | undefined => {
       if (liveTurns.get(id) === undefined) return undefined;

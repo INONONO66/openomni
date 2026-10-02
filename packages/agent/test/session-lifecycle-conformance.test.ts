@@ -842,8 +842,8 @@ describe("session lifecycle conformance", () => {
                             actions: [],
                             state: "running",
                         });
-                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: dead.leaseFence });
-                        expect(dead.leaseFence).toBeGreaterThan(1);
+                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: dead.fence });
+                        expect(dead.fence).toBeGreaterThan(1);
                     }),
                 },
             ],
@@ -1041,7 +1041,7 @@ describe("session lifecycle conformance", () => {
                         const corruptCommit = kernel().commitRequestTransition({
                             sessionId: q.sessionId,
                             owner: "stranger",
-                            fence: fresh.leaseFence,
+                            fence: fresh.fence,
                             now: 1099,
                             expectedRevision: fresh.revision,
                             actions: [],
@@ -1133,7 +1133,7 @@ describe("session lifecycle conformance", () => {
         // A successor activation adopts a strictly newer fence mid-turn (W5.2 F5):
         // the live runner's authority dies at that CAS, no timer involved.
         const prior = kernel().row(handle.id);
-        yield* kernel().adoptFence({ sessionId: handle.id, owner: "successor", fence: prior.leaseFence + 1 });
+        yield* kernel().adoptFence({ sessionId: handle.id, owner: "successor", fence: prior.fence + 1 });
         const before = snapshotOf(handle.id);
         const observations = sink.published;
         sink.resetToolTape();
@@ -1282,7 +1282,7 @@ function cancelRequest(q: SessionTransition.Request, runtime: SessionRuntime) {
         const adopted = (yield* kernel().adoptFence({
             sessionId: q.sessionId,
             owner: controller,
-            fence: row.leaseFence + 1,
+            fence: row.fence + 1,
         }));
         return (yield* commitSessionRequest(kernel(), q.sessionId, { owner: controller, fence: adopted.fence }, { kind: "request.cancel", requestId: q.requestId, principal: owner }, `cancel-1:${q.sessionId}`, 1099, runtime)).resolution;
     });
@@ -1348,7 +1348,7 @@ function seedLeasedResident(id: string, actionId: string, owner: string) {
         const lease = (yield* kernel().adoptFence({
             sessionId: id,
             owner,
-            fence: created.row.leaseFence + 1,
+            fence: created.row.fence + 1,
         }));
         return { created, generation, lease };
     });

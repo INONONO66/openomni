@@ -8,7 +8,7 @@ import { Alarm, LedgerAction, type SessionTransition } from "@openomni/protocol"
 import { CommitFailed } from "../../src/kernel/failure";
 import type { ExecutorOptions } from "../../src/kernel/gate/decide";
 import { commitSessionRequest } from "../../src/session/mailbox";
-import { createRetryTimerPort, deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, watchTimeoutKey, type TimerChainReads, } from "../../src/session/alarm";
+import { createRetryAlarmPort, deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, watchTimeoutKey, type AlarmChainReads, } from "../../src/session/alarm";
 import { fixtureHashes } from "../helpers/compiled-policy";
 import { memoryExecutionReads } from "../helpers/execution-reads";
 import { requestLedger } from "../helpers/g0-request-ledger";
@@ -21,7 +21,7 @@ const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().ke
 
 // Type-level drop-in proof: the timer port replaces the alarm-table port.
 type RetryPortSlot = NonNullable<ExecutorOptions["retryAlarm"]>;
-const _dropIn: RetryPortSlot = createRetryTimerPort({
+const _dropIn: RetryPortSlot = createRetryAlarmPort({
   commitScheduled: () => Effect.void,
   send: () => Effect.void,
   clock: () => 0,
@@ -45,7 +45,7 @@ const action = (input: {
 });
 
 /** The kernel read ports a timer delivery consults (the isolation's kernel instance). */
-const chainReads = (sessionId: string): TimerChainReads => {
+const chainReads = (sessionId: string): AlarmChainReads => {
   const kernel = isolatedLedger().kernel;
   return {
     actionById: kernel.actionById,
@@ -139,7 +139,7 @@ describe("retry delivery chain guard", () => {
       node("op:attempt:2", "op", "attempt", 259),
     ];
     const memory = memoryExecutionReads(() => nodes);
-    const reads: TimerChainReads = {
+    const reads: AlarmChainReads = {
       actionById: (id) => memory.actionById?.(id),
       requestById: (id) => memory.requestById?.(id),
       resultFor: (id) => memory.resultFor?.(id),
@@ -311,7 +311,7 @@ describe("retry timer port over DeliverAt", () => {
     runAgent(
       Effect.gen(function* () {
         const order: string[] = [];
-        const port = createRetryTimerPort({
+        const port = createRetryAlarmPort({
           commitScheduled: (input) =>
             Effect.sync(() => {
               order.push(`commit:${input.id}:${input.notBefore}`);
@@ -341,7 +341,7 @@ describe("retry timer port over DeliverAt", () => {
             currentFence: 1,
           }),
         });
-        const port = createRetryTimerPort({
+        const port = createRetryAlarmPort({
           commitScheduled: () => Effect.fail(refusal),
           send: () =>
             Effect.sync(() => {
@@ -358,7 +358,7 @@ describe("retry timer port over DeliverAt", () => {
     runAgent(
       Effect.gen(function* () {
         let sent = 0;
-        const port = createRetryTimerPort({
+        const port = createRetryAlarmPort({
           commitScheduled: () => Effect.void,
           send: () =>
             Effect.sync(() => {
@@ -375,7 +375,7 @@ describe("retry timer port over DeliverAt", () => {
     runAgent(
       Effect.gen(function* () {
         let now = 100;
-        const port = createRetryTimerPort({
+        const port = createRetryAlarmPort({
           commitScheduled: () => Effect.void,
           send: () => Effect.void,
           clock: () => now,
@@ -394,7 +394,7 @@ describe("retry timer port over DeliverAt", () => {
   test("an aborted signal interrupts the residual wait", () =>
     runAgent(
       Effect.gen(function* () {
-        const port = createRetryTimerPort({
+        const port = createRetryAlarmPort({
           commitScheduled: () => Effect.void,
           send: () => Effect.void,
           clock: () => 100,

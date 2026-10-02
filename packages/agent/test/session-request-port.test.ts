@@ -75,7 +75,7 @@ test("gateway request port commits physical bindings and receiving intake withou
     ...isolatedRuntime(),
     onInboxCommitted: (ids) => {
       // No release plane: the gateway's fenced intake leaves its adopted owner durable.
-      expect(isolatedLedger().kernel.row("source").leaseOwner).not.toBeNull();
+      expect(isolatedLedger().kernel.row("source").fenceOwner).not.toBeNull();
       received.push(...ids);
     },
   }; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
@@ -208,7 +208,7 @@ test("request opening uses its original turn generation, never a later catalog",
   const lease = yield* isolatedLedger().kernel.adoptFence({
     sessionId: "source",
     owner: "configure",
-    fence: row.leaseFence + 1,
+    fence: row.fence + 1,
   });
   const next = { ...generation, generation: 2, revertTo: 1 };
   yield* isolatedLedger().kernel.commit({

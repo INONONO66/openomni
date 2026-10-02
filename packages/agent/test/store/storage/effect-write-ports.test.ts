@@ -19,8 +19,8 @@ function fixture(db: ReturnType<typeof openLedgerDatabase>): {
       role: "resident",
       state: "idle",
       revision: 0,
-      leaseOwner: null,
-      leaseFence: 0,
+      fenceOwner: null,
+      fence: 0,
       toolsGeneration: 0,
       systemHash: "",
       policyGeneration: 0,
@@ -113,7 +113,7 @@ test("fence adoption races and SQL CAS loss preserve holder and fence in typed r
       ),
     ),
   ).toMatchObject({
-    _tag: "LeaseRefused",
+    _tag: "FenceRefused",
     reason: "stale",
     holder: "writer",
     fence: 1,
@@ -129,15 +129,15 @@ test("fence adoption races and SQL CAS loss preserve holder and fence in typed r
       ),
     ),
   ).toMatchObject({
-    _tag: "LeaseRefused",
+    _tag: "FenceRefused",
     reason: "stale",
     holder: "writer",
     fence: 1,
     expiresAt: null,
   });
   expect(f.adapter.sessions.get("session")).toMatchObject({
-    leaseOwner: "writer",
-    leaseFence: 1,
+    fenceOwner: "writer",
+    fence: 1,
   });
 });
 

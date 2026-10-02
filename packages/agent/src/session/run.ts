@@ -355,12 +355,12 @@ export function adoptSessionAuthority(
 ): Effect.Effect<number, LedgerError> {
   const attempt: Effect.Effect<number, LedgerError> = Effect.suspend(() => {
     const current = kernel.row(sessionId);
-    if (current.leaseOwner === owner) return Effect.succeed(current.leaseFence);
+    if (current.fenceOwner === owner) return Effect.succeed(current.fence);
     return kernel
-      .adoptFence({ sessionId, owner, fence: current.leaseFence + 1 })
+      .adoptFence({ sessionId, owner, fence: current.fence + 1 })
       .pipe(
         Effect.map((receipt) => receipt.fence),
-        Effect.catchTag("LeaseRefused", () => attempt),
+        Effect.catchTag("FenceRefused", () => attempt),
       );
   });
   return attempt;

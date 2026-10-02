@@ -102,7 +102,7 @@ it("the injected gateway port uses the live controller's fence and releases the 
         expect(yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))).toBe("resolved");
         yield* Fiber.join(running);
         expect(f.effects).toEqual(["original"]);
-        expect(isolatedLedger().kernel.row(f.handle.id).leaseFence).toBe(fence);
+        expect(isolatedLedger().kernel.row(f.handle.id).fence).toBe(fence);
         expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("resolved");
       }),
     ),

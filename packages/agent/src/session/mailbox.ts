@@ -227,7 +227,7 @@ export function createSessionAdmission(
       guardedOperationsPage: (id, cursor) => kernel.guardedOperationsPage(sessionId, id, cursor),
       validateRequest(request) {
         const row = kernel.row(sessionId);
-        return row.leaseOwner === owner && row.leaseFence === executionFence &&
+        return row.fenceOwner === owner && row.fence === executionFence &&
           row.toolsGeneration === request.toolsGeneration &&
           row.systemHash === request.systemHash && row.policyGeneration === request.generation &&
           (runtime.requestDomainRevisions === undefined || canonicalDigest({ ...runtime.requestDomainRevisions(request) }) === canonicalDigest(request.domainRevisions));
@@ -235,7 +235,7 @@ export function createSessionAdmission(
       transition(payload, inputId, at) {
         return Effect.gen(function* () {
           const current = kernel.row(sessionId);
-          if (current.leaseFence !== executionFence || (turnId !== undefined && kernel.turnTerminalFor(sessionId, turnId) !== undefined))
+          if (current.fence !== executionFence || (turnId !== undefined && kernel.turnTerminalFor(sessionId, turnId) !== undefined))
             return yield* new AgentFailure({ operation: "session.request.transition", cause: "stale" });
           return yield* commitSessionRequest(kernel, sessionId, { owner, fence: executionFence }, payload, inputId, at, runtime);
         });
@@ -244,9 +244,9 @@ export function createSessionAdmission(
         return Effect.gen(function* () {
           const current = kernel.row(sessionId);
           const sealed = turnId !== undefined && kernel.turnTerminalFor(sessionId, turnId) !== undefined;
-          if (current.leaseFence !== executionFence || sealed || state.terminalFrozen) return yield* new CommitRefused({
+          if (current.fence !== executionFence || sealed || state.terminalFrozen) return yield* new CommitRefused({
             sessionId, reason: "fence", expectedRevision: current.revision,
-            currentRevision: current.revision, fence: executionFence, currentFence: current.leaseFence,
+            currentRevision: current.revision, fence: executionFence, currentFence: current.fence,
           });
           const committed = yield* commitSession({ expectedRevision: current.revision, actions: [action], state: current.state });
           const receipt = committed.receipts[0];
@@ -404,7 +404,7 @@ export function commitSessionRequest(
  * activation's authority and kill its wave. This kernel view instead BORROWS
  * the running activation's owner+fence: `adoptFence` on a running session
  * records the live pair (and the borrowing caller) without touching the row,
- * `row()` reports the borrowing caller as `leaseOwner` so the pure request
+ * `row()` reports the borrowing caller as `fenceOwner` so the pure request
  * decision (`ownsRequestRevision`) runs under the true live authority, and the
  * commit lands under the live owner+fence (same process: it lands between the
  * turn's awaits). Fence and revision are never masked — a rotated fence or a
@@ -422,16 +422,16 @@ export function requestAuthorityKernel(base: SessionKernel, sessionId: string): 
     row: (id: string) => {
       const row = base.row(id);
       return holder.borrowed !== undefined && holder.caller !== undefined && id === sessionId
-        ? { ...row, leaseOwner: holder.caller }
+        ? { ...row, fenceOwner: holder.caller }
         : row;
     },
     adoptFence: (input) =>
       Effect.suspend(() => {
         const row = base.row(sessionId);
-        if (input.sessionId === sessionId && row.state === "running" && row.leaseOwner !== null) {
-          holder.borrowed = { owner: row.leaseOwner, fence: row.leaseFence };
+        if (input.sessionId === sessionId && row.state === "running" && row.fenceOwner !== null) {
+          holder.borrowed = { owner: row.fenceOwner, fence: row.fence };
           holder.caller = input.owner;
-          return Effect.succeed({ ok: true as const, fence: row.leaseFence });
+          return Effect.succeed({ ok: true as const, fence: row.fence });
         }
         return base.adoptFence(input);
       }),

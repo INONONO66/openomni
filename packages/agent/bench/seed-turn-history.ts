@@ -33,12 +33,12 @@ export function prepareTurnCommit(
   const resultId = `${turnId}:result`;
   const now = index + 2;
   const adopted =
-    row.leaseOwner === "bench"
-      ? { fence: row.leaseFence }
+    row.fenceOwner === "bench"
+      ? { fence: row.fence }
       : Result.getOrThrowWith(
           runLedgerSync(
             Effect.result(
-              kernel.adoptFence({ sessionId: id, owner: "bench", fence: row.leaseFence + 1 }),
+              kernel.adoptFence({ sessionId: id, owner: "bench", fence: row.fence + 1 }),
             ),
           ),
           (error) => error,

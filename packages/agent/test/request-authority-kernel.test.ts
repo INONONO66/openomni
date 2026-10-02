@@ -71,13 +71,13 @@ test("a borrowed-fence caller opens a request mid-turn under the live owner", ()
       const request = yield* pending(id);
       const kernel = isolatedLedger().kernel;
       const liveOwner = `${id}:owner`;
-      expect(kernel.row(id)).toMatchObject({ state: "running", leaseOwner: liveOwner, leaseFence: 1 });
+      expect(kernel.row(id)).toMatchObject({ state: "running", fenceOwner: liveOwner, fence: 1 });
       const wrapped = requestAuthorityKernel(kernel, id);
       const caller = "pid:request:borrower";
       const fence = yield* adoptSessionAuthority(wrapped, id, caller);
       // Borrowing never rotates the fence or steals the row.
       expect(fence).toBe(1);
-      expect(kernel.row(id)).toMatchObject({ leaseOwner: liveOwner, leaseFence: 1 });
+      expect(kernel.row(id)).toMatchObject({ fenceOwner: liveOwner, fence: 1 });
       const decision = yield* commitSessionRequest(
         wrapped,
         id,
@@ -89,7 +89,7 @@ test("a borrowed-fence caller opens a request mid-turn under the live owner", ()
       );
       expectOpenedRows(kernel, id, request, decision);
       // The durable row still belongs to the live activation.
-      expect(kernel.row(id)).toMatchObject({ leaseOwner: liveOwner, leaseFence: 1 });
+      expect(kernel.row(id)).toMatchObject({ fenceOwner: liveOwner, fence: 1 });
     }),
   ));
 
@@ -136,7 +136,7 @@ test("an idle session falls back to a real fence adoption", () =>
       const caller = "pid:request:idle-taker";
       const fence = yield* adoptSessionAuthority(requestAuthorityKernel(kernel, id), id, caller);
       expect(fence).toBe(1);
-      expect(kernel.row(id)).toMatchObject({ leaseOwner: caller, leaseFence: 1 });
+      expect(kernel.row(id)).toMatchObject({ fenceOwner: caller, fence: 1 });
     }),
   ));
 

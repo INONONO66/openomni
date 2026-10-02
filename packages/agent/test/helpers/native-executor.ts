@@ -25,7 +25,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId, handle?: S
     });
     const owner = `owner:${now}`;
     const adopted = yield* kernel.adoptFence({
-      sessionId: id, owner, fence: initial.row.leaseFence + 1,
+      sessionId: id, owner, fence: initial.row.fence + 1,
     });
     const turnId = `${id}:turn`;
     const ledger: ExecutionLedger = {

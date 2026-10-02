@@ -64,7 +64,7 @@ test.each(["revision", "fence"] as const)(
         return Effect.fail(new CommitRefused({
           sessionId: id, reason,
           expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
-          fence: input.fence, currentFence: row.leaseFence,
+          fence: input.fence, currentFence: row.fence,
         }));
       };
       return { ...kernel, commit };

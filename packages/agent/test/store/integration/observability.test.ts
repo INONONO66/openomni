@@ -15,8 +15,8 @@ function session(id: string): LedgerSession.Row {
     id,
     parentId: null,
     role: "resident",
-    leaseOwner: null,
-    leaseFence: 0,
+    fenceOwner: null,
+    fence: 0,
     revision: 0,
     state: "idle",
   });

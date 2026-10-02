@@ -1,5 +1,5 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
-import { LeaseRefused } from "../store/errors";
+import { FenceRefused } from "../store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../kernel/failure";
 import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "../session/commit";
@@ -104,9 +104,9 @@ export function createController(
           const current = kernel.row(sessionId);
           // A foreign adoption over this activation makes every commit stale;
           // the pinned fence is never silently re-adopted beneath a live turn.
-          if (current.leaseOwner !== owner || current.leaseFence !== state.fence)
-            return yield* Effect.fail(new CommitFailed({ error: new LeaseRefused({
-              sessionId, reason: "stale", holder: current.leaseOwner, fence: current.leaseFence, expiresAt: null,
+          if (current.fenceOwner !== owner || current.fence !== state.fence)
+            return yield* Effect.fail(new CommitFailed({ error: new FenceRefused({
+              sessionId, reason: "stale", holder: current.fenceOwner, fence: current.fence, expiresAt: null,
             }) }));
           return yield* commitSessionRequest(kernel, sessionId, { owner, fence: state.fence }, payload, inputId, Math.max(at, clock()), runtime, inbox).pipe(
             Effect.tap((decision) => Effect.sync(() => {

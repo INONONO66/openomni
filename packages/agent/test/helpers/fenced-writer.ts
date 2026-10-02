@@ -61,7 +61,7 @@ export function fencedTurnFixture(
     const adopted = yield* kernel.adoptFence({
       sessionId: id,
       owner,
-      fence: created.row.leaseFence + 1,
+      fence: created.row.fence + 1,
     });
     const generation = kernel.latestGenerationFor(id);
     const turnId = input.turnId ?? `${id}:turn`;
