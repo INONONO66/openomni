@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PassThrough } from "node:stream";
 import type { SessionTransition } from "@openomni/protocol";
 import { createProcessReplyChannel } from "../src/composition/process-replies";
+import { runEffect } from "./helpers/effect";
 import { bounded } from "./helpers/protected-dispatch";
 
 const answer: SessionTransition.Answer = {
@@ -24,7 +25,7 @@ const answer: SessionTransition.Answer = {
 function fixture() {
   const input = new PassThrough();
   const output: string[] = [];
-  const channel = createProcessReplyChannel(input, (line) => output.push(line));
+  const channel = createProcessReplyChannel(input, (line) => output.push(line), runEffect);
   return {
     input,
     output,

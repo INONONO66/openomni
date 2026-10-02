@@ -1,4 +1,6 @@
-import { Effect, Result, Exit, Scope } from "effect";
+import type { EffectRunner } from "@openomni/channels";
+import { Effect, ManagedRuntime, Result, Exit, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import type { AppRuntime, AppServices } from "../../src/runtime";
 
 /** Runs an app test Effect at the test boundary. */
@@ -51,4 +53,19 @@ export function acquireSyncEffect<A, E>(effect: Effect.Effect<A, E, Scope.Scope>
   const scope = runSyncEffect(Scope.make());
   scopes.push(scope);
   return runSyncEffect(Scope.provide(effect, scope));
+}
+
+/**
+ * One TestClock runtime per test (#1248): `run` is the port handed to the
+ * code under test, `adjust` moves the fake clock its deadlines run on.
+ * Dispose in the test's `finally`.
+ */
+export function testClockRuntime() {
+  const runtime = ManagedRuntime.make(TestClock.layer());
+  const run: EffectRunner = (effect) => runtime.runPromise(effect);
+  return {
+    run,
+    adjust: (millis: number): Promise<void> => runtime.runPromise(TestClock.adjust(millis)),
+    dispose: (): Promise<void> => runtime.dispose(),
+  };
 }
