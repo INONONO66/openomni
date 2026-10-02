@@ -125,6 +125,37 @@ describe("decision replay (#1251)", () => {
     expect(calls).toBe(2);
   });
 
+  it("a changed matcher context is a different decision: the old record does not replay (#1251 r3)", () => {
+    const gate = compileGateRows<{ block: boolean }>({
+      table,
+      rows: [gateRow("message.pre", { id: "guard/message.pre#7", how: { verdict: "deny" } })],
+      handlers: [],
+      generation: 1,
+      matchers: new Map([["guard/message.pre#7", (context) => context?.block === true]]),
+    });
+    const first = gate.decide("message.pre", { when: {}, value: { text: "hi" }, context: { block: false } });
+    expect(first.decision.verdict).toBe("allow");
+
+    // Identical context: the recorded decision replays verbatim.
+    const same = gate.decide(
+      "message.pre",
+      { when: {}, value: { text: "hi" }, context: { block: false } },
+      { recorded: first.decision },
+    );
+    expect(same.replayed).toBe(true);
+    expect(same.decision.verdict).toBe("allow");
+
+    // Changed context flips the matcher: the old allow must not replay.
+    const changed = gate.decide(
+      "message.pre",
+      { when: {}, value: { text: "hi" }, context: { block: true } },
+      { recorded: first.decision },
+    );
+    expect(changed.replayed).toBe(false);
+    expect(changed.decision.verdict).toBe("deny");
+    expect(changed.decision.rowIds).toEqual(["guard/message.pre#7"]);
+  });
+
   it("treats an unrecorded handler response as observe-only: it cannot change the decision", () => {
     const silent: GateHandler = () => ({ verdict: "deny" });
     const gate = compileGateRows({

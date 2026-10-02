@@ -160,13 +160,27 @@ export function compileGateRows<Context = never>(
     decideOptions: GateDecideOptions = {},
   ): GateOutcome {
     const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
+    const entries = byPoint.get(point) ?? [];
     const recorded = decideOptions.recorded;
-    if (recorded !== undefined && recorded.point === point && recorded.inputHash === inputHash) {
+    // Matcher context is a decision input: a recorded decision replays only
+    // when every context-dependent row still matches exactly as recorded.
+    const matchersUnchanged = (record: GateDecision): boolean =>
+      entries.every(
+        (entry) =>
+          entry.matcher === undefined ||
+          matches(entry, input) === record.rowIds.includes(entry.row.id),
+      );
+    if (
+      recorded !== undefined &&
+      recorded.point === point &&
+      recorded.inputHash === inputHash &&
+      matchersUnchanged(recorded)
+    ) {
       // Replay restores the recorded rewrite output without invoking handlers.
       return { decision: recorded, value: recorded.output, emissions: [], replayed: true };
     }
     const state = initialFoldState(input.value);
-    for (const entry of byPoint.get(point) ?? []) {
+    for (const entry of entries) {
       if (matches(entry, input)) applyRow(entry.row, entry.emit, state, inputHash, decideOptions);
     }
     const decision: GateDecision = {
