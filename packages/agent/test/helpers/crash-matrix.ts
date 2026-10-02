@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { ExecutionLedger } from "../../src/kernel/gate/decide";
 import { createLedgerRetryTimerPort } from "../../src/kernel/gate/decide";
 import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
-import { session } from "../../src/session/run";
+import { session } from "../../src/testing/registry";
 import { reactivateSession } from "./wake-session";
 import { commitReceivedMessage } from "./ingress";
 

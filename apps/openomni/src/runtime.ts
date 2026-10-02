@@ -1,6 +1,5 @@
 import { AppInvariantError } from "./invariant";
 import {
-  AgentProcessLive,
   type BundleDefinitions,
   BundlesLive,
   type Entropy,
@@ -10,6 +9,7 @@ import {
   type SessionError,
   type GenerationLayers,
 } from "@openomni/agent";
+import { AgentProcessLive } from "./agent-layers";
 import type { LedgerError } from "@openomni/agent";
 import { LlmLive, type Llm } from "@openomni/agent";
 import { pid } from "node:process";

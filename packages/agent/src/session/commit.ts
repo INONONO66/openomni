@@ -8,7 +8,7 @@ import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "../store/fence";
 import { z } from "zod";
 import { RunReasonCode } from "../kernel/reason-codes";
-import { GenerationUnavailable, SessionCommitError } from "../kernel/failure";
+import { GenerationUnavailable } from "../kernel/failure";
 import { SessionPolicyRefusal, type SessionRunnerResult, type SessionTool } from "./run";
 
 // ─── from session-fold-commit.ts (#1247) ───
@@ -179,10 +179,6 @@ export function internalOrigin(sessionId: string): Inbox.Origin {
   return { encodingVersion: 1, value: { kind: "session", id: sessionId } };
 }
 
-export function requireCommit(result: LedgerSession.CommitResult): LedgerSession.Row {
-  if (!result.ok) throw new SessionCommitError({ result });
-  return result.row;
-}
 
 interface TurnEnvelopeActionInput {
   readonly id: string;

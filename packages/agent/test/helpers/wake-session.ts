@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { createController } from "../../src/session-controller";
+import { createController } from "../../src/testing/controller";
 import { resolveSessionRuntime, type SessionRunner, type SessionRunnerResult } from "../../src/session/run";
 import type { SessionError } from "../../src/kernel/failure";
 import type { SessionEntryServices } from "../../src/kernel/ports";

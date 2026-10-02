@@ -1,4 +1,5 @@
-import { AgentProcessLive, BundlesLive, GenerationLayers, type ObservationSink, type SessionRuntime } from "@openomni/agent";
+import { BundlesLive, GenerationLayers, type ObservationSink, type SessionRuntime } from "@openomni/agent";
+import { AgentProcessLive } from "../../src/agent-layers";
 import { Bus } from "./bus";
 import { Llm, LlmLive } from "@openomni/agent";
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";

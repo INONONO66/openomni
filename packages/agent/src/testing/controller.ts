@@ -1,18 +1,18 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
-import { LeaseRefused } from "./store/errors";
+import { LeaseRefused } from "../store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
-import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./kernel/failure";
-import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session/commit";
-import { createSessionTurn } from "./session/run";
-import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session/mailbox";
-import { adoptSessionAuthority, createSessionConfiguration } from "./session/run";
-import { dispatchSessionOutbound } from "./session/run";
-import { inspectSession } from "./inspect";
-import { createRawSlots } from "./kernel/gate/decide";
-import { commitFoldBatch } from "./session/commit";
-import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "./session/run";
-import type { SessionControllerState } from "./session/run";
-import type { SessionKernel } from "./session/entity";
+import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../kernel/failure";
+import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "../session/commit";
+import { createSessionTurn } from "../session/run";
+import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "../session/mailbox";
+import { adoptSessionAuthority, createSessionConfiguration } from "../session/run";
+import { dispatchSessionOutbound } from "../session/run";
+import { inspectSession } from "../inspect";
+import { createRawSlots } from "../kernel/gate/decide";
+import { commitFoldBatch } from "../session/commit";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "../session/run";
+import type { SessionControllerState } from "../session/run";
+import type { SessionKernel } from "../session/entity";
 
 const SEAL_RESCAN_BUDGET = 8;
 /** Shutdown grace for settling raw slots; the lease TTL it once mirrored is gone. */
@@ -331,49 +331,4 @@ function unresolvedOperations(kernel: SessionKernel, sessionId: string, turnId: 
     }
   }
   return [...operations.values()];
-}
-
-/**
- * The real turn port for the Session entity (W5.2 F6): one admitted decision
- * runs through the same admission/turn machinery the in-process controller
- * uses, against the activation's kernel and pinned fence. The entity already
- * owns receipt, dedupe and authority; this port only reaches the durable turn
- * boundary and never re-adopts the fence. The admission paths commit that
- * boundary (deliveries + turn envelope, state `running`) before invoking the
- * turn runner, so the runner handed to the admission detaches its body via
- * `input.detach` (W5.2 S4): the delivering RPC acks at the boundary and the
- * model/tool remainder runs under the activation scope instead.
- */
-export function createSessionEntityRunTurn(
-  runner: SessionRunner,
-  runtime: ResolvedSessionRuntime,
-  scope: Scope.Scope,
-): SessionEntityPorts["runTurn"] {
-  return (input) => Effect.gen(function* () {
-    const { kernel, authority, decision } = input;
-    const state: SessionControllerState = {
-      active: undefined, controller: undefined, fence: authority.fence,
-      closed: false, terminalFrozen: false, released: false, successor: undefined,
-      retainedRunner: undefined, retainedFailure: undefined,
-      rawSlots: createRawSlots(), activeApprovals: undefined,
-    };
-    const { runTurn, seal } = createSessionTurn(kernel, authority.sessionId, runner, runtime, state, authority.owner, runtime.clock, runtime.entropy, scope, {
-      createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
-      evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
-      consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
-      hibernate: () => Effect.void,
-    });
-    // The synthetic result never persists: seals ride the detached body, and
-    // every entity admission path returns the runner result to a void sink.
-    const detachedRunTurn: typeof runTurn = (turnInput) =>
-      input.detach(runTurn(turnInput).pipe(Effect.asVoid)).pipe(
-        Effect.as<SessionRunnerResult>({ kind: "waiting", reason: "live_wait", alarmIds: [], text: "" }),
-      );
-    const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal });
-    switch (decision.kind) {
-      case "start": return void (yield* admission.startTurn());
-      case "recover": return void (yield* admission.resumeTurn(decision.open));
-      case "resume": return void (yield* admission.resumeInterrupted(decision.item));
-    }
-  });
 }

@@ -14,7 +14,8 @@ import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/co
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { closeSessions, createSessionChatRunner, type Executor,  } from "../src/index";
 import { Bus } from "./helpers/bus";
-import { session, type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import { type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import { session } from "../src/testing/registry";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
 import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";

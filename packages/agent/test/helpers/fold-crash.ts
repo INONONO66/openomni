@@ -6,9 +6,11 @@ import { runAgent } from "./executor";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/plugins/compaction/successor";
-import { closeSessions, session } from "../../src/session/run";
+import { closeSessions } from "../../src/session/run";
+import { session } from "../../src/testing/registry";
 import { hydrateSessionHistory } from "../../src/inspect/history";
-import { foldCheckpointAction, requireCommit } from "../../src/session/commit";
+import { foldCheckpointAction } from "../../src/session/commit";
+import { requireCommit } from "../../src/testing/commit";
 import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionFixture, reconstructionSession, } from "./reconstruction-fixture";
 

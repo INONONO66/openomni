@@ -1,6 +1,7 @@
 import * as SessionHandleStore from "../../src/store/fence";
 import { PlainValueSchema, type LedgerAction } from "@openomni/protocol";
-import { requireCommit, turnTerminalAction } from "../../src/session/commit";
+import { turnTerminalAction } from "../../src/session/commit";
+import { requireCommit } from "../../src/testing/commit";
 import type { ExecutionLedger } from "../../src/kernel/gate/decide";
 import { Effect } from "effect";
 import { AgentFailure } from "../../src/kernel/failure";

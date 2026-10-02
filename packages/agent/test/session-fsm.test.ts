@@ -5,9 +5,9 @@ import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type
 import { sessionTree } from "./helpers/session-tree";
 import { decideSessionAdmission } from "../src/session/mailbox";
 import { decideRequestTransition } from "../src/session/request";
-import { session } from "../src/session/run";
+import { session } from "../src/testing/registry";
 import { resolveSessionRuntime } from "../src/session/run";
-import { createController } from "../src/session-controller";
+import { createController } from "../src/testing/controller";
 import { turnIntentAction } from "../src/session/commit";
 import type { SessionRunner, SessionRunnerInput } from "../src/session/run";
 import { createExecutor } from "../src/kernel/gate/decide";

@@ -16,7 +16,7 @@ import { runnerTestLayer } from "./service-layers";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
 import { createExecutor } from "../../src/kernel/gate/decide";
 import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session/run";
-import { createController } from "../../src/session-controller";
+import { createController } from "../../src/testing/controller";
 import {
   FoldCheckpointIntegrityError,
   foldHistoryState,

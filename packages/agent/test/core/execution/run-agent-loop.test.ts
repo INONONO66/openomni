@@ -20,7 +20,8 @@ import { expect, test, spyOn } from "bun:test";
 import { seedPolicy } from "../../helpers/seed-policy";
 import { Message, canonicalDigest, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
-import { session, closeSessions } from "../../../src/session/run";
+import { closeSessions } from "../../../src/session/run";
+import { session } from "../../../src/testing/registry";
 import { createSessionChatRunner } from "../../../src/session/run";
 import {
   sessionTool,

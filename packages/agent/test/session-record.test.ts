@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { requireCommit } from "../src/session/commit";
+import { requireCommit } from "../src/testing/commit";
 import { SessionCommitError } from "../src/kernel/failure";
 
 // A refused commit must surface the ledger's verdict verbatim: callers branch

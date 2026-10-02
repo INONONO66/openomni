@@ -8,7 +8,8 @@ import {
 import { expect, spyOn, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { PlainObjectSchema, type LedgerAction, type LedgerSession } from "@openomni/protocol";
-import { session, type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import { type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import { session } from "../src/testing/registry";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";

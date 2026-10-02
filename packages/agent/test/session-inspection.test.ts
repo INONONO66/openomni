@@ -15,12 +15,12 @@ import { LlmRunFailure, type Run } from "../src/model";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import { closeSessions, createTurnDispatcher, type SessionRunner } from "../src/index";
 import { resolveSessionRuntime } from "../src/session/run";
-import { createController } from "../src/session-controller";
+import { createController } from "../src/testing/controller";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { foldSessionHistory } from "../src/inspect/history";
 import { inspectSession } from "../src/inspect";
 import { fencedTurnFixture } from "./helpers/fenced-writer";
-import { session } from "../src/session/run";
+import { session } from "../src/testing/registry";
 
 const SECRET = "sk-live-credential-never-shown";
 
