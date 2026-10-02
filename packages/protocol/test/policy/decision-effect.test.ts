@@ -37,21 +37,12 @@ describe("Policy decision and effect schemas", () => {
     ).toBe(false);
   });
 
-  it("parses PolicyDecision with effects and obligations", () => {
+  it("parses PolicyDecision with effects", () => {
     const decision = Policy.PolicyDecision.parse({
       policyId: "policy.workspace-safety",
       policyVersion: "2026-05-14",
       verdict: "pending",
       effects: [effects[0], effects[6]],
-      obligations: [
-        {
-          obligationId: "approval:workspace-write",
-          type: "humanApproval",
-          description: "Approve workspace write access.",
-          timeoutMs: 60_000,
-          resolvedBy: "user:ino",
-        },
-      ],
       reasonCodes: ["workspace_write_requires_approval"],
       factsUsed: ["resource.labels", "actor.permissions"],
       durationMs: 12,
@@ -59,7 +50,6 @@ describe("Policy decision and effect schemas", () => {
 
     expect(decision.verdict).toBe("pending");
     expect(decision.effects.length).toBe(2);
-    expect(decision.obligations?.[0]?.type).toBe("humanApproval");
   });
 
   it("requires reason codes on PolicyDecision", () => {
@@ -70,23 +60,5 @@ describe("Policy decision and effect schemas", () => {
         effects: [],
       }).success,
     ).toBe(false);
-  });
-
-  it("parses PolicyObligation variants", () => {
-    const obligationTypes: Policy.PolicyObligation["type"][] = [
-      "humanApproval",
-      "evidenceRequired",
-      "credentialConfirm",
-    ];
-
-    for (const type of obligationTypes) {
-      expect(
-        Policy.PolicyObligation.parse({
-          obligationId: `obligation:${type}`,
-          type,
-          description: "Resolve before continuing.",
-        }),
-      ).toMatchObject({ type });
-    }
   });
 });

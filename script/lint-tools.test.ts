@@ -127,8 +127,9 @@ describe("tool surface lint (#949 sealed catalog grammar)", () => {
       properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {} },
       $ref: "#/$defs/common~1fields",
     };
-    expect(lintToolSurface({ name: "grep", description: "x", inputSchema })
-      .map(({ rule }) => rule)).toEqual(["tool-max-fields"]);
+    expect(
+      lintToolSurface({ name: "grep", description: "x", inputSchema }).map(({ rule }) => rule),
+    ).toEqual(["tool-max-fields"]);
   });
 });
 
@@ -217,18 +218,22 @@ describe("lint-tools definition invariants", () => {
     expect(diffSnapshots({ "Tool.Call": ["id"] }, {})).toMatchObject([
       { check: "schema-snapshot", subject: "Tool.Call" },
     ]);
-    expect(diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["payload"] })[0]?.message)
-      .toContain("id");
-    expect(diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }))
-      .toEqual([]);
+    expect(
+      diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["payload"] })[0]?.message,
+    ).toContain("id");
+    expect(diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] })).toEqual([]);
   });
 });
 
 test("the vocab ratchet reports newly unmapped and stale grandfathered namespaces", async () => {
-  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  const baseline: Baseline = JSON.parse(
+    readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"),
+  );
   const newViolation = await checkVocabRatchet({
     ...baseline,
-    vocab: { unmappedNamespaces: baseline.vocab.unmappedNamespaces.filter((name) => name !== "bus") },
+    vocab: {
+      unmappedNamespaces: baseline.vocab.unmappedNamespaces.filter((name) => name !== "bus"),
+    },
   });
   expect(newViolation).toMatchObject([{ check: "vocab-ratchet", subject: "bus" }]);
 
@@ -239,21 +244,18 @@ test("the vocab ratchet reports newly unmapped and stale grandfathered namespace
   expect(staleViolation).toMatchObject([{ check: "vocab-ratchet", subject: "actor" }]);
 });
 
-test("the naming ratchet reports an ungrandfathered protocol export", async () => {
-  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
-  expect(await checkNaming({ ...baseline, naming: { grandfathered: [] } })).toMatchObject([
-    { check: "naming", subject: "packages/protocol/src/policy/policy-point.ts:PolicyPointModule" },
-  ]);
-});
-
 test("the shipped catalog passes tool lint and earned-definition checks in-process", async () => {
-  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  const baseline: Baseline = JSON.parse(
+    readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"),
+  );
   expect(await checkToolLint(baseline)).toEqual([]);
   expect(await checkEarned()).toEqual([]);
 });
 
 test("the protocol tree passes the vocab ratchet and naming checks in-process regardless of cwd", async () => {
-  const baseline: Baseline = JSON.parse(readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"));
+  const baseline: Baseline = JSON.parse(
+    readFileSync(join(import.meta.dir, "conformance/lint-tools-baseline.json"), "utf8"),
+  );
   const previousCwd = process.cwd();
   process.chdir(tmpdir());
   try {

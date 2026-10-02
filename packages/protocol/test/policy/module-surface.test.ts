@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
 import { Policy, PolicyDecision, PolicyPermission } from "../../src/index.js";
 import {
   Policy as PolicyIndex,
@@ -11,31 +10,18 @@ import {
 // `fromEvaluation` moved with it (decisionFromEvaluation), the RuntimeResource
 // sibling folded into the namespace as Policy.Resource, and the test-only
 // PolicyPoint.MigrationMapping compat surface was deleted.
+// #1246: the unconsumed interception-point contracts, Timing values, the
+// plan/obligation schemas, and the four unobserved policy events were deleted.
 const expectedPolicyKeys = [
   "Permission",
   "EvaluationRequest",
   "EvaluationResult",
-  "Timing",
   "PolicyEffect",
-  "PolicyObligation",
   "PolicyDecision",
-  "PolicyPoint",
   "Resource",
-  "PolicyPlan",
-  // #499: observation descriptors converged under the noun namespace.
-  "Events",
 ];
 
 const expectedPolicyDecisionKeys = ["allow", "deny", "pending", "reason"];
-
-const expectedPolicyPointStaticKeys = [
-  "version",
-  "Id",
-  "Contract",
-  "RegistrySchema",
-  "Registry",
-  "InputSchemas",
-];
 
 const expectedResourceKeys = ["Descriptor"];
 
@@ -59,7 +45,6 @@ describe("policy module public surface", () => {
   test("root and policy barrels expose identical runtime policy symbols", () => {
     expect(Policy).toBe(PolicyIndex);
     expect(Policy.PolicyDecision).toBe(PolicyIndex.PolicyDecision);
-    expect(Policy.PolicyPoint).toBe(PolicyIndex.PolicyPoint);
     expect(PolicyDecision.allow).toBe(PolicyDecisionIndex.allow);
     expect(Policy.Resource.Descriptor).toBe(PolicyIndex.Resource.Descriptor);
     expect(PolicyPermission.isSafeInputPattern).toBe(PolicyPermissionIndex.isSafeInputPattern);
@@ -70,13 +55,6 @@ describe("policy module public surface", () => {
     expect(Object.keys(PolicyIndex)).toEqual(expectedPolicyKeys);
     expect(Object.keys(PolicyDecision)).toEqual(expectedPolicyDecisionKeys);
     expect(Object.keys(PolicyDecisionIndex)).toEqual(expectedPolicyDecisionKeys);
-    const policyPointKeys = Object.keys(Policy.PolicyPoint);
-    expect(policyPointKeys).toEqual(Object.keys(PolicyIndex.PolicyPoint));
-    // Zod 4.5 memoizes prototype-getter methods (e.g. `parse`) as own keys on
-    // first access, so filter against the prototype chain, not own keys.
-    const zodObjectProbe = z.object({});
-    const policyPointStaticKeys = policyPointKeys.filter((key) => !(key in zodObjectProbe));
-    expect(policyPointStaticKeys).toEqual(expectedPolicyPointStaticKeys);
     expect(Object.keys(Policy.Resource)).toEqual(expectedResourceKeys);
     expect(Object.keys(PolicyIndex.Resource)).toEqual(expectedResourceKeys);
   });

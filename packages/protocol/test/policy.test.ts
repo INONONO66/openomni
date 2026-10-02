@@ -133,51 +133,6 @@ describe("Policy schemas", () => {
     });
   });
 
-  describe("Policy.Timing", () => {
-    it("parses all 13 valid timing values", () => {
-      const timingValues = [
-        Policy.Timing.DISPATCH_AUTHORIZE,
-        Policy.Timing.RUN_START,
-        Policy.Timing.TURN_START,
-        Policy.Timing.CONTEXT_PREPARE,
-        Policy.Timing.RESOURCES_PREPARE,
-        Policy.Timing.MODEL_REQUEST,
-        Policy.Timing.MODEL_RESPONSE,
-        Policy.Timing.INVOKE_PREPARE,
-        Policy.Timing.INVOKE_RESULT,
-        Policy.Timing.TURN_FINISH,
-        Policy.Timing.COMPLETION_PREPARE,
-        Policy.Timing.RUN_FINISH,
-        Policy.Timing.ERROR,
-      ];
-
-      expect(timingValues).toEqual([
-        "dispatch.authorize",
-        "run.start",
-        "turn.start",
-        "context.prepare",
-        "resources.prepare",
-        "model.request",
-        "model.response",
-        "invoke.prepare",
-        "invoke.result",
-        "turn.finish",
-        "completion.prepare",
-        "run.finish",
-        "error",
-      ]);
-    });
-
-    it("has all 13 timing values as constants", () => {
-      const timingKeys = Object.keys(Policy.Timing);
-      expect(timingKeys.length).toBe(13);
-    });
-
-    it("does not register invalid timing values", () => {
-      expect(Object.values(Policy.Timing)).not.toContain("invalid_timing");
-    });
-  });
-
   describe("Policy.PolicyDecision", () => {
     const baseDecision = {
       policyId: "test.policy",
@@ -379,82 +334,6 @@ describe("Policy schemas", () => {
         annotation: "audit note",
         severity: "warning",
       });
-    });
-  });
-
-  describe("Policy.PolicyPoint", () => {
-    it("parses policy point with timing and allowed effects", () => {
-      const result = Policy.PolicyPoint.parse({
-        point: "turn.start",
-        allowedEffects: ["prompt.append_context", "tool.filter"],
-        defaultFailPolicy: "fail-open",
-      });
-      expect(result.point).toBe("turn.start");
-      expect(result.allowedEffects).toContain("prompt.append_context");
-      expect(result.defaultFailPolicy).toBe("fail-open");
-    });
-
-    it("parses policy point with all allowed effect types", () => {
-      const allEffects = [
-        "prompt.append_context",
-        "prompt.inject_message",
-        "tool.filter",
-        "tool.rewrite_input",
-        "tool.require_approval",
-        "run.abort",
-        "run.continue_with_prompt",
-        "run.retry_after",
-        "audit.annotate",
-      ] as const;
-
-      const result = Policy.PolicyPoint.parse({
-        point: "invoke.prepare",
-        allowedEffects: allEffects,
-        defaultFailPolicy: "fail-closed",
-      });
-      expect(result.allowedEffects.length).toBe(9);
-    });
-  });
-
-  describe("Policy.PolicyPlan", () => {
-    it("parses policy plan with policies array", () => {
-      const result = Policy.PolicyPlan.parse({
-        policies: [
-          { id: "policy-1", required: true },
-          { id: "policy-2", required: false, config: { key: "value" } },
-        ],
-        labels: ["security", "audit"],
-      });
-      expect(result.policies.length).toBe(2);
-      expect(result.policies[0]).toEqual({ id: "policy-1", required: true });
-      expect(result.labels).toEqual(["security", "audit"]);
-    });
-
-    it("parses policy plan with registry version", () => {
-      const result = Policy.PolicyPlan.parse({
-        policies: [{ id: "policy-1", required: true }],
-        labels: ["test"],
-        registryVersion: "1.0.0",
-      });
-      expect(result.registryVersion).toBe("1.0.0");
-    });
-
-    it("accepts policy plan with no policies", () => {
-      expect(
-        Policy.PolicyPlan.parse({
-          policies: [],
-          labels: ["test"],
-        }),
-      ).toEqual({ policies: [], labels: ["test"] });
-    });
-
-    it("rejects policy with empty id", () => {
-      expect(() =>
-        Policy.PolicyPlan.parse({
-          policies: [{ id: "", required: true }],
-          labels: ["test"],
-        }),
-      ).toThrow(ZodError);
     });
   });
 });

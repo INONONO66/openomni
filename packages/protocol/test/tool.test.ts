@@ -7,28 +7,6 @@ function expectInvalidState<State>(state: State): void {
   expect(() => Tool.State.parse(state)).toThrow(ZodError);
 }
 
-describe("Tool shared contracts", () => {
-  test("parses tool config shared by execution and ingress", () => {
-    const config = Tool.Config.parse({
-      systemTools: ["read"],
-      agentTools: ["dispatch"],
-      mcpTools: ["search.query"],
-      workspaceRoot: "/workspace",
-    });
-
-    expect(config.systemTools).toEqual(["read"]);
-    expect(config.agentTools).toEqual(["dispatch"]);
-    expect(config.mcpTools).toEqual(["search.query"]);
-    expect(config.workspaceRoot).toBe("/workspace");
-  });
-
-  test("rejects invalid tool config shapes", () => {
-    expect(Tool.Config.safeParse({ systemTools: "read" }).success).toBe(false);
-    expect(Tool.Config.safeParse({ workspaceRoot: 42 }).success).toBe(false);
-  });
-
-});
-
 describe("Tool.StatePending", () => {
   test("parses valid pending state with empty input", () => {
     const state = Tool.State.parse({
@@ -376,5 +354,12 @@ describe("Tool.Spec", () => {
         name: "search",
       }),
     ).toThrow(ZodError);
+  });
+
+  test("rejects non-plain input schemas", () => {
+    const values = [() => "nope", new Date(), new (class Example {})(), { [Symbol("key")]: 1 }];
+    for (const inputSchema of values) {
+      expect(Tool.Spec.safeParse({ name: "x", inputSchema }).success).toBe(false);
+    }
   });
 });

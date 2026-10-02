@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureOutput, expectExitViolation } from "./capture-output.test-helper";
-import { main, validateGuardSource, validatePolicyPointRegistrations } from "./lint-guards";
+import { main, validateGuardSource } from "./lint-guards";
 
 test("the shipped tree passes every guard rule in-process", async () => {
   const cwd = process.cwd();
@@ -20,14 +20,49 @@ test("the shipped tree passes every guard rule in-process", async () => {
 });
 
 test.each([
-  ["packages/channels/src/authn/decision.ts", "export const decide = () => true;", "missing-canonical-policy-evaluator", 1],
-  ["packages/channels/src/telegram/normalizer.ts", "\nevaluateTriggers(event);", "inline-channel-trigger-evaluation", 2],
-  ["packages/channels/src/authn/other.ts", "\nallowlist?.includes(actor);", "ad-hoc-list-membership", 2],
-  ["packages/channels/src/authn/other.ts", "\nif (!authorized) throw new Error();", "inline-authorization-throw", 2],
-  ["packages/channels/src/authn/other.ts", "\nif (isAuthorized === false) { throw new Error(); }", "inline-authorization-throw", 2],
+  [
+    "packages/channels/src/authn/decision.ts",
+    "export const decide = () => true;",
+    "missing-canonical-policy-evaluator",
+    1,
+  ],
+  [
+    "packages/channels/src/telegram/normalizer.ts",
+    "\nevaluateTriggers(event);",
+    "inline-channel-trigger-evaluation",
+    2,
+  ],
+  [
+    "packages/channels/src/authn/other.ts",
+    "\nallowlist?.includes(actor);",
+    "ad-hoc-list-membership",
+    2,
+  ],
+  [
+    "packages/channels/src/authn/other.ts",
+    "\nif (!authorized) throw new Error();",
+    "inline-authorization-throw",
+    2,
+  ],
+  [
+    "packages/channels/src/authn/other.ts",
+    "\nif (isAuthorized === false) { throw new Error(); }",
+    "inline-authorization-throw",
+    2,
+  ],
   ["packages/policy/src/other.ts", '\nimport "@openomni/agent";', "policy-package-boundary", 2],
-  ["apps/openomni/src/other.ts", '\nconst rule = { reasonCodes: ["stalled"] };', "run-reason-code-vocabulary", 2],
-  ["apps/openomni/src/other.ts", '\nif (reason === "budget_warning") stop();', "run-reason-code-vocabulary", 2],
+  [
+    "apps/openomni/src/other.ts",
+    '\nconst rule = { reasonCodes: ["stalled"] };',
+    "run-reason-code-vocabulary",
+    2,
+  ],
+  [
+    "apps/openomni/src/other.ts",
+    '\nif (reason === "budget_warning") stop();',
+    "run-reason-code-vocabulary",
+    2,
+  ],
 ])("reports %s at the offending source line for %s", (path, source, ruleId, line) => {
   expect(validateGuardSource(path, source)).toContainEqual(
     expect.objectContaining({ filePath: path, ruleId, line }),
@@ -35,21 +70,13 @@ test.each([
 });
 
 test.each([
-  ["packages/policy/src/permission-evaluate.ts", "allowlist.includes(actor);"],
+  ["packages/agent/src/kernel/gate/match.ts", "allowlist.includes(actor);"],
   ["apps/openomni/src/other.test.ts", 'const reasonCodes = ["stalled"];'],
   ["packages/agent/src/core/policy/reason-codes.ts", 'const reasonCodes = ["stalled"];'],
   ["packages/channels/src/telegram/other.ts", "evaluateTriggers(event);"],
   ["packages/channels/src/authn/decision.ts", "evaluatePermission(actor);"],
 ])("permits the explicitly scoped guard exception in %s", (path, source) => {
   expect(validateGuardSource(path, source)).toEqual([]);
-});
-
-test("flags a registration still pinned as intentionally empty", () => {
-  expect(validatePolicyPointRegistrations(new Map([["run.turn.pre", "apps/openomni/src/policy.ts"]])))
-    .toContainEqual(expect.objectContaining({
-      ruleId: "policy-point-registration",
-      filePath: "apps/openomni/src/policy.ts",
-    }));
 });
 
 test("guard lint rejects a missing pinned file before scanning", async () => {
@@ -67,7 +94,7 @@ test("guard lint rejects a missing pinned file before scanning", async () => {
 test("guard lint reports planted source violations in-process", async () => {
   const root = mkdtempSync(join(tmpdir(), "guard-lint-"));
   for (const file of [
-    "packages/policy/src/permission-evaluate.ts",
+    "packages/agent/src/kernel/gate/match.ts",
     "packages/channels/src/authn/decision.ts",
   ]) {
     const target = join(root, file);

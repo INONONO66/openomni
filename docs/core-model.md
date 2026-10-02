@@ -49,7 +49,7 @@ Spawning a Worker for an atomic action is waste; doing multi-step work in the Ow
 
 ### Policy — the cross-cutting hook layer
 
-Policy is not a gate-internal or Worker-only feature: it is the system-wide interception layer (LSM-style) around every actor and boundary. Resident, Worker, Jester, Governor, ingress, dispatch, memory, scheduling, tools, LLM connections, and writeback may each carry policy registrations selected by their actor profile and context. The protocol defines policy-point contracts for allowed effects, default fail policy, and required context schema. [Implementation Status](implementation-status.md) alone records which points have live consumers.
+Policy is not a gate-internal or Worker-only feature: it is the system-wide interception layer (LSM-style) around every actor and boundary. Resident, Worker, Jester, Governor, ingress, dispatch, memory, scheduling, tools, LLM connections, and writeback may each carry policy registrations selected by their actor profile and context. The protocol defines the policy decision and permission vocabulary; interception-point contracts are introduced with their first live consumer (#1246 deleted the consumerless ones). [Implementation Status](implementation-status.md) alone records which points have live consumers.
 
 The rulebook:
 

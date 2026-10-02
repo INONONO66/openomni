@@ -5,7 +5,9 @@ export namespace PolicyEffects {
   // Named generic guards: z.custom's inline callback parameter would be
   // contextually typed `unknown`; a generic parameter carries no top type.
   function isJsonPlainObject<Input>(value: Input): boolean {
-    return typeof value === "object" && value !== null && !Array.isArray(value) && isPlainValue(value);
+    return (
+      typeof value === "object" && value !== null && !Array.isArray(value) && isPlainValue(value)
+    );
   }
   function isJsonPlainArray<Input>(value: Input): boolean {
     return Array.isArray(value) && isPlainValue(value);
@@ -16,27 +18,6 @@ export namespace PolicyEffects {
   const JsonPlainArray = z.custom<PlainValue[]>(isJsonPlainArray, {
     message: "Expected a JSON-plain array",
   });
-
-  export const PolicyEffectType = z.enum([
-    "prompt.append_context",
-    "prompt.inject_message",
-    "prompt.replace",
-    "tool.filter",
-    "tool.rewrite_input",
-    "tool.rewrite_output",
-    "tool.skip_invocation",
-    "tool.require_approval",
-    "run.abort",
-    "run.continue_with_prompt",
-    "run.retry_after",
-    "run.replace_messages",
-    "audit.annotate",
-    "writeback.rewrite",
-    "writeback.suppress",
-    "runtime.workspace_lock",
-    "model.override",
-  ]);
-  export type PolicyEffectType = z.infer<typeof PolicyEffectType>;
 
   export const PolicyEffect = z.discriminatedUnion("type", [
     z.object({
@@ -120,22 +101,12 @@ export namespace PolicyEffects {
   ]);
   export type PolicyEffect = z.infer<typeof PolicyEffect>;
 
-  export const PolicyObligation = z.object({
-    obligationId: z.string(),
-    type: z.enum(["humanApproval", "evidenceRequired", "credentialConfirm"]),
-    description: z.string(),
-    timeoutMs: z.number().int().min(0).optional(),
-    resolvedBy: z.string().optional(),
-  });
-  export type PolicyObligation = z.infer<typeof PolicyObligation>;
-
   export const PolicyDecision = z
     .object({
       policyId: z.string(),
       policyVersion: z.string().optional(),
       verdict: z.enum(["allow", "deny", "pending"]),
       effects: z.array(PolicyEffect),
-      obligations: z.array(PolicyObligation).optional(),
       reasonCodes: z.array(z.string()),
       factsUsed: z.array(z.string()).optional(),
       durationMs: z.number().min(0).optional(),

@@ -196,8 +196,8 @@ export namespace Actor {
    *     stores (refs only — the rows live where their lifecycles are owned);
    *   - executable: what the actor runs with (prompt, tools, model, budget).
    *
-   * `Ingress.AgentDef` stays the ingress wire seam; its `budget` field speaks
-   * this vocabulary (`Actor.Profile.Budget`, the former AgentBudget).
+   * `budget` speaks this vocabulary (`Actor.Profile.Budget`, the former
+   * AgentBudget).
    */
   export const Profile = Object.assign(
     z.object({

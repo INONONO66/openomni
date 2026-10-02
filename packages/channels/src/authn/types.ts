@@ -1,7 +1,8 @@
 import type { Policy } from "@openomni/protocol";
 
 interface ChannelAuthnDecision {
-  readonly timing: Policy.Timing;
+  /** The one timing the channel authn seam evaluates at (perimeter admission). */
+  readonly timing: "run.start";
   readonly name: string;
   readonly policyId: string;
   readonly verdict: Policy.PolicyDecision["verdict"];

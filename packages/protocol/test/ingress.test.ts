@@ -9,96 +9,8 @@ function directEvent() {
     surface: "cli",
     mode: "direct",
     payload: { query: "What is 2+2?" },
-    agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
   };
 }
-
-describe("AgentDef", () => {
-  test("should parse agent with only model required", () => {
-    const agent = Ingress.AgentDefSchema.parse({
-      model: {
-        provider: "anthropic",
-        id: "claude-3-5-sonnet",
-      },
-    });
-    expect(agent.model.provider).toBe("anthropic");
-    expect(agent.model.id).toBe("claude-3-5-sonnet");
-    expect(agent.systemPrompt).toBe(undefined);
-    expect(agent.tools).toBe(undefined);
-    expect(agent.budget).toBe(undefined);
-  });
-
-  test("should parse agent with optional fields", () => {
-    const agent = Ingress.AgentDefSchema.parse({
-      model: {
-        provider: "openai",
-        id: "gpt-4",
-      },
-      systemPrompt: "You are a helpful assistant",
-      tools: [
-        {
-          name: "bash",
-          description: "Execute bash commands",
-          inputSchema: { command: { type: "string" } },
-        },
-      ],
-      budget: {
-        maxTurns: 10,
-        maxToolCalls: 20,
-        maxWallTimeMs: 30_000,
-        maxToolRuntimeMs: 5_000,
-      },
-      permissions: {
-        action: "tool.call",
-        allowlist: ["bash"],
-      },
-      toolConfig: {
-        workspaceRoot: "/workspace/openomni",
-      },
-    });
-    expect(agent.systemPrompt).toBe("You are a helpful assistant");
-    expect(agent.tools?.length).toBe(1);
-    const [tool] = agent.tools ?? [];
-    if (!tool) throw new Error("expected parsed tool");
-    expect(tool.name).toBe("bash");
-    expect(agent.budget?.maxTurns).toBe(10);
-    expect(agent.budget?.maxToolCalls).toBe(20);
-    expect(agent.budget?.maxWallTimeMs).toBe(30_000);
-    expect(agent.budget?.maxToolRuntimeMs).toBe(5_000);
-    expect(agent.permissions?.action).toBe("tool.call");
-    expect(agent.permissions?.allowlist).toEqual(["bash"]);
-    expect(agent.toolConfig?.workspaceRoot).toBe("/workspace/openomni");
-  });
-
-  test("should parse full canonical budget fields through direct events", () => {
-    const event = Ingress.DirectEventSchema.parse({
-      id: "event-budget",
-      traceId: "trace-test",
-      surface: "cli",
-      mode: "direct",
-      payload: "budgeted work",
-      agent: {
-        model: {
-          provider: "anthropic",
-          id: "claude-3-5-sonnet",
-        },
-        budget: {
-          maxTurns: 8,
-          maxToolCalls: 13,
-          maxWallTimeMs: 60_000,
-          maxToolRuntimeMs: 10_000,
-        },
-      },
-    });
-
-    expect(event.agent.budget).toEqual({
-      maxTurns: 8,
-      maxToolCalls: 13,
-      maxWallTimeMs: 60_000,
-      maxToolRuntimeMs: 10_000,
-    });
-  });
-});
 
 describe("Ingress meta contracts", () => {
   test("parses actor and target metadata", () => {
@@ -132,10 +44,10 @@ describe("Ingress meta contracts", () => {
 });
 
 describe("DirectEvent", () => {
-  test("should parse valid direct event with agent", () => {
+  test("should parse valid direct event", () => {
     const event = Ingress.DirectEventSchema.parse(directEvent());
     expect(event.mode).toBe("direct");
-    expect(event.agent.model.id).toBe("claude-3-5-sonnet");
+    expect(event.id).toBe("event-1");
   });
 });
 
@@ -152,12 +64,6 @@ describe("DirectEvent validation", () => {
         surface: "cli",
         mode: "auto",
         payload: { goal: "Build API" },
-        agent: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
       }),
     );
   });
@@ -171,7 +77,6 @@ describe("DirectEvent validation", () => {
       target: "resident",
       payload: "hello",
       meta: { actor: { role: "user", id: "u1" } },
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
     expect(resident.target).toEqual({ kind: "resident" });
     expect(resident.meta?.actor?.role).toBe("user");
@@ -184,7 +89,6 @@ describe("DirectEvent validation", () => {
       target: "worker:worker-7",
       payload: "continue",
       meta: { actor: { role: "resident" } },
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
     expect(worker.target).toEqual({ kind: "worker", workerId: "worker-7" });
   });
@@ -197,7 +101,6 @@ describe("DirectEvent validation", () => {
       mode: "direct",
       target: { type: "worker" },
       payload: "start",
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
 
     expect(event.target).toEqual({ kind: "worker" });
@@ -209,12 +112,6 @@ describe("DirectEvent validation", () => {
         surface: "cli",
         mode: "direct",
         payload: { goal: "Build API" },
-        agent: {
-          model: {
-            provider: "anthropic",
-            id: "claude-3-5-sonnet",
-          },
-        },
       }),
     );
   });
