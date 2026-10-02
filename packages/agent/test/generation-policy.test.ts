@@ -5,10 +5,10 @@ import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } f
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";
-import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/bundle";
-import { makeSessionGenerations } from "../src/session-generations";
-import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
-import { createTurnDispatcher, defineTool, sessionTool } from "../src/tool-dispatcher";
+import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/kernel/bundle";
+import { makeSessionGenerations } from "../src/session/run";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/kernel/ports";
+import { createTurnDispatcher, defineTool, sessionTool } from "../src/kernel/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { sessionTree } from "./helpers/session-tree";

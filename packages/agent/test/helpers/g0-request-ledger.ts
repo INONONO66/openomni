@@ -2,8 +2,8 @@ import { fencedExecutionLedger } from "./execution-reads";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger } from "./isolated";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
-import type { ExecutionLedger } from "../../src/executor";
+import type { SessionKernel } from "../../src/session/entity";
+import type { ExecutionLedger } from "../../src/kernel/gate/decide";
 
 export function requestLedger(input: {
   readonly id: string;

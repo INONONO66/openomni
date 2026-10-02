@@ -4,7 +4,7 @@ import { APIError, Retry, run as runLlm, type RunInput } from "../src/model";
 import { PlainObjectSchema, type LedgerAction, type Model } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { StreamEvent } from "../src/model/processor/stream-events";
-import { runAgent } from "../src/core/execution/run";
+import { runAgent } from "../src/kernel/turn";
 import { AgentFailure } from "../src/store/errors";
 import { isolated } from "./helpers/isolated";
 import { requestLedger } from "./helpers/effect-g1";

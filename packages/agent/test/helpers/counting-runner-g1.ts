@@ -3,9 +3,9 @@ import { fixtureConfigHead, fixtureTraceContext, prepareChatFixture } from "./ch
 import type { SessionFixture as SessionRuntime } from "./session-services";
 import { Effect } from "effect";
 import type { RunInput, Sink } from "../../src/model";
-import type { SessionRunnerInput, SessionRunner } from "../../src/session-handle";
-import { createSessionChatRunner } from "../../src/session-chat-runner";
-import type { ExecutionError } from "../../src/errors";
+import type { SessionRunnerInput, SessionRunner } from "../../src/session/run";
+import { createSessionChatRunner } from "../../src/session/run";
+import type { ExecutionError } from "../../src/kernel/failure";
 import { completeModel } from "./mock-llm";
 
 /** A real session chat runner with an Effect-native model-entry barrier. */

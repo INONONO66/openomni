@@ -3,7 +3,7 @@ import { isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFix
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
-import { session, closeSessions, type SessionHandle } from "../src/session-handle";
+import { session, closeSessions, type SessionHandle } from "../src/session/run";
 import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";
 import { isolated, isolatedLedger } from "./helpers/isolated";

@@ -5,7 +5,7 @@ import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
-import { createSessionRequests } from "../src/session-requests";
+import { createSessionRequests } from "../src/session/request";
 
 const setup = Effect.gen(function* () {
   (yield* isolatedLedger().kernel.materialize({

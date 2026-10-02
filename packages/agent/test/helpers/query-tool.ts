@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../../src/index";
-import type { ExecutionRequest } from "../../src/executor-contract";
+import type { ExecutionRequest } from "../../src/kernel/gate/decide";
 import type { ToolExecutionContext } from "@openomni/protocol";
 
 export function timedQueryTool(description: string, execute: (input: Record<string, never>, context: ToolExecutionContext) => Promise<string>) {

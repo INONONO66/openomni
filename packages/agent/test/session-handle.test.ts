@@ -10,18 +10,18 @@ import { seedPolicy } from "./helpers/seed-policy";
 import { openRequest } from "./helpers/open-request";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
-import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
-import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
+import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/kernel/gate/decide";
+import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session/run";
 import { AgentFailure, type LedgerError } from "../src/store/errors";
 import { openCatalogStore } from "../src/store/catalog";
 import { openSessionStore } from "../src/store/session-file";
 import * as SessionHandleStore from "../src/store/fence";
 import { type BusEvent, type LedgerAction, L0Observation, PlainValueSchema, type ObservationSink, type SessionGeneration, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
-import { CommitFailed } from "../src/errors";
-import { GenerationOwnership } from "../src/services";
-import { GenerationRawSlots } from "../src/session-generations";
-import { receivedMessages } from "../src/session-record";
-import type { SessionKernel } from "../src/cluster/kernel-registry";
+import { CommitFailed } from "../src/kernel/failure";
+import { GenerationOwnership } from "../src/kernel/ports";
+import { GenerationRawSlots } from "../src/session/run";
+import { receivedMessages } from "../src/session/commit";
+import type { SessionKernel } from "../src/session/entity";
 import { Bus } from "./helpers/bus";
 
 // ---------------------------------------------------------------------------

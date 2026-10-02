@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   baseThresholdRatioForWindow,
   resolveCompactionGeometry,
-} from "../../src/compaction/geometry";
+} from "../../src/plugins/compaction/geometry";
 
 describe("compaction geometry", () => {
   it("tiers the base threshold by context window", () => {

@@ -3,13 +3,13 @@ import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { Clock, Context, Effect, Layer } from "effect";
 import { LlmLive } from "../../src/model";
 import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/kernel/gate/compile";
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
-import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices } from "../../src/services";
-import { NamedPolicyRegistry } from "../../src/bundle";
-import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session-generations";
-import { createObservationBus, scopeObservation } from "../../src/observation/bus";
+import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
+import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices } from "../../src/kernel/ports";
+import { NamedPolicyRegistry } from "../../src/kernel/bundle";
+import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session/run";
+import { createObservationBus, scopeObservation } from "../../src/session/bus";
 import { entropySource, fixedClock } from "./time";
-import { createTurnDispatcher } from "../../src/tool-dispatcher";
+import { createTurnDispatcher } from "../../src/kernel/tool";
 
 /** The dispatcher-backed tool surface of a chat fixture config. */
 export function dispatcherToolPorts(

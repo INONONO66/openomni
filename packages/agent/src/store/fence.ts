@@ -18,7 +18,7 @@ import { z } from "zod";
 import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
-import type { SessionStore } from "./session-file.js";
+import type { SessionStore } from "./session-file/index.js";
 import { writeEffect } from "./storage/write-effect";
 
 /**

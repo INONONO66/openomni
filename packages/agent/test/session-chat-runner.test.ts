@@ -14,7 +14,7 @@ import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/co
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { closeSessions, createSessionChatRunner, type Executor,  } from "../src/index";
 import { Bus } from "./helpers/bus";
-import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
+import { session, type SessionHandle, type SessionRunnerInput } from "../src/session/run";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
 import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";
@@ -167,7 +167,7 @@ function runDurably(
     };
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input: import("../src/session-handle").SessionRunnerInput) =>
+      prepare: (input: import("../src/session/run").SessionRunnerInput) =>
         Effect.gen(function* () {
           return prepareChatFixture({
             config: config(

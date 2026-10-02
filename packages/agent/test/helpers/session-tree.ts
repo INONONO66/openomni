@@ -1,5 +1,5 @@
 import type { LedgerAction } from "@openomni/protocol";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
+import type { SessionKernel } from "../../src/session/entity";
 
 /** Independent unbounded audit oracle over one kernel's chain; bounded pages underneath. */
 export function sessionTree(kernel: SessionKernel, sessionId: string): LedgerAction.Node[] {

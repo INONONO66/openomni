@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { DateTime, Schema } from "effect";
 import { DeliverAt } from "effect/cluster";
-import { DeadlineRpc, RetryScheduledRpc, WatchTimeoutRpc } from "../../src/cluster/messages";
+import { DeadlineRpc, RetryScheduledRpc, WatchTimeoutRpc } from "../../src/session/messages";
 
 // C2 wakes are durable not-before clocks: the sharding scheduler reads
 // DeliverAt off the decoded payload, so the instant must round-trip exactly.

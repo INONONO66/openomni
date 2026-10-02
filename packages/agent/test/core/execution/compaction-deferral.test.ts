@@ -1,10 +1,10 @@
 import type { ChatFixture as ChatAgentConfig } from "../../helpers/chat-services";
 import { describe, expect, it } from "bun:test";
 import { Effect, type Scope } from "effect";
-import { CompactionSession } from "../../../src/compaction/speculate";
+import { CompactionSession } from "../../../src/plugins/compaction/speculate";
 import { applyThreshold, stateAtGrace } from "../../helpers/compaction-seam";
-import type {} from "../../../src/core/types";
-import { RunEvents } from "../../../src/core/execution/events";
+import type {} from "../../../src/kernel/types";
+import { RunEvents } from "../../../src/kernel/turn";
 import { Bus } from "../../helpers/bus";
 import { captureBusEvents } from "../../helpers/bus-event";
 import { isolated } from "../../helpers/isolated";

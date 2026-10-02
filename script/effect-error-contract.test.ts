@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Result } from "effect";
 import ts from "typescript";
 import { runSyncEffect } from "../apps/openomni/test/helpers/effect";
-import * as Agent from "../packages/agent/src/errors";
+import * as Agent from "../packages/agent/src/kernel/failure";
 import * as Model from "../packages/agent/src/model/errors";
 import * as Store from "../packages/agent/src/store/errors";
 import { sdkError } from "../packages/agent/test/model/helpers/retry";

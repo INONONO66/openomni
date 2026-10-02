@@ -1,11 +1,11 @@
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { expect, test } from "bun:test";
 import { z } from "zod";
 import { Effect } from "effect";
 import { recordingLedger } from "./helpers/effect-g3-recording";
-import { createTurnDispatcher } from "../src/tool-dispatcher";
-import { defineTool, sessionTool } from "../src/tool-dispatcher";
+import { createTurnDispatcher } from "../src/kernel/tool";
+import { defineTool, sessionTool } from "../src/kernel/tool";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";
 

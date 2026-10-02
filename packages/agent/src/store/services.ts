@@ -2,7 +2,7 @@ import type { Effect } from "effect";
 import type { LedgerSession, Storage as ProtocolStorage } from "@openomni/protocol";
 import type { LedgerError } from "./errors";
 import type { CatalogStore } from "./catalog.js";
-import type { SessionStore } from "./session-file.js";
+import type { SessionStore } from "./session-file/index.js";
 
 export type CommitReceipt = Extract<LedgerSession.CommitResult, { readonly ok: true }>;
 export type AdoptReceipt = { readonly ok: true; readonly fence: number };

@@ -1,26 +1,26 @@
 import { APICallError } from "ai";
 import { sessionTree } from "./helpers/session-tree";
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { describe, expect, spyOn, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
-import { OutcomeUnknown, CommitFailed } from "../src/errors";
+import { OutcomeUnknown, CommitFailed } from "../src/kernel/failure";
 import { seedPolicy } from "./helpers/seed-policy";
 import { approveWriteRow } from "./helpers/compiled-policy";
 import * as SessionHandleStore from "../src/store/fence";
 import { LlmRunFailure, type Run } from "../src/model";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import { closeSessions, createTurnDispatcher, type SessionRunner } from "../src/index";
-import { resolveSessionRuntime } from "../src/session-contract";
+import { resolveSessionRuntime } from "../src/session/run";
 import { createController } from "../src/session-controller";
 import { commitReceivedMessage } from "./helpers/ingress";
-import { foldSessionHistory } from "../src/session-lifecycle/history";
-import { inspectSession } from "../src/session-lifecycle/inspect";
+import { foldSessionHistory } from "../src/inspect/history";
+import { inspectSession } from "../src/inspect";
 import { fencedTurnFixture } from "./helpers/fenced-writer";
-import { session } from "../src/session-handle";
+import { session } from "../src/session/run";
 
 const SECRET = "sk-live-credential-never-shown";
 
@@ -130,7 +130,7 @@ function committed(sessionId: string, kind: string): Promise<L0Observation.Actio
  * One real turn: a retried model call, a refused tool, an approved tool carrying a
  * credential, an effect whose outcome is unknown, an answer, and a compaction.
  */
-const parentRunner: SessionRunner = (input: import("../src/session-handle").SessionRunnerInput) =>
+const parentRunner: SessionRunner = (input: import("../src/session/run").SessionRunnerInput) =>
   Effect.scoped(
     Effect.gen(function* () {
       if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };

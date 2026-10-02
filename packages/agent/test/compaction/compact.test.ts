@@ -3,15 +3,15 @@ import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message, PlainValue } from "@openomni/protocol";
 import { z } from "zod";
-import { RunEvents } from "../../src/core/execution/events";
+import { RunEvents } from "../../src/kernel/turn";
 import { Bus } from "../helpers/bus";
-import { Compaction } from "../../src/compaction/compact";
-import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/compaction/contract";
+import { Compaction } from "../../src/plugins/compaction/compact";
+import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/plugins/compaction/contract";
 import {
   estimateMessagesTokens,
   isIneffectiveCompaction,
   prepareSummarizerInput,
-} from "../../src/compaction/estimate";
+} from "../../src/plugins/compaction/estimate";
 import { captureBusEvents } from "../helpers/bus-event";
 import { completedToolPart, messageSequence } from "../helpers/messages";
 

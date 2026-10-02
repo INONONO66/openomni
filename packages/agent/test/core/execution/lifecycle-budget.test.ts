@@ -5,7 +5,7 @@ import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import { Operational, type Tool } from "@openomni/protocol";
 import { runTestAgent, runUserMessage, failure, foreign } from "../../helpers/effect-g2";
-import { createAssistantMessage } from "../../../src/core/message-factory";
+import { createAssistantMessage } from "../../../src/kernel/message-factory";
 import { Bus } from "../../helpers/bus";
 import { collector } from "../../helpers/observation-collector";
 import { mockLlm, createStopOutcome, countingStopLlm } from "../../helpers/mock-llm";

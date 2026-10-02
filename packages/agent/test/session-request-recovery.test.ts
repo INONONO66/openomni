@@ -2,22 +2,22 @@ import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, kernelRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
-import { AgentFailure } from "../src/errors";
+import { AgentFailure } from "../src/kernel/failure";
 import { expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LedgerAction, PlainValue, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
-import { createTurnDispatcher, defineTool, eraseTool } from "../src/tool-dispatcher";
-import { createSessionRequests } from "../src/session-requests";
+import { createTurnDispatcher, defineTool, eraseTool } from "../src/kernel/tool";
+import { createSessionRequests } from "../src/session/request";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger, crashAfterRequestOpen, failure, type RequestLedger } from "./helpers/effect-g1";
 import { bounded } from "./helpers/bounded";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { openCrashStores } from "./helpers/crash-stores";
 import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
-import type { RunnerServices } from "../src/services";
+import type { RunnerServices } from "../src/kernel/ports";
 
 /**
  * File-backed isolation with a process-crash restart (W5.2): the Storage

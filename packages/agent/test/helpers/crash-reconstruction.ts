@@ -2,21 +2,21 @@ import { Database } from "bun:sqlite";
 import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
 import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
-import { NamedPolicyRegistry } from "../../src/bundle";
+import { NamedPolicyRegistry } from "../../src/kernel/bundle";
 import { AgentGenerationLive } from "./generation-layer";
-import { makeSessionGenerations } from "../../src/session-generations";
+import { makeSessionGenerations } from "../../src/session/run";
 import * as SessionHandleStore from "../../src/store/fence";
 import { canonicalDigest, FoldCheckpoint, Message, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
 import { z } from "zod";
 import { computeActionHash, GENESIS_PREV_HASH } from "../../src/store/session-file";
 import { ActionSqlRow } from "../../src/store/storage/sqlite-l0-rows";
-import { recordedCompaction, restoreContextRequest, restoredContextProjection, } from "../../src/compaction/restore";
-import { executeCompaction } from "../../src/compaction/execute-cut";
-import { GenerationUnavailable } from "../../src/errors";
-import { GenerationLayers, ObservationSink } from "../../src/services";
-import { closeSessions } from "../../src/session-handle";
+import { recordedCompaction, restoreContextRequest, restoredContextProjection, } from "../../src/plugins/compaction/restore";
+import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
+import { GenerationUnavailable } from "../../src/kernel/failure";
+import { GenerationLayers, ObservationSink } from "../../src/kernel/ports";
+import { closeSessions } from "../../src/session/run";
 import { reactivateSession } from "./wake-session";
-import { FoldCheckpointIntegrityError, hydrateSessionHistory, } from "../../src/session-lifecycle/history";
+import { FoldCheckpointIntegrityError, hydrateSessionHistory, } from "../../src/inspect/history";
 import { compiledPolicy } from "./compiled-policy";
 import { testExecutor } from "./executor";
 import { isolated, isolatedLedger } from "./isolated";
@@ -274,7 +274,7 @@ function restartGenerations(captures: number[], missing: boolean) {
         configure: <A>(
           _id: import("@openomni/protocol").SessionGeneration.Id,
           _snapshot: import("@openomni/protocol").SessionGeneration.Snapshot,
-          commit: Effect.Effect<A, import("../../src/errors").SessionError>,
+          commit: Effect.Effect<A, import("../../src/kernel/failure").SessionError>,
         ) => commit,
         capture: (id: import("@openomni/protocol").SessionGeneration.Id) => {
           captures.push(id.generation);

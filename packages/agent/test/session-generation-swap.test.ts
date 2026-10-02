@@ -7,16 +7,16 @@ import type { LedgerError } from "../src/store/errors";
 import type { AnyToolDefinition, LedgerAction, PlainValue, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";
-import { CommitFailed, AgentFailure, GenerationUnavailable } from "../src/errors";
-import { createExecutor } from "../src/executor";
+import { CommitFailed, AgentFailure, GenerationUnavailable } from "../src/kernel/failure";
+import { createExecutor } from "../src/kernel/gate/decide";
 import { compiledPolicy } from "./helpers/compiled-policy";
-import { makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
-import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
-import { NamedPolicyRegistry } from "../src/bundle";
+import { makeSessionGenerations, type GenerationBundle } from "../src/session/run";
+import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/kernel/ports";
+import { NamedPolicyRegistry } from "../src/kernel/bundle";
 import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
-import { executeToolBody } from "../src/tool-body";
+import { executeToolBody } from "../src/kernel/tool";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
-import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";
+import { createTurnDispatcher, sessionTool } from "../src/kernel/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 /** Chain oracle over the active isolation's kernel. */

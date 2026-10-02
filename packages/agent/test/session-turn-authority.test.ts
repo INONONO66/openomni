@@ -9,8 +9,8 @@ import {
   withSessionServices,
   type SessionFixture,
 } from "./helpers/session-services";
-import { closeSessions, session, type SessionRunner } from "../src/session-handle";
-import { InboundAuthorityViolated, inboundAuthority } from "../src/session-turn";
+import { closeSessions, session, type SessionRunner } from "../src/session/run";
+import { InboundAuthorityViolated, inboundAuthority } from "../src/session/run";
 
 // Unit seam: the perimeter verdicts the turn recognizes (issue #1245 (1)).
 test("unknown provenance never acts: evidence authority plus a typed violation fact", () => {

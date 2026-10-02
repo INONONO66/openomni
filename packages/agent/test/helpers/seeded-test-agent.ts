@@ -3,9 +3,9 @@ import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, } 
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import { Effect } from "effect";
 import type { Sink } from "../../src/model";
-import type { ChatAgentInput } from "../../src/core/types";
-import type { ExecutorOptions } from "../../src/executor-contract";
-import { runAgent } from "../../src/core/execution/run";
+import type { ChatAgentInput } from "../../src/kernel/types";
+import type { ExecutorOptions } from "../../src/kernel/gate/decide";
+import { runAgent } from "../../src/kernel/turn";
 import { recordingLedger } from "./recording-ledger";
 
 /** Seeded-policy chat agent over the production executor; the retry alarm is the only fixture choice. */

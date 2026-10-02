@@ -3,8 +3,8 @@ import { Effect } from "effect";
 import * as SessionHandleStore from "../../src/store/fence";
 import { openCatalogStore } from "../../src/store/catalog";
 import { openSessionStore } from "../../src/store/session-file";
-import { SessionEntity } from "../../src/cluster/session-entity";
-import { receivedMessageAction } from "../../src/session-record";
+import { SessionEntity } from "../../src/session/entity";
+import { receivedMessageAction } from "../../src/session/commit";
 import { runAgent } from "../helpers/executor";
 import { clusterTempDir, runCluster, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 

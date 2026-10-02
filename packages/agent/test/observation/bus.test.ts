@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { createObservationBus, ObservationDeliveryFailed } from "../../src/observation/bus";
+import { createObservationBus, ObservationDeliveryFailed } from "../../src/session/bus";
 import { BusEvent } from "@openomni/protocol";
 import { z } from "zod";
 

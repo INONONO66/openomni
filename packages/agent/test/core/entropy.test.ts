@@ -2,7 +2,7 @@ import { runAgentSync } from "../helpers/executor";
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
 import { AgentProcessLive } from "../../src/layers";
-import { Entropy } from "../../src/services";
+import { Entropy } from "../../src/kernel/ports";
 import { testBus } from "../helpers/bus";
 
 describe("process entropy", () => {

@@ -1,5 +1,5 @@
 import { Clock, Duration, Effect, Layer } from "effect";
-import type { EntropySource } from "../../src/core/entropy";
+import type { EntropySource } from "../../src/kernel/ports";
 
 /**
  * An Effect Clock whose wall time is the fixture's `now` function; sleeping

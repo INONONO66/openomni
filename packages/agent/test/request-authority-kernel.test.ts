@@ -4,8 +4,8 @@ import { Inbox, type SessionTransition } from "@openomni/protocol";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime } from "./helpers/session-services";
 import { pendingRequest } from "./helpers/open-request";
-import { commitSessionRequest, requestAuthorityKernel } from "../src/session-admission";
-import { adoptSessionAuthority } from "../src/session-configuration";
+import { commitSessionRequest, requestAuthorityKernel } from "../src/session/mailbox";
+import { adoptSessionAuthority } from "../src/session/run";
 import { sessionTree } from "./helpers/session-tree";
 
 /**

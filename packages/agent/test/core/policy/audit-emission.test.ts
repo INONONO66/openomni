@@ -2,7 +2,7 @@ import { testExecutor } from "../../helpers/executor";
 import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
-import type { ExecutionLedger } from "../../../src/executor";
+import type { ExecutionLedger } from "../../../src/kernel/gate/decide";
 import { compilePolicySnapshot } from "../../../src/kernel/gate/compile";
 import { L0Observation, type LedgerAction, type PolicyRow } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";

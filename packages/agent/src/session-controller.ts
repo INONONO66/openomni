@@ -1,18 +1,18 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
 import { LeaseRefused } from "./store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
-import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./errors";
-import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session-record";
-import { createSessionTurn } from "./session-turn";
-import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session-admission";
-import { adoptSessionAuthority, createSessionConfiguration } from "./session-configuration";
-import { dispatchSessionOutbound } from "./session-outbound";
-import { inspectSession } from "./session-lifecycle/inspect";
-import { createRawSlots } from "./executor-raw";
-import { commitFoldBatch } from "./session-fold-commit";
-import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "./session-contract";
-import type { SessionControllerState } from "./session-controller-state";
-import type { SessionKernel } from "./cluster/kernel-registry";
+import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./kernel/failure";
+import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session/commit";
+import { createSessionTurn } from "./session/run";
+import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "./session/mailbox";
+import { adoptSessionAuthority, createSessionConfiguration } from "./session/run";
+import { dispatchSessionOutbound } from "./session/run";
+import { inspectSession } from "./inspect";
+import { createRawSlots } from "./kernel/gate/decide";
+import { commitFoldBatch } from "./session/commit";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "./session/run";
+import type { SessionControllerState } from "./session/run";
+import type { SessionKernel } from "./session/entity";
 
 const SEAL_RESCAN_BUDGET = 8;
 /** Shutdown grace for settling raw slots; the lease TTL it once mirrored is gone. */

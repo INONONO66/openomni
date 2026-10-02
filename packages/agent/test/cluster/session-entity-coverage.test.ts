@@ -5,7 +5,7 @@ import { openCatalogStore } from "../../src/store/catalog";
 import { openSessionStore } from "../../src/store/session-file";
 import * as SessionHandleStore from "../../src/store/fence";
 import { Effect } from "effect";
-import { SessionEntity } from "../../src/cluster/session-entity";
+import { SessionEntity } from "../../src/session/entity";
 import { clusterTempDir, readChain, runCluster, sendPrompt, sessionFileFor, } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 

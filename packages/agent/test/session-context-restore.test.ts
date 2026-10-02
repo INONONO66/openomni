@@ -10,9 +10,9 @@ import { isolated, isolatedLedger } from "./helpers/isolated";
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
 import { createTurnDispatcher, type SessionRunner } from "../src/index";
 import { Bus } from "./helpers/bus";
-import { session } from "../src/session-handle";
-import type { SessionHandle, SessionRunnerInput } from "../src/session-contract";
-import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { session } from "../src/session/run";
+import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
+import { foldSessionHistory } from "../src/inspect/history";
 
 let nextId = 0;
 function runtime(): SessionRuntime {

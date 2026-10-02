@@ -12,8 +12,8 @@ import { Bus } from "../../helpers/bus";
 import { recordingExecutor } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { z } from "zod";
-import { createAssistantMessage } from "../../../src/core/message-factory";
-import type {} from "../../../src/core/types";
+import { createAssistantMessage } from "../../../src/kernel/message-factory";
+import type {} from "../../../src/kernel/types";
 
 // Catalog metadata does not bypass the executor's compiled policy.
 const tools: Tool.Spec[] = [
