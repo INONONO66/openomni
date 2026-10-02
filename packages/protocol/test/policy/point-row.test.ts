@@ -22,33 +22,19 @@ describe("point registry records (#1251)", () => {
     );
   });
 
-  it("keeps core records core-owned and capability records owned by their capability", () => {
+  // Consistency invariants over the registry, not transcriptions of it:
+  // which records exist and what each allows is covered behaviorally by the
+  // gate-row compiler's admission tests.
+  it("names every capability record after the capability that owns its point", () => {
     for (const record of CORE_POINT_RECORDS) expect(record.owner).toBe("core");
-    expect(CAPABILITY_POINT_RECORDS.map((record) => [record.id, record.owner])).toEqual([
-      ["tool.pre", "tool"],
-      ["tool.post", "tool"],
-      ["compaction.pre", "compaction"],
-      ["compaction.post", "compaction"],
-      ["alarm.fired", "alarm"],
-      ["action.pre", "action"],
-    ]);
+    for (const record of CAPABILITY_POINT_RECORDS)
+      expect(record.id.split(".")[0]).toBe(record.owner);
   });
 
-  it("marks turn.post as the end point and withholds emit from it", () => {
-    const turnPost = POINT_RECORDS.find((record) => record.id === "turn.post");
-    expect(turnPost?.end).toBe(true);
-    expect(turnPost?.allowedDo).not.toContain("emit");
-    for (const record of POINT_RECORDS) {
-      if (record.id !== "turn.post") expect(record.end).toBeUndefined();
-    }
-  });
-
-  it("restricts observe-only points to emit/observe", () => {
-    for (const id of ["compaction.post", "alarm.fired"] as const) {
-      const record = POINT_RECORDS.find((candidate) => candidate.id === id);
-      expect(record?.allowedDo).toEqual(["emit", "observe"]);
-      expect(record?.rewritableFields).toEqual([]);
-    }
+  it("withholds emit from every end point, and the loop has one", () => {
+    const ends = POINT_RECORDS.filter((record) => record.end === true);
+    expect(ends.length).toBeGreaterThan(0);
+    for (const record of ends) expect(record.allowedDo).not.toContain("emit");
   });
 
 
