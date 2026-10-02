@@ -4,7 +4,6 @@ import * as SessionHandleStore from "../../src/store/fence";
 import type { LedgerSession, ObservationSink as ObservationSinkShape } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, FiberSet, Layer, Scope, Stream } from "effect";
 import {
-  ObservationSubscriberFailure,
   type ObservationBusOptions,
   type PublishedObservation,
   makeObservationBus,
@@ -27,56 +26,53 @@ export type TestObservationBus = SinkService & {
   reset(): void;
   /** Taps every published observation; returns the tap's unsubscribe. */
   observe(watcher: (observation: PublishedObservation) => void): () => void;
+  /** Closes the fixture's own Scope: shuts the bus down and interrupts every drain. */
+  close(): void;
 };
 
-/** Fixture buses outlive any one test; this process-lifetime Scope owns them. */
-const fixtureScope = Effect.runSync(Scope.make());
-
 /**
- * Builds one PubSub observation bus fixture (#1249) in the process-lifetime
- * fixture Scope. Callback subscriptions ride a fixture-owned FiberSet so
- * `reset()` can interrupt every leftover tap between test cases.
+ * Builds one PubSub observation bus fixture (#1249) in a Scope the fixture
+ * itself owns. `subscribe` is the production sink's callback drain, so broad
+ * integration tests exercise the real subscriber-failure path; `observe` is
+ * the test-only all-events tap. `reset()` detaches every leftover
+ * subscription between cases; `close()` releases the fixture's Scope.
  */
 export function testBusService(options: ObservationBusOptions): TestObservationBus {
+  const scope = Effect.runSync(Scope.make());
   const { bus, taps, fork } = Effect.runSync(
     Effect.gen(function* () {
       const bus = yield* makeObservationBus(options);
       const taps = yield* FiberSet.make<void, never>();
       const fork = yield* FiberSet.runtime(taps)<never>();
       return { bus, taps, fork };
-    }).pipe(Scope.provide(fixtureScope)),
+    }).pipe(Scope.provide(scope)),
   );
-  const drain = <T>(
-    stream: Effect.Effect<Stream.Stream<T>, never, Scope.Scope>,
-    deliver: (item: T) => void,
-    eventName: string,
-  ): (() => void) => {
-    const fiber = fork(
-      Effect.scoped(Effect.flatMap(stream, Stream.runForEach((item) =>
-        Effect.suspend(() => {
-          try {
-            deliver(item);
-            return Effect.void;
-          } catch (cause) {
-            const error = cause instanceof Error ? cause : new Error(String(cause));
-            if (options.onError !== undefined) {
-              const report = options.onError;
-              return Effect.sync(() => report(error, eventName));
-            }
-            return Effect.logError(new ObservationSubscriberFailure({ eventName, cause: String(error) }));
-          }
-        })))),
-    );
-    return () => fiber.interruptUnsafe();
-  };
+  const subscriptions = new Set<() => void>();
   const fixture: TestObservationBus = {
     publish: bus.sink.publish,
-    subscribe: (event, handler, subscribeOptions) =>
-      drain(bus.stream(event, subscribeOptions), handler, event.name),
+    subscribe: (event, handler, subscribeOptions) => {
+      const stop = bus.sink.subscribe(event, handler, subscribeOptions);
+      const tracked = () => {
+        subscriptions.delete(tracked);
+        stop();
+      };
+      subscriptions.add(tracked);
+      return tracked;
+    },
     scope: (identity) => scopeObservation(fixture, identity, options),
-    observe: (watcher) => drain(bus.observations, watcher, "*"),
+    observe: (watcher) => {
+      const fiber = fork(
+        Effect.scoped(Effect.flatMap(bus.observations, Stream.runForEach((observation) =>
+          Effect.sync(() => watcher(observation))))),
+      );
+      return () => fiber.interruptUnsafe();
+    },
     reset: () => {
+      for (const stop of [...subscriptions]) stop();
       for (const fiber of taps) fiber.interruptUnsafe();
+    },
+    close: () => {
+      Effect.runSync(Scope.close(scope, Exit.void));
     },
   };
   return fixture;
@@ -150,6 +146,7 @@ function makeIsolatedLedger(): IsolatedLedgerHandle {
     close: () => {
       session.close();
       catalog.close();
+      bus.close();
     },
   };
 }

@@ -29,6 +29,7 @@ export function openCrashStores(dbPath: string): CrashStores {
     close: () => {
       session.close();
       catalog.close();
+      bus.close();
     },
   };
 }
