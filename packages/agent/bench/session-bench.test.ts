@@ -1,4 +1,5 @@
 import { sessionTree } from "../test/store/helpers/session-tree";
+import { rmSync } from "node:fs";
 import { Effect, Result } from "effect";
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
@@ -68,9 +69,10 @@ describe("session benchmark fixtures", () => {
 // remains is seeding 10k actions and walking them, which the exact collector's
 // instrumentation runs about five times slower than the plain lane.
 test("benchmark entry point emits the ten existing ledger metrics and four new session metrics", async () => {
+  rmSync("bench-results/session.json", { force: true });
   process.env.BENCHMARK_BUDGET_MS = "10";
   try {
-    await import("./index");
+    await import("./store");
   } finally {
     delete process.env.BENCHMARK_BUDGET_MS;
   }

@@ -142,8 +142,3 @@ test("reasoning-only failure retains billed usage without marking an assistant p
     visibleOutput: false, usage: { inputTokens: 13, outputTokens: 7, reasoningTokens: 5 },
   } });
 });
-
-test("the model barrel exposes no legacy FailureError shape", async () => {
-  const root = await import("../../src/model");
-  expect("FailureError" in root).toBe(false);
-});

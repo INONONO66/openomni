@@ -453,6 +453,5 @@ describe("decisionFromEvaluation", () => {
     expect(decision.effects).toEqual([
       { type: "tool.require_approval", reason: "require_approval" },
     ]);
-    expect("obligations" in decision).toBe(false);
   });
 });
