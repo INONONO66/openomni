@@ -1,8 +1,10 @@
 import {
   EMIT_KINDS,
-  GateDecision,
+  type GateDecision,
   NamedError,
+  RowVerdictRead,
   type EmitKind,
+  type GateAnnotation,
   type GateRow,
   type GateVerdict,
   type PlainValue,
@@ -20,8 +22,6 @@ import { GateComposeError, type GatePointTable } from "../points";
  * merged point registration table at startup or generation change and rejects
  * fail-closed with the compose rejection codes defined in #1255.
  */
-
-const emitKinds: ReadonlySet<string> = new Set(EMIT_KINDS);
 
 /** A dynamic service reference outside the row's requires; recorded as a fact at call time. */
 const GateRequirementError = NamedError.create(
@@ -111,11 +111,13 @@ function validateFields(row: GateRow, record: PointRecord): void {
   }
 }
 
-function validateEmit(row: GateRow, record: PointRecord): void {
-  if (row.do !== "emit") return;
+/** Narrows the row's emitted kind at compile; a non-emit row carries none. */
+function validateEmit(row: GateRow, record: PointRecord): EmitKind | undefined {
+  if (row.do !== "emit") return undefined;
   if (record.end === true) reject("post_end_emit", row);
-  if (row.how.emit === undefined || !emitKinds.has(row.how.emit))
-    reject("bad_action", row, row.how.emit ?? "emit");
+  const kind = EMIT_KINDS.find((candidate) => candidate === row.how.emit);
+  if (kind === undefined) reject("bad_action", row, row.how.emit ?? "emit");
+  return kind;
 }
 
 function validateHow(row: GateRow, handlers: ReadonlySet<string>): void {
@@ -127,13 +129,6 @@ function validateHow(row: GateRow, handlers: ReadonlySet<string>): void {
     reject("bad_field", row, "limit");
   if (row.how.ref !== undefined && !handlers.has(row.how.ref))
     reject("unknown_handler", row, row.how.ref);
-}
-
-function validateRow(row: GateRow, record: PointRecord, handlers: ReadonlySet<string>): void {
-  validateAction(row, record);
-  validateFields(row, record);
-  validateEmit(row, record);
-  validateHow(row, handlers);
 }
 
 function matches(row: GateRow, when: Readonly<Record<string, PlainValue>>): boolean {
@@ -148,38 +143,53 @@ function foldVerdict(folded: GateVerdict, next: GateVerdict): GateVerdict {
   return "allow";
 }
 
+function plainField(value: PlainValue, field: string): PlainValue | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return field in value ? value[field] : undefined;
+}
+
 /** Only the declared rewritable fields flow from the handler's output into the prior value. */
 function applyRewrite(prior: PlainValue, fields: readonly string[], output: PlainValue): PlainValue {
   if (prior === null || typeof prior !== "object" || Array.isArray(prior)) return prior;
-  if (output === null || typeof output !== "object" || Array.isArray(output)) return prior;
   const next = { ...prior };
   for (const field of fields) {
-    const replacement = Object.getOwnPropertyDescriptor(output, field)?.value as PlainValue | undefined;
+    const replacement = plainField(output, field);
     if (replacement !== undefined) next[field] = replacement;
   }
   return next;
 }
 
+/** One admitted row with its compile-time narrowed emit kind. */
+interface CompiledGateRow {
+  readonly row: GateRow;
+  readonly emit: EmitKind | undefined;
+}
+
 export function compileGateRows(options: CompileGateRowsOptions): CompiledGate {
   const handlers = new Set(options.handlers);
   const seen = new Set<string>();
-  const byPoint = new Map<string, GateRow[]>();
+  const byPoint = new Map<string, CompiledGateRow[]>();
   for (const row of options.rows) {
     if (seen.has(row.id)) reject("duplicate", row);
     seen.add(row.id);
     const record = options.table.get(row.on);
     if (record === undefined) reject("unknown_point", row);
-    validateRow(row, record, handlers);
+    validateAction(row, record);
+    validateFields(row, record);
+    const emit = validateEmit(row, record);
+    validateHow(row, handlers);
     const bucket = byPoint.get(row.on) ?? [];
-    bucket.push(row);
+    bucket.push({ row, emit });
     byPoint.set(row.on, bucket);
   }
   for (const bucket of byPoint.values()) {
-    bucket.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+    bucket.sort(
+      (left, right) => left.row.order - right.row.order || left.row.id.localeCompare(right.row.id),
+    );
   }
 
   function rowsAt(point: PointId): readonly GateRow[] {
-    return byPoint.get(point) ?? [];
+    return (byPoint.get(point) ?? []).map((entry) => entry.row);
   }
 
   function decide(
@@ -190,32 +200,26 @@ export function compileGateRows(options: CompileGateRowsOptions): CompiledGate {
     const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
     const recorded = decideOptions.recorded;
     if (recorded !== undefined && recorded.point === point && recorded.inputHash === inputHash) {
-      return {
-        decision: GateDecision.parse(recorded),
-        value: input.value,
-        emissions: [],
-        replayed: true,
-      };
+      // Replay restores the recorded rewrite output without invoking handlers.
+      return { decision: recorded, value: recorded.output, emissions: [], replayed: true };
     }
     const state = initialFoldState(input.value);
-    for (const row of rowsAt(point)) {
-      if (matches(row, input.when)) applyRow(row, state, inputHash, decideOptions);
+    for (const entry of byPoint.get(point) ?? []) {
+      if (matches(entry.row, input.when)) applyRow(entry, state, inputHash, decideOptions);
     }
-    return {
-      decision: GateDecision.parse({
-        point,
-        verdict: state.verdict,
-        rowIds: state.rowIds,
-        obligations: state.obligations,
-        consulted: state.consulted,
-        facts: state.facts,
-        inputHash,
-        generation: options.generation,
-      }),
-      value: state.value,
-      emissions: state.emissions,
-      replayed: false,
+    const decision: GateDecision = {
+      point,
+      verdict: state.verdict,
+      rowIds: state.rowIds,
+      obligations: state.obligations,
+      consulted: state.consulted,
+      annotations: state.annotations,
+      facts: state.facts,
+      output: state.value,
+      inputHash,
+      generation: options.generation,
     };
+    return { decision, value: state.value, emissions: state.emissions, replayed: false };
   }
 
   return { generation: options.generation, rowsAt, decide };
@@ -226,29 +230,43 @@ interface FoldState {
   readonly rowIds: string[];
   readonly obligations: { metric: string; limit: number }[];
   readonly consulted: { ref: string; digest: string; payload: PlainValue }[];
+  readonly annotations: GateAnnotation[];
   readonly facts: { rowId: string; ref: string; code: string }[];
   value: PlainValue;
   readonly emissions: GateEmission[];
 }
 
 function initialFoldState(value: PlainValue): FoldState {
-  return { verdict: "allow", rowIds: [], obligations: [], consulted: [], facts: [], value, emissions: [] };
+  return {
+    verdict: "allow",
+    rowIds: [],
+    obligations: [],
+    consulted: [],
+    annotations: [],
+    facts: [],
+    value,
+    emissions: [],
+  };
 }
 
 function applyRow(
-  row: GateRow,
+  entry: CompiledGateRow,
   state: FoldState,
   inputHash: string,
   decideOptions: GateDecideOptions,
 ): void {
+  const row = entry.row;
   state.rowIds.push(row.id);
   if (row.how.metric !== undefined && row.how.limit !== undefined)
     state.obligations.push({ metric: row.how.metric, limit: row.how.limit });
-  if (row.do === "observe") return;
-  if (row.do === "emit") {
+  if (row.do === "observe") {
+    observeRow(row, state, decideOptions);
+    return;
+  }
+  if (entry.emit !== undefined) {
     state.emissions.push({
       key: emittedRowKey(inputHash, row.id, state.emissions.length),
-      kind: row.how.emit as EmitKind,
+      kind: entry.emit,
       rowId: row.id,
       intent: row.how.intent ?? null,
     });
@@ -259,6 +277,53 @@ function applyRow(
     return;
   }
   if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, decideOptions);
+}
+
+/** Calls the handler under the row's requires collection; an escape throws. */
+function invokeGuarded(
+  row: GateRow,
+  ref: string,
+  handler: GateHandler,
+  value: PlainValue,
+  decideOptions: GateDecideOptions,
+): GateHandlerResult {
+  return handler({
+    value,
+    params: row.how.params ?? null,
+    service: (requested) => {
+      const resolved = requested === ref ? decideOptions.handlers?.(requested) : undefined;
+      if (resolved === undefined) throw new GateRequirementError({ rowId: row.id, ref: requested });
+      return resolved;
+    },
+  });
+}
+
+/**
+ * Observe rows run through a constrained audit-only path (#1251): the handler
+ * is invoked and its recorded payload becomes an `audit.annotate` annotation,
+ * but nothing an observer returns or throws can change the verdict or value.
+ */
+function observeRow(row: GateRow, state: FoldState, decideOptions: GateDecideOptions): void {
+  const ref = row.how.ref;
+  if (ref === undefined) return;
+  const handler = decideOptions.handlers?.(ref);
+  if (handler === undefined) {
+    state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
+    return;
+  }
+  let result: GateHandlerResult;
+  try {
+    result = invokeGuarded(row, ref, handler, state.value, decideOptions);
+  } catch (cause) {
+    if (!GateRequirementError.isInstance(cause)) throw cause;
+    state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
+    return;
+  }
+  if (result.payload === undefined) {
+    state.facts.push({ rowId: row.id, ref, code: "unrecorded_response" });
+    return;
+  }
+  state.annotations.push({ rowId: row.id, ref, payload: result.payload });
 }
 
 /** Calls the row's handler under the requirement guard and folds its recorded response. */
@@ -276,15 +341,7 @@ function consultRow(
   }
   let result: GateHandlerResult;
   try {
-    result = handler({
-      value: state.value,
-      params: row.how.params ?? null,
-      service: (requested) => {
-        const resolved = requested === ref ? decideOptions.handlers?.(requested) : undefined;
-        if (resolved === undefined) throw new GateRequirementError({ rowId: row.id, ref: requested });
-        return resolved;
-      },
-    });
+    result = invokeGuarded(row, ref, handler, state.value, decideOptions);
   } catch (cause) {
     if (!GateRequirementError.isInstance(cause)) throw cause;
     state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
@@ -330,6 +387,75 @@ export function legacyPointOf(kind: string, phase: PolicyRow.Phase): PointId | u
 }
 
 type PolicyRowDraft = Omit<PolicyRow.Row, "generation">;
+
+function matchValue(row: PolicyRowDraft): Readonly<Record<string, PlainValue>> {
+  const value = row.match.value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  return value;
+}
+
+/**
+ * Converts one historical row's semantics onto the fourteen-point contract
+ * (#1251). Compaction moved off the turn envelope: a `turn/post` row matching
+ * the historical `op: "compaction"` governs the compaction point itself, so it
+ * becomes a `compaction/pre` row matching every compaction operation —
+ * a base-era compaction deny keeps refusing summarization after conversion.
+ */
+export function translateLegacyPolicyRow<Row extends PolicyRowDraft>(row: Row): Row {
+  const match = matchValue(row);
+  if (row.kind !== "turn" || row.phase !== "post" || match.op !== "compaction") return row;
+  const { op: _op, ...rest } = match;
+  return {
+    ...row,
+    kind: "compaction",
+    phase: "pre",
+    match: { encodingVersion: 1 as const, value: rest },
+  };
+}
+
+function legacyDoHow(row: PolicyRowDraft, record: PointRecord | undefined): Pick<GateRow, "do" | "how"> {
+  const verdict = RowVerdictRead.safeParse(row.verdict.value);
+  if (!verdict.success) return { do: "gate", how: {} };
+  switch (verdict.data.type) {
+    case "transform":
+      return {
+        do: "rewrite",
+        how: { ref: verdict.data.ref, fields: [...(record?.rewritableFields ?? [])] },
+      };
+    case "obligation":
+      return {
+        do: "gate",
+        how: { verdict: "allow", metric: verdict.data.metric, limit: verdict.data.limit },
+      };
+    default:
+      return { do: "gate", how: { verdict: verdict.data.type } };
+  }
+}
+
+/**
+ * Projects one translated historical row into the gate-row contract so the
+ * gate compiler admits every production generation. The legacy match keeps
+ * evaluating through the compiled snapshot; admission enforces the point
+ * registration, allowed actions, handler registration, and emit rules.
+ */
+export function legacyGateRow(
+  row: PolicyRowDraft,
+  index: number,
+  generation: number,
+  table: GatePointTable,
+): GateRow {
+  const point = legacyPointOf(row.kind, row.phase);
+  if (point === undefined)
+    throw new GateComposeError({ code: "unknown_point", point: `${row.kind}.${row.phase}` });
+  return {
+    id: `legacy/${point}#${index}`,
+    on: point,
+    when: {},
+    ...legacyDoHow(row, table.get(point)),
+    order: -row.priority,
+    generation,
+  };
+}
 
 /**
  * Marks a generation as validated against the fourteen-point registration

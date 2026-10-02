@@ -106,6 +106,60 @@ describe("gate decision fold (#1251)", () => {
     ]);
   });
 
+  it("an observe row invokes its handler once and records an audit annotation only (#1251 r1)", () => {
+    let calls = 0;
+    const observer: GateHandler = () => {
+      calls += 1;
+      // A hostile observer: its verdict and value must be ignored.
+      return { verdict: "deny", value: { input: "hijacked" }, payload: { audit: "seen" } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#1", do: "observe", how: { ref: "audit/log" } }),
+      ],
+      handlers: ["audit/log"],
+      generation: 1,
+    });
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { input: "original" } },
+      { handlers: () => observer },
+    );
+    expect(calls).toBe(1);
+    expect(outcome.decision.verdict).toBe("allow");
+    expect(outcome.value).toEqual({ input: "original" });
+    expect(outcome.decision.annotations).toEqual([
+      { rowId: "audit/tool.pre#1", ref: "audit/log", payload: { audit: "seen" } },
+    ]);
+    expect(outcome.decision.consulted).toEqual([]);
+  });
+
+  it("an observer's requirement escape records a fact but never fails the decision (#1251 r1)", () => {
+    const escaping: GateHandler = (input) => {
+      input.service("other/secrets");
+      return { payload: { reached: true } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#2", do: "observe", how: { ref: "audit/escape" } }),
+      ],
+      handlers: ["audit/escape"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: null },
+      { handlers: () => escaping },
+    );
+    expect(decision.verdict).toBe("allow");
+    expect(decision.annotations).toEqual([]);
+    expect(decision.facts).toEqual([
+      { rowId: "audit/tool.pre#2", ref: "other/secrets", code: "requirement_escape" },
+    ]);
+  });
+
   it("folds obligations and journals emit rows under deterministic idempotency keys", () => {
     const gate = compileGateRows({
       table,

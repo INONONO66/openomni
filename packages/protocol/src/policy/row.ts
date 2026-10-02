@@ -62,6 +62,16 @@ export const GateConsulted = z
   .strict();
 export type GateConsulted = z.infer<typeof GateConsulted>;
 
+/** One observe-row audit annotation; recorded with the decision, never part of it. */
+export const GateAnnotation = z
+  .object({
+    rowId: GateRowId,
+    ref: GateHandlerRef,
+    payload: PlainValueSchema,
+  })
+  .strict();
+export type GateAnnotation = z.infer<typeof GateAnnotation>;
+
 /** A recorded call-time rejection (e.g. a dynamic service reference escaping the row's requires). */
 export const GateFact = z
   .object({
@@ -74,8 +84,9 @@ export type GateFact = z.infer<typeof GateFact>;
 
 /**
  * The folded decision at one point: deny beats approval beats allow, every
- * matched row id is recorded, and gate/rewrite responses carry their
- * `consulted` payloads so an identical input replays identically.
+ * matched row id is recorded, gate/rewrite responses carry their `consulted`
+ * payloads, and `output` carries the final rewritten value, so an identical
+ * input replays the identical decision and value without invoking handlers.
  */
 export const GateDecision = z
   .object({
@@ -84,7 +95,11 @@ export const GateDecision = z
     rowIds: z.array(GateRowId),
     obligations: z.array(z.object({ metric: z.string().min(1), limit: z.number().int().positive() }).strict()),
     consulted: z.array(GateConsulted),
+    /** Observe-row audit annotations (`audit.annotate`); isolated from the decision. */
+    annotations: z.array(GateAnnotation),
     facts: z.array(GateFact),
+    /** The value after every rewrite row, replayed verbatim with the decision. */
+    output: PlainValueSchema,
     inputHash: z.string().min(1),
     generation: z.number().int().positive(),
   })

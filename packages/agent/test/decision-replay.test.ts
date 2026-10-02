@@ -32,6 +32,69 @@ describe("decision replay (#1251)", () => {
     expect(calls).toBe(1);
   });
 
+  it("replay restores the recorded rewrite output without re-running the rewriter (#1251 r1)", () => {
+    let calls = 0;
+    const rewriter: GateHandler = () => {
+      calls += 1;
+      return { value: { model: "safe-model" }, payload: { rewrote: true } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("llm.pre", { do: "rewrite", how: { ref: "rewrite/model", fields: ["model"] } })],
+      handlers: ["rewrite/model"],
+      generation: 1,
+    });
+    const input = { when: {}, value: { model: "raw", temperature: 1 } };
+    const first = gate.decide("llm.pre", input, { handlers: () => rewriter });
+    expect(first.value).toEqual({ model: "safe-model", temperature: 1 });
+    expect(first.decision.output).toEqual({ model: "safe-model", temperature: 1 });
+    expect(calls).toBe(1);
+
+    // Replay has no handler available at all: the recorded output must carry.
+    const replay = gate.decide("llm.pre", input, {
+      handlers: () => undefined,
+      recorded: first.decision,
+    });
+    expect(replay.replayed).toBe(true);
+    expect(replay.value).toEqual({ model: "safe-model", temperature: 1 });
+    expect(calls).toBe(1);
+  });
+
+  it("replay of chained rewrites restores the final folded value and untouched fields (#1251 r1)", () => {
+    const upgrade: GateHandler = (input) => {
+      const value = input.value as { model: string };
+      return { value: { model: `${value.model}+a` }, payload: { step: "a" } };
+    };
+    const suffix: GateHandler = (input) => {
+      const value = input.value as { model: string };
+      return { value: { model: `${value.model}+b` }, payload: { step: "b" } };
+    };
+    const handlers = new Map<string, GateHandler>([
+      ["rewrite/upgrade", upgrade],
+      ["rewrite/suffix", suffix],
+    ]);
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("llm.pre", { order: 1, do: "rewrite", how: { ref: "rewrite/upgrade", fields: ["model"] } }),
+        gateRow("llm.pre", { order: 2, do: "rewrite", how: { ref: "rewrite/suffix", fields: ["model"] } }),
+      ],
+      handlers: [...handlers.keys()],
+      generation: 1,
+    });
+    const input = { when: {}, value: { model: "base", temperature: 0.2 } };
+    const first = gate.decide("llm.pre", input, { handlers: (ref) => handlers.get(ref) });
+    expect(first.value).toEqual({ model: "base+a+b", temperature: 0.2 });
+
+    const replay = gate.decide("llm.pre", input, {
+      handlers: () => undefined,
+      recorded: first.decision,
+    });
+    expect(replay.replayed).toBe(true);
+    expect(replay.value).toEqual({ model: "base+a+b", temperature: 0.2 });
+    expect(replay.decision).toEqual(first.decision);
+  });
+
   it("re-decides when the input hash differs from the recorded decision", () => {
     let calls = 0;
     const handler: GateHandler = () => {
