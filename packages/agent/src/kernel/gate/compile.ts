@@ -494,7 +494,7 @@ function projectedDoHow(row: CompiledRow): Pick<GateRow, "do" | "how"> {
 }
 
 /**
- * Every point one historical row governs. The removed `policyPoint()` routed
+ * Every point one historical row governs. The retired v3 point mapping routed
  * compaction operations through `turn/post`, so a wildcard `turn/post` row is
  * projected onto the compaction point too; op-specific compaction rows were
  * already converted onto `compaction/pre` before parsing.

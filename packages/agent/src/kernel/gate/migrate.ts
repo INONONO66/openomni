@@ -40,7 +40,7 @@ function matchValue(row: PolicyRowDraft): Readonly<Record<string, PlainValue>> {
 }
 
 /**
- * The removed `policyPoint()` consulted `turn/post` for every compaction
+ * The retired v3 point mapping consulted `turn/post` for every compaction
  * operation, renaming `compact` to `compaction` and passing every other
  * operation (`restore_context_projection`) through. Conversion inverts that
  * mapping so each historical restriction lands on the compaction point with

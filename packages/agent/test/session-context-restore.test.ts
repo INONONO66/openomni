@@ -187,7 +187,7 @@ describe("restore_context_projection", () => {
             );
           }),
         // The untouched base-era fixture: before #1251, restore restrictions
-        // lived on `turn/post` through the removed `policyPoint` mapping.
+        // lived on `turn/post` through the retired v3 point mapping.
         // Migration must keep this exact historical row refusing restores.
         [{
           name: "no-restore", kind: "turn", phase: "post",
