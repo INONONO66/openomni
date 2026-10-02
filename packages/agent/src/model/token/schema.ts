@@ -47,7 +47,6 @@ const Usage = z
     completion_tokens: Count,
     reasoningTokens: Count,
     reasoning_tokens: Count,
-    cachedInputTokens: Count,
     cacheReadTokens: Count,
     cache_read_input_tokens: Count,
     cacheWriteTokens: Count,

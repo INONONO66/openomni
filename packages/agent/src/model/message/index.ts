@@ -4,6 +4,7 @@ import type { Provider } from "../provider";
 import { ProviderTransform } from "../provider/transform";
 
 export type SDKMessage = ModelMessage;
+export type SystemMessage = Extract<SDKMessage, { role: "system" }>;
 type AssistantMessage = Extract<SDKMessage, { role: "assistant" }>;
 type ToolMessage = Extract<SDKMessage, { role: "tool" }>;
 type AssistantContentBlock = Exclude<AssistantMessage["content"], string>[number];

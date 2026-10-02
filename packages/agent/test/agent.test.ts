@@ -113,7 +113,7 @@ describe("ChatAgent public run contract", () => {
     let providerSteps = 0;
     mock.module("ai", () => ({
       jsonSchema: (schema: object) => ({ jsonSchema: schema }),
-      stepCountIs: () => () => false,
+      isStepCount: () => () => false,
       streamText: () => ({
         fullStream: (async function* (): AsyncGenerator<object, void, void> {
           providerSteps += 1;

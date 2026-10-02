@@ -1,14 +1,14 @@
 import { Operational, PlainObjectSchema, type Tool } from "@openomni/protocol";
 import {
   jsonSchema,
-  stepCountIs,
+  isStepCount,
   type streamText,
   type StopCondition,
   type TextStreamPart,
   type ToolSet,
 } from "ai";
 import { z } from "zod";
-import { toModelMessages, type SDKMessage } from "../message";
+import { toModelMessages, type SystemMessage } from "../message";
 import { ProviderEvent, type StreamEvent } from "../processor/event-schema";
 import type { RunInput } from "../run";
 import type { getLanguage } from "./sdk";
@@ -34,7 +34,7 @@ function streamTools(specs: Tool.Spec[], names: string[], model: Provider.Model)
 const ProviderOptions = z.record(z.string(), PlainObjectSchema);
 
 function stopConditions(input: RunInput): StopCondition<ToolSet>[] {
-  const conditions: StopCondition<ToolSet>[] = [stepCountIs(1)];
+  const conditions: StopCondition<ToolSet>[] = [isStepCount(1)];
   const threshold = input.yieldAtInputTokens;
   if (threshold !== undefined)
     conditions.push(({ steps }) => (steps[steps.length - 1]?.usage?.inputTokens ?? 0) >= threshold);
@@ -51,12 +51,13 @@ export function streamArguments(
   model: ReturnType<typeof getLanguage>,
 ): Parameters<typeof streamText>[0] {
   const cacheOptions = ProviderTransform.anthropicCacheOptions(input.model);
-  const systemMessages: SDKMessage[] = system
+  const instructions: SystemMessage[] = system
     ? [{ role: "system", content: system, ...(cacheOptions && { providerOptions: cacheOptions }) }]
     : [];
   return {
     model,
-    messages: [...systemMessages, ...toModelMessages(input.messages, input.model)],
+    ...(instructions.length > 0 && { instructions }),
+    messages: toModelMessages(input.messages, input.model),
     tools: streamTools(input.tools, names, input.model),
     toolChoice: input.toolChoice,
     ...(input.maxTokens === undefined ? {} : { maxOutputTokens: input.maxTokens }),
@@ -81,7 +82,7 @@ export function streamArguments(
 }
 
 /**
- * The SDK-to-wire boundary: v6 block boundaries pass through unchanged, only
+ * The SDK-to-wire boundary: v7 block boundaries pass through unchanged, only
  * step marker names differ, and every event is decoded into the consumed wire
  * shape here because this is where SDK values become processor input.
  */

@@ -41,12 +41,15 @@ describe("run schema-only tools and cache breakpoints", () => {
     expect(capture.args.tools.test_tool?.providerOptions).toBeUndefined();
   });
 
-  test("marks the system message with the Anthropic breakpoint", async () => {
+  test("marks the system instructions with the Anthropic breakpoint", async () => {
     await capture.run({ system: "system fixture" });
-    expect(capture.args.messages[0]).toEqual({
-      role: "system",
-      content: "system fixture",
-      providerOptions: breakpoint,
-    });
+    expect(capture.args.instructions).toEqual([
+      {
+        role: "system",
+        content: "system fixture",
+        providerOptions: breakpoint,
+      },
+    ]);
+    expect(capture.args.messages).toEqual([]);
   });
 });
