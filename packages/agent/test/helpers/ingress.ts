@@ -1,8 +1,8 @@
 import type { LedgerError } from "../../src/store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
-import { receivedMessageAction } from "../../src/session-record";
+import type { SessionKernel } from "../../src/session/entity";
+import { receivedMessageAction } from "../../src/session/commit";
 
 export interface ReceivedMessageInput {
   readonly id: string;
@@ -27,11 +27,11 @@ export function commitReceivedMessage(
   return Effect.suspend(() => {
     const current = kernel.row(input.sessionId);
     const writer =
-      current.leaseOwner === null
+      current.fenceOwner === null
         ? kernel
-            .adoptFence({ sessionId: input.sessionId, owner: "ingress", fence: current.leaseFence + 1 })
+            .adoptFence({ sessionId: input.sessionId, owner: "ingress", fence: current.fence + 1 })
             .pipe(Effect.map((adopted) => ({ owner: "ingress", fence: adopted.fence })))
-        : Effect.succeed({ owner: current.leaseOwner, fence: current.leaseFence });
+        : Effect.succeed({ owner: current.fenceOwner, fence: current.fence });
     return writer.pipe(
       Effect.flatMap(({ owner, fence }) =>
         kernel.commit({

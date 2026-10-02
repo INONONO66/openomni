@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import type { PlainValue, PolicyRow } from "@openomni/protocol";
 import { Context, Effect, Exit, Layer } from "effect";
 import { z } from "zod";
-import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, compose, NamedPolicyRegistry } from "../src/bundle";
-import { BundleError } from "../src/errors";
+import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, compose, NamedPolicyRegistry } from "../src/kernel/bundle";
+import { BundleError } from "../src/kernel/failure";
 import { testBus } from "./helpers/bus";
-import { Entropy, ObservationSink, ToolCatalog } from "../src/services";
+import { Entropy, ObservationSink, ToolCatalog } from "../src/kernel/ports";
 
 class NumberService extends Context.Service<NumberService, number>()("@openomni/bundle/number/Value") {}
 class TextService extends Context.Service<TextService, string>()("@openomni/bundle/text/Value") {}

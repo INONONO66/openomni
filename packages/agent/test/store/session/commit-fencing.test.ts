@@ -49,8 +49,8 @@ test("a stale fence is rejected at commit time with no partial row, even under t
             id: sessionId,
             parentId: null,
             role: "resident",
-            leaseOwner: null,
-            leaseFence: 0,
+            fenceOwner: null,
+            fence: 0,
             revision: 0,
             state: "idle",
             toolsGeneration: 0,
@@ -80,7 +80,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
     ),
   ).toEqual({ ok: true, fence: 2 });
   const before = sessions.get(sessionId);
-  expect(before).toMatchObject({ leaseOwner: "kernel-owner", leaseFence: 2, revision: 0 });
+  expect(before).toMatchObject({ fenceOwner: "kernel-owner", fence: 2, revision: 0 });
 
   // Owner name matches and the revision is exact: only the fence is stale,
   // and the rejection is typed with the current fence.
@@ -109,7 +109,7 @@ test("a stale fence is rejected at commit time with no partial row, even under t
       (error) => error,
     );
   expect(readopt).toThrow(
-    expect.objectContaining({ _tag: "LeaseRefused", reason: "stale", fence: 2 }),
+    expect.objectContaining({ _tag: "FenceRefused", reason: "stale", fence: 2 }),
   );
 
   // The successor's fence commits the identical work exactly once.
@@ -118,6 +118,6 @@ test("a stale fence is rejected at commit time with no partial row, even under t
     (error) => error,
   );
   expect(committed.ok).toBe(true);
-  expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2 });
+  expect(committed.row).toMatchObject({ revision: 1, fence: 2 });
   expect(sessionTree(sessionId, actions).map((action) => action.id)).toEqual(["successor-result"]);
 });

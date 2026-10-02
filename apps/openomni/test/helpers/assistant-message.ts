@@ -1,4 +1,6 @@
-import type { RunInput, Sink } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
+type RunInput = Model.RunInput;
+type Sink = Model.Sink;
 import type { Message, Tool } from "@openomni/protocol";
 
 export interface AssistantMessageOptions {

@@ -1,6 +1,8 @@
 import { CELL_CEILING_MS, describe } from "./core/cell-output";
 import { CodemodeError, type RunOptions } from "@openomni/machines";
-import { defineTool, ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const defineTool = Kernel.defineTool;
+const ToolRefused = Kernel.ToolRefused;
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
 

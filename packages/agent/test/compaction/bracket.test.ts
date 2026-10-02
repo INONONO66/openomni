@@ -3,10 +3,10 @@ import { providerFailure } from "../helpers/mock-llm";
 import { isolated } from "../helpers/isolated";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { BusEvent } from "@openomni/protocol";
-import { RunEvents } from "../../src/core/execution/events";
+import { RunEvents } from "../../src/kernel/turn";
 import { Bus } from "../helpers/bus";
 import { collector } from "../helpers/observation-collector";
-import { Compaction } from "../../src/compaction/compact";
+import { Compaction } from "../../src/plugins/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";
 
 import { messageSequence } from "../helpers/messages";

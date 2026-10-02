@@ -3,8 +3,8 @@ import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { failure } from "./helpers/effect-g1";
-import { CommitFailed, AgentFailure, type ExecutionError, type SessionError } from "../src/errors";
-import type { SessionHandle } from "../src/session-contract";
+import { CommitFailed, AgentFailure, type ExecutionError, type SessionError } from "../src/kernel/failure";
+import type { SessionHandle } from "../src/session/run";
 import { Cause, Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
@@ -16,14 +16,15 @@ import { join } from "node:path";
 import { openCatalogStore } from "../src/store/catalog";
 import { openSessionStore } from "../src/store/session-file";
 import * as SessionHandleStore from "../src/store/fence";
-import type { SessionKernel } from "../src/cluster/kernel-registry";
-import { receivedMessages } from "../src/session-record";
+import type { SessionKernel } from "../src/session/entity";
+import { receivedMessages } from "../src/session/commit";
 import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
-import { createExecutor } from "../src/index";
-import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/executor";
-import { closeSessions, session, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/session-handle";
-import { createSessionRequests } from "../src/session-requests";
-import { commitSessionRequest } from "../src/session-admission";
+import { createExecutor } from "../src/kernel/gate/decide";
+import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/kernel/gate/decide";
+import { closeSessions, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/session/run";
+import { session } from "../src/testing/registry";
+import { createSessionRequests } from "../src/session/request";
+import { commitSessionRequest } from "../src/session/mailbox";
 import { z } from "zod";
 // ---------------------------------------------------------------------------
 // HARNESS (docs/session-lifecycle-contract.md section 6): real ledger, session
@@ -841,8 +842,8 @@ describe("session lifecycle conformance", () => {
                             actions: [],
                             state: "running",
                         });
-                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: dead.leaseFence });
-                        expect(dead.leaseFence).toBeGreaterThan(1);
+                        expect(yield* failure(stale())).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: dead.fence });
+                        expect(dead.fence).toBeGreaterThan(1);
                     }),
                 },
             ],
@@ -1037,10 +1038,10 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         const q = requestOf(opened, "STALE");
                         const fresh = kernel().row(q.sessionId);
-                        const corruptCommit = kernel().commitRequestTransition({
+                        const corruptCommit = kernel().commit({
                             sessionId: q.sessionId,
                             owner: "stranger",
-                            fence: fresh.leaseFence,
+                            fence: fresh.fence,
                             now: 1099,
                             expectedRevision: fresh.revision,
                             actions: [],
@@ -1132,7 +1133,7 @@ describe("session lifecycle conformance", () => {
         // A successor activation adopts a strictly newer fence mid-turn (W5.2 F5):
         // the live runner's authority dies at that CAS, no timer involved.
         const prior = kernel().row(handle.id);
-        yield* kernel().adoptFence({ sessionId: handle.id, owner: "successor", fence: prior.leaseFence + 1 });
+        yield* kernel().adoptFence({ sessionId: handle.id, owner: "successor", fence: prior.fence + 1 });
         const before = snapshotOf(handle.id);
         const observations = sink.published;
         sink.resetToolTape();
@@ -1281,7 +1282,7 @@ function cancelRequest(q: SessionTransition.Request, runtime: SessionRuntime) {
         const adopted = (yield* kernel().adoptFence({
             sessionId: q.sessionId,
             owner: controller,
-            fence: row.leaseFence + 1,
+            fence: row.fence + 1,
         }));
         return (yield* commitSessionRequest(kernel(), q.sessionId, { owner: controller, fence: adopted.fence }, { kind: "request.cancel", requestId: q.requestId, principal: owner }, `cancel-1:${q.sessionId}`, 1099, runtime)).resolution;
     });
@@ -1347,7 +1348,7 @@ function seedLeasedResident(id: string, actionId: string, owner: string) {
         const lease = (yield* kernel().adoptFence({
             sessionId: id,
             owner,
-            fence: created.row.leaseFence + 1,
+            fence: created.row.fence + 1,
         }));
         return { created, generation, lease };
     });

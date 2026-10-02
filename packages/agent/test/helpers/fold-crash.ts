@@ -5,10 +5,12 @@ import { Effect } from "effect";
 import { runAgent } from "./executor";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { isolatedLedger } from "./isolated";
-import { CompactionPredecessorError } from "../../src/compaction/successor";
-import { closeSessions, session } from "../../src/session-handle";
-import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
-import { foldCheckpointAction, requireCommit } from "../../src/session-record";
+import { CompactionPredecessorError } from "../../src/plugins/compaction/successor";
+import { closeSessions } from "../../src/session/run";
+import { session } from "../../src/testing/registry";
+import { hydrateSessionHistory } from "../../src/inspect/history";
+import { foldCheckpointAction } from "../../src/session/commit";
+import { requireCommit } from "../../src/testing/commit";
 import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionFixture, reconstructionSession, } from "./reconstruction-fixture";
 

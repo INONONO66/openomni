@@ -38,7 +38,7 @@ test("request commit requires the adopted fence rather than borrowing another ow
     Result.getOrThrowWith(
       runLedgerSync(
         Effect.result(
-          stores.kernel.commitRequestTransition({
+          stores.kernel.commit({
             sessionId: request.sessionId,
             owner: "foreign",
             fence: 1,

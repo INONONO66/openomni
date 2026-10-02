@@ -7,12 +7,13 @@ import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import * as SessionHandleStore from "../src/store/fence";
-import { session, closeSessions, type SessionRunner } from "../src/session-handle";
-import { resolveSessionRuntime } from "../src/session-contract";
-import { createController } from "../src/session-controller";
+import { closeSessions, type SessionRunner } from "../src/session/run";
+import { session } from "../src/testing/registry";
+import { resolveSessionRuntime } from "../src/session/run";
+import { createController } from "../src/testing/controller";
 import { reopenableLedger } from "./helpers/reopenable-ledger";
 import { canonicalDigest } from "@openomni/protocol";
-import { createSessionRequests } from "../src/session-requests";
+import { createSessionRequests } from "../src/session/request";
 import { fileRequest, planeAnswer } from "./helpers/session-request-plane";
 
 /**
@@ -287,7 +288,7 @@ test("a fence stolen during dispatch surfaces the ack refusal and never marks de
                 .adoptFence({
                   sessionId: message.sourceSessionId,
                   owner: "other-runtime",
-                  fence: kernel.row(message.sourceSessionId).leaseFence + 1,
+                  fence: kernel.row(message.sourceSessionId).fence + 1,
                 })
                 .pipe(Effect.orDie);
               return (yield* receiveOutbound(message, 100)).receipt;
@@ -307,7 +308,7 @@ test("a fence stolen during dispatch surfaces the ack refusal and never marks de
         ]);
         const kernel = isolatedLedger().kernel;
         expect(kernel.outboundRows("child")).toMatchObject([{ state: "pending" }]);
-        expect(kernel.row("child").leaseOwner).toBe("other-runtime");
+        expect(kernel.row("child").fenceOwner).toBe("other-runtime");
       }),
     ),
   ));

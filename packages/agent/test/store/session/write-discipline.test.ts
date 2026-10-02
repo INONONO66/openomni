@@ -16,8 +16,8 @@ function l0Session(id: string): LedgerSession.Row {
     id,
     parentId: null,
     role: "resident",
-    leaseOwner: null,
-    leaseFence: 0,
+    fenceOwner: null,
+    fence: 0,
     revision: 0,
     state: "idle",
     toolsGeneration: 0,
@@ -69,7 +69,7 @@ describe("fenced session write discipline", () => {
     });
     // A rival on a fence the file already passed is refused as stale.
     expect(() => run(sessions.adoptFence({ sessionId, owner: "owner-b", fence: 1 }))).toThrow(
-      expect.objectContaining({ _tag: "LeaseRefused", reason: "stale", fence: 1 }),
+      expect.objectContaining({ _tag: "FenceRefused", reason: "stale", fence: 1 }),
     );
     expect(run(sessions.adoptFence({ sessionId, owner: "owner-b", fence: 2 }))).toEqual({
       ok: true,
@@ -88,7 +88,7 @@ describe("fenced session write discipline", () => {
       }),
     );
     expect(committed.ok).toBe(true);
-    expect(committed.row).toMatchObject({ revision: 1, leaseFence: 2, leaseOwner: "owner-b" });
+    expect(committed.row).toMatchObject({ revision: 1, fence: 2, fenceOwner: "owner-b" });
 
     expect(() =>
       run(
@@ -179,7 +179,7 @@ describe("fenced session write discipline", () => {
       }),
     );
     expect(committed.ok).toBe(true);
-    expect(committed.row).toMatchObject({ revision: 5, state: "running", leaseOwner: "owner" });
+    expect(committed.row).toMatchObject({ revision: 5, state: "running", fenceOwner: "owner" });
     expect(kernel.pendingMessages(sessionId)).toEqual([]);
   });
 });

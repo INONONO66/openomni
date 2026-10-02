@@ -1,5 +1,9 @@
-import { type ObservationSink, AgentFailure, type CompactionOptions } from "@openomni/agent";
-import type { Llm, RunInput } from "@openomni/agent";
+import { Kernel, type Model } from "@openomni/agent";
+type ObservationSink = Kernel.ObservationSink;
+const AgentFailure = Kernel.AgentFailure;
+type CompactionOptions = Kernel.CompactionOptions;
+type Llm = Model.Llm;
+type RunInput = Model.RunInput;
 import { Effect, Result } from "effect";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { runResolvedText } from "../composition/completion";

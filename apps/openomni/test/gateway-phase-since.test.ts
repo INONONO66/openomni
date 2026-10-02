@@ -155,7 +155,7 @@ test("a commit interleaved during the phase read yields a typed gap, never an ol
     expect(response).toEqual({
       type: "session_gap",
       sessionId: SESSION,
-      epoch: kernel.row(SESSION).leaseFence,
+      epoch: kernel.row(SESSION).fence,
       headRevision: headBefore + 2,
       oldestRevision: 0,
     });

@@ -4,7 +4,7 @@ import { isolated } from "../../helpers/isolated";
 import { failure as failed } from "../../helpers/g0-signals";
 import { describe, expect, it } from "bun:test";
 import { runTestAgent } from "../../helpers/g0-effect";
-import { failureFacts } from "../../../src/core/retry";
+import { failureFacts } from "../../../src/kernel/retry";
 import { Bus } from "../../helpers/bus";
 import { providerFailure, mockProviderModel } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";

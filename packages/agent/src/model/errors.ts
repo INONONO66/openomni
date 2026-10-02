@@ -1,5 +1,5 @@
 import { APICallError } from "ai";
-import { AgentFailure } from "../errors";
+import { AgentFailure } from "../kernel/failure";
 
 export { AgentFailure };
 import { Data } from "effect";

@@ -2,12 +2,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import type {
-  ExecutionApprovalRequest,
-} from "@openomni/agent";
+import { type Kernel, Journal } from "@openomni/agent";
+type ExecutionApprovalRequest = Kernel.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
-import { CommitRefused } from "@openomni/agent";
+const CommitRefused = Journal.CommitRefused;
 import { L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src/index";
 import {
@@ -64,7 +63,7 @@ test.each(["revision", "fence"] as const)(
         return Effect.fail(new CommitRefused({
           sessionId: id, reason,
           expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
-          fence: input.fence, currentFence: row.leaseFence,
+          fence: input.fence, currentFence: row.fence,
         }));
       };
       return { ...kernel, commit };

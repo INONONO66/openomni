@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { expect, it } from "bun:test";
 import type { LedgerAction } from "@openomni/protocol";
-import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
-import { sessionStopEvidence } from "../src/session-stop-evidence";
+import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/kernel/gate/decide";
+import { sessionStopEvidence } from "../src/session/run";
 import { fencedTurnFixture, type FencedTurnFixture } from "./helpers/fenced-writer";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { sessionTree } from "./helpers/session-tree";

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
-import type { SessionEntityTimerContext } from "@openomni/agent";
-import { CommitRefused, AgentFailure } from "@openomni/agent";
+import { Kernel, type Session, Journal } from "@openomni/agent";
+type SessionEntityTimerContext = Session.SessionEntityTimerContext;
+const CommitRefused = Journal.CommitRefused;
+const AgentFailure = Kernel.AgentFailure;
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { AppLedgerPlane, SessionKernel } from "../src/composition/cluster-runtime";
@@ -60,7 +62,7 @@ test("watch arm retries one lost revision race before installing the source", as
       return Effect.fail(
         new CommitRefused({
           reason: "revision",
-          currentFence: row.leaseFence,
+          currentFence: row.fence,
           currentRevision: row.revision + 1,
           expectedRevision: input.expectedRevision,
           fence: input.fence,

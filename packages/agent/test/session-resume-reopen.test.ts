@@ -13,11 +13,12 @@ import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import * as SessionHandleStore from "../src/store/fence";
 import { SessionTurn } from "@openomni/protocol";
-import { session, closeSessions, type SessionRunnerInput } from "../src/session-handle";
-import { resolveSessionRuntime } from "../src/session-contract";
-import { createController } from "../src/session-controller";
-import { createSessionChatRunner } from "../src/session-chat-runner";
-import { createAssistantMessage } from "../src/core/message-factory";
+import { closeSessions, type SessionRunnerInput } from "../src/session/run";
+import { session } from "../src/testing/registry";
+import { resolveSessionRuntime } from "../src/session/run";
+import { createController } from "../src/testing/controller";
+import { createSessionChatRunner } from "../src/session/run";
+import { createAssistantMessage } from "../src/kernel/message-factory";
 import { reopenableLedger } from "./helpers/reopenable-ledger";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { uniqueEntropy } from "./helpers/time";
@@ -121,7 +122,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
             const lease = yield* kernel().adoptFence({
               sessionId: "resume",
               owner: "crashed",
-              fence: kernel().row("resume").leaseFence + 1,
+              fence: kernel().row("resume").fence + 1,
             });
             const newer = SessionHandleStore.generationSnapshot({
               generation: 2,

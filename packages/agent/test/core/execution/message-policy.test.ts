@@ -8,8 +8,8 @@ import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
 import { LedgerAction } from "@openomni/protocol";
-import { runAgent } from "../../../src/core/execution/run";
-import { createAssistantMessage } from "../../../src/core/message-factory";
+import { runAgent } from "../../../src/kernel/turn";
+import { createAssistantMessage } from "../../../src/kernel/message-factory";
 import { recordingLedger } from "../../helpers/g0-effect";
 import { runInput } from "../../helpers/run-input";
 

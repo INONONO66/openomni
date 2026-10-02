@@ -1,4 +1,5 @@
-import { createObservationBus } from "@openomni/agent";
+import { Session } from "@openomni/agent";
+const createObservationBus = Session.createObservationBus;
 
 /** A bus with deterministic scoped-event stamps (counter ids, counter times). */
 function testBus(): ReturnType<typeof createObservationBus> {

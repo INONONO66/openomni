@@ -13,17 +13,19 @@ import {
 import { timingSafeEqual } from "node:crypto";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
-import {
-  BundleDefinitions, Entropy, GenerationLayers, ObservationSink,
-  createSessionEntityRunTurn,
-  createSessionRequests,
-  SessionEntity,
-  type SessionHandle,
-  type SessionRuntime,
-  AgentFailure,
-  ExecutionApprovalError,
-} from "@openomni/agent";
-import { CommitRefused, SessionHandleStore } from "@openomni/agent";
+import { Kernel, Session, Bundle, Journal } from "@openomni/agent";
+const BundleDefinitions = Bundle.BundleDefinitions;
+const Entropy = Kernel.Entropy;
+const GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
+const createSessionRequests = Session.createSessionRequests;
+const SessionEntity = Session.SessionEntity;
+type SessionHandle = Session.SessionHandle;
+type SessionRuntime = Session.SessionRuntime;
+const AgentFailure = Kernel.AgentFailure;
+const ExecutionApprovalError = Kernel.ExecutionApprovalError;
+const CommitRefused = Journal.CommitRefused;
 import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
@@ -725,8 +727,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const borrowedAuthority = (id: string) => {
       const kernel = plane.openKernel(id);
       const row = kernel.row(id);
-      if (row.leaseOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
-      return { kernel, row, owner: row.leaseOwner, fence: row.leaseFence };
+      if (row.fenceOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
+      return { kernel, row, owner: row.fenceOwner, fence: row.fence };
     };
     const sessionFacade = (id: string): AppSessionHandle | undefined => {
       if (liveTurns.get(id) === undefined) return undefined;
@@ -807,7 +809,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
               });
               if (!accepted)
                 return yield* Effect.fail(new AgentFailure({ operation: "session.configure", cause: "denied" }));
-              const snapshot = SessionHandleStore.generationSnapshot({
+              const snapshot = Journal.SessionHandleStore.generationSnapshot({
                 generation,
                 revertTo: before.generation,
                 tools: [...before.tools, ...additions.map((tool) => SessionGeneration.Tool.parse(tool))],
@@ -815,7 +817,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 policyGeneration: before.policyGeneration,
                 bundles: before.bundles,
               });
-              const configured = SessionHandleStore.configureAction({
+              const configured = Journal.SessionHandleStore.configureAction({
                 id: services.entropy.id(), sessionId: id,
                 parentId: kernel.latestAction(id)?.id ?? null,
                 operation: "tools.add", snapshot, at: services.now(),
@@ -928,9 +930,9 @@ export interface AppSessionHandle {
     timeout(
       requestId: string,
       at: number,
-    ): Effect.Effect<void, import("@openomni/agent").ExecutionError>;
+    ): Effect.Effect<void, Kernel.ExecutionError>;
   };
-  interrupt(): Effect.Effect<void, import("@openomni/agent").SessionError>;
+  interrupt(): Effect.Effect<void, Kernel.SessionError>;
   readonly tools: {
     add: SessionHandle["tools"]["add"];
   };

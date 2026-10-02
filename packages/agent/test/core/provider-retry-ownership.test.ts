@@ -5,9 +5,9 @@ import { createTestAgent, failure as effectFailure } from "../helpers/effect-g2"
 import { afterEach, describe, expect, it } from "bun:test";
 import { LlmRunFailure, run as llmRun, type run } from "../../src/model";
 import type { Model } from "@openomni/protocol";
-import { RunEvents } from "../../src/core/execution/events";
+import { RunEvents } from "../../src/kernel/turn";
 import { Bus } from "../helpers/bus";
-import { failureFacts } from "../../src/core/retry";
+import { failureFacts } from "../../src/kernel/retry";
 import { runInput } from "../helpers/run-input";
 
 let providerCalls = 0;

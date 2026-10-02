@@ -10,18 +10,19 @@ import { seedPolicy } from "./helpers/seed-policy";
 import { openRequest } from "./helpers/open-request";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
-import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
-import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
+import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/kernel/gate/decide";
+import { closeSessions, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session/run";
+import { session } from "../src/testing/registry";
 import { AgentFailure, type LedgerError } from "../src/store/errors";
 import { openCatalogStore } from "../src/store/catalog";
 import { openSessionStore } from "../src/store/session-file";
 import * as SessionHandleStore from "../src/store/fence";
 import { type BusEvent, type LedgerAction, L0Observation, PlainValueSchema, type ObservationSink, type SessionGeneration, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
-import { CommitFailed } from "../src/errors";
-import { GenerationOwnership } from "../src/services";
-import { GenerationRawSlots } from "../src/session-generations";
-import { receivedMessages } from "../src/session-record";
-import type { SessionKernel } from "../src/cluster/kernel-registry";
+import { CommitFailed } from "../src/kernel/failure";
+import { GenerationOwnership } from "../src/kernel/ports";
+import { GenerationRawSlots } from "../src/session/run";
+import { receivedMessages } from "../src/session/commit";
+import type { SessionKernel } from "../src/session/entity";
 import { Bus } from "./helpers/bus";
 
 // ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ function settleStubborn(
 ) {
   return Effect.gen(function* () {
     yield* awaitSignal(bounded(pending.interrupted, "interrupt receipt before runner settlement"));
-    expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
+    expect(kernel().row(handle.id).fenceOwner).not.toBeNull();
     run.releaseRunner.resolve();
     yield* awaitSignal(
       bounded(
@@ -171,7 +172,7 @@ function expectSingleWriterUntilSettled(
     expect(handle.get().lease.fence).toBe(fence);
     expect(run.maximumActive()).toBe(1);
     yield* awaitSignal(settleStubborn(handle, run, pending, hibernated));
-    expect(kernel().row(handle.id).leaseFence).toBe(fence);
+    expect(kernel().row(handle.id).fence).toBe(fence);
     expect(run.maximumActive()).toBe(1);
   });
 }
@@ -399,7 +400,7 @@ function commitOpenTurn(input: {
     const adopted = yield* kernel().adoptFence({
       sessionId: input.sessionId,
       owner: "crashed-owner",
-      fence: created.row.leaseFence + 1,
+      fence: created.row.fence + 1,
     });
     yield* kernel().commit({
       sessionId: input.sessionId,
@@ -1283,7 +1284,7 @@ describe("durable session handle", () => {
         try {
           expect(result).toEqual({ kind: "result", text: "retained" });
           expect(owner.pending()).toBe(1);
-          expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
+          expect(kernel().row(handle.id).fenceOwner).not.toBeNull();
         } finally {
           owner.release();
         }
@@ -1342,7 +1343,7 @@ describe("durable session handle", () => {
           if (committed.kind !== "turn" || fenceAtSeal !== -1) return;
           const row = kernel().row(handle.id);
           if (row.state !== "interrupted") return;
-          fenceAtSeal = row.leaseFence;
+          fenceAtSeal = row.fence;
           const configured = handle.tools.add([tool("search")]);
           reentered.resolve(() => configured);
         };
@@ -1354,11 +1355,11 @@ describe("durable session handle", () => {
         yield* awaitSignal(bounded(reentrant(), "re-entrant configure"));
 
         const row = kernel().row(handle.id);
-        expect(row.leaseFence).toBe(fenceAtSeal);
-        expect(row.leaseOwner).not.toBeNull();
+        expect(row.fence).toBe(fenceAtSeal);
+        expect(row.fenceOwner).not.toBeNull();
 
         yield* awaitSignal(settleStubborn(handle, run, { running, interrupted }, hibernated));
-        expect(kernel().row(handle.id).leaseFence).toBe(fenceAtSeal);
+        expect(kernel().row(handle.id).fence).toBe(fenceAtSeal);
         expect(run.maximumActive()).toBe(1);
       }),
     ));
@@ -1383,7 +1384,7 @@ describe("durable session handle", () => {
             Effect.forkDetach(handle.close()).pipe(Effect.flatMap(Fiber.join)),
             "close after grace lapse",
           );
-          expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
+          expect(kernel().row(handle.id).fenceOwner).not.toBeNull();
         } finally {
           releaseRunner.resolve();
           yield* bounded(
@@ -1412,7 +1413,7 @@ describe("durable session handle", () => {
 
         // Detached from the caller only: this activation still holds its fence,
         // so no second executor can have overlapped.
-        expect(kernel().row(handle.id).leaseOwner).not.toBeNull();
+        expect(kernel().row(handle.id).fenceOwner).not.toBeNull();
 
         // Once the runner settles, the retained continuation finishes durably.
         releaseRunner.resolve();
@@ -1754,11 +1755,11 @@ describe("durable session handle", () => {
           );
           // The parent's original letter, appended under its live activation's authority.
           const parentRow = kernel().row(parent.id);
-          if (parentRow.leaseOwner === null) throw new Error("parent activation owns no fence");
+          if (parentRow.fenceOwner === null) throw new Error("parent activation owns no fence");
           yield* kernel().commit({
             sessionId: parent.id,
-            owner: parentRow.leaseOwner,
-            fence: parentRow.leaseFence,
+            owner: parentRow.fenceOwner,
+            fence: parentRow.fence,
             now,
             expectedRevision: parentRow.revision,
             state: parentRow.state,
@@ -1863,8 +1864,8 @@ describe("durable session handle", () => {
         expect(worker.id.startsWith("delegation-")).toBe(false);
         expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker" });
         // Each activation adopted its own first fence; neither borrowed the other's.
-        expect(kernel().row(parent.id).leaseFence).toBe(1);
-        expect(kernel().row(worker.id).leaseFence).toBe(1);
+        expect(kernel().row(parent.id).fence).toBe(1);
+        expect(kernel().row(worker.id).fence).toBe(1);
       }),
     ));
 });
@@ -2077,11 +2078,11 @@ describe("session crash recovery and observation", () => {
         // An earlier activation left the durable state interrupted with no open
         // turn and no terminal; the mark rides the live activation's authority.
         const row = kernel().row(handle.id);
-        if (row.leaseOwner === null) throw new Error("activation owns no fence");
+        if (row.fenceOwner === null) throw new Error("activation owns no fence");
         yield* kernel().commit({
           sessionId: handle.id,
-          owner: row.leaseOwner,
-          fence: row.leaseFence,
+          owner: row.fenceOwner,
+          fence: row.fence,
           now,
           expectedRevision: row.revision,
           actions: [],

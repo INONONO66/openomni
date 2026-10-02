@@ -1,13 +1,13 @@
 import { executionReads } from "./execution-reads";
 import { isolatedLedger } from "./isolated";
 import { sessionTree } from "./session-tree";
-import type { ResolvedExecutorOptions } from "../../src/executor-contract";
+import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
 import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import { type LedgerAction, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
-import type { ExecutionLedger } from "../../src/executor-contract";
+import type { SessionKernel } from "../../src/session/entity";
+import type { ExecutionLedger } from "../../src/kernel/gate/decide";
 
 export const fiberSessionId = "fiber-session";
 export const nativePolicy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
@@ -25,7 +25,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId, handle?: S
     });
     const owner = `owner:${now}`;
     const adopted = yield* kernel.adoptFence({
-      sessionId: id, owner, fence: initial.row.leaseFence + 1,
+      sessionId: id, owner, fence: initial.row.fence + 1,
     });
     const turnId = `${id}:turn`;
     const ledger: ExecutionLedger = {

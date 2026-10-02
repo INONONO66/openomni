@@ -1,10 +1,13 @@
 import { sessionTree } from "../../../../packages/agent/test/store/helpers/session-tree";
 import { Effect, type Result } from "effect";
-import { defineTool, eraseTool } from "@openomni/agent";
+import { Kernel, Journal } from "@openomni/agent";
+const defineTool = Kernel.defineTool;
+const eraseTool = Kernel.eraseTool;
 import { Bus } from "./bus";
 import type { AppSessionHandle } from "../../src/index";
 import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/protocol";
-import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/agent";
+type AdoptReceipt = Journal.AdoptReceipt;
+type LedgerError = Journal.LedgerError;
 import { z } from "zod";
 import { eventSignal } from "./event-signal";
 import { runEffect, runSyncResult } from "./effect";
@@ -110,7 +113,7 @@ function commitReceived(
   return Effect.suspend(() => {
     const kernel = plane.openKernel(sessionId);
     const row = kernel.row(sessionId);
-    if (row.leaseOwner === null)
+    if (row.fenceOwner === null)
       return Effect.fail(new Error(`session has no activation authority: ${sessionId}`));
     const action: LedgerAction.Append = {
       id,
@@ -125,8 +128,8 @@ function commitReceived(
     return kernel
       .commit({
         sessionId,
-        owner: row.leaseOwner,
-        fence: row.leaseFence,
+        owner: row.fenceOwner,
+        fence: row.fence,
         now: Date.now(),
         expectedRevision: row.revision,
         actions: [action],
@@ -149,7 +152,7 @@ export function commitPrompt(plane: AppLedgerPlane, sessionId: string, id: strin
 
 export function interruptDeliveries(plane: AppLedgerPlane, sessionId: string) {
   return sessionTree(sessionId, plane.sessionStore(sessionId).actions).flatMap((action) => {
-    const delivery = SessionHandleStore.delivery(action);
+    const delivery = Journal.SessionHandleStore.delivery(action);
     return delivery?.kind === "interrupt" ? [delivery] : [];
   });
 }

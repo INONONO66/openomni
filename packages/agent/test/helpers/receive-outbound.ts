@@ -1,6 +1,6 @@
 import { Effect, Result } from "effect";
 import type { SessionTransition } from "@openomni/protocol";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
+import type { SessionKernel } from "../../src/session/entity";
 import { commitReceivedMessage } from "./ingress";
 import { runTestSync } from "./isolated";
 

@@ -9,24 +9,24 @@ import { testExecutor } from "./executor";
 import { catalogLayer, dispatcherToolPorts } from "./service-layers";
 import { type ChatFixture as ChatAgentConfig, fixtureConfigHead, fixtureTraceContext, prepareChatFixture, } from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
-import { createSessionChatRunner } from "../../src/session-chat-runner";
-import { createTurnDispatcher } from "../../src/tool-dispatcher";
+import { createSessionChatRunner } from "../../src/session/run";
+import { createTurnDispatcher } from "../../src/kernel/tool";
 import type { AnyToolDefinition } from "@openomni/protocol";
 import type { Run, RunInput } from "../../src/model";
-import type {} from "../../src/session-contract";
+import type {} from "../../src/session/run";
 import { PlainValueSchema } from "@openomni/protocol";
-import { createCompactionPlan } from "../../src/compaction/durable";
-import { createAssistantMessage } from "../../src/core/message-factory";
-import { foldSessionHistory } from "../../src/session-lifecycle/history";
-import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session-contract";
+import { createCompactionPlan } from "../../src/plugins/compaction/durable";
+import { createAssistantMessage } from "../../src/kernel/message-factory";
+import { foldSessionHistory } from "../../src/inspect/history";
+import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session/run";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
-import type { ChatAgentInput } from "../../src/core/types";
+import type { ChatAgentInput } from "../../src/kernel/types";
 import type { Sink } from "../../src/model";
-import type { ExecutorOptions, DurableExecutor } from "../../src/executor-contract";
-import type { SessionHandle } from "../../src/session-handle";
-import { AgentFailure, CommitFailed } from "../../src/errors";
+import type { ExecutorOptions, DurableExecutor } from "../../src/kernel/gate/decide";
+import type { SessionHandle } from "../../src/session/run";
+import { AgentFailure, CommitFailed } from "../../src/kernel/failure";
 import { allowAllPolicy } from "./compiled-policy";
 import { runInput } from "./run-input";
 
@@ -126,7 +126,7 @@ export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>
       running,
       settled: Fiber.await(running),
       request,
-      fence: kernel.row(handle.id).leaseFence,
+      fence: kernel.row(handle.id).fence,
     };
   });
 }

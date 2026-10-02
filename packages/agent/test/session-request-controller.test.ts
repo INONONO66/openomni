@@ -2,15 +2,16 @@ import { sessionTree } from "./helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { expect, it } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { L0Observation, type SessionTransition } from "@openomni/protocol";
-import { session, closeSessions } from "../src/session-handle";
-import { createTurnDispatcher, eraseTool, sessionTool } from "../src/tool-dispatcher";
+import { closeSessions } from "../src/session/run";
+import { session } from "../src/testing/registry";
+import { createTurnDispatcher, eraseTool, sessionTool } from "../src/kernel/tool";
 import { valueTool } from "./helpers/query-tool";
-import { createSessionRequests } from "../src/session-requests";
+import { createSessionRequests } from "../src/session/request";
 import { suspendedRequest, } from "./helpers/effect-g2";
 
 // W5.2: the TTL-expiry test ("does not reacquire an expired lease under a still-live
@@ -53,7 +54,7 @@ function setup() {
         id: "controller",
         role: "resident",
         tools: [sessionTool(tool)],
-        runner: (input: import("../src/session-handle").SessionRunnerInput) =>
+        runner: (input: import("../src/session/run").SessionRunnerInput) =>
           Effect.gen(function* () {
             const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
             yield* dispatcher.execute(
@@ -101,7 +102,7 @@ it("the injected gateway port uses the live controller's fence and releases the 
         expect(yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))).toBe("resolved");
         yield* Fiber.join(running);
         expect(f.effects).toEqual(["original"]);
-        expect(isolatedLedger().kernel.row(f.handle.id).leaseFence).toBe(fence);
+        expect(isolatedLedger().kernel.row(f.handle.id).fence).toBe(fence);
         expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("resolved");
       }),
     ),

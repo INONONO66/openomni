@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type { ObservationSink, Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
 import { SessionNotFound } from "./errors";
-import { openStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-file.js";
+import { openStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-file/index.js";
 import { createSqliteActorRegistryAdapter } from "./storage/sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./storage/sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./storage/sqlite-channel-grant-adapter";

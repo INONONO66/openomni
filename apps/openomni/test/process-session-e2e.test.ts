@@ -5,7 +5,8 @@ import { PassThrough, Readable } from "node:stream";
 import { acquireAppResource, gatewayRuntime } from "../src/gateway";
 import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
-import { sessionTool } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const sessionTool = Kernel.sessionTool;
 import { Bus } from "./helpers/bus";
 import { Database } from "bun:sqlite";
 import { catalogDefinitions } from "../src/tools/core/catalog";
@@ -266,7 +267,7 @@ test("process session drain defers entity-owned resume consumption", async () =>
       kernel.adoptFence({
         sessionId: fixture.sessionId,
         owner,
-        fence: initial.leaseFence + 1,
+        fence: initial.fence + 1,
       }),
     );
     const row = kernel.row(fixture.sessionId);
@@ -337,7 +338,7 @@ test("process session drain recovers an open turn through the default admission 
       kernel.adoptFence({
         sessionId: fixture.sessionId,
         owner,
-        fence: row.leaseFence + 1,
+        fence: row.fence + 1,
       }),
     );
     const current = kernel.row(fixture.sessionId);

@@ -1,4 +1,5 @@
-import type { SessionEntityTimerContext } from "@openomni/agent";
+import type { Session } from "@openomni/agent";
+type SessionEntityTimerContext = Session.SessionEntityTimerContext;
 import {
   Alarm,
   EncodedPayload,
@@ -148,7 +149,7 @@ export function watchState(
       spec: { encodingVersion: 1, value: parsed.spec },
       status,
       epoch,
-      fence: kernel.row(sessionId).leaseFence,
+      fence: kernel.row(sessionId).fence,
       lastBatch,
       notifications: fired.length,
       createdAt: first.ts,
@@ -228,13 +229,13 @@ function commitWatchActions(
 ): Effect.Effect<void, Error> {
   return Effect.suspend(() => {
     const row = kernel.row(sessionId);
-    if (row.leaseOwner === null)
+    if (row.fenceOwner === null)
       return Effect.fail(new Error(`watch commit refused: ${sessionId} has no active writer`));
     return kernel
       .commit({
         sessionId,
-        owner: row.leaseOwner,
-        fence: row.leaseFence,
+        owner: row.fenceOwner,
+        fence: row.fence,
         now: actions[0]?.ts ?? now(),
         expectedRevision: row.revision,
         actions: [...actions],

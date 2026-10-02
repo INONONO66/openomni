@@ -1,14 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createDispatcher,
-  createExecutor,
-  createSessionRequests,
-  eraseTool,
-  session,
-  type SessionRuntime,
-} from "@openomni/agent";
+import { Kernel, Session, Testing } from "@openomni/agent";
+const createDispatcher = Kernel.createDispatcher;
+const createExecutor = Kernel.createExecutor;
+const createSessionRequests = Session.createSessionRequests;
+const eraseTool = Kernel.eraseTool;
+const session = Testing.session;
+type SessionRuntime = Session.SessionRuntime;
 import { Bus } from "./bus";
 import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
@@ -20,7 +19,7 @@ import {
 } from "../../src/composition/message-session";
 import { localInbox } from "./ledger";
 import { allowConfigure, generationServices } from "./generation-services";
-import { ToolCatalog } from "@openomni/agent";
+const ToolCatalog = Kernel.ToolCatalog;
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { createSendMessageTool } from "../../src/tools/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";

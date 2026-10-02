@@ -4,7 +4,7 @@ import ts from "typescript";
 
 const root = resolve(import.meta.dir, "..");
 const header = `import { Context, Effect, Layer } from "effect";
-import { bundle, compose, bundlePolicyTag } from "../packages/agent/src/bundle";
+import { bundle, compose, bundlePolicyTag } from "../packages/agent/src/kernel/bundle";
 class A extends Context.Service<A, number>()("@openomni/bundle/a/Value") {}
 class B extends Context.Service<B, string>()("@openomni/bundle/b/Value") {}
 class External extends Context.Service<External, boolean>()("@openomni/test/External") {}
@@ -20,7 +20,7 @@ const composed = compose({requires:[External], provides:[A], layer:ExternalSeed}
 type Equal<A,B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 const output: Equal<Layer.Success<typeof composed>, A | B> = true;
 const input: Equal<Layer.Services<typeof composed>, External> = true;
-const error: Equal<Layer.Error<typeof composed>, "seed-error" | import("../packages/agent/src/errors").BundleError> = true;
+const error: Equal<Layer.Error<typeof composed>, "seed-error" | import("../packages/agent/src/kernel/failure").BundleError> = true;
 const tuple: Equal<typeof a.provides, readonly [typeof A]> = true;
 const original: Equal<typeof a.layer, typeof ALive> = true;
 const ObserverLive = Layer.effectDiscard(Effect.asVoid(B));
@@ -36,7 +36,7 @@ const negatives = [
   ["missing provider", `compose(seed,[b]);`, 2554],
   ["wrong service value", `Layer.succeed(A,"wrong");`, 2345],
   ["unprovided Effect", `Effect.runPromise(A);`, 2345],
-  ["dropped seed environment", `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/errors").BundleError> = live;`, 2322],
+  ["dropped seed environment", `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/kernel/failure").BundleError> = live;`, 2322],
   ["reserved policy shape", `class InvalidPolicy extends Context.Service<InvalidPolicy, number>()("@openomni/bundle/b/Policy") {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`, 2554],
   ["seed output mismatch", `compose({requires:[],provides:[B],layer:ALive},[]);`, 2554],
   ["seed input mismatch", `compose({requires:[],provides:[B],layer:BLive},[]);`, 2554],
@@ -52,7 +52,7 @@ test("bundle compiler contract retains exact types and rejects metadata and envi
   host.fileExists = (file) => fixtures.has(file) || exists(file);
   const program = ts.createProgram([...fixtures.keys()], options, host);
   const diagnostics = ts.getPreEmitDiagnostics(program);
-  const owned = diagnostics.filter((item) => item.file?.fileName === resolve(root, "packages/agent/src/bundle.ts") || item.file?.fileName.endsWith("bundle-positive.fixture.ts"));
+  const owned = diagnostics.filter((item) => item.file?.fileName === resolve(root, "packages/agent/src/kernel/bundle.ts") || item.file?.fileName.endsWith("bundle-positive.fixture.ts"));
   expect(owned.map((item) => ts.flattenDiagnosticMessageText(item.messageText, "\n"))).toEqual([]);
   for (const [name, , code] of negatives) {
     const path = resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`);

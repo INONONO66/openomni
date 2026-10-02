@@ -1,4 +1,4 @@
-import { createObservationBus, type ObservationBus } from "../../src/observation/bus";
+import { createObservationBus, type ObservationBus } from "../../src/session/bus";
 
 let traceCounter = 0;
 

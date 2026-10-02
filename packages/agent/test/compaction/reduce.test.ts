@@ -1,13 +1,13 @@
 import { Effect } from "effect";
-import { AgentFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/kernel/failure";
 import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { collector } from "../helpers/observation-collector";
-import { Compaction } from "../../src/compaction/compact";
-import { elideToolOutputs } from "../../src/compaction/reduce";
+import { Compaction } from "../../src/plugins/compaction/compact";
+import { elideToolOutputs } from "../../src/plugins/compaction/reduce";
 import { completedToolPart, messageSequence } from "../helpers/messages";
-import { RunEvents } from "../../src/core/execution/events";
+import { RunEvents } from "../../src/kernel/turn";
 
 const { user: userMessage, assistant } = messageSequence("reduce-session");
 

@@ -2,8 +2,8 @@ import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices } f
 import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
 import { Effect, Cause, Exit } from "effect";
 
-import { runAgent } from "../../src/core/execution/run";
-import type { ChatAgentInput } from "../../src/core/types";
+import { runAgent } from "../../src/kernel/turn";
+import type { ChatAgentInput } from "../../src/kernel/types";
 import type { Sink } from "../../src/model";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import type { PolicyRow } from "@openomni/protocol";

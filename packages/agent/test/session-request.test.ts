@@ -14,14 +14,14 @@ import {
   type LedgerSession,
   type SessionTransition,
 } from "@openomni/protocol";
-import { decideRequestTransition, requestBindingDigest } from "../src/session-request";
+import { decideRequestTransition, requestBindingDigest } from "../src/session/request";
 
 const row: LedgerSession.Row = {
   id: "session",
   parentId: null,
   role: "resident",
-  leaseOwner: "kernel",
-  leaseFence: 1,
+  fenceOwner: "kernel",
+  fence: 1,
   revision: 1,
   state: "running",
   toolsGeneration: 1,
@@ -450,7 +450,7 @@ it.each([false, true])("gateway admission intake commits atomically with the req
   expect(kernel.pendingMessages("parent").map(({ id }) => id)).toEqual(["commission:prompt"]);
   expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "parent" }]);
   // No lease release: the admission's fence owner stays durable.
-  expect(kernel.row("parent").leaseOwner).not.toBeNull();
+  expect(kernel.row("parent").fenceOwner).not.toBeNull();
 })));
 
 it.each([

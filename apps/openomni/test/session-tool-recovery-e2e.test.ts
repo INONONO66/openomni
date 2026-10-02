@@ -9,18 +9,16 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  closeSessions,
-  createSessionChatRunner,
-  createTurnDispatcher,
-  defineTool,
-  eraseTool,
-  session,
-  sessionTool,
-  type SessionRuntime,
-} from "@openomni/agent";
+import { Kernel, Session, Journal, Testing } from "@openomni/agent";
+const closeSessions = Session.closeSessions;
+const createSessionChatRunner = Session.createSessionChatRunner;
+const createTurnDispatcher = Kernel.createTurnDispatcher;
+const defineTool = Kernel.defineTool;
+const eraseTool = Kernel.eraseTool;
+const session = Testing.session;
+const sessionTool = Kernel.sessionTool;
+type SessionRuntime = Session.SessionRuntime;
 import { Bus } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/agent";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
@@ -227,7 +225,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         });
         crashRef.current = crashPlane;
         prefix = treeOf();
-        expect(SessionHandleStore.openTurns(prefix)).toHaveLength(1);
+        expect(Journal.SessionHandleStore.openTurns(prefix)).toHaveLength(1);
         expect(
           prefix.filter(
             (action) =>
@@ -237,7 +235,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         ).toHaveLength(1);
         // The crashed activation's fence is still on the row; the recovery
         // drain adopts a higher fence and settles the open turn from evidence.
-        expect(crashPlane.openKernel(sessionId).row(sessionId).leaseOwner).not.toBeNull();
+        expect(crashPlane.openKernel(sessionId).row(sessionId).fenceOwner).not.toBeNull();
         const crashRuntime: SessionRuntime = {
           authorizeConfigure: allowConfigure,
           openKernel: crashPlane.openKernel,

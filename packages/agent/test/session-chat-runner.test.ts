@@ -12,9 +12,11 @@ import { describe, expect, it } from "bun:test";
 
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
-import { closeSessions, createSessionChatRunner, type Executor,  } from "../src/index";
+import { closeSessions, createSessionChatRunner } from "../src/session/run";
+import type { Executor } from "../src/kernel/gate/decide";
 import { Bus } from "./helpers/bus";
-import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
+import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
+import { session } from "../src/testing/registry";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
 import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";
@@ -167,7 +169,7 @@ function runDurably(
     };
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input: import("../src/session-handle").SessionRunnerInput) =>
+      prepare: (input: import("../src/session/run").SessionRunnerInput) =>
         Effect.gen(function* () {
           return prepareChatFixture({
             config: config(

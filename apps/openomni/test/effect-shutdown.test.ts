@@ -1,7 +1,13 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
-import { session, createTurnDispatcher, defineTool, eraseTool, sessionTool, type SessionRuntime } from "@openomni/agent";
+import { Kernel, type Session, Testing } from "@openomni/agent";
+const session = Testing.session;
+const createTurnDispatcher = Kernel.createTurnDispatcher;
+const defineTool = Kernel.defineTool;
+const eraseTool = Kernel.eraseTool;
+const sessionTool = Kernel.sessionTool;
+type SessionRuntime = Session.SessionRuntime;
 import { planeOf } from "./helpers/ledger";
 import { z } from "zod";
 import { createResident } from "../src/resident";
@@ -12,7 +18,7 @@ import { Clock, Effect } from "effect";
 import { bootResource } from "../src/composition/boot";
 import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "../src/gateway";
 import { installShutdownHandlers } from "../src/index";
-import { GenerationLayers } from "@openomni/agent";
+const GenerationLayers = Kernel.GenerationLayers;
 import { AppLifecycleFailure } from "../src/runtime";
 import { allowConfigure } from "./helpers/generation-services";
 import { Bus } from "./helpers/bus";
@@ -145,11 +151,11 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     await entered.promise;
     const kernel = plane.openKernel(handle.id);
     const lease = kernel.row(handle.id);
-    expect(lease.leaseOwner).not.toBeNull();
+    expect(lease.fenceOwner).not.toBeNull();
     await runAppEffect(runtime, shutdownSessions(sessionRuntime, Promise.resolve()));
     order.push("close.returned");
     await interrupted.promise;
-    expect(kernel.row(handle.id)).toMatchObject({ leaseOwner: lease.leaseOwner, leaseFence: lease.leaseFence });
+    expect(kernel.row(handle.id)).toMatchObject({ fenceOwner: lease.fenceOwner, fence: lease.fence });
     expect(sessionTree(handle.id, plane.sessionStore(handle.id).actions).some((action) => {
       const value = action.effect.value;
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
@@ -163,7 +169,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
     // W5.2: hibernation commits nothing and the durable owner survives —
     // release is the onHibernate signal above, not a lease-null write.
-    expect(kernel.row(handle.id).leaseOwner).not.toBeNull();
+    expect(kernel.row(handle.id).fenceOwner).not.toBeNull();
   } finally {
     raw.resolve("late raw settlement");
     await turn;

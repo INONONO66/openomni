@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { bundle, BundlesLive, AgentFailure, GenerationLayers, ObservationSink, SessionLayer, session } from "@openomni/agent";
+import { Bundle, Kernel, Testing } from "@openomni/agent";
+const bundle = Bundle.bundle;
+const BundlesLive = Bundle.BundlesLive;
+const AgentFailure = Kernel.AgentFailure;
+const GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+const SessionLayer = Kernel.SessionLayer;
+const session = Testing.session;
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";

@@ -1,10 +1,10 @@
 
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
-import { createRunState, recordCallContext, type RunState } from "../../src/core/execution/state";
-import { resolveCompactionGeometry } from "../../src/compaction/geometry";
-import { applyCompaction } from "../../src/core/execution/turn-compaction";
-import type { CompactionSession } from "../../src/compaction/speculate";
-import type {} from "../../src/core/types";
+import { createRunState, recordCallContext, type RunState } from "../../src/kernel/turn";
+import { resolveCompactionGeometry } from "../../src/plugins/compaction/geometry";
+import { applyCompaction } from "../../src/kernel/compaction";
+import type { CompactionSession } from "../../src/plugins/compaction/speculate";
+import type {} from "../../src/kernel/types";
 import { runInput } from "./run-input";
 import { testMessageSource } from "./message-source";
 

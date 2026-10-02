@@ -8,11 +8,12 @@ import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
-import { createTurnDispatcher, type SessionRunner } from "../src/index";
+import { createTurnDispatcher } from "../src/kernel/tool";
+import type { SessionRunner } from "../src/session/run";
 import { Bus } from "./helpers/bus";
-import { session } from "../src/session-handle";
-import type { SessionHandle, SessionRunnerInput } from "../src/session-contract";
-import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { session } from "../src/testing/registry";
+import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
+import { foldSessionHistory } from "../src/inspect/history";
 
 let nextId = 0;
 function runtime(): SessionRuntime {
@@ -152,7 +153,7 @@ describe("restore_context_projection", () => {
             ),
           );
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
           expect(handle.inspect().compactions).toEqual([
             expect.objectContaining({
               compactionId: compaction.id,
@@ -206,7 +207,7 @@ describe("restore_context_projection", () => {
             message: "context restore refused: unknown_compaction",
           });
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
           const result = before.find(
             (action: LedgerAction.Node) =>
               action.kind === "compaction" && action.parentId === compaction.id,
@@ -220,7 +221,7 @@ describe("restore_context_projection", () => {
           });
           expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);
           // No release plane: the adopted fence owner stays durable.
-          expect(isolatedLedger().kernel.row("ctx").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
         }),
       ),
     ));

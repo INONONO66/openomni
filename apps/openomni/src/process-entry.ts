@@ -1,17 +1,20 @@
 import type { Readable } from "node:stream";
-import {
-  BundleDefinitions, Entropy, GenerationLayers, ObservationSink,
-  closeSessions,
-  createSessionRequests,
-  createSessionEntityRunTurn,
-  currentExecutor,
-  decideSessionAdmission,
-  AgentFailure,
-  adoptSessionAuthority,
-  receivedMessageAction,
-  type SessionEntryServices,
-  type SessionRuntime,
-} from "@openomni/agent";
+import { Bundle, Kernel, Session } from "@openomni/agent";
+const BundleDefinitions = Bundle.BundleDefinitions;
+const Entropy = Kernel.Entropy;
+const GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+const closeSessions = Session.closeSessions;
+const createSessionRequests = Session.createSessionRequests;
+const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
+const currentExecutor = Kernel.currentExecutor;
+const decideSessionAdmission = Session.decideSessionAdmission;
+const AgentFailure = Kernel.AgentFailure;
+type AgentFailure = Kernel.AgentFailure;
+const adoptSessionAuthority = Session.adoptSessionAuthority;
+const receivedMessageAction = Session.receivedMessageAction;
+type SessionEntryServices = Kernel.SessionEntryServices;
+type SessionRuntime = Session.SessionRuntime;
 import { createChannelStores, createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
 import { Effect } from "effect";
 import {
@@ -80,8 +83,8 @@ export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: ()
         new AgentFailure({ operation: "message.commit", cause: error._tag });
       const live = kernel.row(input.sessionId);
       const authority =
-        live.state === "running" && live.leaseOwner !== null
-          ? { owner: live.leaseOwner, fence: live.leaseFence }
+        live.state === "running" && live.fenceOwner !== null
+          ? { owner: live.fenceOwner, fence: live.fence }
           : {
               owner,
               fence: yield* adoptSessionAuthority(kernel, input.sessionId, owner).pipe(

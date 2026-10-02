@@ -2,7 +2,15 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkBundleImports, checkDocFreshness, main } from "./check-deps";
+import {
+  agentBandViolations,
+  agentIndexPerimeterViolations,
+  checkBundleImports,
+  checkDocFreshness,
+  main,
+  validateAgentBands,
+  validateAgentIndexPerimeter,
+} from "./check-deps";
 import { checkPython } from "./check-quality-python";
 import { TOPOLOGY } from "./topology";
 
@@ -544,4 +552,143 @@ test("in-process Python gate rejects checker version drift and invalid flags", (
     if (previous === undefined) delete process.env.BASEDPYRIGHT;
     else process.env.BASEDPYRIGHT = previous;
   }
+});
+
+test("#1247 bands: a planted kernel->session import emits a VIOLATION line", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { runSession } from "../session/run";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toStartWith("VIOLATION: packages/agent/src/kernel/planted.ts:1");
+});
+
+test("#1247 ratchet: growth over the pinned baseline fails, within-baseline passes", async () => {
+  const clean = fixture({
+    "packages/agent/src/kernel/pure.ts": 'import { ok } from "./other";',
+  });
+  expect(await validateAgentBands(clean)).toEqual([]);
+
+  // kernel/failure.ts is pinned at 1; a second violation in it must fail.
+  const grown = fixture({
+    "packages/agent/src/kernel/failure.ts":
+      'import { a } from "../session/run";\nimport { b } from "../model/errors";',
+  });
+  const violations = await validateAgentBands(grown);
+  expect(violations.some((line) => line.includes("over the #1247 ratchet of 1"))).toBe(true);
+
+  // Exactly at the pinned count: the ratchet holds without failing.
+  const pinned = fixture({
+    "packages/agent/src/kernel/failure.ts": 'import { a } from "../session/run";',
+  });
+  expect(await validateAgentBands(pinned)).toEqual([]);
+});
+
+test("#1247 bands: external bans catch exact and prefixed specifiers, legal externals pass", () => {
+  const exact = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { generateText } from "ai";',
+  );
+  expect(exact).toHaveLength(1);
+  expect(exact[0]).toContain("kernel/ may not depend on ai");
+
+  const prefixed = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { anthropic } from "@ai-sdk/anthropic";',
+  );
+  expect(prefixed).toHaveLength(1);
+  expect(prefixed[0]).toContain("kernel/ may not depend on @ai-sdk/");
+
+  // A sub-path of an exact ban is banned too; an unrelated external is legal.
+  const subPath = agentBandViolations(
+    "packages/agent/src/session/planted.ts",
+    'import { Database } from "bun:sqlite/thing";',
+  );
+  expect(subPath).toHaveLength(1);
+  expect(
+    agentBandViolations("packages/agent/src/kernel/planted.ts", 'import { Effect } from "effect";'),
+  ).toEqual([]);
+});
+
+test("#1247 S8 pin: the real agent index passes, a grown name fails", async () => {
+  const real = await Bun.file(join(import.meta.dir, "..", "packages/agent/src/index.ts")).text();
+  expect(agentIndexPerimeterViolations(real)).toEqual([]);
+
+  const grown = `${real}\nexport { somethingNew } from "./kernel/turn";\n`;
+  const violations = agentIndexPerimeterViolations(grown);
+  expect(violations.some((line) => line.includes("exports somethingNew outside the pinned S8 perimeter"))).toBe(true);
+});
+
+test("#1247 S8 pin: an eighth namespace and a non-barrel export form fail; shrink passes", () => {
+  const extraNamespace = agentIndexPerimeterViolations('export * as Extra from "./extra";\n');
+  expect(extraNamespace.some((line) => line.includes("namespace Extra outside the seven #1247 namespaces"))).toBe(true);
+
+  const declaration = agentIndexPerimeterViolations("export const leak = 1;\n");
+  expect(declaration.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+
+  const shrunk = agentIndexPerimeterViolations(
+    'export * as Kernel from "./kernel";\nexport { evaluatePermission } from "./kernel/gate/match";\n',
+  );
+  expect(shrunk).toEqual([]);
+});
+
+test("#1247 S8 pin: alias, indentation, and missing semicolon cannot smuggle a name", () => {
+  // The EXPORTED name (after `as`) is what goes public; the pinned local name must not whitelist it.
+  const aliased = agentIndexPerimeterViolations(
+    'export { evaluatePermission as rogue } from "./kernel/gate/match";\n',
+  );
+  expect(aliased.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
+
+  const indented = agentIndexPerimeterViolations('  export { rogue } from "./kernel/turn";\n');
+  expect(indented.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
+
+  const semicolonFree = agentIndexPerimeterViolations('export { rogue } from "./kernel/turn"\n');
+  expect(semicolonFree.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
+
+  // Aliasing a pinned name onto another pinned name stays within the perimeter.
+  const pinnedAlias = agentIndexPerimeterViolations(
+    'export { decisionFromEvaluation as evaluatePermission } from "./kernel/gate/match";\n',
+  );
+  expect(pinnedAlias).toEqual([]);
+});
+
+test("#1247 S8 pin: unaliased star export and default export are rejected forms", () => {
+  const star = agentIndexPerimeterViolations('export * from "./kernel";\n');
+  expect(star.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+
+  const defaulted = agentIndexPerimeterViolations("const x = 1;\nexport default x;\n");
+  expect(defaulted.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+});
+
+test("#1247 S8 pin: a tenth named export trips the count diagnostic itself", () => {
+  const names = [
+    "decisionFromEvaluation",
+    "evaluatePermission",
+    "PolicyEvaluationInput",
+    "requireSubAdapter",
+    "withStoreTimestamps",
+    "createDecisionFactPort",
+    "createSurfaceKeyStore",
+    "StoredEndpoint",
+    "StoredIdentity",
+    // Tenth entry re-exports a pinned name under a second pinned alias, so every
+    // NAME stays pinned and only the count rule can catch the growth.
+    "evaluatePermission as decisionFromEvaluation",
+  ];
+  const source = names.map((name) => `export { ${name} } from "./kernel/gate/match";`).join("\n");
+  const violations = agentIndexPerimeterViolations(source);
+  expect(violations).toContain(
+    "VIOLATION: packages/agent/src/index.ts has 10 named exports over the pinned 9 — shrink only, never grow",
+  );
+});
+
+test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolerates its absence", async () => {
+  const clean = fixture({});
+  expect(await validateAgentIndexPerimeter(clean)).toEqual([]);
+
+  const planted = fixture({
+    "packages/agent/src/index.ts": 'export { rogue } from "./kernel/turn";\n',
+  });
+  const violations = await validateAgentIndexPerimeter(planted);
+  expect(violations.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { PlainValue } from "@openomni/protocol";
-import type { SessionRunnerResult } from "../src/session-contract";
-import { sessionRunnerResultFromValue, sessionRunnerResultValue } from "../src/session-record";
+import type { SessionRunnerResult } from "../src/session/run";
+import { sessionRunnerResultFromValue, sessionRunnerResultValue } from "../src/session/commit";
 
 const usage = { inputTokens: 2, outputTokens: 3, totalTokens: 5 };
 

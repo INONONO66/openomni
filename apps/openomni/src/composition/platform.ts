@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Clock, Effect, Layer } from "effect";
-import { type EntropySource, createObservationBus } from "@openomni/agent";
+import { type Kernel, Session } from "@openomni/agent";
+type EntropySource = Kernel.EntropySource;
+const createObservationBus = Session.createObservationBus;
 
 /**
  * The composition root's only ambient entropy (#1245): node's CSPRNG for ids,

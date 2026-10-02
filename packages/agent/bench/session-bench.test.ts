@@ -55,7 +55,7 @@ describe("session benchmark fixtures", () => {
       runLedgerSync(Effect.result(stores.kernel.commit(request))),
       (error) => error,
     );
-    expect(result).toMatchObject({ ok: true, row: { revision: 22, leaseOwner: "bench" } });
+    expect(result).toMatchObject({ ok: true, row: { revision: 22, fenceOwner: "bench" } });
     expect(sessionTree("warm", stores.session.actions).at(-1)).toMatchObject({
       id: "warm:turn:10",
       kind: "turn",

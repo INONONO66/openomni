@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
 import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { Effect, Fiber, Layer } from "effect";
-import { NamedPolicyRegistry } from "../src/bundle";
+import { NamedPolicyRegistry } from "../src/kernel/bundle";
 import { AgentGenerationLive } from "./helpers/generation-layer";
-import { ObservationSink } from "../src/services";
-import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
+import { ObservationSink } from "../src/kernel/ports";
+import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session/run";
 import { allowAllPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";
 

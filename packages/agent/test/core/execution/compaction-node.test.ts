@@ -9,10 +9,10 @@ import { runTestAgent } from "../../helpers/effect-g3";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { recoveryRecording as recordingExecutor } from "../../helpers/effect-g3r";
 import { runInput } from "../../helpers/run-input";
-import { RunEvents } from "../../../src/core/execution/events";
-import { executeCompaction } from "../../../src/compaction/execute-cut";
-import { createCompactionPlan, restoreCompactionProjection } from "../../../src/compaction/durable";
-import { Compaction } from "../../../src/compaction/compact";
+import { RunEvents } from "../../../src/kernel/turn";
+import { executeCompaction } from "../../../src/plugins/compaction/execute-cut";
+import { createCompactionPlan, restoreCompactionProjection } from "../../../src/plugins/compaction/durable";
+import { Compaction } from "../../../src/plugins/compaction/compact";
 
 function assistant(id: string): Message.WithParts {
   return {

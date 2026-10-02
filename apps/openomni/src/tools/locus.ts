@@ -1,4 +1,5 @@
-import { ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const ToolRefused = Kernel.ToolRefused;
 import { Machine } from "@openomni/protocol";
 
 export type Locus =

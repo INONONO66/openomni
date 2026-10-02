@@ -18,7 +18,7 @@ import { z } from "zod";
 import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
-import type { SessionStore } from "./session-file.js";
+import type { SessionStore } from "./session-file/index.js";
 import { writeEffect } from "./storage/write-effect";
 
 /**
@@ -127,8 +127,8 @@ export function materializationSeed(
       id: input.id,
       parentId: input.parentId,
       role: input.role,
-      leaseOwner: null,
-      leaseFence: 0,
+      fenceOwner: null,
+      fence: 0,
       revision: 0,
       state: "idle",
       toolsGeneration: snapshot.generation,
@@ -584,8 +584,8 @@ function snapshotFor(
     revision: current.revision,
     state: current.state,
     lease: {
-      owner: current.leaseOwner,
-      fence: current.leaseFence,
+      owner: current.fenceOwner,
+      fence: current.fence,
     },
     toolsGeneration: current.toolsGeneration,
     systemHash: current.systemHash,
@@ -804,7 +804,6 @@ function makeSessionKernel(context: SessionKernelContext) {
     adoptFence: (input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError> =>
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
-    commitRequestTransition: (input: LedgerSession.Commit) => commitIn(context, input),
     pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,

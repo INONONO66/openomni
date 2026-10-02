@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { testBus } from "./helpers/bus";
-import { AgentStopError, ContextAdmissionError } from "../src/errors";
-import { failureEvidence } from "../src/executor-outcome";
+import { AgentStopError, ContextAdmissionError } from "../src/kernel/failure";
+import { failureEvidence } from "../src/kernel/gate/decide";
 import { AgentGenerationLive } from "./helpers/generation-layer";
 import { fixedClockLayer } from "./helpers/time";
 import { Clock } from "effect";
-import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/kernel/ports";
 import { allowAllPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";
 

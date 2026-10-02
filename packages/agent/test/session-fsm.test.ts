@@ -3,16 +3,16 @@ import { Deferred, Effect, Fiber } from "effect";
 import * as SessionHandleStore from "../src/store/fence";
 import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
-import { decideSessionAdmission } from "../src/session-admission";
-import { decideRequestTransition } from "../src/session-request";
-import { session } from "../src/session-handle";
-import { resolveSessionRuntime } from "../src/session-contract";
-import { createController } from "../src/session-controller";
-import { turnIntentAction } from "../src/session-record";
-import type { SessionRunner, SessionRunnerInput } from "../src/session-contract";
-import { createExecutor } from "../src/executor";
-import { CommitFailed } from "../src/errors";
-import { createSessionChatRunner } from "../src/session-chat-runner";
+import { decideSessionAdmission } from "../src/session/mailbox";
+import { decideRequestTransition } from "../src/session/request";
+import { session } from "../src/testing/registry";
+import { resolveSessionRuntime } from "../src/session/run";
+import { createController } from "../src/testing/controller";
+import { turnIntentAction } from "../src/session/commit";
+import type { SessionRunner, SessionRunnerInput } from "../src/session/run";
+import { createExecutor } from "../src/kernel/gate/decide";
+import { CommitFailed } from "../src/kernel/failure";
+import { createSessionChatRunner } from "../src/session/run";
 import { prepareChatFixture } from "./helpers/chat-services";
 import { assistantStep } from "./helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -28,8 +28,8 @@ const row: LedgerSession.Row = {
   id: "S",
   parentId: null,
   role: "resident",
-  leaseOwner: "owner",
-  leaseFence: 1,
+  fenceOwner: "owner",
+  fence: 1,
   revision: 1,
   state: "running",
   toolsGeneration: 1,
@@ -111,7 +111,7 @@ function commitAsForeignOwner(
     const lease = yield* kernel.adoptFence({
       sessionId: "S",
       owner,
-      fence: kernel.row("S").leaseFence + 1,
+      fence: kernel.row("S").fence + 1,
     });
     yield* kernel.commit({
       sessionId: "S",
@@ -537,7 +537,7 @@ describe("T01-T15 real controller transition witnesses", () => {
           expect(SessionHandleStore.turnTerminal(endings[0])?.kind).toBe(kind);
           // W5.2: terminals keep the fence owner durable; there is no lease release.
           expect(isolatedLedger().kernel.row("S").state).toBe("idle");
-          expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         }),
       ));
 
@@ -623,7 +623,7 @@ describe("T01-T15 real controller transition witnesses", () => {
             source === "current" ? "waiting" : "error",
           );
           // W5.2: waiting/error terminals keep the fence owner durable.
-          expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+          expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         }),
       ));
 
@@ -752,7 +752,7 @@ describe("T01-T15 real controller transition witnesses", () => {
         expect((yield* handle.restoreContext(compaction.id)).terminal).toBe("executed");
         expect(sessionTree(isolatedLedger().kernel, "S").slice(0, before.length)).toEqual(before);
         // W5.2: no lease release; the restore's fence owner stays durable.
-        expect(isolatedLedger().kernel.row("S").leaseOwner).not.toBeNull();
+        expect(isolatedLedger().kernel.row("S").fenceOwner).not.toBeNull();
         expect(canonicalDigest(sessionTree(isolatedLedger().kernel, "S"))).not.toBe(
           canonicalDigest(before),
         );

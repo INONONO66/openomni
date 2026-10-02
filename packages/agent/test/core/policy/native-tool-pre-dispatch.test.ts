@@ -9,7 +9,8 @@ import { Cause, Effect, Fiber } from "effect";
 import { createNamedPolicyRegistry } from "../../../src/kernel/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
-import { createExecutor, createDispatcher, defineTool } from "../../../src/index";
+import { createExecutor } from "../../../src/kernel/gate/decide";
+import { createDispatcher, defineTool } from "../../../src/kernel/tool";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 
 test("approval recovery executes recorded admitted bytes without transforming again", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -70,7 +71,7 @@ for (const door of ["model", "cell", "wave"] as const) {
         policyGeneration: 1, actionId: `${id}:configure`, at: 100,
       });
       const lease = yield* kernel.adoptFence({
-        sessionId: id, owner: id, fence: materialized.row.leaseFence + 1,
+        sessionId: id, owner: id, fence: materialized.row.fence + 1,
       });
       let sequence = 0;
       const executed: string[] = [];

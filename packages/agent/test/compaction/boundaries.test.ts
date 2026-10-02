@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
-import { planAnchoredCut } from "../../src/compaction/candidate";
-import { createCompactionPlan, restoreCompactionProjection } from "../../src/compaction/durable";
-import { CompactionSession } from "../../src/compaction/speculate";
+import { planAnchoredCut } from "../../src/plugins/compaction/candidate";
+import { createCompactionPlan, restoreCompactionProjection } from "../../src/plugins/compaction/durable";
+import { CompactionSession } from "../../src/plugins/compaction/speculate";
 import { isolated } from "../helpers/isolated";
-import { withSummarizerDeadline } from "../../src/compaction/summary";
+import { withSummarizerDeadline } from "../../src/plugins/compaction/summary";
 import { textMessage } from "../helpers/messages";
 
 

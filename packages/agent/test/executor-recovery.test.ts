@@ -1,14 +1,14 @@
 import { memoryExecutionReads } from "./helpers/execution-reads";
 import { testExecutor } from "./helpers/executor";
-import type { ResolvedExecutorOptions } from "../src/executor-contract";
+import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
 import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
-import { createTurnDispatcher } from "../src/index";
-import type { DurableExecutor, ExecutionBatchItem, ExecutionResult, } from "../src/executor-contract";
-import type { WaveControl } from "../src/core/execution/tool-wave";
+import { createTurnDispatcher } from "../src/kernel/tool";
+import type { DurableExecutor, ExecutionBatchItem, ExecutionResult, } from "../src/kernel/gate/decide";
+import type { WaveControl } from "../src/kernel/tool";
 import { CommitRefused, AgentFailure } from "../src/store/errors";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";

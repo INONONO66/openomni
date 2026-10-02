@@ -1,12 +1,11 @@
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
-import {
-  eraseTool,
-  ExecutorContextError,
-  ToolRefused,
-  type SessionEntityTimerContext,
-} from "@openomni/agent";
+import { Kernel, type Session } from "@openomni/agent";
+const eraseTool = Kernel.eraseTool;
+const ExecutorContextError = Kernel.ExecutorContextError;
+const ToolRefused = Kernel.ToolRefused;
+type SessionEntityTimerContext = Session.SessionEntityTimerContext;
 import { Effect, Exit, Cause } from "effect";
 import { createMonitorTool } from "../src/tools/monitor";
 import {

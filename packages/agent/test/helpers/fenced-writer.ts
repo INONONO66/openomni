@@ -2,7 +2,7 @@ import type { CommitReceipt } from "../../src/store/services";
 import type { LedgerError } from "../../src/store/errors";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/cluster/kernel-registry";
+import type { SessionKernel } from "../../src/session/entity";
 import { sessionTree } from "./session-tree";
 
 export interface FencedTurnFixture {
@@ -61,7 +61,7 @@ export function fencedTurnFixture(
     const adopted = yield* kernel.adoptFence({
       sessionId: id,
       owner,
-      fence: created.row.leaseFence + 1,
+      fence: created.row.fence + 1,
     });
     const generation = kernel.latestGenerationFor(id);
     const turnId = input.turnId ?? `${id}:turn`;

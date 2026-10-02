@@ -1,4 +1,5 @@
-import { SEEDED_POLICY_ROWS } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
 import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
 import { PROVISION_POLICY_ROWS } from "./tools/provision";

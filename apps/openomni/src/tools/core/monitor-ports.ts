@@ -1,5 +1,7 @@
-import { currentInvocation, ToolRefused } from "@openomni/agent";
-import { SessionHandleStore, type LedgerError } from "@openomni/agent";
+import { Kernel, Journal } from "@openomni/agent";
+const currentInvocation = Kernel.currentInvocation;
+const ToolRefused = Kernel.ToolRefused;
+type LedgerError = Journal.LedgerError;
 import { Alarm, EncodedPayload, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import type { SessionKernel } from "../../composition/cluster-runtime";
@@ -77,7 +79,7 @@ export async function armWatch(
 ) {
   const watch = Alarm.Watch.parse({ ...source, description });
   const kernel = ports.openKernel(context.sessionId);
-  const turn = SessionHandleStore.turnIntent(kernel.actionById(context.turnId));
+  const turn = Journal.SessionHandleStore.turnIntent(kernel.actionById(context.turnId));
   if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
   const { policy } = currentInvocation();
   const evaluation = policy.evaluate({

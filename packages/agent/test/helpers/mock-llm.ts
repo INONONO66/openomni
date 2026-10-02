@@ -3,8 +3,8 @@ import { APICallError } from "ai";
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { LlmRunFailure, type Run, type RunInput, type Sink } from "../../src/model";
 import { Effect } from "effect";
-import type {} from "../../src/core/types";
-import { createAssistantMessage } from "../../src/core/message-factory";
+import type {} from "../../src/kernel/types";
+import { createAssistantMessage } from "../../src/kernel/message-factory";
 
 export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;
 

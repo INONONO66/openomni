@@ -1,7 +1,7 @@
 /** Channel rendering of kernel-classified failures; raw provider details stay private. */
 
-import { failureFacts } from "@openomni/agent";
-import { Retry } from "@openomni/agent";
+import { Kernel, Model } from "@openomni/agent";
+const failureFacts = Kernel.failureFacts;
 import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 
@@ -11,7 +11,7 @@ type ThrownValue = z.input<typeof ThrownValue>;
 /** How the classified failure reads to the person who asked for the turn. */
 export interface ClassifiedFailure {
   /** The closed llm-package class this failure was decided to be. */
-  readonly reason: Retry.Reason;
+  readonly reason: Model.Retry.Reason;
   /** The channel-visible message. */
   readonly text: string;
 }
@@ -36,7 +36,7 @@ function attemptClause(error: object | undefined): string {
 export function classifyTurnFailure(error: ThrownValue): ClassifiedFailure {
   const parsed = ThrownValue.safeParse(error);
   const failure: Error | PlainValue = parsed.success ? parsed.data : null;
-  const reason = Retry.classifyFailure(failure);
+  const reason = Model.Retry.classifyFailure(failure);
   const objectError = typeof failure === "object" && failure !== null ? failure : undefined;
   switch (reason) {
     case "rate_limit":

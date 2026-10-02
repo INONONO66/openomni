@@ -3,9 +3,9 @@ import { openSessionStore } from "../../src/store/session-file";
 import * as SessionHandleStore from "../../src/store/fence";
 import type { LedgerSession } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
-import type { createObservationBus } from "../../src/observation/bus";
+import type { createObservationBus } from "../../src/session/bus";
 import { testBus } from "./bus";
-import type { RunnerServices } from "../../src/services";
+import type { RunnerServices } from "../../src/kernel/ports";
 import { runnerTestLayer } from "./service-layers";
 
 /**

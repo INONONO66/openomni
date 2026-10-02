@@ -6,8 +6,8 @@ import {
   PlainValueSchema,
   type PlainValue,
 } from "@openomni/protocol";
-import { createAssistantMessage } from "../src/core/message-factory";
-import { foldSessionHistory } from "../src/session-lifecycle/history";
+import { createAssistantMessage } from "../src/kernel/message-factory";
+import { foldSessionHistory } from "../src/inspect/history";
 
 for (const terminal of [undefined, "interrupted", "error"] as const) {
   test(`positional settlements survive ${terminal ?? "open crash"} history and do not cross turns`, () => {

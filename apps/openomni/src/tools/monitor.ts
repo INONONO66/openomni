@@ -1,6 +1,8 @@
 import { armWatch, type MonitorPorts, WatchState } from "./core/monitor-ports";
 import { isAbsolute } from "node:path";
-import { defineTool, ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const defineTool = Kernel.defineTool;
+const ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 
 const lifetime = {

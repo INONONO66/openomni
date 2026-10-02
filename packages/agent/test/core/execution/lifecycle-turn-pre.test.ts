@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveCompactionGeometry } from "../../../src/compaction/geometry";
+import { resolveCompactionGeometry } from "../../../src/plugins/compaction/geometry";
 
 describe("turn preparation compaction geometry", () => {
   it("arms the model below the compaction threshold", () => {

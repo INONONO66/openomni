@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Result } from "effect";
 import ts from "typescript";
 import { runSyncEffect } from "../apps/openomni/test/helpers/effect";
-import * as Agent from "../packages/agent/src/errors";
+import * as Agent from "../packages/agent/src/kernel/failure";
 import * as Model from "../packages/agent/src/model/errors";
 import * as Store from "../packages/agent/src/store/errors";
 import { sdkError } from "../packages/agent/test/model/helpers/retry";
@@ -52,7 +52,7 @@ const store = {
   AgentFailure: agentFailure,
   SessionNotFound: new Store.SessionNotFound({ sessionId: "session" }),
   MaterializeRefused: new Store.MaterializeRefused({ sessionId: "session", reason: "input" }),
-  LeaseRefused: new Store.LeaseRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
+  FenceRefused: new Store.FenceRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
   CommitRefused: new Store.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
   PolicyGenerationRefused: new Store.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
   StorageUnavailable: new Store.StorageUnavailable({ capability: "storage" }),
@@ -128,7 +128,7 @@ const carrierOwners: Readonly<Record<string, object>> = {
 };
 
 const packages: readonly PackageEntry[] = [
-  { name: "agent", path: "agent/src/errors", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/errors", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
+  { name: "agent", path: "agent/src/kernel/failure", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/kernel/failure", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
   { name: "agent store", path: "agent/src/store/errors", module: Store, union: "LedgerError", carrier: "AgentFailure", carrierPath: "agent/src/store/errors", failures: store, thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError] },
   { name: "agent model", path: "agent/src/model/errors", module: Model, union: "LlmError", carrier: "AgentFailure", carrierPath: "agent/src/model/errors", failures: model, thrown: [] },
   { name: "channels", path: "channels/src/errors", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", carrierPath: "channels/src/errors", failures: channels, thrown: [] },

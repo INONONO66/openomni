@@ -8,7 +8,7 @@ import * as SessionHandleStore from "../src/store/fence";
 import { isolatedRun } from "./helpers/isolated";
 import { openCrashStores } from "./helpers/crash-stores";
 import { sessionTree } from "./helpers/session-tree";
-import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/session-lifecycle/history";
+import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/inspect/history";
 import { reconstructionMain, reconstructionProcessMain, reconstructionWitness, } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";

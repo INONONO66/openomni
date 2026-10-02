@@ -1,5 +1,8 @@
 import { createCodemode, MachinesFailure, type RunOptions } from "@openomni/machines";
-import { forkInvocation, AgentFailure, type InvocationFrame } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const forkInvocation = Kernel.forkInvocation;
+const AgentFailure = Kernel.AgentFailure;
+type InvocationFrame = Kernel.InvocationFrame;
 import { Effect, Exit, type Scope } from "effect";
 import type { MachineHost } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";

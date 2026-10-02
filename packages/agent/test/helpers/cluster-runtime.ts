@@ -43,14 +43,14 @@ import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { openCatalogStore } from "../../src/store/catalog";
 import { openSessionStore } from "../../src/store/session-file";
-import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/cluster/session-entity";
+import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/session/entity";
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type TimerChainReads, } from "../../src/cluster/timers";
-import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session-contract";
-import type { SessionError } from "../../src/errors";
-import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session-record";
+import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/session/alarm";
+import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session/run";
+import type { SessionError } from "../../src/kernel/failure";
+import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session/commit";
 import { runAgent } from "./executor";
 
 export interface TestClusterOptions {
@@ -255,7 +255,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
 
 /** Chain-guarded timer folds straight from `src/cluster/timers` (C2/F2). */
 function makeTimerPort(): SessionEntityPorts["timers"] {
-  const reads = (context: SessionEntityTimerContext): TimerChainReads => ({
+  const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
     actionById: context.kernel.actionById,
     requestById: context.kernel.requestById,
     resultFor: (intentId) => context.kernel.resultFor(context.authority.sessionId, intentId),

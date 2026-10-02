@@ -1,6 +1,12 @@
-import { AgentProcessLive, BundlesLive, GenerationLayers, type ObservationSink, type SessionRuntime } from "@openomni/agent";
+import { Kernel, type Session, Bundle, Model } from "@openomni/agent";
+const BundlesLive = Bundle.BundlesLive;
+const GenerationLayers = Kernel.GenerationLayers;
+const ObservationSink = Kernel.ObservationSink;
+type SessionRuntime = Session.SessionRuntime;
+import { AgentProcessLive } from "../../src/agent-layers";
 import { Bus } from "./bus";
-import { Llm, LlmLive } from "@openomni/agent";
+const Llm = Model.Llm;
+const LlmLive = Model.LlmLive;
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";

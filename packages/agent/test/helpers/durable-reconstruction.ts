@@ -14,15 +14,15 @@ import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
 import { runnerTestLayer } from "./service-layers";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
-import { createExecutor } from "../../src/executor";
-import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session-contract";
-import { createController } from "../../src/session-controller";
+import { createExecutor } from "../../src/kernel/gate/decide";
+import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session/run";
+import { createController } from "../../src/testing/controller";
 import {
   FoldCheckpointIntegrityError,
   foldHistoryState,
   foldSessionHistory,
   hydrateSessionHistory,
-} from "../../src/session-lifecycle/history";
+} from "../../src/inspect/history";
 import { reconstructionFixture, reconstructionSession } from "./reconstruction-fixture";
 
 export const reconstructionWitness = z.object({

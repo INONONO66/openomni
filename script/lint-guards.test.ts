@@ -71,7 +71,7 @@ test.each([
 test.each([
   ["packages/agent/src/kernel/gate/match.ts", "allowlist.includes(actor);"],
   ["apps/openomni/src/other.test.ts", 'const reasonCodes = ["stalled"];'],
-  ["packages/agent/src/core/policy/reason-codes.ts", 'const reasonCodes = ["stalled"];'],
+  ["packages/agent/src/kernel/reason-codes.ts", 'const reasonCodes = ["stalled"];'],
   ["packages/channels/src/telegram/other.ts", "evaluateTriggers(event);"],
   ["packages/channels/src/authn/decision.ts", "evaluatePermission(actor);"],
 ])("permits the explicitly scoped guard exception in %s", (path, source) => {

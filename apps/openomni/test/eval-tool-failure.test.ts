@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { ToolRefused } from "@openomni/agent";
+import { Kernel } from "@openomni/agent";
+const ToolRefused = Kernel.ToolRefused;
 import { createEvalTool } from "../src/tools/eval";
 
 const CONTEXT = {

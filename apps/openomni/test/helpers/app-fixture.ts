@@ -1,4 +1,6 @@
-import { Llm, LlmLive } from "@openomni/agent";
+import { Model } from "@openomni/agent";
+const Llm = Model.Llm;
+const LlmLive = Model.LlmLive;
 import { Context, Effect, Layer } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
 import { startOpenOmni } from "../../src/index";

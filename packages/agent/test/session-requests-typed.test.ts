@@ -1,8 +1,8 @@
 import { Cause, Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
 import { canonicalDigest, type PlainValue } from "@openomni/protocol";
-import { AgentFailure } from "../src/errors";
-import { createSessionRequests } from "../src/session-requests";
+import { AgentFailure } from "../src/kernel/failure";
+import { createSessionRequests } from "../src/session/request";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 

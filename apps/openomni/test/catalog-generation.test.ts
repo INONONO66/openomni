@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { GenerationLayers, ToolCatalog, session, sessionTool } from "@openomni/agent";
+import { Kernel, Testing } from "@openomni/agent";
+const GenerationLayers = Kernel.GenerationLayers;
+const ToolCatalog = Kernel.ToolCatalog;
+type ToolCatalog = Kernel.ToolCatalog;
+const session = Testing.session;
+const sessionTool = Kernel.sessionTool;
 import type { AnyToolDefinition } from "@openomni/protocol";
 import { Effect, type Layer } from "effect";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";

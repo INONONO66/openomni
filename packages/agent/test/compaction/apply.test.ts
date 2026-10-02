@@ -1,11 +1,11 @@
 import { Effect } from "effect";
-import { AgentFailure } from "../../src/errors";
+import { AgentFailure } from "../../src/kernel/failure";
 import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { Compaction } from "../../src/compaction";
+import { Compaction } from "../../src/plugins/compaction";
 import { collector } from "../helpers/observation-collector";
-import { resolveCompactionGeometry } from "../../src/compaction/geometry";
+import { resolveCompactionGeometry } from "../../src/plugins/compaction/geometry";
 import { textMessage } from "../helpers/messages";
 
 function user(id: string): Message.WithParts {

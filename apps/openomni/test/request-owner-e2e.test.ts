@@ -178,7 +178,7 @@ test("authenticated Owner executes the captured Person invocation once across SI
     expect(before.person).toBeNull();
     expect(before.modelCalls).toBe(1);
     const captured = before.sessions.find((session) => session.row.id === request.sessionId);
-    if (captured === undefined || captured.row.leaseOwner === null)
+    if (captured === undefined || captured.row.fenceOwner === null)
       throw new Error("missing crash lease");
     expect(captured.actions.find((action) => action.id === request.requestId)?.kind).toBe("tool");
     expect(request.toolsHash).toBe(captured.generation.toolsHash);
