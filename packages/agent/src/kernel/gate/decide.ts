@@ -15,6 +15,7 @@ import { attachFailureFacts } from "../retry";
 import { attemptRouteChange } from "../../plugins/model-selection";
 import { judgeStop, type StopState, type StopObservation, type StopMetric } from "../stop";
 import type * as SessionHandleStore from "../../store/fence";
+import { executionPoint } from "../points";
 
 // ─── from executor-contract.ts (#1247) ───
 interface ExecutionKindRegistration {
@@ -1222,18 +1223,25 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   const kinds = new Set([...CORE_KINDS, ...(options.extensionKinds ?? []).map((item) => item.kind)]);
   const turnId = options.identity.turnId ?? options.identity.parentActionId;
 
+  /** Registry lookup (#1251): a kind consults `<kind>.<phase>` only when that point is registered; extension kinds register their own consultation points. */
+  const extensions = new Set((options.extensionKinds ?? []).map((item) => item.kind));
+  function consulted(kind: string, phase: "pre" | "post"): boolean {
+    return executionPoint(kind, phase) !== undefined || extensions.has(kind);
+  }
   function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
     parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
     return Effect.suspend(() => {
-      const point = policyPoint(request, phase);
-      const decision = options.policy.evaluate({
-        ...point, role: options.identity.role, sessionId: options.identity.sessionId,
+      const evaluated = options.policy.evaluate({
+        kind: request.kind, phase, op: request.op, role: options.identity.role, sessionId: options.identity.sessionId,
         ...(request.message === undefined ? {} : { message: request.message }), value,
       });
+      // An unregistered point fails closed: the registration table, not the row set, defines where policy applies.
+      const decision = consulted(request.kind, phase) ? evaluated
+        : { ...evaluated, verdict: "deny" as const, reason: "unknown_point" };
       return record.commit({
         id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
         intent: { encodingVersion: 1, value: {
-          hook: `${point.kind}.${point.phase}`, op: request.op, generation: decision.generation,
+          hook: `${request.kind}.${phase}`, op: request.op, generation: decision.generation,
           matchedRuleIds: [...decision.matchedRuleIds], verdict: decision.verdict, inputHash: decision.inputHash,
           transforms: decision.transforms.map((transform) => ({ ...transform })),
           ...(decision.ref === undefined ? {} : { ref: decision.ref }),
@@ -1268,7 +1276,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     if (original === undefined) return decide(request, "pre", request.intent);
     return Effect.try({ try: () => {
       const intent = object(original.intent.value);
-      const inputHash = canonicalDigest({ ...policyPoint(request, "pre"), role: options.identity.role,
+      const inputHash = canonicalDigest({ kind: request.kind, phase: "pre", op: request.op, role: options.identity.role,
         sessionId: options.identity.sessionId, ...(request.message === undefined ? {} : { message: request.message }), value: request.intent });
       const action = recordedDecision(options.ledger, original, intent.policyDecisionId);
       if (action === undefined || intent.value === undefined) throw new ExecutionApprovalError({ code: "stale_approval" });
@@ -1278,7 +1286,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         reason: object(action.effect.value).reason ?? null,
       });
       if (recorded.inputHash !== inputHash || recorded.generation !== options.policy.generation ||
-          recorded.hook !== `${policyPoint(request, "pre").kind}.pre` || recorded.op !== request.op)
+          recorded.hook !== `${request.kind}.pre` || recorded.op !== request.op)
         throw new ExecutionApprovalError({ code: "stale_approval" });
       return { generation: recorded.generation, verdict, transforms: recorded.transforms,
         value: intent.value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
@@ -1478,8 +1486,10 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   function complete<R>(stage: Stage<R>, raw: PlainValue): Effect.Effect<ExecutionResult, ExecutionError> {
     return Effect.gen(function* () {
       const value = clonePlainValue(raw);
-      const post = yield* decide(stage.request, "post", { intent: stage.request.intent, effect: stage.request.effect, result: value });
-      const outcome = yield* settlePost(stage.request, post, value);
+      const outcome = consulted(stage.request.kind, "post")
+        ? yield* decide(stage.request, "post", { intent: stage.request.intent, effect: stage.request.effect, result: value }).pipe(
+            Effect.flatMap((post) => settlePost(stage.request, post, value)))
+        : { terminal: "executed" as const, value };
       if (stage.request.boundary === true && outcome.terminal === "executed" && stage.intent !== undefined) {
         yield* record.commit({
           id: `${stage.intent.action.id}:boundary`, parentId: stage.intent.action.id,
@@ -1580,6 +1590,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
       const exit = yield* Effect.exit(restore(Effect.scoped(body())));
       if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
       const value = clonePlainValue(exit.value);
+      if (!consulted(request.kind, "post")) return { terminal: "executed", value } as const;
       const post = yield* decide(request, "post", { intent: request.intent, effect: request.effect, result: value });
       return yield* settlePost(request, post, value);
     }));
@@ -1599,11 +1610,6 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   });
 }
 
-function policyPoint(request: ExecutionRequest, phase: "pre" | "post"): Pick<PolicyEvaluationInput, "kind" | "phase" | "op"> {
-  return request.kind === "compaction"
-    ? { kind: "turn", phase: "post", op: request.op === "compact" ? "compaction" : request.op }
-    : { kind: request.kind, phase, op: request.op };
-}
 function needsApproval(stage: { readonly pre: Pick<PolicyEvaluation, "verdict">; readonly request: ExecutionRequest }) {
   return stage.pre.verdict === "require_approval" || stage.request.approval?.required === true;
 }

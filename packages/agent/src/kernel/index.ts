@@ -13,6 +13,10 @@ export {
 export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, type PolicyEvaluationInput } from "./gate/compile";
 export { decisionFromEvaluation, evaluatePermission } from "./gate/match";
 export {
+  composePointTable, executionPoint, GateComposeError, KERNEL_CAPABILITY_POINTS,
+} from "./points";
+export { assertPointGenerationRows, POINT_GENERATION_ROW } from "./gate/compose";
+export {
   createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, sessionTool,
   ToolRefused, toolInputSchema, toolSpec,
 } from "./tool";
