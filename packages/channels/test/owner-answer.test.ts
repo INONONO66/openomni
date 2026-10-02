@@ -77,7 +77,7 @@ async function approval() {
     { row: ledger().kernel.row(row.id), invocation: ledger().kernel.actionById(request.requestId), inputRecord: ledger().kernel.requestInputById(row.id, "open") },
   );
   expect(decision.resolution).toBe("opened");
-  await runEffect(ledger().kernel.commitRequestTransition({
+  await runEffect(ledger().kernel.commit({
     sessionId: row.id,
     owner: "fixture",
     fence,

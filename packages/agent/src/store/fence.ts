@@ -804,7 +804,6 @@ function makeSessionKernel(context: SessionKernelContext) {
     adoptFence: (input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError> =>
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
-    commitRequestTransition: (input: LedgerSession.Commit) => commitIn(context, input),
     pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,

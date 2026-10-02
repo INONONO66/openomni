@@ -271,7 +271,7 @@ function commitRequestDeadline(
       },
     );
     if (decision.actions.length === 0) return "noop" as const;
-    yield* kernel.commitRequestTransition({
+    yield* kernel.commit({
       sessionId: authority.sessionId,
       owner: authority.owner,
       fence: authority.fence,

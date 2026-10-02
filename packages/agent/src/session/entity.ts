@@ -332,7 +332,7 @@ function requestCommand(
         ? []
         : [receivedMessageAction({ ...decision.receive, at: decision.receive.createdAt })];
     if (decision.actions.length > 0) {
-      yield* kernel.commitRequestTransition({
+      yield* kernel.commit({
         sessionId: authority.sessionId,
         owner: authority.owner,
         fence: authority.fence,

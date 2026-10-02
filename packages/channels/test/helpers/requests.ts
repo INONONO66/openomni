@@ -156,7 +156,7 @@ export async function command(
       request,
     },
   );
-  await runEffect(kernel.commitRequestTransition({
+  await runEffect(kernel.commit({
     sessionId,
     owner: "command",
     fence,

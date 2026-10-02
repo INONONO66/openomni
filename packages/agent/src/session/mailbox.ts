@@ -384,7 +384,7 @@ export function commitSessionRequest(
         ...(decision.receive === undefined ? [] : [decision.receive]),
         ...(admission === undefined || admission.sessionId !== sessionId ? [] : [admission]),
       ].map((commit) => receivedMessageAction({ ...commit, at: commit.createdAt }));
-      yield* kernel.commitRequestTransition({
+      yield* kernel.commit({
         sessionId,
         ...authority,
         now: at,
@@ -435,8 +435,8 @@ export function requestAuthorityKernel(base: SessionKernel, sessionId: string): 
         }
         return base.adoptFence(input);
       }),
-    commitRequestTransition: (input) =>
-      base.commitRequestTransition(
+    commit: (input) =>
+      base.commit(
         holder.borrowed === undefined
           ? input
           : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },

@@ -54,7 +54,7 @@ export function requestFixture(
     Result.getOrThrowWith(
       runLedgerSync(
         Effect.result(
-          kernel.commitRequestTransition({
+          kernel.commit({
             sessionId: request.sessionId,
             owner: authority.owner,
             fence: authority.fence,

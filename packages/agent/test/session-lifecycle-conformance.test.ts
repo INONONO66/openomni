@@ -1038,7 +1038,7 @@ describe("session lifecycle conformance", () => {
                     run: () => Effect.gen(function* () {
                         const q = requestOf(opened, "STALE");
                         const fresh = kernel().row(q.sessionId);
-                        const corruptCommit = kernel().commitRequestTransition({
+                        const corruptCommit = kernel().commit({
                             sessionId: q.sessionId,
                             owner: "stranger",
                             fence: fresh.fence,
