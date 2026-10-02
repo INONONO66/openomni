@@ -5,33 +5,32 @@ import { fullPointTable, gateRow } from "./helpers/gate-rows";
 const table = fullPointTable();
 
 describe("requirement guard (#1251)", () => {
-  it("resolves a row's own declared service through the guard", () => {
-    const handler: GateHandler = (input) => input.service("guard/self")(input);
-    const inner: GateHandler = () => ({ verdict: "allow", payload: { via: "self" } });
+  it("resolves the row's declared service through a stable registry (#1251 r1)", () => {
+    // The resolver is stable: the same ref always returns the same handler,
+    // as a production registry would. The handler re-enters itself through
+    // the guard, proving the declared requirement resolves at call time.
+    let depth = 0;
+    const self: GateHandler = (input) => {
+      depth += 1;
+      if (depth > 1) return { verdict: "allow", payload: { via: "self", depth } };
+      return input.service("guard/self")(input);
+    };
+    const handlers = new Map<string, GateHandler>([["guard/self", self]]);
     const gate = compileGateRows({
       table,
       rows: [gateRow("tool.pre", { how: { ref: "guard/self" } })],
-      handlers: ["guard/self"],
+      handlers: [...handlers.keys()],
       generation: 1,
     });
-    let outer = true;
     const { decision } = gate.decide(
       "tool.pre",
       { when: {}, value: null },
-      {
-        handlers: (ref) => {
-          if (ref !== "guard/self") return undefined;
-          if (outer) {
-            outer = false;
-            return handler;
-          }
-          return inner;
-        },
-      },
+      { handlers: (ref) => handlers.get(ref) },
     );
+    expect(depth).toBe(2);
     expect(decision.verdict).toBe("allow");
     expect(decision.facts).toEqual([]);
-    expect(decision.consulted.map((entry) => entry.payload)).toEqual([{ via: "self" }]);
+    expect(decision.consulted.map((entry) => entry.payload)).toEqual([{ via: "self", depth: 2 }]);
   });
 
   it("records a dynamic reference escaping the declared requires as a fact and fails closed", () => {
