@@ -54,6 +54,7 @@ function harness(rows: readonly PolicyRow.Row[]) {
       let value = 0;
       return () => `action-${++value}`;
     })(),
+    random: () => 0,
   });
   return { actions, executor };
 }
@@ -172,6 +173,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             identity: { sessionId: "session-1", role: "resident", parentActionId: null },
             clock: () => 100,
             entropy: () => `extension-${revision + 1}`,
+            random: () => 0,
             extensionKinds: [
               {
                 kind: "channel.send",
@@ -244,6 +246,7 @@ describe("the single L2 executor's four-kind verdict model", () => {
             },
             clock: () => 100,
             entropy: () => `receipt-${revision + 1}`,
+            random: () => 0,
           });
 
           const running = yield* Effect.forkScoped(

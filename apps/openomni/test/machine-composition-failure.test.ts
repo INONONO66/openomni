@@ -16,14 +16,15 @@ test("the app machine host translates a codemode failure at its callback boundar
     return createHost(options);
   });
   const failure = new Machines.MachinesFailure({ operation: "code.tool", cause: "lost cell" });
-  const failCell = spyOn(Codemode, "composeCodemode").mockImplementation((host: Machines.MachineHost) =>
-    compose(host).pipe(Effect.map((mode: Codemode.ComposedCodemode) => ({
+  const failCell = spyOn(Codemode, "composeCodemode").mockImplementation((host: Machines.MachineHost, sources: { readonly id: () => string }) =>
+    compose(host, sources).pipe(Effect.map((mode: Codemode.ComposedCodemode) => ({
       ...mode, callTool: (_call: Machine.ToolCall) => Effect.fail(failure),
     }))),
   );
   try {
     const app = await startOpenOmni({ config: {
       host: "127.0.0.1", wsPort: 0,
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
       machines: { socketPath: socketPath(), enrolled: [] },
     } });

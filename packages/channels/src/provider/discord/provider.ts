@@ -25,8 +25,8 @@ export const DiscordProvider: ChannelProvider<DiscordCredentials, "discord"> = {
     "MESSAGE CONTENT gateway intent enabled in the developer portal",
     "bot invited to the target guild with read/send permissions",
   ],
-  create(credentials, config, publish) {
-    const surface = new DiscordAdapter(credentials.token, config, publish);
+  create(credentials, config, publish, options) {
+    const surface = new DiscordAdapter(credentials.token, config, publish, options);
     return {
       surface,
       deliveryRoute: (externalId, body, idempotencyKey) =>

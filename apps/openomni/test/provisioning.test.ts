@@ -17,6 +17,7 @@ import {
 import { resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
 import { putChannelCredential } from "./helpers/channel-credential";
+import { testChannelDeps } from "./helpers/test-entropy";
 
 const NOW = 1_756_000_000_000;
 const KEY_B64 = Buffer.from(new Uint8Array(32).fill(7)).toString("base64");
@@ -90,6 +91,7 @@ describe("declared channel profile", () => {
     const { rows, statuses } = declaredChannelProfile(
       [instance({})],
       readerFor({ "secret:channel-telegram-main": '{"token":"tg-token"}' }),
+      testChannelDeps(),
     );
     expect(statuses).toEqual([
       { id: "channel:telegram:main", provider: "telegram", state: "ready" },
@@ -110,6 +112,7 @@ describe("declared channel profile", () => {
         instance({ id: "channel:discord:main", provider: "discord", credentialRef: undefined }),
       ],
       readerFor({}),
+      testChannelDeps(),
     );
     expect(rows).toEqual([]);
     expect(statuses.map((status) => status.state)).toEqual([
@@ -138,6 +141,7 @@ describe("declared channel profile", () => {
         "secret:channel-discord-main": "not json",
         "secret:channel-github-main": '{"wrong":"shape"}',
       }),
+      testChannelDeps(),
     );
     expect(rows).toEqual([]);
     expect(statuses.map((status) => status.state)).toEqual([
@@ -201,7 +205,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
   });
 
   test("no declarations means no external channels", () => {
-    const selection = desiredChannels(provisionStores(), {}, state.home);
+    const selection = desiredChannels(provisionStores(), resolveKek({}, state.home), testChannelDeps());
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([]);
@@ -222,18 +226,18 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     // (e.g. observer -> owner) fails here rather than surviving on one literal.
     for (const tier of Actor.TrustTier.options) {
       plane().stores.instances.put(instance({ grant: { defaultTier: tier } }));
-      const declaredTier = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
+      const declaredTier = desiredChannels(provisionStores(), resolveKek({ OPENOMNI_VAULT_KEY: KEY_B64 }, state.home), testChannelDeps());
       expect(declaredTier.rows[0]?.defaultTier).toBe(tier);
     }
 
     plane().stores.instances.put(instance({ grant: { allowedSenders: ["tg:1"] } }));
-    const noTier = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
+    const noTier = desiredChannels(provisionStores(), resolveKek({ OPENOMNI_VAULT_KEY: KEY_B64 }, state.home), testChannelDeps());
     expect(noTier.rows[0]?.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
   });
 
   test("a disabled declaration stays unmounted", () => {
     plane().stores.instances.put(instance({ enabled: false, credentialRef: undefined }));
-    const selection = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
+    const selection = desiredChannels(provisionStores(), resolveKek({ OPENOMNI_VAULT_KEY: KEY_B64 }, state.home), testChannelDeps());
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses).toEqual([
@@ -243,7 +247,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
 
   test("§8.4 locked vault: enabled declarations become vault_locked statuses, nothing mounts", () => {
     plane().stores.instances.put(instance({}));
-    const selection = desiredChannels(provisionStores(), {}, state.home);
+    const selection = desiredChannels(provisionStores(), resolveKek({}, state.home), testChannelDeps());
     expect(selection.source).toBe("declared");
     expect(selection.rows).toEqual([]);
     expect(selection.statuses[0]?.state).toBe("vault_locked");
@@ -262,7 +266,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
     const get = spyOn(plane().stores.secrets, "get");
     let before: ReturnType<typeof desiredChannels>;
     try {
-      before = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
+      before = desiredChannels(provisionStores(), resolveKek({ OPENOMNI_VAULT_KEY: KEY_B64 }, state.home), testChannelDeps());
       expect(get.mock.calls).toEqual([["secret:channel-telegram-main"]]);
     } finally {
       get.mockRestore();
@@ -279,7 +283,7 @@ describe("boot profile selection (§8.1, §8.4)", () => {
       createdAt: NOW,
       rotatedAt: NOW + 50,
     });
-    const after = desiredChannels(provisionStores(), { OPENOMNI_VAULT_KEY: KEY_B64 }, state.home);
+    const after = desiredChannels(provisionStores(), resolveKek({ OPENOMNI_VAULT_KEY: KEY_B64 }, state.home), testChannelDeps());
     expect(after.rows[0]?.key).toBe(`4:${NOW + 50}`);
   });
 });
@@ -349,6 +353,7 @@ describe("github declared row", () => {
         kind: "ok",
         plaintext: new TextEncoder().encode('{"secret":"hook-secret"}'),
       }),
+      testChannelDeps(),
     );
     expect(statuses).toEqual([{ id: "channel:github:main", provider: "github", state: "ready" }]);
     expect(rows[0]?.component.id).toBe("github");
@@ -372,6 +377,7 @@ describe("github declared row", () => {
         kind: "ok",
         plaintext: new TextEncoder().encode('{"botToken":"xoxb-1","appToken":"xapp-1"}'),
       }),
+      testChannelDeps(),
     );
     expect(statuses).toEqual([{ id: "channel:slack:main", provider: "slack", state: "ready" }]);
     expect(rows[0]?.component.id).toBe("slack");

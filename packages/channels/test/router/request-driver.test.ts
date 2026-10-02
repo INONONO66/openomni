@@ -41,9 +41,9 @@ test("router opens the immutable original message action before real Telegram de
     observedRequestId = request?.requestId;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined);
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
   const router = makeRouter({
-    clock: () => 10,
+    now: () => 10,
     messaging: {
       grants: () => [
         { id: "grant", senderId: "source", targetActorId: "target", operations: ["awaited"] },
@@ -94,7 +94,7 @@ test.each([
     posted += 1;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined);
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
   const requests = channelRequests(requestPort(() => 10));
   const messaging = createExistingAgentMessaging({
     stores: ledger().stores,
@@ -148,7 +148,7 @@ test.each([
   ]);
   const router = makeRouter({
     requests,
-    clock: () => 20,
+    now: () => 20,
   });
   const normalizer = new TelegramNormalizer({ botId: "42", botUsername: "bot" });
   for (let index = 1; index <= input.requestSpec.threshold; index += 1) {

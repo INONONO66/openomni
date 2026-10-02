@@ -4,6 +4,12 @@ import { runEffect } from "./effect";
 
 type ConnectionData = Parameters<WebSocketHandler["ws"]["open"]>[0]["data"];
 
+/** Deterministic per-server id minter; websocket tests never read ambient entropy. */
+export function testWebSocketId(): () => string {
+  const state = { value: 0 };
+  return () => { state.value += 1; return `ws-id-${state.value}`; };
+}
+
 export function websocketCallbacks(handler: WebSocketHandler) {
   return {
     ...handler.ws,
@@ -20,7 +26,7 @@ export function authenticatedWebSocketServer(): Bun.Server<ConnectionData> {
   const handler = new WebSocketHandler(
     () => Effect.void,
     () => undefined,
-    { token: "secret-token" },
+    { token: "secret-token", now: () => 1, id: testWebSocketId() },
   );
   return Bun.serve<ConnectionData>({
     hostname: "127.0.0.1",

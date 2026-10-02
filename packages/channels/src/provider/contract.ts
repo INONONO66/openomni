@@ -121,7 +121,18 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
    * webhook secret plus optional API token). Validation stays where the
    * credential enters the system (the provisioning store's `channel_add`/
    * `secret_rotate` gate) — one enforcement layer per invariant, so the
-   * contract takes the already-trusted typed value.
+   * contract takes the already-trusted typed value. `options` injects the
+   * wall clock, UUID source, and jitter source — drivers never read ambient
+   * time or entropy.
    */
-  create(credentials: TCredentials, config: Channel.Config, publish: PublishPort): ProviderRuntime;
+  create(
+    credentials: TCredentials,
+    config: Channel.Config,
+    publish: PublishPort,
+    options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
+  ): ProviderRuntime;
 }

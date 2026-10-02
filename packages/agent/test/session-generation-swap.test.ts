@@ -1,3 +1,4 @@
+import { testBus } from "./helpers/bus";
 import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
@@ -12,7 +13,6 @@ import { makeSessionGenerations, type GenerationBundle } from "../src/session-ge
 import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import { createObservationBus } from "../src/observation/bus";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
 import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";
@@ -34,7 +34,7 @@ function bundle(generation: number, name: string, finalized: () => void,
     system: { preset: name, blocks: [] }, policyGeneration: 1,
   });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void, layer: Layer.mergeAll(
-    Layer.succeed(ObservationSink, createObservationBus()),
+    Layer.succeed(ObservationSink, testBus()),
     Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
     Layer.succeed(SessionLayer, { snapshot, policy }),
     Layer.succeed(ToolCatalog, { definitions: [definition] }),

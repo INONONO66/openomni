@@ -9,10 +9,11 @@ export function emitRunStarted(
   events: BusEvent.Sink,
   trace: TraceContext.Type,
   modelId: string,
+  now: () => number,
 ): void {
   events.publish(Operational.Events.Info, {
     traceId: trace.traceId,
-    time: Date.now(),
+    time: now(),
     sessionId: trace.sessionId,
     component: "agent",
     msg: "agent.run.started",
@@ -24,10 +25,11 @@ export function emitTurnStart(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
+  now: () => number,
 ): void {
   events.publish(RunEvents.TurnStart, {
     ...agentBase,
-    time: Date.now(),
+    time: now(),
     turnIndex: state.turnIndex,
   });
 }
@@ -37,10 +39,11 @@ export function emitTurnComplete(
   state: RunState,
   agentBase: AgentRunBase,
   turnUsage: TokenUsage,
+  now: () => number,
 ): void {
   events.publish(RunEvents.TurnComplete, {
     ...agentBase,
-    time: Date.now(),
+    time: now(),
     turnIndex: state.turnIndex,
     usage: {
       inputTokens: turnUsage.inputTokens,
@@ -55,17 +58,19 @@ export function emitRunCompleted(
   state: RunState,
   agentBase: AgentRunBase,
   finishReason: AgentResult["finishReason"],
+  now: () => number,
 ): void {
+  const time = now();
   events.publish(Operational.Events.Info, {
     traceId: agentBase.traceId,
-    time: Date.now(),
+    time,
     sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.completed",
     context: {
       finishReason,
       turns: state.budgetState.turns,
-      durationMs: Date.now() - state.startTime,
+      durationMs: time - state.startTime,
     },
   });
 }
@@ -80,12 +85,13 @@ export function emitErrorRetry(
     readonly reason: RetryReason;
     readonly backoffMs: number;
   },
+  now: () => number,
 ): void {
   const sessionId = agentBase.sessionId;
   events.publish(RunEvents.ErrorRetry, {
     ...agentBase,
     sessionId,
-    time: Date.now(),
+    time: now(),
     attempt: options.attempt,
     maxAttempts: options.maxAttempts,
     error: options.error,
@@ -111,10 +117,11 @@ export function emitRunFailed(
     readonly attempt: number;
     readonly maxAttempts: number;
   },
+  now: () => number,
 ): void {
   events.publish(Operational.Events.Error, {
     traceId: agentBase.traceId,
-    time: Date.now(),
+    time: now(),
     sessionId: agentBase.sessionId,
     component: "agent",
     msg: "agent.run.failed",

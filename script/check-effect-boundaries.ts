@@ -458,9 +458,19 @@ function appLiveRoots(source: ts.SourceFile): ts.Node[] {
 }
 function appLiveProviders(sources: readonly ts.SourceFile[], worktree: string, provenance: Provenance): Set<ts.CallExpression> {
   const tags = new Set<ts.CallExpression>();
+  // Reachability is a set union, so a node finished under one binding frame contributes nothing on a
+  // second path through the same frame: memoising per frame keeps the walk linear in the DAG (the path
+  // set `seen` alone revisits shared definitions once per path, which is exponential).
+  const finished = new Map<ReadonlyMap<ts.Node, ts.Node>, Set<ts.Node>>();
   const visit = (node: ts.Node, bindings: ReadonlyMap<ts.Node, ts.Node> = new Map(), seen: ReadonlySet<ts.Node> = new Set()): void => {
-    if (seen.has(node) || nonExecutable(node)) return;
-    const next = new Set(seen).add(node);
+    const done = finished.get(bindings) ?? new Set<ts.Node>();
+    finished.set(bindings, done);
+    if (seen.has(node) || done.has(node)) return;
+    walk(node, bindings, new Set(seen).add(node));
+    done.add(node);
+  };
+  const walk = (node: ts.Node, bindings: ReadonlyMap<ts.Node, ts.Node>, next: ReadonlySet<ts.Node>): void => {
+    if (nonExecutable(node)) return;
     const descend = (child: ts.Node): void => visit(child, bindings, next);
     if (!productionSource(relative(worktree, node.getSourceFile().fileName))) return;
     if (callable(node)) {

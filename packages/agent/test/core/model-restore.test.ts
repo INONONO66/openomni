@@ -1,3 +1,4 @@
+import { messageSource } from "../helpers/message-source";
 import { recordingResolveModel } from "../helpers/resolve-model";
 import { testExecutor } from "../helpers/executor";
 import { type ChatFixture, chatServices } from "../helpers/chat-services";
@@ -48,6 +49,7 @@ async function turn(options: {
     observations: { publish: () => undefined },
     clock: () => 1,
     entropy: recording.entropy,
+    random: () => 0,
     identity: {
       sessionId: "session",
       role: "resident",
@@ -67,7 +69,7 @@ async function turn(options: {
         llm: {
           run: (_input: import("@openomni/llm").RunInput, sink: Sink) =>
             Effect.promise(async () => {
-              sink.onMessage(createAssistantMessage("done", "", "session"));
+              sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
               return createStopOutcome();
             }),
           resolveModel: recordingResolveModel(resolved),

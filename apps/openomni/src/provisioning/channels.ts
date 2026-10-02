@@ -111,7 +111,7 @@ function sealCredential(
   };
 }
 
-export function executeChannelDeclare(port: ProvisionPort, now: () => number = Date.now) {
+export function executeChannelDeclare(port: ProvisionPort, now: () => number) {
   return async (input: z.output<typeof CHANNEL_DECLARE_INPUT>) => {
     // §4: knobs must parse under the provider's settings declaration before the row lands.
     const badSettings = validateProviderSettings(input.provider, input.settings);
@@ -172,15 +172,15 @@ function channelToggleExecutor(port: ProvisionPort, enabled: boolean, now: () =>
   };
 }
 
-export function executeChannelEnable(port: ProvisionPort, now: () => number = Date.now) {
+export function executeChannelEnable(port: ProvisionPort, now: () => number) {
   return channelToggleExecutor(port, true, now);
 }
 
-export function executeChannelDisable(port: ProvisionPort, now: () => number = Date.now) {
+export function executeChannelDisable(port: ProvisionPort, now: () => number) {
   return channelToggleExecutor(port, false, now);
 }
 
-export function executeSecretRotate(port: ProvisionPort, now: () => number = Date.now) {
+export function executeSecretRotate(port: ProvisionPort, now: () => number) {
   return async (input: z.output<typeof SECRET_ROTATE_INPUT>) => {
     const existing = port.secrets.get(input.secretId);
     if (existing === undefined) {

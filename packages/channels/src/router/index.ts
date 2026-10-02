@@ -28,8 +28,8 @@ function ingestResult(
 }
 
 export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
-  const clock = ports.clock ?? Date.now;
-  const stores = ports.stores ?? unconfiguredChannelStores();
+  const clock = ports.now;
+  const stores = ports.stores ?? unconfiguredChannelStores(ports.now);
   const observe =
     ports.observe ??
     ((_sender: Gateway.IngestSender, observation: Gateway.MessageObservation) =>
@@ -131,7 +131,7 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
 
   function sendTarget(send: Gateway.SendMessage): string {
     if (send.to.kind === "actor") return send.to.actorId;
-    return send.to.kind === "session" ? send.to.id : crypto.randomUUID();
+    return send.to.kind === "session" ? send.to.id : ports.id();
   }
 
   return {
@@ -151,11 +151,12 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
               startedAt,
               messagingPorts?.budgets?.() ?? [],
               ports.requests,
+              ports.id,
             )
           : undefined;
       const send = sendFromEnvelope(external, envelope);
       const target = sendTarget(send);
-      const proposedId = external?.event.id ?? crypto.randomUUID();
+      const proposedId = external?.event.id ?? ports.id();
       const prepared = yield* ports.prepare(sender, send, target, proposedId);
       const messageId = prepared.messageId ?? proposedId;
       const handle = { messageId, target: prepared.target };

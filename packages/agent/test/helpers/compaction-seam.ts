@@ -6,9 +6,10 @@ import { applyCompaction } from "../../src/core/execution/turn-compaction";
 import type { CompactionSession } from "../../src/compaction/speculate";
 import type {} from "../../src/core/types";
 import { runInput } from "./run-input";
+import { testMessageSource } from "./message-source";
 
 export function stateAtGrace(window: number, offset: number) {
-  const state = createRunState(runInput([{ role: "user", content: "hi" }]));
+  const state = createRunState(runInput([{ role: "user", content: "hi" }]), testMessageSource());
   recordCallContext(state, resolveCompactionGeometry({ contextWindowTokens: window }).graceTokens + offset);
   return state;
 }

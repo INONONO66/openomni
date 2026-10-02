@@ -8,12 +8,13 @@ export function observeDrained(
   boundary: SessionTurn.Boundary,
   at: number,
   sink: ObservationSink,
+  id: () => string,
 ): void {
   for (const row of rows) {
     const scoped = scopeObservation(
       sink,
       { sessionId: row.sessionId, turnId },
-      { clock: () => at },
+      { now: () => at, id },
     );
     scoped.publish(Gateway.MessageObserved, {
       kind: "message.drained",

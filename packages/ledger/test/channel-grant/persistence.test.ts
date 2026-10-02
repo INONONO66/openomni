@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createChannelGrantStore } from "../../src/index.js";
-import { useSqliteStores } from "../helpers/storage";
+import { testNow, useSqliteStores } from "../helpers/storage";
 import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {
@@ -66,6 +66,6 @@ describe("ChannelGrantStore SQLite persistence", () => {
   });
 
   test("raw reads fail closed when the channelGrant sub-adapter is absent", () => {
-    expect(() => createChannelGrantStore({}).list()).toThrow("does not implement channel grants");
+    expect(() => createChannelGrantStore({ now: testNow }).list()).toThrow("does not implement channel grants");
   });
 });

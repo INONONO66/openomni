@@ -6,7 +6,13 @@ import { sendText } from "../../support/send-text";
 import { SLACK_RENDER } from "./format";
 import type { PublishPort } from "../../types";
 import { SlackClient } from "./client";
-import { DeliveryNotSent, SlackApiError, SlackEndpointKeyError, SlackHandlerMissingError, RateLimited } from "../../errors";
+import {
+  DeliveryNotSent,
+  SlackApiError,
+  SlackEndpointKeyError,
+  SlackHandlerMissingError,
+  RateLimited,
+} from "../../errors";
 import { SlackNormalizer } from "./normalizer";
 import { SlackSocket } from "./socket";
 import type { SlackMessageEvent, SocketEnvelope } from "./types";
@@ -16,7 +22,7 @@ export class SlackAdapter implements Channel.Surface {
 
   private readonly client: SlackClient;
   private readonly socket: SlackSocket;
-  private readonly dedupe = new Dedupe();
+  private readonly dedupe: Dedupe;
   private readonly outbound = new DeliveryReconciliation();
   private normalizer: SlackNormalizer | null = null;
   private botUserId: string | null = null;
@@ -26,12 +32,19 @@ export class SlackAdapter implements Channel.Surface {
     credentials: { botToken: string; appToken: string },
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
   ) {
-    this.client = new SlackClient(credentials.botToken, credentials.appToken, publish);
+    this.dedupe = new Dedupe(options.now);
+    this.client = new SlackClient(credentials.botToken, credentials.appToken, publish, options.now);
     this.socket = new SlackSocket(
       (traceId) => this.client.openSocketUrl(traceId),
       { onEvent: (envelope, traceId) => this.handleEnvelope(envelope, traceId) },
       publish,
+      options,
     );
   }
 
@@ -56,7 +69,7 @@ export class SlackAdapter implements Channel.Surface {
     await this.socket.start();
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "slack bot started",
       context: { botUserId: identity.botUserId, team: identity.team },
@@ -67,7 +80,7 @@ export class SlackAdapter implements Channel.Surface {
     this.socket.stop();
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "slack bot stopped",
     });
@@ -104,6 +117,7 @@ export class SlackAdapter implements Channel.Surface {
         (error instanceof SlackApiError && error.rejected === true) ||
         (error instanceof RateLimited && error.status === 429),
       this.publish,
+      this.options,
     );
   }
 
@@ -121,6 +135,7 @@ export class SlackAdapter implements Channel.Surface {
       dedupe: this.dedupe,
       key: `${event.channel}:${event.ts}`,
       traceId,
+      now: this.options.now,
       publish: this.publish,
       errorMessage: "slack message handling failed",
       rethrowFailure: false,

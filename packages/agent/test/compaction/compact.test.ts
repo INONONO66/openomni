@@ -4,7 +4,7 @@ import { describe, expect, it } from "bun:test";
 import type { Message, PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { Compaction } from "../../src/compaction/compact";
 import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/compaction/contract";
 import {

@@ -8,6 +8,7 @@ import { testExecutor } from "./executor";
 import { runAgent } from "./executor";
 import { RunEvents } from "../../src/core/execution/events";
 import { executeCompaction } from "../../src/compaction/execute-cut";
+import { Entropy } from "../../src/core/entropy";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
 import { compiledPolicy } from "./compiled-policy";
 import { textMessage } from "./messages";
@@ -181,7 +182,7 @@ export async function reconstructionFixture(
       },
       identity: { traceId: "restart", sessionId: reconstructionSession },
       dispatch: { trigger: "yield" },
-    }));
+    }).pipe(Effect.provide(Entropy.layer({ id: recording.entropy, random: () => 0 }))));
   const suffix = () =>
     runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
       Effect.succeed(PlainValueSchema.parse(textMessage("assistant", "suffix", reconstructionSession, "suffix"))),

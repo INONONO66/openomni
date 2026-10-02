@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { type Channel, Operational, type PlainObject, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 import { SlackAdapter } from "../src/provider/slack/surface";
@@ -58,13 +59,13 @@ afterEach(() => {
 
 describe("SlackAdapter", () => {
   it("refuses to start without a handler", async () => {
-    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish);
+    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
     await expect(adapter.start("trace-1")).rejects.toBeInstanceOf(SlackHandlerMissingError);
   });
 
   it("delivers a channel event as ingress facts", async () => {
     const api = installSlackApi();
-    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish);
+    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
     const facts = Promise.withResolvers<Channel.InboundMessage>();
     adapter.onMessage(async (message) => {
       facts.resolve(message);
@@ -106,9 +107,14 @@ describe("SlackAdapter", () => {
     const failed = Promise.withResolvers<void>();
     const retried = Promise.withResolvers<void>();
     let attempts = 0;
-    const adapter = new SlackAdapter({ botToken: "xoxb", appToken: "xapp" }, {}, (event) => {
-      if (event.name === Operational.Events.Error.name) failed.resolve();
-    });
+    const adapter = new SlackAdapter(
+      { botToken: "xoxb", appToken: "xapp" },
+      {},
+      (event) => {
+        if (event.name === Operational.Events.Error.name) failed.resolve();
+      },
+      injectedOptions(),
+    );
     adapter.onMessage(async () => {
       attempts += 1;
       if (attempts === 1) throw new Error("inbox refused");
@@ -147,7 +153,7 @@ describe("SlackAdapter", () => {
   it("reports a delivery receipt and rejects an unscoped endpoint", async () => {
     const api = installSlackApi();
     try {
-      const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish);
+      const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
       const receipt = adapter.deliver("T9:U5", "direct note", "message-1");
       expect(await bounded(api.posts)).toEqual({ channel: "D-open", text: "direct note" });
       expect(api.calls.find((call) => call.method === "conversations.open")?.body).toEqual({

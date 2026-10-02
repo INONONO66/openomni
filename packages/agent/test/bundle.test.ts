@@ -5,8 +5,8 @@ import { Context, Effect, Exit, Layer } from "effect";
 import { z } from "zod";
 import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, compose, NamedPolicyRegistry } from "../src/bundle";
 import { BundleError } from "../src/errors";
-import { createObservationBus } from "../src/observation/bus";
-import { Clock, Entropy, ObservationSink, ToolCatalog } from "../src/services";
+import { testBus } from "./helpers/bus";
+import { Entropy, ObservationSink, ToolCatalog } from "../src/services";
 
 class NumberService extends Context.Service<NumberService, number>()("@openomni/bundle/number/Value") {}
 class TextService extends Context.Service<TextService, string>()("@openomni/bundle/text/Value") {}
@@ -42,8 +42,8 @@ test("rejects duplicate Tag keys, wrong namespaces and kernel collisions", () =>
   const alias = Context.Service<NumberService, number>(NumberService.key);
   expect(() => bundle({ name: "number", requires: [], provides: [NumberService, alias], layer: NumberLive })).toThrow(BundleError);
   expect(() => bundle({ name: "wrong", requires: [], provides: [NumberService], layer: NumberLive })).toThrow(BundleError);
-  const ClockLive = Layer.succeed(Clock, { now: () => 1 });
-  expect(() => bundle({ name: "clock", requires: [], provides: [Clock], layer: ClockLive })).toThrow(BundleError);
+  const EntropyLive = Layer.succeed(Entropy, { id: () => "id", random: () => 0 });
+  expect(() => bundle({ name: "entropy", requires: [], provides: [Entropy], layer: EntropyLive })).toThrow(BundleError);
 });
 
 test("rejects repeated and self requirements", () => {
@@ -228,7 +228,7 @@ test("BundlesLive acquires only selected generation recipes and captures policy 
   expect(events).toEqual([]);
   expect(definitions.names).toEqual(["demo", "unselected"]);
   const selected = definitions.select(["demo"]);
-  const SeedLive = Layer.mergeAll(Layer.succeed(Clock, { now: () => 1 }), Layer.succeed(Entropy, { next: () => "id" }), Layer.succeed(ObservationSink, createObservationBus()), Layer.succeed(ToolCatalog, { definitions: [] }));
+  const SeedLive = Layer.mergeAll(Layer.succeed(Entropy, { id: () => "id", random: () => 0 }), Layer.succeed(ObservationSink, testBus()), Layer.succeed(ToolCatalog, { definitions: [] }));
   const registry = await isolated(NamedPolicyRegistry.pipe(Effect.provide(selected.layer), Effect.provide(SeedLive)));
   expect(registry.transformers.map((entry) => entry.name)).toEqual(["kernel/redact", "demo/identity"]);
   expect(registry.obligations.map((entry) => entry.name)).toEqual(["kernel/budget-clamp", "demo/budget"]);

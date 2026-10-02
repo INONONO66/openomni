@@ -84,7 +84,7 @@ for (const door of ["model", "cell", "wave"] as const) {
       });
       const executor = testExecutor({
         identity: { sessionId: id, role: "resident", parentActionId: `${id}:configure` },
-        clock: () => 100, entropy: () => `${id}:${++sequence}`, observations: { publish: () => undefined },
+        clock: () => 100, entropy: () => `${id}:${++sequence}`, observations: { publish: () => undefined }, random: () => 0,
         policy: compilePolicySnapshot({
           registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: [...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })), {
             name: "redact-input", kind: "tool", phase: "pre", generation: 1, priority: 1,

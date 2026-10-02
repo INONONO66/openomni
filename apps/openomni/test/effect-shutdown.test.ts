@@ -8,17 +8,18 @@ import { createResident } from "../src/resident";
 import { eventSignal } from "./helpers/event-signal";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { shutdownSessions } from "../src/shutdown";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { bootResource } from "../src/composition/boot";
 import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "../src/gateway";
 import { installShutdownHandlers } from "../src/index";
-import { Clock, GenerationLayers } from "@openomni/agent";
+import { GenerationLayers } from "@openomni/agent";
 import { AppLifecycleFailure } from "../src/runtime";
 import { allowConfigure } from "./helpers/generation-services";
+import { Bus } from "./helpers/bus";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
-  const runtime = gatewayRuntime({ clock: () => now });
+  const runtime = gatewayRuntime({ observations: Bus, now: () => now });
   const events: (string | number)[] = [];
   const closing = Promise.withResolvers<void>();
   const settled = Promise.withResolvers<void>();
@@ -27,13 +28,13 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
   await runAppBoot(
     runtime,
     Effect.gen(function* () {
-      const clock = yield* Clock;
+      const clock = yield* Clock.Clock;
       yield* bootResource(Effect.void, () =>
         Effect.promise(async () => {
-          events.push("sessions.close", clock.now());
+          events.push("sessions.close", clock.currentTimeMillisUnsafe());
           closing.resolve();
           await settled.promise;
-          events.push("sessions.closed", clock.now());
+          events.push("sessions.closed", clock.currentTimeMillisUnsafe());
         }),
       );
       yield* bootResource(Effect.void, () =>
@@ -69,7 +70,7 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
 });
 
 test("a cleanup failure is an observed shutdown incident and cannot produce a successful exit", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const failure = new AppLifecycleFailure({ operation: "sessions.close", cause: "commit_refused" });
   await runAppBoot(
     runtime,
@@ -97,7 +98,7 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
 
 for (const settleAfterTurn of [false, true]) {
 test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
-  const runtime = gatewayRuntime({ clock: () => 1000 });
+  const runtime = gatewayRuntime({ observations: Bus, now: () => 1000 });
   await runAppBoot(runtime, Effect.void);
   const plane = await planeOf(runtime);
   seedKernelPolicyRows(plane.catalog.policies);
@@ -154,7 +155,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
     })).toBe(true);
     await expect(runtime.dispose()).rejects.toMatchObject({ _tag: "AppLifecycleFailure", operation: "shutdown.raw_unsettled" });
-    expect(gatewayRuntime({})).toBe(runtime);
+    expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
     if (settleAfterTurn) await turn;
     raw.resolve("late raw settlement");
     await turn;

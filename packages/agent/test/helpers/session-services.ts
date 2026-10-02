@@ -1,16 +1,17 @@
 import { LlmLive } from "@openomni/llm";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
-import { type Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { NamedPolicyRegistry } from "../../src/bundle";
 import type { SessionKernel } from "../../src/cluster/kernel-registry";
 import { GenerationUnavailable, type SessionError } from "../../src/errors";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations, type GenerationBundle } from "../../src/session-generations";
 import type { SessionRuntime } from "../../src/session-contract";
-import { Clock, Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";
+import { Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/services";
 import { isolatedLedger } from "./isolated";
 import { observationService } from "./service-layers";
+import { entropySource, fixedClock } from "./time";
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -78,9 +79,11 @@ function sessionServices(fixture: SessionFixture) {
       settle: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.settle, { discard: true })),
       drain: Effect.suspend(() => Effect.forEach(managers.values(), (owner: Effect.Success<ReturnType<typeof makeSessionGenerations>>) => owner.drain, { discard: true })),
     };
+    const live = yield* Clock.clockWith(Effect.succeed);
     const context = yield* Layer.buildWithScope(Layer.mergeAll(
-      LlmLive, Layer.succeed(Clock, { now: fixture.clock ?? Date.now }),
-      Layer.succeed(Entropy, { next: fixture.entropy ?? (() => crypto.randomUUID()) }),
+      LlmLive,
+      Layer.succeed(Clock.Clock, fixture.clock === undefined ? live : fixedClock(fixture.clock)),
+      Layer.succeed(Entropy, fixture.entropy === undefined ? entropySource("session") : { id: fixture.entropy, random: () => 0 }),
       Layer.succeed(ObservationSink, observations), Layer.succeed(GenerationLayers, generations),
     ), scope);
     cache.set(fixture, context);

@@ -2,7 +2,7 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { createChannelStores } from "@openomni/channels";
 import { Gateway, L0Observation } from "@openomni/protocol";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import { messageFixture } from "./helpers/message-fixture";
 
 import { storageDirectories } from "./helpers/storage-directories";
 import { actorPolicy } from "./helpers/message-scenarios";
+import { testClock } from "./helpers/test-entropy";
 
 const directories = storageDirectories(true);
 
@@ -228,7 +229,7 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
       let receipt = initial;
       if (restriction === "spent") {
         if (initial.status !== "executed") throw new Error("initial admission refused");
-        createChannelStores(channelStoreSource(fixture.plane)).egressBudgets.claim(
+        createChannelStores(channelStoreSource(fixture.plane, testClock())).egressBudgets.claim(
           {
             id: "spent",
             senderId: initial.handle.target,

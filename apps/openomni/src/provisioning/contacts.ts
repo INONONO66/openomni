@@ -132,7 +132,7 @@ function declarePerson(
   };
 }
 
-export function executePersonDeclare(port: ProvisionPort, now: () => number = Date.now) {
+export function executePersonDeclare(port: ProvisionPort, now: () => number) {
   return (
     input: z.output<typeof PERSON_DECLARE_INPUT>,
     domainRevisions?: Readonly<Record<string, number>>,

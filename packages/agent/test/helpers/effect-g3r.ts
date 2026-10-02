@@ -29,6 +29,7 @@ export function recoveryRecording(options: {
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: () => 1,
     entropy: () => `action-${++sequence}`,
+    random: () => 0,
   });
   return { executor, committed };
 }

@@ -1,7 +1,6 @@
 import z from "zod";
-import { join, dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { Effect } from "effect";
 import { AuthInvalidFileError, AuthResolutionError, type LlmError } from "../errors";
 import { decodeLlmFailure } from "../error";
@@ -11,9 +10,8 @@ const Info = z.discriminatedUnion("type", [
   z.object({ type: z.literal("proxy"), baseURL: z.string(), apiKey: z.string().optional() }),
 ]);
 const AuthFile = z.record(z.string(), z.json());
-const getAuthFilePath = () => process.env.OPENOMNI_AUTH_FILE
-  ? resolve(process.env.OPENOMNI_AUTH_FILE)
-  : join(homedir(), ".openomni", "auth.json");
+// The credential file location is injected by the composition root (#1245):
+// storage itself reads no environment and resolves no paths.
 
 function readAuthFile(filepath: string): Record<string, Auth.Info> {
   if (!existsSync(filepath)) return {};
@@ -38,10 +36,10 @@ export namespace Auth {
   export const InvalidFileError = AuthInvalidFileError;
   export const ResolutionError = AuthResolutionError;
 
-  export function resolve(provider: string, explicit?: Info, boundProvider = provider, allowFallback = true): Effect.Effect<Info, LlmError> {
+  export function resolve(provider: string, authFilePath: string, explicit?: Info, boundProvider = provider, allowFallback = true): Effect.Effect<Info, LlmError> {
     return Effect.gen(function* () {
       const auth = boundProvider === provider && explicit !== undefined
-        ? explicit : allowFallback ? yield* Auth.get(provider) : undefined;
+        ? explicit : allowFallback ? yield* Auth.get(provider, authFilePath) : undefined;
       if (auth === undefined) return yield* new AuthResolutionError({
         message: `No authentication found for provider: ${provider}`, provider, reason: "missing_auth",
       });
@@ -56,20 +54,28 @@ export namespace Auth {
     return { type: info.type, fingerprint: digest.slice(0, 16) };
   }
 
-  export function get(providerID: string): Effect.Effect<Info | undefined, LlmError> {
-    return Effect.map(all(), (auth) => auth[providerID]);
+  export function get(providerID: string, authFilePath: string): Effect.Effect<Info | undefined, LlmError> {
+    return Effect.map(all(authFilePath), (auth) => auth[providerID]);
   }
-  export function all(): Effect.Effect<Record<string, Info>, LlmError> {
-    return Effect.try({ try: () => readAuthFile(getAuthFilePath()), catch: decodeLlmFailure("auth.read") });
+  export function all(authFilePath: string): Effect.Effect<Record<string, Info>, LlmError> {
+    return Effect.try({ try: () => readAuthFile(authFilePath), catch: decodeLlmFailure("auth.read") });
   }
-  /** One synchronous read/atomic rename boundary: concurrent effects cannot lose credentials. */
-  export function set(key: string, info: Info): Effect.Effect<void, LlmError> {
+  /**
+   * One synchronous read/atomic rename boundary: concurrent effects cannot
+   * lose credentials. The temp-file suffix comes from the injected `id`
+   * source (#1245), never ambient entropy.
+   */
+  export function set(
+    key: string,
+    info: Info,
+    options: { readonly id: () => string; readonly authFilePath: string },
+  ): Effect.Effect<void, LlmError> {
     return Effect.try({
       try: () => {
-        const filepath = getAuthFilePath();
+        const filepath = options.authFilePath;
         mkdirSync(dirname(filepath), { recursive: true });
         const data = readAuthFile(filepath);
-        const tmpPath = `${filepath}.${crypto.randomUUID()}.tmp`;
+        const tmpPath = `${filepath}.${options.id()}.tmp`;
         writeFileSync(tmpPath, JSON.stringify({ ...data, [key]: info }, null, 2), { mode: 0o600 });
         let swapped = false;
         try { renameSync(tmpPath, filepath); swapped = true; }

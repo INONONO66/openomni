@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { SessionIndexInsert, SessionIndexRow } from "../../src/storage/catalog-store";
 import { CATALOG_SCHEMA, openCatalogStore } from "../../src/storage/index";
+import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
@@ -12,7 +13,7 @@ const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
 test("openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog tables", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
   const path = join(directory, "catalog.sqlite");
-  const store = openCatalogStore(path);
+  const store = openCatalogStore(path, { now: testNow });
   try {
     const raw = new Database(path, { readonly: true });
     try {
@@ -56,7 +57,7 @@ test("F9: catalog bootstrap applies busy_timeout before any schema statement", (
 
 test("session index registers at fence 0, rotates monotonically and refuses unknown sessions", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
-  const store = openCatalogStore(join(directory, "catalog.sqlite"));
+  const store = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow });
   try {
     const registration: SessionIndexInsert = {
       id: "s1",
@@ -91,7 +92,7 @@ test("session index registers at fence 0, rotates monotonically and refuses unkn
 });
 
 test("child session pages preserve id order and enforce a bounded page size", () => {
-  const store = openCatalogStore(":memory:");
+  const store = openCatalogStore(":memory:", { now: testNow });
   try {
     for (const [id, parentId] of [["b", "root"], ["a", "root"], ["c", "root"], ["else", "other"]] as const) {
       store.indexSession({ id, parentId, role: "worker", createdAt: 1 });
@@ -111,12 +112,12 @@ test("child session pages preserve id order and enforce a bounded page size", ()
 test("concurrent rotateFence from two processes yields distinct consecutive fences", async () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
   const path = join(directory, "catalog.sqlite");
-  const store = openCatalogStore(path);
+  const store = openCatalogStore(path, { now: testNow });
   try {
     store.indexSession({ id: "s1", parentId: null, role: "resident", createdAt: 1 });
     const childSource = `
       import { openCatalogStore } from "./src/storage/catalog-store.ts";
-      const store = openCatalogStore(String(process.env.CATALOG_PATH));
+      const store = openCatalogStore(String(process.env.CATALOG_PATH), { now: () => 1_700_000_000_000 });
       const fence = store.rotateFence("s1");
       store.close();
       console.log(fence);
@@ -150,7 +151,7 @@ test("concurrent rotateFence from two processes yields distinct consecutive fenc
 
 test("catalog sub-adapters operate on the fresh catalog tables", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
-  const store = openCatalogStore(join(directory, "catalog.sqlite"));
+  const store = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow });
   try {
     expect(store.surfaceKey.claim("surface:main", "s1")).toBe("s1");
     expect(store.surfaceKey.lookup("surface:main")).toBe("s1");

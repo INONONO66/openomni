@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { Effect } from "effect";
 import { RunEvents } from "../../../src/core/execution/events";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { bounded } from "../../helpers/bounded";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { failure, turnExecutor } from "../../helpers/effect-g1";
@@ -191,7 +191,11 @@ describe("one terminal record per started run", () => {
         model,
         llm: { resolveModel: () => Effect.die(terminal) },
       })))).toBe(terminal);
-      expect((await bounded(failed.promise, "pre-provider defect")).error).toBe("Symbol(terminal)");
+      const event = await bounded(failed.promise, "pre-provider defect");
+      expect(event.error).toBe("Symbol(terminal)");
+      // #1245: a defect with no failure facts publishes the machine-consumed
+      // `unclassified` reason instead of an absent one.
+      expect(event.context?.reason).toBe("unclassified");
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
       failed.unsubscribe();

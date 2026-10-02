@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Policy, type Message } from "@openomni/protocol";
 import { run, runEffect, LlmRunFailure } from "./helpers/native";
+import { fixedNow, sequentialIds } from "./helpers/fixtures";
 import { Auth } from "../src/auth";
 import type { StreamEvent } from "../src/processor/stream-events";
 import { streamArguments } from "../src/provider/stream";
@@ -10,6 +11,9 @@ const input = {
   messages: [],
   tools: [],
   model: { id: "model", name: "model", providerID: "provider" },
+  authFilePath: "/nonexistent/openomni-run-outcome/auth.json",
+  now: fixedNow,
+  id: sequentialIds(),
   trace: { traceId: "trace", sessionId: "session", runId: "run" },
   events: { publish: () => undefined },
 };
@@ -75,7 +79,7 @@ test("stop and aborted are produced by the real attempt entry", async () => {
 function overWire(call: Parameters<typeof run>[0]) {
   return async () => {
     const auth = await runEffect(
-      Auth.resolve(call.model.providerID, call.auth, call.authProvider, call.allowAuthFallback),
+      Auth.resolve(call.model.providerID, input.authFilePath, call.auth, call.authProvider, call.allowAuthFallback),
     );
     await getLanguage(call.model, auth, call.transport).doStream({
       prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],

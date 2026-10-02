@@ -52,6 +52,10 @@ export namespace Processor {
     estimateUsage?: EstimateUsage;
     sink?: Sink;
     events: BusEvent.Sink;
+    /** Wall-clock source for every transcript timestamp (#1245). */
+    now: () => number;
+    /** Unique-id source for stream-born part identities (#1245). */
+    id: () => string;
     createStream: (input: StreamInput) => Effect.Effect<Stream, LlmError>;
     toolNames?: ReadonlyMap<string, string>;
     trace: { traceId: string; sessionId: string; runId?: string; provider?: string };
@@ -72,6 +76,8 @@ export namespace Processor {
       sessionID,
       abort,
       events,
+      now,
+      id,
       createStream,
       toolNames,
       estimateUsage = defaultEstimateUsage,
@@ -82,6 +88,7 @@ export namespace Processor {
       options.sink ?? createNoopSink(),
       sessionID,
       trace.traceId,
+      now,
     );
     let folded: Message.WithParts | undefined;
     const eventState = createStreamEventState();
@@ -100,7 +107,7 @@ export namespace Processor {
         catch: decodeLlmFailure("stream.close"),
       }).pipe(
         Effect.timeoutOption(STREAM_CLOSE_GRACE_MS),
-        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, "stream.close.failed", { error: typeof error.cause === "string" ? error.cause : String(error) }))),
+        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, now, "stream.close.failed", { error: typeof error.cause === "string" ? error.cause : String(error) }))),
         Effect.asVoid,
         Effect.interruptible,
       );
@@ -108,7 +115,7 @@ export namespace Processor {
 
     function process(streamInput: StreamInput): Effect.Effect<void, LlmError> {
       return Effect.suspend(() => {
-      publishStatus(events, sessionID, trace.traceId, "busy");
+      publishStatus(events, sessionID, trace.traceId, now, "busy");
       record({ type: "message.created", attemptId, message: { ...assistantMessage } });
       const eventContext: StreamEventContext = {
         sessionID,
@@ -116,7 +123,9 @@ export namespace Processor {
         attemptId,
         sink,
         record,
-        note: (msg, data) => publishInfo(events, sessionID, trace.traceId, msg, data),
+        note: (msg, data) => publishInfo(events, sessionID, trace.traceId, now, msg, data),
+        now,
+        id,
         promptText: streamInput.promptText,
         estimateUsage,
         externalTools: options.externalTools,
@@ -127,7 +136,7 @@ export namespace Processor {
           type: "message.finished",
           attemptId,
           messageId: assistantMessage.id,
-          at: Date.now(),
+          at: now(),
           finish,
           usage: eventState.usage,
         });
@@ -159,7 +168,7 @@ export namespace Processor {
           settleAttempt(eventState, eventContext, { aborted: true });
           finish("aborted");
         })),
-        Effect.ensuring(Effect.sync(() => publishStatus(events, sessionID, trace.traceId, "idle"))),
+        Effect.ensuring(Effect.sync(() => publishStatus(events, sessionID, trace.traceId, now, "idle"))),
       );
       });
     }
@@ -184,12 +193,13 @@ export namespace Processor {
     events: BusEvent.Sink,
     sessionID: string,
     traceId: string,
+    now: () => number,
     message: string,
     data?: PlainObject,
   ): void {
     events.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: now(),
       sessionId: sessionID,
       component: "llm.processor",
       msg: message,
@@ -202,11 +212,12 @@ export namespace Processor {
     sink: Sink,
     sessionID: string,
     traceId: string,
+    now: () => number,
   ): Sink {
     return {
       onMessage(message) {
         sink.onMessage(message);
-        publishInfo(events, sessionID, traceId, "sink.message", {
+        publishInfo(events, sessionID, traceId, now, "sink.message", {
           role: message.info.role,
           messageId: message.info.id,
           partCount: message.parts.length,
@@ -214,7 +225,7 @@ export namespace Processor {
       },
       onToolCall(call: Tool.Call) {
         sink.onToolCall(call);
-        publishInfo(events, sessionID, traceId, "sink.tool.started", {
+        publishInfo(events, sessionID, traceId, now, "sink.tool.started", {
           toolCallId: call.id,
           toolName: call.tool,
           inputSummary: summarizeRecord(call.input),
@@ -222,7 +233,7 @@ export namespace Processor {
       },
       onToolResult(result: Tool.Result) {
         sink.onToolResult(result);
-        publishInfo(events, sessionID, traceId, "sink.tool.completed", {
+        publishInfo(events, sessionID, traceId, now, "sink.tool.completed", {
           toolCallId: result.toolCallId,
           outputLength: result.output.length,
           isError: result.isError === true,
@@ -241,9 +252,10 @@ export namespace Processor {
     events: BusEvent.Sink,
     sessionID: string,
     traceId: string,
+    now: () => number,
     stateType: "busy" | "idle",
   ): void {
-    publishInfo(events, sessionID, traceId, "sink.snapshot", { stateType });
+    publishInfo(events, sessionID, traceId, now, "sink.snapshot", { stateType });
   }
   function summarizeRecord(input: PlainObject): string {
     const keys = Object.keys(input).sort();

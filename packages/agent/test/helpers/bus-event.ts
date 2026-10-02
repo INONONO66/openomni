@@ -1,5 +1,5 @@
 import type { BusEvent } from "@openomni/protocol";
-import { Bus } from "../../src/index";
+import { Bus } from "./bus";
 import { bounded } from "./bounded";
 
 const EVENT_TIMEOUT_MS = 1_000;

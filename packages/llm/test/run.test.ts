@@ -1,6 +1,6 @@
 import { runEffect } from "./helpers/native";
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
@@ -92,7 +92,7 @@ describe("run", () => {
   });
 
   test("returns RunOutcome with stop type", async () => {
-    const input: import("../src/run").RunInput = {
+    const input: import("./helpers/native").TestRunInput = {
       trace: TEST_TRACE,
       events: Bus,
       messages: [],
@@ -109,7 +109,7 @@ describe("run", () => {
 
   test("handles abort signal", async () => {
     const abortController = new AbortController();
-    const input: import("../src/run").RunInput = {
+    const input: import("./helpers/native").TestRunInput = {
       trace: TEST_TRACE,
       events: Bus,
       messages: [],
@@ -128,7 +128,7 @@ describe("run", () => {
   });
 
   test("returns error outcome when auth is not configured", async () => {
-    const input: import("../src/run").RunInput = {
+    const input: import("./helpers/native").TestRunInput = {
       trace: TEST_TRACE,
       events: Bus,
       messages: [],
@@ -237,12 +237,10 @@ describe("run", () => {
   });
 
   test("does not read stored auth when fallback is disabled", async () => {
-    const authFile = join(tmpdir(), `openomni-run-auth-${crypto.randomUUID()}.json`);
+    const authFile = join(mkdtempSync(join(tmpdir(), "openomni-run-auth-")), "auth.json");
 
-    const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
-    process.env.OPENOMNI_AUTH_FILE = authFile;
     try {
-      await runEffect(Auth.set("stored-auth-provider", testAuth));
+      await runEffect(Auth.set("stored-auth-provider", testAuth, { id: () => "tmp-stored", authFilePath: authFile }));
 
       const outcome = await run(
         {
@@ -251,6 +249,7 @@ describe("run", () => {
           messages: [],
           tools: [],
           allowAuthFallback: false,
+          authFilePath: authFile,
           model: {
             id: "claude-3-haiku",
             providerID: "stored-auth-provider",
@@ -264,8 +263,6 @@ describe("run", () => {
       expect(outcome.type).toBe("error");
       expect(capturedStreamArgs).toBeUndefined();
     } finally {
-      if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
-      else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
       rmSync(authFile, { force: true });
     }
   });
@@ -274,7 +271,7 @@ describe("run", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const input: import("../src/run").RunInput = {
+    const input: import("./helpers/native").TestRunInput = {
       trace: TEST_TRACE,
       events: Bus,
       messages: [],
@@ -292,7 +289,7 @@ describe("run", () => {
   });
 
   test("calls sink methods during execution", async () => {
-    const input: import("../src/run").RunInput = {
+    const input: import("./helpers/native").TestRunInput = {
       trace: TEST_TRACE,
       events: Bus,
       messages: [],

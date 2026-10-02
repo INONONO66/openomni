@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { acquireEffect, acquireSyncEffect } from "./effect";
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
+import { testIds } from "./test-entropy";
 import type { Machine } from "@openomni/protocol";
 
 export function bridgeHost(
@@ -11,6 +12,7 @@ export function bridgeHost(
   const callTool = options.callTool;
   return acquireEffect(createMachineHost({
     socketPath,
+    id: testIds("bridge-host"),
     enrollment: () => ({
       name: "workstation",
       machineId: "m-1",
@@ -47,5 +49,5 @@ export function bridgeOffer(): Machine.Offer {
 }
 
 export function bridgeDaemon(socketPath: string) {
-  return acquireEffect(attachMachineDaemon({ runner: acquireSyncEffect(createCodemode()).runner, socketPath, offer: bridgeOffer() }));
+  return acquireEffect(attachMachineDaemon({ id: testIds("bridge-daemon"), runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-cell") })).runner, socketPath, offer: bridgeOffer() }));
 }

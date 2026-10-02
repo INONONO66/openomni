@@ -32,6 +32,7 @@ export class TelegramClient implements ChannelClient {
   constructor(
     token: string,
     private readonly publish: PublishPort,
+    private readonly now: () => number,
   ) {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
@@ -53,10 +54,17 @@ export class TelegramClient implements ChannelClient {
     try {
       return await this.sendMessage(channelId, text, traceId, "MarkdownV2");
     } catch (error) {
-      if (!(error instanceof TelegramApiError && error.rejected && /can't parse entities/i.test(error.message))) throw error;
+      if (
+        !(
+          error instanceof TelegramApiError &&
+          error.rejected &&
+          /can't parse entities/i.test(error.message)
+        )
+      )
+        throw error;
       this.publish(Operational.Events.Warn, {
         traceId,
-        time: Date.now(),
+        time: this.now(),
         component: "server",
         msg: "telegram markdown rejected — delivered as plain text",
         context: { err: String(error) },
@@ -115,6 +123,7 @@ export class TelegramClient implements ChannelClient {
       },
       {
         traceId,
+        now: this.now,
         publish: this.publish,
         retryAfterSchema: RetryAfterSchema.transform((hint) => hint.parameters?.retry_after ?? 5),
         label: `telegram/${method}`,
@@ -131,7 +140,9 @@ export class TelegramClient implements ChannelClient {
 
     const envelope = EnvelopeSchema.safeParse(await response.json());
     if (!envelope.success) {
-      throw new TelegramApiError({ message: `Telegram API ${method} returned a malformed envelope` });
+      throw new TelegramApiError({
+        message: `Telegram API ${method} returned a malformed envelope`,
+      });
     }
     if (!envelope.data.ok) {
       throw new TelegramApiError({

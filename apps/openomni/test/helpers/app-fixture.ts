@@ -1,7 +1,9 @@
-import { Llm, Provider, run } from "@openomni/llm";
-import { Layer, type Context } from "effect";
+import { Llm, LlmLive } from "@openomni/llm";
+import { Context, Effect, Layer } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
 import { startOpenOmni } from "../../src/index";
+import { testEntropy } from "./test-entropy";
+import { Bus } from "./bus";
 
 export type FixtureLlm = Context.Service.Shape<typeof Llm>;
 type Start = NonNullable<Parameters<typeof startOpenOmni>[0]>;
@@ -15,12 +17,13 @@ export function appFixture(options: AppFixtureOptions) {
   if (options.config === undefined) throw new Error("fixture config required");
   const { llm, sessionRuntime, ...app } = options;
   const { clock, entropy, ...session } = sessionRuntime ?? {};
-  const runtime = options.runtime ?? gatewayRuntime({
+  const runtime = options.runtime ?? gatewayRuntime({ observations: Bus,
     ...(options.config.catalogPath === undefined ? {} : { catalogPath: options.config.catalogPath }),
     ...(options.config.sessionsDir === undefined ? {} : { sessionsDir: options.config.sessionsDir }),
     ...(options.config.entityIdleMs === undefined ? {} : { entityIdleMs: options.config.entityIdleMs }),
-    clock, entropy,
-    llm: Layer.succeed(Llm, { run, resolveModel: Provider.resolveModel, ...llm }),
+    now: clock,
+    entropy: entropy === undefined ? undefined : testEntropy(entropy),
+    llm: Layer.unwrap(Effect.map(Layer.build(LlmLive), (live) => Layer.succeed(Llm, { ...Context.get(live, Llm), ...llm }))),
   });
   return startOpenOmni({ ...app, runtime, sessionRuntime: session });
 }

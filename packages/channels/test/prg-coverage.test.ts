@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { FIXED_NOW, injectedOptions } from "./helpers/injected";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import { DiscordAdapter } from "../src/provider/discord/surface";
@@ -6,6 +7,7 @@ import type { DiscordGateway } from "../src/provider/discord/gateway";
 
 type GatewayCallbacks = ConstructorParameters<typeof DiscordGateway>[2];
 import { DiscordProvider } from "../src/provider/discord/provider";
+import { GitHubProvider } from "../src/provider/github/provider";
 import { SlackProvider } from "../src/provider/slack/provider";
 import { TelegramClient } from "../src/provider/telegram/client";
 import { TelegramProvider } from "../src/provider/telegram/provider";
@@ -39,7 +41,7 @@ describe("provider retry and receipt paths", () => {
       success: { id: "m1" },
       address: "channel-1",
       id: "m1",
-      client: (publish: PublishPort) => new DiscordClient("token", publish),
+      client: (publish: PublishPort) => new DiscordClient("token", publish, () => FIXED_NOW),
     },
     {
       name: "Telegram",
@@ -47,7 +49,7 @@ describe("provider retry and receipt paths", () => {
       success: { ok: true, result: { message_id: 7 } },
       address: "chat-1",
       id: "7",
-      client: (publish: PublishPort) => new TelegramClient("token", publish),
+      client: (publish: PublishPort) => new TelegramClient("token", publish, () => FIXED_NOW),
     },
   ])("retries $name rate limits and returns the platform id", async (scenario) => {
     const { published, publish } = collector();
@@ -77,8 +79,10 @@ describe("provider retry and receipt paths", () => {
   });
 
   it("provider delivery routes return accepted receipts", async () => {
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input);
+      if (url.hostname === "api.github.com")
+        return init?.method === "POST" ? jsonResponse({ id: 42 }) : jsonResponse([]);
       if (url.hostname === "slack.com" && url.pathname === "/api/conversations.open")
         return jsonResponse({ ok: true, channel: { id: "D1" } });
       if (url.hostname === "discord.com" && url.pathname === "/api/v10/users/@me/channels")
@@ -93,28 +97,38 @@ describe("provider retry and receipt paths", () => {
       { token: "t" },
       {},
       () => undefined,
+      injectedOptions(),
     ).deliveryRoute?.("100", "hello", "key-1");
     const discord = await DiscordProvider.create(
       { token: "t" },
       {},
       () => undefined,
+      injectedOptions(),
     ).deliveryRoute?.("user-1", "hello", "key-2");
     const slack = await SlackProvider.create(
       { botToken: "xoxb-1", appToken: "xapp-1" },
       {},
       () => undefined,
+      injectedOptions(),
     ).deliveryRoute?.("T1:U1", "hello", "key-3");
+    const github = await GitHubProvider.create(
+      { secret: "s", token: "t" },
+      {},
+      () => undefined,
+      injectedOptions(),
+    ).deliveryRoute?.("owner/repo#1", "hello", "key-4");
 
     expect(telegram).toEqual({ value: "accepted", externalMessageId: "5" });
     expect(discord).toEqual({ value: "accepted", externalMessageId: "m-9" });
     expect(slack).toEqual({ value: "accepted", externalMessageId: "1.2" });
+    expect(github).toEqual({ value: "accepted", externalMessageId: "42" });
   });
 });
 
 describe("Discord gateway surface", () => {
   it("drops malformed message payloads with an operational warning", () => {
     const { published, publish } = collector();
-    const adapter = new DiscordAdapter("token", {}, publish);
+    const adapter = new DiscordAdapter("token", {}, publish, injectedOptions());
     const harness = adapter as object as { gateway: { callbacks: GatewayCallbacks } };
     harness.gateway.callbacks.onDispatch("MESSAGE_CREATE", { nope: true }, "trace-1");
     harness.gateway.callbacks.onDispatch("TYPING_START", {}, "trace-2");

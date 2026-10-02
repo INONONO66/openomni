@@ -1,15 +1,14 @@
 import { AppInvariantError } from "./invariant";
 import {
   AgentProcessLive,
-  Bus,
   type BundleDefinitions,
   BundlesLive,
-  type Clock,
   type Entropy,
-  type GenerationLayers,
+  type EntropySource,
   type ObservationSink,
   type SessionEntityPorts,
   type SessionError,
+  type GenerationLayers,
 } from "@openomni/agent";
 import type { LedgerError } from "@openomni/ledger";
 import { LlmLive, type Llm } from "@openomni/llm";
@@ -24,6 +23,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { GenerationLayersLive } from "./composition/generation-layers";
+import { captureNow, platformBus, platformEntropy, wallClockLayer } from "./composition/platform";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
@@ -69,24 +69,30 @@ export interface AppRuntimeOptions {
     readonly owner: string;
     readonly ports: SessionEntityPorts;
   };
-  readonly clock?: () => number;
-  readonly entropy?: () => string;
-  readonly observations?: typeof Bus;
+  /** Injected wall clock (#1245); absent = the bootstrap-captured Effect Clock. */
+  readonly now?: () => number;
+  /** Injected entropy source (#1245); absent = the platform CSPRNG. */
+  readonly entropy?: EntropySource;
+  readonly observations?: Context.Service.Shape<typeof ObservationSink>;
   readonly llm?: Layer.Layer<Llm>;
   readonly bundles?: Layer.Layer<BundleDefinitions>;
 }
 
 export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
-  const observations = options.observations ?? Bus;
+  const now = options.now === undefined ? captureNow : Effect.succeed(options.now);
+  return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, bundles, captured)));
+}
+
+function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinitions>, now: () => number) {
+  const entropy = options.entropy ?? platformEntropy();
+  const observations = options.observations ?? platformBus(entropy, now);
   const plane = appLedgerLayer({
+    now,
     ...(options.catalogPath === undefined ? {} : { catalogPath: options.catalogPath }),
     ...(options.sessionsDir === undefined ? {} : { sessionsDir: options.sessionsDir }),
     observationSink: observations,
   });
-  const process = AgentProcessLive(observations, {
-    clock: options.clock,
-    entropy: options.entropy,
-  });
+  const process = AgentProcessLive(observations, entropy);
   const generations = GenerationLayersLive.pipe(
     Layer.provideMerge(Layer.mergeAll(process, bundles, plane)),
   );
@@ -109,20 +115,20 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
         };
   const entity: Layer.Layer<never, never, ClusterServices | AppLedger> = sessionEntityLayer({
     owner: seam.owner,
-    ...(options.clock === undefined ? {} : { clock: options.clock }),
+    clock: now,
     ports: seam.ports,
   });
   const binding = Layer.succeed(SessionEntityBinding, { bind: seam.bind });
-  return Layer.mergeAll(
+  const app = Layer.mergeAll(
     Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
     binding,
     entity.pipe(Layer.provide(plane)),
   ).pipe(Layer.provideMerge(host));
+  return options.now === undefined ? app : Layer.mergeAll(app, wallClockLayer(now));
 }
 
 export type AppServices =
-  | Clock
   | Entropy
   | ObservationSink
   | AppLedger

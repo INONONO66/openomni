@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { FIXED_NOW, injectedOptions, sequentialIds } from "./helpers/injected";
 import { deliveryFixture, installDeliveryFetch } from "./helpers/delivery";
 import { TelegramAdapter } from "../src/provider/telegram/surface";
 import { GitHubAdapter } from "../src/provider/github/surface";
@@ -93,7 +94,7 @@ for (const provider of ["discord", "slack", "telegram"] as const) {
 
 test("uncertain reconciliation custody does not expire with an inbound dedupe window", async () => {
   const reconciliation = new DeliveryReconciliation();
-  const original = Date.now;
+  let now = FIXED_NOW;
   let physicalSends = 0;
   const send = () =>
     deliverKeyed(
@@ -105,15 +106,12 @@ test("uncertain reconciliation custody does not expire with an inbound dedupe wi
       },
       () => false,
       () => undefined,
+      { now: () => now, id: sequentialIds() },
     );
-  try {
-    expect(await send()).toEqual({ value: "unknown" });
-    Date.now = () => original() + 24 * 60 * 60_000;
-    expect(await send()).toEqual({ value: "unknown" });
-    expect(physicalSends).toBe(1);
-  } finally {
-    Date.now = original;
-  }
+  expect(await send()).toEqual({ value: "unknown" });
+  now += 24 * 60 * 60_000;
+  expect(await send()).toEqual({ value: "unknown" });
+  expect(physicalSends).toBe(1);
 });
 
 test("proven sends age out of custody in send order while uncertain keys stay forever", async () => {
@@ -129,6 +127,7 @@ test("proven sends age out of custody in send order while uncertain keys stay fo
       },
       () => false,
       () => undefined,
+      { now: () => FIXED_NOW, id: sequentialIds() },
     );
   await send("lost", undefined);
   await send("a", "1");
@@ -167,7 +166,7 @@ test("GitHub uncertainty is terminal even when comment read-back would show no m
     { preconnect: fetch.preconnect },
   );
   try {
-    const adapter = new GitHubAdapter("secret", {}, () => undefined, "token");
+    const adapter = new GitHubAdapter("secret", {}, () => undefined, injectedOptions(), "token");
     expect(await adapter.deliver("owner/repo#1", "SENTINEL", "key")).toEqual({ value: "unknown" });
     expect(await adapter.deliver("owner/repo#1", "SENTINEL", "key")).toEqual({ value: "unknown" });
     expect(physicalSends).toBe(1);
@@ -206,7 +205,7 @@ for (const provider of ["discord", "slack", "github"] as const) {
       const { adapter, address } =
         provider === "github"
           ? {
-              adapter: new GitHubAdapter("secret", {}, () => undefined, "token"),
+              adapter: new GitHubAdapter("secret", {}, () => undefined, injectedOptions(), "token"),
               address: "owner/repo#1",
             }
           : deliveryFixture(provider);
@@ -232,7 +231,7 @@ test("Telegram never retries a transport failure whose prose resembles a parse r
     throw new TypeError("can't parse entities: lost ACK");
   });
   try {
-    const adapter = new TelegramAdapter("token", {}, () => undefined);
+    const adapter = new TelegramAdapter("token", {}, () => undefined, injectedOptions());
     expect(await adapter.deliver("1", "SENTINEL", "key")).toEqual({ value: "unknown" });
     expect(await adapter.deliver("1", "SENTINEL", "key")).toEqual({ value: "unknown" });
     expect(sends).toBe(1);

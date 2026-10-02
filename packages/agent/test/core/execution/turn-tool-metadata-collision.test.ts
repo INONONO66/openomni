@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { describe, expect, it } from "bun:test";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { runTestAgent } from "../../helpers/effect-g3";
 import type {} from "../../../src/core/types";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";

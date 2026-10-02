@@ -2,7 +2,7 @@ import { runEffect, runSyncEffect } from "./helpers/effect";
 import { decodeChannelFailure } from "@openomni/channels";
 import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import type { SessionTransition } from "@openomni/protocol";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { dispatchOutboundMessage } from "../src/composition/terminal-message";

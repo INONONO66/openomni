@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { runAgentSync } from "../../helpers/executor";
 import type { ChatFixture as ChatAgentConfig } from "../../helpers/chat-services";
 import { catalogLayer } from "../../helpers/service-layers";
@@ -6,7 +7,8 @@ import { isolated } from "../../helpers/isolated";
 import { createTestAgent } from "../../helpers/effect-g1";
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { Tool } from "@openomni/protocol";
-import { Bus, createDispatcher, defineTool } from "../../../src/index";
+import { createDispatcher, defineTool } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { recordingExecutor } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { z } from "zod";
@@ -74,7 +76,7 @@ describe("tool calls reach the executor without target gating", () => {
           resolveModel: () => Effect.succeed({ id: "model", name: "model", providerID: "test" }),
           run: (input, sink) => Effect.sync(() => {
             catalogs.push(input.tools.map((tool) => tool.name));
-            const message = createAssistantMessage("completed", "", "session-tools");
+            const message = createAssistantMessage("completed", "", "session-tools", messageSource);
             if (!requested) {
               requested = true;
               message.parts.push({

@@ -15,6 +15,7 @@ import { seededPolicy } from "./helpers/executor";
 import { residentSuite } from "./helpers/resident-suite";
 import { socketPath } from "./helpers/socket-path";
 import { testToolPorts } from "./helpers/tool-ports";
+import { testIds } from "./helpers/test-entropy";
 
 const suite = residentSuite();
 
@@ -24,6 +25,7 @@ test("two cells in one turn each own a full completion budget", async () => {
   const cellCalls = new Map<string, number>();
   const host = await acquireEffect(createMachineHost({
     socketPath: path,
+    id: testIds("budget-host"),
     enrollment: (machineId: string) => ({ machineId, name: "budget", allowedCapabilities: ["kernel.py"], enrolledAt: 0 }),
     events: { publish: () => undefined }, now: () => 1,
     callTool: (call: Machine.ToolCall) => Effect.suspend(() => {
@@ -34,11 +36,11 @@ test("two cells in one turn each own a full completion budget", async () => {
   }));
   suite.defer(() => runEffect(host.close()));
   const daemon = await acquireEffect(attachMachineDaemon({
-    ...cellDaemonOptions(path, "budget"), runner: acquireSyncEffect(createCodemode()).runner,
+    ...cellDaemonOptions(path, "budget"), runner: acquireSyncEffect(createCodemode({ id: testIds("budget-cell") })).runner,
   }));
   suite.defer(() => runEffect(daemon.close()));
   expect(daemon.attachment.status).toBe("attached");
-  cells = acquireSyncEffect(composeCodemode(host));
+  cells = acquireSyncEffect(composeCodemode(host, { id: testIds("budget-compose") }));
   suite.defer(() => runEffect(cells.close()));
   let completions = 0;
   const definitions = catalogDefinitions({ ...testToolPorts, cells: cellPorts(cells), llm: async () => {

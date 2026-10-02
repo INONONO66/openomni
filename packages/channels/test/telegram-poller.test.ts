@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { TelegramPoller } from "../src/provider/telegram/poller";
 import type { TelegramMessage, TelegramUpdate } from "../src/provider/telegram/types";
 
@@ -40,6 +41,7 @@ describe("TelegramPoller checkpoints", () => {
         },
       },
       () => undefined,
+      injectedOptions(),
     );
 
     await expect(poller.pollOnce("trace-failed-batch")).rejects.toThrow("handoff failed");

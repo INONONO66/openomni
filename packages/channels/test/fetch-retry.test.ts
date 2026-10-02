@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
 import { controlledTimeouts } from "./helpers/timeouts";
+import { FIXED_NOW } from "./helpers/injected";
 import { fetchWithRetry } from "../src/support/fetch-retry";
 import { RateLimited } from "../src/errors";
 
@@ -32,6 +33,7 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
         { method: "POST" },
         {
           traceId: "exhausted",
+          now: () => FIXED_NOW,
         },
       ).then(
         (value) => value,

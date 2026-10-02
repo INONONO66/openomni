@@ -28,8 +28,8 @@ export interface TestLedgerPaths {
 }
 
 function createTestLedger(paths?: TestLedgerPaths): TestLedger {
-  const catalog = openCatalogStore(paths?.catalog ?? ":memory:");
-  const sessions = openSessionStore(paths?.sessions ?? ":memory:");
+  const catalog = openCatalogStore(paths?.catalog ?? ":memory:", { now: () => 1 });
+  const sessions = openSessionStore(paths?.sessions ?? ":memory:", { now: () => 1 });
   const kernel = SessionHandleStore.createSessionKernel(sessions, catalog);
   const seam: { facts: ProtocolStorage.DecisionFactSubAdapter | undefined } = {
     facts: sessions.decisionFacts,
@@ -44,6 +44,7 @@ function createTestLedger(paths?: TestLedgerPaths): TestLedger {
     get decisionFacts() {
       return seam.facts;
     },
+    now: () => 1,
     transaction: (operation) => sessions.transaction(operation),
   });
   return {

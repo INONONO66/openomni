@@ -1,6 +1,8 @@
 import { clampSidebarWidth, SIDEBAR_WIDTH } from "@openomni/ui";
 import { Store } from "@tanstack/store";
 import type { SessionRead } from "@openomni/protocol";
+import { RendererInvariantError } from "../errors";
+import type { RendererPlatform } from "../platform";
 
 /**
  * Window-lifetime client state. Server state belongs in queries.ts; sessions
@@ -88,12 +90,31 @@ export const INITIAL_CLIENT_STATE: ClientState = {
 
 export const consoleStore = new Store<ClientState>(INITIAL_CLIENT_STATE);
 
+/**
+ * The store is a module-level singleton, so its injected clock/entropy (#1245)
+ * is a module-level binding: the bootstrap file sets it once, before anything
+ * can mint a session or tab. Unbound minting is an invariant violation, never
+ * an ambient `Date`/`crypto` fallback.
+ */
+let boundPlatform: RendererPlatform | null = null;
+
+export function bindStorePlatform(platform: RendererPlatform): void {
+  boundPlatform = platform;
+}
+
+function storePlatform(): RendererPlatform {
+  if (boundPlatform === null) {
+    throw new RendererInvariantError("store platform unbound: call bindStorePlatform at bootstrap");
+  }
+  return boundPlatform;
+}
+
 export function activeTab(state: ClientState): Tab | null {
   return state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
 }
 
-export function createSession(now: number = Date.now()): SessionId {
-  const id = crypto.randomUUID();
+export function createSession(now: number): SessionId {
+  const id = storePlatform().id();
   consoleStore.setState((state) => ({
     ...state,
     sessions: [
@@ -115,13 +136,13 @@ export function createSession(now: number = Date.now()): SessionId {
 }
 
 export function newSessionTab(): SessionId {
-  const id = createSession();
+  const id = createSession(storePlatform().now());
   openTab({ kind: "session", sessionId: id });
   return id;
 }
 
 export function openTab(place: Place): void {
-  const id = crypto.randomUUID();
+  const id = storePlatform().id();
   consoleStore.setState((state) => {
     const match = matchingTab(state, place, activeTab(state));
     return match ? activated(state, match.id) : appendTab(state, place, id);
@@ -190,7 +211,7 @@ export function navigate(
   place: Place,
   targetTabId: string | null = consoleStore.state.activeTabId,
 ): void {
-  const id = crypto.randomUUID();
+  const id = storePlatform().id();
   consoleStore.setState((state) => {
     const target = state.tabs.find((tab) => tab.id === targetTabId) ?? activeTab(state);
     if (place.kind === "session") {

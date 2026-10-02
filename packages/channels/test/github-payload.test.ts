@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { signedWebhook } from "./helpers/github";
 
@@ -16,7 +17,7 @@ test.each(invalidBodies)("signed non-event payload $body returns $status without
   body,
   status,
 }) => {
-  const adapter = new GitHubAdapter("secret", {}, () => undefined);
+  const adapter = new GitHubAdapter("secret", {}, () => undefined, injectedOptions());
   let calls = 0;
   adapter.onMessage(async () => {
     calls += 1;

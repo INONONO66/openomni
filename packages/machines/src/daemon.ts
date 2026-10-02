@@ -17,6 +17,8 @@ export interface CodeRunner {
 }
 interface MachineDaemonOptions {
   readonly socketPath: string;
+  /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly id: () => string;
   readonly offer: Machine.Offer;
   readonly fsExports?: ReadonlyMap<string, string>;
   readonly runner?: CodeRunner;
@@ -145,6 +147,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     };
     return yield* Effect.gen(function* () {
       client = yield* connectIpcClient(options.socketPath, {
+        idSource: options.id,
         onDisconnect: () => close.pipe(Effect.mapError((error) => new IpcFailure({ operation: "daemon.disconnect", cause: String(error) }))),
         onRequest: (method, params, respond) => Deferred.await(attached).pipe(Effect.andThen(Effect.gen(function* () {
           const serve = wire[method];

@@ -23,6 +23,7 @@ import { testToolPorts } from "./helpers/tool-ports";
 import { executor } from "./helpers/executor";
 import { bounded, protectedDispatch } from "./helpers/protected-dispatch";
 import { provisionPort } from "./helpers/provision-port";
+import { testClock } from "./helpers/test-entropy";
 
 const PROMOTE = { op: "contact_promote", args: { actorId: "contact:mallory" } } as const;
 const MERGE = {
@@ -35,7 +36,7 @@ const plane = (): AppLedgerPlane => {
   return planeRef.current;
 };
 const actors = () => plane().stores.actors;
-const provision = () => eraseTool(createProvisionTool(provisionPort(plane())));
+const provision = () => eraseTool(createProvisionTool(provisionPort(plane()), () => 1000));
 /** The provisional contact's current standing in the actor registry. */
 const malloryStanding = () => actors().getIdentity("contact:mallory")?.standing;
 
@@ -241,8 +242,8 @@ for (const operation of [PROMOTE, MERGE]) {
       const dbPath = join(directory, "ledger.sqlite");
       const catalogPath = join(directory, "catalog.sqlite");
       const open = () => {
-        const session = openSessionStore(dbPath);
-        const catalog = openCatalogStore(catalogPath);
+        const session = openSessionStore(dbPath, { now: testClock() });
+        const catalog = openCatalogStore(catalogPath, { now: testClock() });
         return {
           kernel: SessionHandleStore.createSessionKernel(session, catalog),
           close: () => {

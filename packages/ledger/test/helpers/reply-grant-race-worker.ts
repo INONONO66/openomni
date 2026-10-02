@@ -4,7 +4,7 @@ import { openCatalogStore } from "../../src/storage/catalog-store";
 
 const [path, id] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
 if (!process.send) throw new Error("reply-grant contender requires IPC");
-const adapter = openCatalogStore(path);
+const adapter = openCatalogStore(path, { now: () => 1_700_000_000_000 });
 let result: "claimed" | "existing" | "capacity";
 try {
   const start = once(process, "message", { signal: AbortSignal.timeout(10_000) });

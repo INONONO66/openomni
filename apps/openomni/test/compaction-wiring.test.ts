@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { LlmLive } from "@openomni/llm";
-import { Bus, ObservationSink } from "@openomni/agent";
+import { ObservationSink } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
@@ -10,6 +11,7 @@ import { assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { planeOf } from "./helpers/ledger";
+import { testIds } from "./helpers/test-entropy";
 
 const KEYS = [
   "OPENOMNI_MODEL_PROVIDER",
@@ -38,12 +40,12 @@ afterEach(() => {
 
 describe("compaction composition configuration", () => {
   it("wires a run-scoped summarizer by default", () => {
-    expect(runSyncEffect(configuredCompaction(loadConfig()).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus))).onSummarize).toBeFunction();
+    expect(runSyncEffect(configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus))).onSummarize).toBeFunction();
   });
 
   it("omits the summarizer when explicitly off while preserving deterministic reduction", () => {
     process.env.OPENOMNI_COMPACTION_SUMMARIZER = "off";
-    const compaction = runSyncEffect(configuredCompaction(loadConfig()).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus)));
+    const compaction = runSyncEffect(configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus)));
     expect(compaction.onSummarize).toBeUndefined();
     expect(compaction.elideToolOutputs).toEqual({ minOutputChars: 4000, keepHeadChars: 500 });
   });
@@ -86,12 +88,12 @@ describe("compaction composition configuration", () => {
     ]);
     for (let index = 0; index < 6; index += 1) {
       const reply = nextResidentTurn(plane);
-      ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
+      ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: `seed ${index} ${"filler ".repeat(30)}` }));
       await reply;
     }
     constrained = true;
     const reply = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", text: "compact now" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "compact now" }));
     await reply;
 
     expect(messageCounts).toHaveLength(2);

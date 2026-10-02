@@ -5,6 +5,7 @@ import { createBudgetState, publishBudgetTelemetry } from "../../../src/core/bud
 import { collector } from "../../helpers/observation-collector";
 describe("RunEvents BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: 1 };
+  const now = () => 1;
 
   test("TurnStart parses", () => {
     expect(() => RunEvents.TurnStart.schema.parse({ ...base, turnIndex: 0 })).not.toThrow();
@@ -57,7 +58,7 @@ describe("RunEvents BusEvents", () => {
     { turns: 15, event: Operational.Events.Info, status: "reassurance" },
   ])("budget $status uses the operational event contract", ({ turns, event, status }) => {
     const events = collector();
-    publishBudgetTelemetry({ ...createBudgetState(), turns }, base, events);
+    publishBudgetTelemetry({ ...createBudgetState(now), turns }, base, events, now);
     expect(events.events).toHaveLength(1);
     const parsed = event.schema.parse(events.named(event.name)[0]);
     expect(parsed).toMatchObject({

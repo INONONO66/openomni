@@ -2,7 +2,7 @@ import { openCatalogStore } from "../../ledger/src/storage/catalog-store";
 import type { PlainValue, PolicyRow, Storage } from "@openomni/protocol";
 
 export function withPolicyRows<A>(run: (source: Storage.PolicyRowSubAdapter) => A): A {
-  const catalog = openCatalogStore(":memory:");
+  const catalog = openCatalogStore(":memory:", { now: () => 1_700_000_000_000 });
   try {
     return run(catalog.policies);
   } finally {

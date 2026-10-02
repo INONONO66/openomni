@@ -6,6 +6,7 @@ import type { StreamEvent } from "../../src/processor/stream-events";
 import type { Sink } from "../../src/sink";
 import { collector } from "./observation";
 import { capturingSink } from "./processor";
+import { fixedNow, sequentialIds } from "./fixtures";
 
 export type Condition = (input: { steps: Array<{ usage?: { inputTokens?: number } }> }) => boolean;
 interface Arguments {
@@ -65,12 +66,15 @@ export function useStreamCapture() {
     run(overrides: Partial<RunInput> = {}, output: Sink = capturingSink().sink) {
       return run(
         {
+          authFilePath: "/nonexistent/openomni-test/auth.json",
           trace: {
             traceId: "trace-stream-capture",
             sessionId: "session-stream-capture",
             runId: "run-stream-capture",
           },
           events,
+          now: fixedNow,
+          id: sequentialIds(),
           messages: [],
           tools: [],
           auth: { type: "api", key: "test-key-stream-capture" },

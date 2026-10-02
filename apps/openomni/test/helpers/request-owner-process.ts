@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./bus";
 import { L0Observation, type PlainValue, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";
@@ -147,6 +147,7 @@ async function serve() {
       host: "127.0.0.1",
       wsPort: 0,
       wsToken: OWNER_TOKEN,
+      kek: { kind: "locked", reason: "no vault key in this fixture" },
       actors: [{ actorId: "owner", externalId: "owner", kind: "human", trustTier: "owner" }],
       model: { provider: "fake", id: "request-owner-e2e", apiKey: "fixture-key" },
     },

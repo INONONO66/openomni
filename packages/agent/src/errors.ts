@@ -109,6 +109,36 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
   readonly code: "stale_approval" | "approval_authority_unavailable" | "unauthenticated";
 }> {}
 
+/**
+ * Perimeter mail whose provenance the turn could not authenticate: the turn
+ * runs with `evidence_only` authority and this fact is recorded as a
+ * violation observation (issue #1245). A recorded fact, never a failure-channel
+ * value: tagged like `SessionPolicyRefusal`, not an `Error`.
+ */
+export class InboundAuthorityViolation {
+  readonly _tag = "InboundAuthorityViolation";
+  constructor(readonly reason: "unknown_origin" | "undeclared_treatment") {}
+  get message(): string { return `inbound authority violation: ${this.reason}`; }
+}
+
+/** A turn whose executor sealed without any runner-produced output: a distinct typed result cause, not a policy refusal. */
+export class RunnerOutputMissing {
+  readonly _tag = "RunnerOutputMissing";
+  constructor(readonly turnId: string) {}
+  get message(): string { return `runner output missing: turn ${this.turnId}`; }
+}
+
+/**
+ * A backlog admission the session entity refused: the durable views are
+ * mutually inconsistent (e.g. a running session with no open turn). Recorded
+ * as a typed refusal fact; drains report it instead of folding into a stop.
+ */
+export class SessionAdmissionRefused {
+  readonly _tag = "SessionAdmissionRefused";
+  constructor(readonly sessionId: string) {}
+  get message(): string { return `session admission refused: ${this.sessionId}`; }
+}
+
 export type ExecutionError =
   | LlmRunFailure
   | LlmFailure

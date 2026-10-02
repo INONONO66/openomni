@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { resolveGatewayEndpoint } from "../src/main/gateway-endpoint";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Glob } from "bun";
+import { resolveDesktopConfig, resolveGatewayEndpoint } from "../src/main/config";
 
 /**
  * The main process is the only part of the desktop that may read the
@@ -71,5 +74,45 @@ describe("the gateway endpoint is resolved from the environment", () => {
         url: "ws://127.0.0.1:3000/ws",
       });
     }
+  });
+});
+
+describe("the desktop config is resolved once from an explicit env record (#1245)", () => {
+  test("Given a full record, When resolved, Then gateway and dev URL come out typed", () => {
+    expect(
+      resolveDesktopConfig({
+        OPENOMNI_WS_URL: "ws://host:9/ws",
+        OPENOMNI_WS_TOKEN: "t",
+        ELECTRON_RENDERER_URL: "http://localhost:5173",
+      }),
+    ).toEqual({
+      gateway: { url: "ws://host:9/ws", token: "t" },
+      rendererDevUrl: "http://localhost:5173",
+    });
+  });
+
+  test("Given an empty record, When resolved, Then defaults apply and dev mode is off", () => {
+    const config = resolveDesktopConfig({});
+    expect(config).toEqual({ gateway: { url: "ws://127.0.0.1:3000/ws" } });
+    expect("rendererDevUrl" in config).toBe(false);
+  });
+
+  test("Given a blank renderer URL, When resolved, Then the key is absent rather than empty", () => {
+    expect("rendererDevUrl" in resolveDesktopConfig({ ELECTRON_RENDERER_URL: "   " })).toBe(false);
+  });
+});
+
+describe("the desktop source keeps its environment and runtime boundaries (#1245)", () => {
+  test("Given src/, When scanned, Then no file reads process.env and none imports effect", async () => {
+    const root = join(import.meta.dirname, "../src");
+    const envOffenders: string[] = [];
+    const effectOffenders: string[] = [];
+    for await (const file of new Glob("**/*.{ts,tsx}").scan({ cwd: root })) {
+      const text = readFileSync(join(root, file), "utf-8");
+      if (text.includes("process.env")) envOffenders.push(file);
+      if (/from\s+"effect"/.test(text)) effectOffenders.push(file);
+    }
+    expect(envOffenders.toSorted()).toEqual([]);
+    expect(effectOffenders.toSorted()).toEqual([]);
   });
 });

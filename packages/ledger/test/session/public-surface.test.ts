@@ -12,7 +12,7 @@ test("967 exports expose only canonical session authority", () => {
   for (const retired of ["Storage", "SqliteStorageAdapter", "ActorRegistry", "SurfaceKey"]) {
     expect(Object.hasOwn(ledgerExports, retired)).toBe(false);
   }
-  const store = ledgerExports.openSessionStore(":memory:");
+  const store = ledgerExports.openSessionStore(":memory:", { now: () => 1_700_000_000_000 });
   try {
     for (const retired of ["session", "message", "part", "inbox", "alarms"]) {
       expect(retired in store).toBe(false);

@@ -49,5 +49,5 @@ export type {
   SessionEntityTimerContext,
   SessionEntityTurnInput,
 } from "./session-contract";
-export { Bus, createObservationBus, newTraceId, scopeObservation } from "./observation/bus";
+export { createObservationBus, scopeObservation } from "./observation/bus";
 export type { SessionHandle, SessionRunner, SessionRuntime } from "./session-handle";

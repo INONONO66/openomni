@@ -3,6 +3,7 @@ import type { WatchSources } from "../../src/composition/watch-sources";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { runEffect } from "./effect";
 import { adoptTestFence } from "./ledger";
+import { testClock } from "./test-entropy";
 
 interface WatchFixture {
   readonly plane: AppLedgerPlane;
@@ -15,7 +16,7 @@ interface WatchFixture {
 
 /** One real session and observable fake source lifecycle for monitor tests. */
 export async function watchFixture(sessionId: string, owner: string): Promise<WatchFixture> {
-  const plane = createAppLedger({});
+  const plane = createAppLedger({ now: testClock() });
   const installed: string[] = [];
   const closed: string[] = [];
   const sources: WatchSources = {

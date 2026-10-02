@@ -36,6 +36,7 @@ import { providerFailure } from "./mock-llm";
 import { stringQueryTool } from "./query-tool";
 import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
+import { uniqueEntropy } from "./time";
 import { CommitFailed, AgentFailure, type SessionError } from "../../src/errors";
 
 export const crashPoint = z.enum([
@@ -348,6 +349,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       authorizeConfigure: allowConfigure,
       observations,
       clock: () => 100,
+      entropy: uniqueEntropy("admission"),
       onHibernate: hibernateCut(point, bodies),
       dispatchOutbound: outboundPort(point, bodies, dbPath),
     };
@@ -408,14 +410,14 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
   const main = async () => {
     const reconstruct = reconstructionPoint.safeParse(cut);
     if (reconstruct.success) return runAgent(reconstructionCut(reconstruct.data, dbPath,
-      (bodies, pending, proof) => stop(cut, bodies, pending, proof)));
+      (bodies, pending, proof) => stop(cut, bodies, pending, proof)).pipe(Effect.provide(runnerTestLayer)));
     const fold = foldCrashPoint.safeParse(cut);
     if (fold.success) return foldCrashMain(fold.data, (bodies, pending, proof) => stop(cut, bodies, pending, proof));
     const point = crashPoint.parse(cut);
     return runAgent(Effect.scoped(Effect.gen(function* () {
       const bodies: string[] = [];
       if (stage === "resume") {
-        const fixture: SessionFixture = { ...isolatedRuntime(), observations, clock: () => 100_000, authorizeConfigure: allowConfigure };
+        const fixture: SessionFixture = { ...isolatedRuntime(), observations, clock: () => 100_000, entropy: uniqueEntropy("resume"), authorizeConfigure: allowConfigure };
         yield* withSessionServices(reactivateSession(sessionId, () => Effect.sync(() => {
           stop(point, bodies);
           return { kind: "result" as const, text: "" };

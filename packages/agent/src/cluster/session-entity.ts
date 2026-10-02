@@ -6,7 +6,7 @@ import {
 } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
-import { LeaseLost, type SessionError } from "../errors";
+import { LeaseLost, SessionAdmissionRefused, type SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";
 import type {
   SessionAdmissionSnapshot,
@@ -126,7 +126,7 @@ function appendReceived(
   handle: ActivationHandle,
   kind: Inbox.Kind,
   message: { readonly messageId: string; readonly content: string; readonly origin: string },
-): Effect.Effect<ChainAppendReceipt, LedgerError> {
+): Effect.Effect<Omit<ChainAppendReceipt, "admission">, LedgerError> {
   return retryRevision(() => Effect.gen(function* () {
     const { kernel, authority, env } = handle;
     const existing = kernel.actionById(message.messageId);
@@ -228,6 +228,12 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
   });
 }
 
+/** What one backlog drain resolved to; `refused` carries the typed refusal fact (issue #1245). */
+export type SessionDrainOutcome =
+  | { readonly kind: "stop" }
+  | { readonly kind: "refused"; readonly refusal: SessionAdmissionRefused }
+  | { readonly kind: "turn" };
+
 /**
  * Backlog drain (F4): consume-decisions are folded here; the first admitted
  * turn decision is handed to the composition-owned turn port, which reaches
@@ -236,25 +242,31 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
  * drain is a no-op — the turn's own boundaries consume fresh backlog and
  * its continuation re-drains at the end.
  */
-function drain(handle: ActivationHandle): Effect.Effect<void, LedgerError | SessionError> {
+function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, LedgerError | SessionError> {
   const { authority, kernel, env } = handle;
   const detach = (body: Effect.Effect<void, SessionError>) => detachTurn(handle, body);
   return handle.gate.withPermits(1)(Effect.gen(function* () {
     for (;;) {
-      if (handle.live.current !== undefined) return;
+      if (handle.live.current !== undefined) return { kind: "turn" as const };
       const snapshot = admissionSnapshot(handle);
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {
         case "stop":
-        case "refused":
-          return;
+          return { kind: "stop" as const };
+        case "refused": {
+          const refusal = new SessionAdmissionRefused(authority.sessionId);
+          yield* Effect.logWarning(refusal.message);
+          return { kind: "refused" as const, refusal };
+        }
         case "consume":
           yield* consumePending(handle, decision.items);
           continue;
         case "start":
-          return yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
+          yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
+          return { kind: "turn" as const };
         default:
-          return yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
+          yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
+          return { kind: "turn" as const };
       }
     }
   }));
@@ -267,8 +279,8 @@ function receive(
 ): Effect.Effect<ChainAppendReceipt> {
   return Effect.gen(function* () {
     const receipt = yield* appendReceived(handle, kind, message);
-    yield* drain(handle);
-    return receipt;
+    const outcome = yield* drain(handle);
+    return { ...receipt, admission: outcome.kind };
   }).pipe(Effect.orDie);
 }
 

@@ -1,3 +1,4 @@
+import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { testExecutor } from "./executor";
 import {
@@ -51,6 +52,7 @@ export function recordingExecutor(
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: options.clock ?? (() => 1),
     entropy: () => `action-${committed.length + 1}`,
+    random: () => 0,
   });
   return { executor, committed };
 }
@@ -75,6 +77,7 @@ export function turnExecutor(
     identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
     clock: () => 1,
     entropy: () => `action-${committed.length + 1}`,
+    random: () => 0,
     ...overrides,
   });
   return { executor, committed };
@@ -122,7 +125,8 @@ export function requestLedger(
     return {
       ledger,
       identity: fencedTurnIdentity(id, turnId, generation),
-      entropy: () => crypto.randomUUID(),
+      entropy: uniqueEntropy(`${id}-entropy`),
+      random: () => 0,
       clock,
     };
   });

@@ -10,7 +10,7 @@ function workspaceKey(workspace: string | undefined): string {
   return workspace ?? "";
 }
 
-export function createSqliteActorRegistryAdapter(db: Database) {
+export function createSqliteActorRegistryAdapter(db: Database, now: () => number) {
   return {
     getIdentity(id) {
       return (
@@ -20,7 +20,7 @@ export function createSqliteActorRegistryAdapter(db: Database) {
       );
     },
     setIdentity(identity) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO actor_identity (
            id, data, kind, trust_tier, time_created, time_updated
@@ -35,8 +35,8 @@ export function createSqliteActorRegistryAdapter(db: Database) {
         JSON.stringify(identity),
         identity.kind,
         identity.trustTier,
-        identity.createdAt ?? now,
-        identity.updatedAt ?? now,
+        identity.createdAt ?? at,
+        identity.updatedAt ?? at,
       );
     },
     removeIdentity(id) {
@@ -50,7 +50,7 @@ export function createSqliteActorRegistryAdapter(db: Database) {
       );
     },
     setEndpoint(endpoint) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO actor_endpoint (
            id, actor_id, data, channel, workspace, external_id, time_created, time_updated
@@ -69,8 +69,8 @@ export function createSqliteActorRegistryAdapter(db: Database) {
         endpoint.channel,
         workspaceKey(endpoint.workspace),
         endpoint.externalId,
-        endpoint.createdAt ?? now,
-        endpoint.updatedAt ?? now,
+        endpoint.createdAt ?? at,
+        endpoint.updatedAt ?? at,
       );
     },
     findEndpoint(channel, externalId, workspace) {

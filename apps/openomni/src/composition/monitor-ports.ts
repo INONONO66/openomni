@@ -223,6 +223,7 @@ function commitWatchActions(
   kernel: SessionKernel,
   sessionId: string,
   actions: readonly LedgerAction.Append[],
+  now: () => number,
   retries = WATCH_COMMIT_RETRIES,
 ): Effect.Effect<void, Error> {
   return Effect.suspend(() => {
@@ -234,7 +235,7 @@ function commitWatchActions(
         sessionId,
         owner: row.leaseOwner,
         fence: row.leaseFence,
-        now: actions[0]?.ts ?? Date.now(),
+        now: actions[0]?.ts ?? now(),
         expectedRevision: row.revision,
         actions: [...actions],
         state: row.state,
@@ -243,7 +244,7 @@ function commitWatchActions(
         Effect.asVoid,
         Effect.catch((error) =>
           retries > 0 && error._tag === "CommitRefused"
-            ? commitWatchActions(kernel, sessionId, actions, retries - 1)
+            ? commitWatchActions(kernel, sessionId, actions, now, retries - 1)
             : Effect.fail(new Error(`watch commit failed: ${error._tag}`)),
         ),
       );
@@ -289,7 +290,7 @@ export function createWatchMonitorPorts(deps: WatchPlaneDeps): MonitorPorts {
       effect: { status: "armed", fireAt, spec },
       at,
     });
-    await deps.run(commitWatchActions(kernel, sessionId, [action]), signal);
+    await deps.run(commitWatchActions(kernel, sessionId, [action], deps.clock), signal);
     return install(sessionId, id, epoch, spec);
   }
   return {
@@ -315,7 +316,7 @@ export function createWatchMonitorPorts(deps: WatchPlaneDeps): MonitorPorts {
           effect: { status: "cancelled" },
           at,
         });
-        await deps.run(commitWatchActions(kernel, sessionId, [action]), signal);
+        await deps.run(commitWatchActions(kernel, sessionId, [action], deps.clock), signal);
       }
       await deps.sources.close(id);
       return requireFold(kernel, sessionId, id).state;

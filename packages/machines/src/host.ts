@@ -9,6 +9,8 @@ import { onAbort } from "./interrupt-on";
 
 interface MachineHostOptions {
   readonly socketPath: string;
+  /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly id: () => string;
   readonly enrollment: (id: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
@@ -92,6 +94,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       const offer = yield* Effect.try({ try: () => Machine.Offer.parse(params), catch: decodeMachineFailure("attach.decode") });
       yield* attach(offer, respond, connectionId);
     }).pipe(Effect.mapError((error) => new IpcFailure({ operation: "machine.request", cause: error.message || String(error) }))), {
+      idSource: options.id,
       onDisconnect: (id) => Effect.sync(() => detach(id, "connection_closed")),
     }).pipe(Effect.mapError((error) => new TransportFailure({ operation: "host.listen", message: error.message, cause: String(error) })));
     yield* Effect.try({ try: () => chmodSync(options.socketPath, 0o600), catch: decodeMachineFailure("host.chmod") });

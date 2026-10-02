@@ -1,9 +1,10 @@
-import { Effect, Result } from "effect";
+import { Clock, Effect, Result } from "effect";
 import { AgentFailure, type ExecutionError } from "../errors";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
 import { latestAnchorBody, isAnchorMessage } from "./candidate";
 import { prepareSummarizerInput, estimateContentChars, userTextChars } from "./estimate";
+import { Entropy } from "../core/entropy";
 
 const DEFAULT_SUMMARIZER_DEADLINE_MS = 60_000;
 
@@ -86,9 +87,9 @@ function carriesUserSpeech(message: Message.WithParts): boolean {
  * enters the record: the replacement record carries the structured `time`
  * instead, so resume re-derives markers rather than replaying them.
  */
-function stampTimeMarker(message: Message.WithParts): Message.WithParts {
+function stampTimeMarker(message: Message.WithParts, id: () => string): Message.WithParts {
   const marker: Message.TextPart = {
-    id: crypto.randomUUID(),
+    id: id(),
     sessionID: message.info.sessionID,
     messageID: message.info.id,
     type: "text",
@@ -134,8 +135,10 @@ export function attemptAnchoredCut(
   preserveBudget: number,
   contextWindowTokens: number,
   onSummarize: NonNullable<CompactionOptions["onSummarize"]>,
-): Effect.Effect<AnchoredCutAttempt, ExecutionError> {
+): Effect.Effect<AnchoredCutAttempt, ExecutionError, Entropy> {
   return Effect.gen(function* () {
+  const { id } = yield* Entropy;
+  const anchorTime = yield* Clock.currentTimeMillis;
   const previousAnchor = latestAnchorBody(cutSpan);
   const summarizerInput = cutSpan.filter(
     (message) => message.info.role !== "user" && !isAnchorMessage(message),
@@ -161,7 +164,7 @@ export function attemptAnchoredCut(
   const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
   if (anchorText === undefined && preservedUsers.length === 0) return { summarizerError };
   const stampedUsers = preservedUsers.map((message) =>
-    carriesUserSpeech(message) ? stampTimeMarker(message) : message,
+    carriesUserSpeech(message) ? stampTimeMarker(message, id) : message,
   );
   const keptWindow = replacementRecord(stampedUsers, keepSpan);
   const stampedAny = stampedUsers.some((message) => message.parts.some(isTimeCarriageMarkerPart));
@@ -175,6 +178,7 @@ export function attemptAnchoredCut(
             firstRemoved.info.agent,
             keptWindow,
             stampedAny,
+            { now: () => anchorTime, id },
           ),
         ];
   const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
@@ -227,9 +231,10 @@ function buildAnchorMessage(
   agent: string,
   keptWindow: ReadonlyArray<{ role: "user" | "assistant"; text: string; time: number }>,
   withMarkerLegend: boolean,
+  source: { readonly now: () => number; readonly id: () => string },
 ): Message.WithParts {
-  const id = crypto.randomUUID();
-  const now = Date.now();
+  const id = source.id();
+  const now = source.now();
   const render = renderAnchorText(anchorBody, withMarkerLegend);
   const info: Message.UserMessage = {
     id,
@@ -241,7 +246,7 @@ function buildAnchorMessage(
     system: render,
   };
   const textPart: Message.TextPart = {
-    id: crypto.randomUUID(),
+    id: source.id(),
     sessionID,
     messageID: id,
     type: "text",

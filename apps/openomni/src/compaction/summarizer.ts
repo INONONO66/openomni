@@ -17,6 +17,9 @@ export class SummarizerError extends AgentFailure {
 }
 
 interface SummarizerConfig {
+  /** Injected clock + id entropy (#1245): required, no ambient Date/crypto. */
+  readonly now: () => number;
+  readonly id: () => string;
   readonly model: {
     readonly provider: string;
     readonly id: string;
@@ -36,20 +39,24 @@ function reasoningOptions(provider: string): PlainObject {
     : { openai: { reasoningEffort: "minimal" } };
 }
 
-function messageWithText(input: Message.WithParts[], text: string): Message.WithParts[] {
-  const id = `compaction-${crypto.randomUUID()}`;
+function messageWithText(
+  input: Message.WithParts[],
+  text: string,
+  sources: { readonly now: () => number; readonly id: () => string },
+): Message.WithParts[] {
+  const id = `compaction-${sources.id()}`;
   return [
     {
       info: {
         id,
         sessionID: "compaction",
         role: "user",
-        time: { created: Date.now() },
+        time: { created: sources.now() },
         agent: "compaction",
         model: { providerID: "", modelID: "" },
       },
       parts: [
-        { id: crypto.randomUUID(), sessionID: "compaction", messageID: id, type: "text", text },
+        { id: sources.id(), sessionID: "compaction", messageID: id, type: "text", text },
       ],
     },
     ...input,
@@ -75,7 +82,9 @@ export function createCompactionSummarizer(
       const answer = yield* Effect.result(runResolvedText(
           {
             model: config.model,
-            messages: messageWithText(working, prompt),
+            now: config.now,
+            id: config.id,
+            messages: messageWithText(working, prompt, config),
             sessionId: "compaction",
             signal,
             maxTokens: Math.min(

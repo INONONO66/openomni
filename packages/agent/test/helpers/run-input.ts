@@ -1,4 +1,4 @@
-import { newTraceId } from "../../src/index";
+import { newTraceId } from "./bus";
 import type { RunTrace } from "../../src/core/execution/state";
 import type { ChatAgentInput } from "../../src/core/types";
 
@@ -17,8 +17,8 @@ export function runInput(
     messages,
     traceContext: {
       traceId: newTraceId(),
-      sessionId: `session-${crypto.randomUUID()}`,
-      runId: `run-${crypto.randomUUID()}`,
+      sessionId: `session-${newTraceId()}`,
+      runId: `run-${newTraceId()}`,
     },
   };
 }

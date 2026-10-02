@@ -65,7 +65,7 @@ export function streamArguments(
     onError: (failure) => {
       input.events.publish(Operational.Events.Error, {
         traceId: input.trace.traceId,
-        time: Date.now(),
+        time: input.now(),
         sessionId: input.trace.sessionId,
         component: "llm.stream",
         msg: "streamText error",

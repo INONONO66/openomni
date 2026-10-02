@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEgressBudgetStore, openCatalogStore } from "../../src/index";
-import { useMemoryStores } from "../helpers/storage";
+import { testNow, useMemoryStores } from "../helpers/storage";
 import type { Gateway } from "@openomni/protocol";
 
 /** #219 active-egress debit ledger: atomic, idempotent counted-window claims. */
@@ -141,7 +141,7 @@ describe("EgressBudgetStore", () => {
     // would leave the probe insert free to succeed and fail this test.
     const dir = mkdtempSync(join(tmpdir(), "egress-claim-"));
     const dbPath = join(dir, "claim.sqlite");
-    const catalog = openCatalogStore(dbPath);
+    const catalog = openCatalogStore(dbPath, { now: testNow });
     try {
       const adapter = catalog.egressBudget;
       const probe = new Database(dbPath);

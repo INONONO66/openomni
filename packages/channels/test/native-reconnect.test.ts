@@ -8,6 +8,7 @@ import { TelegramUpdateSchema } from "../src/provider/telegram/types";
 import { SocketReconnectShell } from "../src/support/socket-shell";
 import { calculateBackoff } from "../src/support/reconnect-backoff";
 import { bounded } from "./helpers/bounded";
+import { injectedOptions } from "./helpers/injected";
 
 function websocketServer(
   onOpen: (peer: ServerWebSocket<undefined>, server: Bun.Server<undefined>) => void,
@@ -101,6 +102,7 @@ for (const provider of ["slack", "discord"] as const) {
               },
             },
             publish,
+            injectedOptions(),
             delay,
           )
         : new DiscordGateway(
@@ -114,6 +116,7 @@ for (const provider of ["slack", "discord"] as const) {
               },
             },
             publish,
+            injectedOptions(),
             delay,
           );
     const frame = (id: string) =>
@@ -172,6 +175,7 @@ test("a retired reconnect sleeper cannot replace a new real socket", async () =>
           if (settle.current()) settle.resolveOnce();
         });
       }),
+    injectedOptions(),
   );
   try {
     shell.begin();
@@ -180,8 +184,7 @@ test("a retired reconnect sleeper cannot replace a new real socket", async () =>
       reconnects++;
     });
     const backoff = await bounded(sleeping.promise);
-    expect(backoff).toBeGreaterThanOrEqual(2000);
-    expect(backoff).toBeLessThan(3000);
+    expect(backoff).toBe(2000);
     shell.begin();
     await bounded(shell.connect(async () => url));
     wake.resolve();
@@ -195,25 +198,18 @@ test("a retired reconnect sleeper cannot replace a new real socket", async () =>
   }
 });
 
-test("reconnect has a floor, exponential cap, and jitter", () => {
-  const random = Math.random;
-  try {
-    Math.random = () => 0;
-    const floor = calculateBackoff(0);
-    const cap = calculateBackoff(20);
-    expect(floor).toBeGreaterThan(0);
-    expect(calculateBackoff(1)).toBe(floor * 2);
-    expect(calculateBackoff(2)).toBe(floor * 4);
-    expect(cap).toBeGreaterThan(calculateBackoff(3));
-    expect(calculateBackoff(30)).toBe(cap);
-    Math.random = () => 0.5;
-    const jitter = calculateBackoff(0) - floor;
-    expect(jitter).toBeGreaterThan(0);
-    expect(jitter).toBeLessThan(floor);
-    expect(calculateBackoff(20) - cap).toBe(jitter);
-  } finally {
-    Math.random = random;
-  }
+test("reconnect has a floor, exponential cap, and injected jitter", () => {
+  const zero = () => 0;
+  const floor = calculateBackoff(0, zero);
+  const cap = calculateBackoff(20, zero);
+  expect(floor).toBe(1000);
+  expect(calculateBackoff(1, zero)).toBe(2000);
+  expect(calculateBackoff(2, zero)).toBe(4000);
+  expect(cap).toBe(60_000);
+  expect(calculateBackoff(30, zero)).toBe(60_000);
+  const half = () => 0.5;
+  expect(calculateBackoff(0, half)).toBe(1500);
+  expect(calculateBackoff(20, half)).toBe(60_500);
 });
 
 const update = (id: number) => ({
@@ -247,6 +243,7 @@ test("Telegram ignores a retired HTTP response even when cancellation arrives to
     telegramUpdates(server),
     collectTelegramMessages(delivered),
     () => undefined,
+    injectedOptions(),
   );
   try {
     const old = poller.pollOnce("old");
@@ -285,6 +282,7 @@ test("Telegram reconnect uses jittered backoff and its retired sleeper cannot po
       arrived.resolve();
     }),
     () => undefined,
+    injectedOptions(),
     (ms) => {
       sleeping.resolve(ms);
       return wake.promise;
@@ -293,8 +291,7 @@ test("Telegram reconnect uses jittered backoff and its retired sleeper cannot po
   try {
     const retired = poller.start();
     const backoff = await bounded(sleeping.promise);
-    expect(backoff).toBeGreaterThanOrEqual(2000);
-    expect(backoff).toBeLessThan(3000);
+    expect(backoff).toBe(2000);
     const current = poller.start();
     await bounded(arrived.promise);
     await bounded(current);

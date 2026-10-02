@@ -14,9 +14,20 @@
 
 import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels";
 import { ChannelProviders } from "@openomni/channels";
-import type { Channel, PlainValue, Provisioning } from "@openomni/protocol";
-import { Bus } from "@openomni/agent";
+import type { BusEvent, Channel, PlainValue, Provisioning } from "@openomni/protocol";
 import { Result } from "effect";
+
+/**
+ * Injected runtime seams for provider construction (#1245): observation
+ * publish plus wall clock, UUID source, and jitter source — drivers never
+ * reach for a process singleton or ambient time/entropy.
+ */
+export interface ChannelRuntimeDeps {
+  readonly publish: BusEvent.Sink["publish"];
+  readonly now: () => number;
+  readonly id: () => string;
+  readonly random: () => number;
+}
 
 export interface BuiltChannel {
   readonly surface: Channel.Surface;
@@ -41,11 +52,16 @@ function providerRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
   credentials: TCredentials,
   config: Channel.Config,
+  deps: ChannelRuntimeDeps,
 ): ChannelComponent {
   return {
     id: provider.id,
     build(handler) {
-      const runtime = provider.create(credentials, config, Bus.publish);
+      const runtime = provider.create(credentials, config, deps.publish, {
+        now: deps.now,
+        id: deps.id,
+        random: deps.random,
+      });
       runtime.surface.onMessage(handler);
       return {
         surface: runtime.surface,
@@ -86,6 +102,7 @@ export type CredentialReader = (
 function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   provider: ChannelProvider<TCredentials, TId>,
   plaintext: Uint8Array,
+  deps: ChannelRuntimeDeps,
 ): ChannelComponent | { readonly invalid: string } {
   const decoded = Result.try({
     try: (): PlainValue => JSON.parse(new TextDecoder().decode(plaintext)),
@@ -96,24 +113,25 @@ function credentialRow<TCredentials, TId extends keyof typeof ChannelProviders>(
   }
   const parsed = provider.credentials.safeParse(decoded.success);
   if (!parsed.success) return { invalid: parsed.error.message };
-  return providerRow(provider, parsed.data, {});
+  return providerRow(provider, parsed.data, {}, deps);
 }
 
 function declaredRow(
   key: keyof typeof ChannelProviders,
   plaintext: Uint8Array,
   providers: typeof ChannelProviders,
+  deps: ChannelRuntimeDeps,
 ): ChannelComponent | { readonly invalid: string } {
   if (key === "telegram") {
-    return credentialRow(providers.telegram, plaintext);
+    return credentialRow(providers.telegram, plaintext, deps);
   }
   if (key === "discord") {
-    return credentialRow(providers.discord, plaintext);
+    return credentialRow(providers.discord, plaintext, deps);
   }
   if (key === "slack") {
-    return credentialRow(providers.slack, plaintext);
+    return credentialRow(providers.slack, plaintext, deps);
   }
-  return credentialRow(providers.github, plaintext);
+  return credentialRow(providers.github, plaintext, deps);
 }
 
 export function isRegisteredProvider(provider: string): provider is keyof typeof ChannelProviders {
@@ -170,6 +188,7 @@ export interface DeclaredChannelRow {
 export function declaredChannelProfile(
   instances: readonly Provisioning.ChannelInstance[],
   readCredential: CredentialReader,
+  deps: ChannelRuntimeDeps,
   providers: typeof ChannelProviders = ChannelProviders,
 ): { rows: DeclaredChannelRow[]; statuses: DeclaredChannelStatus[] } {
   const rows: DeclaredChannelRow[] = [];
@@ -205,7 +224,7 @@ export function declaredChannelProfile(
       record(instance, "vault_locked", credential.reason);
       continue;
     }
-    const row = declaredRow(instance.provider, credential.plaintext, providers);
+    const row = declaredRow(instance.provider, credential.plaintext, providers, deps);
     if ("invalid" in row) {
       record(instance, "credential_invalid", row.invalid);
       continue;

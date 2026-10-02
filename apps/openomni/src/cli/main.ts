@@ -13,6 +13,7 @@ import { loadConfig, resolveClusterStorage } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "../index";
 import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
+import { platformEntropy } from "../composition/platform";
 import type { DaemonIo, DaemonTarget, ExecResult } from "./daemon";
 import { daemonActive, unitPath } from "./daemon";
 import { applyEnvFile, mergeEnvFile, writeEnvFile } from "./env-file";
@@ -93,7 +94,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
   };
 
   async function startApp(): Promise<void> {
-    applyEnvFile(envPath, process.env);
+    applyEnvFile(envPath);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
     const runtime = gatewayRuntime(resolveClusterStorage(config, home));
@@ -108,10 +109,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
 
   async function doctorPorts(): Promise<DoctorPorts> {
     const envFilePresent = existsSync(envPath);
-    const effectiveEnv = mergeEnvFile(
-      envFilePresent ? await Bun.file(envPath).text() : "",
-      process.env,
-    );
+    const effectiveEnv = mergeEnvFile(envFilePresent ? await Bun.file(envPath).text() : "");
     const lingerEnabled = ((): boolean | undefined => {
       if (target.platform !== "linux") return undefined;
       const result = io.exec(["loginctl", "show-user", String(target.uid), "--property=Linger"]);
@@ -173,7 +171,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     async attachMachine(configPath) {
       const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
-      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath));
+      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath, platformEntropy().id));
       console.log(JSON.stringify(daemon.attachment));
       if (daemon.attachment.status === "refused") {
         return 1;

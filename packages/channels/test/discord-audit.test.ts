@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { FIXED_NOW, injectedOptions } from "./helpers/injected";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import {
@@ -32,9 +33,14 @@ describe("Discord audit regressions", () => {
     const failed = Promise.withResolvers<void>();
     const retried = Promise.withResolvers<void>();
     let handlerAttempts = 0;
-    const adapter = new DiscordAdapter("token", {}, (event) => {
-      if (event.name === Operational.Events.Error.name) failed.resolve();
-    });
+    const adapter = new DiscordAdapter(
+      "token",
+      {},
+      (event) => {
+        if (event.name === Operational.Events.Error.name) failed.resolve();
+      },
+      injectedOptions(),
+    );
     adapter.onMessage(async () => {
       handlerAttempts += 1;
       if (handlerAttempts === 1) throw new Error("inbox refused");
@@ -54,7 +60,7 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("outage", { status: 503 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient("token", () => undefined);
+    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
     await expect(client.fetchGatewayUrl()).rejects.toBeInstanceOf(DiscordGatewayFetchError);
   });
 
@@ -62,14 +68,14 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("forbidden", { status: 403 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient("token", () => undefined);
+    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
     await expect(client.send("channel-1", "hello", "trace-1")).rejects.toBeInstanceOf(
       DiscordApiError,
     );
   });
 
   it("throws a typed error when start has no message handler", async () => {
-    const adapter = new DiscordAdapter("token", {}, () => undefined);
+    const adapter = new DiscordAdapter("token", {}, () => undefined, injectedOptions());
     await expect(adapter.start("trace-1")).rejects.toBeInstanceOf(DiscordHandlerMissingError);
   });
 });

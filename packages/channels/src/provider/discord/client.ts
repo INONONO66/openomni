@@ -19,6 +19,7 @@ export class DiscordClient implements ChannelClient {
   constructor(
     private readonly token: string,
     private readonly publish: PublishPort,
+    private readonly now: () => number,
   ) {}
 
   async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
@@ -85,6 +86,7 @@ export class DiscordClient implements ChannelClient {
       },
       {
         traceId,
+        now: this.now,
         publish: this.publish,
         retryAfterSchema: RetryAfterSchema.transform((hint) => hint.retry_after ?? 5),
         label: `discord${path}`,

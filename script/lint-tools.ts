@@ -40,7 +40,7 @@ import * as protocolExports from "../packages/protocol/src/index.js";
 // Schema inspection never executes ports; absent capabilities are explicit test doubles.
 const schemaPorts: ToolPorts = {
   alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
-  llm: undefined, provisioning: undefined, clock: () => 0,
+  llm: undefined, provisioning: undefined, clock: () => 0, id: () => "schema",
 };
 const definitions = catalogDefinitions(schemaPorts);
 

@@ -5,9 +5,16 @@ import { z } from "zod";
 
 import { bounded } from "../helpers/bounded";
 
+/** Deterministic injected sources: counter ids, counter times. */
+function sourceOptions() {
+  let id = 0;
+  let time = 0;
+  return { id: () => `bus-event-${++id}`, now: () => ++time };
+}
+
 const buses: ReturnType<typeof createObservationBus>[] = [];
 function bus() {
-  const created = createObservationBus();
+  const created = createObservationBus(sourceOptions());
   buses.push(created);
   return created;
 }
@@ -80,7 +87,7 @@ describe("observation bus delivery", () => {
   it("delivers the original handler failure to the injected error sink", async () => {
     const failure = new Error("subscriber failure");
     const reported = Promise.withResolvers<{ error: Error; event: string }>();
-    const observations = createObservationBus((error, event) => reported.resolve({ error, event }));
+    const observations = createObservationBus({ ...sourceOptions(), onError: (error, event) => reported.resolve({ error, event }) });
     const event = BusEvent.define("test.bus.error-sink", z.string());
     observations.subscribe(event, () => {
       throw failure;

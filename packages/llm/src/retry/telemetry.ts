@@ -12,6 +12,8 @@ export function observeRetry(
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly decision: Extract<Retry.Decision, { retry: true }>;
+    /** Wall-clock source for the emitted fact timestamps (#1245). */
+    readonly now: () => number;
   },
 ): void {
   const { decision } = input;
@@ -23,7 +25,7 @@ export function observeRetry(
     maxAttempts: input.maxAttempts,
     reason: decision.reason,
     backoffMs: decision.delayMs,
-    time: Date.now(),
+    time: input.now(),
   });
   if (decision.reason === "rate_limit")
     events.publish(LlmCall.Events.RateLimited, {
@@ -32,14 +34,14 @@ export function observeRetry(
       runId: input.runId,
       provider: input.provider,
       retryAfterMs: decision.delayMs,
-      time: Date.now(),
+      time: input.now(),
     });
   if (decision.retryAfterOverCap)
     events.publish(Operational.Events.Warn, {
       traceId: input.traceId,
       sessionId: input.sessionId,
       component: "llm.retry",
-      time: Date.now(),
+      time: input.now(),
       msg: "ratelimit reset above cap; demoted to backoff",
       context: { backoffMs: decision.delayMs },
     });

@@ -15,6 +15,7 @@ interface WebSocketAuthResult {
 interface WebSocketAuthState {
   readonly request: Request;
   readonly publish: PublishPort;
+  readonly now: () => number;
   /** The upgrade attempt's trace (D11 origin, one per upgrade) — both auth warns inherit it. */
   readonly traceId: string;
   readonly token?: string;
@@ -67,7 +68,7 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
   ) {
     state.publish(Operational.Events.Warn, {
       traceId: state.traceId,
-      time: Date.now(),
+      time: state.now(),
       component: "server",
       msg: "websocket auth failure",
     });
@@ -96,25 +97,28 @@ function evaluateWebSocketToken(state: WebSocketAuthState): Policy.PolicyDecisio
 export function authenticateWebSocketUpgrade(input: {
   readonly request: Request;
   readonly publish: PublishPort;
+  readonly now: () => number;
+  readonly id: () => string;
   readonly token?: string;
   readonly onDecision?: ChannelAuthnDecisionObserver;
 }): WebSocketAuthResult {
-  const startedAt = Date.now();
+  const startedAt = input.now();
   const state: WebSocketAuthState = {
     request: input.request,
     publish: input.publish,
+    now: input.now,
     // Origin: an inbound upgrade attempt is a genuine trace root — ONE mint per
     // upgrade; the two auth warns (mutually exclusive per upgrade) inherit it.
     // Deliberately NOT shared with per-frame traces: an accepted connection's
     // frames mint their own message origins (channel/websocket.ts).
-    traceId: newTraceId(),
+    traceId: newTraceId(input.id),
     ...(input.token !== undefined ? { token: input.token } : {}),
   };
   const verdict = evaluateWebSocketToken(state);
   void recordDecision(
     "channel-authn:websocket-token",
     verdict,
-    Date.now() - startedAt,
+    input.now() - startedAt,
     input.onDecision,
   );
 

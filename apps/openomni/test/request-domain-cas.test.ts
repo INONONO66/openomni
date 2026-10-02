@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { Tool } from "@openomni/protocol";
@@ -39,7 +39,7 @@ test("an endpoint changed at body entry cannot spend consent for its old binding
     },
   };
   const running = protectedDispatch(
-    createProvisionTool(provisionPort(plane)),
+    createProvisionTool(provisionPort(plane), () => 1000),
     {
       operation: { op: "contact_merge", args: { endpointId: "endpoint", toActorId: "target" } },
     },
@@ -63,7 +63,7 @@ test("a second Owner decision cannot spend the same promotion CAS", async () => 
     { id: "contact:cas", kind: "unknown", trustTier: "observer", standing: "provisional" },
     { id: "ep:cas", channel: "ws", externalId: "cas" },
   );
-  const running = protectedDispatch(createProvisionTool(provisionPort(plane)), {
+  const running = protectedDispatch(createProvisionTool(provisionPort(plane), () => 1000), {
     operation: { op: "contact_promote", args: { actorId: "contact:cas" } },
   }, undefined, { plane });
   try {

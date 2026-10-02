@@ -4,6 +4,8 @@ import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-s
 /** Raw blacklist fact storage over one catalog handle. Active-pattern matching belongs to channels. */
 export function createBlacklistStore(source: {
   readonly blacklist?: ProtocolStorage.BlacklistSubAdapter;
+  /** Injected wall clock (#1245): the catalog handle carries it. */
+  readonly now: () => number;
 }) {
   function requireAdapter(): ProtocolStorage.BlacklistSubAdapter {
     return requireSubAdapter(source.blacklist, "Storage adapter does not implement blacklist");
@@ -12,7 +14,7 @@ export function createBlacklistStore(source: {
   return {
     put(input: Actor.BlacklistEntry): Actor.BlacklistEntry {
       const store = requireAdapter();
-      const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id)));
+      const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id), source.now()));
       store.set(entry);
       return entry;
     },

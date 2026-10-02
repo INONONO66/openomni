@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Actor, Gateway, Machine, NamedError, type Model, type PlainValue } from "@openomni/protocol";
+import { type KekResolution, resolveKek } from "./provisioning/vault-key";
 import { Result } from "effect";
 import { z } from "zod";
 
@@ -39,6 +40,12 @@ export interface OpenOmniConfig {
   readonly compactionSummarizer?: boolean;
   /** Required for non-loopback hosts; every ws sender is granted owner tier. */
   readonly wsToken?: string;
+  /**
+   * The vault key-encryption-key, resolved exactly once at config time
+   * (#1245): boot wiring and declared provisioning receive this resolution
+   * as an argument and never read the environment themselves.
+   */
+  readonly kek: KekResolution;
   readonly model: {
     readonly provider: string;
     readonly id: string;
@@ -115,8 +122,8 @@ export function modelTransport(
   };
 }
 
-function required(name: string): string {
-  const value = process.env[name]?.trim();
+function required(name: string, env: Record<string, string | undefined>): string {
+  const value = env[name]?.trim();
   if (value === undefined || value.length === 0) {
     throw new ConfigurationError({ code: "missing_env", message: `${name} is required` });
   }
@@ -168,8 +175,8 @@ export function resolveClusterStorage(
   };
 }
 
-function entityIdleMsFromEnv(): number | undefined {
-  const raw = process.env.OPENOMNI_ENTITY_IDLE_MS?.trim();
+function entityIdleMsFromEnv(env: Record<string, string | undefined>): number | undefined {
+  const raw = env.OPENOMNI_ENTITY_IDLE_MS?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   const ms = Number(raw);
   if (!Number.isInteger(ms) || ms <= 0) {
@@ -181,8 +188,8 @@ function entityIdleMsFromEnv(): number | undefined {
   return ms;
 }
 
-function compactionSummarizerFromEnv(): boolean {
-  const raw = process.env.OPENOMNI_COMPACTION_SUMMARIZER?.trim();
+function compactionSummarizerFromEnv(env: Record<string, string | undefined>): boolean {
+  const raw = env.OPENOMNI_COMPACTION_SUMMARIZER?.trim();
   if (raw === undefined || raw.length === 0) return true;
   if (raw === "off") return false;
   throw new ConfigurationError({
@@ -238,8 +245,8 @@ const ModelHeaders = z.record(
 // failure until a live turn reaches it.
 const CATALOG_PROVIDER_IDS = new Set(["anthropic", "openai"]);
 
-function modelFallbacksFromEnv(): readonly Model.Ref[] | undefined {
-  const raw = process.env.OPENOMNI_MODEL_FALLBACKS?.trim();
+function modelFallbacksFromEnv(env: Record<string, string | undefined>): readonly Model.Ref[] | undefined {
+  const raw = env.OPENOMNI_MODEL_FALLBACKS?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   return raw.split(",").map((entry) => {
     const trimmed = entry.trim();
@@ -281,8 +288,12 @@ const Actors = z
   .min(1);
 
 /** Reads an env var holding JSON, naming the variable on both parse and schema failure. */
-function parseEnvJson<T>(name: string, schema: z.ZodType<T>): T | undefined {
-  const raw = process.env[name]?.trim();
+function parseEnvJson<T>(
+  name: string,
+  schema: z.ZodType<T>,
+  env: Record<string, string | undefined>,
+): T | undefined {
+  const raw = env[name]?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   const json = Result.try({ try: (): PlainValue => JSON.parse(raw), catch: String });
   if (Result.isFailure(json)) {
@@ -299,14 +310,16 @@ function parseEnvJson<T>(name: string, schema: z.ZodType<T>): T | undefined {
  * Like enrollment, actor admission is the Owner's decision read from config:
  * who may be delegated to is never inferred from whoever connects.
  */
-function actorsFromEnv(): OpenOmniConfig["actors"] {
-  return parseEnvJson("OPENOMNI_ACTORS", Actors);
+function actorsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["actors"] {
+  return parseEnvJson("OPENOMNI_ACTORS", Actors, env);
 }
 
 const ChannelAllowedSenders = z.record(z.string(), z.array(z.string().min(1)).min(1));
 
-function channelAllowedSendersFromEnv(): OpenOmniConfig["channelAllowedSenders"] {
-  return parseEnvJson("OPENOMNI_CHANNEL_ALLOWED_SENDERS", ChannelAllowedSenders);
+function channelAllowedSendersFromEnv(
+  env: Record<string, string | undefined>,
+): OpenOmniConfig["channelAllowedSenders"] {
+  return parseEnvJson("OPENOMNI_CHANNEL_ALLOWED_SENDERS", ChannelAllowedSenders, env);
 }
 
 /** Declared ChannelInstance rows are the sole channel provisioning owner. */
@@ -324,18 +337,18 @@ export function assertDeclaredChannelConfig(
   }
 }
 
-function socialBudgetsFromEnv(): OpenOmniConfig["socialBudgets"] {
-  return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets);
+function socialBudgetsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["socialBudgets"] {
+  return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets, env);
 }
 
-function modelFromEnv(): OpenOmniConfig["model"] {
-  const baseUrl = process.env.OPENOMNI_MODEL_BASE_URL?.trim();
-  const headers = parseEnvJson("OPENOMNI_MODEL_HEADERS", ModelHeaders);
-  const fallbacks = modelFallbacksFromEnv();
+function modelFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["model"] {
+  const baseUrl = env.OPENOMNI_MODEL_BASE_URL?.trim();
+  const headers = parseEnvJson("OPENOMNI_MODEL_HEADERS", ModelHeaders, env);
+  const fallbacks = modelFallbacksFromEnv(env);
   return {
-    provider: required("OPENOMNI_MODEL_PROVIDER"),
-    id: required("OPENOMNI_MODEL_ID"),
-    apiKey: required("OPENOMNI_MODEL_API_KEY"),
+    provider: required("OPENOMNI_MODEL_PROVIDER", env),
+    id: required("OPENOMNI_MODEL_ID", env),
+    apiKey: required("OPENOMNI_MODEL_API_KEY", env),
     ...(baseUrl === undefined || baseUrl.length === 0 ? {} : { baseUrl }),
     ...(headers === undefined ? {} : { headers }),
     ...(fallbacks === undefined ? {} : { fallbacks }),
@@ -347,38 +360,44 @@ function modelFromEnv(): OpenOmniConfig["model"] {
  * rather than inferred from whoever connects. Ledger-backed enrollment is a
  * later slice; the shape the host consumes is already the protocol's.
  */
-function machinesFromEnv(home: string): OpenOmniConfig["machines"] {
-  const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments);
+function machinesFromEnv(
+  home: string,
+  env: Record<string, string | undefined>,
+): OpenOmniConfig["machines"] {
+  const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments, env);
   if (enrolled === undefined) return undefined;
   return {
-    socketPath:
-      process.env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock"),
+    socketPath: env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock"),
     enrolled,
   };
 }
 
-export function loadConfig(home: string = homedir()): OpenOmniConfig {
-  assertDeclaredChannelConfig();
-  const host = process.env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
-  const wsToken = process.env.OPENOMNI_WS_TOKEN?.trim();
-  const machines = machinesFromEnv(home);
-  const actors = actorsFromEnv();
-  const socialBudgets = socialBudgetsFromEnv();
-  const channelAllowedSenders = channelAllowedSendersFromEnv();
+export function loadConfig(
+  home: string = homedir(),
+  env: Record<string, string | undefined> = process.env,
+): OpenOmniConfig {
+  assertDeclaredChannelConfig(env);
+  const host = env.OPENOMNI_WS_HOST?.trim() || "127.0.0.1";
+  const wsToken = env.OPENOMNI_WS_TOKEN?.trim();
+  const machines = machinesFromEnv(home, env);
+  const actors = actorsFromEnv(env);
+  const socialBudgets = socialBudgetsFromEnv(env);
+  const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   return {
     ...resolveClusterStorage(
       {
-        catalogPath: process.env.OPENOMNI_CATALOG_PATH?.trim() || undefined,
-        sessionsDir: process.env.OPENOMNI_SESSIONS_DIR?.trim() || undefined,
-        entityIdleMs: entityIdleMsFromEnv(),
+        catalogPath: env.OPENOMNI_CATALOG_PATH?.trim() || undefined,
+        sessionsDir: env.OPENOMNI_SESSIONS_DIR?.trim() || undefined,
+        entityIdleMs: entityIdleMsFromEnv(env),
       },
       home,
     ),
     host,
-    wsPort: parseWsPort(process.env.OPENOMNI_WS_PORT),
-    compactionSummarizer: compactionSummarizerFromEnv(),
+    wsPort: parseWsPort(env.OPENOMNI_WS_PORT),
+    compactionSummarizer: compactionSummarizerFromEnv(env),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
-    model: modelFromEnv(),
+    kek: resolveKek(env, home),
+    model: modelFromEnv(env),
     ...(machines === undefined ? {} : { machines }),
     ...(actors === undefined ? {} : { actors }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),

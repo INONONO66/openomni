@@ -10,13 +10,9 @@ const testAuthRoot = join(tmpdir(), "openomni-auth-storage-");
 async function withTestAuthFile<T>(fn: (filepath: string, dir: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(testAuthRoot);
   const filepath = join(dir, "auth.json");
-  const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
-  process.env.OPENOMNI_AUTH_FILE = filepath;
   try {
     return await fn(filepath, dir);
   } finally {
-    if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
-    else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -26,9 +22,9 @@ describe("Auth Storage", () => {
     { name: "should write API auth to auth.json", provider: "anthropic", key: "sk-ant" },
     { name: "should work with API key auth type", provider: "openai", key: "sk-xxx" },
   ])("$name", async ({ provider, key }) => {
-    await withTestAuthFile(async () => {
-      await runEffect(Auth.set(provider, { type: "api", key }));
-      const stored = await runEffect(Auth.get(provider));
+    await withTestAuthFile(async (filepath) => {
+      await runEffect(Auth.set(provider, { type: "api", key }, { id: () => "tmp-api", authFilePath: filepath }));
+      const stored = await runEffect(Auth.get(provider, filepath));
       expect(stored).toBeDefined();
       expect(stored?.type).toBe("api");
       if (stored?.type !== "api") throw new Error("expected API auth");
@@ -37,13 +33,13 @@ describe("Auth Storage", () => {
   });
 
   it("should return stored value with correct Zod type", async () => {
-    await withTestAuthFile(async () => {
+    await withTestAuthFile(async (filepath) => {
       await runEffect(Auth.set("anthropic", {
         type: "proxy",
         baseURL: "http://localhost:8317/v1",
         apiKey: "proxy-key",
-      }));
-      const stored = await runEffect(Auth.get("anthropic"));
+      }, { id: () => "tmp-proxy", authFilePath: filepath }));
+      const stored = await runEffect(Auth.get("anthropic", filepath));
       expect(stored).toBeDefined();
       expect(stored?.type).toBe("proxy");
       if (stored?.type !== "proxy") throw new Error("expected proxy auth");
@@ -53,19 +49,19 @@ describe("Auth Storage", () => {
   });
 
   it("should return undefined for nonexistent key", async () => {
-    await withTestAuthFile(async () => {
-      expect(await runEffect(Auth.get("nonexistent"))).toBeUndefined();
+    await withTestAuthFile(async (filepath) => {
+      expect(await runEffect(Auth.get("nonexistent", filepath))).toBeUndefined();
     });
   });
 
   it("preserves both credentials when set calls overlap", async () => {
-    await withTestAuthFile(async () => {
+    await withTestAuthFile(async (filepath) => {
       await Promise.all([
-        runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" })),
-        runEffect(Auth.set("openai", { type: "api", key: "sk-openai" })),
+        runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }, { id: () => "tmp-a", authFilePath: filepath })),
+        runEffect(Auth.set("openai", { type: "api", key: "sk-openai" }, { id: () => "tmp-b", authFilePath: filepath })),
       ]);
 
-      expect(await runEffect(Auth.all())).toEqual({
+      expect(await runEffect(Auth.all(filepath))).toEqual({
         anthropic: { type: "api", key: "sk-ant" },
         openai: { type: "api", key: "sk-openai" },
       });
@@ -73,10 +69,10 @@ describe("Auth Storage", () => {
   });
 
   it("should return all entries", async () => {
-    await withTestAuthFile(async () => {
-      await runEffect(Auth.set("anthropic", { type: "proxy", baseURL: "http://localhost:8317/v1" }));
-      await runEffect(Auth.set("openai", { type: "api", key: "sk-xxx" }));
-      const all = await runEffect(Auth.all());
+    await withTestAuthFile(async (filepath) => {
+      await runEffect(Auth.set("anthropic", { type: "proxy", baseURL: "http://localhost:8317/v1" }, { id: () => "tmp-1", authFilePath: filepath }));
+      await runEffect(Auth.set("openai", { type: "api", key: "sk-xxx" }, { id: () => "tmp-2", authFilePath: filepath }));
+      const all = await runEffect(Auth.all(filepath));
       expect(Object.keys(all).length).toBe(2);
       expect(all.anthropic).toBeDefined();
       expect(all.openai).toBeDefined();
@@ -94,7 +90,7 @@ describe("Auth Storage", () => {
           invalid: { type: "unknown", data: "bad" },
         }),
       );
-      const all = await runEffect(Auth.all());
+      const all = await runEffect(Auth.all(filepath));
       expect(Object.keys(all).length).toBe(1);
       expect(all.valid).toBeDefined();
       expect(all.invalid).toBeUndefined();
@@ -104,9 +100,9 @@ describe("Auth Storage", () => {
   it("fails loudly on a malformed auth file instead of reading it as empty", async () => {
     await withTestAuthFile(async (filepath) => {
       await Bun.write(filepath, "{ this is not json");
-      await expect(runEffect(Auth.all())).rejects.toThrow("auth file is not valid JSON");
-      await expect(runEffect(Auth.get("anthropic"))).rejects.toThrow("auth file is not valid JSON");
-      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-new" }))).rejects.toThrow(
+      await expect(runEffect(Auth.all(filepath))).rejects.toThrow("auth file is not valid JSON");
+      await expect(runEffect(Auth.get("anthropic", filepath))).rejects.toThrow("auth file is not valid JSON");
+      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-new" }, { id: () => "tmp-new", authFilePath: filepath }))).rejects.toThrow(
         "auth file is not valid JSON",
       );
       expect(await Bun.file(filepath).text()).toBe("{ this is not json");
@@ -116,7 +112,7 @@ describe("Auth Storage", () => {
   it("fails loudly when the auth file is valid JSON but not an object", async () => {
     await withTestAuthFile(async (filepath) => {
       await Bun.write(filepath, "null");
-      await expect(runEffect(Auth.all())).rejects.toThrow("auth file is not a JSON object");
+      await expect(runEffect(Auth.all(filepath))).rejects.toThrow("auth file is not a JSON object");
     });
   });
 
@@ -128,7 +124,7 @@ describe("Auth Storage", () => {
           legacy: { type: "oauth", refresh: "r", access: "a", expires: 999 },
         }),
       );
-      const all = await runEffect(Auth.all());
+      const all = await runEffect(Auth.all(filepath));
       expect(all.legacy).toBeUndefined();
     });
   });
@@ -136,9 +132,8 @@ describe("Auth Storage", () => {
   it("creates a missing nested credential directory", async () => {
     await withTestAuthFile(async (_filepath, dir) => {
       const nested = join(dir, "nested", "auth.json");
-      process.env.OPENOMNI_AUTH_FILE = nested;
 
-      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }));
+      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }, { id: () => "tmp-ant", authFilePath: nested }));
 
       expect(await Bun.file(nested).json()).toEqual({
         anthropic: { type: "api", key: "sk-ant" },
@@ -153,16 +148,31 @@ describe("Auth Storage", () => {
       mkdirSync(filepath);
       await Bun.write(join(filepath, "sentinel"), "keep");
 
-      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }))).rejects.toThrow();
+      await expect(runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }, { id: () => "tmp-ant", authFilePath: filepath }))).rejects.toThrow();
 
       expect(readdirSync(dir).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
       expect(await Bun.file(join(filepath, "sentinel")).text()).toBe("keep");
     });
   });
 
+  it("reads and writes only the injected path, whatever the environment says", async () => {
+    await withTestAuthFile(async (filepath, dir) => {
+      const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+      process.env.OPENOMNI_AUTH_FILE = join(dir, "elsewhere.json");
+      try {
+        await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }, { id: () => "tmp-env", authFilePath: filepath }));
+        expect(await runEffect(Auth.get("anthropic", filepath))).toEqual({ type: "api", key: "sk-ant" });
+        expect(existsSync(join(dir, "elsewhere.json"))).toBe(false);
+      } finally {
+        if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
+        else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
+      }
+    });
+  });
+
   it("should set auth.json file with 0o600 permissions", async () => {
     await withTestAuthFile(async (filepath) => {
-      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }));
+      await runEffect(Auth.set("anthropic", { type: "api", key: "sk-ant" }, { id: () => "tmp-ant", authFilePath: filepath }));
       const mode = (await Bun.file(filepath).stat())?.mode ?? 0;
       expect(mode & 0o777).toBe(0o600);
     });

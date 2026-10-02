@@ -1,5 +1,5 @@
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
-import { createObservationBus } from "../../src/observation/bus";
+import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 
 export type CrashStores = IsolatedLedgerHandle & { readonly dbPath: string };
@@ -10,9 +10,11 @@ export type CrashStores = IsolatedLedgerHandle & { readonly dbPath: string };
  * process-global storage — every opener owns and closes its handles.
  */
 export function openCrashStores(dbPath: string): CrashStores {
-  const bus = createObservationBus();
-  const session = openSessionStore(dbPath, bus);
-  const catalog = openCatalogStore(`${dbPath}.catalog`, bus);
+  const bus = testBus();
+  let now = 0;
+  const storeOptions = { now: () => (now += 1), observationSink: bus };
+  const session = openSessionStore(dbPath, storeOptions);
+  const catalog = openCatalogStore(`${dbPath}.catalog`, storeOptions);
   const kernel = SessionHandleStore.createSessionKernel(session, catalog);
   return {
     dbPath,

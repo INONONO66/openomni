@@ -7,9 +7,10 @@ import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway
 import { allowConfigure } from "./helpers/generation-services";
 import { configureAuthority } from "../src/composition/generation-layers";
 import { AppLedger } from "../src/composition/cluster-runtime";
+import { Bus } from "./helpers/bus";
 
 test("AppLive retains distinct same-number session generations", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   try {
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -35,7 +36,7 @@ test("AppLive retains distinct same-number session generations", async () => {
 });
 
 test("generation composition rejects use before initialization and duplicate initialization", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   try {
     await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -69,7 +70,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     if (fail) return yield* new AgentFailure({ operation: "fixture.acquire", cause: String(id.id) });
   }));
   const definition = bundle({ name: "probe", requires: [ObservationSink], provides: [], layer: live, events: [{ ns: "probe.event", version: 1 }] });
-  const runtime = gatewayRuntime({ bundles: BundlesLive([definition]) });
+  const runtime = gatewayRuntime({ observations: Bus, bundles: BundlesLive([definition]) });
   try {
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
       yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
@@ -112,7 +113,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
 
 for (const verdict of ["require_approval", "deny"] as const) {
   test(`configureAuthority refuses session.configure when the pinned pre-policy yields ${verdict}`, async () => {
-    const runtime = gatewayRuntime({});
+    const runtime = gatewayRuntime({ observations: Bus });
     try {
       const decisions = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
         const generations = yield* GenerationLayers;

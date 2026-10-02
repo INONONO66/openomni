@@ -30,7 +30,7 @@ test("ledger write receipts are the ok arms of the protocol results", () => {
 test("every production Tag is consumed or has an exact existing-debt receipt", () => {
   const inventory = effectServiceInventory();
   expect(inventory.map((service: ServiceUsage) => service.key)).toEqual(expect.arrayContaining([
-    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink",
+    "@openomni/agent/Entropy", "@openomni/agent/ObservationSink",
     "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
     "@openomni/llm/Llm",
   ]));

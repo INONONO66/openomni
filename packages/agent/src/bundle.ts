@@ -2,7 +2,7 @@ import { createNamedPolicyRegistry, KERNEL_POLICY_REGISTRY, type NamedPolicyRegi
 import { type AnyToolDefinition, type PlainValue, PlainValueSchema, PolicyRow } from "@openomni/protocol";
 import { Context, Effect, Layer, Option, type Scope } from "effect";
 import { BundleError } from "./errors";
-import { Clock, Entropy, ObservationSink, ToolCatalog } from "./services";
+import { Entropy, ObservationSink, ToolCatalog } from "./services";
 
 type TagIdentity = Pick<Context.Service<never, never>, "key" | typeof Context.ServiceTypeId>;
 type Identifier<T> = T extends { readonly Identifier: infer I } ? I : never;
@@ -14,7 +14,7 @@ type Exact<P extends readonly TagIdentity[], R extends readonly TagIdentity[], O
   false extends GenuineTuple<P>[number] | GenuineTuple<R>[number] ? false :
   Equal<Identifiers<P>, O> extends true ? Equal<Identifiers<R>, I> : false;
 type Check<T> = T extends true ? [] : [invalidContract: never];
-type SeedServices = Clock | Entropy | ObservationSink | ToolCatalog;
+type SeedServices = Entropy | ObservationSink | ToolCatalog;
 
 export class NamedPolicyRegistry extends Context.Service<NamedPolicyRegistry, PolicyRegistry>()("@openomni/agent/NamedPolicyRegistry") {}
 
@@ -233,7 +233,7 @@ export class BundleDefinitions extends Context.Service<BundleDefinitions, {
   readonly names: readonly string[];
   readonly select: (names: readonly string[]) => SelectedBundles;
 }>()("@openomni/agent/BundleDefinitions") {}
-const kernelTags = [Clock, Entropy, ObservationSink, ToolCatalog] as const;
+const kernelTags = [Entropy, ObservationSink, ToolCatalog] as const;
 export function BundlesLive<const B extends readonly BundleDefinition[]>(definitions: B, ..._check: Check<Ordered<B, SeedServices>>): Layer.Layer<BundleDefinitions> {
   validateOrder(kernelTags, definitions);
   const installed = Object.freeze([...definitions]);

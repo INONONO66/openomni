@@ -8,6 +8,7 @@ import { encode, LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
 import { acquire, run } from "./helpers/effects";
 import { captureError, deferred, within } from "./helpers/signal";
+import { sequentialIds } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
 
 async function rawServer() {
@@ -30,7 +31,7 @@ async function rawServer() {
 for (const failure of ["malformed", "disconnect"] as const) {
   test(`native socket ${failure} fails the pending RPC without replay`, async () => {
     const server = await rawServer();
-    const client = await acquire(connectIpcClient(server.path));
+    const client = await acquire(connectIpcClient(server.path, { idSource: sequentialIds("native-client") }));
     const socket = await within(server.accepted, "server accept");
     const closed = deferred();
     socket.once("close", () => closed.resolve());
@@ -65,9 +66,10 @@ test("native scopes release the connection and permit immediate socket-path reus
   const disconnected = deferred();
   const path = socketPath("release");
   const server = await acquire(createIpcServer(path, (_method, _params, respond) => Effect.sync(() => respond({ ok: true })), {
+    idSource: sequentialIds("native-server"),
     onDisconnect: () => Effect.sync(() => disconnected.resolve()),
   }));
-  const client = await acquire(connectIpcClient(path));
+  const client = await acquire(connectIpcClient(path, { idSource: sequentialIds("native-reuse") }));
   try {
     expect(await run(client.value.call("ready"))).toEqual({ ok: true });
     await client.close();
@@ -101,6 +103,7 @@ test("a retained response callback cannot write to a socket after scope close", 
     },
   }));
   const client = await acquire(connectIpcClient(server.path, {
+    idSource: sequentialIds("native-callback"),
     onRequest: (_method, _params, respond) => Effect.sync(() => entered.resolve(respond)),
   })).finally(() => observation.mockRestore());
   const peer = await within(server.accepted, "callback peer accept");

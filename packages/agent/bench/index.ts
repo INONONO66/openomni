@@ -2,7 +2,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message, ObservationSink } from "@openomni/protocol";
+import { Effect } from "effect";
 import { Compaction } from "../src/compaction/compact.ts";
+import { Entropy } from "../src/services";
+import { entropySource } from "../test/helpers/time";
 import { addTurnBenchmarks, runBenchEffect } from "./turns.ts";
 
 /** The bench stands in for one run. It measures compaction, not reporting. */
@@ -33,7 +36,7 @@ for (const size of [20, 100, 500]) {
     async () => {
       await runBenchEffect(Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
         trigger: "threshold",
-      }));
+      }).pipe(Effect.provide(Entropy.layer(entropySource("bench")))));
     },
     { async: true },
   );

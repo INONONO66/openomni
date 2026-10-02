@@ -30,6 +30,8 @@ export interface ToolPorts {
   readonly llm: LlmPort | undefined;
   readonly provisioning: ProvisionPort | undefined;
   readonly clock: () => number;
+  /** Injected id entropy (#1245): required, no ambient crypto fallback. */
+  readonly id: () => string;
 }
 
 /** Pure construction: generation acquisition, not a process cache, owns identity. */
@@ -45,7 +47,7 @@ export function catalogDefinitions(ports: ToolPorts): readonly AnyToolDefinition
     eraseTool(createEvalTool(ports.cells?.cell)),
     eraseTool(createMonitorTool(ports.alarms)),
     eraseTool(createSendMessageTool(ports.messages, ports.clock)),
-    eraseTool(createProvisionTool(ports.provisioning)),
+    eraseTool(createProvisionTool(ports.provisioning, ports.clock)),
     eraseTool(createCompletionTool(ports.llm)),
   ]);
 }

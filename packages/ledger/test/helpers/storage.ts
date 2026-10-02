@@ -5,6 +5,10 @@ import { join } from "node:path";
 import type { ObservationSink } from "@openomni/protocol";
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src";
 
+/** Fixed injected clock (#1245): ledger tests assert exact timestamps. */
+export const TEST_NOW = 1_700_000_000_000;
+export const testNow = (): number => TEST_NOW;
+
 type SessionStore = ReturnType<typeof openSessionStore>;
 type CatalogStore = ReturnType<typeof openCatalogStore>;
 
@@ -15,8 +19,8 @@ export interface LedgerStores {
 }
 
 function open(paths: { session: string; catalog: string }, sink?: ObservationSink): LedgerStores {
-  const session = openSessionStore(paths.session, sink);
-  const catalog = openCatalogStore(paths.catalog, sink);
+  const session = openSessionStore(paths.session, { now: testNow, observationSink: sink });
+  const catalog = openCatalogStore(paths.catalog, { now: testNow, observationSink: sink });
   return { session, catalog, kernel: SessionHandleStore.createSessionKernel(session, catalog) };
 }
 

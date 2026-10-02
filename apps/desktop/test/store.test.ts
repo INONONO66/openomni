@@ -22,6 +22,8 @@ import {
   toggleSidebar,
 } from "../src/renderer/state/store";
 import { placeTitle } from "../src/renderer/state/selectors";
+import { RendererInvariantError } from "../src/renderer/errors";
+import "./helpers/platform";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);
@@ -254,4 +256,26 @@ describe("the sidebar's width and mode", () => {
     setSidebarFloating(false);
     expect(consoleStore.state).toBe(before);
   });
+});
+
+/**
+ * Minting before `bindStorePlatform` is an invariant violation, never an
+ * ambient `Date`/`crypto` fallback (#1245). A query-busted import yields a
+ * fresh, unbound module instance without disturbing the cached bound one.
+ */
+test("an unbound store refuses to mint instead of reaching for ambient entropy", async () => {
+  const unbound = (await import(`../src/renderer/state/store?${"unbound"}`)) as
+    typeof import("../src/renderer/state/store");
+  expect(() => unbound.createSession(1)).toThrow(RendererInvariantError);
+  expect(() => unbound.openTab({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
+  expect(() => unbound.navigate({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
+  expect(() => unbound.newSessionTab()).toThrow(RendererInvariantError);
+
+  // Once bound, every mint reads the injected clock and ids — never ambient.
+  let minted = 0;
+  unbound.bindStorePlatform({ now: () => 42, id: () => `fake-${++minted}` });
+  unbound.newSessionTab();
+  const session = unbound.consoleStore.state.sessions[0];
+  expect(session?.id).toBe("fake-1");
+  expect(session?.createdAt).toBe(42);
 });

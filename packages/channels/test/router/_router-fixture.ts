@@ -84,7 +84,14 @@ export async function ownerMessageTargets(
 
 // L1/executor recording ports. Routing, identity, Request, grants and delivery remain real.
 // The real compiler evaluates perimeter A rows and actor grants; app tests cover the full executor/tree.
+const fixtureIds = { value: 0 };
+function nextFixtureId(prefix: string): string {
+  fixtureIds.value += 1;
+  return `${prefix}-${fixtureIds.value}`;
+}
+
 export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {
+  const now = overrides.now ?? (() => 1);
   const policy = compilePolicySnapshot({
     registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
@@ -151,7 +158,9 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
   router = createGatewayRouter({
     stores: ledger().stores,
     transaction: channelTransaction,
-    requests: channelRequests(requestPort(overrides.clock ?? Date.now, (sessionIds: readonly string[]) => {
+    now,
+    id: () => nextFixtureId("fixture-id"),
+    requests: channelRequests(requestPort(now, (sessionIds: readonly string[]) => {
       for (const sessionId of sessionIds) {
         for (const row of ledger().kernel.pendingMessages(sessionId)) {
           if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
@@ -224,7 +233,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           matchedRuleIds: decision.matchedRuleIds,
           reason: decision.reason ?? "denied",
         };
-      const actionId = crypto.randomUUID();
+      const actionId = nextFixtureId("action");
       if (sender.kind === "session") originalAction(actionId, sender.id, request.intent);
       return {
         terminal: "executed",
@@ -263,7 +272,7 @@ export function registerOwnerDm(): void {
 }
 
 export function createMappedOwnerSession(): { readonly id: string } {
-  const id = crypto.randomUUID();
+  const id = nextFixtureId("mapped-session");
   ledger().stores.surfaceKeys.claim(
     Channel.SurfaceKey.fromChannel({
       surface: ownerFacts.surface,

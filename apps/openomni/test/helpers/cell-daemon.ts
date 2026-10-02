@@ -1,4 +1,5 @@
 import type { attachMachineDaemon } from "@openomni/machines";
+import { testIds } from "./test-entropy";
 
 export function cellDaemonOptions(
   socketPath: string,
@@ -6,6 +7,7 @@ export function cellDaemonOptions(
 ): Parameters<typeof attachMachineDaemon>[0] {
   return {
     socketPath,
+    id: testIds(`cell-daemon-${machineId}`),
     offer: {
       machineId,
       offeredCapabilities: ["kernel.py"],

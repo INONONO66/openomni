@@ -1,4 +1,5 @@
 import { runAgentSync } from "./executor";
+import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger, runTestSync } from "./isolated";
@@ -99,7 +100,8 @@ export function requestLedger(
     },
     ledger,
     identity: fencedTurnIdentity(id, turnId, generation),
-    entropy: () => crypto.randomUUID(),
+    entropy: uniqueEntropy(`${id}-entropy`),
+    random: () => 0,
     clock,
   };
 }

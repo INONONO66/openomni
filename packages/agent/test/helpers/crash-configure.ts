@@ -13,6 +13,7 @@ import { openCrashStores } from "./crash-stores";
 import { commitReceivedMessage } from "./ingress";
 import { seedPolicy } from "./seed-policy";
 import { awaitCrashStart, holdCrashBarrier } from "./crash-channel";
+import { uniqueEntropy } from "./time";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./session-services";
 
 export const configureCrashPoint = "session_configure_commit_before_hibernate";
@@ -34,6 +35,7 @@ function cut() {
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
       authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => 100,
+      entropy: uniqueEntropy("configure"),
       onHibernate: () => Effect.sync(() => { hibernations += 1; }),
     };
     return yield* withSessionServices(Effect.gen(function* () {
@@ -67,6 +69,7 @@ function recover() {
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
       observations: { publish: () => undefined }, clock: () => 100_000,
+      entropy: uniqueEntropy("recover"),
       authorizeConfigure: () => Effect.suspend(() => {
         configureCalls += 1;
         return Effect.fail(new AgentFailure({ operation: "configure.recovery", cause: "unexpected_reexecution" }));

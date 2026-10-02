@@ -59,7 +59,7 @@ test.each([
 
 test("session deadline is part of the inbox commit, never a second alarm write", async () => {
   const router = makeRouter({
-    clock: () => 10,
+    now: () => 10,
   });
   const result = await runEffect(router.ingest(
     { kind: "session", id: "sender" },

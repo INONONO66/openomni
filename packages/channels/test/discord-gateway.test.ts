@@ -1,4 +1,5 @@
 import { bounded } from "./helpers/bounded";
+import { injectedOptions } from "./helpers/injected";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
 import { Operational } from "@openomni/protocol";
@@ -217,6 +218,7 @@ function createMissedAckHarness(local: FakeGateway) {
       },
     },
     noopPublish,
+    injectedOptions(),
     () => {
       backoffStarted.resolve();
       return releaseBackoff.promise;
@@ -284,6 +286,7 @@ describe("discord gateway state machine (#520)", () => {
         onReady: () => undefined,
       },
       noopPublish,
+      injectedOptions(),
     );
 
     const identifyReceived = local.waitFor((payload) => payload.op === GatewayOp.IDENTIFY);
@@ -361,6 +364,7 @@ describe("discord gateway state machine (#520)", () => {
         const payload = z.object({ msg: z.string() }).parse(data);
         if (payload.msg === "discord session resumed") sessionResumed.resolve();
       },
+      injectedOptions(),
       immediateDelay,
     );
 
@@ -419,6 +423,7 @@ describe("discord gateway state machine (#520)", () => {
         onReady: () => ready.resolve(),
       },
       noopPublish,
+      injectedOptions(),
       immediateDelay,
     );
 
@@ -468,6 +473,7 @@ describe("discord gateway state machine (#520)", () => {
         onReady: () => undefined,
       },
       noopPublish,
+      injectedOptions(),
       delay,
     );
 
@@ -511,6 +517,7 @@ describe("discord gateway state machine (#520)", () => {
         onReady: () => readyEvents.emit(),
       },
       noopPublish,
+      injectedOptions(),
       immediateDelay,
     );
 
@@ -543,6 +550,7 @@ describe("discord gateway state machine (#520)", () => {
         if (event.name === Operational.Events.Warn.name)
           warnings.push(z.object({ msg: z.string() }).parse(payload).msg);
       },
+      injectedOptions(),
       immediateDelay,
     );
 

@@ -26,6 +26,7 @@ const ClaimRow = z.object({
  */
 export function createSqliteEgressBudgetAdapter(
   db: Database,
+  now: () => number,
 ): ProtocolStorage.EgressBudgetSubAdapter {
   const read: ProtocolStorage.EgressBudgetSubAdapter["read"] = (
     senderId,
@@ -91,7 +92,7 @@ export function createSqliteEgressBudgetAdapter(
             parsed.targetActorId,
             parsed.class,
             parsed.at,
-            Date.now(),
+            now(),
           );
         },
       });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import type { ServerWebSocket } from "bun";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
@@ -135,6 +136,7 @@ describe("SlackSocket", () => {
       },
       { onEvent: (envelope) => events.emit(envelope) },
       options?.publish ?? noopPublish,
+      injectedOptions(),
       immediateDelay,
     );
     cleanups.push(() => {
@@ -217,6 +219,7 @@ describe("SlackSocket", () => {
         },
       },
       publish,
+      injectedOptions(),
       immediateDelay,
     );
     cleanups.push(() => {
@@ -249,6 +252,7 @@ describe("SlackSocket", () => {
       },
       { onEvent: () => undefined },
       noopPublish,
+      injectedOptions(),
       () => {
         delayCalls += 1;
         return Promise.resolve();
@@ -293,6 +297,7 @@ describe("SlackSocket", () => {
       },
       { onEvent: () => undefined },
       noopPublish,
+      injectedOptions(),
       immediateDelay,
     );
     cleanups.push(() => {

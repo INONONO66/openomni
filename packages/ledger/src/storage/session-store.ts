@@ -63,15 +63,18 @@ function closeStoreDatabase(db: Database): void {
 /** Shared transaction and idempotent close behavior for catalog and session files. */
 export class StoreHandle {
   readonly observationSink: ObservationSink;
+  /** The injected wall clock this handle was opened with; every timestamp the handle writes comes from it. */
+  readonly now: () => number;
   // Every transaction caller is a write unit: take the write lock up front
   // (BEGIN IMMEDIATE) instead of upgrading mid-transaction.
   readonly transaction = <T>(operation: () => T): T => this.db.transaction(operation).immediate();
   protected readonly db: Database;
   private closed = false;
 
-  constructor(db: Database, observationSink: ObservationSink) {
+  constructor(db: Database, observationSink: ObservationSink, now: () => number) {
     this.db = db;
     this.observationSink = observationSink;
+    this.now = now;
   }
 
   /** Idempotent — explicit teardown and scope finalizers may both close. */
@@ -94,9 +97,10 @@ export class SessionStore extends StoreHandle {
   constructor(
     db: Database,
     observationSink: ObservationSink,
+    now: () => number,
     onObservationFailure: ObservationFailurePort,
   ) {
-    super(db, observationSink);
+    super(db, observationSink, now);
     this.sessions = createSessions(db, this.transaction, observationSink, onObservationFailure);
     this.actions = createActions(db, this.transaction, observationSink, onObservationFailure);
     this.decisionFacts = createSqliteDecisionFacts(db);
@@ -110,14 +114,18 @@ export class SessionStore extends StoreHandle {
  */
 const DROP_OBSERVATION_FAILURES: ObservationFailurePort = () => undefined;
 
-export function openSessionStore(
-  path: string,
-  observationSink: ObservationSink = SILENT_OBSERVATION_SINK,
-  onObservationFailure: ObservationFailurePort = DROP_OBSERVATION_FAILURES,
-): SessionStore {
+export interface OpenSessionStoreOptions {
+  /** Injected wall clock (#1245): the store never reads ambient time. */
+  readonly now: () => number;
+  readonly observationSink?: ObservationSink;
+  readonly onObservationFailure?: ObservationFailurePort;
+}
+
+export function openSessionStore(path: string, options: OpenSessionStoreOptions): SessionStore {
   return new SessionStore(
     openStoreDatabase(path, SESSION_FILE_SCHEMA),
-    observationSink,
-    onObservationFailure,
+    options.observationSink ?? SILENT_OBSERVATION_SINK,
+    options.now,
+    options.onObservationFailure ?? DROP_OBSERVATION_FAILURES,
   );
 }

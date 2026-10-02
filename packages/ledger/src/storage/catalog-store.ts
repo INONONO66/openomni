@@ -58,15 +58,15 @@ export class CatalogStore extends StoreHandle {
   readonly replyGrant: ProtocolStorage.ReplyGrantSubAdapter;
   readonly provisioning: ProtocolStorage.ProvisioningSubAdapter;
   readonly policies: ProtocolStorage.PolicyRowSubAdapter;
-  constructor(db: Database, observationSink: ObservationSink) {
-    super(db, observationSink);
-    this.surfaceKey = createSqliteSurfaceKeyAdapter(db);
-    this.egressBudget = createSqliteEgressBudgetAdapter(db);
-    this.actorRegistry = createSqliteActorRegistryAdapter(db);
-    this.blacklist = createSqliteBlacklistAdapter(db);
-    this.channelGrant = createSqliteChannelGrantAdapter(db);
+  constructor(db: Database, observationSink: ObservationSink, now: () => number) {
+    super(db, observationSink, now);
+    this.surfaceKey = createSqliteSurfaceKeyAdapter(db, now);
+    this.egressBudget = createSqliteEgressBudgetAdapter(db, now);
+    this.actorRegistry = createSqliteActorRegistryAdapter(db, now);
+    this.blacklist = createSqliteBlacklistAdapter(db, now);
+    this.channelGrant = createSqliteChannelGrantAdapter(db, now);
     this.replyGrant = createSqliteReplyGrantAdapter(db);
-    this.provisioning = createSqliteProvisioningAdapter(db);
+    this.provisioning = createSqliteProvisioningAdapter(db, now);
     this.policies = createPolicies(db, this.transaction);
   }
 
@@ -114,9 +114,16 @@ export class CatalogStore extends StoreHandle {
   }
 }
 
-export function openCatalogStore(
-  path: string,
-  observationSink: ObservationSink = SILENT_OBSERVATION_SINK,
-): CatalogStore {
-  return new CatalogStore(openStoreDatabase(path, CATALOG_SCHEMA), observationSink);
+export interface OpenCatalogStoreOptions {
+  /** Injected wall clock (#1245): catalog adapters never read ambient time. */
+  readonly now: () => number;
+  readonly observationSink?: ObservationSink;
+}
+
+export function openCatalogStore(path: string, options: OpenCatalogStoreOptions): CatalogStore {
+  return new CatalogStore(
+    openStoreDatabase(path, CATALOG_SCHEMA),
+    options.observationSink ?? SILENT_OBSERVATION_SINK,
+    options.now,
+  );
 }

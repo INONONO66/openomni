@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { expect, spyOn, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { ownerStart } from "./helpers/owner-start";
-import { Bus } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { L0Observation, SessionTransition, SessionTurn } from "@openomni/protocol";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
@@ -60,7 +60,7 @@ test.each([
   suite.defer(() => ingest.mockRestore());
   const receipt = nextFrame(ws, (frame) => frame.type === "receipt");
   const terminal = nextResidentTurn(plane);
-  ws.send(JSON.stringify({ text: "start" }));
+  ws.send(JSON.stringify({ eventId: newTraceId(), text: "start" }));
   expect(await receipt).toMatchObject({ type: "receipt", status: "accepted" });
   expect((await terminal).text).toBe("FINAL_SENTINEL");
   expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([]);
@@ -98,7 +98,7 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "token"]);
   const delivered = nextFrame(ws, (frame) => frame.type === "message");
   const terminal = nextResidentTurn(plane);
-  ws.send(JSON.stringify({ text: "send explicitly" }));
+  ws.send(JSON.stringify({ eventId: newTraceId(), text: "send explicitly" }));
   expect(await delivered).toMatchObject({ text: "EXPLICIT_SENTINEL" });
   expect((await terminal).text).toBe("LOCAL_ONLY_SENTINEL");
   expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([

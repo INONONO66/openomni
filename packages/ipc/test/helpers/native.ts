@@ -7,16 +7,21 @@ import { acquire, run, sync } from "./effects";
 export * from "../../src/errors";
 export { classifyIpcMessage } from "../../src/peer-request-table";
 
+export function sequentialIds(prefix: string): IdSource {
+  let n = 0;
+  return () => { n += 1; return `${prefix}-${n}`; };
+}
 type Handler = (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void, notify: (method: string, params?: Ipc.Notification["params"]) => void, connectionId: string) => void | Promise<void>;
 function handlerEffect(body: () => void | Promise<void>) {
   return Effect.try({ try: body, catch: decodeIpcFailure("test.handler") }).pipe(Effect.flatMap((result) => result instanceof Promise ? Effect.tryPromise({ try: () => result, catch: decodeIpcFailure("test.handler") }) : Effect.void));
 }
 export async function connectIpcClient(path: string, options: {
-  connectTimeoutMs?: number; onDisconnect?: () => void;
+  idSource?: IdSource; connectTimeoutMs?: number; onDisconnect?: () => void;
   onRequest?: (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => void | Promise<void>;
   onNotification?: (method: string, params: Ipc.Notification["params"]) => void | Promise<void>;
 } = {}) {
   const { value: native, close } = await acquire(connect(path, {
+    idSource: options.idSource ?? sequentialIds("client-req"),
     connectTimeoutMs: options.connectTimeoutMs,
     onDisconnect: options.onDisconnect ? () => handlerEffect(() => options.onDisconnect?.()) : undefined,
     onRequest: options.onRequest ? (method, params, respond) => handlerEffect(() => options.onRequest?.(method, params, respond)) : undefined,
@@ -28,8 +33,9 @@ export async function connectIpcClient(path: string, options: {
   };
 }
 export type IpcClient = Awaited<ReturnType<typeof connectIpcClient>>;
-export async function createIpcServer(path: string, handler: Handler, options: { onDisconnect?: (id: string) => void } = {}) {
+export async function createIpcServer(path: string, handler: Handler, options: { idSource?: IdSource; onDisconnect?: (id: string) => void } = {}) {
   const { value: native, close } = await acquire(listen(path, (...args) => handlerEffect(() => handler(...args)), {
+    idSource: options.idSource ?? sequentialIds("server-req"),
     onDisconnect: options.onDisconnect ? (id) => handlerEffect(() => options.onDisconnect?.(id)) : undefined,
   }));
   return { native, socketPath: native.socketPath,
@@ -68,6 +74,7 @@ export class PeerRequestTable<P = undefined> {
   private readonly native: NativeTable<P>;
   constructor(options: TableOptions<P>) {
     this.native = new NativeTable({ ...options,
+      idSource: options.idSource ?? sequentialIds("table-req"),
       onRequest: options.onRequest ? (...args) => handlerEffect(() => options.onRequest?.(...args)) : undefined,
       onNotification: options.onNotification ? (...args) => handlerEffect(() => options.onNotification?.(...args)) : undefined,
     });

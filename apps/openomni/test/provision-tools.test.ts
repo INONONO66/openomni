@@ -104,7 +104,7 @@ afterEach(() => {
 describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
-    const tool = eraseTool(createProvisionTool(port));
+    const tool = eraseTool(createProvisionTool(port, () => 1000));
     const result = await runEffect(dispatcherFixture([{ ...tool, execute: async () => ({ op: "status" }) }], {
       executor,
     }).execute(
@@ -133,7 +133,7 @@ function consentedDeclare(port: ProvisionPort, manifest: PlainObject) {
   // tool port mutates; a private dispatch plane reads every person as absent
   // (-1) and rejects the consent as stale.
   return protectedDispatch(
-    eraseTool(createProvisionTool(port)),
+    eraseTool(createProvisionTool(port, () => 1000)),
     { operation: { op: "contact_add", args: { manifest } } },
     undefined,
     { plane: plane() },
@@ -182,7 +182,7 @@ describe("original Person invocation consent", () => {
   });
   test("the act itself refuses consent bound to a Person revision that no longer holds", async () => {
     const { port, supervisor } = portWith();
-    const tool = createProvisionTool(port);
+    const tool = createProvisionTool(port, () => 1000);
     const context = {
       sessionId: "provision-session",
       turnId: "provision-turn",
@@ -565,7 +565,7 @@ describe("refusal branches", () => {
 
   test("foreign approval identifiers are invalid rather than reusable authority", async () => {
     const { port } = portWith();
-    const tool = eraseTool(createProvisionTool(port));
+    const tool = eraseTool(createProvisionTool(port, () => 1000));
     for (const approvalId of ["contact-approval", "another-person-approval"]) {
       const result = await runEffect(dispatcherFixture([tool], { executor }).execute(
         {
@@ -584,7 +584,7 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await runEffect(Effect.result(dispatcherFixture([eraseTool(createProvisionTool(port))], {
+    const result = await runEffect(Effect.result(dispatcherFixture([eraseTool(createProvisionTool(port, () => 1000))], {
       executor,
     }).execute(
       {

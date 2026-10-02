@@ -35,6 +35,10 @@ export type StreamEventContext = {
   readonly promptText: string;
   /** Local usage estimator for steps whose provider accounting is unusable (#933). */
   readonly estimateUsage: EstimateUsage;
+  /** Wall-clock source for part timestamps (#1245). */
+  readonly now: () => number;
+  /** Unique-id source for part identities (#1245). */
+  readonly id: () => string;
 };
 
 type OpenBlock = {
@@ -154,7 +158,7 @@ function applyStreamEvent(
     case "step-start": {
       appendPart(
         {
-          id: crypto.randomUUID(),
+          id: context.id(),
           sessionID: context.sessionID,
           messageID: context.messageID,
           type: "step-start",
@@ -183,12 +187,12 @@ function startText(
   context: StreamEventContext,
 ): void {
   const part: Message.TextPart = {
-    id: crypto.randomUUID(),
+    id: context.id(),
     sessionID: context.sessionID,
     messageID: context.messageID,
     type: "text",
     text: "",
-    time: { start: Date.now() },
+    time: { start: context.now() },
     metadata: event.providerMetadata ?? {},
   };
   state.currentText = { partId: part.id, text: "" };
@@ -201,7 +205,7 @@ function finishText(state: StreamEventState, context: StreamEventContext): void 
   state.currentText = undefined;
   advancePart(
     open.partId,
-    { to: "completed", at: Date.now(), output: open.text.trimEnd() },
+    { to: "completed", at: context.now(), output: open.text.trimEnd() },
     context,
   );
 }
@@ -212,12 +216,12 @@ function startReasoning(
   context: StreamEventContext,
 ): void {
   const part: Message.ReasoningPart = {
-    id: crypto.randomUUID(),
+    id: context.id(),
     sessionID: context.sessionID,
     messageID: context.messageID,
     type: "reasoning",
     text: "",
-    time: { start: Date.now(), end: undefined },
+    time: { start: context.now(), end: undefined },
     metadata: event.providerMetadata ?? {},
   };
   state.reasoning.set(String(event.id), { partId: part.id, text: "" });
@@ -250,7 +254,7 @@ function finishReasoning(
     open.partId,
     {
       to: "completed",
-      at: Date.now(),
+      at: context.now(),
       output: open.text.trimEnd(),
       ...(signature !== undefined ? { signature } : {}),
     },
@@ -313,7 +317,7 @@ function handleStepFinish(
   // #532-7: a length-truncated step cannot have completed its tool calls —
   // fail every non-terminal tool part now, no salvage.
   if (mapFinishReason(finishReason) === "length") {
-    const at = Date.now();
+    const at = context.now();
     for (const [callID, partId] of state.pendingTools) {
       if (context.externalTools) advancePart(partId, { to: "running", at }, context);
       advancePart(
@@ -322,7 +326,7 @@ function handleStepFinish(
         context,
       );
       context.sink.onToolResult({
-        id: crypto.randomUUID(),
+        id: context.id(),
         toolCallId: callID,
         output: "truncated output: tool call incomplete",
         isError: true,
@@ -333,7 +337,7 @@ function handleStepFinish(
 
   appendPart(
     {
-      id: crypto.randomUUID(),
+      id: context.id(),
       sessionID: context.sessionID,
       messageID: context.messageID,
       type: "step-finish",
@@ -376,7 +380,7 @@ export function settleAttempt(
     finishReasoning({ type: "reasoning-end", id: reasoningId }, state, context);
   }
   if (options.preserveTools) return;
-  const at = Date.now();
+  const at = context.now();
   for (const [callID, partId] of state.pendingTools) {
     if (context.externalTools) advancePart(partId, { to: "running", at }, context);
     advancePart(
@@ -387,7 +391,7 @@ export function settleAttempt(
       context,
     );
     context.sink.onToolResult({
-      id: crypto.randomUUID(),
+      id: context.id(),
       toolCallId: callID,
       output: "Processing was interrupted",
       isError: true,

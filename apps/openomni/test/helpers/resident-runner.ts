@@ -1,12 +1,13 @@
 import { testToolPorts } from "./tool-ports";
-import { Effect, Scope } from "effect";
-import { Provider, run } from "@openomni/llm";
+import { Context, Effect, Layer, Scope } from "effect";
+import { Llm, LlmLive } from "@openomni/llm";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";
 import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
-import { Bus, closeSessions, type SessionRuntime } from "@openomni/agent";
+import { closeSessions, type SessionRuntime } from "@openomni/agent";
+import { Bus } from "./bus";
 import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
 import { runEffect, runSyncEffect } from "./effect";
@@ -52,10 +53,11 @@ export function residentRunner(
     policyGeneration: () => plane.openKernel("policy-probe").currentPolicyGeneration(),
   });
   const fixture = options.sessionRuntime;
+  const liveLlm = Context.get(runSyncEffect(Scope.provide(Layer.build(LlmLive), scope.scope)), Llm);
   const context = runSyncEffect(Scope.provide(generationServices({
     clock: fixture?.clock, entropy: fixture?.entropy,
     observations: fixture?.observations === undefined ? Bus : observationService(fixture.observations),
-    definitions: resident.definitions, llm: { run, resolveModel: Provider.resolveModel, ...options.llm },
+    definitions: resident.definitions, llm: { ...liveLlm, ...options.llm },
     plane,
   }), scope.scope));
   cleanups.push(async () => {
@@ -85,7 +87,9 @@ export function residentRunner(
         sessionId,
         kind: "prompt",
         content,
-        origin: { encodingVersion: 1, value: { kind: "test" } },
+        // Owner prompts enter with the perimeter's recorded full-access treatment (#1245:
+        // unknown provenance is evidence-only, so a fixture prompt must declare its authority).
+        origin: { encodingVersion: 1, value: { kind: "external", inboundTreatment: "full_access" } },
         createdAt: (fixture?.clock ?? Date.now)(),
         parentActionId: null,
         ...(exists

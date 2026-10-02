@@ -45,10 +45,13 @@ test.each([
   }));
   const commits: Inbox.Commit[] = [];
   const decisions: Ingress.RoutingDecisionPayload[] = [];
+  const ids = { value: 0 };
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
     stores: ledger().stores,
     transaction: channelTransaction,
+    now: () => 1,
+    id: () => { ids.value += 1; return `raw-id-${ids.value}`; },
     sink: <T>(event: BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));

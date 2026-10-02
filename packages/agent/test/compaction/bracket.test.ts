@@ -4,7 +4,7 @@ import { isolated } from "../helpers/isolated";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { BusEvent } from "@openomni/protocol";
 import { RunEvents } from "../../src/core/execution/events";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { collector } from "../helpers/observation-collector";
 import { Compaction } from "../../src/compaction/compact";
 import { captureBusEvents } from "../helpers/bus-event";

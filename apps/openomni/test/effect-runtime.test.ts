@@ -5,15 +5,20 @@ import { createSessionEntityPortsSlot } from "../src/composition/cluster-runtime
 import { gatewayRuntime, runAppBoot, toolPorts } from "../src/gateway";
 
 import { startOpenOmni } from "../src/index";
-import { Clock, Entropy } from "@openomni/agent";
+import { Entropy } from "@openomni/agent";
+import { Clock } from "effect";
 import { AppLifecycleFailure } from "../src/runtime";
 import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
+import { testIds } from "./helpers/test-entropy";
+import { testEntropy } from "./helpers/test-entropy";
+import { Bus } from "./helpers/bus";
 
 const config = {
   host: "127.0.0.1",
   wsPort: 0,
+  kek: { kind: "locked", reason: "no vault key in this fixture" },
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
-};
+} as const;
 
 
 test("tool ports bridge machine filesystem and exec effects through the app runtime", async () => {
@@ -36,6 +41,8 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
     machines: { get: (): typeof machine => machine } as never,
     completion: (() => Effect.succeed({})) as never,
     messages: { ingest: () => Effect.succeed({}) } as never,
+    now: () => 0,
+    id: testIds("ports"),
   });
   const handle = ports.machines?.get("machine");
   expect((await handle?.fs.read("/file")) === read).toBe(true);
@@ -46,15 +53,15 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
 });
 
 test("the server edge consumes the shared gateway runtime and its injected services", async () => {
-  const runtime = gatewayRuntime({ clock: () => 123, entropy: () => "fixed" });
+  const runtime = gatewayRuntime({ observations: Bus, now: () => 123, entropy: testEntropy(() => "fixed") });
   const first = await startOpenOmni({ config, runtime });
   try {
     expect(first.runtime).toBe(runtime);
-    expect(gatewayRuntime({})).toBe(runtime);
+    expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
     expect(
       await runRuntimeEffect(runtime,
         Effect.gen(function* () {
-          return [(yield* Clock).now(), (yield* Entropy).next()];
+          return [yield* Clock.currentTimeMillis, (yield* Entropy).id()];
         }),
       ),
     ).toEqual([123, "fixed"]);
@@ -68,7 +75,7 @@ test("the server edge consumes the shared gateway runtime and its injected servi
 });
 
 test("failed boot releases acquired resources in reverse and rethrows the typed cause", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const order: string[] = [];
   const failure = new AppLifecycleFailure({ operation: "fixture.acquire", cause: "refused" });
   const message = Object.getOwnPropertyDescriptor(
@@ -106,7 +113,7 @@ test("failed boot releases acquired resources in reverse and rethrows the typed 
 });
 
 test("double stop observes one pending disposal and releases exactly once", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let calls = 0;
@@ -132,7 +139,7 @@ test("double stop observes one pending disposal and releases exactly once", asyn
 });
 
 test("scope finalizers all run and aggregate failures in reverse release order", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const order: string[] = [];
   const first = new AppLifecycleFailure({ operation: "first.close", cause: "first" });
   const second = new AppLifecycleFailure({ operation: "second.close", cause: "second" });
@@ -158,8 +165,8 @@ test("scope finalizers all run and aggregate failures in reverse release order",
 
 test("a runtime with fixed entity ports refuses late rebinding", async () => {
   const ports = createSessionEntityPortsSlot().ports;
-  await gatewayRuntime({}).dispose();
-  const runtime = gatewayRuntime({
+  await gatewayRuntime({ observations: Bus }).dispose();
+  const runtime = gatewayRuntime({ observations: Bus,
     entity: { owner: "fixed-entity", ports },
   });
   try {

@@ -4,13 +4,14 @@ import type { Message, Policy, TraceContext } from "@openomni/protocol";
 import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState } from "../budget";
 import { AgentInvariantViolation } from "../../errors";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage } from "../types";
-import { createUserMessage, createAssistantMessage, withMessageId } from "../message-factory";
+import { createUserMessage, createAssistantMessage, withMessageId, type MessageSource } from "../message-factory";
 import type { CompactionYield } from "../../compaction/geometry";
 import { stopState, type StopState } from "./stop-chain";
 
 function toMessagesWithParts(
   messages: ChatAgentInput["messages"],
-  source: string,
+  sessionId: string,
+  source: MessageSource,
 ): Message.WithParts[] {
   const output: Message.WithParts[] = [];
 
@@ -19,10 +20,11 @@ function toMessagesWithParts(
     output.push(
       withMessageId(
         message.role === "user"
-          ? createUserMessage(message.content, source, message.partMetadata, message.time)
+          ? createUserMessage(message.content, sessionId, source, message.partMetadata, message.time)
           : createAssistantMessage(
               message.content,
               parentID,
+              sessionId,
               source,
               message.partMetadata,
               message.time,
@@ -182,17 +184,20 @@ export type BuildTurnResult =
   | { type: "ready"; turn: TurnArtifacts }
   | { type: "complete"; result: AgentResult };
 
-export function createRunState(input: ChatAgentInput & { traceContext: RunTrace }): RunState {
+export function createRunState(
+  input: ChatAgentInput & { traceContext: RunTrace },
+  source: MessageSource,
+): RunState {
   const sessionId = input.traceContext.sessionId;
   return {
     sessionId,
     stop: stopState(),
     modelFailureReasons: [],
     modelChainStart: 0,
-    budgetState: createBudgetState(),
+    budgetState: createBudgetState(source.now),
     messages:
       input.history === undefined
-        ? toMessagesWithParts(input.messages, sessionId)
+        ? toMessagesWithParts(input.messages, sessionId, source)
         : structuredClone([...input.history]),
     lastAssistantText: "",
     steps: [],
@@ -206,7 +211,7 @@ export function createRunState(input: ChatAgentInput & { traceContext: RunTrace 
     turnIndex: 0,
     chargedTurnIndex: -1,
     attempt: 1,
-    startTime: Date.now(),
+    startTime: source.now(),
   };
 }
 

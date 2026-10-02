@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import { Retry } from "@openomni/llm";
 import { providerFailure } from "../../helpers/mock-llm";
 
+/** Deterministic injected sources: frozen clock, zero jitter (#1245). */
+const sources = { now: () => 0, random: () => 0 };
+
 for (const [statusCode, retryable, reason] of [
   [408, true, "timeout"],
   [529, true, "transient_error"],
@@ -10,7 +13,7 @@ for (const [statusCode, retryable, reason] of [
   test(`provider status ${statusCode} produces canonical placement facts`, () => {
     const failure = providerFailure("opaque", { statusCode, retryable });
     expect(Retry.attemptReason(failure)).toBe(reason);
-    expect(Retry.decide(1, failure).retry).toBe(retryable);
+    expect(Retry.decide(1, failure, sources).retry).toBe(retryable);
   });
 }
 
@@ -22,5 +25,5 @@ test("a context overflow is not classified as a generic provider retry", () => {
   });
   expect(Retry.isContextOverflow(failure)).toBe(true);
   expect(Retry.attemptReason(failure)).toBe("context_overflow");
-  expect(Retry.decide(1, failure).retry).toBe(false);
+  expect(Retry.decide(1, failure, sources).retry).toBe(false);
 });

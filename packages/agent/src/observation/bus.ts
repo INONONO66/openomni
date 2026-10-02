@@ -91,7 +91,16 @@ namespace ObservationBus {
   }
 }
 
-export function createObservationBus(onError?: FailureReporter): ObservationBus {
+export interface ObservationBusOptions {
+  /** Composition-root entropy for scoped event ids; never ambient. */
+  readonly id: () => string;
+  /** Composition-root time for scoped event stamps; never ambient. */
+  readonly now: () => number;
+  readonly onError?: FailureReporter;
+}
+
+export function createObservationBus(options: ObservationBusOptions): ObservationBus {
+  const onError = options.onError;
   const rootState = createState();
   const local = new AsyncLocalStorage<BusState>();
   const current = () => local.getStore() ?? rootState;
@@ -120,7 +129,7 @@ export function createObservationBus(onError?: FailureReporter): ObservationBus 
       }
     },
     scope(identity) {
-      return scopeObservation(bus, identity);
+      return scopeObservation(bus, identity, options);
     },
     subscribe<T>(
       event: BusEvent.Descriptor<T>,
@@ -214,21 +223,18 @@ function matches<T>(data: T, match: Partial<T>): boolean {
   return true;
 }
 
-export const Bus = createObservationBus();
-
 interface ScopeObservationOptions {
-  readonly clock?: () => number;
-  readonly entropy?: () => string;
+  readonly now: () => number;
+  readonly id: () => string;
   readonly onError?: FailureReporter;
 }
 
 export function scopeObservation(
   sink: ObservationSink,
   identity: Readonly<BusEvent.Metadata>,
-  options: ScopeObservationOptions = {},
+  options: ScopeObservationOptions,
 ): ObservationSink {
-  const clock = options.clock ?? Date.now;
-  const entropy = options.entropy ?? (() => crypto.randomUUID());
+  const { now, id } = options;
 
   const subscribe = sink.subscribe?.bind(sink);
   const scoped: ObservationSink = {
@@ -237,7 +243,7 @@ export function scopeObservation(
         if (data === null || typeof data !== "object" || Array.isArray(data)) {
           throw new TypeError("scoped observation payload must be an object");
         }
-        const stamp = { eventId: entropy(), time: clock(), ...identity };
+        const stamp = { eventId: id(), time: now(), ...identity };
         sink.publish(event, { ...data, ...stamp });
       } catch (error) {
         reportObservationFailure(sink, asError(toBusData(error)), event.name, options.onError);
@@ -249,8 +255,4 @@ export function scopeObservation(
     ...(subscribe === undefined ? {} : { subscribe }),
   };
   return scoped;
-}
-
-export function newTraceId(): string {
-  return crypto.randomUUID().replaceAll("-", "");
 }

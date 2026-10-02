@@ -5,7 +5,7 @@ import { CompactionSession } from "../../../src/compaction/speculate";
 import { applyThreshold, stateAtGrace } from "../../helpers/compaction-seam";
 import type {} from "../../../src/core/types";
 import { RunEvents } from "../../../src/core/execution/events";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { captureBusEvents } from "../../helpers/bus-event";
 import { isolated } from "../../helpers/isolated";
 import { textMessage } from "../../helpers/messages";

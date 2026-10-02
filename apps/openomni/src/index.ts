@@ -14,7 +14,7 @@ import { timingSafeEqual } from "node:crypto";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import {
-  BundleDefinitions, Clock, Entropy, GenerationLayers, ObservationSink,
+  BundleDefinitions, Entropy, GenerationLayers, ObservationSink,
   createSessionEntityRunTurn,
   createSessionRequests,
   SessionEntity,
@@ -32,7 +32,6 @@ import {
   ChannelsFailure,
   WebSocketHandler,
 } from "@openomni/channels";
-import { homedir } from "node:os";
 import type { ActorRegistry } from "@openomni/ledger";
 
 import {
@@ -40,11 +39,9 @@ import {
   MachinesFailure,
   type MachineHost,
 } from "@openomni/machines";
-import type { Channel } from "@openomni/protocol";
-import { Bus, newTraceId } from "@openomni/agent";
+import { traceIdFromUuid, type Channel } from "@openomni/protocol";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
-import { resolveKek } from "./provisioning/vault-key";
 import type { ProvisionPort } from "./provisioning/channels";
 import {
   assertWsExposure,
@@ -66,6 +63,7 @@ import {
   sessionTimerPort,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
+import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import {
   watchFiredHook,
@@ -212,7 +210,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           context: yield* Effect.context<AppServices>(),
           plane: yield* AppLedger,
           scope: yield* AppScope,
-          clock: yield* Clock,
+          now: yield* captureNow,
           entropy: yield* Entropy,
           observations: yield* ObservationSink,
           bundles: yield* BundleDefinitions,
@@ -256,7 +254,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       listSessions: plane.listSessions,
       dispatchOutbound: dispatchOutboundMessage(
         (...args) => messages.ingest(...args),
-        services.clock.now,
+        services.now,
         plane.openKernel,
       ),
       requestDomainRevisions: domainRevisions,
@@ -348,7 +346,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       secrets: plane.stores.secrets,
       actors: plane.stores.actors,
       transaction: plane.catalog.transaction,
-      kek: resolveKek(process.env, homedir()),
+      kek: config.kek,
       supervisor: {
         reconcile: () => liveSupervisor().reconcile(),
         resume: (instanceId) => liveSupervisor().resume(instanceId),
@@ -370,8 +368,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
             createMachineHost({
               socketPath: machines.socketPath,
               enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-              events: Bus,
-              now: () => Date.now(),
+              events: services.observations,
+              id: services.entropy.id,
+              now: services.now,
               callTool: (call) =>
                 cells === undefined
                   ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
@@ -390,9 +389,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
+      { now: services.now, id: services.entropy.id },
     );
     if (host !== undefined) {
-      cells = await acquireAppResource(runtime, composeCodemode(host));
+      cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
     }
 
     // Watch plane: native sources deliver occurrences as WatchFired entity
@@ -420,7 +420,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           ),
       },
       {
-        clock: services.clock.now,
+        clock: services.now,
         failure: (watchId, error) => console.error(`watch ${watchId} send failed`, error),
       },
     );
@@ -433,11 +433,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
-      compaction: configuredCompaction(config),
+      compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       bundles: services.bundles.names,
       tools: {
-        ...toolPorts(runtime, { machines: host, cells, completion: llmPort, messages }),
-        clock: services.clock.now,
+        ...toolPorts(runtime, {
+          machines: host, cells, completion: llmPort, messages,
+          now: services.now, id: services.entropy.id,
+        }),
         alarms: await createMonitorPorts(runtime, watchSources),
         provisioning: provisioningPort,
       },
@@ -469,7 +471,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const webhookHandlers = new Map<string, (request: Request) => Promise<Response>>();
     const supervisor = createChannelSupervisor({
       desired: () =>
-        desiredChannels({ instances: plane.stores.instances, secrets: plane.stores.secrets }),
+        desiredChannels(
+          { instances: plane.stores.instances, secrets: plane.stores.secrets },
+          config.kek,
+          {
+            publish: services.observations.publish,
+            now: services.now,
+            id: services.entropy.id,
+            random: services.entropy.random,
+          },
+        ),
       build: (component) => component.build(routingHandler),
       // The tier is the row's, never this call site's: mounting a named
       // surface materializes no owner authority (#931).
@@ -479,14 +490,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ),
       deliveryRoutes,
       webhookHandlers,
-      traceId: newTraceId,
+      traceId: () => traceIdFromUuid(services.entropy.id()),
     });
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
       answer: (answer) =>
         runAppEffect(
           runtime,
-          requests.answer({ ...answer, receivedAt: services.clock.now() }),
+          requests.answer({ ...answer, receivedAt: services.now() }),
         ),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
@@ -528,7 +539,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const commitInbox = createMessageInboxCommit({
       plane,
       client: entityClient,
-      clock: services.clock.now,
+      clock: services.now,
     });
     // Deadline-carrying requests arm one persisted DeliverAt wake on the
     // owning session; the chain fold decides applied-versus-noop at delivery.
@@ -581,7 +592,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
           committed: (row) => {
             void wake(row.sessionId);
           },
-          clock: services.clock.now,
+          now: services.now,
+          id: services.entropy.id,
         },
         {
           deliveryRoutes,
@@ -621,8 +633,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // delegate to the child transport without committing under this fence.
     const resolvedRuntime: Parameters<typeof createSessionEntityRunTurn>[1] = {
       ...sessionRuntime,
-      clock: services.clock.now,
-      entropy: services.entropy.next,
+      clock: services.now,
+      entropy: services.entropy.id,
       observations: services.observations,
       generations: services.generations,
       services: services.context,
@@ -676,14 +688,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
               : Effect.succeed(admission),
           ),
         ),
-      Bus.publish,
+      services.observations.publish,
       {
+        now: services.now,
+        id: services.entropy.id,
         ...(config.wsToken === undefined ? {} : { token: config.wsToken }),
         onRequestAnswer: (sender, answer) => messages.ingest(sender, answer),
       },
     );
 
-    const wsCallbacks = webSocketCallbacks(runtime, wsHandler, (id) =>
+    const wsCallbacks = webSocketCallbacks(runtime, wsHandler, services.observations, (id) =>
       plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id));
     const server = Bun.serve({
       hostname: config.host,
@@ -758,17 +772,17 @@ export async function startOpenOmni(options: StartOptions = {}) {
             const attempt = () => Effect.suspend(() => {
               const { kernel, row, owner, fence } = borrowedAuthority(id);
               const received: LedgerAction.Append = {
-                id: services.entropy.next(),
+                id: services.entropy.id(),
                 parentId: kernel.latestAction(id)?.id ?? null,
                 sessionId: id,
                 kind: "prompt",
                 intent: { encodingVersion: 1, value: { kind: "session", id } },
                 effect: { encodingVersion: 1, value: { inboxKind: "interrupt", content: "" } },
                 irreversible: true,
-                ts: services.clock.now(),
+                ts: services.now(),
               };
               return kernel.commit({
-                sessionId: id, owner, fence, now: services.clock.now(),
+                sessionId: id, owner, fence, now: services.now(),
                 expectedRevision: row.revision, actions: [received],
                 state: row.state === "running" ? "interrupted" : row.state,
               });
@@ -802,13 +816,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 bundles: before.bundles,
               });
               const configured = SessionHandleStore.configureAction({
-                id: services.entropy.next(), sessionId: id,
+                id: services.entropy.id(), sessionId: id,
                 parentId: kernel.latestAction(id)?.id ?? null,
-                operation: "tools.add", snapshot, at: services.clock.now(),
+                operation: "tools.add", snapshot, at: services.now(),
               });
               const commit = kernel
                 .commit({
-                  sessionId: id, owner, fence, now: services.clock.now(),
+                  sessionId: id, owner, fence, now: services.now(),
                   expectedRevision: row.revision, actions: [configured], state: row.state,
                   generation: {
                     toolsGeneration: snapshot.generation,

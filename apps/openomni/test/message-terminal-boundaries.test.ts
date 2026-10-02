@@ -3,7 +3,7 @@ import { runEffect } from "./helpers/effect";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
-import { Bus } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { SessionHandleStore } from "@openomni/ledger";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
@@ -32,7 +32,7 @@ test("startOpenOmni reports pre-denied socket admission as an error, not accepte
   });
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "token"]);
   const response = nextFrame(socket, (frame) => frame.type === "receipt" || frame.type === "error");
-  socket.send(JSON.stringify({ text: "DENIED_INPUT" }));
+  socket.send(JSON.stringify({ eventId: newTraceId(), text: "DENIED_INPUT" }));
   expect(await response).toMatchObject({ type: "error" });
   expect(
     plane.listSessions().flatMap((row) => receivedMessages(plane, row.id)),

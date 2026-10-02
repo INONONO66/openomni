@@ -45,6 +45,9 @@ export function collector(): Collector {
   };
 }
 
+let traceCounter = 0;
 export function newTraceId(): string {
-  return crypto.randomUUID().replaceAll("-", "");
+  // Deterministic unique trace ids: tests must not read ambient entropy (#1245).
+  traceCounter += 1;
+  return `trace${traceCounter.toString(16).padStart(27, "0")}`;
 }

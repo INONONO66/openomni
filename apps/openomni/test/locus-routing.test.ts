@@ -15,6 +15,7 @@ import { parseLocus } from "../src/tools/locus";
 import { socketPath } from "./helpers/socket-path";
 import { testMachinePorts } from "./helpers/native-tool-ports";
 import { executor } from "./helpers/executor";
+import { testIds } from "./helpers/test-entropy";
 
 const context = { sessionId: "locus", turnId: "turn" };
 
@@ -70,6 +71,7 @@ async function fixture(
   const socket = socketPath();
   const host = await acquireEffect(createMachineHost({
     socketPath: socket,
+    id: testIds("locus-host"),
     enrollment: () => ({
       machineId: "c",
       name: "test",
@@ -82,6 +84,7 @@ async function fixture(
   }));
   const daemon = await acquireEffect(attachMachineDaemon({
     socketPath: socket,
+    id: testIds("locus-daemon"),
     offer: {
       machineId: "c",
       daemonVersion: "test",

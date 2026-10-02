@@ -20,6 +20,7 @@ import {
   type Tab,
 } from "../src/renderer/state/store";
 import { historyMenuEntries } from "../src/renderer/state/selectors";
+import "./helpers/platform";
 
 beforeEach(() => {
   consoleStore.setState(() => INITIAL_CLIENT_STATE);

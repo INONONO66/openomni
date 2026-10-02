@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { Dedupe } from "../src/support/dedupe";
+import { FIXED_NOW } from "./helpers/injected";
 import { handoffInbound } from "../src/support/inbound-handoff";
 
 test.each([
@@ -13,9 +14,10 @@ test.each([
   const errors: z.infer<typeof schema>[] = [];
   let attempts = 0;
   const input = {
-    dedupe: new Dedupe(),
+    dedupe: new Dedupe(() => FIXED_NOW),
     key: "message",
     traceId: "trace",
+    now: () => FIXED_NOW,
     errorMessage: "delivery failed",
     rethrowFailure,
     publish: (event, data) => {
@@ -39,9 +41,10 @@ test("an in-flight or completed handoff is not delivered again", async () => {
   const released = Promise.withResolvers<void>();
   let calls = 0;
   const input = {
-    dedupe: new Dedupe(),
+    dedupe: new Dedupe(() => FIXED_NOW),
     key: "message",
     traceId: "trace",
+    now: () => FIXED_NOW,
     errorMessage: "delivery failed",
     rethrowFailure: true,
     publish: () => undefined,

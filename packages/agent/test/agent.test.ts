@@ -1,15 +1,16 @@
+import { messageSource } from "./helpers/message-source";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
-import { createTestAgent } from "./helpers/effect-g3";
+import { createTestAgent, failure } from "./helpers/effect-g3";
 import { describe, expect, it, mock, spyOn, test } from "bun:test";
 import { Auth, LlmFailure } from "@openomni/llm";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
-import { Bus } from "../src/index";
+import { Bus } from "./helpers/bus";
 import { failureEvidence } from "../src/executor-outcome";
-import { Clock, Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
-import { PolicyDenied, ToolBodyFailed, AgentFailure, CommitFailed, CompactionExecutionError, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
+import { PolicyDenied, ToolBodyFailed, AgentFailure, AgentInvariantViolation, AgentStopError, CommitFailed, CompactionExecutionError, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
 import type { LedgerError } from "@openomni/ledger";
 import {
   completeModel,
@@ -32,8 +33,8 @@ function agent(run: MockLlmFn) {
 
 
 test("agent foundation tags and failure evidence are runtime contracts", () => {
-  expect([Clock.key, Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
-    "@openomni/agent/Clock", "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
+  expect([Entropy.key, ObservationSink.key, SessionLayer.key, ToolCatalog.key]).toEqual([
+    "@openomni/agent/Entropy", "@openomni/agent/ObservationSink", "@openomni/agent/SessionLayer", "@openomni/agent/ToolCatalog",
   ]);
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
@@ -97,7 +98,7 @@ describe("ChatAgent public run contract", () => {
         seen.push(step);
       }),
       llm: mockLlm(async (_input, sink) => {
-        sink.onMessage(createAssistantMessage("done", "", "session"));
+        sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
         return createStopOutcome();
       }),
     }).run(runInput([{ role: "user", content: "hello" }])));
@@ -193,8 +194,23 @@ describe("ChatAgent public run contract", () => {
 });
 
 describe("ChatAgent provider boundary failures", () => {
-  it("uses the empty assistant fallback for a provider stop without a snapshot", async () => {
-    expect(await isolated(Effect.flip(agent(async () => createStopOutcome()).run(runInput([{ role: "user", content: "hello" }]))))).toBeInstanceOf(Error);
+  it("dies with AgentInvariantViolation when the provider stops without emitting a snapshot", async () => {
+    // #1245: the executor no longer synthesises an empty assistant; a stop
+    // with no sink snapshot is a wiring defect, not a recoverable state.
+    const defect = await isolated(failure(agent(async () => createStopOutcome())
+      .run(runInput([{ role: "user", content: "hello" }]))));
+    expect(defect).toBeInstanceOf(AgentInvariantViolation);
+    expect((defect as Error).message).toBe("llm sink emitted no assistant snapshot");
+  });
+  it("fails the toolless run as a stop when the llm fold emits an empty snapshot", async () => {
+    // The llm fold owns the empty-assistant fallback: an empty snapshot built
+    // from the injected now/id sources is recorded, then the stop chain ends
+    // the toolless run — a typed stop, never the invariant defect above.
+    const error = await isolated(Effect.flip(agent(async (input, sink) => {
+      sink.onMessage(createAssistantMessage("", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId, { now: input.now, id: input.id }));
+      return createStopOutcome();
+    }).run(runInput([{ role: "user", content: "hello" }]))));
+    expect(error).toBeInstanceOf(AgentStopError);
   });
   it.each([
     {

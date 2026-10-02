@@ -1,6 +1,5 @@
 import {
   adoptSessionAuthority,
-  Clock,
   createSessionEntityRunTurn,
   decideSessionAdmission,
   Entropy,
@@ -13,7 +12,7 @@ import {
 } from "@openomni/agent";
 import type { LedgerError } from "@openomni/ledger";
 import type { SessionTurn } from "@openomni/protocol";
-import { Context, Effect, type Scope } from "effect";
+import { Clock, Context, Effect, type Scope } from "effect";
 import {
   AppLedger,
   createAppLedger,
@@ -23,12 +22,13 @@ import {
 import { localInboxCommit } from "../../src/process-entry";
 import type { AppRuntime } from "../../src/runtime";
 import { runRuntimeEffect } from "./effect";
+import { testClock } from "./test-entropy";
 
 /** A standalone app ledger plane for fixtures that never boot the runtime. */
 export function testPlane(
-  options: Parameters<typeof createAppLedger>[0] = {},
+  options: Partial<Parameters<typeof createAppLedger>[0]> = {},
 ): AppLedgerPlane {
-  return createAppLedger(options);
+  return createAppLedger({ ...options, now: options.now ?? testClock() });
 }
 
 /** The booted runtime's own plane — the one the entity and boot share. */
@@ -66,8 +66,8 @@ export function resolvedRuntimeFor(
 ): ResolvedTestRuntime {
   return {
     ...runtime,
-    clock: Context.get(context, Clock).now,
-    entropy: Context.get(context, Entropy).next,
+    clock: Context.get(context, Clock.Clock).currentTimeMillisUnsafe,
+    entropy: Context.get(context, Entropy).id,
     observations: Context.get(context, ObservationSink),
     generations: Context.get(context, GenerationLayers),
     services: context,

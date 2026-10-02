@@ -18,6 +18,7 @@ import {
   consoleStore, createSession, INITIAL_CLIENT_STATE, openTab, setDraft,
 } from "../src/renderer/state/store";
 import { upgradeWebSocket } from "./helpers/chat-server";
+import { testId } from "./helpers/platform";
 
 const cleanups: (() => void)[] = [];
 beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
@@ -95,7 +96,7 @@ test("a session read without a configured gateway refuses with the named class",
 
 test("session_read repairs a stale cursor with a fresh snapshot on the existing transport", async () => {
   const wire = serveReads();
-  const transport = createGatewayChatTransport({ url: wire.url });
+  const transport = createGatewayChatTransport({ id: testId, url: wire.url });
   const repaired = await transport.readSession("durable", { revision: 1, epoch: 1 });
   expect(wire.requests.map((request) => request.cursor)).toEqual([{ revision: 1, epoch: 1 }, undefined]);
   expect(repaired).toMatchObject({ type: "session_snapshot", epoch: 2, headRevision: 3 });
@@ -112,6 +113,7 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
   let bound: (() => void) | undefined;
   const binding = new Promise<void>((resolve) => { bound = resolve; });
   const transport = createGatewayChatTransport({
+    id: testId,
     url: wire.url,
     onSessionBound: (id, durableId) => { bindDurableSession(id, durableId); bound?.(); },
   });
@@ -189,7 +191,7 @@ test("an empty same-epoch same-head continuation keeps the authoritative activit
   cleanups.push(() => server.stop(true));
   const client = new QueryClient();
   cleanups.push(() => client.clear());
-  const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+  const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
   const localId = createSession(10);
   bindDurableSession(localId, "durable");
   const local = consoleStore.state.sessions[0];

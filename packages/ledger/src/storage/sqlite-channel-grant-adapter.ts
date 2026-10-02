@@ -6,6 +6,7 @@ const ChannelGrantRow = sqliteJsonData(Actor.ChannelGrant);
 
 export function createSqliteChannelGrantAdapter(
   db: Database,
+  now: () => number,
 ): ProtocolStorage.ChannelGrantSubAdapter {
   return {
     get(id) {
@@ -15,7 +16,7 @@ export function createSqliteChannelGrantAdapter(
       return row ?? undefined;
     },
     set(grant) {
-      const now = Date.now();
+      const at = now();
       db.query(
         `INSERT INTO channel_grant (
            id, data, surface, workspace, channel, kind, time_created, time_updated
@@ -34,8 +35,8 @@ export function createSqliteChannelGrantAdapter(
         grant.workspace ?? "",
         grant.channel ?? "",
         grant.kind,
-        grant.createdAt ?? now,
-        grant.updatedAt ?? now,
+        grant.createdAt ?? at,
+        grant.updatedAt ?? at,
       );
     },
     list() {

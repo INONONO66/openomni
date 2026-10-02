@@ -8,6 +8,7 @@ import { ModelsDev } from "../../src/model";
 import { resetCatalog } from "../helpers/model-loader";
 import { Provider } from "../../src/provider/index";
 import { enrichWithCatalog, fetchProxyModels } from "../../src/provider/proxy-models";
+import { fixedNow } from "../helpers/fixtures";
 
 type FetchArgs = Parameters<typeof fetch>;
 const originalFetch = globalThis.fetch;
@@ -53,7 +54,7 @@ describe("proxy-models", () => {
           headers: { "Content-Type": "application/json" },
         });
       });
-      const result = await runEffect(fetchProxyModels(`http://localhost:${port}/v1`, apiKey));
+      const result = await runEffect(fetchProxyModels(`http://localhost:${port}/v1`, fixedNow, apiKey));
       expect(result).toEqual(["test-model"]);
       expect(capturedHeaders?.get("Authorization")).toBe(expected);
     });
@@ -76,7 +77,7 @@ describe("proxy-models", () => {
         }),
       );
 
-      expect(await runEffect(fetchProxyModels("https://mixed-entries-proxy.example/v1"))).toEqual([
+      expect(await runEffect(fetchProxyModels("https://mixed-entries-proxy.example/v1", fixedNow))).toEqual([
         "first",
         "second",
       ]);
@@ -94,10 +95,10 @@ describe("proxy-models", () => {
         });
       });
 
-      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", "credential-a"))).toEqual([
+      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-a"))).toEqual([
         "model-a",
       ]);
-      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", "credential-b"))).toEqual([
+      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-b"))).toEqual([
         "model-b",
       ]);
       expect(authorizationHeaders).toEqual(["Bearer credential-a", "Bearer credential-b"]);
@@ -105,7 +106,7 @@ describe("proxy-models", () => {
 
     it("throws a typed error on auth failure (401) instead of returning []", async () => {
       stubFetch(() => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
-      await expect(runEffect(fetchProxyModels("http://localhost:3102/v1"))).rejects.toMatchObject({
+      await expect(runEffect(fetchProxyModels("http://localhost:3102/v1", fixedNow))).rejects.toMatchObject({
         _tag: "ProxyModelsError", status: 401, url: "http://localhost:3102/v1/models",
       });
     });
@@ -127,18 +128,17 @@ describe("proxy-models", () => {
       },
     ])("$name", async ({ port, response, message }) => {
       stubFetch(response);
-      await expect(runEffect(fetchProxyModels(`http://localhost:${port}/v1`))).rejects.toThrow(message);
+      await expect(runEffect(fetchProxyModels(`http://localhost:${port}/v1`, fixedNow))).rejects.toThrow(message);
     });
   });
 
   describe("Provider.resolveModel proxy discovery", () => {
     it("resolves a model advertised only by the configured proxy", async () => {
       const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
-      const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+      const authFilePath = join(directory, "auth.json");
       const previousModelsPath = process.env.OPENOMNI_MODELS_PATH;
       const previousModelsUrl = process.env.OPENOMNI_MODELS_URL;
       const previousDisableFetch = process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
       process.env.OPENOMNI_MODELS_PATH = join(directory, "models.json");
       process.env.OPENOMNI_MODELS_URL = "https://models.dev";
       delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
@@ -174,13 +174,11 @@ describe("proxy-models", () => {
           type: "proxy",
           baseURL: "http://localhost:3199/v1",
           apiKey: "proxy-key",
-        }));
-        const model = await runEffect(Provider.resolveModel({ provider: "openai", id: "proxy-only-model" }));
+        }, { id: () => "tmp-proxy-models", authFilePath }));
+        const model = await runEffect(Provider.resolveModel({ authFilePath, provider: "openai", id: "proxy-only-model", now: fixedNow }));
 
         expect(model).toMatchObject({ id: "proxy-only-model", providerID: "openai" });
       } finally {
-        if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
-        else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
         if (previousModelsPath === undefined) delete process.env.OPENOMNI_MODELS_PATH;
         else process.env.OPENOMNI_MODELS_PATH = previousModelsPath;
         if (previousModelsUrl === undefined) delete process.env.OPENOMNI_MODELS_URL;

@@ -1,15 +1,22 @@
+import { Vault } from "@openomni/ledger";
 import { createAppLedger } from "../../src/composition/cluster-runtime";
+import type { KekResolution } from "../../src/provisioning/vault-key";
 import { putChannelCredential } from "./channel-credential";
-import { replaceEnvironment } from "./environment";
+import { testClock } from "./test-entropy";
 
-/** Seed the same declaration and sealed credential consumed by real app boot. */
+/**
+ * Seed the same declaration and sealed credential consumed by real app boot.
+ * Returns the resolved vault key the booting config must carry (#1245: the
+ * composition root resolves the key once at config load, never from the
+ * ambient environment at mount time).
+ */
 export function declareChannel(
   catalogPath: string,
   provider: "telegram" | "github",
   credentials: Record<string, string>,
-): () => void {
+): KekResolution {
   const key = new Uint8Array(32).fill(7);
-  const plane = createAppLedger({ catalogPath });
+  const plane = createAppLedger({ now: testClock(), catalogPath });
   try {
     const credentialRef = `secret:${provider}`;
     putChannelCredential(plane.stores.secrets, credentialRef, JSON.stringify(credentials), key, 1);
@@ -20,5 +27,5 @@ export function declareChannel(
   } finally {
     plane.close();
   }
-  return replaceEnvironment({ OPENOMNI_VAULT_KEY: Buffer.from(key).toString("base64") });
+  return { kind: "ok", kek: Vault.kekOf(key) };
 }

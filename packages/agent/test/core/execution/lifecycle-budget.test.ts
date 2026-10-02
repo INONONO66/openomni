@@ -1,37 +1,51 @@
+import { messageSource } from "../../helpers/message-source";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { isolated } from "../../helpers/isolated";
-import { describe, expect, it, jest } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { Operational, type Tool } from "@openomni/protocol";
 import { runTestAgent, runUserMessage, failure, foreign } from "../../helpers/effect-g2";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { collector } from "../../helpers/observation-collector";
 import { mockLlm, createStopOutcome, countingStopLlm } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 import { expectUncalledBudget } from "../../helpers/execution-assertions";
 
 describe("run budget terminal facts", () => {
-  it("charges successful and failed tools across turns before the next admission", async () => {
-    jest.useFakeTimers();
-    const events = collector();
-    let modelCalls = 0;
-    let executions = 0;
-    const toolExecutor = (call: Tool.Call) =>
+  it("charges successful and failed tools across turns before the next admission", () =>
+    isolated(
       Effect.gen(function* () {
-        executions += 1;
-        jest.advanceTimersByTime(executions === 1 ? 4 : 6);
-        if (executions === 2) return yield* foreign("tool", "tool failed");
-        return {
-          id: `result-${call.id}`,
-          toolCallId: call.id,
-          toolName: call.tool,
-          output: "ok",
-        };
-      });
-
-    try {
-      const result = await isolated(
-        failure(
+        const events = collector();
+        let modelCalls = 0;
+        let executions = 0;
+        const entered = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
+        const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
+        const toolExecutor = (call: Tool.Call) =>
+          Effect.gen(function* () {
+            executions += 1;
+            const slot = executions - 1;
+            entered[slot]?.resolve();
+            // Hold the tool open until the control fiber has moved the
+            // injected clock; the billed runtime is exactly that movement.
+            yield* Effect.promise(() => gates[slot]?.promise ?? Promise.resolve());
+            if (executions === 2) return yield* foreign("tool", "tool failed");
+            return {
+              id: `result-${call.id}`,
+              toolCallId: call.id,
+              toolName: call.tool,
+              output: "ok",
+            };
+          });
+        const control = Effect.gen(function* () {
+          yield* Effect.promise(() => entered[0].promise);
+          yield* TestClock.adjust(4);
+          gates[0].resolve();
+          yield* Effect.promise(() => entered[1].promise);
+          yield* TestClock.adjust(6);
+          gates[1].resolve();
+        });
+        const agent = failure(
           runTestAgent(runInput([{ role: "user", content: "hi" }]), {
             events,
             model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
@@ -61,7 +75,7 @@ describe("run budget terminal facts", () => {
                 modelCalls += 1;
                 input.shouldYield?.();
                 const call = { id: `call-${modelCalls}`, tool: "lookup", input: {} };
-                const message = createAssistantMessage("", "", "session");
+                const message = createAssistantMessage("", "", "session", messageSource);
                 sink.onMessage({
                   ...message,
                   parts: [
@@ -95,22 +109,20 @@ describe("run budget terminal facts", () => {
               },
             ),
           }),
-        ),
-      );
+        );
+        const [result] = yield* Effect.all([agent, control], { concurrency: "unbounded" });
 
-      expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
-      expect(modelCalls).toBe(2);
-      expect(executions).toBe(2);
-      expect(events.named(Operational.Events.Warn.name)).toContainEqual(
-        expect.objectContaining({
-          msg: "budget exceeded: tool wall time",
-          context: expect.objectContaining({ toolCalls: 2, toolRuntimeMs: 10 }),
-        }),
-      );
-    } finally {
-      jest.useRealTimers();
-    }
-  });
+        expect(result).toMatchObject({ code: "agent_stop", reason: "budget" });
+        expect(modelCalls).toBe(2);
+        expect(executions).toBe(2);
+        expect(events.named(Operational.Events.Warn.name)).toContainEqual(
+          expect.objectContaining({
+            msg: "budget exceeded: tool wall time",
+            context: expect.objectContaining({ toolCalls: 2, toolRuntimeMs: 10 }),
+          }),
+        );
+      }).pipe(Effect.provide(TestClock.layer())),
+    ));
 
   it("reports wall-time exhaustion through only the injected sink", async () => {
     const events = collector();

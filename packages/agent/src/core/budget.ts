@@ -11,9 +11,9 @@ export interface BudgetState {
   totalOutputTokens: number;
 }
 
-export function createBudgetState(): BudgetState {
+export function createBudgetState(now: () => number): BudgetState {
   return {
-    startTime: Date.now(),
+    startTime: now(),
     turns: 0,
     toolCalls: 0,
     toolRuntimeMs: 0,
@@ -61,24 +61,25 @@ export function effectiveMaxToolCalls(budget?: AgentBudget): number {
   return budget?.maxToolCalls ?? BUDGET_DEFAULTS.maxToolCalls;
 }
 
+/** The tool wall-time ceiling the budget enforces (-1 = unlimited); shared with the wave-level enforcement in tool-wave.ts. */
+function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
+  return budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
+}
+
 /**
  * Sole evaluator of the 4-state budget verdict and the facts telemetry
  * needs (reads the clock, mutates nothing, emits nothing) — see
  * {@link publishBudgetTelemetry}, the single production consumer.
  */
-export function evaluateBudget(state: BudgetState, budget?: AgentBudget): BudgetEvaluation {
+export function evaluateBudget(state: BudgetState, now: () => number, budget?: AgentBudget): BudgetEvaluation {
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
-  const elapsedMs = Date.now() - state.startTime;
+  const elapsedMs = now() - state.startTime;
   const limits: readonly [ExceededLimit, number, number][] = [
     ["wall time", elapsedMs, budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs],
     ["turns", state.turns, budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns],
     ["tool calls", state.toolCalls, effectiveMaxToolCalls(budget)],
-    [
-      "tool wall time",
-      state.toolRuntimeMs,
-      budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs,
-    ],
+    ["tool wall time", state.toolRuntimeMs, effectiveMaxToolRuntimeMs(budget)],
   ];
   const ratios: number[] = [];
   for (const [exceededLimit, consumed, maximum] of limits) {
@@ -107,15 +108,16 @@ export function publishBudgetTelemetry(
   /** The run being reported on. Structural: this needs a trace and a session. */
   run: { readonly traceId: string; readonly sessionId: string },
   events: BusEvent.Sink,
+  now: () => number,
   budget?: AgentBudget,
 ): BudgetStatus {
-  const evaluation = evaluateBudget(state, budget);
+  const evaluation = evaluateBudget(state, now, budget);
 
   if (evaluation.status === "exceeded") {
     events.publish(Operational.Events.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
-      time: Date.now(),
+      time: now(),
       component: "agent.budget",
       msg: `budget exceeded: ${evaluation.exceededLimit}`,
       context: {
@@ -134,12 +136,12 @@ export function publishBudgetTelemetry(
     events.publish(Operational.Events.Warn, {
       traceId: run.traceId,
       sessionId: run.sessionId,
-      time: Date.now(),
+      time: now(),
       component: "agent.budget",
       msg: "budget threshold warning",
       context: {
         type: "warning",
-        remaining: describeBudgetRemaining(state, budget),
+        remaining: describeBudgetRemaining(state, now, budget),
         ratio: evaluation.maxRatio.toFixed(2),
       },
     });
@@ -149,12 +151,12 @@ export function publishBudgetTelemetry(
     events.publish(Operational.Events.Info, {
       traceId: run.traceId,
       sessionId: run.sessionId,
-      time: Date.now(),
+      time: now(),
       component: "agent.budget",
       msg: "budget threshold reassurance",
       context: {
         type: "reassurance",
-        remaining: describeBudgetRemaining(state, budget),
+        remaining: describeBudgetRemaining(state, now, budget),
         ratio: evaluation.maxRatio.toFixed(2),
       },
     });
@@ -162,7 +164,7 @@ export function publishBudgetTelemetry(
   return evaluation.status;
 }
 
-export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget): string {
+export function describeBudgetRemaining(state: BudgetState, now: () => number, budget?: AgentBudget): string {
   const parts: string[] = [];
 
   const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
@@ -181,12 +183,12 @@ export function describeBudgetRemaining(state: BudgetState, budget?: AgentBudget
 
   const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
   if (maxWallTimeMs !== -1) {
-    const elapsed = Date.now() - state.startTime;
+    const elapsed = now() - state.startTime;
     const remaining = Math.max(0, maxWallTimeMs - elapsed);
     parts.push(`${Math.round(remaining / 1000)}s wall time remaining`);
   }
 
-  const maxToolRuntimeMs = budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
+  const maxToolRuntimeMs = effectiveMaxToolRuntimeMs(budget);
   if (maxToolRuntimeMs !== -1) {
     const remaining = Math.max(0, maxToolRuntimeMs - state.toolRuntimeMs);
     parts.push(`${Math.round(remaining / 1000)}s tool wall time remaining`);

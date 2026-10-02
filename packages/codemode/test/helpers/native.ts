@@ -19,7 +19,14 @@ export class PythonKernel {
   peek(cellId: string) { return this.native.peek(cellId); }
   close() { return run(this.native.close()); }
 }
+/** Deterministic injected cell-id entropy (#1245) for tests. */
+function sequentialCellIds(): () => string {
+  let n = 0;
+  return () => { n += 1; return `cell-${n}`; };
+}
+
 export function createCodemode(options: {
+  id?: () => string;
   machines?: Pick<MachineHost, "list" | "get">;
   completion?: (request: Machine.CompletionRequest) => Promise<string>;
   tools?: (tenant: string) => Caller;
@@ -30,6 +37,7 @@ export function createCodemode(options: {
   const boundary = options.boundary;
   const machines = options.machines;
   const { value: native, close } = acquireSync(create({
+    id: options.id ?? sequentialCellIds(),
     machines: machines ? { list: machines.list, get: (id) => machines.get(id).native } : undefined,
     completion: completion ? (request) => code(() => completion(request)) : undefined,
     tools: tools ? (tenant) => { const call = tools(tenant); return (request) => code(() => call(request)); } : undefined,

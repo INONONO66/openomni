@@ -34,6 +34,7 @@ function harness(limit = 3) {
       identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
       clock: () => 1,
       entropy: record.entropy,
+      random: () => 0,
       observations: { publish: () => undefined },
     }),
   };

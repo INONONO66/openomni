@@ -17,20 +17,20 @@ import {
   type ProvisionPort,
 } from "./channels";
 import { executeProvisionStatus } from "./status";
-function provisionExecutors(port: ProvisionPort) {
+function provisionExecutors(port: ProvisionPort, now: () => number) {
   return {
-    contact_add: executePersonDeclare(port),
+    contact_add: executePersonDeclare(port, now),
     contact_remove: executePersonRemove(port),
-    channel_add: executeChannelDeclare(port),
-    channel_enable: executeChannelEnable(port),
-    channel_disable: executeChannelDisable(port),
-    secret_rotate: executeSecretRotate(port),
+    channel_add: executeChannelDeclare(port, now),
+    channel_enable: executeChannelEnable(port, now),
+    channel_disable: executeChannelDisable(port, now),
+    secret_rotate: executeSecretRotate(port, now),
     status: executeProvisionStatus(port),
   };
 }
 
-export function executeProvision(port: ProvisionPort | undefined) {
-  const composed = port === undefined ? undefined : provisionExecutors(port);
+export function executeProvision(port: ProvisionPort | undefined, now: () => number) {
+  const composed = port === undefined ? undefined : provisionExecutors(port, now);
   const executors = () => composed ?? refusal("provision", "provisioning is not composed");
   return async ({ operation }: z.output<typeof ProvisionInput>, context: ToolExecutionContext) => {
     if (operation.op === "contact_promote" || operation.op === "contact_merge") {

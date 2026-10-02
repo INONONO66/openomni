@@ -1,3 +1,4 @@
+import { messageSource } from "./message-source";
 import { APICallError } from "ai";
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { LlmRunFailure, type Run, type RunInput, type Sink } from "@openomni/llm";
@@ -10,7 +11,7 @@ export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;
 // Explicit terminal provider behavior, never injected into another mock's output.
 export const completeModel: MockLlmFn = async (input, sink) => {
   sink.onMessage(
-    createAssistantMessage("done", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId),
+    createAssistantMessage("done", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId, messageSource),
   );
   return { type: "stop" };
 };

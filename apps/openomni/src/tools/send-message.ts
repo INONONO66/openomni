@@ -47,7 +47,7 @@ function toGatewaySend(input: SendMessageInput, now: number): Gateway.SendMessag
 }
 
 /** The catalog is static: without a composed gateway the tool exists and refuses. */
-export function createSendMessageTool(port: MessagePort | undefined, now: () => number = Date.now) {
+export function createSendMessageTool(port: MessagePort | undefined, now: () => number) {
   return defineTool({
     name: "send_message",
     category: "authority",

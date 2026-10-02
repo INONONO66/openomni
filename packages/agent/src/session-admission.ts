@@ -164,7 +164,7 @@ export function createSessionAdmission(
         actions: [...deliveries, envelope],
         state: "running",
       });
-      observeDrained(pending, turnId, "before_llm", clock(), observations);
+      observeDrained(pending, turnId, "before_llm", clock(), observations, entropy);
       if (pending.some((item) => item.kind === "interrupt")) {
         const action = kernel.actionById(turnId);
         if (action === undefined) return yield* new AgentFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });

@@ -15,9 +15,20 @@ export type WebSocketFrameOutcome =
   | z.infer<typeof SessionRead.Receipt>
   | SessionRead.Bound
   | SessionRead.Request
-  | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult };
+  | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult }
+  | WebSocketKeyRefusal;
+
+/** A keyless text frame is refused at the perimeter; no deduplication key is ever minted for it. */
+type WebSocketKeyRefusal = {
+  readonly admitted: false;
+  readonly reason: "missing_key";
+};
 
 export interface WebSocketConfig {
+  /** Injected wall clock; the perimeter never reads ambient time. */
+  now: () => number;
+  /** Injected id minter; the perimeter never reads ambient entropy. */
+  id: () => string;
   token?: string;
   onAuthDecision?: ChannelAuthnDecisionObserver;
   /** Compose with the same gateway.ingest used by ordinary channel messages. */
@@ -85,7 +96,7 @@ export class WebSocketHandler {
   constructor(
     private readonly handler: WebSocketMessageHandler,
     private readonly publish: PublishPort,
-    private readonly config: WebSocketConfig = {},
+    private readonly config: WebSocketConfig,
   ) {}
 
   /**
@@ -119,8 +130,8 @@ export class WebSocketHandler {
       open(ws: WsConnection) {
         self.connections.set(ws.data.externalId, ws);
         self.publish(Operational.Events.Info, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(self.config.id),
+          time: self.config.now(),
           component: "server",
           msg: "websocket connection opened",
           context: { surfaceKey: ws.data.surfaceKey },
@@ -132,8 +143,8 @@ export class WebSocketHandler {
           self.connections.delete(externalId);
         }
         self.publish(Operational.Events.Info, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(self.config.id),
+          time: self.config.now(),
           component: "server",
           msg: "websocket connection closed",
           context: { surfaceKey: ws.data.surfaceKey },
@@ -149,6 +160,8 @@ export class WebSocketHandler {
     const auth = authenticateWebSocketUpgrade({
       request: req,
       publish: this.publish,
+      now: this.config.now,
+      id: this.config.id,
       ...(this.config.token !== undefined ? { token: this.config.token } : {}),
       ...(this.config.onAuthDecision !== undefined
         ? { onDecision: this.config.onAuthDecision }
@@ -165,7 +178,7 @@ export class WebSocketHandler {
     const declaredId = authenticated
       ? new URL(req.url).searchParams.get("actor")?.trim()
       : undefined;
-    const externalId = declaredId || `connection:${crypto.randomUUID()}`;
+    const externalId = declaredId || `connection:${this.config.id()}`;
     // Bun 1.3.6 writes an explicit response protocol twice. Narrow the offer
     // AFTER authentication so Bun negotiates only the selected, non-secret protocol.
     if (auth.protocol !== undefined) req.headers.set("sec-websocket-protocol", auth.protocol);
@@ -177,7 +190,7 @@ export class WebSocketHandler {
           surface: "ws",
           namespace: "",
           kind: "dm",
-          id: crypto.randomUUID(),
+          id: this.config.id(),
         }),
         authenticated,
         externalId,
@@ -194,8 +207,8 @@ export class WebSocketHandler {
     return Effect.gen({ self: this }, function* () {
       yield* Effect.try({
         try: () => this.publish(Operational.Events.Debug, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(this.config.id),
+          time: this.config.now(),
           component: "server",
           msg: "websocket message received",
           context: { surfaceKey: connection.surfaceKey },
@@ -221,10 +234,15 @@ export class WebSocketHandler {
         const result = yield* this.config.onRequestAnswer(sender, parsed);
         return { type: "receipt", inputId: parsed.inputId, result };
       }
+      // A frame without a platform event key is refused: the perimeter never
+      // fabricates a deduplication key for keyless input (#1245).
+      if (parsed.eventId === undefined) {
+        return { admitted: false, reason: "missing_key" } satisfies WebSocketKeyRefusal;
+      }
       const result = yield* this.handler({
         sender,
         facts: {
-          eventId: parsed.eventId ?? crypto.randomUUID(),
+          eventId: parsed.eventId,
           surface: "ws",
           channelId: connection.surfaceKey,
           addressees: [],

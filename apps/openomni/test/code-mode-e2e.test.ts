@@ -5,7 +5,8 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
-import { Bus, currentInvocation, type InvocationFrame } from "@openomni/agent";
+import { currentInvocation, type InvocationFrame } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
@@ -27,6 +28,7 @@ import { socketPath as testSocketPath } from "./helpers/socket-path";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { cellDaemonOptions } from "./helpers/cell-daemon";
+import { testIds } from "./helpers/test-entropy";
 
 const WS_TOKEN = "code-mode-e2e-token";
 const MACHINE_ID = "alpha";
@@ -45,8 +47,8 @@ const suite = residentSuite(async () => {
 });
 
 // Registration occurs before returning to any fallible test or harness work.
-async function createMachineHost(options: Parameters<typeof createHost>[0]) {
-  const host = await acquireEffect(createHost(options));
+async function createMachineHost(options: Omit<Parameters<typeof createHost>[0], "id">) {
+  const host = await acquireEffect(createHost({ id: testIds("e2e-host"), ...options }));
   suite.defer(async () => {
     await runEffect(host.close());
     expect(existsSync(options.socketPath)).toBe(false);
@@ -62,9 +64,9 @@ async function createMachineHost(options: Parameters<typeof createHost>[0]) {
 }
 
 async function attachMachineDaemon(
-  options: Parameters<typeof attachDaemon>[0],
+  options: Omit<Parameters<typeof attachDaemon>[0], "id">,
 ): Promise<MachineDaemon> {
-  const daemon = await acquireEffect(attachDaemon({ ...options, runner: acquireSyncEffect(createCodemode()).runner }));
+  const daemon = await acquireEffect(attachDaemon({ id: testIds("e2e-daemon"), ...options, runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner }));
   suite.defer(() => runEffect(daemon.close()));
   return daemon;
 }
@@ -143,7 +145,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   suite.defer(() => runEffect(daemon.close()));
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextResidentTurn(plane, 15_000);
-  ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "exercise machine" }));
   const answer = String((await reply).text);
   expect(answer).toContain("[0, 255, 128, 65]");
   expect(answer).toContain("b'shell'");
@@ -218,7 +220,7 @@ test("a cell creates three child sessions through send_message", async () => {
     WS_TOKEN,
   ]);
   const reply = nextResidentTurn(planeRef.current, 30_000);
-  ws.send(JSON.stringify({ type: "message", text: "check everything" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "check everything" }));
 
   const answer = String((await reply).text);
 
@@ -287,7 +289,7 @@ test("the catalog remains available while machine execution refuses without atta
     WS_TOKEN,
   ]);
   const reply = nextResidentTurn(await planeOf(app.runtime), 15_000);
-  ws.send(JSON.stringify({ type: "message", text: "run something" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run something" }));
 
   const answer = String((await reply).text);
 
@@ -423,7 +425,7 @@ async function startCellHarness(ports: Partial<ToolPorts>) {
   });
   const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
-  cells = acquireSyncEffect(composeCodemode(host));
+  cells = acquireSyncEffect(composeCodemode(host, { id: testIds("e2e-compose") }));
   suite.defer(() => runEffect(cells.close()));
   const states: Machine.CellState[] = [];
   const portsForCells = cellPorts(cells);

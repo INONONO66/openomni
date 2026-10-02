@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { SocketReconnectShell } from "../src/support/socket-shell";
+import { injectedOptions, nthTraceId } from "./helpers/injected";
 
 const messages = {
   urlFetchFailed: "fetch",
@@ -33,6 +34,7 @@ test("reconnect completion includes terminal failure reporting on the initiating
       delays += 1;
     },
     async () => undefined,
+    injectedOptions(),
   );
   shell.begin();
   const scheduled = shell
@@ -54,6 +56,7 @@ test("reconnect completion includes terminal failure reporting on the initiating
     Operational.Events.Warn.name,
     Operational.Events.Error.name,
   ]);
+  expect(reconnectTrace).toBe(nthTraceId(1));
   expect(events.map((event) => event.data.traceId)).toEqual([reconnectTrace, reconnectTrace]);
   expect(events[1]?.data.context).toEqual({ err: String(failure) });
   shell.stop();

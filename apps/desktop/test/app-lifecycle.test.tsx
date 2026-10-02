@@ -29,6 +29,10 @@ import {
   setSidebarOpen,
   setSidebarWidth,
 } from "../src/renderer/state/store";
+import { testId } from "./helpers/platform";
+
+/** The suite's injected clock matches its pinned `Date.now` spy (#1245). */
+const suitePlatform = { now: () => 10_000, id: testId };
 
 let browser: Window;
 let host: HTMLElement;
@@ -105,7 +109,7 @@ async function mount(
   await act(() =>
     root.render(
       <StateProvider client={client}>
-        <App platform="darwin" storage={storage} />
+        <App platform="darwin" storage={storage} host={suitePlatform} />
       </StateProvider>,
     ),
   );

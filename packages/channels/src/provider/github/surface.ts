@@ -100,7 +100,7 @@ export class GitHubAdapter implements Channel.Surface {
   readonly id = "github";
 
   private readonly client: GitHubClient;
-  private readonly dedupe = new Dedupe();
+  private readonly dedupe: Dedupe;
   private readonly outbound = new DeliveryReconciliation();
   private handler: Channel.MessageHandler | null = null;
 
@@ -108,10 +108,12 @@ export class GitHubAdapter implements Channel.Surface {
     private readonly secret: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
+    private readonly options: { readonly now: () => number; readonly id: () => string },
     githubToken?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
-    this.client = new GitHubClient(publish, githubToken);
+    this.dedupe = new Dedupe(options.now);
+    this.client = new GitHubClient(publish, options.now, githubToken);
   }
 
   async deliver(
@@ -126,15 +128,17 @@ export class GitHubAdapter implements Channel.Surface {
       return { value: "not_sent" };
     const repo = target[1];
     return this.outbound.run(idempotencyKey, async () => {
-      const traceId = newTraceId();
+      const traceId = newTraceId(this.options.id);
       try {
         return await this.client.postComment(repo, issueNumber, body, traceId, idempotencyKey);
       } catch (error) {
-        const value = error instanceof DeliveryNotSent || (error instanceof RateLimited && error.status === 429)
-          ? "not_sent" : "unknown";
+        const value =
+          error instanceof DeliveryNotSent || (error instanceof RateLimited && error.status === 429)
+            ? "not_sent"
+            : "unknown";
         this.publish(Operational.Events.Warn, {
           traceId,
-          time: Date.now(),
+          time: this.options.now(),
           component: "github",
           msg: "GitHub delivery failed",
           context: { error: String(error), value },
@@ -152,7 +156,7 @@ export class GitHubAdapter implements Channel.Surface {
     requireHandler(this.handler, "github");
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "github webhook handler ready",
     });
@@ -165,10 +169,11 @@ export class GitHubAdapter implements Channel.Surface {
   async handleWebhook(request: Request): Promise<Response> {
     // Origin: the first frame of an inbound webhook delivery — this ONE mint
     // is the message's trace, carried to the run (D11).
-    const traceId = newTraceId();
+    const traceId = newTraceId(this.options.id);
     const auth = await authenticateGitHubWebhook({
       request,
       secret: this.secret,
+      now: this.options.now,
       ...(this.authOptions.onDecision === undefined
         ? {}
         : { onDecision: this.authOptions.onDecision }),
@@ -194,7 +199,7 @@ export class GitHubAdapter implements Channel.Surface {
   ): WebhookPreparation {
     this.publish(Operational.Events.Warn, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "github",
       msg: "github event not ingested",
       context: { ...observation, deliveryId },
@@ -218,12 +223,16 @@ export class GitHubAdapter implements Channel.Surface {
     if (!event) return { response: new Response("Missing event", { status: 400 }) };
 
     if (!body.success)
-      return this.observeUnsupported(refusal(event, undefined, "invalid_payload"), deliveryId, traceId);
+      return this.observeUnsupported(
+        refusal(event, undefined, "invalid_payload"),
+        deliveryId,
+        traceId,
+      );
     const raw = body.data;
     const eventKey = `${event}.${actionOf(raw)}`;
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "github event received",
       // deliveryId: GitHub's own per-delivery id (x-github-delivery) — the
@@ -265,7 +274,7 @@ export class GitHubAdapter implements Channel.Surface {
 
     this.publish(Operational.Events.Debug, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "github message received",
       context: {
@@ -285,7 +294,7 @@ export class GitHubAdapter implements Channel.Surface {
     } catch (err) {
       this.publish(Operational.Events.Error, {
         traceId: prepared.traceId,
-        time: Date.now(),
+        time: this.options.now(),
         component: "server",
         msg: "github message handler error",
         context: {

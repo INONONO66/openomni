@@ -34,7 +34,7 @@ export function answerOwnerRequest(
   if (Result.isFailure(authenticated) || authenticated.success.kind !== "owner")
     return { status: "blocked_pre", reasonCode: "request_answer.unauthenticated" };
   const principal = authenticated.success;
-  const authenticatedAt = Math.max(receivedAt, (ports.clock ?? Date.now)());
+  const authenticatedAt = Math.max(receivedAt, ports.now());
   const endpoint = stores.actors.resolveEndpoint(sender.surface, sender.externalId);
   if (
     matchBlacklist(

@@ -18,9 +18,9 @@ test("a mounted driver receives a rejected promise when message policy refuses a
     const config = suite.config("driver-refusal-");
     const catalogPath = config.catalogPath;
     if (catalogPath === undefined) throw new Error("suite config is missing catalogPath");
-    suite.defer(declareChannel(catalogPath, "telegram", { token: "fixture" }));
+    const kek = declareChannel(catalogPath, "telegram", { token: "fixture" });
     const app = await suite.boot({
-      config,
+      config: { ...config, kek },
       llm: { resolveModel: fakeProviderModel },
     });
     const plane = await planeOf(app.runtime);

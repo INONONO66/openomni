@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
-import { createObservationBus } from "../../src/observation/bus";
+import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 
 /**
@@ -14,10 +14,12 @@ export function reopenableLedger(
   prefix: string,
 ): IsolatedLedgerHandle & { readonly reopen: () => void } {
   const directory = mkdtempSync(join(tmpdir(), prefix));
-  const bus = createObservationBus();
+  const bus = testBus();
+  let now = 0;
+  const storeOptions = { now: () => (now += 1), observationSink: bus };
   const open = () => {
-    const sessionStore = openSessionStore(join(directory, "chat.sqlite"), bus);
-    const catalog = openCatalogStore(join(directory, "catalog.sqlite"), bus);
+    const sessionStore = openSessionStore(join(directory, "chat.sqlite"), storeOptions);
+    const catalog = openCatalogStore(join(directory, "catalog.sqlite"), storeOptions);
     return {
       sessionStore,
       catalog,

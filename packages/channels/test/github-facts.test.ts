@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { injectedOptions } from "./helpers/injected";
 import { expect, test } from "bun:test";
 import { Gateway, type Channel } from "@openomni/protocol";
 import { GitHubAdapter } from "../src/provider/github/surface";
@@ -13,7 +14,7 @@ for (const text of ["ambient event", "@owner review @bot", "@bot"]) {
     };
     const body = JSON.stringify(payload);
     const received: Channel.InboundMessage[] = [];
-    const adapter = new GitHubAdapter("secret", {}, () => undefined);
+    const adapter = new GitHubAdapter("secret", {}, () => undefined, injectedOptions());
     adapter.onMessage(async (message) => {
       received.push(message);
     });
@@ -78,7 +79,7 @@ for (const value of ["sent", "not_sent", "unknown"] as const) {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const adapter = new GitHubAdapter("secret", {}, () => undefined, "token");
+      const adapter = new GitHubAdapter("secret", {}, () => undefined, injectedOptions(), "token");
       expect(await adapter.deliver("owner/repo#7", "content", "stable-key")).toEqual(
         value === "sent" ? { value, externalMessageId: "99" } : { value },
       );
@@ -100,7 +101,7 @@ test("GitHub refuses malformed destinations and missing credentials before effec
     { preconnect: realFetch.preconnect },
   );
   try {
-    const adapter = new GitHubAdapter("secret", {}, () => undefined);
+    const adapter = new GitHubAdapter("secret", {}, () => undefined, injectedOptions());
     for (const endpoint of [
       "owner/repo#7",
       "owner/repo",

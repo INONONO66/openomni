@@ -1,12 +1,24 @@
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Effect, Semaphore } from "effect";
 import { decodeLlmFailure } from "../error";
 import type { LlmError } from "../errors";
 import { Catalog, RemoteCatalog } from "./schema";
 
 const DEFAULT_CACHE_PATH = join(homedir(), ".openomni", "models.json");
+
+/**
+ * The llm package's one environment owner (#1245): the credential file
+ * location is resolved here, in the model loading Layer, and injected into
+ * `auth/storage`, which performs no environment reads of its own.
+ */
+export function resolveAuthFilePath(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const override = env.OPENOMNI_AUTH_FILE;
+  return override ? resolve(override) : join(homedir(), ".openomni", "auth.json");
+}
 async function snapshot(): Promise<Catalog> {
   return Catalog.parse((await import("./models-snapshot.json")).default);
 }

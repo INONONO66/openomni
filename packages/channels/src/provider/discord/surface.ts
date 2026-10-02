@@ -4,7 +4,12 @@ import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
-import { DeliveryNotSent, DiscordApiError, DiscordHandlerMissingError, RateLimited } from "../../errors";
+import {
+  DeliveryNotSent,
+  DiscordApiError,
+  DiscordHandlerMissingError,
+  RateLimited,
+} from "../../errors";
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import { type DiscordMessage, DiscordMessageSchema } from "./types";
@@ -17,7 +22,7 @@ export class DiscordAdapter implements Channel.Surface {
 
   private readonly client: DiscordClient;
   private readonly gateway: DiscordGateway;
-  private readonly dedupe = new Dedupe();
+  private readonly dedupe: Dedupe;
   private readonly outbound = new DeliveryReconciliation();
   private normalizer: DiscordNormalizer | null = null;
   private botId: string | null = null;
@@ -27,8 +32,14 @@ export class DiscordAdapter implements Channel.Surface {
     token: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
   ) {
-    this.client = new DiscordClient(token, publish);
+    this.dedupe = new Dedupe(options.now);
+    this.client = new DiscordClient(token, publish, options.now);
     this.gateway = new DiscordGateway(
       token,
       () => this.client.fetchGatewayUrl(),
@@ -39,8 +50,8 @@ export class DiscordAdapter implements Channel.Surface {
           this.publish(Operational.Events.Info, {
             // Origin: a gateway READY is a distinct occurrence (initial connect
             // AND every re-identify) — deliberately its own trace, not the boot's.
-            traceId: newTraceId(),
-            time: Date.now(),
+            traceId: newTraceId(this.options.id),
+            time: this.options.now(),
             component: "server",
             msg: "discord bot started",
             context: { username: botUsername, botId },
@@ -52,7 +63,7 @@ export class DiscordAdapter implements Channel.Surface {
           if (!message.success) {
             this.publish(Operational.Events.Warn, {
               traceId,
-              time: Date.now(),
+              time: this.options.now(),
               component: "server",
               msg: "discord MESSAGE_CREATE payload malformed; dropped",
             });
@@ -62,6 +73,7 @@ export class DiscordAdapter implements Channel.Surface {
         },
       },
       publish,
+      options,
     );
   }
 
@@ -82,7 +94,7 @@ export class DiscordAdapter implements Channel.Surface {
     this.gateway.stop();
     this.publish(Operational.Events.Info, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "discord bot stopped",
     });
@@ -109,6 +121,7 @@ export class DiscordAdapter implements Channel.Surface {
         (error instanceof DiscordApiError && error.rejected === true) ||
         (error instanceof RateLimited && error.status === 429),
       this.publish,
+      this.options,
     );
   }
 
@@ -119,6 +132,7 @@ export class DiscordAdapter implements Channel.Surface {
       dedupe: this.dedupe,
       key: message.id,
       traceId,
+      now: this.options.now,
       publish: this.publish,
       errorMessage: "discord message handling failed",
       rethrowFailure: false,
@@ -137,7 +151,7 @@ export class DiscordAdapter implements Channel.Surface {
   ): Promise<void> {
     this.publish(Operational.Events.Debug, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: "discord message received",
       context: { channelId },

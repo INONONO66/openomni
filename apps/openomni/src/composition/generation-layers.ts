@@ -1,5 +1,5 @@
 import {
-  BundleDefinitions, BundleError, type Clock, type Entropy, AgentFailure,
+  BundleDefinitions, BundleError, Entropy, AgentFailure,
   GenerationLayers, GenerationUnavailable, NamedPolicyRegistry, ObservationSink, SessionLayer,
   ToolCatalog, createObservationBus, makeSessionGenerations, scopeObservation,
   type GenerationBundle, type SessionError, type SessionRuntime,
@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
+import { captureNow } from "./platform";
 
 /** `select` throws `BundleError` for an unknown bundle; anything else is a foreign failure. */
 const SelectThrown = z.union([z.instanceof(BundleError), z.coerce.string().transform((cause) => new AgentFailure({ operation: "generation.select", cause }))]);
@@ -32,8 +33,10 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
   const scope = yield* Effect.scope;
   const plane = yield* AppLedger;
   const installed = yield* BundleDefinitions;
-  const process = yield* Effect.context<Clock | Entropy | ObservationSink>();
+  const process = yield* Effect.context<Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
+  const entropy = Context.get(process, Entropy);
+  const now = yield* captureNow;
   const lock = yield* Semaphore.make(1);
   const managers = new Map<string, Effect.Success<ReturnType<typeof makeSessionGenerations>>>();
   let definitions: GenerationDefinitions | undefined;
@@ -58,11 +61,11 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       let active = false;
       const observations = Layer.effect(ObservationSink, Effect.acquireRelease(
         Effect.sync(() => {
-          const bus = createObservationBus();
+          const bus = createObservationBus({ id: entropy.id, now });
           const sink: Context.Service.Shape<typeof ObservationSink> = {
             publish: (event, data) => { if (active) { bus.publish(event, data); root.publish(event, data); } },
             subscribe: bus.subscribe,
-            scope: (identity) => scopeObservation(sink, identity),
+            scope: (identity) => scopeObservation(sink, identity, { id: entropy.id, now }),
           };
           return { ...sink, close: () => { active = false; bus.reset(); } };
         }),

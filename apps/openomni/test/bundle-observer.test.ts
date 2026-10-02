@@ -14,6 +14,7 @@ import { residentSuite } from "./helpers/resident-suite";
 import { auditBundle, ProviderRequest, providerResponse } from "./helpers/bundle-fixture";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { eventSignal } from "./helpers/event-signal";
+import { Bus, newTraceId } from "./helpers/bus";
 
 const suite = residentSuite();
 const echo = (name: string, execute: (text: string) => Promise<string>) => eraseTool(defineTool({
@@ -33,15 +34,15 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-observer-db-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
+  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
     bundles: enabled ? BundlesLive([audit.definition]) : BundlesLive([]),
-    llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
+    llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
   const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
   const reply = nextResidentTurn(plane);
-  ws.send(JSON.stringify({ type: "message", text: "echo" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "echo" }));
   await reply;
   const row = plane.listSessions().find((row) => row.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing resident");
@@ -87,15 +88,15 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-bundle-swap-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, bundles: BundlesLive([audit.definition, definition]),
-    llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
+  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, bundles: BundlesLive([audit.definition, definition]),
+    llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
   const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
   const first = nextResidentTurn(plane);
   try {
-    ws.send(JSON.stringify({ type: "message", text: "hold" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "hold" }));
     await entered.promise;
     const row = plane.listSessions().find((row) => row.id !== "gateway-ingress");
     if (row === undefined) throw new Error("missing resident");
@@ -109,7 +110,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     await first;
     await retired.promise;
     const second = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", text: "next" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "next" }));
     await second;
     expect(offered.slice(0, 2).every((names) => !names.includes(demo.name))).toBe(true);
     expect(offered.slice(2).every((names) => names.includes(demo.name))).toBe(true);

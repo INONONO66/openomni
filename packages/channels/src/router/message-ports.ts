@@ -99,7 +99,10 @@ export interface GatewayRouterPorts {
     body: (intent: LedgerAction.Receipt) => Effect.Effect<PlainValue, ChannelError>,
   ) => Effect.Effect<MessageExecutionResult, ChannelError>;
   readonly committed?: (row: Inbox.Row) => void;
-  readonly clock?: () => number;
+  /** Injected wall clock; the router never reads ambient time. */
+  readonly now: () => number;
+  /** Injected id minter; the router never reads ambient entropy. */
+  readonly id: () => string;
   readonly messaging?: MessagingGrantSources & {
     readonly deliveryRoutes: ReadonlyMap<string, ChannelDeliveryRoute>;
     readonly replyGrantRules?: () => readonly Gateway.ReplyGrantRule[];

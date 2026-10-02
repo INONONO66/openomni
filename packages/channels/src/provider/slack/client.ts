@@ -28,6 +28,7 @@ export class SlackClient implements ChannelClient {
     private readonly botToken: string,
     private readonly appToken: string,
     private readonly publish: PublishPort,
+    private readonly now: () => number,
   ) {}
 
   /** `apps.connections.open` — the only app-token call; returns the Socket Mode wss URL. */
@@ -102,7 +103,7 @@ export class SlackClient implements ChannelClient {
         },
         body: JSON.stringify(body),
       },
-      { traceId, label: `slack ${method}`, publish: this.publish },
+      { traceId, now: this.now, label: `slack ${method}`, publish: this.publish },
     );
     if (!res.ok) {
       throw new SlackApiError({

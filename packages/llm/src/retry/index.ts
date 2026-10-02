@@ -110,14 +110,19 @@ export namespace Retry {
       }
     | { readonly retry: false; readonly reason: Reason; readonly detail?: string };
 
-  /** Terminal classification precedes probes, headers and backoff. */
+  /**
+   * Terminal classification precedes probes, headers and backoff. `sources`
+   * injects the wall clock (header-relative waits) and the jitter draw so the
+   * decision is reproducible (#1245).
+   */
   export function decide<E>(
     attempt: number,
     error: E,
+    sources: { now: () => number; random: () => number },
     instantFailureStreak = 0,
     fallbackAvailable = false,
   ): Decision {
-    return decideFor(attempt, apiCause(error), instantFailureStreak, fallbackAvailable);
+    return decideFor(attempt, apiCause(error), sources, instantFailureStreak, fallbackAvailable);
   }
 
   const TERMINAL_DETAIL = {
@@ -130,6 +135,7 @@ export namespace Retry {
   function decideFor(
     attempt: number,
     providerError: ApiFailure | undefined,
+    sources: { now: () => number; random: () => number },
     instantFailureStreak: number,
     fallbackAvailable: boolean,
   ): Decision {
@@ -141,7 +147,7 @@ export namespace Retry {
       case "content_policy":
         return { retry: false, reason, detail: TERMINAL_DETAIL[reason] };
       default:
-        return retryable(attempt, reason, providerError, instantFailureStreak);
+        return retryable(attempt, reason, providerError, sources, instantFailureStreak);
     }
   }
 
@@ -149,11 +155,12 @@ export namespace Retry {
     attempt: number,
     reason: RetryableReason,
     providerError: ApiFailure | undefined,
+    sources: { now: () => number; random: () => number },
     instantFailureStreak: number,
   ): Decision {
     return (
       streakDecision(instantFailureStreak, reason) ??
-      selectDelay(attempt, reason, headerDelay(providerError))
+      selectDelay(attempt, reason, headerDelay(providerError, sources.now), sources.random)
     );
   }
 
@@ -184,8 +191,9 @@ export namespace Retry {
     attempt: number,
     reason: RetryableReason,
     header: ReturnType<typeof headerDelay>,
+    random: () => number,
   ): Decision {
-    if (header === undefined) return { retry: true, reason, delayMs: backoffDelayMs(attempt) };
+    if (header === undefined) return { retry: true, reason, delayMs: backoffDelayMs(attempt, random) };
     if (header.ms <= RETRY_HEADER_DELAY_CAP)
       return { retry: true, reason, delayMs: Math.max(0, header.ms) };
     // Explicit directives fail fast; inferred resets demote to backoff.
@@ -196,7 +204,7 @@ export namespace Retry {
         detail: `server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
       };
     }
-    return { retry: true, reason, delayMs: backoffDelayMs(attempt), retryAfterOverCap: true };
+    return { retry: true, reason, delayMs: backoffDelayMs(attempt, random), retryAfterOverCap: true };
   }
 
   /** Jitter subtracts at most one quarter of the ladder delay. */
@@ -206,17 +214,17 @@ export namespace Retry {
    * Jitter applies to the ladder only, never to a server-directed wait: a
    * provider that named a delay gets exactly that delay.
    */
-  function backoffDelayMs(attempt: number): number {
+  function backoffDelayMs(attempt: number, random: () => number): number {
     const ladder = Math.min(
       RETRY_INITIAL_DELAY * RETRY_BACKOFF_FACTOR ** (attempt - 1),
       RETRY_MAX_DELAY_NO_HEADERS,
     );
-    return Math.round(ladder * (1 - Math.random() * RETRY_JITTER_RATIO));
+    return Math.round(ladder * (1 - random() * RETRY_JITTER_RATIO));
   }
 
   /** Provider-directed delay retained on the terminal typed failure. */
-  export function retryAfterMs<E>(error: E): number | undefined {
-    return headerDelay(coerceApiError(error))?.ms;
+  export function retryAfterMs<E>(error: E, now: () => number): number | undefined {
+    return headerDelay(coerceApiError(error), now)?.ms;
   }
 
   /** Bound traversal even for cyclic cause chains. */

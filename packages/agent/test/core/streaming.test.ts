@@ -14,7 +14,7 @@ import {
   type MockLlmFn,
 } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
-import { Bus } from "../../src/index";
+import { Bus } from "../helpers/bus";
 import { streamingAssistantInfo } from "../helpers/messages";
 
 let mockRunFn: MockLlmFn = async () => createStopOutcome();

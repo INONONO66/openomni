@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
+import { FIXED_NOW, injectedOptions } from "./helpers/injected";
 import type { Channel, PlainValue } from "@openomni/protocol";
 import type { TelegramMessage } from "../src/provider/telegram/types";
 import { DiscordAdapter } from "../src/provider/discord/surface";
@@ -70,7 +71,7 @@ describe("TelegramAdapter dedupe (D1)", () => {
   it("delivers same message_id from two different chats (no cross-chat collision)", async () => {
     const delivered: Channel.InboundMessage[] = [];
     const deliveredBoth = Promise.withResolvers<void>();
-    const adapter = new TelegramAdapter("test-token", {}, () => undefined);
+    const adapter = new TelegramAdapter("test-token", {}, () => undefined, injectedOptions());
     adapter.onMessage(async (message) => {
       delivered.push(message);
       if (delivered.length === 2) deliveredBoth.resolve();
@@ -128,7 +129,7 @@ function telegramFixture(): { owner: DeliveryOwner; outboundCalls: () => number 
     return Response.json({ ok: true, result: { message_id: calls } });
   }) as typeof fetch;
   return {
-    owner: new TelegramAdapter("token", config, () => undefined),
+    owner: new TelegramAdapter("token", config, () => undefined, injectedOptions()),
     outboundCalls: () => calls,
   };
 }
@@ -145,7 +146,7 @@ function discordFixture(): { owner: DeliveryOwner; outboundCalls: () => number }
     throw new Error(`unexpected request: ${url}`);
   }) as typeof fetch;
   return {
-    owner: new DiscordAdapter("token", config, () => undefined),
+    owner: new DiscordAdapter("token", config, () => undefined, injectedOptions()),
     outboundCalls: () => calls,
   };
 }
@@ -207,7 +208,7 @@ describe("outbound adapter delivery dedupe capability", () => {
   });
 
   test("the inbound dedupe bound evicts oldest ids rather than dropping new work", () => {
-    const dedupe = new Dedupe(Number.POSITIVE_INFINITY, 2);
+    const dedupe = new Dedupe(() => FIXED_NOW, Number.POSITIVE_INFINITY, 2);
     for (let index = 0; index < 100; index += 1) {
       expect(dedupe.acquire(`message-${index}`).duplicate).toBe(false);
     }
@@ -217,21 +218,15 @@ describe("outbound adapter delivery dedupe capability", () => {
   });
 
   test("a stale release cannot remove a newer generation after expiry", () => {
-    const originalNow = Date.now;
     let now = 1_000;
-    Date.now = () => now;
-    try {
-      const dedupe = new Dedupe(5);
-      const first = dedupe.acquire("same-id");
-      now += 6;
-      expectStaleReleasePreservesReplacement(dedupe, first);
-    } finally {
-      Date.now = originalNow;
-    }
+    const dedupe = new Dedupe(() => now, 5);
+    const first = dedupe.acquire("same-id");
+    now += 6;
+    expectStaleReleasePreservesReplacement(dedupe, first);
   });
 
   test("a stale release cannot remove a newer generation after capacity eviction", () => {
-    const dedupe = new Dedupe(Number.POSITIVE_INFINITY, 1);
+    const dedupe = new Dedupe(() => FIXED_NOW, Number.POSITIVE_INFINITY, 1);
     const first = dedupe.acquire("same-id");
     for (let index = 0; index < 99; index += 1) dedupe.acquire(`other-${index}`);
     dedupe.acquire("eviction-trigger");

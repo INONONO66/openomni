@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { WebSocketHandler, type WsConnection } from "@openomni/channels";
 import type { LedgerAction, LedgerSession, PlainValue } from "@openomni/protocol";
 import { adoptWriter, materializeSession } from "../../../packages/ledger/test/helpers/session";
@@ -8,6 +8,7 @@ import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, readSessionCursor, webSocketCallbacks } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";
 import { runSyncEffect } from "./helpers/scoped-effect";
+import { testIds } from "./helpers/test-entropy";
 
 function readFixture(sessionId: string) {
   const plane = testPlane();
@@ -115,7 +116,7 @@ test("session pages report tool wall time from committed intent/result pairs", (
 // A kernel read that throws mid-send must answer the reader with the typed
 // session_read_failed error frame instead of tearing down the socket loop.
 test("a reader whose kernel read throws receives a session_read_failed error frame", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const sessionId = "ws-throw";
   const { plane, kernel } = readFixture(sessionId);
   try {
@@ -125,7 +126,7 @@ test("a reader whose kernel read throws receives a session_read_failed error fra
         throw new Error("kernel read refused");
       },
     };
-    const handler = new WebSocketHandler(() => Effect.void, Bus.publish);
+    const handler = new WebSocketHandler(() => Effect.void, Bus.publish, { now: () => 0, id: testIds("ws") });
     const frames: string[] = [];
     const ws: WsConnection = {
       data: { surfaceKey: "ws::dm:test", authenticated: true, externalId: "reader" },
@@ -133,7 +134,7 @@ test("a reader whose kernel read throws receives a session_read_failed error fra
         frames.push(frame);
       },
     };
-    const gatewaySocket = webSocketCallbacks(runtime, handler, () => throwing);
+    const gatewaySocket = webSocketCallbacks(runtime, handler, Bus, () => throwing);
     await gatewaySocket.callbacks.message(
       ws,
       JSON.stringify({ type: "session_read", sessionId, limit: 4 }),

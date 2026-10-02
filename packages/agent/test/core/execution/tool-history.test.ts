@@ -1,3 +1,4 @@
+import { messageSource } from "../../helpers/message-source";
 import { bounded } from "../../helpers/bounded";
 import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
@@ -10,7 +11,7 @@ import { toModelMessages } from "@openomni/llm/src/message";
 import type { Message } from "@openomni/protocol";
 import { RunEvents } from "../../../src/core/execution/events";
 import { createAssistantMessage } from "../../../src/core/message-factory";
-import { Bus } from "../../../src/index";
+import { Bus } from "../../helpers/bus";
 import { createStopOutcome, type MockLlmFn } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 import { stepFinish } from "../../helpers/messages";
@@ -23,7 +24,7 @@ const providerModel = {
 } satisfies Provider.Model;
 
 function toolSnapshot(id: string, text: string, reason: "tool-calls" | "stop"): Message.WithParts {
-  const base = createAssistantMessage(text, "", "session");
+  const base = createAssistantMessage(text, "", "session", messageSource);
   if (base.info.role !== "assistant") throw new Error("expected assistant message");
   const tool: Message.ToolPart = {
     id: `${id}-tool`,
@@ -78,7 +79,7 @@ describe("tool-bearing history", () => {
         if (calls === 1) {
           pending = false;
           sink.onMessage(toolSnapshot("first", "answer", "tool-calls"));
-        } else sink.onMessage(createAssistantMessage("done", "", "session"));
+        } else sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
         return createStopOutcome();
       },
       () => pending,
@@ -122,7 +123,7 @@ describe("tool-bearing history", () => {
             return createStopOutcome();
           }
           if (calls === 2) return { type: "error", error: providerFailure("transient failure") };
-          sink.onMessage(createAssistantMessage("done", "", "session"));
+          sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
           return createStopOutcome();
         },
         () => pending,
@@ -148,7 +149,7 @@ describe("tool-bearing history", () => {
           input.shouldYield?.();
           pending = false;
           sink.onMessage(toolSnapshot("first", "done", "tool-calls"));
-        } else sink.onMessage(createAssistantMessage("", "", "session"));
+        } else sink.onMessage(createAssistantMessage("", "", "session", messageSource));
         return createStopOutcome();
       },
       () => pending,

@@ -71,6 +71,7 @@ test("a real committed failed attempt contributes billed usage once", () =>
       identity,
       clock,
       entropy,
+      random: () => 0,
       policy: allowAllPolicy,
       observations: { publish: () => undefined },
       retryAlarm: { arm: () => Effect.void, wait: () => Effect.void, settle: () => Effect.void },
@@ -115,7 +116,7 @@ test.each(["reported", "estimated", "unknown"] as const)(
       execution: executor,
       llm: {
         resolveModel: () => Effect.succeed(mockProviderModel),
-        run: (input, sink) => run(input, sink, {
+        run: (input, sink) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, {
           createStream: () => Effect.succeed({
             fullStream: (async function* () {
               yield { type: "text-start", id: "text" };

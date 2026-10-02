@@ -63,10 +63,19 @@ export class DiscordGateway {
     private readonly fetchGatewayUrl: () => Promise<string>,
     private readonly callbacks: GatewayCallbacks,
     private readonly publish: PublishPort,
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
     delay: (ms: number) => Promise<void> = sleep,
   ) {
-    this.shell = new SocketReconnectShell(publish, DISCORD_SHELL_MESSAGES, delay, (url) =>
-      this.openSocket(url),
+    this.shell = new SocketReconnectShell(
+      publish,
+      DISCORD_SHELL_MESSAGES,
+      delay,
+      (url) => this.openSocket(url),
+      options,
     );
     this.heartbeat = new GatewayHeartbeat(
       () => this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence }),
@@ -121,8 +130,8 @@ export class DiscordGateway {
       if (FATAL_CLOSE_CODES.has(event.code)) {
         this.shell.end();
         this.publish(Operational.Events.Error, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(this.options.id),
+          time: this.options.now(),
           component: "server",
           msg: "discord gateway fatal close code",
           context: { code: event.code },
@@ -173,8 +182,8 @@ export class DiscordGateway {
       // orphaned chain head (#653 review).
       case GatewayOp.RECONNECT:
         this.publish(Operational.Events.Info, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(this.options.id),
+          time: this.options.now(),
           component: "server",
           msg: "discord server requested reconnect",
         });
@@ -183,8 +192,8 @@ export class DiscordGateway {
       case GatewayOp.INVALID_SESSION: {
         const resumable = d === true;
         this.publish(Operational.Events.Warn, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(this.options.id),
+          time: this.options.now(),
           component: "server",
           msg: "discord invalid session",
           context: { resumable },
@@ -210,8 +219,8 @@ export class DiscordGateway {
       const ready = ReadyDataSchema.safeParse(data);
       if (!ready.success) {
         this.publish(Operational.Events.Warn, {
-          traceId: newTraceId(),
-          time: Date.now(),
+          traceId: newTraceId(this.options.id),
+          time: this.options.now(),
           component: "server",
           msg: "discord READY payload malformed; dropped",
         });
@@ -229,8 +238,8 @@ export class DiscordGateway {
     if (event === "RESUMED") {
       this.shell.reset();
       this.publish(Operational.Events.Info, {
-        traceId: newTraceId(),
-        time: Date.now(),
+        traceId: newTraceId(this.options.id),
+        time: this.options.now(),
         component: "server",
         msg: "discord session resumed",
       });
@@ -238,13 +247,13 @@ export class DiscordGateway {
     }
     // Origin: the first frame of an inbound gateway event — this ONE mint is
     // the message's trace, carried through the surface to the run (D11).
-    const traceId = newTraceId();
+    const traceId = newTraceId(this.options.id);
     try {
       this.callbacks.onDispatch(event, data, traceId);
     } catch (err) {
       this.publish(Operational.Events.Error, {
         traceId,
-        time: Date.now(),
+        time: this.options.now(),
         component: "server",
         msg: "discord dispatch error",
         context: {

@@ -19,7 +19,7 @@ export interface HistoryEntry {
  * the ambient tone on the right — so the list reads as a ledger of where the
  * eye has been, not as a second navigator.
  *
- * `now` is a prop rather than `Date.now()` read here: the relative times are
+ * `now` is a prop rather than an ambient clock read here: the relative times are
  * then a pure function of the entries, which is what lets them be rendered to
  * static markup and asserted on.
  */

@@ -1,7 +1,7 @@
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import { RunEvents } from "../../../src/core/execution/events";
-import { Bus, newTraceId } from "../../../src/index";
+import { Bus, newTraceId } from "../../helpers/bus";
 import { runTestAgent } from "../../helpers/effect-g1";
 import type { RunTrace } from "../../../src/core/execution/state";
 import { mockLlm, completeModel } from "../../helpers/mock-llm";

@@ -7,6 +7,7 @@ export async function handoffInbound(input: {
   dedupe: Dedupe;
   key: string;
   traceId: string;
+  now: () => number;
   publish: PublishPort;
   errorMessage: string;
   rethrowFailure: boolean;
@@ -20,7 +21,7 @@ export async function handoffInbound(input: {
     input.dedupe.forget(input.key, acquisition.token);
     input.publish(Operational.Events.Error, {
       traceId: input.traceId,
-      time: Date.now(),
+      time: input.now(),
       component: "server",
       msg: input.errorMessage,
       context: { err: String(error) },

@@ -24,6 +24,8 @@ export function providerError(fields: {
   });
 }
 
+export const FIXTURE_AUTH_FILE = "/nonexistent/openomni-test/auth.json";
+
 export function transientProvider(
   resolved: Model.Ref[],
   auths?: Auth.Info[],
@@ -32,13 +34,14 @@ export function transientProvider(
   return {
     resolveModel: (model) =>
       Effect.suspend(() => {
-        resolved.push(model);
+        // Record the model ref only: the resolve input also carries the injected clock (#1245).
+        resolved.push({ provider: model.provider, id: model.id });
         return fakeProviderModel(model);
       }),
     run: (input, sink) =>
       Effect.gen(function* () {
         if (auths !== undefined)
-          auths.push(yield* Auth.resolve(input.model.providerID, input.auth, input.authProvider));
+          auths.push(yield* Auth.resolve(input.model.providerID, FIXTURE_AUTH_FILE, input.auth, input.authProvider));
         calls += 1;
         if (calls === 1) return { type: "error" as const, error: providerFailure("transient blip") };
         sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));

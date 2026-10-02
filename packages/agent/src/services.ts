@@ -6,12 +6,15 @@ import type {
   SessionGeneration,
 } from "@openomni/protocol";
 import { Context, type Effect, type Scope } from "effect";
+import type { Entropy } from "./core/entropy";
 import type { SessionError } from "./errors";
 import type { NamedPolicyRegistry } from "./bundle";
 import type { GenerationRawSlots } from "./session-generations";
 import type { ToolDispatchDefinition } from "./tool-dispatcher";
 
-export type ProcessServices = Clock | Entropy | ObservationSink;
+export { Entropy, type EntropySource } from "./core/entropy";
+
+export type ProcessServices = Entropy | ObservationSink;
 export type GenerationServices = SessionLayer | ToolCatalog | ObservationSink | NamedPolicyRegistry;
 export type SessionEntryServices = ProcessServices | Llm | GenerationLayers;
 export type RunnerServices = ProcessServices | SessionLayer | ToolCatalog | Llm | GenerationOwnership;
@@ -36,16 +39,6 @@ export interface GenerationLayersService {
 }
 
 export class GenerationLayers extends Context.Service<GenerationLayers, GenerationLayersService>()("@openomni/agent/GenerationLayers") {}
-
-export class Clock extends Context.Service<
-  Clock,
-  { readonly now: () => number }
->()("@openomni/agent/Clock") {}
-
-export class Entropy extends Context.Service<
-  Entropy,
-  { readonly next: () => string }
->()("@openomni/agent/Entropy") {}
 
 export class ObservationSink extends Context.Service<
   ObservationSink,

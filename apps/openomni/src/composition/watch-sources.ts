@@ -2,6 +2,7 @@ import { statSync, watch } from "node:fs";
 import { basename, dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Alarm } from "@openomni/protocol";
+import { processEnvironment } from "../cli/env-file";
 
 /**
  * Watch plane over the Session entity (W5.2, plan §1 F2): this module owns the
@@ -146,7 +147,9 @@ async function killCommandGroup(pid: number): Promise<void> {
   const signal = Bun.spawn(["/bin/kill", "-KILL", "--", `-${pid}`], {
     stdout: "ignore",
     stderr: "pipe",
-    env: { ...process.env, LC_ALL: "C" },
+    // Environment values come from the env-file owner (#1245); LC_ALL pins
+    // the C locale so the kill(1) stderr parse below stays literal.
+    env: { ...processEnvironment(), LC_ALL: "C" },
   });
   const [code, error] = await Promise.all([signal.exited, new Response(signal.stderr).text()]);
   if (code === 0 || error.includes("No such process")) return;

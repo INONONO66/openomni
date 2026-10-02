@@ -41,8 +41,8 @@ async function materializeSession(
     readonly kernel: SessionHandleStore.SessionKernel;
   }) => Promise<void>,
 ): Promise<void> {
-  const catalog = openCatalogStore(catalogFile);
-  const store = openSessionStore(sessionFileFor(sessionsDir, sessionId));
+  const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+  const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
   const kernel = SessionHandleStore.createSessionKernel(store, catalog);
   try {
     await runAgent(kernel.materialize({
@@ -134,7 +134,7 @@ test("a stale activation yields until a later fence can adopt the session", asyn
   );
 
   expect(reply.deduped).toBe(false);
-  const catalog = openCatalogStore(catalogFile);
+  const catalog = openCatalogStore(catalogFile, { now: () => 1 });
   try {
     expect(catalog.sessionIndex(sessionId)?.fence).toBe(3);
   } finally {

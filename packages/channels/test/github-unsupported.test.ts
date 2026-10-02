@@ -1,16 +1,22 @@
 import { expect, test } from "bun:test";
+import { injectedOptions } from "./helpers/injected";
 import { Operational } from "@openomni/protocol";
 import { GitHubAdapter } from "../src/provider/github/surface";
 import { signedWebhook } from "./helpers/github";
 
 function observedGitHub() {
   const observations: object[] = [];
-  const adapter = new GitHubAdapter("secret", {}, (descriptor, payload) => {
-    if (descriptor.name === Operational.Events.Warn.name) {
-      const warning = Operational.Events.Warn.schema.parse(payload);
-      if (warning.context) observations.push(warning.context);
-    }
-  });
+  const adapter = new GitHubAdapter(
+    "secret",
+    {},
+    (descriptor, payload) => {
+      if (descriptor.name === Operational.Events.Warn.name) {
+        const warning = Operational.Events.Warn.schema.parse(payload);
+        if (warning.context) observations.push(warning.context);
+      }
+    },
+    injectedOptions(),
+  );
   return { adapter, observations };
 }
 

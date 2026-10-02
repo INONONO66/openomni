@@ -1,3 +1,4 @@
+import { messageSource } from "./message-source";
 import { sessionTree } from "./session-tree";
 import { runChatAttempts } from "./chat-attempts";
 import { seededTestAgent } from "./seeded-test-agent";
@@ -65,6 +66,7 @@ export function recordingExecutor(
     identity: { sessionId: "session-1", role: "resident", parentActionId: null },
     clock: () => 1,
     entropy: record.entropy,
+    random: () => 0,
   });
   return { committed: record.committed, executor };
 }
@@ -80,6 +82,7 @@ export function turnExecutor(policy: CompiledPolicySnapshot) {
       identity: { sessionId: "session-1", role: "resident", parentActionId: "turn-1" },
       clock: () => 1,
       entropy: record.entropy,
+      random: () => 0,
       retryAlarm: nullRetryAlarm,
     }),
   };
@@ -135,7 +138,7 @@ export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>
 export { runChatAttempts };
 export function answerThenCompact(executor: DurableExecutor, input: SessionRunnerInput) {
   return Effect.gen(function* () {
-    const answer = createAssistantMessage("answer", "", input.sessionId);
+    const answer = createAssistantMessage("answer", "", input.sessionId, messageSource);
     yield* executor.run(
       { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
       () => Effect.sync(() => PlainValueSchema.parse(answer)),

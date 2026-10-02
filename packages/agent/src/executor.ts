@@ -1,7 +1,7 @@
 import type { SessionHandleStore } from "@openomni/ledger";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
-import { Cause, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
+import { Cause, Clock, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
 import { createExecutionApprovals } from "./executor-approval";
@@ -15,7 +15,7 @@ import * as Failure from "./failure";
 import { listenForAbort } from "@openomni/protocol";
 import { BOUNDED_CONCURRENCY } from "./core/concurrency";
 import { GenerationRawSlots } from "./session-generations";
-import { Clock, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "./services";
+import { Entropy, ObservationSink, SessionLayer, type ProcessServices } from "./services";
 import type {
   DurableExecutor, ExecutionBatchItem, ExecutionRequest,
   ExecutionResult, ExecutorOptions,
@@ -65,11 +65,11 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   return Effect.gen(function* () {
   if (input.approvalTimeoutMs !== undefined && (!Number.isSafeInteger(input.approvalTimeoutMs) || input.approvalTimeoutMs < 0))
     return yield* new AgentFailure({ operation: "executor.acquire", cause: "invalid_approval_timeout" });
-  const clock = yield* Clock;
+  const clock = yield* Clock.clockWith(Effect.succeed);
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
   const { policy } = yield* SessionLayer;
-  const options = { ...input, clock: clock.now, entropy: entropy.next, observations, policy };
+  const options = { ...input, clock: () => clock.currentTimeMillisUnsafe(), entropy: entropy.id, random: entropy.random, observations, policy };
   const record = createExecutionRecord(options);
   const { approvals, awaitApproval } = createExecutionApprovals(options);
   const recovery = createExecutionRecovery(options, record);

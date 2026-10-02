@@ -28,6 +28,7 @@ export function recordingExecutor() {
       identity: { sessionId: "session-1", role: "resident", parentActionId: null },
       clock: () => 1,
       entropy: record.entropy,
+      random: () => 0,
     }),
   };
 }

@@ -146,7 +146,7 @@ test("late reply lazily expires the request while retaining partial progress", a
     })),
   ).toBe("attached");
   expect(await effectFailure(
-    makeRouter({ clock: () => 10_001 }).ingest(sender, facts("late")),
+    makeRouter({ now: () => 10_001 }).ingest(sender, facts("late")),
   )).toMatchObject({
     code: "request_reply_rejected",
     _tag: "IngressRoutingError",
@@ -179,7 +179,7 @@ test.each([
   let now = 10;
   const requests = channelRequests(requestPort(() => now));
   const router = makeRouter({
-    clock: () => now,
+    now: () => now,
     requests: {
       ...requests,
       answer: (input: Parameters<typeof requests.answer>[0]) => Effect.gen(function* () {

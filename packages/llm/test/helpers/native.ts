@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, Option } from "effect";
 import { Processor as NativeProcessor } from "../../src/processor";
 import { run as nativeRun } from "../../src/run";
 import { decodeLlmFailure } from "../../src/error";
+import { fixedNow, sequentialIds } from "./fixtures";
 export type { Run, RunInput } from "../../src/run";
 export { LlmRunFailure } from "../../src/errors";
 
@@ -30,7 +31,10 @@ export namespace Processor {
     return { get message() { return value.message; }, get usageTotals() { return value.usageTotals; }, get visibleOutput() { return value.visibleOutput; }, process: (streamInput: { system: string; promptText: string }) => runEffect(value.process(streamInput)) };
   }
 }
-export function run(input: Parameters<typeof nativeRun>[0], sink: Parameters<typeof nativeRun>[1], dependencies: { createStream?: Processor.ProcessorOptions["createStream"] } = {}) {
+type NativeInput = Parameters<typeof nativeRun>[0];
+/** Fixed `now`/`id` stubs by default (#1245); a test overrides them to assert exact values. */
+export type TestRunInput = Omit<NativeInput, "now" | "id" | "authFilePath"> & Partial<Pick<NativeInput, "now" | "id" | "authFilePath">>;
+export function run(input: TestRunInput, sink: Parameters<typeof nativeRun>[1], dependencies: { createStream?: Processor.ProcessorOptions["createStream"] } = {}) {
   const createStream = dependencies.createStream;
-  return runEffect(nativeRun(input, sink, createStream ? { createStream: (request) => Effect.tryPromise({ try: () => createStream(request), catch: decodeLlmFailure("test.provider") }) } : {}));
+  return runEffect(nativeRun({ now: fixedNow, id: sequentialIds(), authFilePath: "/nonexistent/openomni-llm-test/auth.json", ...input }, sink, createStream ? { createStream: (request) => Effect.tryPromise({ try: () => createStream(request), catch: decodeLlmFailure("test.provider") }) } : {}));
 }

@@ -1,3 +1,4 @@
+import { messageSource } from "./message-source";
 import type { Message } from "@openomni/protocol";
 import { createAssistantMessage } from "../../src/core/message-factory";
 
@@ -8,7 +9,7 @@ export function assistantStep(
   parentId: string,
   toolCall?: { id: string; callID: string; tool: string },
 ): Message.WithParts {
-  const message = createAssistantMessage(text, parentId, sessionId);
+  const message = createAssistantMessage(text, parentId, sessionId, messageSource);
   if (toolCall !== undefined)
     message.parts.push({
       id: toolCall.id,

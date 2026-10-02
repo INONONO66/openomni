@@ -64,7 +64,7 @@ type ReplyGrantAdmission = Readonly<{
 
 type ReplyGrantInstances = Readonly<{
   /** Live view for the send kernel's grant source; expiry is re-checked per-send by the evaluator (`at` is the send's clock). */
-  list(at?: number): readonly Gateway.SenderTargetGrant[];
+  list(at: number): readonly Gateway.SenderTargetGrant[];
   /** Materializes instances for an admitted inbound; capacity/first-contact rules applied per rule. */
   admit(admission: ReplyGrantAdmission): void;
 }>;
@@ -145,7 +145,7 @@ export function createReplyGrantInstances(ports: {
   }
 
   return {
-    list(at = Date.now()) {
+    list(at: number) {
       return ports.stores.replyGrants.listLive(at);
     },
     admit,

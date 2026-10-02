@@ -1,10 +1,11 @@
 import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
-import { adoptSessionAuthority, createExecutor, BundleDefinitions, Clock, Entropy, GenerationLayers, CommitFailed, AgentFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
+import { adoptSessionAuthority, createExecutor, BundleDefinitions, Entropy, GenerationLayers, CommitFailed, AgentFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
 import { CorruptRecord } from "@openomni/ledger";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";
+import { captureNow } from "./platform";
 
 type ExecutionResult = Effect.Success<ReturnType<Effect.Success<ReturnType<typeof createExecutor>>["run"]>>;
 type Run = Parameters<typeof createGatewayRouter>[0]["run"];
@@ -19,19 +20,19 @@ export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<Nati
     const id = GATEWAY_INGRESS_SESSION;
     const services = yield* Effect.context<SessionEntryServices>();
     const generations = yield* GenerationLayers;
-    const { now: clock } = yield* Clock;
-    const { next } = yield* Entropy;
+    const clock = yield* captureNow;
+    const { id: nextId } = yield* Entropy;
     const installed = yield* BundleDefinitions;
     const kernel = plane.openKernel(id);
     yield* kernel.materialize({
       id, parentId: null, role: "resident", tools: [], bundles: installed.names, system: { preset: "", blocks: [] },
-      policyGeneration: kernel.currentPolicyGeneration(), actionId: crypto.randomUUID(), at: clock(),
+      policyGeneration: kernel.currentPolicyGeneration(), actionId: nextId(), at: clock(),
     }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
     plane.catalog.indexSession({ id, parentId: null, role: "resident", createdAt: clock() });
     const serial = yield* Semaphore.make(1);
     return (_sender, request, body) => serial.withPermits(1)(Effect.scoped(Effect.gen(function* () {
       const row = kernel.row(id);
-      const owner = next();
+      const owner = nextId();
       const captured = yield* generations.capture({ sessionId: id, generation: row.toolsGeneration }).pipe(Effect.mapError((error) => new AgentFailure({ operation: "ingress.capture", cause: String(error) })));
       const fence = yield* adoptSessionAuthority(kernel, id, owner).pipe(
         Effect.mapError((error) => new CommitFailed({ error })),

@@ -6,7 +6,10 @@ import { modelTransport } from "../config";
 import { createCompactionSummarizer } from "./summarizer";
 
 /** Translate operator configuration into the callback-free run-scoped strategy. */
-export function configuredCompaction(config: OpenOmniConfig): Effect.Effect<CompactionOptions, never, Llm | ObservationSink> {
+export function configuredCompaction(
+  config: OpenOmniConfig,
+  sources: { readonly now: () => number; readonly id: () => string },
+): Effect.Effect<CompactionOptions, never, Llm | ObservationSink> {
   return Effect.gen(function* () {
   const transport = modelTransport(config.model);
   return {
@@ -15,6 +18,8 @@ export function configuredCompaction(config: OpenOmniConfig): Effect.Effect<Comp
       ? {}
       : {
           onSummarize: yield* createCompactionSummarizer({
+            now: sources.now,
+            id: sources.id,
             model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
           }),
         }),

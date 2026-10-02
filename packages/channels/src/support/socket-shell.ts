@@ -48,6 +48,12 @@ export class SocketReconnectShell {
     private readonly delay: (ms: number) => Promise<void>,
     /** The surface's socket opener (its own listeners wired via openWebSocket). */
     private readonly open: (url: string) => Promise<void>,
+    /** Injected clock, UUID source, and jitter source — never ambient. */
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly random: () => number;
+    },
   ) {}
 
   /** The intent flag: true from begin() until end()/stop(); every retry loop is bounded by it. */
@@ -106,10 +112,10 @@ export class SocketReconnectShell {
       } catch (err) {
         if (!this.active || generation !== this.generation) return undefined;
         this.attempt++;
-        const backoffMs = calculateBackoff(this.attempt);
+        const backoffMs = calculateBackoff(this.attempt, this.options.random);
         this.publish(Operational.Events.Error, {
           traceId,
-          time: Date.now(),
+          time: this.options.now(),
           component: "server",
           msg: this.messages.urlFetchFailed,
           context: { err: String(err), backoffMs: Math.round(backoffMs) },
@@ -135,11 +141,11 @@ export class SocketReconnectShell {
   ): Promise<void> {
     const generation = this.generation;
     this.attempt++;
-    const backoffMs = calculateBackoff(this.attempt);
-    const traceId = newTraceId();
+    const backoffMs = calculateBackoff(this.attempt, this.options.random);
+    const traceId = newTraceId(this.options.id);
     this.publish(Operational.Events.Warn, {
       traceId,
-      time: Date.now(),
+      time: this.options.now(),
       component: "server",
       msg: this.messages.closed,
       context: { code: closeCode, backoffMs: Math.round(backoffMs) },
@@ -152,7 +158,7 @@ export class SocketReconnectShell {
         if (!this.active || generation !== this.generation) return;
         this.publish(Operational.Events.Error, {
           traceId,
-          time: Date.now(),
+          time: this.options.now(),
           component: "server",
           msg: this.messages.reconnectFailed,
           context: { err: String(error) },
@@ -217,8 +223,8 @@ export class SocketReconnectShell {
   socketErrorListener(): (err: Event) => void {
     return (err) =>
       this.publish(Operational.Events.Error, {
-        traceId: newTraceId(),
-        time: Date.now(),
+        traceId: newTraceId(this.options.id),
+        time: this.options.now(),
         component: "server",
         msg: this.messages.socketError,
         context: { err: String(err) },
@@ -228,8 +234,8 @@ export class SocketReconnectShell {
   /** A frame that cannot enter the state machine is dropped loudly, never thrown. */
   warnDrop(msg: string): void {
     this.publish(Operational.Events.Warn, {
-      traceId: newTraceId(),
-      time: Date.now(),
+      traceId: newTraceId(this.options.id),
+      time: this.options.now(),
       component: "server",
       msg,
     });

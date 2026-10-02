@@ -11,6 +11,7 @@ import {
 import { TransportCapabilityError } from "../src/renderer/errors";
 import { signal } from "./helpers";
 import { upgradeWebSocket } from "./helpers/chat-server";
+import { testId } from "./helpers/platform";
 
 /**
  * The wire is asserted against a REAL socket, not a stubbed WebSocket. What
@@ -183,6 +184,7 @@ class ControlledSocket {
 function controlledTurn(messages = [userMessage("first")]) {
   ControlledSocket.instances.length = 0;
   const transport = createGatewayChatTransport({
+    id: testId,
     url: "ws://controlled",
     WebSocketImpl: ControlledSocket,
   });
@@ -212,6 +214,7 @@ describe("createGatewayChatTransport", () => {
   test("close before opening rejects and failed send closes its socket", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -242,7 +245,7 @@ describe("createGatewayChatTransport", () => {
         { type: "error", message: "turn already completed" },
       ],
     ]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
 
     const chunks = await collect(await send(transport, [userMessage("append it")]));
 
@@ -273,7 +276,7 @@ describe("createGatewayChatTransport", () => {
         { type: "error", message: "text field required" },
       ],
     ]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
 
     const chunks = await collect(await send(transport, [userMessage("")]));
 
@@ -285,7 +288,7 @@ describe("createGatewayChatTransport", () => {
       [{ type: "message", messageId: "wait-7", text: "which branch?" }],
       [{ type: "message", messageId: "done", text: "done" }],
     ]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
 
     await collect(await send(transport, [userMessage("ship it")]));
     await collect(await send(transport, [userMessage("main")]));
@@ -304,7 +307,7 @@ describe("createGatewayChatTransport", () => {
       [{ type: "message", messageId: "done-a", text: "done A" }],
       [{ type: "message", messageId: "done-b", text: "done B" }],
     ]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
 
     const first = send(transport, [userMessage("start A")], undefined, "chat-a");
     const second = send(transport, [userMessage("start B")], undefined, "chat-b");
@@ -335,6 +338,7 @@ describe("createGatewayChatTransport", () => {
       [{ type: "message", messageId: "authenticated", text: "connected" }],
     ]);
     const transport = createGatewayChatTransport({
+    id: testId,
       url,
       protocols: ["openomni", "bearer.test-token"],
     });
@@ -399,7 +403,7 @@ describe("createGatewayChatTransport", () => {
 
   test("rejects regeneration instead of appending the historical prompt again", async () => {
     const { received, url } = serveWire([]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
 
     await expect(
       transport.sendMessages({
@@ -415,7 +419,7 @@ describe("createGatewayChatTransport", () => {
 
   test("an already-aborted turn never reaches the gateway", async () => {
     const { received, url } = serveWire([]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
     const controller = new AbortController();
     controller.abort();
 
@@ -430,6 +434,7 @@ describe("createGatewayChatTransport", () => {
   test("an abort settles while the socket is still opening", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -447,7 +452,7 @@ describe("createGatewayChatTransport", () => {
   test("aborting ends the stream", async () => {
     // The server never answers, so only the abort can end this read.
     const { url } = serveWire([[]]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
     const controller = new AbortController();
 
     const stream = await send(transport, [userMessage("hang")], controller.signal);
@@ -461,6 +466,7 @@ describe("createGatewayChatTransport", () => {
   test("aborting one turn fails sibling turns on the invalidated socket", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -486,7 +492,7 @@ describe("createGatewayChatTransport", () => {
       [{ type: "message", messageId: "first", text: "first" }],
       [{ type: "message", messageId: "second", text: "second" }],
     ]);
-    const transport = createGatewayChatTransport({ url });
+    const transport = createGatewayChatTransport({ id: testId, url });
     const firstController = new AbortController();
 
     await collect(await send(transport, [userMessage("one")], firstController.signal));
@@ -502,6 +508,7 @@ describe("createGatewayChatTransport", () => {
   test("an unexpected socket close fails its pending turn", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -521,6 +528,7 @@ describe("createGatewayChatTransport", () => {
   test("an old socket close cannot drain a turn on its replacement", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -552,6 +560,7 @@ describe("createGatewayChatTransport", () => {
   test("a socket that fails while opening is replaced on retry", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -624,7 +633,7 @@ describe("createGatewayChatTransport", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
     const stop = transport.subscribeSession(() => undefined);
 
     const first = await collect(await send(transport, [userMessage("one")]));
@@ -651,6 +660,7 @@ describe("createGatewayChatTransport", () => {
     ControlledSocket.instances.length = 0;
     const bound: [string, string][] = [];
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
       onSessionBound: (chatId, sessionId) => bound.push([chatId, sessionId]),
@@ -691,7 +701,7 @@ describe("createGatewayChatTransport", () => {
     ]);
     let ids = 0;
     const chat = new Chat<UIMessage>({
-      transport: createGatewayChatTransport({ url }),
+      transport: createGatewayChatTransport({ id: testId, url }),
       generateId: () => {
         ids += 1;
         return `id-${ids}`;
@@ -758,7 +768,7 @@ describe("session reads over the gateway socket", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
     const seen: (number | null)[] = [];
     const stop = transport.subscribeSession((page) => seen.push(page.nextRevision));
 
@@ -783,7 +793,7 @@ describe("session reads over the gateway socket", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
 
     await expect(transport.readSession("durable")).rejects.toThrow("session evicted");
   });
@@ -801,7 +811,7 @@ describe("session reads over the gateway socket", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({ url: `ws://127.0.0.1:${server.port}` });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
 
     const read = transport.readSession("durable");
     const rejection = read.then(
@@ -825,6 +835,7 @@ describe("session reads over the gateway socket", () => {
     }
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ReadFailingSocket,
     });
@@ -888,7 +899,7 @@ describe("session reads over the gateway socket", () => {
 
   test("two concurrent identical reads coalesce onto one request and both resolve", async () => {
     const wire = serveHeldRead();
-    const transport = createGatewayChatTransport({ url: wire.url });
+    const transport = createGatewayChatTransport({ id: testId, url: wire.url });
 
     const first = transport.readSession("durable");
     await wire.readSeen;
@@ -903,7 +914,7 @@ describe("session reads over the gateway socket", () => {
 
   test("a differing-cursor second read is rejected while the first still resolves", async () => {
     const wire = serveHeldRead();
-    const transport = createGatewayChatTransport({ url: wire.url });
+    const transport = createGatewayChatTransport({ id: testId, url: wire.url });
 
     const first = transport.readSession("durable");
     await wire.readSeen;
@@ -926,7 +937,7 @@ describe("session reads over the gateway socket", () => {
 
   test("a close drains every coalesced waiter", async () => {
     const wire = serveHeldRead();
-    const transport = createGatewayChatTransport({ url: wire.url });
+    const transport = createGatewayChatTransport({ id: testId, url: wire.url });
 
     const asRejection = (read: Promise<SessionRead.Page>) =>
       read.then(

@@ -5,14 +5,13 @@ import {
   createSessionChatRunner,
   createTurnDispatcher,
   failureFacts,
-  newTraceId,
   sessionTool,
   ToolRefused,
   type ChatAgentConfig,
   type SessionRunner,
   type SessionRuntime,
 } from "@openomni/agent";
-import type { AnyToolDefinition, LedgerSession, Model, Tool } from "@openomni/protocol";
+import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
@@ -68,7 +67,7 @@ export function createResident(options: ResidentOptions) {
       const dispatcher = yield* createTurnDispatcher(input, options.sessionRuntime);
       const observations = yield* ObservationSink;
       const compaction = options.compaction === undefined ? undefined : yield* options.compaction;
-      const traceId = newTraceId();
+      const traceId = traceIdFromUuid(ports.id());
       const observation = observeComponent({
         traceId,
         sessionId: input.sessionId,
@@ -124,7 +123,7 @@ export function createResident(options: ResidentOptions) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new AppInvariantError(`runner is not registered: ${runner}`);
       }
-      return messageMaterialization(options.policyGeneration)({
+      return messageMaterialization(options.policyGeneration, ports.id)({
         id,
         parentId,
         role,

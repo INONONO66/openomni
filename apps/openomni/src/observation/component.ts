@@ -1,5 +1,4 @@
 import { Effect, Cause } from "effect";
-import { Bus } from "@openomni/agent";
 import { type BusEvent, Component, type ObservationSink, type TraceContext } from "@openomni/protocol";
 
 export interface ObservedComponent {
@@ -19,7 +18,7 @@ interface ComponentIdentity extends TraceContext.Type {
 }
 
 /** App-owned component observation sink behind the protocol port. */
-export function observeComponent(trace: ComponentIdentity, sink: ObservationSink = Bus): ObservedComponent {
+export function observeComponent(trace: ComponentIdentity, sink: ObservationSink): ObservedComponent {
   const events =
     sink.scope?.({
       traceId: trace.traceId,

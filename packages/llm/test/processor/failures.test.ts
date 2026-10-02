@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { LlmCall } from "@openomni/protocol";
 import { Processor as NativeProcessor } from "../../src/processor";
-import { anthropicModel } from "../helpers/fixtures";
+import { anthropicModel, fixedNow, sequentialIds } from "../helpers/fixtures";
 import { runEffect } from "../helpers/native";
 
 import { apiError, sdkError } from "../helpers/retry";
@@ -19,6 +19,8 @@ describe("Processor failures", () => {
       model: anthropicModel,
       abort: fixture.abortController.signal,
       events,
+      now: fixedNow,
+      id: sequentialIds(),
       trace: { traceId: "interrupt", sessionId: "session-456" },
       createStream: () => Effect.sync(() => {
         entered.resolve();

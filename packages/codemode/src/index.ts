@@ -28,6 +28,8 @@ const RETAINED_SETTLED_CELLS = 64;
 /** Upper bound on tenant interpreters shut down at once during close. */
 const CLOSE_CONCURRENCY = 16;
 interface Options {
+  /** Injected cell-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly id: () => string;
   readonly machines?: Pick<MachineHost, "list" | "get">;
   readonly completion?: (request: Machine.CompletionRequest) => Effect.Effect<string, Failure>;
   readonly tools?: (tenant: string) => Caller;
@@ -40,7 +42,7 @@ const RunInput = z.object({ machineId: Machine.MachineId, code: z.string() }).st
 const FindInput = z.object({ tag: z.string().min(1) }).strict();
 
 /** One app-owned scope retains background cells and tenant interpreters. */
-export function createCodemode(options: Options = {}) {
+export function createCodemode(options: Options) {
   return Effect.gen(function* () {
     const scope = yield* Scope.Scope;
     const kernels = new Map<string, PythonKernel>();
@@ -170,7 +172,7 @@ export function createCodemode(options: Options = {}) {
     function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = (runOptions.bindings ?? options).boundary?.(tenant)) {
       return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
         const timeoutMs = runOptions.timeoutMs ?? 15_000;
-        const cellId = crypto.randomUUID();
+        const cellId = options.id();
         const controller = new AbortController();
         const signal = AbortSignal.any([lifetime.signal, controller.signal, ...(runOptions.signal ? [runOptions.signal] : [])]);
         const handle = yield* Effect.try({ try: () => machines().get(id), catch: decodeCodeFailure("cell.launch") });

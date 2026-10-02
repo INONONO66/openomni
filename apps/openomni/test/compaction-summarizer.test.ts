@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
 import { Llm } from "@openomni/llm";
-import { Bus, ObservationSink } from "@openomni/agent";
+import { ObservationSink } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import type { FixtureLlm } from "./helpers/app-fixture";
 import { LlmRunFailure, type Run } from "@openomni/llm";
 import type { Message } from "@openomni/protocol";
@@ -12,6 +13,7 @@ import {
 import { ExecutorContext } from "@openomni/agent";
 import { executor } from "./helpers/executor";
 import { runEffect, runSyncEffect } from "./helpers/effect";
+import { testIds } from "./helpers/test-entropy";
 
 function createCompactionSummarizer(config: Parameters<typeof summarizer>[0] & { readonly io: FixtureLlm }) {
   const run = runSyncEffect(summarizer(config).pipe(Effect.provideService(Llm, config.io), Effect.provideService(ObservationSink, Bus)));
@@ -79,7 +81,7 @@ async function expectSummarizerFailure(
   spans: Message.WithParts[],
   kind: "empty" | "overflow",
 ): Promise<void> {
-  const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
+  const summarize = createCompactionSummarizer({ model: MODEL, now: () => 1000, id: testIds("summarizer"), io: { run, resolveModel } });
   const error = await runEffect(Effect.flip(summarize(spans, undefined, BUDGET)));
   expect(error).toBeInstanceOf(SummarizerError);
   expect(error).toMatchObject({ _tag: "AgentFailure", kind });
@@ -93,7 +95,7 @@ describe("production compaction summarizer", () => {
       sink.onMessage(answer("dense merged summary"));
       return { type: "stop" };
     });
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, now: () => 1000, id: testIds("summarizer"), io: { run, resolveModel } });
 
     await expect(runEffect(summarize([message("m1", "new span")], "prior anchor", BUDGET))).resolves.toBe(
       "dense merged summary",
@@ -130,7 +132,7 @@ describe("production compaction summarizer", () => {
     let calls = 0;
     const failure = runFailure(false, "context window has been exceeded");
     const run = failingRun(failure, () => { calls += 1; });
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, now: () => 1000, id: testIds("summarizer"), io: { run, resolveModel } });
 
     const error = await runEffect(Effect.flip(summarize([message("m1", "span")], undefined, BUDGET)));
     expect(calls).toBe(1);
@@ -146,7 +148,7 @@ describe("production compaction summarizer", () => {
       expect(input.signal).toBe(controller.signal);
       return { type: "aborted" };
     });
-    const summarize = createCompactionSummarizer({ model: MODEL, io: { run, resolveModel } });
+    const summarize = createCompactionSummarizer({ model: MODEL, now: () => 1000, id: testIds("summarizer"), io: { run, resolveModel } });
 
     const error = await runEffect(Effect.flip(summarize(
       [message("m1", "span")],

@@ -11,6 +11,7 @@ import { outboundMessage } from "../src/composition/terminal-message";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { runEffect } from "./helpers/effect";
 import { testPlane } from "./helpers/ledger";
+import { testIds } from "./helpers/test-entropy";
 
 const origin = {
   encodingVersion: 1,
@@ -42,7 +43,7 @@ function inboxCommit(
 
 test("inbox target materialization refuses a child beyond its pinned fanout", async () => {
   const plane = testPlane();
-  const materialize = messageMaterialization(() => 1);
+  const materialize = messageMaterialization(() => 1, testIds("materialize"));
   try {
     await runEffect(
       materializeInboxTarget(

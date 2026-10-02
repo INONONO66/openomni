@@ -36,7 +36,8 @@ type RequestHandler<TPeer> = (
 type NotificationHandler<TPeer> = (peer: TPeer, method: string, params: Ipc.Notification["params"]) => Effect.Effect<void, IpcError>;
 type PeerRequestTableOptions<TPeer> = {
   readonly send: SendFrame<TPeer>;
-  readonly idSource?: IdSource;
+  /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
+  readonly idSource: IdSource;
   readonly onRequest?: RequestHandler<TPeer>;
   readonly onNotification?: NotificationHandler<TPeer>;
   readonly missingRequestHandlerMessage?: (method: string) => string;
@@ -52,7 +53,7 @@ export class PeerRequestTable<TPeer = undefined> {
   }
   call(peer: TPeer, method: string, params: Ipc.Request["params"], timeoutMs: number): Effect.Effect<Ipc.Response["result"], IpcError> {
     return Effect.gen({ self: this }, function* () {
-      const request = Ipc.createRequest((this.options.idSource ?? (() => crypto.randomUUID()))(), method, params);
+      const request = Ipc.createRequest(this.options.idSource(), method, params);
       const result = yield* Deferred.make<Ipc.Response["result"], IpcError>();
       this.pending.set(request.id, { peer, method, result });
       return yield* Effect.try({ try: () => this.options.send(peer, request), catch: decodeIpcFailure("request.send") }).pipe(
