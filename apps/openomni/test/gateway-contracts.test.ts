@@ -182,9 +182,9 @@ describe("authenticated gateway ingress", () => {
   test("real gateway observations retain stamped metadata for schema consumers", async () => {
     const resident = testResident(() => Effect.succeed(({ type: "stop" })));
     const projected = Promise.withResolvers<Gateway.MessageObservation>();
-    const stop = Bus.observe((event, data) => {
-      if (event.name !== Gateway.MessageObserved.name) return;
-      const parsed = event.schema.safeParse(data);
+    const stop = Bus.observe((observation) => {
+      if (observation.name !== Gateway.MessageObserved.name) return;
+      const parsed = Gateway.MessageObserved.schema.safeParse(observation.data);
       if (parsed.success) projected.resolve(Gateway.MessageObservation.parse(parsed.data));
     });
     try {

@@ -12,7 +12,7 @@ type ObservationSink = Kernel.ObservationSink;
 const SessionLayer = Kernel.SessionLayer;
 const ToolCatalog = Kernel.ToolCatalog;
 type ToolCatalog = Kernel.ToolCatalog;
-const createObservationBus = Session.createObservationBus;
+const makeObservationBus = Session.makeObservationBus;
 const makeSessionGenerations = Session.makeSessionGenerations;
 const scopeObservation = Session.scopeObservation;
 type GenerationBundle = Session.GenerationBundle;
@@ -73,18 +73,19 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         ? Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze(select(source[role])) }))
         : source.catalogLayer(select));
       let active = false;
-      const observations = Layer.effect(ObservationSink, Effect.acquireRelease(
-        Effect.sync(() => {
-          const bus = createObservationBus({ id: entropy.id, now });
-          const sink: Context.Service.Shape<typeof ObservationSink> = {
-            publish: (event, data) => { if (active) { bus.publish(event, data); root.publish(event, data); } },
-            subscribe: bus.subscribe,
-            scope: (identity) => scopeObservation(sink, identity, { id: entropy.id, now }),
-          };
-          return { ...sink, close: () => { active = false; bus.reset(); } };
-        }),
-        (sink) => Effect.sync(sink.close),
-      ));
+      // One PubSub bus per generation (#1249): built in the generation Layer's
+      // Scope, whose closure shuts the PubSub down and interrupts every
+      // subscriber drain; the finalizer gates publishes off first.
+      const observations = Layer.effect(ObservationSink, Effect.gen(function* () {
+        const bus = yield* makeObservationBus({ id: entropy.id, now });
+        yield* Effect.addFinalizer(() => Effect.sync(() => { active = false; }));
+        const sink: Context.Service.Shape<typeof ObservationSink> = {
+          publish: (event, data) => { if (active) { bus.sink.publish(event, data); root.publish(event, data); } },
+          subscribe: bus.sink.subscribe,
+          scope: (identity) => scopeObservation(sink, identity, { id: entropy.id, now }),
+        };
+        return sink;
+      }));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
       const registry = selected.layer.pipe(Layer.provideMerge(seed));
       const layer = Layer.unwrap(Effect.gen(function* () {

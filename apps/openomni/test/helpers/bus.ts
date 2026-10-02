@@ -1,23 +1,6 @@
-import { Session } from "@openomni/agent";
-const createObservationBus = Session.createObservationBus;
+import { testBus } from "../../../../packages/agent/test/helpers/isolated";
 
-/** A bus with deterministic scoped-event stamps (counter ids, counter times). */
-function testBus(): ReturnType<typeof createObservationBus> {
-  let id = 0;
-  let time = 0;
-  return createObservationBus({
-    id: () => {
-      id += 1;
-      return `event-${id}`;
-    },
-    now: () => {
-      time += 1;
-      return time;
-    },
-  });
-}
-
-/** The shared fixture bus: tests that used the deleted agent-global Bus singleton use this one. */
+/** The app-suite shared bus fixture (PubSub-backed, #1249); suites reset() it between cases. */
 export const Bus = testBus();
 
 let traceCounter = 0;

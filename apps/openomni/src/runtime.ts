@@ -1,5 +1,5 @@
 import { AppInvariantError } from "./invariant";
-import { Kernel, type Session, Bundle, type Journal, Model } from "@openomni/agent";
+import { Kernel, Session, Bundle, type Journal, Model } from "@openomni/agent";
 type BundleDefinitions = Bundle.BundleDefinitions;
 const BundlesLive = Bundle.BundlesLive;
 type Entropy = Kernel.Entropy;
@@ -24,7 +24,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { GenerationLayersLive } from "./composition/generation-layers";
-import { captureNow, platformBus, platformEntropy, wallClockLayer } from "./composition/platform";
+import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
   readonly operation: string;
@@ -86,7 +86,25 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
 
 function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinitions>, now: () => number) {
   const entropy = options.entropy ?? platformEntropy();
-  const observations = options.observations ?? platformBus(entropy, now);
+  // The root observation bus is app-owned (#1249): a Layer whose Scope is the
+  // runtime's lifetime. Injected fixture sinks mount as plain values.
+  const sinkLayer: Layer.Layer<ObservationSink> =
+    options.observations === undefined
+      ? Session.observationBusLayer({ id: entropy.id, now })
+      : Layer.succeed(ObservationSink, options.observations);
+  return Layer.unwrap(Effect.gen(function* () {
+    const observations = yield* ObservationSink;
+    return wiredLayer(options, bundles, now, entropy, observations);
+  })).pipe(Layer.provideMerge(sinkLayer));
+}
+
+function wiredLayer(
+  options: AppRuntimeOptions,
+  bundles: Layer.Layer<BundleDefinitions>,
+  now: () => number,
+  entropy: EntropySource,
+  observations: Context.Service.Shape<typeof ObservationSink>,
+) {
   const plane = appLedgerLayer({
     now,
     ...(options.catalogPath === undefined ? {} : { catalogPath: options.catalogPath }),
