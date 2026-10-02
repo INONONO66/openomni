@@ -27,8 +27,9 @@ deferred to #1251/#1255, not re-planned in this lane. The band-ratchet
 baseline is 36 violations across 15 files against the issue's 20/11 estimate —
 20/11 was measured at `f7e36984`, before #1246 folded policy/ledger/llm into
 `packages/agent`, so those edges were cross-package imports there and are
-intra-package band edges now; the baseline is pinned shrink-only and every
-entry pre-existed this lane (provenance table in the lane evidence).
+intra-package band edges now; the baseline is pinned shrink-only, every surviving
+entry is a pre-existing edge (one scanner hit on a lane-written comment was
+reworded away in review r1), and the provenance table is in the lane evidence.
 
 ## #1250 model and desktop unified on AI SDK 7 (epic #1260, merged as `9b4e4b8c` (PR #1265))
 

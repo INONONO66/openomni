@@ -8,7 +8,7 @@ import type { GenerationRawSlots } from "../session/run";
 import type { ToolDispatchDefinition } from "./tool";
 
 // ─── from core/entropy.ts (#1247) ───
-/** Supplied by the composition root; package code never reads `crypto` or `Math.random` itself. */
+/** Supplied by the composition root; package code never reads ambient crypto or random sources itself. */
 export interface EntropySource {
   readonly id: () => string;
   /** Uniform in `[0, 1)`. */
