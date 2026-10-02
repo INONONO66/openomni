@@ -28,9 +28,15 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
   try {
     const kernel = stores.kernel;
     let now = 0;
-    const clock = () => (now += 1);
+    const clock = () => {
+      now += 1;
+      return now;
+    };
     let ids = 0;
-    const entropy = () => `race:id-${(ids += 1)}`;
+    const entropy = () => {
+      ids += 1;
+      return `race:id-${ids}`;
+    };
     await runAgent(
       Effect.gen(function* () {
         const fixture = yield* fencedTurnFixture(kernel, { id: "race", clock });
