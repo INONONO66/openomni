@@ -110,8 +110,11 @@ export function compileGateRows<Context = never>(
           entry.matcher === undefined ||
           matches(entry, input) === record.rowIds.includes(entry.row.id),
       );
+    // A decision is bound to its policy generation (#1251 r4): a record from
+    // another generation never replays — the current rows decide fresh.
     if (
       recorded !== undefined &&
+      recorded.generation === options.generation &&
       recorded.point === point &&
       recorded.inputHash === inputHash &&
       matchersUnchanged(recorded)
@@ -144,4 +147,3 @@ export function compileGateRows<Context = never>(
     decide,
   };
 }
-

@@ -161,6 +161,32 @@ describe("decision replay (#1251)", () => {
     expect(changed.decision.rowIds).toEqual(["guard/message.pre#7"]);
   });
 
+  it("a decision recorded under another generation never replays (#1251 r4)", () => {
+    const recordedBy = compileGateRows({
+      table,
+      rows: [gateRow("tool.pre", { id: "guard/tool.pre#1", how: { verdict: "allow" } })],
+      handlers: [],
+      generation: 1,
+    });
+    const first = recordedBy.decide("tool.pre", { when: {}, value: { text: "hi" } });
+    expect(first.decision.generation).toBe(1);
+
+    // Generation 2 adds a deny on the same point; the gen-1 allow is void.
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "guard/tool.pre#1", how: { verdict: "allow" } }),
+        gateRow("tool.pre", { id: "guard/tool.pre#2", how: { verdict: "deny" }, order: 2 }),
+      ],
+      handlers: [],
+      generation: 2,
+    });
+    const outcome = gate.decide("tool.pre", { when: {}, value: { text: "hi" } }, { recorded: first.decision });
+    expect(outcome.replayed).toBe(false);
+    expect(outcome.decision.verdict).toBe("deny");
+    expect(outcome.decision.generation).toBe(2);
+  });
+
   it("treats an unrecorded handler response as observe-only: it cannot change the decision", () => {
     const silent: GateHandler = () => ({ verdict: "deny" });
     const gate = compileGateRows({
@@ -239,5 +265,32 @@ describe("production snapshot replay (#1251 r3)", () => {
     // surfaces instead of the recorded output.
     expect(() => snapshot.evaluate({ ...input, value: { text: "changed" }, recorded: first.gate }))
       .toThrow("handler must not run during replay");
+  });
+
+  it("a decision is bound to its policy generation: a gen-1 allow never replays under gen-2 (#1251 r4)", () => {
+    const registry = createNamedPolicyRegistry(KERNEL_POLICY_REGISTRY);
+    const allowRows = (generation: number): PolicyRow.Row[] => [
+      { name: "compaction", kind: "compaction", phase: "pre", generation, priority: 1_000,
+        match: { encodingVersion: 1, value: {} },
+        verdict: { encodingVersion: 1, value: { type: "allow" } } },
+    ];
+    const generationOne = compilePolicySnapshot({ registry, generation: 1, rows: allowRows(1) });
+    const first = generationOne.evaluate(input);
+    expect(first.verdict).toBe("allow");
+
+    // Generation 2 introduces a deny for the same input.
+    const generationTwo = compilePolicySnapshot({ registry, generation: 2, rows: [
+      ...allowRows(2),
+      { name: "freeze-writes", kind: "tool", phase: "pre", generation: 2, priority: 1,
+        match: { encodingVersion: 1, value: { op: "write" } },
+        verdict: { encodingVersion: 1, value: { type: "deny", reason: "frozen" } } },
+    ] });
+    expect(generationTwo.evaluate(input).verdict).toBe("deny");
+
+    // The gen-1 record must not resurrect the allow under the gen-2 snapshot.
+    const replayed = generationTwo.evaluate({ ...input, recorded: first.gate });
+    expect(replayed.replayed).toBe(false);
+    expect(replayed.verdict).toBe("deny");
+    expect(replayed.generation).toBe(2);
   });
 });
