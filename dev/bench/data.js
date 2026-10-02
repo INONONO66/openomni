@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790927927484,
+  "lastUpdate": 1790935920190,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76419,6 +76419,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 169051,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b4e4b8c656552aed2ee4261bad8827d6e55024c",
+          "message": "#1250 Pin the agent model client to ai 7.0.93 (single major) (#1265)\n\n* #1250: pin ai 7.0.93 and provider majors 4 in agent and openomni manifests\n\n* #1250: migrate model source to ai 7 (isStepCount, instructions, v7 token details; drop v6 cachedInputTokens alias; providers pinned to ai 7.0.93 resolution)\n\n* #1250: unify the three ai module mocks into one 7-signature helper (isStepCount, APICallError pass-through)\n\n* #1250: add model-stream-v7, usage-v7 and max-retries-zero tests\n\n* #1250: document the AI SDK 7 unification (root stamp, agent AGENTS, implementation status, SLOP token rewrite)\n\n* #1250: inline the stop-condition input type to keep the dead-export ratchet at zero\n\n* #1250: keep retired v6 token names out of the receipt prose\n\n* docs(1250): scope the maxRetries test claim to the run() boundary; name the lockfile diff as the ai dependency closure",
+          "timestamp": "2026-10-02T10:09:08Z",
+          "tree_id": "a2547fe9a4f1bd8c37f44f77adbb41c2888c8326",
+          "url": "https://github.com/INONONO66/openomni/commit/9b4e4b8c656552aed2ee4261bad8827d6e55024c"
+        },
+        "date": 1790935919442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 979,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1669,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1388036,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 419292,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6448918,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1114,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 183339,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 755437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 466931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3218,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11767228,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1460399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 17461,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 165931,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 823974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 243016,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14230761,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 172828,
             "unit": "ns/op"
           }
         ]
