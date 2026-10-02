@@ -1,8 +1,8 @@
 import { BusEvent, type ObservationSink, Gateway, type Inbox, type SessionTurn } from "@openomni/protocol";
-import { AsyncLocalStorage } from "node:async_hooks";
+import { Data, Effect, FiberSet, Layer, PubSub, type Scope, Stream } from "effect";
 import { z } from "zod";
+import { ObservationSink as ObservationSinkTag } from "../kernel/ports";
 
-// ─── from observation/bus.ts (#1247) ───
 const DeliveryFailure = z.object({
   eventName: z.string(),
   error: z.string(),
@@ -11,9 +11,9 @@ const DeliveryFailure = z.object({
 type DeliveryFailure = z.infer<typeof DeliveryFailure>;
 
 /**
- * A subscriber or sink failure is reported as data on the plane it failed on;
- * this runner-free package neither throws it nor logs it. Delivery of this
- * event is never reported again: a failing failure report is dropped.
+ * A scoped-sink failure is reported as data on the plane it failed on; this
+ * runner-free package neither throws it nor logs it. Delivery of this event
+ * is never reported again: a failing failure report is dropped.
  */
 export const ObservationDeliveryFailed = BusEvent.define(
   "observation.delivery_failed",
@@ -23,36 +23,17 @@ export const ObservationDeliveryFailed = BusEvent.define(
 
 type FailureReporter = (error: Error, eventName: string) => void;
 
-type BusData = bigint | boolean | null | number | object | string | symbol | undefined;
-type ParseResult<T> = { readonly data: T; readonly success: true } | { readonly success: false };
-type Handler = <T>(event: BusEvent.Descriptor<T>, data: T) => void;
-type Observer = (event: ObservationBus.PublishedDescriptor, data: BusData) => void;
+/** The payload plane of one observation: anything a descriptor schema can carry. */
+export type ObservationData = bigint | boolean | null | number | object | string | symbol | undefined;
 
-interface Subscription {
-  readonly handler: Handler;
+/** One delivered observation: the event name, its declared visibility, and the payload untouched. */
+export interface PublishedObservation {
+  readonly name: string;
+  readonly visibility?: BusEvent.Visibility;
+  readonly data: ObservationData;
 }
 
-interface BusState {
-  readonly subscribers: Map<string, Set<Subscription>>;
-  readonly observers: Set<Observer>;
-}
-
-function createState(): BusState {
-  return { subscribers: new Map(), observers: new Set() };
-}
-
-function toBusData<T>(value: T): BusData {
-  if (value === null) return null;
-  if (typeof value === "object" || typeof value === "function") return value;
-  if (typeof value === "bigint") return value;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value;
-  if (typeof value === "string") return value;
-  if (typeof value === "symbol") return value;
-  return undefined;
-}
-
-function describeFailure(value: BusData): string {
+function describeFailure(value: ObservationData): string {
   try {
     return String(value);
   } catch {
@@ -60,36 +41,22 @@ function describeFailure(value: BusData): string {
   }
 }
 
-function asError(value: BusData): Error {
+function asError(value: ObservationData): Error {
   return value instanceof Error ? value : new Error(describeFailure(value));
 }
 
-function isEventData<T, U>(
-  expected: BusEvent.Descriptor<T>,
-  published: BusEvent.Descriptor<U>,
-  _data: U,
-): _data is U & T {
-  return expected.name === published.name;
-}
+type SinkService = ObservationSink & Required<Pick<ObservationSink, "subscribe" | "scope">>;
 
-export interface ObservationBus extends ObservationSink {
-  scope(identity: Readonly<BusEvent.Metadata>): ObservationSink;
-  subscribe<T>(
+export interface ObservationBus {
+  /** The protocol-shaped port: synchronous lossy publish, callback subscriptions, identity scoping. */
+  readonly sink: SinkService;
+  /** Every observation as a Stream; `PubSub.subscribe` installs the finalizer in the caller's Scope. */
+  readonly observations: Effect.Effect<Stream.Stream<PublishedObservation>, never, Scope.Scope>;
+  /** One event's payloads as a Stream, optionally field-matched, scoped to the caller. */
+  readonly stream: <T>(
     event: BusEvent.Descriptor<T>,
-    handler: (data: T) => void,
-    options?: { match?: Partial<T> },
-  ): () => void;
-  observe(handler: Observer): () => void;
-  reset(): void;
-  withIsolation<T>(operation: () => T): T;
-}
-
-namespace ObservationBus {
-  export interface PublishedDescriptor {
-    readonly name: string;
-    readonly schema: { readonly safeParse: (value: BusData) => ParseResult<BusData> };
-    readonly visibility?: BusEvent.Visibility;
-  }
+    options?: { readonly match?: Partial<T> },
+  ) => Effect.Effect<Stream.Stream<T>, never, Scope.Scope>;
 }
 
 export interface ObservationBusOptions {
@@ -100,90 +67,89 @@ export interface ObservationBusOptions {
   readonly onError?: FailureReporter;
 }
 
-export function createObservationBus(options: ObservationBusOptions): ObservationBus {
-  const onError = options.onError;
-  const rootState = createState();
-  const local = new AsyncLocalStorage<BusState>();
-  const current = () => local.getStore() ?? rootState;
+/** A callback subscriber threw: logged on the subscriber's own fiber, never the publisher's. */
+export class ObservationSubscriberFailure extends Data.TaggedError("ObservationSubscriberFailure")<{
+  readonly eventName: string;
+  readonly cause: string;
+}> {}
 
-  const bus: ObservationBus = {
-    publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-      const state = current();
-      const published: ObservationBus.PublishedDescriptor = {
-        name: event.name,
-        schema: {
-          safeParse(value) {
-            const parsed = event.schema.safeParse(value);
-            return parsed.success
-              ? { success: true, data: toBusData(parsed.data) }
-              : { success: false };
-          },
-        },
-        ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
-      };
-      const publishedData = toBusData(data);
-      for (const observer of [...state.observers]) {
-        queueMicrotask(() => deliver(bus, () => observer(published, publishedData), event.name, onError));
-      }
-      for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(bus, () => subscription.handler(event, data), event.name, onError));
-      }
-    },
-    scope(identity) {
-      return scopeObservation(bus, identity, options);
-    },
-    subscribe<T>(
+/**
+ * The session observation bus (#1249): one unbounded `PubSub` per owning
+ * Scope. Publication is synchronous, nonblocking and lossy — observations are
+ * never journal-durable; `alarm` rows ride the ledger, not this plane.
+ * Subscribers are Streams (or forked callback drains) whose lifetime is a
+ * Scope: closing it shuts the PubSub down and interrupts every drain, so
+ * overlapping generations unsubscribe independently at Scope closure.
+ */
+export const makeObservationBus = (
+  options: ObservationBusOptions,
+): Effect.Effect<ObservationBus, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const pubsub = yield* Effect.acquireRelease(
+      PubSub.unbounded<PublishedObservation>(),
+      PubSub.shutdown,
+    );
+    const forkDrain = yield* FiberSet.makeRuntime<never, void, never>();
+    const observations = Effect.map(PubSub.subscribe(pubsub), Stream.fromSubscription);
+    const stream = <T>(
       event: BusEvent.Descriptor<T>,
-      handler: (data: T) => void,
-      options?: { match?: Partial<T> },
-    ): () => void {
-      const state = current();
-      const subscriptions = state.subscribers.get(event.name) ?? new Set<Subscription>();
-      state.subscribers.set(event.name, subscriptions);
-      const subscription: Subscription = {
-        handler(published, data) {
-          if (!isEventData(event, published, data)) return;
-          if (options?.match !== undefined && !matches(data, options.match)) return;
-          handler(data);
-        },
-      };
-      subscriptions.add(subscription);
-      return () => {
-        subscriptions.delete(subscription);
-        if (subscriptions.size === 0 && state.subscribers.get(event.name) === subscriptions) {
-          state.subscribers.delete(event.name);
-        }
-      };
-    },
-    observe(handler) {
-      const state = current();
-      state.observers.add(handler);
-      return () => state.observers.delete(handler);
-    },
-    reset() {
-      const state = current();
-      state.subscribers.clear();
-      state.observers.clear();
-    },
-    withIsolation<T>(operation: () => T): T {
-      return local.run(createState(), operation);
-    },
-  };
-  return bus;
-}
+      streamOptions?: { readonly match?: Partial<T> },
+    ) =>
+      Effect.map(observations, (all) =>
+        all.pipe(
+          Stream.filter((published) => published.name === event.name),
+          Stream.map((published) => published.data as T),
+          Stream.filter(
+            (data) => streamOptions?.match === undefined || matches(data, streamOptions.match),
+          ),
+        ));
+    const sink: SinkService = {
+      publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
+        PubSub.publishUnsafe(pubsub, {
+          name: event.name,
+          ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
+          data: data as ObservationData,
+        });
+      },
+      subscribe<T>(
+        event: BusEvent.Descriptor<T>,
+        handler: (data: T) => void,
+        subscribeOptions?: { match?: Partial<T> },
+      ): () => void {
+        const fiber = forkDrain(
+          Effect.scoped(
+            Effect.flatMap(
+              stream(event, subscribeOptions),
+              Stream.runForEach((data) =>
+                Effect.suspend(() => {
+                  try {
+                    handler(data);
+                    return Effect.void;
+                  } catch (cause) {
+                    return Effect.logError(
+                      new ObservationSubscriberFailure({
+                        eventName: event.name,
+                        cause: describeFailure(cause as ObservationData),
+                      }),
+                    );
+                  }
+                }),
+              ),
+            ),
+          ),
+        );
+        return () => fiber.interruptUnsafe();
+      },
+      scope: (identity) => scopeObservation(sink, identity, options),
+    };
+    return { sink, observations, stream };
+  });
 
-function deliver(
-  sink: ObservationSink,
-  operation: () => void,
-  eventName: string,
-  onError: FailureReporter | undefined,
-): void {
-  try {
-    operation();
-  } catch (error) {
-    reportObservationFailure(sink, asError(toBusData(error)), eventName, onError);
-  }
-}
+/** The bus as a Layer over the kernel `ObservationSink` service: app-lifetime root or per-generation. */
+export const observationBusLayer = (
+  options: ObservationBusOptions,
+): Layer.Layer<ObservationSinkTag> =>
+  Layer.effect(ObservationSinkTag, Effect.map(makeObservationBus(options), (bus) => bus.sink));
 
 function exposeFailure(sink: ObservationSink, failure: DeliveryFailure): void {
   if (failure.eventName === ObservationDeliveryFailed.name) return;
@@ -211,7 +177,7 @@ function reportObservationFailure(
     exposeFailure(sink, {
       eventName,
       error: describeFailure(error),
-      reporterError: describeFailure(toBusData(reporterError)),
+      reporterError: describeFailure(reporterError as ObservationData),
     });
   }
 }
@@ -247,7 +213,7 @@ export function scopeObservation(
         const stamp = { eventId: id(), time: now(), ...identity };
         sink.publish(event, { ...data, ...stamp });
       } catch (error) {
-        reportObservationFailure(sink, asError(toBusData(error)), event.name, options.onError);
+        reportObservationFailure(sink, asError(error as ObservationData), event.name, options.onError);
       }
     },
     scope(childIdentity) {
@@ -258,7 +224,6 @@ export function scopeObservation(
   return scoped;
 }
 
-// ─── from session-message-observation.ts (#1247) ───
 /** Invoked only after the consuming inbox/action transaction returns its receipt. */
 export function observeDrained(
   rows: readonly Inbox.Row[],

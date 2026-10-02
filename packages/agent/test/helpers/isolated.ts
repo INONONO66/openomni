@@ -1,12 +1,113 @@
 import { openCatalogStore } from "../../src/store/catalog";
 import { openSessionStore } from "../../src/store/session-file";
 import * as SessionHandleStore from "../../src/store/fence";
-import type { LedgerSession } from "@openomni/protocol";
-import { Cause, Effect, Exit } from "effect";
-import type { createObservationBus } from "../../src/session/bus";
-import { testBus } from "./bus";
-import type { RunnerServices } from "../../src/kernel/ports";
-import { runnerTestLayer } from "./service-layers";
+import type { LedgerSession, ObservationSink as ObservationSinkShape } from "@openomni/protocol";
+import { Cause, Context, Effect, Exit, FiberSet, Layer, Scope, Stream } from "effect";
+import {
+  ObservationSubscriberFailure,
+  type ObservationBusOptions,
+  type PublishedObservation,
+  makeObservationBus,
+  scopeObservation,
+} from "../../src/session/bus";
+import { LlmLive } from "../../src/model";
+import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/kernel/gate/compile";
+import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices, type RunnerServices } from "../../src/kernel/ports";
+import { NamedPolicyRegistry } from "../../src/kernel/bundle";
+import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session/run";
+import { entropySource } from "./time";
+
+type FailureReporter = (error: Error, eventName: string) => void;
+
+type SinkService = ObservationSinkShape & Required<Pick<ObservationSinkShape, "subscribe" | "scope">>;
+
+/** A PubSub-backed bus fixture: the protocol sink shape plus test-only taps. */
+export type TestObservationBus = SinkService & {
+  /** Interrupts every fixture subscription; isolates shared fixtures between cases. */
+  reset(): void;
+  /** Taps every published observation; returns the tap's unsubscribe. */
+  observe(watcher: (observation: PublishedObservation) => void): () => void;
+};
+
+/** Fixture buses outlive any one test; this process-lifetime Scope owns them. */
+const fixtureScope = Effect.runSync(Scope.make());
+
+/**
+ * Builds one PubSub observation bus fixture (#1249) in the process-lifetime
+ * fixture Scope. Callback subscriptions ride a fixture-owned FiberSet so
+ * `reset()` can interrupt every leftover tap between test cases.
+ */
+export function testBusService(options: ObservationBusOptions): TestObservationBus {
+  const { bus, taps, fork } = Effect.runSync(
+    Effect.gen(function* () {
+      const bus = yield* makeObservationBus(options);
+      const taps = yield* FiberSet.make<void, never>();
+      const fork = yield* FiberSet.runtime(taps)<never>();
+      return { bus, taps, fork };
+    }).pipe(Scope.provide(fixtureScope)),
+  );
+  const drain = <T>(
+    stream: Effect.Effect<Stream.Stream<T>, never, Scope.Scope>,
+    deliver: (item: T) => void,
+    eventName: string,
+  ): (() => void) => {
+    const fiber = fork(
+      Effect.scoped(Effect.flatMap(stream, Stream.runForEach((item) =>
+        Effect.suspend(() => {
+          try {
+            deliver(item);
+            return Effect.void;
+          } catch (cause) {
+            const error = cause instanceof Error ? cause : new Error(String(cause));
+            if (options.onError !== undefined) {
+              const report = options.onError;
+              return Effect.sync(() => report(error, eventName));
+            }
+            return Effect.logError(new ObservationSubscriberFailure({ eventName, cause: String(error) }));
+          }
+        })))),
+    );
+    return () => fiber.interruptUnsafe();
+  };
+  const fixture: TestObservationBus = {
+    publish: bus.sink.publish,
+    subscribe: (event, handler, subscribeOptions) =>
+      drain(bus.stream(event, subscribeOptions), handler, event.name),
+    scope: (identity) => scopeObservation(fixture, identity, options),
+    observe: (watcher) => drain(bus.observations, watcher, "*"),
+    reset: () => {
+      for (const fiber of taps) fiber.interruptUnsafe();
+    },
+  };
+  return fixture;
+}
+
+/** A bus fixture over deterministic counter sources (#1245: injected, never ambient). */
+export function testBus(onError?: FailureReporter): TestObservationBus {
+  let id = 0;
+  let time = 0;
+  return testBusService({
+    id: () => `event-${++id}`,
+    now: () => ++time,
+    ...(onError === undefined ? {} : { onError }),
+  });
+}
+
+/** The generation-shaped service context every isolated agent program runs under. */
+export const runnerTestLayer = Layer.mergeAll(
+  LlmLive, Layer.succeed(Entropy, entropySource("runner")),
+  Layer.effectContext(Effect.gen(function* () {
+    const snapshot = SessionHandleStore.generationSnapshot({ generation: 1, revertTo: 0, tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1 });
+    const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) });
+    const sink = (yield* makeObservationBus({ id: entropySource("runner-event").id, now: () => 0 })).sink;
+    const owner = yield* makeSessionGenerations({ id: { sessionId: "fixture", generation: 1 }, snapshot, activate: Effect.void,
+      layer: Layer.mergeAll(Layer.succeed(SessionLayer, { snapshot, policy }), Layer.succeed(ToolCatalog, { definitions: [] }),
+        Layer.succeed(ObservationSink, sink), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY)) });
+    const captured = yield* owner.capture();
+    const context = yield* captured.provide(Effect.context<GenerationServices | GenerationOwnership | GenerationRawSlots>());
+    return Context.pick(SessionLayer, ToolCatalog, ObservationSink, NamedPolicyRegistry, GenerationOwnership)(context);
+  })),
+);
 
 /**
  * One isolation's handle-scoped ledger (W5.2 F1): a fresh in-memory session
@@ -22,7 +123,7 @@ export interface IsolatedLedger {
   readonly listSessions: () => LedgerSession.Row[];
   readonly session: ReturnType<typeof openSessionStore>;
   readonly catalog: ReturnType<typeof openCatalogStore>;
-  readonly bus: ReturnType<typeof createObservationBus>;
+  readonly bus: TestObservationBus;
 }
 
 export type IsolatedLedgerHandle = IsolatedLedger & { close: () => void };

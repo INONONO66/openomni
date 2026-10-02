@@ -1,6 +1,7 @@
 import { testToolPorts } from "./tool-ports";
 import { Effect } from "effect";
-import { runnerTestLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
+import { catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
+import { runnerTestLayer } from "../../../../packages/agent/test/helpers/isolated";
 import { acquireSyncEffect } from "./effect";
 import { runEffect } from "./effect";
 import { spyOn } from "bun:test";

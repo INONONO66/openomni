@@ -1,5 +1,6 @@
 import { testToolPorts } from "./helpers/tool-ports";
-import { executorLayer, runnerTestLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
+import { executorLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
+import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
 import { Effect, Layer } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";

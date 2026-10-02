@@ -1,4 +1,5 @@
-import { createObservationBus, type ObservationBus } from "../../src/session/bus";
+export { testBus, testBusService, type TestObservationBus } from "./isolated";
+import { testBus } from "./isolated";
 
 let traceCounter = 0;
 
@@ -8,16 +9,5 @@ export function newTraceId(): string {
   return traceCounter.toString(16).padStart(32, "0");
 }
 
-/** A bus with deterministic scoped-event stamps (counter ids, counter times). */
-export function testBus(onError?: (error: Error, eventName: string) => void): ObservationBus {
-  let id = 0;
-  let time = 0;
-  return createObservationBus({
-    id: () => { id += 1; return `event-${id}`; },
-    now: () => (time += 1),
-    ...(onError === undefined ? {} : { onError }),
-  });
-}
-
-/** The shared fixture bus: tests that used the package-global Bus singleton use this one. */
+/** The package-shared bus fixture; suites reset() it between cases. */
 export const Bus = testBus();

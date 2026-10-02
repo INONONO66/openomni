@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { afterEach, expect, test } from "bun:test";
 import { Bus } from "./helpers/bus";
 import type { SessionTransition } from "@openomni/protocol";
-import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
+import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
 import { dispatchOutboundMessage } from "../src/composition/terminal-message";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { localInbox, testPlane } from "./helpers/ledger";
