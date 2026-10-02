@@ -18,10 +18,12 @@ test("unknown provenance never acts: evidence authority plus a typed violation f
   expect(unknown.authority).toBe("evidence_only");
   expect(unknown.violation?._tag).toBe("InboundAuthorityViolation");
   expect(unknown.violation?.reason).toBe("unknown_origin");
+  expect(unknown.violation?.message).toBe("inbound authority violation: unknown_origin");
 
   const undeclared = inboundAuthority({ kind: "external", messageId: "m", surface: "ws", externalId: "e", actorId: "" });
   expect(undeclared.authority).toBe("evidence_only");
   expect(undeclared.violation?.reason).toBe("undeclared_treatment");
+  expect(undeclared.violation?.message).toBe("inbound authority violation: undeclared_treatment");
 });
 
 test("known trusted origins keep acting with no violation", () => {

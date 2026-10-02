@@ -270,4 +270,12 @@ test("an unbound store refuses to mint instead of reaching for ambient entropy",
   expect(() => unbound.openTab({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
   expect(() => unbound.navigate({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
   expect(() => unbound.newSessionTab()).toThrow(RendererInvariantError);
+
+  // Once bound, every mint reads the injected clock and ids — never ambient.
+  let minted = 0;
+  unbound.bindStorePlatform({ now: () => 42, id: () => `fake-${++minted}` });
+  unbound.newSessionTab();
+  const session = unbound.consoleStore.state.sessions[0];
+  expect(session?.id).toBe("fake-1");
+  expect(session?.createdAt).toBe(42);
 });

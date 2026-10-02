@@ -7,6 +7,7 @@ import type { DiscordGateway } from "../src/provider/discord/gateway";
 
 type GatewayCallbacks = ConstructorParameters<typeof DiscordGateway>[2];
 import { DiscordProvider } from "../src/provider/discord/provider";
+import { GitHubProvider } from "../src/provider/github/provider";
 import { SlackProvider } from "../src/provider/slack/provider";
 import { TelegramClient } from "../src/provider/telegram/client";
 import { TelegramProvider } from "../src/provider/telegram/provider";
@@ -78,8 +79,10 @@ describe("provider retry and receipt paths", () => {
   });
 
   it("provider delivery routes return accepted receipts", async () => {
-    globalThis.fetch = (async (input: string | URL | Request) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input);
+      if (url.hostname === "api.github.com")
+        return init?.method === "POST" ? jsonResponse({ id: 42 }) : jsonResponse([]);
       if (url.hostname === "slack.com" && url.pathname === "/api/conversations.open")
         return jsonResponse({ ok: true, channel: { id: "D1" } });
       if (url.hostname === "discord.com" && url.pathname === "/api/v10/users/@me/channels")
@@ -108,10 +111,17 @@ describe("provider retry and receipt paths", () => {
       () => undefined,
       injectedOptions(),
     ).deliveryRoute?.("T1:U1", "hello", "key-3");
+    const github = await GitHubProvider.create(
+      { secret: "s", token: "t" },
+      {},
+      () => undefined,
+      injectedOptions(),
+    ).deliveryRoute?.("owner/repo#1", "hello", "key-4");
 
     expect(telegram).toEqual({ value: "accepted", externalMessageId: "5" });
     expect(discord).toEqual({ value: "accepted", externalMessageId: "m-9" });
     expect(slack).toEqual({ value: "accepted", externalMessageId: "1.2" });
+    expect(github).toEqual({ value: "accepted", externalMessageId: "42" });
   });
 });
 

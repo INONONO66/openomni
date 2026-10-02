@@ -7,6 +7,8 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 const realClient = { createRoot, hydrateRoot };
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
 import { parseWindowBounds } from "../src/main/window-bounds";
+import { bindStorePlatform, consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
+import { testPlatform } from "./helpers/platform";
 
 type Globals = { document?: object; window?: object; desktop?: DesktopApi };
 const ENVIRONMENT = ["OPENOMNI_WS_URL", "OPENOMNI_WS_TOKEN", "ELECTRON_RENDERER_URL"] as const;
@@ -206,7 +208,13 @@ test("desktop entries register IPC before window creation and render without awa
     await import("../src/renderer/main");
     expect(order).toEqual(["root", "render"]);
     expect(rendered).toHaveLength(1);
+    // The entry bound the host platform (#1245): a store mint reads its ids,
+    // so the session id is a real `crypto.randomUUID` value, never a stub.
+    const sessionId = createSession(0);
+    expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   } finally {
+    consoleStore.setState(() => INITIAL_CLIENT_STATE);
+    bindStorePlatform(testPlatform);
     restoreHost();
     jest.useRealTimers();
     rmSync(userData, { recursive: true, force: true });
