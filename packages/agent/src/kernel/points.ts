@@ -57,7 +57,11 @@ export function composePointTable(options: ComposePointTableOptions): GatePointT
     if (!core.some((record) => record.id === sealed.id))
       throw new GateComposeError({ code: "builtin_removed", point: sealed.id });
   }
-  const table = new Map<string, PointRecord>(core.map((record) => [record.id, record]));
+  const table = new Map<string, PointRecord>();
+  for (const record of core) {
+    if (table.has(record.id)) throw new GateComposeError({ code: "duplicate", point: record.id });
+    table.set(record.id, record);
+  }
   for (const capability of options.capabilities) {
     for (const id of capability.points) {
       const record = capabilityRecords.get(id);
@@ -82,20 +86,18 @@ export const KERNEL_CAPABILITY_POINTS: readonly CapabilityPointRegistration[] = 
   Object.freeze({ bundle: "action", points: Object.freeze(["action.pre"] as const) }),
 ]);
 
-const KERNEL_POINT_TABLE: GatePointTable = composePointTable({
-  capabilities: KERNEL_CAPABILITY_POINTS,
-});
-
 /**
  * Registry lookup replacing the executor's point calculation (#1251): an
  * execution of `kind` consults `<kind>.<phase>` only when that point is
- * registered; an unregistered pre point fails closed and an unregistered post
- * point is simply not consulted (prompt and message have no post point).
+ * registered in the composition's table; an unregistered pre point fails
+ * closed and an unregistered post point is simply not consulted (prompt and
+ * message have no post point). There is no default table: the composed
+ * snapshot carries the table it compiled against.
  */
 export function executionPoint(
   kind: string,
   phase: "pre" | "post",
-  table: GatePointTable = KERNEL_POINT_TABLE,
+  table: GatePointTable,
 ): PointRecord | undefined {
   return table.get(`${kind}.${phase}`);
 }

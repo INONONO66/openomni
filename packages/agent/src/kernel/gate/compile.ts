@@ -14,6 +14,8 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { clonePlain, freezePlain, matchesMessage, type MessagePolicyContext } from "./match";
+import { composePointTable, GateComposeError, KERNEL_CAPABILITY_POINTS, type GatePointTable } from "../points";
+import { compileGateRows, legacyGateRow, translateLegacyPolicyRow } from "./compose";
 
 
 interface NamedTransformer {
@@ -120,6 +122,8 @@ const CompileErrorCode = z.enum([
   "invalid_verdict",
   "unknown_ref",
   "snapshot_load_failed",
+  /** The fourteen-point registry rejected the generation; `composeCode` carries the #1255 code. */
+  "compose_rejected",
 ]);
 type PolicyCompileErrorCode = z.infer<typeof CompileErrorCode>;
 
@@ -132,6 +136,7 @@ const CompileErrorData = z
     kind: z.string().optional(),
     phase: z.enum(["pre", "post"]).optional(),
     ref: z.string().optional(),
+    composeCode: z.string().optional(),
   })
   .strict();
 
@@ -182,6 +187,8 @@ function compileErrorMessage(options: CompileErrorOptions): string {
       return `policy rule ${options.ruleName ?? "<unnamed>"} references unregistered policy ${options.ref ?? "<missing>"}`;
     case "snapshot_load_failed":
       return `policy generation ${options.generation} could not be loaded`;
+    case "compose_rejected":
+      return `policy generation ${options.generation} was rejected by the point registry (${options.composeCode ?? "unknown"}${options.ref === undefined ? "" : `: ${options.ref}`})`;
   }
 }
 
@@ -235,6 +242,8 @@ export interface PolicyEvaluation {
 export interface CompiledPolicySnapshot {
   readonly generation: number;
   readonly contentHash: string;
+  /** The merged point registration table this snapshot compiled against (#1251). */
+  readonly pointTable: GatePointTable;
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
 }
 
@@ -262,6 +271,8 @@ export interface CompilePolicySnapshotOptions {
   readonly rows: readonly PolicyRow.Row[];
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
+  /** The composition's merged point table; defaults to the kernel's built-in capabilities. */
+  readonly table?: GatePointTable;
 }
 
 const DEFAULT_COMPILE_KINDS = [...CORE_ACTION_KINDS, "compaction", "session.configure"] as const;
@@ -574,6 +585,41 @@ function evaluateSnapshot(
   });
 }
 
+/** The kernel's default composition: core plus every built-in capability. */
+function kernelPointTable(): GatePointTable {
+  return composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
+}
+
+/**
+ * Admits a generation through the fourteen-point gate compiler (#1251): every
+ * row must map onto a registered point and satisfy its record. A rejection is
+ * the typed `compose_rejected` compile error carrying the #1255 code.
+ */
+function admitRows(
+  rows: readonly PolicyRow.Row[],
+  generation: number,
+  table: GatePointTable,
+  registry: NamedPolicyRegistry,
+): void {
+  try {
+    compileGateRows({
+      table,
+      rows: rows.map((row, index) => legacyGateRow(row, index, generation, table)),
+      handlers: [...registry.transformers, ...registry.obligations].map(({ name }) => name),
+      generation,
+    });
+  } catch (cause) {
+    if (!GateComposeError.isInstance(cause)) throw cause;
+    throw new PolicyCompileError({
+      code: "compose_rejected",
+      generation,
+      composeCode: cause.data.code,
+      ...(cause.data.point === undefined ? {} : { kind: cause.data.point }),
+      ...(cause.data.ref === undefined ? {} : { ref: cause.data.ref }),
+    });
+  }
+}
+
 export function compilePolicySnapshot(
   options: CompilePolicySnapshotOptions,
 ): CompiledPolicySnapshot {
@@ -589,22 +635,30 @@ export function compilePolicySnapshot(
   }
   const kinds = new Set(options.kinds ?? DEFAULT_COMPILE_KINDS);
   const registry = createNamedPolicyRegistry(options.registry);
-  const rows = options.rows.map((row) => parseRow(row, options.generation, kinds, registry));
+  const table = options.table ?? kernelPointTable();
+  // Historical compaction rows convert onto the compaction point before
+  // evaluation, so a base-era `turn/post {op: compaction}` deny keeps
+  // refusing summarization (#1251).
+  const translated = options.rows.map(translateLegacyPolicyRow);
+  const rows = translated.map((row) => parseRow(row, options.generation, kinds, registry));
+  admitRows(translated, options.generation, table, registry);
   const contentHash = canonicalDigest(contentIdentity(options.rows));
   const buckets = buildBuckets(rows);
   return Object.freeze({
     generation: options.generation,
     contentHash,
+    pointTable: table,
     evaluate: (input: PolicyEvaluationInput) =>
       evaluateSnapshot(options.generation, contentHash, buckets, input),
   });
 }
 
-function failedSnapshot(error: PolicyCompileError): CompiledPolicySnapshot {
+function failedSnapshot(error: PolicyCompileError, table: GatePointTable): CompiledPolicySnapshot {
   const contentHash = canonicalDigest({ generation: error.generation, error: error.data });
   return Object.freeze({
     generation: error.generation,
     contentHash,
+    pointTable: table,
     evaluate(input: PolicyEvaluationInput) {
       return Object.freeze({
         generation: error.generation,
@@ -613,7 +667,7 @@ function failedSnapshot(error: PolicyCompileError): CompiledPolicySnapshot {
         matchedRuleIds: Object.freeze([]),
         transforms: Object.freeze([]),
         verdict: "deny",
-        reason: error.code,
+        reason: error.data.composeCode ?? error.code,
         value: clonePlain(input.value),
         effects: Object.freeze([]),
         obligations: Object.freeze([]),
@@ -636,10 +690,12 @@ export function createPolicyCompiler(options: {
   readonly source: Pick<Storage.PolicyRowSubAdapter, "rows">;
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
+  readonly table?: GatePointTable;
 }): PolicyCompiler {
   const registry = createNamedPolicyRegistry(options.registry);
   const cache = new Map<number, CompiledPolicySnapshot>();
   const mandatory = options.mandatory ?? MANDATORY_RULE_NAMES;
+  const table = options.table ?? kernelPointTable();
 
   function pin(generation: number): CompiledPolicySnapshot {
     const found = cache.get(generation);
@@ -660,6 +716,7 @@ export function createPolicyCompiler(options: {
           generation,
           message: "policy snapshot load failed",
         }),
+        table,
       );
     }
     try {
@@ -668,10 +725,11 @@ export function createPolicyCompiler(options: {
         generation,
         rows,
         mandatory,
+        table,
         ...(options.kinds === undefined ? {} : { kinds: options.kinds }),
       });
     } catch (error) {
-      if (PolicyCompileError.isInstance(error)) return failedSnapshot(error);
+      if (PolicyCompileError.isInstance(error)) return failedSnapshot(error, table);
       throw error;
     }
   }

@@ -64,7 +64,10 @@ function point(
 /** Eight core points: fixed loop locations the agent core always registers. */
 export const CORE_POINT_RECORDS: readonly PointRecord[] = Object.freeze([
   point("ingress.pre", "core", ["gate", "rewrite", "observe"], ["visibility"], ["kind", "channel", "actor", "grant"]),
-  point("session.open", "core", ["emit", "observe"], [], ["generation"]),
+  // `gate` is allowed at session.open: the core's configure authority
+  // evaluates historical `session.configure` rows at this point (#1251);
+  // #1252/#1255 own reshaping configuration gating.
+  point("session.open", "core", ["gate", "emit", "observe"], [], ["generation"]),
   point("prompt.pre", "core", ["gate", "rewrite", "emit", "observe"], ["body", "visibility"], ["kind", "origin", "delivery"]),
   point("turn.pre", "core", ["gate", "rewrite", "emit", "observe"], ["budget"], ["kind"]),
   point("turn.post", "core", ["gate", "rewrite", "observe"], ["budget", "stop"], ["kind", "stopReason", "metric"], true),

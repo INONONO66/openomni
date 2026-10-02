@@ -83,8 +83,9 @@ export async function armWatch(
   const turn = Journal.SessionHandleStore.turnIntent(kernel.actionById(context.turnId));
   if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
   const { policy } = currentInvocation();
-  // The monitor consults the registered `tool.pre` point (#1251), never an independent policy.
-  if (executionPoint("tool", "pre") === undefined)
+  // The monitor consults the registered `tool.pre` point (#1251) in the
+  // generation's composed table, never an independent policy.
+  if (executionPoint("tool", "pre", policy.pointTable) === undefined)
     throw new ToolRefused("monitor", "tool.pre point unregistered");
   const evaluation = policy.evaluate({
     kind: "tool",

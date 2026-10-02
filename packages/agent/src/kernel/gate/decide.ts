@@ -1223,10 +1223,9 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   const kinds = new Set([...CORE_KINDS, ...(options.extensionKinds ?? []).map((item) => item.kind)]);
   const turnId = options.identity.turnId ?? options.identity.parentActionId;
 
-  /** Registry lookup (#1251): a kind consults `<kind>.<phase>` only when that point is registered; extension kinds register their own consultation points. */
-  const extensions = new Set((options.extensionKinds ?? []).map((item) => item.kind));
+  /** Registry lookup (#1251): a kind consults `<kind>.<phase>` only when that point is registered in the snapshot's composed table; there is no bypass — an extension kind without a point record fails closed. */
   function consulted(kind: string, phase: "pre" | "post"): boolean {
-    return executionPoint(kind, phase) !== undefined || extensions.has(kind);
+    return executionPoint(kind, phase, options.policy.pointTable) !== undefined;
   }
   /** An unregistered point fails closed: the registration table, not the row set, defines where policy applies. */
   function gatedByRegistry(evaluated: PolicyEvaluation, request: ExecutionRequest, phase: "pre" | "post"): PolicyEvaluation {

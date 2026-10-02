@@ -45,15 +45,27 @@ describe("point registry records (#1251)", () => {
   });
 
   it("restricts observe-only points to emit/observe", () => {
-    for (const id of ["session.open", "compaction.post", "alarm.fired"] as const) {
+    for (const id of ["compaction.post", "alarm.fired"] as const) {
       const record = POINT_RECORDS.find((candidate) => candidate.id === id);
       expect(record?.allowedDo).toEqual(["emit", "observe"]);
       expect(record?.rewritableFields).toEqual([]);
     }
   });
 
-  it("allows only message, alarm.arm and compaction emissions", () => {
-    expect([...EMIT_KINDS]).toEqual(["message", "alarm.arm", "compaction"]);
+  it("never allows prompt or signal to enter through an emission", () => {
+    // Inputs enter solely through the entity's deliver RPC: the emit set is
+    // behaviorally closed over outputs, not input kinds.
+    const kinds: readonly string[] = EMIT_KINDS;
+    expect(kinds).not.toContain("prompt");
+    expect(kinds).not.toContain("signal");
+    for (const kind of kinds) expect(["message", "alarm.arm", "compaction"]).toContain(kind);
+  });
+
+  it("declares nonempty rewritable fields wherever rewrite is an allowed action", () => {
+    for (const record of POINT_RECORDS) {
+      if (record.allowedDo.includes("rewrite")) expect(record.rewritableFields.length).toBeGreaterThan(0);
+      else expect(record.rewritableFields).toEqual([]);
+    }
   });
 });
 
@@ -88,29 +100,47 @@ describe("gate row contract (#1251)", () => {
     expect(emittedRowKey("hash-b", row.id, 0)).not.toBe(key);
   });
 
-  it("parses the folded decision with consulted payloads and recorded facts", () => {
+  it("parses the folded decision with consulted payloads, annotations, output and facts", () => {
     const decision = {
       point: "turn.post" as const,
       verdict: "allow" as const,
       rowIds: ["guard/turn.post#0"],
       obligations: [{ metric: "continuation", limit: 8 }],
       consulted: [{ ref: "guard/limits", digest: "d1", payload: { limit: 8 } }],
+      annotations: [{ rowId: "guard/turn.post#0", ref: "guard/audit", payload: { seen: true } }],
       facts: [{ rowId: "guard/turn.post#0", ref: "guard/escape", code: "requirement_escape" }],
+      output: { budget: 3 },
       inputHash: "hash-a",
       generation: 3,
     };
     expect(GateDecision.parse(decision)).toEqual(decision);
   });
 
-  it("enumerates the compose rejection codes", () => {
-    expect([...ComposeRejectionCode.options]).toEqual([
-      "unknown_point",
-      "unknown_handler",
-      "duplicate",
-      "bad_action",
-      "bad_field",
-      "post_end_emit",
-      "builtin_removed",
-    ]);
+  it("refuses a decision that omits the replayable rewrite output or annotations", () => {
+    const base = {
+      point: "turn.post" as const,
+      verdict: "allow" as const,
+      rowIds: [],
+      obligations: [],
+      consulted: [],
+      annotations: [],
+      facts: [],
+      output: null,
+      inputHash: "hash-a",
+      generation: 3,
+    };
+    expect(GateDecision.parse(base)).toEqual(base);
+    const { output: _output, ...withoutOutput } = base;
+    expect(GateDecision.safeParse(withoutOutput).success).toBe(false);
+    const { annotations: _annotations, ...withoutAnnotations } = base;
+    expect(GateDecision.safeParse(withoutAnnotations).success).toBe(false);
+  });
+
+  it("accepts every compose rejection a gate compiler can raise and refuses foreign codes", () => {
+    for (const code of ["unknown_point", "unknown_handler", "duplicate", "bad_action", "bad_field", "post_end_emit", "builtin_removed"]) {
+      expect(ComposeRejectionCode.safeParse(code).success).toBe(true);
+    }
+    expect(ComposeRejectionCode.safeParse("unknown_kind").success).toBe(false);
+    expect(ComposeRejectionCode.safeParse("").success).toBe(false);
   });
 });

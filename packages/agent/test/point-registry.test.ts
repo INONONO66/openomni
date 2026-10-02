@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { CORE_POINT_RECORDS } from "@openomni/protocol";
 import { compileGateRows } from "../src/kernel/gate/compose";
 import {
   composePointTable,
@@ -33,6 +34,17 @@ describe("point registration table (#1251)", () => {
             { bundle: "tool", points: ["tool.pre"] },
             { bundle: "shadow-tool", points: ["tool.pre"] },
           ],
+        }),
+      ),
+    ).toBe("duplicate");
+  });
+
+  it("rejects a repeated core point registration with `duplicate` (#1251 r1)", () => {
+    expect(
+      rejectionCode(() =>
+        composePointTable({
+          core: [...CORE_POINT_RECORDS, ...CORE_POINT_RECORDS.slice(0, 1)],
+          capabilities: [],
         }),
       ),
     ).toBe("duplicate");

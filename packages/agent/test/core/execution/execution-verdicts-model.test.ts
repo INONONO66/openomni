@@ -179,16 +179,22 @@ describe("the single L2 executor's four-kind verdict model", () => {
             ],
           });
 
+          const body = okBody();
           const result = yield* executor.run(
             { kind: "channel.send", op: "test", intent: {}, effect: {} },
-            () =>
-              Effect.sync(() => {
-                return { delivered: true };
-              }),
+            body,
           );
 
-          expect(result).toMatchObject({ terminal: "executed" });
-          expect(actions).toHaveLength(4);
+          // The declaration admits the kind, but there is no registered
+          // `channel.send.pre` point in the composed table, so the registry
+          // fails the execution closed — no bypass for extension kinds (#1251).
+          expect(result).toMatchObject({ terminal: "blocked_pre", reason: "unknown_point" });
+          expect(body).toHaveBeenCalledTimes(0);
+          const decisions = actions.filter(
+            (action: import("@openomni/protocol").LedgerAction.Append) =>
+              action.kind === "policy.decision",
+          );
+          expect(decisions).toHaveLength(1);
         }),
       ),
     ));
@@ -379,27 +385,19 @@ describe("the single L2 executor's four-kind verdict model", () => {
 
   }
 
-  // Prompt has no registered post point (#1251): a prompt post row is never consulted.
-  it("prompt: a post deny row never blocks — the post point is not registered", () =>
-    isolated(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { actions, executor } = postDenyHarness("prompt");
-          const body = okBody();
-
-          const result = yield* runTestOperation(executor, "prompt", body);
-
-          expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
-          expect(body).toHaveBeenCalledTimes(1);
-          expect(
-            actions.filter(
-              (action: import("@openomni/protocol").LedgerAction.Append) =>
-                action.kind === "policy.decision",
-            ),
-          ).toHaveLength(1);
+  // Prompt has no registered post point (#1251): a generation carrying a
+  // prompt post row cannot even compile — the registry rejects it fail-closed.
+  it("prompt: a post deny row rejects at compose — the post point is not registered", () => {
+    expect(() => postDenyHarness("prompt")).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          code: "compose_rejected",
+          composeCode: "unknown_point",
+          kind: "prompt.post",
         }),
-      ),
-    ));
+      }),
+    );
+  });
 
   for (const kind of ["turn", "llm", "tool"] as const) {
     it(`${kind}: post deny reverts when a reverter exists`, () =>

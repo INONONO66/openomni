@@ -585,22 +585,28 @@ describe("durable session handle", () => {
       expect(inbox).toEqual(["consumed"]);
     }));
 
-  test("a prompt post row is never consulted: prompt has no post point (#1251)", () =>
+  // Prompt has no post point (#1251): a generation carrying a prompt post row
+  // is rejected wholesale by the point registry at compile, and every
+  // execution against the rejected generation fails closed.
+  test("a generation with a prompt post row fails closed: the registry rejects it and no turn runs", () =>
     testProgram(
       Effect.gen(function* () {
+        let calls = 0;
         const handle = yield* declare(
-          residentOptions("prompt-post-unconsulted", () =>
+          residentOptions("prompt-post-rejected", () =>
             Effect.sync(() => {
-              return { kind: "result", text: "ran" };
+              calls += 1;
+              return { kind: "result", text: "must not run" };
             }),
           ),
         );
-        const result = yield* awaitSignal(handle.prompt("not blocked"));
-        expect(result).toEqual({ kind: "result", text: "ran" });
-        const hooks = tree(handle.id)
-          .filter((action) => action.kind === "policy.decision")
-          .map(policyHook);
-        expect(hooks).not.toContain("prompt.post");
+        const result = yield* awaitSignal(handle.prompt("rejected generation"));
+        expect(result).toMatchObject({
+          kind: "error",
+          cause: { _tag: "SessionPolicyRefusal", reason: "unknown_point" },
+        });
+        expect(calls).toBe(0);
+        expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
       }),
       {
         policies: [
@@ -610,41 +616,6 @@ describe("durable session handle", () => {
             phase: "post",
             match: { encodingVersion: 1, value: { op: "inbox" } },
             verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
-            priority: 2_000,
-          },
-        ],
-      },
-    ));
-
-  test("a prompt post transform row never touches the immutable receipt: prompt has no post point (#1251)", () =>
-    testProgram(
-      Effect.gen(function* () {
-        let calls = 0;
-        const handle = yield* declare(
-          residentOptions("prompt-transform", () =>
-            Effect.sync(() => {
-              calls += 1;
-              return { kind: "result", text: "runs untouched" };
-            }),
-          ),
-        );
-
-        const result = yield* awaitSignal(handle.prompt("immutable prompt"));
-
-        expect(result).toEqual({ kind: "result", text: "runs untouched" });
-        expect(calls).toBe(1);
-      }),
-      {
-        policies: [
-          {
-            name: "transform-prompt-receipt",
-            kind: "prompt",
-            phase: "post",
-            match: { encodingVersion: 1, value: { op: "inbox" } },
-            verdict: {
-              encodingVersion: 1,
-              value: { type: "transform", name: "redact", paths: ["result.status"] },
-            },
             priority: 2_000,
           },
         ],
