@@ -1228,6 +1228,11 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   function consulted(kind: string, phase: "pre" | "post"): boolean {
     return executionPoint(kind, phase) !== undefined || extensions.has(kind);
   }
+  /** An unregistered point fails closed: the registration table, not the row set, defines where policy applies. */
+  function gatedByRegistry(evaluated: PolicyEvaluation, request: ExecutionRequest, phase: "pre" | "post"): PolicyEvaluation {
+    if (consulted(request.kind, phase)) return evaluated;
+    return { ...evaluated, verdict: "deny", reason: "unknown_point" };
+  }
   function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
     parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
     return Effect.suspend(() => {
@@ -1235,9 +1240,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         kind: request.kind, phase, op: request.op, role: options.identity.role, sessionId: options.identity.sessionId,
         ...(request.message === undefined ? {} : { message: request.message }), value,
       });
-      // An unregistered point fails closed: the registration table, not the row set, defines where policy applies.
-      const decision = consulted(request.kind, phase) ? evaluated
-        : { ...evaluated, verdict: "deny" as const, reason: "unknown_point" };
+      const decision = gatedByRegistry(evaluated, request, phase);
       return record.commit({
         id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
         intent: { encodingVersion: 1, value: {

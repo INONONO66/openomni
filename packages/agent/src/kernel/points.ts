@@ -82,7 +82,7 @@ export const KERNEL_CAPABILITY_POINTS: readonly CapabilityPointRegistration[] = 
   Object.freeze({ bundle: "action", points: Object.freeze(["action.pre"] as const) }),
 ]);
 
-export const KERNEL_POINT_TABLE: GatePointTable = composePointTable({
+const KERNEL_POINT_TABLE: GatePointTable = composePointTable({
   capabilities: KERNEL_CAPABILITY_POINTS,
 });
 

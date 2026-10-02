@@ -24,19 +24,19 @@ import { GateComposeError, type GatePointTable } from "../points";
 const emitKinds: ReadonlySet<string> = new Set(EMIT_KINDS);
 
 /** A dynamic service reference outside the row's requires; recorded as a fact at call time. */
-export const GateRequirementError = NamedError.create(
+const GateRequirementError = NamedError.create(
   "GateRequirementError",
   z.object({ rowId: z.string(), ref: z.string() }).strict(),
 );
 
-export interface GateHandlerInput {
+interface GateHandlerInput {
   readonly value: PlainValue;
   readonly params: PlainValue;
   /** The row's requires collection: only the row's own `how.ref` resolves. */
   readonly service: (ref: string) => GateHandler;
 }
 
-export interface GateHandlerResult {
+interface GateHandlerResult {
   readonly verdict?: GateVerdict;
   readonly value?: PlainValue;
   /** Recorded as the consulted payload; an undefined payload is observe-only. */
@@ -45,25 +45,25 @@ export interface GateHandlerResult {
 
 export type GateHandler = (input: GateHandlerInput) => GateHandlerResult;
 
-export interface GateEmission {
+interface GateEmission {
   readonly key: string;
   readonly kind: EmitKind;
   readonly rowId: string;
   readonly intent: PlainValue;
 }
 
-export interface GateDecideInput {
+interface GateDecideInput {
   readonly when: Readonly<Record<string, PlainValue>>;
   readonly value: PlainValue;
 }
 
-export interface GateDecideOptions {
+interface GateDecideOptions {
   readonly handlers?: (ref: string) => GateHandler | undefined;
   /** A persisted decision for this point; same input hash replays it verbatim. */
   readonly recorded?: GateDecision;
 }
 
-export interface GateOutcome {
+interface GateOutcome {
   readonly decision: GateDecision;
   readonly value: PlainValue;
   readonly emissions: readonly GateEmission[];
@@ -93,26 +93,32 @@ function reject(code: GateComposeError["data"]["code"], row: GateRow, detail?: s
   });
 }
 
-function validateRow(row: GateRow, record: PointRecord, handlers: ReadonlySet<string>): void {
-  if (!record.allowedDo.includes(row.do)) {
-    if (row.do === "emit" && record.end === true) reject("post_end_emit", row);
-    reject("bad_action", row, row.do);
-  }
+function validateAction(row: GateRow, record: PointRecord): void {
+  if (record.allowedDo.includes(row.do)) return;
+  if (row.do === "emit" && record.end === true) reject("post_end_emit", row);
+  reject("bad_action", row, row.do);
+}
+
+function validateFields(row: GateRow, record: PointRecord): void {
   for (const field of Object.keys(row.when)) {
     if (!record.whenFields.includes(field)) reject("bad_field", row, field);
   }
-  if (row.do === "rewrite") {
-    const fields = row.how.fields ?? [];
-    if (fields.length === 0) reject("bad_field", row, "fields");
-    for (const field of fields) {
-      if (!record.rewritableFields.includes(field)) reject("bad_field", row, field);
-    }
+  if (row.do !== "rewrite") return;
+  const fields = row.how.fields ?? [];
+  if (fields.length === 0) reject("bad_field", row, "fields");
+  for (const field of fields) {
+    if (!record.rewritableFields.includes(field)) reject("bad_field", row, field);
   }
-  if (row.do === "emit") {
-    if (record.end === true) reject("post_end_emit", row);
-    if (row.how.emit === undefined || !emitKinds.has(row.how.emit))
-      reject("bad_action", row, row.how.emit ?? "emit");
-  }
+}
+
+function validateEmit(row: GateRow, record: PointRecord): void {
+  if (row.do !== "emit") return;
+  if (record.end === true) reject("post_end_emit", row);
+  if (row.how.emit === undefined || !emitKinds.has(row.how.emit))
+    reject("bad_action", row, row.how.emit ?? "emit");
+}
+
+function validateHow(row: GateRow, handlers: ReadonlySet<string>): void {
   const constant = row.how.verdict !== undefined || row.how.metric !== undefined;
   if (row.do === "gate" && !constant && row.how.ref === undefined) reject("bad_action", row, "how");
   if ((row.do === "rewrite" || row.do === "observe") && row.how.ref === undefined)
@@ -121,6 +127,13 @@ function validateRow(row: GateRow, record: PointRecord, handlers: ReadonlySet<st
     reject("bad_field", row, "limit");
   if (row.how.ref !== undefined && !handlers.has(row.how.ref))
     reject("unknown_handler", row, row.how.ref);
+}
+
+function validateRow(row: GateRow, record: PointRecord, handlers: ReadonlySet<string>): void {
+  validateAction(row, record);
+  validateFields(row, record);
+  validateEmit(row, record);
+  validateHow(row, handlers);
 }
 
 function matches(row: GateRow, when: Readonly<Record<string, PlainValue>>): boolean {
@@ -184,75 +197,9 @@ export function compileGateRows(options: CompileGateRowsOptions): CompiledGate {
         replayed: true,
       };
     }
-    const state = {
-      verdict: "allow" as GateVerdict,
-      rowIds: [] as string[],
-      obligations: [] as { metric: string; limit: number }[],
-      consulted: [] as { ref: string; digest: string; payload: PlainValue }[],
-      facts: [] as { rowId: string; ref: string; code: string }[],
-      value: input.value,
-      emissions: [] as GateEmission[],
-    };
+    const state = initialFoldState(input.value);
     for (const row of rowsAt(point)) {
-      if (!matches(row, input.when)) continue;
-      state.rowIds.push(row.id);
-      if (row.how.metric !== undefined && row.how.limit !== undefined)
-        state.obligations.push({ metric: row.how.metric, limit: row.how.limit });
-      if (row.do === "observe") continue;
-      if (row.do === "emit") {
-        state.emissions.push({
-          key: emittedRowKey(inputHash, row.id, state.emissions.length),
-          kind: row.how.emit as EmitKind,
-          rowId: row.id,
-          intent: row.how.intent ?? null,
-        });
-        continue;
-      }
-      if (row.how.verdict !== undefined) {
-        state.verdict = foldVerdict(state.verdict, row.how.verdict);
-        continue;
-      }
-      const ref = row.how.ref;
-      if (ref === undefined) continue;
-      const handler = decideOptions.handlers?.(ref);
-      if (handler === undefined) {
-        state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
-        state.verdict = foldVerdict(state.verdict, "deny");
-        continue;
-      }
-      let result: GateHandlerResult;
-      try {
-        result = handler({
-          value: state.value,
-          params: row.how.params ?? null,
-          service: (requested) => {
-            const resolved = requested === ref ? decideOptions.handlers?.(requested) : undefined;
-            if (resolved === undefined)
-              throw new GateRequirementError({ rowId: row.id, ref: requested });
-            return resolved;
-          },
-        });
-      } catch (cause) {
-        if (!GateRequirementError.isInstance(cause)) throw cause;
-        state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
-        state.verdict = foldVerdict(state.verdict, "deny");
-        continue;
-      }
-      if (result.payload === undefined) {
-        // Unrecorded response: observe-only; it cannot change the decision.
-        state.facts.push({ rowId: row.id, ref, code: "unrecorded_response" });
-        continue;
-      }
-      state.consulted.push({
-        ref,
-        digest: canonicalDigest(result.payload),
-        payload: result.payload,
-      });
-      if (row.do === "rewrite") {
-        state.value = applyRewrite(state.value, row.how.fields ?? [], result.value ?? null);
-        continue;
-      }
-      state.verdict = foldVerdict(state.verdict, result.verdict ?? "allow");
+      if (matches(row, input.when)) applyRow(row, state, inputHash, decideOptions);
     }
     return {
       decision: GateDecision.parse({
@@ -272,6 +219,89 @@ export function compileGateRows(options: CompileGateRowsOptions): CompiledGate {
   }
 
   return { generation: options.generation, rowsAt, decide };
+}
+
+interface FoldState {
+  verdict: GateVerdict;
+  readonly rowIds: string[];
+  readonly obligations: { metric: string; limit: number }[];
+  readonly consulted: { ref: string; digest: string; payload: PlainValue }[];
+  readonly facts: { rowId: string; ref: string; code: string }[];
+  value: PlainValue;
+  readonly emissions: GateEmission[];
+}
+
+function initialFoldState(value: PlainValue): FoldState {
+  return { verdict: "allow", rowIds: [], obligations: [], consulted: [], facts: [], value, emissions: [] };
+}
+
+function applyRow(
+  row: GateRow,
+  state: FoldState,
+  inputHash: string,
+  decideOptions: GateDecideOptions,
+): void {
+  state.rowIds.push(row.id);
+  if (row.how.metric !== undefined && row.how.limit !== undefined)
+    state.obligations.push({ metric: row.how.metric, limit: row.how.limit });
+  if (row.do === "observe") return;
+  if (row.do === "emit") {
+    state.emissions.push({
+      key: emittedRowKey(inputHash, row.id, state.emissions.length),
+      kind: row.how.emit as EmitKind,
+      rowId: row.id,
+      intent: row.how.intent ?? null,
+    });
+    return;
+  }
+  if (row.how.verdict !== undefined) {
+    state.verdict = foldVerdict(state.verdict, row.how.verdict);
+    return;
+  }
+  if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, decideOptions);
+}
+
+/** Calls the row's handler under the requirement guard and folds its recorded response. */
+function consultRow(
+  row: GateRow,
+  ref: string,
+  state: FoldState,
+  decideOptions: GateDecideOptions,
+): void {
+  const handler = decideOptions.handlers?.(ref);
+  if (handler === undefined) {
+    state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
+    state.verdict = foldVerdict(state.verdict, "deny");
+    return;
+  }
+  let result: GateHandlerResult;
+  try {
+    result = handler({
+      value: state.value,
+      params: row.how.params ?? null,
+      service: (requested) => {
+        const resolved = requested === ref ? decideOptions.handlers?.(requested) : undefined;
+        if (resolved === undefined) throw new GateRequirementError({ rowId: row.id, ref: requested });
+        return resolved;
+      },
+    });
+  } catch (cause) {
+    if (!GateRequirementError.isInstance(cause)) throw cause;
+    state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
+    state.verdict = foldVerdict(state.verdict, "deny");
+    return;
+  }
+  if (result.payload === undefined) {
+    // Unrecorded response: observe-only; it cannot change the decision.
+    state.facts.push({ rowId: row.id, ref, code: "unrecorded_response" });
+    return;
+  }
+  state.consulted.push({ ref, digest: canonicalDigest(result.payload), payload: result.payload });
+  if (row.do === "rewrite") {
+    state.value = applyRewrite(state.value, row.how.fields ?? [], result.value ?? null);
+    return;
+  }
+  state.verdict = foldVerdict(state.verdict, result.verdict ?? "allow");
 }
 
 // ─── latest-only catalog migration (#1251) ───
