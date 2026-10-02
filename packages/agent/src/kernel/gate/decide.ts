@@ -2,7 +2,7 @@ import type { LedgerError } from "../../store/errors";
 import { Effect, Scope, Context, Deferred, Exit, Cause, Option, Clock, Fiber } from "effect";
 import * as Failure from "../failure";
 import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFailed, ExecutionApprovalError, PolicyDenied, AgentFailure, Interrupted, OutcomeUnknown } from "../failure";
-import { type BusEvent, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
+import { type BusEvent, GateDecision, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } from "./compile";
 import type { RetryAlarmPort, AlarmSenders } from "../alarm";
 import { createRetryAlarmPort } from "../../session/alarm";
@@ -1247,6 +1247,9 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
           matchedRuleIds: [...decision.matchedRuleIds], verdict: decision.verdict, inputHash: decision.inputHash,
           transforms: decision.transforms.map((transform) => ({ ...transform })),
           ...(decision.ref === undefined ? {} : { ref: decision.ref }),
+          // The gate's replayable decision (#1251 r3): recorded handler
+          // responses, rewrite output, facts — re-admission replays this.
+          ...(decision.gate === undefined ? {} : { gate: decision.gate }),
         } },
         effect: { encodingVersion: 1, value: {
           phase: "result", reason: decision.reason ?? null,
@@ -1282,16 +1285,23 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         sessionId: options.identity.sessionId, ...(request.message === undefined ? {} : { message: request.message }), value: request.intent });
       const action = recordedDecision(options.ledger, original, intent.policyDecisionId);
       if (action === undefined || intent.value === undefined) throw new ExecutionApprovalError({ code: "stale_approval" });
-      const verdict = recordedVerdict(object(action.intent.value).verdict);
-      const recorded = SessionHistory.PolicyDecision.parse({ ...object(action.intent.value),
+      const { gate, ...decisionIntent } = object(action.intent.value);
+      const verdict = recordedVerdict(decisionIntent.verdict);
+      const recorded = SessionHistory.PolicyDecision.parse({ ...decisionIntent,
         revision: action.ordinal, actionId: action.id, subjectActionId: action.parentId, turnId: options.identity.turnId ?? null,
         reason: object(action.effect.value).reason ?? null,
       });
       if (recorded.inputHash !== inputHash || recorded.generation !== options.policy.generation ||
           recorded.hook !== `${request.kind}.pre` || recorded.op !== request.op)
         throw new ExecutionApprovalError({ code: "stale_approval" });
+      // Re-admission replays the committed gate decision (#1251 r3): the
+      // recorded responses are the evidence, so no handler ever re-runs. A
+      // decision recorded before this contract carries no gate evidence and
+      // keeps admitting its recorded bytes.
+      const evidence = GateDecision.safeParse(gate);
+      const value = evidence.success ? replayRecordedValue(options.policy, request, options.identity, evidence.data) : intent.value;
       return { generation: recorded.generation, verdict, transforms: recorded.transforms,
-        value: intent.value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
+        value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
         receipt: { action, revision: action.ordinal } };
     }, catch: (cause) => cause instanceof ExecutionApprovalError ? cause : new AgentFailure({ operation: "executor.recover_admission", cause: String(cause) }) });
   }
@@ -1620,6 +1630,21 @@ function recordedDecision(ledger: ExecutorOptions["ledger"], original: LedgerAct
   const action = typeof decisionId === "string" ? ledger.actionById?.(decisionId) : undefined;
   return action?.sessionId === original.sessionId && action.kind === "policy.decision" && action.ordinal < original.ordinal ? action : undefined;
 }
+/** Replays the committed gate decision through the pinned snapshot; anything but a verbatim replay is a stale approval. */
+function replayRecordedValue(
+  policy: CompiledPolicySnapshot,
+  request: ExecutionRequest,
+  identity: ExecutorOptions["identity"],
+  recorded: GateDecision,
+): PlainValue {
+  const replayed = policy.evaluate({
+    kind: request.kind, phase: "pre", op: request.op, role: identity.role, sessionId: identity.sessionId,
+    ...(request.message === undefined ? {} : { message: request.message }), value: request.intent, recorded,
+  });
+  if (replayed.replayed !== true) throw new ExecutionApprovalError({ code: "stale_approval" });
+  return replayed.value;
+}
+
 function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
   const parsed = RowVerdictType.safeParse(verdict);
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });

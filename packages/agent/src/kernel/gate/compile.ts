@@ -2,6 +2,7 @@ import {
   canonicalDigest,
   Gateway,
   NamedError,
+  type GateDecision,
   type GateRow,
   type PlainValue,
   PlainValueSchema,
@@ -215,6 +216,12 @@ export interface PolicyEvaluationInput {
   readonly sessionId?: string;
   readonly message?: MessagePolicyContext;
   readonly value: PlainValue;
+  /**
+   * A previously committed gate decision for this input (#1251 r3): the gate
+   * replays it verbatim — recorded responses included — without invoking
+   * handlers. Excluded from the evaluation's input identity.
+   */
+  readonly recorded?: GateDecision;
 }
 
 interface CompiledObligation {
@@ -239,6 +246,10 @@ export interface PolicyEvaluation {
   readonly obligations: readonly CompiledObligation[];
   readonly bucket: string;
   readonly evaluatedRuleCount: number;
+  /** The gate's replayable decision: recorded responses, rewrite output, facts. */
+  readonly gate?: GateDecision;
+  /** True when `recorded` was replayed verbatim instead of re-evaluated. */
+  readonly replayed?: boolean;
   readonly error?: Readonly<z.infer<typeof CompileErrorData>>;
 }
 
@@ -565,11 +576,14 @@ function evaluateProjected(
   table: GatePointTable,
   input: PolicyEvaluationInput,
 ): PolicyEvaluation {
+  // The recorded decision is replay input, never part of the input identity.
+  const { recorded, ...identity } = input;
+  const inputHash = canonicalDigest(identity);
   const refused = (reason: string): PolicyEvaluation =>
     Object.freeze({
       generation,
       snapshotHash: contentHash,
-      inputHash: canonicalDigest(input),
+      inputHash,
       matchedRuleIds: Object.freeze([]),
       transforms: Object.freeze([]),
       verdict: "deny" as const,
@@ -595,7 +609,7 @@ function evaluateProjected(
   const outcome = projected.gate.decide(
     point,
     { when, value: clonePlain(input.value), context: input.message },
-    { handlers: (ref) => handlers.get(ref) },
+    { handlers: (ref) => handlers.get(ref), ...(recorded === undefined ? {} : { recorded }) },
   );
   const matched = outcome.decision.rowIds.flatMap((id) => {
     const row = projected.rowById.get(id);
@@ -625,7 +639,7 @@ function evaluateProjected(
   return Object.freeze({
     generation,
     snapshotHash: contentHash,
-    inputHash: canonicalDigest(input),
+    inputHash,
     matchedRuleIds: Object.freeze(matched.map((row) => row.name)),
     transforms: Object.freeze(transforms),
     ...(transforms.length === 1 ? { ref: transforms[0]?.ref } : {}),
@@ -636,6 +650,8 @@ function evaluateProjected(
     obligations: Object.freeze(obligations),
     bucket: publicBucket(input.kind, input.phase, input.op),
     evaluatedRuleCount: matched.length,
+    gate: outcome.decision,
+    replayed: outcome.replayed,
   });
 }
 
@@ -716,10 +732,11 @@ function failedSnapshot(error: PolicyCompileError, table: GatePointTable): Compi
     contentHash,
     pointTable: table,
     evaluate(input: PolicyEvaluationInput) {
+      const { recorded: _recorded, ...identity } = input;
       return Object.freeze({
         generation: error.generation,
         snapshotHash: contentHash,
-        inputHash: canonicalDigest(input),
+        inputHash: canonicalDigest(identity),
         matchedRuleIds: Object.freeze([]),
         transforms: Object.freeze([]),
         verdict: "deny",

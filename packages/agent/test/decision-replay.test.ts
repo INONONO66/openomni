@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import type { PlainValue } from "@openomni/protocol";
+import type { PlainValue, PolicyRow } from "@openomni/protocol";
 import { compileGateRows, type GateHandler } from "../src/kernel/gate/compose";
+import {
+  compilePolicySnapshot,
+  createNamedPolicyRegistry,
+  KERNEL_POLICY_REGISTRY,
+} from "../src/kernel/gate/compile";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 const table = fullPointTable();
@@ -174,5 +179,65 @@ describe("decision replay (#1251)", () => {
     expect(decision.facts).toEqual([
       { rowId: "guard/tool.pre#9", ref: "guard/silent", code: "unrecorded_response" },
     ]);
+  });
+});
+
+describe("production snapshot replay (#1251 r3)", () => {
+  const rows = (generation: number): PolicyRow.Row[] => [
+    { name: "compaction", kind: "compaction", phase: "pre" as const, generation, priority: 1_000,
+      match: { encodingVersion: 1 as const, value: {} },
+      verdict: { encodingVersion: 1 as const, value: { type: "allow" } } },
+    { name: "mask", kind: "tool", phase: "pre" as const, generation, priority: 1,
+      match: { encodingVersion: 1 as const, value: { op: "write" } },
+      verdict: { encodingVersion: 1 as const,
+        value: { type: "transform", ref: "demo/mask", config: { fields: ["text"] } } } },
+  ];
+  const input = { kind: "tool", phase: "pre" as const, op: "write", value: { text: "original" } };
+
+  it("the evaluation carries the replayable gate decision with its consulted responses", () => {
+    let calls = 0;
+    const registry = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+      ...KERNEL_POLICY_REGISTRY.transformers,
+      { name: "demo/mask", apply: () => { calls += 1; return { text: "masked" }; } },
+    ] });
+    const snapshot = compilePolicySnapshot({ registry, generation: 1, rows: rows(1) });
+    const first = snapshot.evaluate(input);
+    expect(calls).toBe(1);
+    expect(first.value).toEqual({ text: "masked" });
+    expect(first.gate).toMatchObject({
+      output: { text: "masked" },
+      consulted: [{ ref: "demo/mask", digest: expect.any(String) }],
+    });
+
+    // Same input plus the recorded decision: the gate replays it verbatim
+    // without invoking the handler again.
+    const replayed = snapshot.evaluate({ ...input, recorded: first.gate });
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.value).toEqual({ text: "masked" });
+    expect(replayed.inputHash).toBe(first.inputHash);
+    expect(calls).toBe(1);
+  });
+
+  it("replays a recorded decision even when the handler can no longer run", () => {
+    const working = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+      ...KERNEL_POLICY_REGISTRY.transformers,
+      { name: "demo/mask", apply: () => ({ text: "masked" }) },
+    ] });
+    const recordedBy = compilePolicySnapshot({ registry: working, generation: 1, rows: rows(1) });
+    const first = recordedBy.evaluate(input);
+
+    const broken = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+      ...KERNEL_POLICY_REGISTRY.transformers,
+      { name: "demo/mask", apply: () => { throw new Error("handler must not run during replay"); } },
+    ] });
+    const snapshot = compilePolicySnapshot({ registry: broken, generation: 1, rows: rows(1) });
+    const replayed = snapshot.evaluate({ ...input, recorded: first.gate });
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.value).toEqual({ text: "masked" });
+
+    // A different input never replays the stale record: the broken handler
+    // surfaces instead of the recorded output.
+    expect(() => snapshot.evaluate({ ...input, value: { text: "changed" }, recorded: first.gate }))
+      .toThrow("handler must not run during replay");
   });
 });
