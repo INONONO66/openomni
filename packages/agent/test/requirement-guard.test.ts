@@ -5,20 +5,21 @@ import { fullPointTable, gateRow } from "./helpers/gate-rows";
 const table = fullPointTable();
 
 describe("requirement guard (#1251)", () => {
-  it("resolves the row's declared service through a stable registry (#1251 r1)", () => {
-    // The resolver is stable: the same ref always returns the same handler,
-    // as a production registry would. The handler re-enters itself through
-    // the guard, proving the declared requirement resolves at call time.
-    let depth = 0;
-    const self: GateHandler = (input) => {
-      depth += 1;
-      if (depth > 1) return { verdict: "allow", payload: { via: "self", depth } };
-      return input.service("guard/self")(input);
+  it("resolves a separately declared dependency from the row's requires collection (#1251 r2)", () => {
+    const helper: GateHandler = () => ({ payload: { risk: "low" } });
+    const main: GateHandler = (input) => {
+      const scan = input.service("guard/helper")(input);
+      return { verdict: "allow", payload: { via: "guard/helper", scan: scan.payload ?? null } };
     };
-    const handlers = new Map<string, GateHandler>([["guard/self", self]]);
+    const handlers = new Map<string, GateHandler>([
+      ["guard/main", main],
+      ["guard/helper", helper],
+    ]);
     const gate = compileGateRows({
       table,
-      rows: [gateRow("tool.pre", { how: { ref: "guard/self" } })],
+      rows: [
+        gateRow("tool.pre", { how: { ref: "guard/main", requires: ["guard/helper"] } }),
+      ],
       handlers: [...handlers.keys()],
       generation: 1,
     });
@@ -27,10 +28,43 @@ describe("requirement guard (#1251)", () => {
       { when: {}, value: null },
       { handlers: (ref) => handlers.get(ref) },
     );
-    expect(depth).toBe(2);
     expect(decision.verdict).toBe("allow");
     expect(decision.facts).toEqual([]);
-    expect(decision.consulted.map((entry) => entry.payload)).toEqual([{ via: "self", depth: 2 }]);
+    expect(decision.consulted.map((entry) => entry.payload)).toEqual([
+      { via: "guard/helper", scan: { risk: "low" } },
+    ]);
+  });
+
+  it("a reference outside the declared requires escapes even when other requires exist", () => {
+    const main: GateHandler = (input) => {
+      input.service("other/secrets");
+      return { verdict: "allow", payload: { reached: true } };
+    };
+    const handlers = new Map<string, GateHandler>([
+      ["guard/main", main],
+      ["guard/helper", () => ({ payload: {} })],
+      ["other/secrets", () => ({ payload: { leaked: true } })],
+    ]);
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", {
+          id: "guard/tool.pre#9",
+          how: { ref: "guard/main", requires: ["guard/helper"] },
+        }),
+      ],
+      handlers: [...handlers.keys()],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: null },
+      { handlers: (ref) => handlers.get(ref) },
+    );
+    expect(decision.verdict).toBe("deny");
+    expect(decision.facts).toEqual([
+      { rowId: "guard/tool.pre#9", ref: "other/secrets", code: "requirement_escape" },
+    ]);
   });
 
   it("records a dynamic reference escaping the declared requires as a fact and fails closed", () => {

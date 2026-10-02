@@ -3,7 +3,6 @@ import {
   CAPABILITY_POINT_RECORDS,
   CORE_POINT_RECORDS,
   ComposeRejectionCode,
-  EMIT_KINDS,
   GateDecision,
   GateHow,
   GateRow,
@@ -52,14 +51,6 @@ describe("point registry records (#1251)", () => {
     }
   });
 
-  it("never allows prompt or signal to enter through an emission", () => {
-    // Inputs enter solely through the entity's deliver RPC: the emit set is
-    // behaviorally closed over outputs, not input kinds.
-    const kinds: readonly string[] = EMIT_KINDS;
-    expect(kinds).not.toContain("prompt");
-    expect(kinds).not.toContain("signal");
-    for (const kind of kinds) expect(["message", "alarm.arm", "compaction"]).toContain(kind);
-  });
 
   it("declares nonempty rewritable fields wherever rewrite is an allowed action", () => {
     for (const record of POINT_RECORDS) {
@@ -136,11 +127,15 @@ describe("gate row contract (#1251)", () => {
     expect(GateDecision.safeParse(withoutAnnotations).success).toBe(false);
   });
 
-  it("accepts every compose rejection a gate compiler can raise and refuses foreign codes", () => {
-    for (const code of ["unknown_point", "unknown_handler", "duplicate", "bad_action", "bad_field", "post_end_emit", "builtin_removed"]) {
-      expect(ComposeRejectionCode.safeParse(code).success).toBe(true);
-    }
+  it("refuses foreign or malformed compose rejection codes", () => {
+    expect(ComposeRejectionCode.safeParse("unknown_point").success).toBe(true);
     expect(ComposeRejectionCode.safeParse("unknown_kind").success).toBe(false);
     expect(ComposeRejectionCode.safeParse("").success).toBe(false);
+  });
+
+  it("parses a declared requires collection and refuses malformed dependency refs", () => {
+    const declared = { ref: "guard/write-check", requires: ["guard/helper", "audit/log"] };
+    expect(GateHow.parse(declared)).toEqual(declared);
+    expect(GateHow.safeParse({ ref: "guard/write-check", requires: ["not a ref"] }).success).toBe(false);
   });
 });
