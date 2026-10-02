@@ -27,6 +27,13 @@ export interface WorkspaceTopology {
  * The single structural inventory for repository workspaces. Adding a workspace
  * here makes dependency, cycle, CI, coverage, knip, and tsconfig gates account
  * for it. Package-specific source sub-bands remain in their owning gate.
+ *
+ * #1246 merged ten packages into five: ipc and codemode folded into machines,
+ * policy/ledger/llm folded into agent, and the channel-facing stores moved
+ * into channels. The import direction (right imports left) is:
+ * protocol <- agent, machines, channels, apps/openomni, apps/desktop;
+ * agent <- channels, apps/openomni; machines <- apps/openomni;
+ * channels <- apps/openomni; ui <- apps/desktop.
  */
 export const TOPOLOGY = [
   {
@@ -41,56 +48,11 @@ export const TOPOLOGY = [
     tsconfigVerify: true,
   },
   {
-    key: "ipc",
-    displayName: "ipc",
-    dir: "packages/ipc",
-    packageName: "@openomni/ipc",
-    allowedDeps: ["@openomni/protocol"],
-    testLane: true,
-    coverageLane: true,
-    knipWorkspace: true,
-    tsconfigVerify: true,
-  },
-  {
-    key: "ledger",
-    displayName: "ledger",
-    dir: "packages/ledger",
-    packageName: "@openomni/ledger",
-    allowedDeps: ["@openomni/protocol"],
-    testLane: true,
-    coverageLane: true,
-    knipWorkspace: true,
-    tsconfigVerify: true,
-  },
-  {
-    key: "policy",
-    displayName: "policy",
-    dir: "packages/policy",
-    packageName: "@openomni/policy",
-    allowedDeps: ["@openomni/protocol"],
-    testLane: true,
-    coverageLane: true,
-    knipWorkspace: true,
-    tsconfigVerify: true,
-  },
-  {
-    key: "llm",
-    displayName: "llm",
-    dir: "packages/llm",
-    packageName: "@openomni/llm",
-    allowedDeps: ["@openomni/protocol"],
-    testLane: true,
-    coverageLane: true,
-    knipWorkspace: true,
-    tsconfigVerify: true,
-  },
-  {
     key: "agent",
     displayName: "agent",
     dir: "packages/agent",
     packageName: "@openomni/agent",
-    allowedDeps: ["@openomni/protocol", "@openomni/ledger", "@openomni/policy", "@openomni/llm"],
-    srcAllowedDeps: ["@openomni/protocol", "@openomni/ledger", "@openomni/policy", "@openomni/llm"],
+    allowedDeps: ["@openomni/protocol"],
     testLane: true,
     coverageLane: true,
     knipWorkspace: true,
@@ -103,20 +65,9 @@ export const TOPOLOGY = [
     displayName: "machines",
     dir: "packages/machines",
     packageName: "@openomni/machines",
-    allowedDeps: ["@openomni/protocol", "@openomni/ipc"],
+    allowedDeps: ["@openomni/protocol"],
     testLane: true,
     // #945 adds the first measured, shrink-only coverage floor.
-    coverageLane: true,
-    knipWorkspace: true,
-    tsconfigVerify: true,
-  },
-  {
-    key: "codemode",
-    displayName: "codemode",
-    dir: "packages/codemode",
-    packageName: "@openomni/codemode",
-    allowedDeps: ["@openomni/protocol", "@openomni/machines"],
-    testLane: true,
     coverageLane: true,
     knipWorkspace: true,
     tsconfigVerify: true,
@@ -126,9 +77,9 @@ export const TOPOLOGY = [
     displayName: "channels",
     dir: "packages/channels",
     packageName: "@openomni/channels",
-    // Agent is test-only: correlation acceptance exercises the real request kernel.
-    allowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger", "@openomni/agent"],
-    srcAllowedDeps: ["@openomni/protocol", "@openomni/policy", "@openomni/ledger"],
+    // Agent carries the policy gate and persistence seams absorbed in #1246;
+    // the channels judgment and store bands consume them through the barrel.
+    allowedDeps: ["@openomni/protocol", "@openomni/agent"],
     testLane: true,
     coverageLane: true,
     knipWorkspace: true,
@@ -142,13 +93,8 @@ export const TOPOLOGY = [
     allowedDeps: [
       "@openomni/protocol",
       "@openomni/channels",
-      "@openomni/ipc",
       "@openomni/agent",
-      "@openomni/llm",
-      "@openomni/ledger",
-      "@openomni/policy",
       "@openomni/machines",
-      "@openomni/codemode",
     ],
     testLane: true,
     coverageLane: true,

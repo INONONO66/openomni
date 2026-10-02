@@ -22,7 +22,7 @@ consumer work are recorded in [Implementation Status](implementation-status.md).
 
 ## Policy
 
-`packages/policy` is the generic actor-agnostic engine. `packages/agent` dispatches the loop points it consumes. `packages/channels` owns perimeter policy. `apps/openomni` owns product composition and may select registrations without moving product semantics into the engine.
+The policy gate inside `packages/agent` (`src/kernel/gate/`) is the generic actor-agnostic engine, and the agent dispatches the loop points it consumes. `packages/channels` owns perimeter policy. `apps/openomni` owns product composition and may select registrations without moving product semantics into the engine.
 
 The old product-specific dispatch registrations and completion service were removed with their only implementation. Their protocol points remain contracts, not proof of a live consumer.
 
@@ -30,20 +30,24 @@ The old product-specific dispatch registrations and completion service were remo
 
 ```text
 ring 0  @openomni/protocol        schemas and pure folds
-ring 1  @openomni/agent       observation
-        @openomni/ledger          durable stores
-        @openomni/policy          pure policy engine
-ring 2  @openomni/llm             model access
-        @openomni/ipc             thin transport
-ring 3  @openomni/agent           generic durable-session mechanics and stateless LLM loop
+ring 1  @openomni/agent           generic durable-session mechanics and the stateless
+                                  LLM loop, with the durable stores (src/store/), the
+                                  pure policy gate (src/kernel/gate/), and model
+                                  access (src/model/) folded in (#1246)
 
 lateral driver/gateway band:
-        @openomni/machines        raw machine WHERE endpoints
-        @openomni/codemode        code facade and injected interpreter runner
-        @openomni/channels        platform drivers plus perimeter router
+        @openomni/machines        raw machine WHERE endpoints, the thin transport
+                                  (src/ipc/), and the code facade with its injected
+                                  interpreter runner (src/codemode/)
+        @openomni/channels        platform drivers, perimeter router, and the
+                                  channel-facing stores (src/store/)
+
+presentation:
+        @openomni/ui              data-blind design system
 
 composition:
         apps/openomni             the only product app and deployable host
+        apps/desktop              desktop shell over protocol + ui
 ```
 
 Each package depends only on the allowlist in `script/check-deps.ts`. The app composes the rings and bands; it is not another reusable ring.

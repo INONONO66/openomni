@@ -6,7 +6,6 @@ type GuardRuleId =
   | "inline-channel-trigger-evaluation"
   | "inline-authorization-throw"
   | "missing-canonical-policy-evaluator"
-  | "policy-package-boundary"
   | "run-reason-code-vocabulary";
 
 interface GuardViolation {
@@ -28,7 +27,7 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 
 // Only the canonical permission evaluator leaf may implement raw allowlist/denylist
 // membership; every public caller still routes through evaluatePermission
-// (@openomni/policy, the engine's owner since #498 W1).
+// (the agent gate, the engine's owner since #498 W1; folded into agent by #1246).
 const canonicalPolicyEvaluator = new Set(["packages/agent/src/kernel/gate/match.ts"]);
 const canonicalPolicyRequiredFiles = new Set(["packages/channels/src/authn/decision.ts"]);
 
@@ -58,9 +57,6 @@ const runReasonCodeLiteralPattern =
   /reasonCodes:\s*\[[^\]]*?["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
 const runReasonCodeComparisonPattern =
   /(?:[!=]==\s*|\.includes\()["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
-
-const policyPackageBoundaryPattern =
-  /(?:from\s+|import\s+)["'](@openomni\/(?:agent|ledger))[^"']*["']/g;
 
 /**
  * File-path allowlists go silently vacuous when a scanned file is renamed or
@@ -104,7 +100,6 @@ export function validateGuardSource(filePath: string, source: string): GuardViol
     ...validateChannelTriggerEvaluation(filePath, source),
     ...validateListMembership(filePath, source),
     ...validateInlineAuthorization(filePath, source),
-    ...validatePolicyPackageBoundary(filePath, source),
     ...validateRunReasonCodeVocabulary(filePath, source),
   ];
 }
@@ -191,19 +186,6 @@ function validateInlineAuthorization(filePath: string, source: string): GuardVio
         "inline authorization throws belong in approved middleware or policy implementation files",
     })),
   );
-}
-
-function validatePolicyPackageBoundary(filePath: string, source: string): GuardViolation[] {
-  if (!filePath.startsWith("packages/policy/src/")) {
-    return [];
-  }
-
-  return matches(source, policyPackageBoundaryPattern).map((match) => ({
-    ruleId: "policy-package-boundary",
-    filePath,
-    line: lineNumberForOffset(source, match.index),
-    message: "packages/policy must not import from @openomni/agent or @openomni/ledger",
-  }));
 }
 
 function validateRunReasonCodeVocabulary(filePath: string, source: string): GuardViolation[] {

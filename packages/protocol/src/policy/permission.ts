@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export namespace PolicyPermission {
   const MAX_REGEX_PATTERN_LENGTH = 200;
-  /** Evaluation-side input cap, shared with the evaluator in @openomni/policy. */
+  /** Evaluation-side input cap, shared with the evaluator in the agent gate. */
   export const MAX_INPUT_LENGTH = 10_000;
 
   const Label = {
@@ -123,7 +123,7 @@ export namespace PolicyPermission {
   /**
    * ReDoS-safety predicate for `InputRule.pattern`. Owned here because the
    * zod refine above validates at the schema boundary; the evaluation engine
-   * (`evaluatePermission` in @openomni/policy) re-checks it at runtime.
+   * (`evaluatePermission` in the agent gate) re-checks it at runtime.
    */
   export function isSafeInputPattern(pattern: string): boolean {
     return (

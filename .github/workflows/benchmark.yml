@@ -10,7 +10,6 @@ on:
     paths:
       - .github/workflows/benchmark.yml
       - script/benchmark-workflow.test.ts
-      - packages/ledger/**
       - packages/agent/**
       - packages/protocol/**
       - script/summarize-benchmark-runs.ts
@@ -99,8 +98,16 @@ jobs:
             (
               cd "$checkout"
               rm -rf packages/*/bench-results
-              bun run --cwd packages/ledger bench
-              cp packages/ledger/bench-results/session.json "$output/session.json"
+              # #1246 folded the ledger session benches into the agent package;
+              # the paired reference checkout may predate the fold, so measure
+              # whichever owner the checkout has. Benchmark names are unchanged.
+              if [ -f packages/agent/bench/store/index.ts ]; then
+                bun run --cwd packages/agent bench/store/index.ts
+                cp packages/agent/bench-results/session.json "$output/session.json"
+              else
+                bun run --cwd packages/ledger bench
+                cp packages/ledger/bench-results/session.json "$output/session.json"
+              fi
               bun run --cwd packages/agent bench
               cp packages/agent/bench-results/agent.json "$output/agent.json"
             )
@@ -152,7 +159,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: ./.github/actions/setup
       - run: bunx turbo run build --filter=@openomni/protocol
-      - run: bun test ./packages/ledger/test/bench/memory-regression.bench.ts
+      - run: bun test ./packages/agent/test/store/bench/memory-regression.bench.ts
 
   publish:
     name: Publish benchmark history

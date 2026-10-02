@@ -145,5 +145,5 @@ export abstract class NamedError extends Error {
 // #500 C3: NamedError STAYS here — it is consumed by protocol's own schemas
 // (ledger/schema.ts AdoptError, wait/schema.ts StoreError). The concrete errors that
 // lived beside it moved to their caller-proven owners: APIError →
-// @openomni/llm (src/error.ts — llm-only callers). The removed local-process
+// the agent model plane (model/error.ts — model-only callers). The removed local-process
 // worker stack owned its own delivery error rather than exporting it here.

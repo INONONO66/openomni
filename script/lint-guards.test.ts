@@ -50,7 +50,6 @@ test.each([
     "inline-authorization-throw",
     2,
   ],
-  ["packages/policy/src/other.ts", '\nimport "@openomni/agent";', "policy-package-boundary", 2],
   [
     "apps/openomni/src/other.ts",
     '\nconst rule = { reasonCodes: ["stalled"] };',

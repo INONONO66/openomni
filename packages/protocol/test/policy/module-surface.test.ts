@@ -6,7 +6,7 @@ import {
   PolicyPermission as PolicyPermissionIndex,
 } from "../../src/policy/index.js";
 
-// #498 receipts: `evaluate` moved to @openomni/policy (evaluatePermission),
+// #498 receipts: `evaluate` moved to the agent gate (evaluatePermission),
 // `fromEvaluation` moved with it (decisionFromEvaluation), the RuntimeResource
 // sibling folded into the namespace as Policy.Resource, and the test-only
 // PolicyPoint.MigrationMapping compat surface was deleted.

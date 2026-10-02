@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -11,6 +10,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { LedgerInvariant } from "./errors";
+import { computeActionHash, GENESIS_PREV_HASH } from "./action-hash.js";
 import type { SessionWriteAdapter } from "./services";
 import { createSqliteDecisionFacts } from "./decision.js";
 import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./storage/sqlite-l0-rows.js";
@@ -19,28 +19,7 @@ import { createSessions } from "./storage/sqlite-l0-sessions.js";
 import { reportCommitted, type ObservationFailurePort } from "./storage/sqlite-l0-observation.js";
 
 
-export const GENESIS_PREV_HASH = "openomni:l0:genesis:v1";
-
-export function computeActionHash(input: Omit<ActionSqlRow, "action_hash">): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify([
-        input.prev_hash,
-        input.id,
-        input.parent_id,
-        input.session_id,
-        input.kind,
-        input.intent,
-        input.effect,
-        input.revert,
-        input.irreversible,
-        input.encoding_version,
-        input.ts,
-        input.ordinal,
-      ]),
-    )
-    .digest("hex");
-}
+export { computeActionHash, GENESIS_PREV_HASH } from "./action-hash.js";
 
 /**
  * Fresh per-session ledger file DDL (W5.2 #1197) — the only session-file

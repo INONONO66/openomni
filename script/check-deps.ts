@@ -488,7 +488,7 @@ function packageDirOf(rule: PackageRule): string {
 
 /**
  * Layer-order check at the source level. package.json manifests cannot see
- * phantom imports (a bare `import "@openomni/ledger"` resolves through the
+ * phantom imports (a bare `import "@openomni/agent"` resolves through the
  * hoisted node_modules even when the manifest never declares it), so the
  * dependency-direction rules are enforced against actual import specifiers.
  */
@@ -524,63 +524,68 @@ const CHANNELS_JUDGMENT_PREFIXES = [
   CHANNELS_ROUTER_PREFIX,
   "packages/channels/src/authn/",
 ] as const;
-const CHANNELS_JUDGMENT_ONLY_DEPS = new Set(["@openomni/policy", "@openomni/ledger"]);
+const CHANNELS_STORE_PREFIX = "packages/channels/src/store/";
+const CHANNELS_BANDED_DEP = "@openomni/agent";
 
 /**
- * The perimeter store surfaces the gateway router may name from
- * @openomni/ledger (docs/gateway-design.md §4/§6): actors, blacklist,
- * channel grants, the surface↔session map, and the scoped decision-fact
- * port (record + head — never the master
- * `Storage` entry, whose adapter reaches every brain surface). Brain
- * surfaces (Session, transcript, artifact, worker-run/grant,
- * effect, …) are NOT reachable from the router — the gateway selects
- * sessions but never reads or writes session content (S1), and domain
- * isolation inside the one DB is by store surface (S2).
+ * The agent-gate surfaces the channels judgment band may name from
+ * @openomni/agent (#1246 — the former policy engine and the scoped
+ * ledger ports live in the agent package now): permission evaluation plus the
+ * two handle-scoped perimeter ports (decision facts, surface↔session map).
+ * Brain surfaces (session stores, catalog, model plane, …) are NOT reachable
+ * from the router — the gateway selects sessions but never reads or writes
+ * session content (S1), and domain isolation inside the one DB is by store
+ * surface (S2).
  */
-const CHANNELS_ROUTER_LEDGER_SURFACES = new Set([
-  "ActorRegistry",
-  // packages/channels/src/router/stores.ts:2,35
-  "createActorRegistry",
-  "BlacklistStore",
-  // packages/channels/src/router/stores.ts:3,36
-  "createBlacklistStore",
-  "ChannelGrantStore",
-  // packages/channels/src/router/stores.ts:4,37
-  "createChannelGrantStore",
-  "ReplyGrantStore",
-  // packages/channels/src/router/stores.ts:7,38
-  "createReplyGrantStore",
-  "SurfaceKey",
-  // packages/channels/src/router/stores.ts:8,40
-  "createSurfaceKeyStore",
-  "DecisionFacts",
-  // packages/channels/src/router/stores.ts:5,41
+const CHANNELS_JUDGMENT_AGENT_SURFACES = new Set([
+  // packages/channels/src/authn/decision.ts
+  "evaluatePermission",
+  "decisionFromEvaluation",
+  // packages/channels/src/router/{external-message,message-ports}.ts
+  "PolicyEvaluationInput",
+  // packages/channels/src/router/stores.ts
   "createDecisionFactPort",
-  // #219 active-egress debit ledger — a perimeter surface written ONLY by the
-  // router's send kernel (brain never reaches the perimeter debit store).
-  "EgressBudgetStore",
-  // packages/channels/src/router/stores.ts:6,39
-  "createEgressBudgetStore",
+  "createSurfaceKeyStore",
+]);
+
+/**
+ * The persistence seams the channels store band (`src/store/`, the perimeter
+ * stores absorbed from the old ledger in #1246) may name from
+ * @openomni/agent: the sub-adapter guard, the timestamp wrapper, and the two
+ * stored-identity schemas. Never a session, catalog, gate, or model surface.
+ */
+const CHANNELS_STORE_AGENT_SURFACES = new Set([
+  "requireSubAdapter",
+  "withStoreTimestamps",
+  "StoredIdentity",
+  "StoredEndpoint",
 ]);
 
 function isChannelsJudgmentPath(filePath: string): boolean {
   return CHANNELS_JUDGMENT_PREFIXES.some((prefix) => filePath.startsWith(prefix));
 }
 
+function channelsAgentBand(filePath: string): ReadonlySet<string> | undefined {
+  if (isChannelsJudgmentPath(filePath)) return CHANNELS_JUDGMENT_AGENT_SURFACES;
+  if (filePath.startsWith(CHANNELS_STORE_PREFIX)) return CHANNELS_STORE_AGENT_SURFACES;
+  return undefined;
+}
+
 /**
  * S8 intra-package banding for the channels gateway (docs/gateway-design.md
- * §7 S8; stage-2 shape, #707). The package-level whitelist admits
- * @openomni/policy and @openomni/ledger, but only the perimeter JUDGMENT
- * band — `src/router/` (routing, physical correlation, send kernel) and `src/authn/`
- * (channel authn) — may use them. The driver sub-band (discord/, github/,
- * telegram/, support/, websocket.ts, channel-authn.ts) stays on the
- * dumb-driver contract {protocol, ipc}: adding a platform = one driver file
- * + one server registration line, zero security review of the router.
+ * §7 S8; five-package shape, #1246). The package-level whitelist admits
+ * @openomni/agent, but only the perimeter JUDGMENT band — `src/router/`
+ * (routing, physical correlation, send kernel) and `src/authn/` (channel
+ * authn) — and the STORE band (`src/store/`, the perimeter stores) may use
+ * it. The driver sub-band (discord/, github/, telegram/, support/,
+ * websocket.ts, channel-authn.ts) stays on the dumb-driver contract
+ * {protocol}: adding a platform = one driver file + one server registration
+ * line, zero security review of the router.
  */
 function isChannelsBandingViolation(filePath: string, dep: string): boolean {
   if (!filePath.startsWith(CHANNELS_SRC_PREFIX)) return false;
-  if (!CHANNELS_JUDGMENT_ONLY_DEPS.has(dep)) return false;
-  return !isChannelsJudgmentPath(filePath);
+  if (dep !== CHANNELS_BANDED_DEP) return false;
+  return channelsAgentBand(filePath) === undefined;
 }
 
 /**
@@ -611,24 +616,25 @@ function isChannelsDriverRouterEdge(filePath: string, importPath: string): boole
 }
 
 /**
- * S8 router↔ledger surface pin (#707): a judgment-band file importing
- * @openomni/ledger may name ONLY the perimeter surfaces, through static
- * named `import`/`export … from` clauses. Everything else is refused
- * outright — namespace/default imports, `export *` re-exports, dynamic
- * `import(...)`, and `require(...)` would all reach (or launder to relative
- * importers) every brain surface the named scan pins out. The named clause
- * is the ONLY road.
+ * S8 channels↔agent surface pin (#707 shape, #1246 vocabulary): a banded
+ * channels file importing @openomni/agent may name ONLY its band's perimeter
+ * surfaces, through static named `import`/`export … from` clauses. Everything
+ * else is refused outright — namespace/default imports, `export *`
+ * re-exports, dynamic `import(...)`, and `require(...)` would all reach (or
+ * launder to relative importers) every brain surface the named scan pins out.
+ * The named clause is the ONLY road.
  */
-function channelsRouterLedgerViolations(filePath: string, source: string): string[] {
-  if (!isChannelsJudgmentPath(filePath)) return [];
+function channelsAgentSurfaceViolations(filePath: string, source: string): string[] {
+  const band = channelsAgentBand(filePath);
+  if (band === undefined) return [];
   const violations: string[] = [];
   const namedPattern =
-    /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@openomni\/ledger["']/g;
+    /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@openomni\/agent["']/g;
   const broadPattern =
-    /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']@openomni\/ledger["']/g;
-  const exportStarPattern = /export\s*\*\s*(?:as\s+\w+\s*)?from\s*["']@openomni\/ledger["']/g;
+    /import\s+(?:type\s+)?(?:\*\s+as\s+\w+|\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']@openomni\/agent["']/g;
+  const exportStarPattern = /export\s*\*\s*(?:as\s+\w+\s*)?from\s*["']@openomni\/agent["']/g;
   const dynamicPattern =
-    /(?:import\s*\(\s*|require\s*\(\s*)["'`]@openomni\/ledger(?:\/[^"'`]*)?["'`]/g;
+    /(?:import\s*\(\s*|require\s*\(\s*)["'`]@openomni\/agent(?:\/[^"'`]*)?["'`]/g;
   for (const match of source.matchAll(namedPattern)) {
     const names = (match[1] ?? "")
       .split(",")
@@ -642,10 +648,10 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
             ?.trim() ?? "",
       );
     for (const name of names) {
-      if (name.length > 0 && !CHANNELS_ROUTER_LEDGER_SURFACES.has(name)) {
+      if (name.length > 0 && !band.has(name)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
-          `VIOLATION: ${filePath}:${line} names ledger surface ${name} — S8: the gateway router may name only the perimeter store surfaces (${[...CHANNELS_ROUTER_LEDGER_SURFACES].join(", ")}), never brain surfaces`,
+          `VIOLATION: ${filePath}:${line} names agent surface ${name} — S8: this channels band may name only its perimeter surfaces (${[...band].join(", ")}), never brain surfaces`,
         );
       }
     }
@@ -653,19 +659,19 @@ function channelsRouterLedgerViolations(filePath: string, source: string): strin
   for (const match of source.matchAll(broadPattern)) {
     const line = lineNumberForOffset(source, match.index);
     violations.push(
-      `VIOLATION: ${filePath}:${line} uses a namespace/default import of @openomni/ledger — S8: the gateway router must name the perimeter surfaces explicitly`,
+      `VIOLATION: ${filePath}:${line} uses a namespace/default import of @openomni/agent — S8: the channels perimeter must name the agent surfaces explicitly`,
     );
   }
   for (const match of source.matchAll(exportStarPattern)) {
     const line = lineNumberForOffset(source, match.index);
     violations.push(
-      `VIOLATION: ${filePath}:${line} re-exports @openomni/ledger wholesale — S8: a router barrel may not launder brain surfaces to relative importers`,
+      `VIOLATION: ${filePath}:${line} re-exports @openomni/agent wholesale — S8: a channels barrel may not launder brain surfaces to relative importers`,
     );
   }
   for (const match of source.matchAll(dynamicPattern)) {
     const line = lineNumberForOffset(source, match.index);
     violations.push(
-      `VIOLATION: ${filePath}:${line} loads @openomni/ledger dynamically — S8: the static named-import pin is the only road to the ledger from the router band`,
+      `VIOLATION: ${filePath}:${line} loads @openomni/agent dynamically — S8: the static named-import pin is the only road to the agent from the channels perimeter`,
     );
   }
   return violations;
@@ -684,7 +690,7 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
       if (dep && isChannelsBandingViolation(filePath, dep)) {
         const line = lineNumberForOffset(source, match.index);
         violations.push(
-          `VIOLATION: ${filePath}:${line} imports ${dep} — S8 banding: only the channels judgment band (src/router/, src/authn/) may import the policy engine or the ledger; drivers stay on {protocol, ipc}`,
+          `VIOLATION: ${filePath}:${line} imports ${dep} — S8 banding: only the channels judgment band (src/router/, src/authn/) and store band (src/store/) may import @openomni/agent; drivers stay on {protocol}`,
         );
       }
     }
@@ -697,7 +703,7 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
         );
       }
     }
-    violations.push(...channelsRouterLedgerViolations(filePath, source));
+    violations.push(...channelsAgentSurfaceViolations(filePath, source));
   }
 
   return violations;
@@ -807,10 +813,8 @@ async function validateGoldenPrinciples(): Promise<string[]> {
 const TRACKED_DOCS = [
   "AGENTS.md",
   "packages/protocol/AGENTS.md",
-  "packages/ipc/AGENTS.md",
-  "packages/ledger/AGENTS.md",
-  "packages/llm/AGENTS.md",
   "packages/agent/AGENTS.md",
+  "packages/machines/AGENTS.md",
   "packages/channels/AGENTS.md",
 ];
 
@@ -884,22 +888,22 @@ function selfTest(): number {
     ["open workspace band permits another package", isAllowedDep(anyExceptSelf, "@openomni/agent")],
     ["src refuses what only the manifest lists", !isAllowedSourceDep(twoTier, "@openomni/agent")],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],
-    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/ledger")],
+    ["src refuses what neither lists", !isAllowedSourceDep(twoTier, "@openomni/machines")],
     [
       "no srcAllowedDeps falls back to the manifest",
       isAllowedSourceDep(oneTier, "@openomni/agent"),
     ],
     ["external packages are never layered", isAllowedSourceDep(twoTier, "zod")],
     [
-      "S8: a channels driver may not import the policy engine",
+      "S8: a channels driver may not import the agent",
       isChannelsBandingViolation(
         "packages/channels/src/provider/discord/surface.ts",
-        "@openomni/policy",
+        "@openomni/agent",
       ),
     ],
     [
-      "S8: channels authn (perimeter judgment) may import the policy engine",
-      !isChannelsBandingViolation("packages/channels/src/authn/decision.ts", "@openomni/policy"),
+      "S8: channels authn (perimeter judgment) may import the agent gate",
+      !isChannelsBandingViolation("packages/channels/src/authn/decision.ts", "@openomni/agent"),
     ],
     [
       "S8: drivers keep the whitelisted contract deps",
@@ -910,25 +914,18 @@ function selfTest(): number {
     ],
     [
       "S8: the banding rule scopes to the channels package only",
-      !isChannelsBandingViolation("apps/openomni/src/gateway.ts", "@openomni/policy"),
+      !isChannelsBandingViolation("apps/openomni/src/gateway.ts", "@openomni/agent"),
     ],
     [
-      "S8: a channels driver may not import the ledger",
-      isChannelsBandingViolation(
-        "packages/channels/src/provider/telegram/surface.ts",
-        "@openomni/ledger",
-      ),
-    ],
-    [
-      "S8: the gateway router may import the ledger",
+      "S8: the gateway router may import the agent",
       !isChannelsBandingViolation(
         "packages/channels/src/router/routing-resolution.ts",
-        "@openomni/ledger",
+        "@openomni/agent",
       ),
     ],
     [
-      "S8: the gateway router may import the policy engine",
-      !isChannelsBandingViolation("packages/channels/src/router/authority.ts", "@openomni/policy"),
+      "S8: the channel store band may import the agent persistence seams",
+      !isChannelsBandingViolation("packages/channels/src/store/actor/index.ts", "@openomni/agent"),
     ],
     [
       "S8: a driver may not relative-import into src/router/",
@@ -960,116 +957,109 @@ function selfTest(): number {
       !isChannelsDriverRouterEdge("packages/channels/src/channel-authn.ts", "./authn/github.js"),
     ],
     [
-      "S8: the router may name a perimeter ledger surface",
-      channelsRouterLedgerViolations(
-        "packages/channels/src/router/actor-resolver.ts",
-        'import { ActorRegistry } from "@openomni/ledger";',
+      "S8: the router may name the permission evaluator",
+      channelsAgentSurfaceViolations(
+        "packages/channels/src/router/authority.ts",
+        'import { evaluatePermission } from "@openomni/agent";',
       ).length === 0,
     ],
     [
-      "S8: the router may name the egress-budget perimeter surface (#219)",
-      channelsRouterLedgerViolations(
-        "packages/channels/src/router/messaging/send.ts",
-        'import { EgressBudgetStore } from "@openomni/ledger";',
+      "S8: the router may name the scoped decision-fact port (#930)",
+      channelsAgentSurfaceViolations(
+        "packages/channels/src/router/stores.ts",
+        'import { createDecisionFactPort, createSurfaceKeyStore } from "@openomni/agent";',
       ).length === 0,
     ],
     [
-      "S8: the router may not name a brain ledger surface",
-      channelsRouterLedgerViolations(
+      "S8: the router may not name a brain agent surface",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/routing-resolution.ts",
-        'import { Session, SurfaceKey } from "@openomni/ledger";',
+        'import { openSessionStore, PolicyEvaluationInput } from "@openomni/agent";',
       ).length === 1,
     ],
     [
-      "S8: the router may name the durable reply-grant projection",
-      channelsRouterLedgerViolations(
-        "packages/channels/src/router/messaging/reply-grant.ts",
-        'import { ReplyGrantStore } from "@openomni/ledger";',
+      "S8: the store band may name the persistence seams",
+      channelsAgentSurfaceViolations(
+        "packages/channels/src/store/actor/index.ts",
+        'import { requireSubAdapter, withStoreTimestamps } from "@openomni/agent";',
       ).length === 0,
+    ],
+    [
+      "S8: the store band may not name the gate",
+      channelsAgentSurfaceViolations(
+        "packages/channels/src/store/actor/index.ts",
+        'import { evaluatePermission } from "@openomni/agent";',
+      ).length === 1,
     ],
     [
       "S8: a type-only brain-surface import is still pinned",
-      channelsRouterLedgerViolations(
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/authority.ts",
-        `import type { ${["Transcript", "Store"].join("")} } from "@openomni/ledger";`,
+        `import type { ${["Catalog", "Store"].join("")} } from "@openomni/agent";`,
       ).length === 1,
     ],
     [
-      "S8: a namespace ledger import cannot bypass the surface pin",
-      channelsRouterLedgerViolations(
+      "S8: a namespace agent import cannot bypass the surface pin",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/actor-resolver.ts",
-        'import * as Ledger from "@openomni/ledger";',
+        'import * as Agent from "@openomni/agent";',
       ).length === 1,
     ],
     [
-      "S8: the ledger surface pin scopes to the judgment band",
-      channelsRouterLedgerViolations(
+      "S8: the agent surface pin scopes to the channels bands",
+      channelsAgentSurfaceViolations(
         "apps/openomni/src/gateway.ts",
-        'import { Session } from "@openomni/ledger";',
+        'import { openSessionStore } from "@openomni/agent";',
       ).length === 0,
     ],
     [
-      "S8: a dynamic ledger import cannot bypass the surface pin",
-      channelsRouterLedgerViolations(
+      "S8: a dynamic agent import cannot bypass the surface pin",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/routing-resolution.ts",
-        'const ledger = await import("@openomni/ledger");',
+        'const agent = await import("@openomni/agent");',
       ).length === 1,
     ],
     [
-      "S8: a require of the ledger cannot bypass the surface pin",
-      channelsRouterLedgerViolations(
+      "S8: a require of the agent cannot bypass the surface pin",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/actor-resolver.ts",
-        'const ledger = require("@openomni/ledger");',
+        'const agent = require("@openomni/agent");',
       ).length === 1,
     ],
     [
-      "S8: a dynamic ledger SUBPATH import is pinned too",
-      channelsRouterLedgerViolations(
+      "S8: a dynamic agent SUBPATH import is pinned too",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
-        'const s = await import("@openomni/ledger/session");',
+        'const s = await import("@openomni/agent/store");',
       ).length === 1,
     ],
     [
       "S8: a brain-surface re-export cannot launder past the pin",
-      channelsRouterLedgerViolations(
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
-        'export { Session } from "@openomni/ledger";',
+        'export { openCatalogStore } from "@openomni/agent";',
       ).length === 1,
     ],
     [
       "S8: a perimeter-surface re-export stays legal",
-      channelsRouterLedgerViolations(
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
-        'export { ActorRegistry } from "@openomni/ledger";',
+        'export { createDecisionFactPort } from "@openomni/agent";',
       ).length === 0,
     ],
     [
       "S8: retired independent authority cannot regain a perimeter allowance",
-      channelsRouterLedgerViolations(
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
-        `import { ${["Wait", "Store"].join("")} } from "@openomni/ledger";`,
+        `import { ${["Wait", "Store"].join("")} } from "@openomni/agent";`,
       ).length === 1,
     ],
     [
-      "S8: a wholesale ledger re-export is refused",
-      channelsRouterLedgerViolations(
+      "S8: a wholesale agent re-export is refused",
+      channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
-        'export * from "@openomni/ledger";',
+        'export * from "@openomni/agent";',
       ).length === 1,
-    ],
-    [
-      "S8: the master Storage entry is not a router surface",
-      channelsRouterLedgerViolations(
-        "packages/channels/src/router/routing-resolution.ts",
-        'import { Storage } from "@openomni/ledger";',
-      ).length === 1,
-    ],
-    [
-      "S8: the scoped decision-fact port is the legal decision-record road",
-      channelsRouterLedgerViolations(
-        "packages/channels/src/router/routing-resolution.ts",
-        'import { DecisionFacts } from "@openomni/ledger";',
-      ).length === 0,
     ],
   ];
 

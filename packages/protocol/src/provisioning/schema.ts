@@ -10,7 +10,7 @@ import { EpochMs } from "../time.js";
  * exist (ChannelInstance), and the ciphertext credential rows they reference
  * (Secret). Declarations are durable acts with revision + createdBy; derived
  * state (actor rows, channel grants) is materialized from them at reconcile
- * time and is rebuildable. Durable persistence lives in `@openomni/ledger`.
+ * time and is rebuildable. Durable persistence lives in the channels store plane.
  */
 
 const PersonId = z

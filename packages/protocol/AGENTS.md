@@ -39,12 +39,12 @@ Namespace additions are gated: `script/lint-tools.ts` (#467) enforces a grandfat
 
 ## KEY PATTERNS
 
-- **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `ProviderError` (in `@openomni/llm`) uses this.
+- **NamedError factory**: `NamedError.create(name, zodSchema)` produces typed error classes with `.isInstance()` guard, `.toObject()` serialization, and `.Schema` for validation. `ProviderError` (in the agent model plane) uses this.
 - **Namespace + Zod duality**: Schemas and types share the same name (e.g., `Tool.State` is both a Zod schema and a TS type). Access schema for validation, type for TS.
-- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Policy.PolicyDecision` on `verdict`, and `Ingress.InboundEvent` on `mode`. `DirectEvent` (`mode: "direct"`) is external inbound; `InternalEvent` (`mode: "internal"`) is system-origin input such as cron. The external `ingest()` path rejects internal events for security. LLM `Run.Outcome` and its streaming `Sink` are owned by `@openomni/llm`, not protocol.
+- **Discriminated unions**: `Tool.State` on `status`, `Message.Part` on `type`, `Message.Info` on `role`, `Policy.PolicyDecision` on `verdict`, and `Ingress.InboundEvent` on `mode`. `DirectEvent` (`mode: "direct"`) is external inbound; `InternalEvent` (`mode: "internal"`) is system-origin input such as cron. The external `ingest()` path rejects internal events for security. LLM `Run.Outcome` and its streaming `Sink` are owned by the agent model plane, not protocol.
 - **Event correlation**: Event descriptors define their own schemas and carry the relevant trace/run/session identity. There is no exported universal `BaseEvent` contract.
 - **Policy vocabulary**: `Policy.PolicyDecision` verdict is one of `allow | deny | pending`; executable row verdicts live in `policy/row-verdict.ts`. The unconsumed interception-point contract registry, plan/obligation schemas, and the legacy `Timing` alias were deleted in #1246 — the gate engine in `packages/agent` evaluates compiled rows and permissions directly.
-- **Storage sub-adapters**: `storage/index.ts` holds the `Storage` namespace of pure interface contracts — no runtime logic. Implementations live in `@openomni/ledger`.
+- **Storage sub-adapters**: `storage/index.ts` holds the `Storage` namespace of pure interface contracts — no runtime logic. Implementations live in the agent store plane and the channels store plane.
 - **IPC contracts**: `ipc/` describes the generic wire envelopes and the machine wire method schemas only. Process delegation lifecycle lives in the product app.
 - **Trace contract**: `trace/index.ts` defines `TraceContext` and the pure `traceIdFromUuid()` format codec. Runtime entropy belongs to telemetry or the consuming driver package.
 
@@ -95,7 +95,7 @@ Keep these as protocol contracts only. Runtime policy and storage implementation
 - Adding new policy vocabulary? Extend `policy/row-verdict.ts` or `policy/permission.ts` and coordinate with the gate engine in `packages/agent` — policy additions are protocol vocabulary and ride the #467 gate.
 - Adding a new storage sub-adapter interface? Add it as a named interface inside the `Storage` namespace in `storage/index.ts`.
 - Adding a new IPC method or field? Update `ipc/` here first, then adapt the machines/openomni callers.
-- Adding trace metadata? Update `trace/index.ts`; helper functions stay in `@openomni/ledger`.
+- Adding trace metadata? Update `trace/index.ts`; helper functions stay in the agent store plane.
 - This package builds to `dist/` — run `bun run build` after changes.
 
 _Edited 2026-08-10 per Owner-approved clean-room corpus (local docs/corpus, session record)._

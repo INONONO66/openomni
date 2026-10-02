@@ -203,10 +203,8 @@ test("accepts a clean repository with no dependency or doc warnings", async () =
   const docs = [
     "",
     "packages/protocol/",
-    "packages/ipc/",
-    "packages/ledger/",
-    "packages/llm/",
     "packages/agent/",
+    "packages/machines/",
     "packages/channels/",
   ];
   const root = fixture(
@@ -354,7 +352,7 @@ test.each([
   [
     "channels driver dependency",
     "packages/channels/src/provider/driver.ts",
-    'import { DecisionFacts } from "@openomni/ledger";',
+    'import { DecisionFacts } from "@openomni/agent";',
     "S8 banding",
   ],
   [
@@ -366,13 +364,13 @@ test.each([
   [
     "channels brain store access",
     "packages/channels/src/router/illegal.ts",
-    'import { Session } from "@openomni/ledger";',
-    "names ledger surface Session",
+    'import { Session } from "@openomni/agent";',
+    "names agent surface Session",
   ],
   [
     "deep package import",
     "packages/agent/src/illegal.ts",
-    'import { Session } from "@openomni/ledger/src/session";',
+    'import { Session } from "@openomni/protocol/src/session";',
     "use package barrel instead",
   ],
   [
@@ -447,13 +445,13 @@ test("missing package manifest fails closed before source scanning", async () =>
 
 test("deep-import fix suggestions retain the package barrel identity", async () => {
   const root = fixture({
-    "packages/agent/src/illegal.ts": 'import "@openomni/ledger/src/session";',
+    "packages/agent/src/illegal.ts": 'import "@openomni/protocol/src/session";',
   });
   Bun.argv.push("--fix-suggestions");
   try {
     const result = await runInProcess(root);
     expect(result.code).toBe(1);
-    expect(result.error).toContain("suggestion: @openomni/ledger");
+    expect(result.error).toContain("suggestion: @openomni/protocol");
   } finally {
     Bun.argv.pop();
   }
@@ -481,7 +479,7 @@ test("doc freshness distinguishes new, stale, and unreadable history without git
   const root = fixture({
     "AGENTS.md": "",
     "packages/protocol/AGENTS.md": "",
-    "packages/ipc/AGENTS.md": "",
+    "packages/machines/AGENTS.md": "",
   });
   const cwd = process.cwd();
   process.chdir(root);
@@ -497,8 +495,8 @@ test("doc freshness distinguishes new, stale, and unreadable history without git
     expect(warnings).toContain(
       "STALE: packages/protocol/AGENTS.md — last updated 50 commits ago (threshold: 50)",
     );
-    expect(warnings).toContain("WARNING: doc freshness unavailable for packages/ipc/AGENTS.md");
-    expect(warnings).toContain("WARNING: tracked doc missing: packages/ledger/AGENTS.md");
+    expect(warnings).toContain("WARNING: doc freshness unavailable for packages/machines/AGENTS.md");
+    expect(warnings).toContain("WARNING: tracked doc missing: packages/agent/AGENTS.md");
     expect(warnings).not.toContain("WARNING: doc freshness unavailable for AGENTS.md");
   } finally {
     process.chdir(cwd);

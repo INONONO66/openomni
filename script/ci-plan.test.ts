@@ -42,7 +42,7 @@ test.each([
   [["docs/nested/guide.md"], "docs", false],
   [["apps/desktop/src/main/index.ts"], "desktop", false],
   [["packages/ui/src/index.ts"], "desktop", false],
-  [["packages/ledger/src/index.ts"], "kernel", false],
+  [["packages/agent/src/index.ts"], "kernel", false],
   [["script/ci.ts"], "tooling", true],
   [["packages/protocol/src/index.ts"], "global", true],
   [["mystery/file.ts"], "global", true],
@@ -224,7 +224,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
   const name = "two words\n$(touch PWNED).ts";
   writeFileSync(join(repo.root, "packages/ui", name), "same file\n");
   const base = repo.snapshot();
-  renameSync(join(repo.root, "packages/ui", name), join(repo.root, "packages/ledger", name));
+  renameSync(join(repo.root, "packages/ui", name), join(repo.root, "packages/machines", name));
   const head = repo.snapshot();
   const output = join(repo.root, "github-output");
   // When the actual CLI reads the diff.
@@ -233,9 +233,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
   expect(result.exitCode).toBe(0);
   const plan = planSchema.parse(JSON.parse(result.stdout.toString()));
   expect(plan.lanes).toEqual([
-    "ledger",
-    "agent",
-    "channels",
+    "machines",
     "openomniApp",
     "ui",
     "desktopApp",

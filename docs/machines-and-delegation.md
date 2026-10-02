@@ -178,7 +178,7 @@ A machine remains WHERE execution happens, not a messaging target. Actor deliver
 The executor's `tool.pre` policy point owns call-time admission. There is no
 separate target-selection package or capability-based catalog fold. Machine
 operations additionally cross the daemon's negotiated capability/export boundary.
-The model-fallback fold belongs to `@openomni/llm`. Tool `safe` derives only from
+The model-fallback fold belongs to the agent model plane (`packages/agent/src/model/`). Tool `safe` derives only from
 `category === "query"`.
 
 ## 5. Ownership boundaries

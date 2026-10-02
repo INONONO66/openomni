@@ -194,9 +194,8 @@ uses Python 3.12.
 `script/scripts-lanes.ts` is the explicit recursive test manifest. Its contract
 test rejects missing, duplicate and newly unassigned `script/**/*.test.ts` files.
 `scripts-contracts` contains topology, CI planning/execution, patch coverage,
-tsconfig inheritance, ledger contracts and repository-consumer tests; its
-command also runs dead-export, dependency and import-cycle self-tests plus
-ledger rename/schema checks. `scripts-tooling` contains the surviving mutation
+tsconfig inheritance, store contracts and repository-consumer tests; its
+command also runs dead-export, dependency and import-cycle self-tests. `scripts-tooling` contains the surviving mutation
 runner, quality-plan/inventory/receipt and type-census self-tests. It runs only
 when `toolingTests` is true, as two explicit matrix partitions packed by their
 measured heavy hitters. Contract tests reject unassigned or duplicate files
@@ -298,8 +297,6 @@ b run script/check-deps.ts
 b run script/check-import-cycles.ts
 b run script/check-dead-exports.ts
 b run script/verify-tsconfig-inheritance.ts
-b run script/verify-ledger-rename.ts
-b run script/check-ledger-schema-drift.ts
 # Test lanes (fresh lcov lands in each workspace's coverage/):
 b run ci test --lane agent
 b run ci test --lane scripts-contracts
