@@ -10,7 +10,7 @@ resolution remains in `bun.lock`. The model plane uses `isStepCount`, passes
 the system prompt as `instructions` (a `SystemModelMessage` carrying the
 Anthropic cache breakpoint), and reads the nested
 `inputTokenDetails`/`outputTokenDetails` accounting; the v6-only flat
-`cachedInputTokens` alias is gone. One shared 7-signature ai test mock
+cached-input usage alias is gone. One shared 7-signature ai test mock
 (`packages/agent/test/model/helpers/ai-mock.ts`) replaces the three copies;
 `model-stream-v7`, `usage-v7`, and `max-retries-zero` pin stream-event order,
 nested token totals, and zero SDK recalls after one failure. `maxRetries: 0`
