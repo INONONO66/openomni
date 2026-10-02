@@ -38,7 +38,7 @@ export interface PolicyEvaluationInput {
   readonly recorded?: GateDecision;
 }
 
-export interface CompiledObligation {
+interface CompiledObligation {
   readonly ref: string;
   readonly metric: Extract<RowVerdict, { type: "obligation" }>["metric"];
   readonly limit: number;
@@ -75,7 +75,7 @@ export interface CompiledPolicySnapshot {
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
 }
 
-export function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
+function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
   return `${kind}/${phase}/${op ?? "*"}`;
 }
 

@@ -20,7 +20,7 @@ import type { NamedPolicyRegistry, NamedTransformer } from "./registry";
 export const MANDATORY_RULE_NAMES = ["compaction"] as const;
 export type RuleName = (typeof MANDATORY_RULE_NAMES)[number];
 
-export const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool", "message"] as const;
+const CORE_ACTION_KINDS = ["prompt", "turn", "llm", "tool", "message"] as const;
 
 const CompileErrorCode = z.enum([
   "generation_mismatch",
@@ -112,7 +112,7 @@ export const Match = z
   .strict();
 export type Match = z.infer<typeof Match>;
 
-export type CompiledVerdict =
+type CompiledVerdict =
   | Exclude<RowVerdict, { type: "transform" }>
   | (Extract<RowVerdict, { type: "transform" }> & { readonly apply: NamedTransformer["apply"] });
 
@@ -127,7 +127,7 @@ export interface CompiledRow {
 
 export const DEFAULT_COMPILE_KINDS = [...CORE_ACTION_KINDS, "compaction", "session.configure"] as const;
 
-export function rowKey(row: Pick<PolicyRow.Row, "name" | "kind" | "phase">): string {
+function rowKey(row: Pick<PolicyRow.Row, "name" | "kind" | "phase">): string {
   return `${row.name}\u0000${row.kind}\u0000${row.phase}`;
 }
 
