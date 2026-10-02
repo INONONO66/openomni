@@ -2,7 +2,7 @@ import { newTraceId } from "../../support/trace";
 import { Operational, parseJson } from "@openomni/protocol";
 import { sleep } from "../../support/fetch-retry";
 import { SocketReconnectShell, type SocketSettle } from "../../support/socket-shell";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { GatewayHeartbeat } from "./heartbeat";
 import {
   type GatewayFrame,
@@ -67,6 +67,7 @@ export class DiscordGateway {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
     delay: (ms: number) => Promise<void> = sleep,
   ) {
@@ -80,6 +81,7 @@ export class DiscordGateway {
     this.heartbeat = new GatewayHeartbeat(
       () => this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence }),
       () => this.shell.closeSocket(4000),
+      options.run,
     );
   }
 
