@@ -259,7 +259,7 @@ export type RunTrace = TraceContext.Type & {
  * expressible as a W3C `traceparent` is enforced by the emitter that puts it
  * on the wire, which is the only place the format matters.
  */
-export function requireTrace(
+function requireTrace(
   subject: string,
   traceContext: TraceContext.Type | undefined,
 ): RunTrace {
@@ -277,7 +277,7 @@ export function requireTrace(
   return { ...traceContext, traceId, sessionId, runId };
 }
 
-export function nonEmptyString<T>(value: T): string | undefined {
+function nonEmptyString<T>(value: T): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
@@ -413,11 +413,11 @@ export function createRunState(
   };
 }
 
-export function recordRunAttempt(state: RunState, attempt: number): void {
+function recordRunAttempt(state: RunState, attempt: number): void {
   state.attempt = attempt;
 }
 
-export function getCompactionCount(state: RunState): number | undefined {
+function getCompactionCount(state: RunState): number | undefined {
   return state.compactionCount > 0 ? state.compactionCount : undefined;
 }
 
@@ -438,11 +438,11 @@ export function recordCallContext(state: RunState, contextTokens: number): void 
   state.lastCallContextTokens = contextTokens;
 }
 
-export function recordRunWindow(state: RunState, contextWindowTokens: number): void {
+function recordRunWindow(state: RunState, contextWindowTokens: number): void {
   state.contextWindowTokens = contextWindowTokens > 0 ? contextWindowTokens : undefined;
 }
 
-export function disarmWindowYield(state: RunState): void {
+function disarmWindowYield(state: RunState): void {
   state.windowYieldDisarmed = true;
 }
 
@@ -453,14 +453,14 @@ export function disarmWindowYield(state: RunState): void {
  * window; carried onto a different model, a smaller fallback window would be
  * fired blind with its recovery already consumed.
  */
-export function resetModelWindowGuards(state: RunState): void {
+function resetModelWindowGuards(state: RunState): void {
   state.windowYieldDisarmed = undefined;
   state.lastCompactionYield = undefined;
   state.lastCompactionIneffective = undefined;
   state.overflowCompactionAttempted = undefined;
 }
 
-export function recordAssistantTokenDelta(
+function recordAssistantTokenDelta(
   state: RunState,
   usage: import("@openomni/protocol").Token.ProviderUsage,
 ): void {
@@ -468,15 +468,15 @@ export function recordAssistantTokenDelta(
   state.budgetState = recordTokenUsage(state.budgetState, usage.inputTokens, usage.outputTokens);
 }
 
-export function setLastAssistantText(state: RunState, text: string): void {
+function setLastAssistantText(state: RunState, text: string): void {
   state.lastAssistantText = text;
 }
 
-export function appendRunStep(state: RunState, step: AgentStep): void {
+function appendRunStep(state: RunState, step: AgentStep): void {
   state.steps.push(step);
 }
 
-export function appendRunMessages(state: RunState, messages: readonly Message.WithParts[]): void {
+function appendRunMessages(state: RunState, messages: readonly Message.WithParts[]): void {
   state.messages.push(...messages);
 }
 
@@ -500,7 +500,7 @@ export function advanceRunTurn(state: RunState): void {
 }
 
 // ─── from core/execution/run-events.ts (#1247) ───
-export function emitRunStarted(
+function emitRunStarted(
   events: BusEvent.Sink,
   trace: TraceContext.Type,
   modelId: string,
@@ -516,7 +516,7 @@ export function emitRunStarted(
   });
 }
 
-export function emitTurnStart(
+function emitTurnStart(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
@@ -529,7 +529,7 @@ export function emitTurnStart(
   });
 }
 
-export function emitTurnComplete(
+function emitTurnComplete(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
@@ -548,7 +548,7 @@ export function emitTurnComplete(
   });
 }
 
-export function emitRunCompleted(
+function emitRunCompleted(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
@@ -570,7 +570,7 @@ export function emitRunCompleted(
   });
 }
 
-export function emitErrorRetry(
+function emitErrorRetry(
   events: BusEvent.Sink,
   agentBase: AgentRunBase,
   options: {
@@ -603,7 +603,7 @@ export function emitErrorRetry(
  * configured one narrowed by a `run.retry_after` effect — exists nowhere else
  * in the record.
  */
-export function emitRunFailed(
+function emitRunFailed(
   events: BusEvent.Sink,
   agentBase: AgentRunBase,
   error: string,
@@ -625,7 +625,7 @@ export function emitRunFailed(
   });
 }
 
-export function runResult(
+function runResult(
   state: RunState,
   options?: {
     text?: string;
@@ -645,7 +645,7 @@ export function runResult(
 }
 
 // ─── from core/execution/turn-assistant.ts (#1247) ───
-export function assistantTextOf(message: Message.WithParts | undefined): string {
+function assistantTextOf(message: Message.WithParts | undefined): string {
   if (message === undefined) return "";
   return message.parts
     .filter((part: Message.Part): part is Message.TextPart => part.type === "text")
@@ -653,7 +653,7 @@ export function assistantTextOf(message: Message.WithParts | undefined): string 
     .join("");
 }
 
-export function createTrackingSink(
+function createTrackingSink(
   state: RunState,
   sink: Sink | undefined,
   turnUsage: TokenUsage,
@@ -706,7 +706,7 @@ export function createTrackingSink(
   };
 }
 
-export function recordAssistant(
+function recordAssistant(
   config: ChatAgentConfig,
   message: Message.WithParts,
 ): Effect.Effect<Message.WithParts, ExecutionError> {
@@ -850,7 +850,7 @@ function turnYield(
   return turn.windowYieldArmed ? "window" : "steps";
 }
 
-export function handleStop(
+function handleStop(
   state: RunState,
   config: ObservedChatAgentConfig,
   agentBase: AgentRunBase,
@@ -933,7 +933,7 @@ function stopResult(state: RunState, text: string, verdict: StopVerdict): Effect
     : result);
 }
 
-export function handleContinue(
+function handleContinue(
   events: BusEvent.Sink,
   state: RunState,
   agentBase: AgentRunBase,
@@ -944,7 +944,7 @@ export function handleContinue(
   advanceRunTurn(state);
 }
 
-export function drainStepBoundary(
+function drainStepBoundary(
   state: RunState,
   config: ObservedChatAgentConfig,
   boundary: "before_llm" | "after_llm" | "after_tools",

@@ -4,7 +4,7 @@ import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CommitFailed } from "../kernel/failure";
 import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
 
-export type { AlarmDisposition, AlarmChainReads, AlarmSenders, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
+export type { AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
 
 /**
  * Timer plane over cluster DeliverAt (W5.2 review F2, plan D5/D8): a persisted

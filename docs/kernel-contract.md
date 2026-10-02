@@ -75,7 +75,7 @@ authority explicit. A bundle has exactly four extension points:
 | Tool catalog and system configuration | `ToolCatalog` supplies definitions; recorded `session.configure` operations `tools.add`, `tools.remove` and `system.blocks.set` select the next generation, never replace an in-flight catalog. | `packages/agent/src/services.ts`, `packages/agent/src/session-configuration.ts` |
 | Policy rows | Data-only pre/post verdicts are `allow`, `deny`, `require_approval`, `transform` or `obligation`. Named implementations come from the captured bundle Layer, not a callback-registration API. | `packages/policy/src/row-compiler.ts`, `packages/agent/src/bundle.ts` |
 | Observation subscriptions | `ObservationSink.subscribe` observes committed execution; it never decides admission or writes durable truth. Subscriptions belong to their Scope. | `packages/agent/src/observation/bus.ts`, `apps/openomni/src/composition/generation-layers.ts` |
-| Entity mailbox messages | A bundle addresses a session through `send_message` / gateway ingestion and entity-owned mailbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/cluster/session-entity.ts` |
+| Entity mailbox messages | A bundle addresses a session through `send_message` / gateway ingestion and entity-owned mailbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/session/entity.ts` |
 
 Anything else requires a kernel change. No arbitrary code-callback registration,
 middleware registry, custom action writer, or raw ledger/control service is a

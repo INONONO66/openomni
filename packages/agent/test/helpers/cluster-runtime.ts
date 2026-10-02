@@ -1,11 +1,11 @@
 /**
  * W5.2 L2.4 — test cluster runtime hosting the REAL Session entity (plan §3
- * L2.1 `src/cluster/session-entity.ts`) on a SingleRunner: sql message/runner
+ * L2.1 `src/session/entity.ts`) on a SingleRunner: sql message/runner
  * storage plus the ledger catalog schema in one catalog file, per-session
  * ledger files under `sessionsDir`. Every Effect here is executed through the
  * allowlisted `runAgent` helper so the runner-site ratchet does not grow.
  *
- * The wire contract is `src/cluster/messages.ts`: `Prompt`/`Interrupt`/
+ * The wire contract is `src/session/messages.ts`: `Prompt`/`Interrupt`/
  * `Resume` payloads are `{ messageId, content, origin }` (origin = canonical
  * JSON of the protocol origin value) acked with `ChainAppendReceipt`
  * `{ ordinal, actionHash, deduped }`; `Deadline` is `{ requestId, deadlineAt }`
@@ -253,7 +253,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
     }).pipe(Effect.orDie);
 }
 
-/** Chain-guarded timer folds straight from `src/cluster/timers` (C2/F2). */
+/** Chain-guarded timer folds straight from `src/session/alarm` (C2/F2). */
 function makeTimerPort(): SessionEntityPorts["timers"] {
   const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
     actionById: context.kernel.actionById,
