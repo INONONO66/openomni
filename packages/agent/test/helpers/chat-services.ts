@@ -1,4 +1,4 @@
-import { Llm, LlmLive } from "@openomni/llm";
+import { Llm, LlmLive } from "../../src/model";
 import { type Context, Effect, Layer } from "effect";
 import type { ChatAgentConfig, ObservedChatAgentConfig } from "../../src/core/types";
 import type { createSessionChatRunner } from "../../src/session-chat-runner";

@@ -32,7 +32,7 @@ body:
         Issues without reproduction steps may be closed without investigation.
       placeholder: |
         ```ts
-        import { Storage } from "@openomni/ledger";
+        import { Storage } from "@openomni/agent";
         Storage.get(); // Expected: returns adapter, Actual: throws
         ```
 

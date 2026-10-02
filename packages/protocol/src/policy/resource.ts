@@ -56,15 +56,6 @@ export namespace PolicyResource {
       scope: z.string().optional(),
     }),
     z.object({
-      type: z.literal("coordinator"),
-      coordinatorId: z.string().optional(),
-      workerId: z.string().optional(),
-    }),
-    z.object({
-      type: z.literal("runtime"),
-      runtimeId: z.string().optional(),
-    }),
-    z.object({
       type: z.literal("file"),
       path: z.string().optional(),
       filePath: z.string().optional(),

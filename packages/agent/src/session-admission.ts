@@ -1,36 +1,15 @@
 import { Effect } from "effect";
-import { CommitRefused, LedgerFailure, SessionHandleStore, type CommitReceipt, type LedgerError } from "@openomni/ledger";
+import { CommitRefused, type LedgerError } from "./store/errors";
+import * as SessionHandleStore from "./store/fence";
+import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./services";
-import {
-  canonicalDigest,
-  PlainValueSchema,
-  type SessionGeneration,
-  type SessionTransition,
-  type Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, PlainValueSchema, type SessionGeneration, type SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "./compaction/restore";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./errors";
-import {
-  SessionPolicyRefusal,
-  type SessionRuntime,
-  type ResolvedSessionRuntime,
-  type SessionRunnerResult,
-  type SessionActionCommitPort,
-} from "./session-contract";
+import { SessionPolicyRefusal, type SessionRuntime, type ResolvedSessionRuntime, type SessionRunnerResult, type SessionActionCommitPort, } from "./session-contract";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import {
-  turnIntentAction,
-  turnResumeAction,
-  deliveryActions,
-  policyRefusalResult,
-  generationForOpen,
-  pendingBacklog,
-  receivedMessageAction,
-} from "./session-record";
+import { turnIntentAction, turnResumeAction, deliveryActions, policyRefusalResult, generationForOpen, pendingBacklog, receivedMessageAction, } from "./session-record";
 import type { SessionControllerState } from "./session-controller-state";
 import { observeDrained } from "./session-message-observation";
 import { decideRequestTransition, type RequestDecision } from "./session-request";
@@ -271,7 +250,7 @@ export function createSessionAdmission(
           });
           const committed = yield* commitSession({ expectedRevision: current.revision, actions: [action], state: current.state });
           const receipt = committed.receipts[0];
-          if (receipt === undefined) return yield* new LedgerFailure({ operation: "session.commit", cause: "missing_receipt" });
+          if (receipt === undefined) return yield* new AgentFailure({ operation: "session.commit", cause: "missing_receipt" });
           return receipt;
         });
       },

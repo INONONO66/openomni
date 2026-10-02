@@ -1,13 +1,8 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { Clock, Effect } from "effect";
 import { Entropy, createSessionRequests, decideRequestTransition, type SessionRuntime } from "@openomni/agent";
 import { runEffect } from "./effect";
-import {
-  canonicalDigest,
-  type Gateway,
-  type PlainValue,
-  type SessionTransition,
-} from "@openomni/protocol";
+import { canonicalDigest, type Gateway, type PlainValue, type SessionTransition, } from "@openomni/protocol";
 import { adoptLedgerFence, ledger } from "./ledger";
 
 /** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */

@@ -1,5 +1,5 @@
 import { ledger } from "../helpers/ledger";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Effect } from "effect";

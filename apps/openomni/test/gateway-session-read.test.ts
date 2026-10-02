@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { Bus } from "./helpers/bus";
 import { WebSocketHandler, type WsConnection } from "@openomni/channels";
 import type { LedgerAction, LedgerSession, PlainValue } from "@openomni/protocol";
-import { adoptWriter, materializeSession } from "../../../packages/ledger/test/helpers/session";
+import { adoptWriter, materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, readSessionCursor, webSocketCallbacks } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";

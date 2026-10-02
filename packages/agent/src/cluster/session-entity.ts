@@ -1,35 +1,15 @@
-import { CommitRefused, LeaseRefused, SessionHandleStore, SessionNotFound, type LedgerError } from "@openomni/ledger";
-import {
-  PlainValueSchema,
-  SessionTransition,
-  type Inbox,
-} from "@openomni/protocol";
+import { CommitRefused, LeaseRefused, SessionNotFound, type LedgerError } from "../store/errors";
+import * as SessionHandleStore from "../store/fence";
+import { PlainValueSchema, SessionTransition, type Inbox, } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "../errors";
 import { decideSessionAdmission } from "../session-admission";
-import type {
-  SessionAdmissionSnapshot,
-  SessionEntityAuthority,
-  SessionEntityPorts,
-  SessionEntityTimerContext,
-  SessionTimerOutcome,
-} from "../session-contract";
+import type { SessionAdmissionSnapshot, SessionEntityAuthority, SessionEntityPorts, SessionEntityTimerContext, SessionTimerOutcome, } from "../session-contract";
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "../session-record";
 import { decideRequestTransition } from "../session-request";
 import type { SessionKernel } from "./kernel-registry";
-import {
-  DeadlineRpc,
-  InterruptRpc,
-  PromptRpc,
-  RequestCancelRpc,
-  RequestResolveRpc,
-  ResumeRpc,
-  RetryScheduledRpc,
-  WatchFiredRpc,
-  WatchTimeoutRpc,
-  type ChainAppendReceipt,
-} from "./messages";
+import { DeadlineRpc, InterruptRpc, PromptRpc, RequestCancelRpc, RequestResolveRpc, ResumeRpc, RetryScheduledRpc, WatchFiredRpc, WatchTimeoutRpc, type ChainAppendReceipt, } from "./messages";
 
 /** Store-handle types by position on the public kernel factory (the ledger index re-export lands with wave 3). */
 type SessionStoreHandle = Parameters<typeof SessionHandleStore.createSessionKernel>[0];

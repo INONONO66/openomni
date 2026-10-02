@@ -1,10 +1,6 @@
-import type { CompiledPolicySnapshot } from "@openomni/policy";
-import type { Llm } from "@openomni/llm";
-import type {
-  AnyToolDefinition,
-  ObservationSink as ObservationPort,
-  SessionGeneration,
-} from "@openomni/protocol";
+import type { CompiledPolicySnapshot } from "./kernel/gate/compile";
+import type { Llm } from "./model";
+import type { AnyToolDefinition, ObservationSink as ObservationPort, SessionGeneration, } from "@openomni/protocol";
 import { Context, type Effect, type Scope } from "effect";
 import type { Entropy } from "./core/entropy";
 import type { SessionError } from "./errors";

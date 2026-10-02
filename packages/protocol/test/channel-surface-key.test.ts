@@ -92,51 +92,6 @@ describe("Channel.SurfaceKey codec", () => {
     });
   });
 
-  describe("parse", () => {
-    test("parses a DM key", () => {
-      const parsed = SurfaceKey.parse("slack:workspaceA:dm:U123");
-      expect(parsed.surface).toBe("slack");
-      expect(parsed.namespace).toBe("workspaceA");
-      expect(parsed.kind).toBe("dm");
-      expect(parsed.id).toBe("U123");
-      expect(parsed.threadId).toBeUndefined();
-    });
-
-    test("parses a group key", () => {
-      const parsed = SurfaceKey.parse("slack:workspaceA:group:C456");
-      expect(parsed.kind).toBe("group");
-      expect(parsed.id).toBe("C456");
-    });
-
-    test("parses a thread key", () => {
-      const parsed = SurfaceKey.parse("slack:workspaceA:group:C456:thread:171000");
-      expect(parsed.kind).toBe("group");
-      expect(parsed.id).toBe("C456");
-      expect(parsed.threadId).toBe("171000");
-    });
-
-    test("parses a chat key", () => {
-      const parsed = SurfaceKey.parse("telegram:bot123:chat:chat456");
-      expect(parsed.kind).toBe("chat");
-      expect(parsed.id).toBe("chat456");
-    });
-
-    test("parses a legacy key without known kind", () => {
-      const parsed = SurfaceKey.parse("tui:/Users/ino/Develop/OpenOmni");
-      expect(parsed.surface).toBe("tui");
-      expect(parsed.namespace).toBe("/Users/ino/Develop/OpenOmni");
-      expect(parsed.kind).toBeUndefined();
-      expect(parsed.id).toBeUndefined();
-    });
-
-    test("parse handles legacy keys gracefully", () => {
-      const parsed = SurfaceKey.parse("myservice:some-id");
-      expect(parsed.surface).toBe("myservice");
-      expect(parsed.namespace).toBe("some-id");
-      expect(parsed.kind).toBeUndefined();
-    });
-  });
-
   describe("DM vs group vs thread distinction", () => {
     test("produces distinct keys for DM and group in same workspace", () => {
       const dmKey = SurfaceKey.fromChannel({
@@ -173,24 +128,6 @@ describe("Channel.SurfaceKey codec", () => {
       expect(groupKey).not.toBe(threadKey);
       expect(threadKey).toContain(":thread:");
       expect(groupKey).not.toContain(":thread:");
-    });
-
-    test("roundtrips fromChannel → parse correctly", () => {
-      const descriptor: Channel.SurfaceKey.ChannelDescriptor = {
-        surface: "slack",
-        namespace: "ws1",
-        kind: "group",
-        id: "C001",
-        threadId: "171000",
-      };
-      const key = SurfaceKey.fromChannel(descriptor);
-      const parsed = SurfaceKey.parse(key);
-
-      expect(parsed.surface).toBe(descriptor.surface);
-      expect(parsed.namespace).toBe(descriptor.namespace);
-      expect(parsed.kind).toBe(descriptor.kind);
-      expect(parsed.id).toBe(descriptor.id);
-      expect(parsed.threadId).toBe(descriptor.threadId);
     });
   });
 });

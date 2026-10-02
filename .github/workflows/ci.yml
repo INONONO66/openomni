@@ -225,22 +225,6 @@ jobs:
         if: matrix.key == 'protocol'
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/protocol
-      - name: Test (ipc)
-        if: matrix.key == 'ipc'
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/ipc
-      - name: Test (ledger)
-        if: matrix.key == 'ledger'
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/ledger
-      - name: Test (policy)
-        if: matrix.key == 'policy'
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/policy
-      - name: Test (llm)
-        if: matrix.key == 'llm'
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/llm
       - name: Test (agent)
         if: matrix.key == 'agent'
         run: bun run test:ci
@@ -249,10 +233,6 @@ jobs:
         if: matrix.key == 'machines'
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
         working-directory: packages/machines
-      - name: Test (codemode)
-        if: matrix.key == 'codemode'
-        run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage
-        working-directory: packages/codemode
       - name: Test (channels)
         if: matrix.key == 'channels'
         run: bun test --timeout 15000 --coverage --coverage-reporter=lcov --coverage-dir=coverage

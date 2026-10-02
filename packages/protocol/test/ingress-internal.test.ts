@@ -39,21 +39,4 @@ describe("InternalEventSchema", () => {
       }),
     );
   });
-
-  test("trigger metadata parses correctly", () => {
-    const result = Ingress.InternalEventSchema.parse({
-      id: "test-3",
-      traceId: "trace-test",
-      surface: "cron",
-      mode: "internal",
-      agentName: "dev",
-      payload: "hello",
-      activation: {
-        trigger: { kind: "cron", id: "job-1", scheduledAt: 1000, firedAt: 1001 },
-      },
-    });
-
-    expect(result.activation?.trigger?.kind).toBe("cron");
-    expect(result.activation?.trigger?.id).toBe("job-1");
-  });
 });

@@ -1,16 +1,8 @@
 import { testExecutor } from "./executor";
-import {
-  type ChatFixture as ChatAgentConfig,
-  type ChatFixture,
-  chatServices,
-} from "./chat-services";
-import {
-  compilePolicySnapshot,
-  KERNEL_POLICY_REGISTRY,
-  SEEDED_POLICY_ROWS,
-} from "@openomni/policy";
+import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, } from "./chat-services";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import { Effect } from "effect";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { ChatAgentInput } from "../../src/core/types";
 import type { ExecutorOptions } from "../../src/executor-contract";
 import { runAgent } from "../../src/core/execution/run";

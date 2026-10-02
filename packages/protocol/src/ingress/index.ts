@@ -6,12 +6,8 @@ import {
   recordedRoutingDecision as recordedRoutingDecisionReader,
   type RoutingDecisionPayload as RoutingDecisionPayloadType,
 } from "../event/ingress.js";
-import { Model } from "../model/index.js";
-import { Policy } from "../policy/index.js";
-import { Tool } from "../tool/index.js";
 import { SessionTransition } from "../ledger/session-transition.js";
 import * as RouteRecord from "./route-record.js";
-import { EpochMs } from "../time.js";
 
 /**
  * #500 A6: every production-written actor key is declared (`runId` and
@@ -79,39 +75,6 @@ function normalizeTargetInput<Input>(input: Input) {
 
 const TargetSchemaImpl = z.preprocess(normalizeTargetInput, RawTargetSchema);
 
-/**
- * #500 A3: the one lifecycle that rides an inbound event is the WORKER axis
- * (cancel requests read "stopping"). The resident axis (sleeping / hydrating /
- * active / idle / releasing) is in-process ResidentRuntime activation state
- * and has zero writers and zero readers on this field — it never rides the
- * event, so it is not part of this vocabulary.
- */
-const WorkerLifecycleSchema = z.enum(["starting", "ready", "busy", "stopping", "exited"]);
-
-const ActivationMetadataSchemaImpl = z
-  .object({
-    durableSessionId: z.string().optional(),
-    activationId: z.string().optional(),
-    runId: z.string().optional(),
-    lifecycle: WorkerLifecycleSchema.optional(),
-    /**
-     * #500 A2: background worker dispatch flag — a declared, serializable
-     * field (previously smuggled through the catchall).
-     */
-    background: z.boolean().optional(),
-    trigger: z
-      .object({
-        kind: z.enum(["cron", "webhook", "manual", "internal"]),
-        id: z.string().optional(),
-        scheduledAt: EpochMs.optional(),
-        firedAt: EpochMs.optional(),
-        attempt: z.number().optional(),
-      })
-      .catchall(z.unknown())
-      .optional(),
-  })
-  .catchall(z.unknown());
-
 /** The inbound sender identity a channel driver carries (Channel.InboundMessage.sender). */
 const SenderMetaSchema = z
   .object({ id: z.string(), name: z.string().optional() })
@@ -155,39 +118,6 @@ export namespace Ingress {
   export const MetaSchema = MetaSchemaImpl;
   export type Meta = z.infer<typeof MetaSchema>;
 
-  export const WorkerLifecycle = WorkerLifecycleSchema;
-  export type WorkerLifecycle = z.infer<typeof WorkerLifecycleSchema>;
-
-
-  /**
-   * The zod half of a delivered agent config; only the in-process callback
-   * half below is ingress-specific. `.passthrough()` keeps the historical
-   * inbound tolerance for extra keys.
-   */
-  export const AgentDefSchema = z
-    .object({
-      model: Model.Ref,
-      systemPrompt: z.string().optional(),
-      tools: z.array(Tool.Spec).optional(),
-      budget: Actor.Profile.Budget.optional(),
-      permissions: Policy.Permission.optional(),
-      policyPlan: Policy.PolicyPlan.optional(),
-      toolConfig: Tool.Config.optional(),
-    })
-    .passthrough();
-  // Runtime callbacks can't be expressed in Zod.
-  export type AgentDef = z.infer<typeof AgentDefSchema> & {
-    toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
-    toolExecutorFactory?: (ctx: {
-      sessionId: string;
-      runId: string;
-      agentName?: string;
-      workspaceRoot?: string;
-      /** The triggering delivery's perimeter trust verdict. */
-      actorTrustTier?: string;
-    }) => (call: Tool.Call, context?: Tool.ExecutionContext) => Promise<Tool.Result>;
-  };
-
   const InboundEventBase = {
     id: z.string(),
     /** D11: minted once at the producer's first frame (channel surface, cron fire, dispatch command) — ingress inherits, never re-mints. */
@@ -200,16 +130,13 @@ export namespace Ingress {
     payload: z.unknown().optional(),
     target: TargetSchemaImpl.optional(),
     meta: MetaSchemaImpl.optional(),
-    /** #500 A1: activation-scoped metadata (in-process only, never persisted). */
-    activation: ActivationMetadataSchemaImpl.optional(),
   };
 
   export const DirectEventSchema = z.object({
     ...InboundEventBase,
     mode: z.literal("direct"),
-    agent: AgentDefSchema,
   });
-  export type DirectEvent = z.infer<typeof DirectEventSchema> & { agent: AgentDef };
+  export type DirectEvent = z.infer<typeof DirectEventSchema>;
 
   export const InternalEventSchema = z.object({
     ...InboundEventBase,
@@ -219,7 +146,6 @@ export namespace Ingress {
   export type InternalEvent = z.infer<typeof InternalEventSchema>;
 
   export type InboundEvent = DirectEvent | InternalEvent;
-  export type ResolvedInboundEvent = DirectEvent | (InternalEvent & { agent: AgentDef });
 
   /** #499 observation descriptors — published via Bus; event name strings frozen. */
   export const Events = EventDescriptors;

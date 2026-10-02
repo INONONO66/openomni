@@ -36,39 +36,21 @@ export function clusterTempDir(prefix: string): {
 
 import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import { L0Write, SessionHandleStore } from "@openomni/ledger";
+import { L0Write } from "../../src/store/session-file";
+import * as SessionHandleStore from "../../src/store/fence";
 import type { Inbox } from "@openomni/protocol";
 import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
-import { openCatalogStore, openSessionStore } from "../../../ledger/src/storage/index";
-import {
-  SessionEntity,
-  SessionEntityContext,
-  SessionEntityLive,
-  type SessionEntityEnv,
-} from "../../src/cluster/session-entity";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/cluster/session-entity";
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import {
-  deadlineDelivery,
-  retryDelivery,
-  watchFiredDelivery,
-  watchTimeoutDelivery,
-  type TimerChainReads,
-} from "../../src/cluster/timers";
-import type {
-  SessionEntityPorts,
-  SessionEntityTimerContext,
-  SessionEntityTurnInput,
-} from "../../src/session-contract";
+import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type TimerChainReads, } from "../../src/cluster/timers";
+import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session-contract";
 import type { SessionError } from "../../src/errors";
-import {
-  deliveryActions,
-  turnIntentAction,
-  turnResumeAction,
-  turnTerminalAction,
-} from "../../src/session-record";
+import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session-record";
 import { runAgent } from "./executor";
 
 export interface TestClusterOptions {

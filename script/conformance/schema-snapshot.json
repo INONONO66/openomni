@@ -114,7 +114,6 @@
     "sessionId"
   ],
   "Gateway.DeliveredEvent": [
-    "activation",
     "channel",
     "id",
     "meta",
@@ -459,18 +458,7 @@
     "type",
     "workerId"
   ],
-  "Ingress.AgentDefSchema": [
-    "budget",
-    "model",
-    "permissions",
-    "policyPlan",
-    "systemPrompt",
-    "toolConfig",
-    "tools"
-  ],
   "Ingress.DirectEventSchema": [
-    "activation",
-    "agent",
     "channel",
     "id",
     "meta",
@@ -483,7 +471,6 @@
     "workspace"
   ],
   "Ingress.InternalEventSchema": [
-    "activation",
     "agentName",
     "channel",
     "id",
@@ -821,7 +808,6 @@
     "durationMs",
     "effects",
     "factsUsed",
-    "obligations",
     "policyId",
     "policyVersion",
     "priority",
@@ -845,15 +831,6 @@
   "Policy.PolicyEffect#tool.skip_invocation": ["reason", "type"],
   "Policy.PolicyEffect#writeback.rewrite": ["output", "type"],
   "Policy.PolicyEffect#writeback.suppress": ["reason", "type"],
-  "Policy.PolicyObligation": [
-    "description",
-    "obligationId",
-    "resolvedBy",
-    "timeoutMs",
-    "type"
-  ],
-  "Policy.PolicyPlan": ["labels", "policies", "registryVersion"],
-  "Policy.PolicyPoint": ["allowedEffects", "defaultFailPolicy", "point"],
   "PolicyPermission.EvaluationRequest": [
     "action",
     "actor",
@@ -1031,6 +1008,52 @@
     "revision",
     "sessionId",
     "turnId"
+  ],
+  "SessionRead.Bound": ["result", "type"],
+  "SessionRead.Cursor": ["epoch", "revision"],
+  "SessionRead.Gap": [
+    "epoch",
+    "headRevision",
+    "oldestRevision",
+    "sessionId",
+    "type"
+  ],
+  "SessionRead.Page": [
+    "actions",
+    "afterRevision",
+    "epoch",
+    "headRevision",
+    "nextRevision",
+    "phase",
+    "phaseSince",
+    "sessionId",
+    "state",
+    "toolWallMs",
+    "type",
+    "usage"
+  ],
+  "SessionRead.Receipt": ["status", "type"],
+  "SessionRead.Request": ["cursor", "limit", "sessionId", "type"],
+  "SessionRead.Response#0": [
+    "actions",
+    "afterRevision",
+    "epoch",
+    "headRevision",
+    "nextRevision",
+    "phase",
+    "phaseSince",
+    "sessionId",
+    "state",
+    "toolWallMs",
+    "type",
+    "usage"
+  ],
+  "SessionRead.Response#1": [
+    "epoch",
+    "headRevision",
+    "oldestRevision",
+    "sessionId",
+    "type"
   ],
   "SessionTransition.Answer": [
     "allowedAction",
@@ -1293,7 +1316,6 @@
     "totalTokens"
   ],
   "Tool.Call": ["id", "input", "tool"],
-  "Tool.Config": ["agentTools", "mcpTools", "systemTools", "workspaceRoot"],
   "Tool.Result": [
     "id",
     "isError",
@@ -1307,9 +1329,7 @@
     "inputSchema",
     "labels",
     "name",
-    "placement",
     "prompt",
-    "requires",
     "safe",
     "sequential"
   ],

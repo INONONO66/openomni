@@ -3,29 +3,32 @@ import { Effect, Result } from "effect";
 import ts from "typescript";
 import { runSyncEffect } from "../apps/openomni/test/helpers/effect";
 import * as Agent from "../packages/agent/src/errors";
+import * as Model from "../packages/agent/src/model/errors";
+import * as Store from "../packages/agent/src/store/errors";
+import { sdkError } from "../packages/agent/test/model/helpers/retry";
 import * as Channels from "../packages/channels/src/errors";
-import * as Code from "../packages/codemode/src/errors";
-import * as Ipc from "../packages/ipc/src/errors";
-import * as Ledger from "../packages/ledger/src/errors";
-import * as Llm from "../packages/llm/src/errors";
-import { sdkError } from "../packages/llm/test/helpers/retry";
+import * as Code from "../packages/machines/src/codemode/errors";
 import * as Machines from "../packages/machines/src/errors";
+import * as Ipc from "../packages/machines/src/ipc/errors";
 const diagnostic = { operation: "fixture", cause: "foreign diagnostic" };
 const message = { message: "fixture" };
 const usage = { inputTokens: 1, outputTokens: 2, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
-const llm = {
-  LlmFailure: new Llm.LlmFailure(diagnostic),
-  APIError: new Llm.APIError({ cause: sdkError({ ...message, isRetryable: true, statusCode: 429 }), provider: "provider", model: "model" }),
-  LlmRunFailure: new Llm.LlmRunFailure({ ...message, usage, aborted: false, contextOverflow: false, visibleOutput: true }),
-  ModelResolutionError: new Llm.ModelResolutionError({ ...message, provider: "provider", model: "model", reason: "model_not_found" }),
-  AuthInvalidFileError: new Llm.AuthInvalidFileError({ ...message, path: "auth.json" }),
-  AuthResolutionError: new Llm.AuthResolutionError({ ...message, provider: "provider", reason: "missing_auth" }),
-  ProxyModelsError: new Llm.ProxyModelsError({ ...message, url: "https://fixture.invalid" }),
-  TransportFailure: new Llm.TransportFailure({ ...diagnostic, ...message }),
-  InvalidProviderData: new Llm.InvalidProviderData({ ...diagnostic, ...message }),
-} satisfies { [K in Llm.LlmError["_tag"]]: Extract<Llm.LlmError, { _tag: K }> };
+const agentFailure = new Agent.AgentFailure(diagnostic);
+// #1246: llm folded into the agent model plane; AgentFailure is the one carrier.
+const model = {
+  AgentFailure: agentFailure,
+  APIError: new Model.APIError({ cause: sdkError({ ...message, isRetryable: true, statusCode: 429 }), provider: "provider", model: "model" }),
+  LlmRunFailure: new Model.LlmRunFailure({ ...message, usage, aborted: false, contextOverflow: false, visibleOutput: true }),
+  ModelResolutionError: new Model.ModelResolutionError({ ...message, provider: "provider", model: "model", reason: "model_not_found" }),
+  AuthInvalidFileError: new Model.AuthInvalidFileError({ ...message, path: "auth.json" }),
+  AuthResolutionError: new Model.AuthResolutionError({ ...message, provider: "provider", reason: "missing_auth" }),
+  ProxyModelsError: new Model.ProxyModelsError({ ...message, url: "https://fixture.invalid" }),
+  TransportFailure: new Model.TransportFailure({ ...diagnostic, ...message }),
+  InvalidProviderData: new Model.InvalidProviderData({ ...diagnostic, ...message }),
+} satisfies { [K in Model.LlmError["_tag"]]: Extract<Model.LlmError, { _tag: K }> };
+// #1246: ipc folded into machines; MachinesFailure is the one carrier.
 const ipc = {
-  IpcFailure: new Ipc.IpcFailure(diagnostic),
+  MachinesFailure: new Machines.MachinesFailure(diagnostic),
   IpcConnectionError: new Ipc.IpcConnectionError(message),
   IpcProtocolError: new Ipc.IpcProtocolError(message),
   IpcTimeoutError: new Ipc.IpcTimeoutError({ ...message, requestId: "request", method: "fixture" }),
@@ -40,32 +43,32 @@ const machines = {
   TransportFailure: new Machines.TransportFailure({ ...diagnostic, ...message }),
 } satisfies { [K in Machines.MachineError["_tag"]]: Extract<Machines.MachineError, { _tag: K }> };
 const code = {
-  CodemodeFailure: new Code.CodemodeFailure(diagnostic),
+  MachinesFailure: new Machines.MachinesFailure(diagnostic),
   CodemodeError: new Code.CodemodeError({ ...message, reason: "closed" }),
   DriverFailure: new Code.DriverFailure({ ...diagnostic, ...message }),
 } satisfies { [K in Code.CodeError["_tag"]]: Extract<Code.CodeError, { _tag: K }> };
-const ledger = {
-  LedgerFailure: new Ledger.LedgerFailure(diagnostic),
-  SessionNotFound: new Ledger.SessionNotFound({ sessionId: "session" }),
-  MaterializeRefused: new Ledger.MaterializeRefused({ sessionId: "session", reason: "input" }),
-  LeaseRefused: new Ledger.LeaseRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
-  CommitRefused: new Ledger.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
-  PolicyGenerationRefused: new Ledger.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
-  StorageUnavailable: new Ledger.StorageUnavailable({ capability: "storage" }),
-  CorruptRecord: new Ledger.CorruptRecord({ operation: "decode", id: "record" }),
-} satisfies { [K in Ledger.LedgerError["_tag"]]: Extract<Ledger.LedgerError, { _tag: K }> };
-// Agent.SessionError absorbs Ledger.LedgerError, Llm.LlmRunFailure and Llm.LlmFailure, so those fixtures are members too.
+// #1246: the ledger store plane folded into agent; AgentFailure is the one carrier.
+const store = {
+  AgentFailure: agentFailure,
+  SessionNotFound: new Store.SessionNotFound({ sessionId: "session" }),
+  MaterializeRefused: new Store.MaterializeRefused({ sessionId: "session", reason: "input" }),
+  LeaseRefused: new Store.LeaseRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
+  CommitRefused: new Store.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
+  PolicyGenerationRefused: new Store.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
+  StorageUnavailable: new Store.StorageUnavailable({ capability: "storage" }),
+  CorruptRecord: new Store.CorruptRecord({ operation: "decode", id: "record" }),
+} satisfies { [K in Store.LedgerError["_tag"]]: Extract<Store.LedgerError, { _tag: K }> };
+// Agent.SessionError absorbs Store.LedgerError and Model.LlmRunFailure, so those fixtures are members too.
 const agent = {
-  ...ledger,
-  LlmRunFailure: llm.LlmRunFailure,
-  LlmFailure: llm.LlmFailure,
-  AgentFailure: new Agent.AgentFailure(diagnostic),
+  ...store,
+  LlmRunFailure: model.LlmRunFailure,
+  AgentFailure: agentFailure,
   PolicyDenied: new Agent.PolicyDenied({ phase: "pre", ruleIds: [] }),
   ToolBodyFailed: new Agent.ToolBodyFailed({ tool: "fixture", cause: "foreign" }),
   InvocationClosed: new Agent.InvocationClosed({ tool: "fixture", reason: "settled" }),
   Interrupted: new Agent.Interrupted(),
   ContextAdmissionError: new Agent.ContextAdmissionError(),
-  CommitFailed: new Agent.CommitFailed({ error: ledger.CommitRefused }),
+  CommitFailed: new Agent.CommitFailed({ error: store.CommitRefused }),
   OutcomeUnknown: new Agent.OutcomeUnknown({ reason: "unsettled" }),
   CompactionExecutionError: new Agent.CompactionExecutionError({ reason: "refused" }),
   ContextRestoreError: new Agent.ContextRestoreError({ reason: "unknown_compaction" }),
@@ -97,31 +100,41 @@ type Failure =
   | Channels.ChannelError
   | Code.CodeError
   | Ipc.IpcError
-  | Ledger.LedgerError
-  | Llm.LlmError
+  | Store.LedgerError
+  | Model.LlmError
   | Machines.MachineError;
 type ErrorClass = abstract new (...args: never) => Error;
 interface PackageEntry {
   readonly name: string;
+  /** Module path of the union's errors file, relative to packages/. */
+  readonly path: string;
   readonly module: Readonly<Record<string, object>>;
   readonly union: string;
   /** The package-owned carrier for a Cause without a typed error: `{ operation, cause: string }`. */
   readonly carrier: Failure["_tag"];
+  /** Where the fixture imports the carrier class from (the ipc/codemode planes do not re-export it). */
+  readonly carrierPath: string;
   readonly failures: Readonly<Record<string, Failure>>;
   /** Exported error classes thrown from non-Effect paths by design: never union members, never yielded. */
   readonly thrown: readonly ErrorClass[];
 }
 const isErrorClass = (value: object): value is ErrorClass =>
   typeof value === "function" && Object.prototype.isPrototypeOf.call(Error, value);
+/** The two post-#1246 carriers, keyed by tag for entries whose errors file does not re-export its carrier. */
+const carrierOwners: Readonly<Record<string, object>> = {
+  AgentFailure: Agent.AgentFailure,
+  MachinesFailure: Machines.MachinesFailure,
+  ChannelsFailure: Channels.ChannelsFailure,
+};
 
 const packages: readonly PackageEntry[] = [
-  { name: "agent", module: Agent, union: "SessionError", carrier: "AgentFailure", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
-  { name: "channels", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", failures: channels, thrown: [] },
-  { name: "codemode", module: Code, union: "CodeError", carrier: "CodemodeFailure", failures: code, thrown: [] },
-  { name: "ipc", module: Ipc, union: "IpcError", carrier: "IpcFailure", failures: ipc, thrown: [] },
-  { name: "ledger", module: Ledger, union: "LedgerError", carrier: "LedgerFailure", failures: ledger, thrown: [Ledger.LedgerInvariant, Ledger.ActorRegistryRefused, Ledger.ReplyGrantProjectionError] },
-  { name: "llm", module: Llm, union: "LlmError", carrier: "LlmFailure", failures: llm, thrown: [] },
-  { name: "machines", module: Machines, union: "MachineError", carrier: "MachinesFailure", failures: machines, thrown: [] },
+  { name: "agent", path: "agent/src/errors", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/errors", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
+  { name: "agent store", path: "agent/src/store/errors", module: Store, union: "LedgerError", carrier: "AgentFailure", carrierPath: "agent/src/store/errors", failures: store, thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError] },
+  { name: "agent model", path: "agent/src/model/errors", module: Model, union: "LlmError", carrier: "AgentFailure", carrierPath: "agent/src/model/errors", failures: model, thrown: [] },
+  { name: "channels", path: "channels/src/errors", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", carrierPath: "channels/src/errors", failures: channels, thrown: [] },
+  { name: "machines", path: "machines/src/errors", module: Machines, union: "MachineError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: machines, thrown: [] },
+  { name: "machines ipc", path: "machines/src/ipc/errors", module: Ipc, union: "IpcError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: ipc, thrown: [] },
+  { name: "machines codemode", path: "machines/src/codemode/errors", module: Code, union: "CodeError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: code, thrown: [] },
 ];
 for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {
@@ -143,7 +156,7 @@ for (const entry of packages) {
     }
     const carrier = entry.failures[entry.carrier];
     expect(carrier).toBeDefined();
-    expect(carrier?.constructor === entry.module[entry.carrier]).toBe(true);
+    expect(carrier?.constructor === (entry.module[entry.carrier] ?? carrierOwners[entry.carrier])).toBe(true);
     expect(carrier !== undefined && "cause" in carrier ? carrier.cause : undefined).toBe(diagnostic.cause);
     expect(JSON.parse(JSON.stringify(carrier))).toMatchObject({ _tag: entry.carrier, ...diagnostic });
   });
@@ -152,7 +165,8 @@ for (const entry of packages) {
 test("every package union has a compiling exhaustive tag switch and a string carrier cause", () => {
   const fixturePath = new URL("./effect-error-exhaustiveness.fixture.ts", import.meta.url).pathname;
   const fixture = packages.map((entry, index) => `
-    import type { ${entry.union} as Union${index}, ${entry.carrier} as Carrier${index} } from "../packages/${entry.name}/src/errors";
+    import type { ${entry.union} as Union${index} } from "../packages/${entry.path}";
+    import type { ${entry.carrier} as Carrier${index} } from "../packages/${entry.carrierPath}";
     function exhaustive${index}(error: Union${index}): string {
       switch (error._tag) {
         ${Object.keys(entry.failures).map((tag) => `case ${JSON.stringify(tag)}: return error._tag;`).join("\n")}

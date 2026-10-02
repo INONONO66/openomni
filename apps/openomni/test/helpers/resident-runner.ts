@@ -1,6 +1,6 @@
 import { testToolPorts } from "./tool-ports";
 import { Context, Effect, Layer, Scope } from "effect";
-import { Llm, LlmLive } from "@openomni/llm";
+import { Llm, LlmLive } from "@openomni/agent";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";

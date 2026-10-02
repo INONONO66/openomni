@@ -1,11 +1,5 @@
 import { Result } from "effect";
-import {
-  Vault,
-  type ActorRegistry,
-  type ChannelInstanceStore,
-  type PersonStore,
-  type SecretStore,
-} from "@openomni/ledger";
+import { Vault, type ActorRegistry, type ChannelInstanceStore, type PersonStore, type SecretStore } from "@openomni/channels";
 import { type ChannelRuntimeDeps, type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";

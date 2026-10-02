@@ -1,11 +1,11 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { Bus } from "./helpers/bus";
 import { describe, expect, test } from "bun:test";
 import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
-import type { RunInput } from "@openomni/llm";
-import { createSurfaceKeyStore } from "@openomni/ledger";
+import type { RunInput } from "@openomni/agent";
+import { createSurfaceKeyStore } from "@openomni/agent";
 import { Gateway, MessagingEvents, type Tool } from "@openomni/protocol";
 import {
   channelStoreSource,

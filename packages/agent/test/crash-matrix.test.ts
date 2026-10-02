@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../src/store/fence";
 import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../src/compaction/summary";
@@ -29,20 +29,7 @@ import { countingRunner } from "./helpers/counting-runner-g1";
 import { nth } from "./helpers/nth";
 import { receiveOutbound } from "./helpers/effect-g2";
 import { requestLedger } from "./helpers/effect-g1";
-import {
-  checkpointEvidence,
-  committedCompactionPoints,
-  crashPoint,
-  crashWitness,
-  effectOf,
-  intentOf,
-  matrixSchema,
-  observations,
-  outboundPoints,
-  recovery,
-  sessionId,
-  type CrashPoint,
-} from "./helpers/crash-matrix";
+import { checkpointEvidence, committedCompactionPoints, crashPoint, crashWitness, effectOf, intentOf, matrixSchema, observations, outboundPoints, recovery, sessionId, type CrashPoint, } from "./helpers/crash-matrix";
 
 const matrix = matrixSchema.parse(
   await Bun.file(new URL("../../../script/conformance/crash-matrix.json", import.meta.url)).json(),

@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import { LlmLive } from "@openomni/llm";
+import { LlmLive } from "@openomni/agent";
 import { ObservationSink } from "@openomni/agent";
 import { Bus, newTraceId } from "./helpers/bus";
 import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/agent";
 import { loadConfig } from "../src/config";
 import { configuredCompaction } from "../src/compaction/strategy";
 import { assistantMessage } from "./helpers/assistant-message";

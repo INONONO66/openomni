@@ -1,5 +1,5 @@
-import { LlmLive } from "@openomni/llm";
-import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { LlmLive } from "../../src/model";
+import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
 import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { NamedPolicyRegistry } from "../../src/bundle";

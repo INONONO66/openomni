@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "@openomni/agent";
 import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";

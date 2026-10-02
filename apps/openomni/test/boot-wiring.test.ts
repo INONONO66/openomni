@@ -5,7 +5,7 @@ import {
   resolveChannelGrant,
 } from "@openomni/channels";
 import { Database } from "bun:sqlite";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/agent";
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { Effect } from "effect";

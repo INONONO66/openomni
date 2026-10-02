@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { describe, expect, it } from "bun:test";
-import type { Run, RunInput, Sink } from "@openomni/llm";
+import type { Run, RunInput, Sink } from "../../../src/model";
 import type { Message } from "@openomni/protocol";
 import { runTestAgent } from "../../helpers/effect-g3";
 import { collector } from "../../helpers/observation-collector";

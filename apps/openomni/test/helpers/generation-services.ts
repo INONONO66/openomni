@@ -1,6 +1,6 @@
 import { AgentProcessLive, BundlesLive, GenerationLayers, type ObservationSink, type SessionRuntime } from "@openomni/agent";
 import { Bus } from "./bus";
-import { Llm, LlmLive } from "@openomni/llm";
+import { Llm, LlmLive } from "@openomni/agent";
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";

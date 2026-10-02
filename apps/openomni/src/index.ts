@@ -23,7 +23,7 @@ import {
   AgentFailure,
   ExecutionApprovalError,
 } from "@openomni/agent";
-import { CommitRefused, SessionHandleStore } from "@openomni/ledger";
+import { CommitRefused, SessionHandleStore } from "@openomni/agent";
 import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
@@ -32,7 +32,7 @@ import {
   ChannelsFailure,
   WebSocketHandler,
 } from "@openomni/channels";
-import type { ActorRegistry } from "@openomni/ledger";
+import type { ActorRegistry } from "@openomni/channels";
 
 import {
   createMachineHost,

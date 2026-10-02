@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { AgentFailure, type SessionEntity } from "@openomni/agent";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";

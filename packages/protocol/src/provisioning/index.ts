@@ -4,7 +4,7 @@ import * as Schema from "./schema.js";
  * Provisioning namespace (docs/provisioning-and-providers.md §3): Person /
  * ChannelInstance / Secret declaration schemas and the typed store + vault
  * errors. Envelope crypto and durable persistence live in
- * `@openomni/ledger`'s provisioning band.
+ * the channels store plane's provisioning band (`packages/channels/src/store/`).
  */
 export namespace Provisioning {
   export const Person = Schema.Person;

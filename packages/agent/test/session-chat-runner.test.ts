@@ -2,35 +2,22 @@ import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
 import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { Cause, Effect, Exit } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { providerFailure } from "./helpers/mock-llm";
 import { seedPolicy } from "./helpers/seed-policy";
 import { describe, expect, it } from "bun:test";
 
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { closeSessions, createSessionChatRunner, type Executor,  } from "../src/index";
 import { Bus } from "./helpers/bus";
 import { session, type SessionHandle, type SessionRunnerInput } from "../src/session-handle";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
-import {
-  completeModel,
-  createMockLlmConfig,
-  createStopOutcome,
-  type MockLlmFn,
-  mockProviderData,
-  mockProviderModel,
-} from "./helpers/mock-llm";
+import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";
 
 const policy = compilePolicySnapshot({
   registry: KERNEL_POLICY_REGISTRY,
@@ -348,7 +335,7 @@ describe("session chat runner", () => {
           let calls = 0;
 
           const { actions, inboxIds } = yield* runDurably(
-            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
+            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
               calls += 1;
               return calls === 1 ? { type: "continue" } : completeModel(input, sink);
             },
@@ -407,7 +394,7 @@ describe("session chat runner", () => {
           let calls = 0;
 
           const { actions } = yield* runDurably(
-            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
+            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
               calls += 1;
               return calls === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }
@@ -456,7 +443,7 @@ describe("session chat runner", () => {
           const answered: string[] = [];
 
           const { actions } = yield* runDurably(
-            async (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) => {
+            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
               answered.push(input.model.id);
               return answered.length === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }

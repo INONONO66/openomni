@@ -1,6 +1,6 @@
 import { ObservationSink } from "@openomni/agent";
 import { Bus } from "./bus";
-import { Llm, Provider, run } from "@openomni/llm";
+import { Llm, Provider, run } from "@openomni/agent";
 import { Effect } from "effect";
 import { createCompletionPort } from "../../src/composition/completion";
 import type { FixtureLlm } from "./app-fixture";

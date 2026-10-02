@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { APICallError } from "ai";
-import { LlmRunFailure } from "@openomni/llm";
+import { LlmRunFailure } from "../src/model";
 import { PlainObjectSchema, type LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import { restoreModelSelection } from "../src/model-selection";

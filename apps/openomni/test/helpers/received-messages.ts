@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../../packages/agent/test/store/helpers/session-tree";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 
 /** All received-message evidence in one session's chain (W5.2 inbox = prompt actions). */

@@ -10,7 +10,6 @@ describe("ingress target helpers", () => {
       surface: "cli",
       mode: "direct",
       payload: "hello",
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
 
     expect(resolveTarget(event)).toEqual({ kind: "resident" });
@@ -34,7 +33,6 @@ describe("ingress target helpers", () => {
       target: "worker:worker-7",
       meta: { target: { kind: "resident" } },
       payload: "continue",
-      agent: { model: { provider: "anthropic", id: "claude-3-5-sonnet" } },
     });
 
     expect(resolveTarget(event)).toEqual({ kind: "worker", workerId: "worker-7" });

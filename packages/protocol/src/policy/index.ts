@@ -1,10 +1,6 @@
-import { z } from "zod";
-import { PlainValueSchema } from "../json.js";
-import { Events as EventDescriptors } from "../event/policy.js";
-import { PolicyDefinition } from "./definition.js";
+import type { z } from "zod";
 import { PolicyEffects } from "./effects.js";
 import { PolicyPermission } from "./permission.js";
-import { PolicyPointModule } from "./policy-point.js";
 import { PolicyResource } from "./resource.js";
 
 export { PolicyPermission } from "./permission.js";
@@ -17,18 +13,10 @@ export namespace Policy {
   export const EvaluationResult = PolicyPermission.EvaluationResult;
   export type EvaluationResult = z.infer<typeof EvaluationResult>;
 
-  export const Timing = PolicyDefinition.Timing;
-  export type Timing = (typeof Timing)[keyof typeof Timing];
-
   export const PolicyEffect = PolicyEffects.PolicyEffect;
   export type PolicyEffect = z.infer<typeof PolicyEffect>;
-  export const PolicyObligation = PolicyEffects.PolicyObligation;
-  export type PolicyObligation = z.infer<typeof PolicyObligation>;
   export const PolicyDecision = PolicyEffects.PolicyDecision;
   export type PolicyDecision = z.infer<typeof PolicyDecision>;
-
-  export const PolicyPoint = PolicyPointModule.PolicyPoint;
-  export type PolicyPoint = z.infer<typeof PolicyPointModule.PolicyPoint>;
 
   /**
    * Runtime resource descriptors ride bus events; shape is wire-frozen.
@@ -40,21 +28,6 @@ export namespace Policy {
     export const Descriptor = PolicyResource.Descriptor;
     export type Descriptor = PolicyResource.Descriptor;
   }
-  export const PolicyPlan = z.object({
-    policies: z.array(
-      z.object({
-        id: z.string().min(1),
-        required: z.boolean(),
-        config: z.record(z.string(), PlainValueSchema).optional(),
-      }),
-    ),
-    labels: z.array(z.string()),
-    registryVersion: z.string().optional(),
-  });
-  export type PolicyPlan = z.infer<typeof PolicyPlan>;
-
-  /** #499 observation descriptors — published via Bus; event name strings frozen. */
-  export const Events = EventDescriptors;
 }
 
 export type PolicyDecision = Policy.PolicyDecision;
@@ -64,7 +37,6 @@ export namespace PolicyDecision {
     readonly policyId: string;
     readonly effects?: Policy.PolicyEffect[];
     readonly reasonCodes?: string[];
-    readonly obligations?: Policy.PolicyObligation[];
     readonly factsUsed?: string[];
     readonly durationMs?: number;
     readonly priority?: number;
@@ -79,7 +51,6 @@ export namespace PolicyDecision {
       verdict,
       effects: options.effects ?? [],
       reasonCodes: options.reasonCodes ?? [],
-      ...(options.obligations !== undefined && { obligations: options.obligations }),
       ...(options.factsUsed !== undefined && { factsUsed: options.factsUsed }),
       ...(options.durationMs !== undefined && { durationMs: options.durationMs }),
       ...(options.priority !== undefined && { priority: options.priority }),

@@ -1,10 +1,10 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, newTraceId } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";

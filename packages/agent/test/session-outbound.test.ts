@@ -1,18 +1,12 @@
 import { sessionTree } from "./helpers/session-tree";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../src/store/fence";
 import { session, closeSessions, type SessionRunner } from "../src/session-handle";
 import { resolveSessionRuntime } from "../src/session-contract";
 import { createController } from "../src/session-controller";
@@ -333,7 +327,7 @@ test("outbound insert failure rolls back the source terminal in the same SQLite 
       };
       expect(yield* Effect.flip(commissionedChild(runtime))).toMatchObject({
         _tag: "CommitFailed",
-        error: { _tag: "LedgerFailure" },
+        error: { _tag: "AgentFailure" },
       });
       const kernel = isolatedLedger().kernel;
       expect(

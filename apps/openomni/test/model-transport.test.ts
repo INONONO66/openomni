@@ -1,7 +1,7 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import type { RunInput } from "@openomni/llm";
+import type { RunInput } from "@openomni/agent";
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
 import { residentRunner as createResident } from "./helpers/resident-runner";

@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
 import { Bus } from "./bus";

@@ -1,4 +1,4 @@
-import { Vault } from "@openomni/ledger";
+import { Vault } from "@openomni/channels";
 import { createAppLedger } from "../../src/composition/cluster-runtime";
 import type { KekResolution } from "../../src/provisioning/vault-key";
 import { putChannelCredential } from "./channel-credential";

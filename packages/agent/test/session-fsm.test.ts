@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
-import {
-  canonicalDigest,
-  PlainObjectSchema,
-  type Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type SessionTransition,
-} from "@openomni/protocol";
+import * as SessionHandleStore from "../src/store/fence";
+import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { decideSessionAdmission } from "../src/session-admission";
 import { decideRequestTransition } from "../src/session-request";
@@ -25,21 +18,10 @@ import { assistantStep } from "./helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { nth } from "./helpers/nth";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  withSessionServices,
-  type SessionFixture,
-} from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./helpers/session-services";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
-import {
-  fixtureGeneration,
-  fixtureNode,
-  fixtureTerminal,
-  fixtureOpenTurn,
-  fixtureTurn,
-} from "./helpers/open-turn-fixture";
+import { fixtureGeneration, fixtureNode, fixtureTerminal, fixtureOpenTurn, fixtureTurn, } from "./helpers/open-turn-fixture";
 import { answerThenCompact } from "./helpers/effect-g2";
 
 const row: LedgerSession.Row = {

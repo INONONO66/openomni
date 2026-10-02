@@ -1,5 +1,5 @@
 import { testToolPorts } from "./helpers/tool-ports";
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, mock, spyOn, test } from "bun:test";
 import { PassThrough, Readable } from "node:stream";
 import { acquireAppResource, gatewayRuntime } from "../src/gateway";

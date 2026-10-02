@@ -15,12 +15,10 @@ const RUNNER_OWNERS = new Set([
   "apps/openomni/test/helpers/effect.ts",
   "packages/agent/test/helpers/isolated.ts",
   "packages/channels/test/helpers/effect.ts",
-  "packages/ipc/test/helpers/effects.ts",
-  "packages/ledger/test/helpers/effect.ts",
-  "packages/llm/test/helpers/native.ts",
   "packages/machines/test/helpers/effect.ts",
+  "packages/machines/test/ipc/helpers/effects.ts",
   "packages/agent/bench/turns.ts",
-  "packages/ledger/bench/index.ts",
+  "packages/agent/bench/store.ts",
 ]);
 const runnerNames = new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]);
 

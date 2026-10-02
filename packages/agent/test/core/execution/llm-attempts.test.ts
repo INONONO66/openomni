@@ -7,7 +7,7 @@ import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
 import { AgentFailure } from "../../../src/errors";
-import { LlmRunFailure } from "@openomni/llm";
+import { LlmRunFailure } from "../../../src/model";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { Alarm, LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";

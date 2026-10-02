@@ -57,7 +57,7 @@ test("rejects nested service paths and requirements outside the four-service see
   const Nested = Context.Service<{ readonly nested: true }, number>("@openomni/bundle/nested/extra/Value");
   const NestedLive = Layer.succeed(Nested, 1);
   expect(() => bundle({ name: "nested", requires: [], provides: [Nested], layer: NestedLive })).toThrow(BundleError);
-  const Control = Context.Service<{ readonly control: true }, number>("@openomni/ledger/Control");
+  const Control = Context.Service<{ readonly control: true }, number>("@openomni/agent/Control");
   const ObserverLive = Layer.effectDiscard(Effect.asVoid(Control));
   expect(() => bundle({ name: "observer", requires: [Control], provides: [], layer: ObserverLive })).toThrow(BundleError);
 });

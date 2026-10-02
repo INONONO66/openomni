@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { LlmRunFailure } from "@openomni/llm";
+import type { LlmRunFailure } from "../../../src/model";
 import { isolated } from "../../helpers/isolated";
 import { failure as failed } from "../../helpers/g0-signals";
 import { describe, expect, it } from "bun:test";

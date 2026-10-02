@@ -3,21 +3,15 @@ import { PlainValueSchema } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
-import type { RunInput, Sink } from "@openomni/llm";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
+import type { RunInput, Sink } from "../src/model";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { awaitSignal, boundedSignal } from "./helpers/g0-signals";
 import { expect, test } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../src/store/fence";
 import { SessionTurn } from "@openomni/protocol";
 import { session, closeSessions, type SessionRunnerInput } from "../src/session-handle";
 import { resolveSessionRuntime } from "../src/session-contract";

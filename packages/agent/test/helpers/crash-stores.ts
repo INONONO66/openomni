@@ -1,4 +1,6 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import * as SessionHandleStore from "../../src/store/fence";
 import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 

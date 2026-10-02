@@ -3,7 +3,7 @@ import { Machine } from "@openomni/protocol";
 import { Effect, Fiber, Cause, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { execute as nativeExecute } from "../src/exec";
-import { run } from "../../ipc/test/helpers/effects";
+import { run } from "./ipc/helpers/effects";
 import { exit as runExit, fork } from "./helpers/effect";
 
 const request = { cmd: "while :; do :; done", cwd: "/" };
@@ -29,7 +29,7 @@ test("the execution deadline kills the real shell and settles timed_out", async 
 
 // Preserve the line-pinned runner sites above without growing the boundary allowlist.
 import * as childProcess from "node:child_process";
-import { within } from "../../ipc/test/helpers/signal";
+import { within } from "./ipc/helpers/signal";
 
 test.each(["ESRCH", "EPERM", "EINVAL"])("aborted exec handles group kill failure %s", async (code: string) => {
   const controller = new AbortController();

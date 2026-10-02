@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { Llm } from "@openomni/llm";
+import { Llm } from "@openomni/agent";
 import { ObservationSink } from "@openomni/agent";
 import { Bus } from "./helpers/bus";
 import type { FixtureLlm } from "./helpers/app-fixture";
-import { LlmRunFailure, type Run } from "@openomni/llm";
+import { LlmRunFailure, type Run } from "@openomni/agent";
 import type { Message } from "@openomni/protocol";
 import {
   createCompactionSummarizer as summarizer,

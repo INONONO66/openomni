@@ -10,8 +10,8 @@ import {
   type SessionError,
   type GenerationLayers,
 } from "@openomni/agent";
-import type { LedgerError } from "@openomni/ledger";
-import { LlmLive, type Llm } from "@openomni/llm";
+import type { LedgerError } from "@openomni/agent";
+import { LlmLive, type Llm } from "@openomni/agent";
 import { pid } from "node:process";
 import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
 import {

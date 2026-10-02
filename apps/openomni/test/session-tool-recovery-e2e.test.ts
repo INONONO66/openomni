@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { observationService } from "../../../packages/agent/test/helpers/service-layers";
@@ -20,7 +20,7 @@ import {
   type SessionRuntime,
 } from "@openomni/agent";
 import { Bus } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";

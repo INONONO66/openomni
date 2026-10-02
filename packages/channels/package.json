@@ -11,14 +11,12 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@openomni/ledger": "workspace:*",
-    "@openomni/policy": "workspace:*",
+    "@openomni/agent": "workspace:*",
     "@openomni/protocol": "workspace:*",
     "effect": "4.0.0-rc.118",
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@openomni/agent": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5"
   }

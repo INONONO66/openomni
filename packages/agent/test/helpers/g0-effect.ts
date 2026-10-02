@@ -1,7 +1,7 @@
 import { testExecutor } from "./executor";
 import type { ChatFixture as ChatAgentConfig } from "./chat-services";
 import { Effect } from "effect";
-import type { Sink } from "@openomni/llm";
+import type { Sink } from "../../src/model";
 import type { ChatAgentInput } from "../../src/core/types";
 import { compiledPolicy } from "./compiled-policy";
 import { recordingLedger } from "./recording-ledger";

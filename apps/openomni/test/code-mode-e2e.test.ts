@@ -9,7 +9,7 @@ import { currentInvocation, type InvocationFrame } from "@openomni/agent";
 import { Bus, newTraceId } from "./helpers/bus";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/agent";
 import {
   attachMachineDaemon as attachDaemon,
   createMachineHost as createHost,
@@ -20,7 +20,7 @@ import type { CatalogOrigin } from "../src/tools/core/catalog";
 import type { ToolPorts } from "../src/tools/core/catalog";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
-import { createCodemode } from "@openomni/codemode";
+import { createCodemode } from "@openomni/machines";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";

@@ -1,25 +1,11 @@
-import type { SessionHandleStore } from "@openomni/ledger";
+import type * as SessionHandleStore from "./store/fence";
 import { Effect } from "effect";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import {
-  canonicalDigest,
-  FoldCheckpoint,
-  PlainValueSchema,
-  SessionGeneration,
-  SessionTurn,
-  Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, FoldCheckpoint, PlainValueSchema, SessionGeneration, SessionTurn, Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
 import { RunReasonCode } from "./core/policy/reason-codes";
 import { GenerationUnavailable, SessionCommitError } from "./errors";
-import {
-  SessionPolicyRefusal,
-  type SessionRunnerResult,
-  type SessionTool,
-} from "./session-contract";
+import { SessionPolicyRefusal, type SessionRunnerResult, type SessionTool, } from "./session-contract";
 
 export function foldCheckpointAction(input: {
   readonly sessionId: string;

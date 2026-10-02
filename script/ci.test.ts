@@ -94,7 +94,7 @@ for (const job of [
   }
 }
 
-for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/src/index.ts", "packages/ledger/src/index.ts", "script/ci.ts"]) {
+for (const path of ["README.md", "apps/desktop/src/main/index.ts", "packages/ui/src/index.ts", "packages/agent/src/index.ts", "script/ci.ts"]) {
   test(`desktop smoke follows selected v2 lanes for ${path}`, () => {
     const plan = planChanges([path]);
     const selected = plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui");

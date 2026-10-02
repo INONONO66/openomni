@@ -1,7 +1,7 @@
 import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
 import { adoptSessionAuthority, createExecutor, BundleDefinitions, Entropy, GenerationLayers, CommitFailed, AgentFailure, type ExecutionError, type SessionEntryServices } from "@openomni/agent";
-import { CorruptRecord } from "@openomni/ledger";
+import { CorruptRecord } from "@openomni/agent";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import type { createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";

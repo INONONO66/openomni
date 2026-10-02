@@ -2,6 +2,8 @@
 
 `@openomni/agent` owns the invocation-scoped chat loop, generic durable-session controller, the compiled-policy L2 executor, and tool definition/dispatch mechanics. Product identity, routing, role policy, and endpoint binding remain in `apps/openomni`.
 
+2026-10-02, #1246: the former policy, ledger, and llm packages fold in here. The policy gate lives in `src/kernel/gate/{compile,match}.ts`; the durable store plane in `src/store/` (`catalog.ts`, `session-file.ts`, `decision.ts`, `fence.ts`, `json.ts`, `atomic-file.ts`, with SQLite adapters under `store/storage/`); the LLM plane in `src/model/` (provider, processor, retry, token, auth, message, model subtrees). The channel-facing stores (actor, blacklist, channel-grant, reply-grant, egress, provisioning/vault) moved to `packages/channels/src/store/`. Everything external imports through the one root barrel `src/index.ts`; there is no second barrel and no re-export file at any old package path. `LedgerFailure`/`LlmFailure` are gone — `AgentFailure` is the single untyped-cause carrier.
+
 2026-09-28, W5.2 #1197: `cluster/session-entity.ts` is the one
 `effect/cluster` `SingleRunner` handler per `sessionId`. Activation rotates the
 fence, opens the per-session store, drains mailbox FIFO through
@@ -28,8 +30,24 @@ Updated for #969 request convergence (2026-09-07): `session-request` owns pure r
 
 ## Boundaries
 
-- Core loop code may depend on protocol, llm, policy, and package-local modules.
-- Durable session mechanics may consume ledger-owned session/action ports.
+- Core loop code may depend on protocol and package-local modules only (`src/model/` and `src/kernel/gate/` are package-local since #1246).
+- Durable session mechanics may consume the package-local `src/store/` session/action ports.
 - No OpenOmni product identity, channel routing, actor grants, or endpoint semantics belong here.
 - No callback policy engine, middleware registration, or alternate tool wrapper may be introduced.
 - Async tests subscribe to exact state/event signals before triggering and use bounded timeouts only as failure guards.
+
+## Store plane (formerly packages/ledger — key patterns kept, 2026-10-02 #1246)
+
+- `openSessionStore`/`openCatalogStore` are the storage factories; the caller owns and explicitly closes each handle. `SessionHandleStore.createSessionKernel` (`src/store/fence.ts`) binds one session-file handle to the catalog and keeps the fence compare-and-set ownership check.
+- Activation rotates the catalog fence exactly once; passivation closes the handle without deleting durable rows. Each session file holds `session`, `action`, `decision_fact`; the catalog holds the session index and cross-session facts. No lease, timer, mailbox, or migration store here.
+- Stored JSON decodes into validated plain values before row/domain assembly. No ad-hoc delegated state beside canonical session actions, no second completion/terminal authority, no compatibility readers for old database files.
+- Store tests use real SQLite and canonical handle fixtures; corruption is tested at the persisted-data boundary and rollback across the complete write unit.
+
+## Model plane (formerly packages/llm — key patterns kept, 2026-10-02 #1246)
+
+- One attempt per invocation: `run()` performs exactly one Processor attempt (`maxRetries: 0`, `stepCountIs(1)`); the session executor owns attempt scheduling and durable failed-usage records.
+- `Llm` (`src/model/services.ts`, tag `@openomni/agent/Llm`) exposes `{ run, resolveModel }`; `LlmLive` is the app-composed Layer. Retry is classification, not scheduling (`Retry.decide`, caps: 60s explicit directive, 30s headerless with jitter; billing and content_policy are terminal).
+- Usage accounting is provider-plus-local with `reported | estimated | unknown` provenance; a reported numeric 0 is authoritative. Auth storage writes atomically at mode 0600 and never reads env — the credential path is injected (#1245).
+- Do NOT import `Bus` in model code (injected `events` sink only), add provider-specific logic at call sites, or reintroduce `Retry.sleep`/`maxSteps`/zero-defaulted usage counts.
+- `src/` keeps the consumer lib floor: never raise `lib` in `tsconfig.json` (model sources must check under ES2020; the test tree runs at ES2022 via `tsconfig.test.json`).
+- Tests run Effects only through the package runner owner `test/helpers/isolated.ts`; `test/model/helpers/native.ts` and `test/store/helpers/effect.ts` delegate to it.

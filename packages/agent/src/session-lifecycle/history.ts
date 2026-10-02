@@ -1,18 +1,8 @@
 import { z } from "zod";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../store/fence";
 import type { SessionKernel } from "../cluster/kernel-registry";
 import { AgentInvariantViolation } from "../errors";
-import {
-  canonicalDigest,
-  FoldCheckpoint,
-  NamedError,
-  Message,
-  PlainValueSchema,
-  Tool,
-  type LedgerAction,
-  type PlainObject,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, FoldCheckpoint, NamedError, Message, PlainValueSchema, Tool, type LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
 
 /**
  * Canonical model-context fold over committed actions: delivered prompts,

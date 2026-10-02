@@ -132,7 +132,7 @@ test("mutation normalization rejects pilots missing candidates and stale killed 
 test("embedded Python mutants retain original host coordinates and cannot disappear at normalization", () => {
   const root = mkdtempSync(join(tmpdir(), "quality-embedded-mutant-"));
   try {
-    const hostPath = "packages/codemode/src/kernel.ts",
+    const hostPath = "packages/machines/src/codemode/kernel.ts",
       path = `${hostPath}#PYTHON_DRIVER`;
     const source = "print(True)\n";
     const identity = {

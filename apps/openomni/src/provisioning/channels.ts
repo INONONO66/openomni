@@ -1,5 +1,5 @@
-import type { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/ledger";
-import { Vault } from "@openomni/ledger";
+import type { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/channels";
+import { Vault } from "@openomni/channels";
 import type { Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { validateProviderCredential, validateProviderSettings } from "../channels";

@@ -23,7 +23,6 @@ function directEvent(overrides: Partial<Ingress.DirectEvent> = {}): Ingress.Dire
     mode: "direct",
     payload: "reply",
     meta: { correlation },
-    agent: { model: { provider: "test", id: "test-model" } },
     ...overrides,
   };
 }

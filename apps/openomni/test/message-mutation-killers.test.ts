@@ -1,11 +1,11 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "./helpers/bus";
 import { join } from "node:path";
-import { createSurfaceKeyStore } from "@openomni/ledger";
+import { createSurfaceKeyStore } from "@openomni/agent";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";

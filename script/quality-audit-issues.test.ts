@@ -141,13 +141,13 @@ test("topology inventory binds embedded driver and tracks only Git-listed histor
   }
   mkdirSync(join(temp.root, "script"));
   mkdirSync(join(temp.root, "docs"));
-  mkdirSync(join(temp.root, "packages/codemode/src"), { recursive: true });
-  const kernel = join(temp.root, "packages/codemode/src/kernel.ts");
+  mkdirSync(join(temp.root, "packages/machines/src/codemode"), { recursive: true });
+  const kernel = join(temp.root, "packages/machines/src/codemode/kernel.ts");
   writeFileSync(kernel, "export const PYTHON_DRIVER = String.raw`print(1)`;\n");
   writeFileSync(join(temp.root, "docs/old.ts"), "export const legacy = 1;\n");
   const contract = contractSchema.parse({
     version: 1, typescript: "5.9.2", roots: ["apps", "packages", "script"],
-    projects: ["packages/codemode/tsconfig.json"], topology: true,
+    projects: ["packages/machines/tsconfig.json"], topology: true,
   });
   writeFileSync(join(temp.root, "contract.json"), JSON.stringify(contract));
   const runner: { spawnSync(args: string[]): { exitCode: number } } = Bun;
@@ -158,13 +158,13 @@ test("topology inventory binds embedded driver and tracks only Git-listed histor
   try {
     const inventory = buildInventory(temp.root, contract);
     expect(inventory.embedded).toEqual([
-      expect.objectContaining({ path: "packages/codemode/src/kernel.ts#PYTHON_DRIVER", sha256: sha("print(1)") }),
+      expect.objectContaining({ path: "packages/machines/src/codemode/kernel.ts#PYTHON_DRIVER", sha256: sha("print(1)") }),
     ]);
     // docs/deleted.ts is Git-tracked but absent from the working tree: skipped.
     expect(inventory.historical.map((entry) => entry.path)).toEqual(["docs/old.ts"]);
     expect(fingerprint(temp.root, "contract.json").embedded).toEqual([
       expect.objectContaining({
-        path: "packages/codemode/src/kernel.ts#PYTHON_DRIVER",
+        path: "packages/machines/src/codemode/kernel.ts#PYTHON_DRIVER",
         text: "print(1)",
         lineOffset: 0,
       }),

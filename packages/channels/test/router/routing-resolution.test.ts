@@ -1,5 +1,5 @@
 import { ledger } from "../helpers/ledger";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { beforeEach, expect, test } from "bun:test";
 import { runEffect } from "../helpers/effect";
 import { Cause, Effect, Exit } from "effect";
@@ -10,17 +10,7 @@ import { replyGrantEndpointFacts } from "../../src/router/messaging/reply-grant"
 import { Channel, Ingress, type Gateway, type Inbox, type DecisionFact } from "@openomni/protocol";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Bus } from "../helpers/observation";
-import {
-  commits,
-  createMappedOwnerSession,
-  makeRouter,
-  ownerEvent,
-  ownerFacts,
-  ownerSender,
-  registerOwnerDm,
-  resetRouterState,
-  routingDecisions,
-} from "./_router-fixture";
+import { commits, createMappedOwnerSession, makeRouter, ownerEvent, ownerFacts, ownerSender, registerOwnerDm, resetRouterState, routingDecisions, } from "./_router-fixture";
 
 const streamId = () => Ingress.routeStreamId(ownerEvent);
 beforeEach(resetRouterState);

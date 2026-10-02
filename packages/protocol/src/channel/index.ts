@@ -49,7 +49,7 @@ export namespace Channel {
 
   /**
    * Pure string codec for surface keys — the wire vocabulary channel
-   * drivers and routing share. Moved here from @openomni/ledger (#499
+   * drivers and routing share. Moved here from the old ledger package (#499
    * precursor): the codec is channel vocabulary; storage semantics
    * (register/claim/lookup) stay in the session surface-key store, which
    * imports this codec for format validation.
@@ -68,14 +68,6 @@ export namespace Channel {
     // "thread" is NOT a kind: threads are sub-keys under a channel (the
     // `:thread:<id>` marker pair) — see the encoding examples above.
     export type ChannelKind = "dm" | "group" | "channel" | "chat";
-
-    export interface ParsedKey {
-      readonly surface: string;
-      readonly namespace: string;
-      readonly kind: ChannelKind | undefined;
-      readonly id: string | undefined;
-      readonly threadId: string | undefined;
-    }
 
     export interface ChannelDescriptor {
       /** Surface type (e.g., "slack", "telegram", "tui") */
@@ -116,46 +108,12 @@ export namespace Channel {
       return assertWellFormed(parts.join(":"));
     }
 
-    const KNOWN_KINDS: ReadonlySet<string> = new Set<ChannelKind>([
-      "dm",
-      "group",
-      "channel",
-      "chat",
-    ]);
-
     export function fromChannel(descriptor: ChannelDescriptor): string {
       const parts = [descriptor.surface, descriptor.namespace, descriptor.kind, descriptor.id];
       if (descriptor.threadId) {
         parts.push("thread", descriptor.threadId);
       }
       return create(parts);
-    }
-
-    export function parse(key: string): ParsedKey {
-      const segments = key.split(":");
-      const surface = segments[0] ?? "";
-      const namespace = segments[1] ?? "";
-
-      let kind: ChannelKind | undefined;
-      let id: string | undefined;
-      let threadId: string | undefined;
-
-      for (let i = 2; i < segments.length; i++) {
-        const seg = segments[i];
-        if (seg == null) {
-          continue;
-        }
-        if (seg === "thread") {
-          threadId = segments[i + 1];
-          i++;
-        } else if (KNOWN_KINDS.has(seg)) {
-          kind = seg as ChannelKind;
-          id = segments[i + 1];
-          i++;
-        }
-      }
-
-      return { surface, namespace, kind, id, threadId };
     }
   }
 }

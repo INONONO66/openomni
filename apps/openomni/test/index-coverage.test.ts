@@ -7,7 +7,7 @@ import type {
 } from "@openomni/agent";
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
-import { CommitRefused } from "@openomni/ledger";
+import { CommitRefused } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src/index";
 import {

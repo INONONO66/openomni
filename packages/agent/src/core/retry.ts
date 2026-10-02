@@ -1,4 +1,4 @@
-import { LlmRunFailure } from "@openomni/llm";
+import { LlmRunFailure } from "../model";
 import { z } from "zod";
 
 export type RetryReason =

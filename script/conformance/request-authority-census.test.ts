@@ -28,14 +28,14 @@ describe("original-action authority census", () => {
     "packages/protocol/src/storage/authority.ts",
   ])("rejects an independent authority mutant at %s", (path) => {
     expect(
-      authorityViolations(path, `import { ${retiredStore} as store } from "@openomni/ledger";`),
+      authorityViolations(path, `import { ${retiredStore} as store } from "@openomni/agent";`),
     ).toContainEqual(expect.objectContaining({ rule: "legacy-api", path }));
   });
 
   test("former archival exception paths retain no SQL or API allowance", () => {
     // W5.2 deleted the migration/archive plane; the operation-scoped
     // exceptions left with it, so old writers are refused on any path.
-    const path = "packages/ledger/test/storage/projection.test.ts";
+    const path = "packages/agent/test/store/storage/projection.test.ts";
     const source = `db.exec("UPDATE ${waitTable} SET status = 'open'");`;
     expect(authorityViolations(path, source)).toContainEqual(
       expect.objectContaining({ rule: "legacy-sql", path }),
@@ -44,7 +44,7 @@ describe("original-action authority census", () => {
       expect.objectContaining({ rule: "legacy-api" }),
     );
     expect(
-      authorityViolations("packages/ledger/src/storage/preflight.ts", `db.exec("DELETE FROM ${waitTable}")`),
+      authorityViolations("packages/agent/src/store/storage/preflight.ts", `db.exec("DELETE FROM ${waitTable}")`),
     ).toContainEqual(expect.objectContaining({ rule: "legacy-sql" }));
   });
 
@@ -82,7 +82,7 @@ describe("original-action authority census", () => {
     const source = `export type Alias = ${frozen};`;
     for (const path of [
       "packages/protocol/src/index.ts",
-      "packages/ledger/src/storage/request-format.ts",
+      "packages/agent/src/store/storage/request-format.ts",
     ]) {
       expect(authorityViolations(path, source)).toContainEqual(
         expect.objectContaining({ rule: "archive-boundary", path, match: frozen }),

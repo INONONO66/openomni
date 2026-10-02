@@ -5,20 +5,11 @@ import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
-import {
-  canonicalDigest,
-  LedgerAction,
-  type PlainObject,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
 import { createTurnDispatcher } from "../src/index";
-import type {
-  DurableExecutor,
-  ExecutionBatchItem,
-  ExecutionResult,
-} from "../src/executor-contract";
+import type { DurableExecutor, ExecutionBatchItem, ExecutionResult, } from "../src/executor-contract";
 import type { WaveControl } from "../src/core/execution/tool-wave";
-import { CommitRefused, LedgerFailure } from "@openomni/ledger";
+import { CommitRefused, AgentFailure } from "../src/store/errors";
 import { failure } from "./helpers/effect-g1";
 import { Effect } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -269,7 +260,7 @@ describe("completion recovery", () => {
       const commit = options.ledger.commit;
       let injected = false;
       // Lose the executed terminal's commit once, before or after it persisted.
-      const storageLost = new LedgerFailure({ operation: "commit", cause: "storage_lost" });
+      const storageLost = new AgentFailure({ operation: "commit", cause: "storage_lost" });
       const lose = (action: LedgerAction.Append) =>
         Effect.gen(function* () {
           injected = true;
@@ -360,14 +351,14 @@ describe("completion recovery", () => {
         ...options.ledger,
         commit: (action) =>
           action.kind === "policy.decision" && record(action.intent.value).hook === "tool.post"
-            ? Effect.fail(new LedgerFailure({ operation: "commit", cause: "decision_lost" }))
+            ? Effect.fail(new AgentFailure({ operation: "commit", cause: "decision_lost" }))
             : commit(action),
       },
     });
     const { error, bodies } = await failedToolRun(executor, { status: "success" });
     expect(error).toMatchObject({
       _tag: "CommitFailed",
-      error: { _tag: "LedgerFailure", cause: "decision_lost" },
+      error: { _tag: "AgentFailure", cause: "decision_lost" },
     });
     expect(actions.filter((action) => action.kind === "policy.decision")).toHaveLength(1);
     expect(resultsOf(actions, "tool")).toHaveLength(0);
@@ -399,7 +390,7 @@ describe("completion recovery", () => {
               !injected
             ) {
               injected = true;
-              return yield* new LedgerFailure({ operation: "commit", cause: "storage_lost" });
+              return yield* new AgentFailure({ operation: "commit", cause: "storage_lost" });
             }
             return receipt;
           }),
@@ -428,7 +419,7 @@ describe("completion recovery", () => {
     expect(reverted).toBe(1);
     expect(error).toMatchObject({
       _tag: "CommitFailed",
-      error: { _tag: "LedgerFailure", cause: "storage_lost" },
+      error: { _tag: "AgentFailure", cause: "storage_lost" },
     });
     const before = structuredClone(actions);
     await recover(executor);

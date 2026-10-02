@@ -1,4 +1,4 @@
-import type { RunInput, Sink } from "@openomni/llm";
+import type { RunInput, Sink } from "@openomni/agent";
 import type { Message, Tool } from "@openomni/protocol";
 
 export interface AssistantMessageOptions {

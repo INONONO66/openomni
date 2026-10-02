@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
@@ -11,7 +11,7 @@ import {
   type ExecutionApprovalRequest,
 } from "@openomni/agent";
 import { Bus, newTraceId } from "./helpers/bus";
-import { SessionHandleStore } from "@openomni/ledger";
+import { SessionHandleStore } from "@openomni/agent";
 import { z } from "zod";
 import {
   LlmCall,

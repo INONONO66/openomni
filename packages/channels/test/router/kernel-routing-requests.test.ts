@@ -1,5 +1,5 @@
 import { ledger } from "../helpers/ledger";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
@@ -11,13 +11,7 @@ import { beforeEach, expect, test } from "bun:test";
 import { Channel, Ingress, type Gateway , type SessionTransition } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
-import {
-  commits,
-  kernelRouter,
-  makeRouter,
-  resetRouterState,
-  routingDecisions,
-} from "./_router-fixture";
+import { commits, kernelRouter, makeRouter, resetRouterState, routingDecisions, } from "./_router-fixture";
 
 const sender = { kind: "external", surface: "telegram", externalId: "seller-1" } as const;
 function facts(

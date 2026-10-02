@@ -10,7 +10,7 @@ import {
   type SessionError,
   type SessionRuntime,
 } from "@openomni/agent";
-import type { LedgerError } from "@openomni/ledger";
+import type { LedgerError } from "@openomni/agent";
 import type { SessionTurn } from "@openomni/protocol";
 import { Clock, Context, Effect, type Scope } from "effect";
 import {

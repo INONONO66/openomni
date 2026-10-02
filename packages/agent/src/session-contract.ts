@@ -1,19 +1,10 @@
 import { Clock, Effect, type Context } from "effect";
 import type { SessionError, ExecutionError, RunnerOutputMissing } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
-import type { SessionHandleStore } from "@openomni/ledger";
+import type * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import type { InspectRequest, InspectionPage } from "./session-lifecycle/inspect";
-import type {
-  Inbox,
-  LedgerAction,
-  LedgerSession,
-  ObservationSink,
-  SessionGeneration,
-  SessionHistory,
-  SessionTurn,
-  SessionTransition,
-} from "@openomni/protocol";
+import type { Inbox, LedgerAction, LedgerSession, ObservationSink, SessionGeneration, SessionHistory, SessionTurn, SessionTransition, } from "@openomni/protocol";
 import type { ChatAgentConfig } from "./core/types";
 import type { decideSessionAdmission } from "./session-admission";
 import type { ExecutionApprovals, ExecutionResult, ExecutorOptions } from "./executor";

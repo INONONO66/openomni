@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
 import { createTestAgent } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
-import type { RunInput } from "@openomni/llm";
+import type { RunInput } from "../../src/model";
 import { collector } from "../helpers/observation-collector";
 import { completeModel, mockProviderModel } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
@@ -15,7 +15,7 @@ function transportHarness(transport?: RunInput["transport"]) {
     ...(transport === undefined ? {} : { transport }),
     llm: {
       resolveModel: () => Effect.promise(async () => mockProviderModel),
-      run: (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) =>
+      run: (input: import("../../src/model").RunInput, sink: import("../../src/model").Sink) =>
         Effect.promise(async () => {
           seen.push(input.transport);
           return completeModel(input, sink);

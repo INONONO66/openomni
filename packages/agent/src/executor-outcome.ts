@@ -26,8 +26,6 @@ export function failureEvidence(error: ExecutionError): PlainObject {
       return { tag: error._tag, generation: error.generation };
     case "AgentFailure":
       return { tag: error._tag, operation: error.operation, cause: error.cause };
-    case "LlmFailure":
-      return { tag: error._tag, operation: error.operation, cause: error.cause };
     case "CompactionExecutionError":
       return { tag: error._tag, reason: error.reason };
     case "CommitFailed":

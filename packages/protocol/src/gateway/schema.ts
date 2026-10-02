@@ -67,13 +67,14 @@ const RequestContextSchema = z
 /**
  * The routed inbound event as it crosses the seam (#707 stage-2, measured at
  * cut): the driver-produced event AFTER perimeter routing (actor resolution,
- * channel-grant treatment stamping, request/session pinning) MINUS the
- * brain-owned `agent` — the AgentDef is brain material and is resolved by the
- * brain's Deliver consumer, never embedded at the perimeter. This is the
- * execution-authoritative residue for this stage; the sibling `actorContext`
- * field is the §2a verdict projection of the same delivery.
+ * channel-grant treatment stamping, request/session pinning). Agent
+ * configuration is brain material and is resolved by the brain's Deliver
+ * consumer, never embedded at the perimeter (an embedded `agent` key is
+ * stripped at parse). This is the execution-authoritative residue for this
+ * stage; the sibling `actorContext` field is the §2a verdict projection of
+ * the same delivery.
  */
-const DeliveredEventSchema = Ingress.DirectEventSchema.omit({ agent: true });
+const DeliveredEventSchema = Ingress.DirectEventSchema;
 
 /**
  * Inbound contract: gateway → brain.

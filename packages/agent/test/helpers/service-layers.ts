@@ -1,8 +1,8 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../../src/store/fence";
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { Clock, Context, Effect, Layer } from "effect";
-import { LlmLive } from "@openomni/llm";
-import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "@openomni/policy";
+import { LlmLive } from "../../src/model";
+import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/kernel/gate/compile";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices } from "../../src/services";
 import { NamedPolicyRegistry } from "../../src/bundle";

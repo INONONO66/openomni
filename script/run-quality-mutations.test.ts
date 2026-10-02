@@ -95,7 +95,7 @@ test("reach probes write each marker once per process", async () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// packages/codemode/src/kernel.ts declares `const process = spawn(...)`; a probe
+// packages/machines/src/codemode/kernel.ts declares `const process = spawn(...)`; a probe
 // naming bare `process` there called ChildProcess.getBuiltinModule and threw,
 // which killed the interpreter start under reach instrumentation (run 35447636805).
 test("reach probes resolve their globals through globalThis inside shadowing scopes", async () => {
@@ -112,7 +112,7 @@ test("reach probes resolve their globals through globalThis inside shadowing sco
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// packages/ledger/test/helpers/disposition-967-archive-fault.ts wraps
+// packages/agent/test/store/helpers/disposition-967-archive-fault.ts wraps
 // `fs.writeFileSync` on the builtin module object; a probe inside that wrapper
 // wrote its marker through the wrapper before claiming the guard and recursed
 // until the stack overflowed (run 35468117173).

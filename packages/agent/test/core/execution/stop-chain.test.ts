@@ -1,9 +1,9 @@
 import { testExecutor } from "../../helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import type { LedgerAction } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "@openomni/policy";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
 import { stopState, type StopObservation } from "../../../src/core/execution/stop-chain";
 import { recordingLedger } from "../../helpers/g0-effect";
 

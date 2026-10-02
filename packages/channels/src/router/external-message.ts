@@ -1,5 +1,5 @@
 import type { ChannelStores } from "./stores.js";
-import type { PolicyEvaluationInput } from "@openomni/policy";
+import type { PolicyEvaluationInput } from "@openomni/agent";
 import { Channel, type Gateway } from "@openomni/protocol";
 import { ChannelsFailure } from "../errors";
 import { newTraceId } from "../support/trace";

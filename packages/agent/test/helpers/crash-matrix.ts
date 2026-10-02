@@ -11,14 +11,9 @@ import { openCrashStores } from "./crash-stores";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import { SessionHandleStore, type LedgerError } from "@openomni/ledger";
-import {
-  LedgerAction,
-  Message,
-  PlainObjectSchema,
-  PlainValueSchema,
-  type PlainValue,
-} from "@openomni/protocol";
+import * as SessionHandleStore from "../../src/store/fence";
+import type { LedgerError } from "../../src/store/errors";
+import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionLedger } from "../../src/executor";
 import { createLedgerRetryTimerPort } from "../../src/executor-attempts";

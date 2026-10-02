@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { SessionHandleStore } from "@openomni/ledger";
-import { openCatalogStore, openSessionStore } from "../../../ledger/src/storage/index";
+import * as SessionHandleStore from "../../src/store/fence";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
 import { SessionEntity } from "../../src/cluster/session-entity";
 import { receivedMessageAction } from "../../src/session-record";
 import { runAgent } from "../helpers/executor";

@@ -1,5 +1,5 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
-import { LeaseRefused } from "@openomni/ledger";
+import { LeaseRefused } from "./store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "./errors";
 import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "./session-record";
@@ -10,15 +10,7 @@ import { dispatchSessionOutbound } from "./session-outbound";
 import { inspectSession } from "./session-lifecycle/inspect";
 import { createRawSlots } from "./executor-raw";
 import { commitFoldBatch } from "./session-fold-commit";
-import type {
-  SessionController,
-  SessionControllerLifecycle,
-  ResolvedSessionRuntime,
-  SessionRunner,
-  SessionRunnerResult,
-  SessionHandle,
-  SessionEntityPorts,
-} from "./session-contract";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, SessionEntityPorts, } from "./session-contract";
 import type { SessionControllerState } from "./session-controller-state";
 import type { SessionKernel } from "./cluster/kernel-registry";
 

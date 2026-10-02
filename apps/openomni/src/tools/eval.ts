@@ -1,5 +1,5 @@
 import { CELL_CEILING_MS, describe } from "./core/cell-output";
-import { CodemodeError, type RunOptions } from "@openomni/codemode";
+import { CodemodeError, type RunOptions } from "@openomni/machines";
 import { defineTool, ToolRefused } from "@openomni/agent";
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";

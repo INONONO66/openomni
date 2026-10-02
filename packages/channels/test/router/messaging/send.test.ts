@@ -1,5 +1,5 @@
 import { ledger } from "../../helpers/ledger";
-import { sessionTree } from "../../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../../agent/test/store/helpers/session-tree";
 import { effectFailure } from "../../helpers/effect-failure";
 import { channelRequests } from "../../helpers/channel-requests";
 import { channelTransaction } from "../../helpers/channel-transaction";
@@ -14,16 +14,7 @@ import { createExistingAgentMessaging } from "../../../src/router/messaging/send
 import type { KernelDeliveryReceipt } from "../../../src/support/deliver";
 
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
-import {
-  expectAwaited,
-  expectDenied,
-  expectRequestSpecViolation,
-  buildAwaitedSendInput,
-  buildGrant,
-  buildSendInput,
-  messagingNow,
-  registerAgentFixture,
-} from "../../helpers/messaging.js";
+import { expectAwaited, expectDenied, expectRequestSpecViolation, buildAwaitedSendInput, buildGrant, buildSendInput, messagingNow, registerAgentFixture, } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 
 type SenderTargetGrant = Gateway.SenderTargetGrant;

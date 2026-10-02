@@ -1,4 +1,4 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/ledger";
+import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "@openomni/agent";
 import { Effect } from "effect";
 import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";

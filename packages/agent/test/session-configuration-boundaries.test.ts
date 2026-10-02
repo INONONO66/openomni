@@ -2,7 +2,7 @@ import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../src/store/fence";
 import { session, closeSessions, type SessionHandle } from "../src/session-handle";
 import { collector } from "./helpers/observation-collector";
 import { seedPolicy } from "./helpers/seed-policy";

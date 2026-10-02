@@ -1,0 +1,137 @@
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import net from "node:net";
+import { connectIpcClient } from "./helpers/native";
+import { IpcConnectionError, IpcProtocolError } from "../../src/ipc/errors";
+import { deferred, within } from "./helpers/signal";
+import { socketPath } from "./helpers/socket-path";
+
+const rawServers: net.Server[] = [];
+const clients: Awaited<ReturnType<typeof connectIpcClient>>[] = [];
+
+afterEach(() => {
+  for (const client of clients.splice(0)) client.close();
+  for (const server of rawServers.splice(0)) server.close();
+});
+
+function listenRaw(onConnection: (socket: net.Socket) => void): Promise<string> {
+  const path = socketPath("client-edge");
+  const server = net.createServer(onConnection);
+  rawServers.push(server);
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(path, () => resolve(path));
+  });
+}
+
+describe("IPC client transport edges", () => {
+  test("a local connect error rejects as IpcConnectionError", async () => {
+    await expect(connectIpcClient(socketPath("missing"))).rejects.toBeInstanceOf(
+      IpcConnectionError,
+    );
+  });
+
+  test("the configured connection deadline destroys a socket that never settles", async () => {
+    let connectingSocket!: net.Socket;
+    let destroyedSocket!: net.Socket;
+    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (
+      this: net.Socket,
+    ) {
+      connectingSocket = this;
+      return this;
+    });
+    const destroy = spyOn(net.Socket.prototype, "destroy").mockImplementation(function (
+      this: net.Socket,
+    ) {
+      destroyedSocket = this;
+      return this;
+    });
+    try {
+      const connection = connectIpcClient("ignored", { connectTimeoutMs: 1 });
+      await expect(connection).rejects.toBeInstanceOf(IpcConnectionError);
+      await expect(connection).rejects.toThrow("connect timeout: ignored");
+      expect(destroyedSocket).toBe(connectingSocket);
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      connect.mockRestore();
+      destroy.mockRestore();
+    }
+  });
+
+  test("an error after connect marks the client disconnected", async () => {
+    const entered = deferred();
+    let connectedSocket!: net.Socket;
+    const connect = spyOn(net.Socket.prototype, "connect").mockImplementation(function (
+      this: net.Socket,
+    ) {
+      connectedSocket = this;
+      entered.resolve();
+      return this;
+    });
+    try {
+      const connecting = connectIpcClient("ignored");
+      await within(entered.promise, "connect listener registration");
+      connectedSocket.emit("connect");
+      const client = await connecting;
+      clients.push(client);
+      expect(client.connected).toBe(true);
+
+      connectedSocket.emit("error", new Error("transport failed"));
+      connectedSocket.emit("close");
+      expect(client.connected).toBe(false);
+    } finally {
+      connect.mockRestore();
+    }
+  });
+
+  test("a malformed server line fails a pending call as a protocol error", async () => {
+    const requestReceived = deferred();
+    const path = await listenRaw((socket) => {
+      socket.once("data", () => {
+        requestReceived.resolve();
+        socket.write("not-json\n");
+      });
+    });
+    const client = await connectIpcClient(path);
+    clients.push(client);
+
+    const call = client.call("edge", {}, 30_000);
+    await within(requestReceived.promise, "raw server receiving request");
+    await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
+    expect(client.connected).toBe(false);
+  });
+
+  test("an oversized server frame fails a pending call as a protocol error", async () => {
+    // Three-byte UTF-8 keeps the wire oversized while the character count stays below the cap.
+    const frame = "\u0800".repeat(Math.ceil((17 * 1024 * 1024) / 3));
+    const payload = Buffer.from(frame);
+    expect(payload.byteLength).toBe(17 * 1024 * 1024 + 1);
+    expect(frame.length).toBeLessThan(16 * 1024 * 1024);
+
+    const requestReceived = deferred();
+    let serverSocket: net.Socket | undefined;
+    const path = await listenRaw((socket) => {
+      serverSocket = socket;
+      socket.on("error", () => {
+        // The client tears the connection down mid-frame by design; on Linux the
+        // peer's read then fails with ECONNRESET, which a raw net.Socket without a
+        // listener would surface as an uncaught exception.
+      });
+      socket.once("data", () => {
+        requestReceived.resolve();
+        socket.write(payload);
+      });
+    });
+    const client = await connectIpcClient(path);
+    clients.push(client);
+
+    try {
+      const call = client.call("edge", {}, 30_000);
+      await within(requestReceived.promise, "raw server receiving request");
+      await expect(call).rejects.toBeInstanceOf(IpcProtocolError);
+      expect(client.connected).toBe(false);
+    } finally {
+      client.close();
+      serverSocket?.destroy();
+    }
+  }, 35_000);
+});

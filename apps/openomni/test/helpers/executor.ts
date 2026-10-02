@@ -5,7 +5,7 @@ import { createExecutor } from "@openomni/agent";
 import { LedgerAction } from "@openomni/protocol";
 import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/effect-g1";
-import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../../../packages/policy/src";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "@openomni/agent";
 
 let ordinal = 0;
 

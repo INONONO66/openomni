@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SEEDED_POLICY_ROWS } from "@openomni/agent";
-import { openCatalogStore } from "@openomni/ledger";
+import { openCatalogStore } from "@openomni/agent";
 import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";

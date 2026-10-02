@@ -1,13 +1,6 @@
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../store/fence";
 import type { SessionKernel } from "../cluster/kernel-registry";
-import {
-  canonicalDigest,
-  type LedgerAction,
-  type PlainObject,
-  type PlainValue,
-  SessionHistory,
-  SessionTransition,
-} from "@openomni/protocol";
+import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue, SessionHistory, SessionTransition, } from "@openomni/protocol";
 import { z } from "zod";
 
 export const InspectRequest = SessionHistory.InspectRequest.extend({

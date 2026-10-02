@@ -1,6 +1,6 @@
-import type { SessionHandleStore } from "@openomni/ledger";
+import type * as SessionHandleStore from "./store/fence";
 import { canonicalDigest, RowVerdictType, SessionHistory, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
-import type { PolicyEvaluation, PolicyEvaluationInput } from "@openomni/policy";
+import type { PolicyEvaluation, PolicyEvaluationInput } from "./kernel/gate/compile";
 import { Cause, Clock, Context, Effect, Exit, Fiber, Option, Scope } from "effect";
 import type { WaveControl } from "./core/execution/tool-wave";
 import { createExecutionRecord, type ToolObservationStatus } from "./executor-record";
@@ -16,15 +16,9 @@ import { listenForAbort } from "@openomni/protocol";
 import { BOUNDED_CONCURRENCY } from "./core/concurrency";
 import { GenerationRawSlots } from "./session-generations";
 import { Entropy, ObservationSink, SessionLayer, type ProcessServices } from "./services";
-import type {
-  DurableExecutor, ExecutionBatchItem, ExecutionRequest,
-  ExecutionResult, ExecutorOptions,
-} from "./executor-contract";
+import type { DurableExecutor, ExecutionBatchItem, ExecutionRequest, ExecutionResult, ExecutorOptions, } from "./executor-contract";
 export { ExecutionApprovalError } from "./errors";
-export type {
-  DurableExecutor, ExecutionLedger, Executor, ExecutionRequest, ExecutionApprovals,
-  ExecutionApprovalRequest, ExecutionBatchResult, ExecutionResult, ExecutorOptions,
-} from "./executor-contract";
+export type { DurableExecutor, ExecutionLedger, Executor, ExecutionRequest, ExecutionApprovals, ExecutionApprovalRequest, ExecutionBatchResult, ExecutionResult, ExecutorOptions, } from "./executor-contract";
 
 /** Raw-slot settlement grace after body exit: an explicit executor-owned
  * default (W5.2), decoupled from the deleted lease plane's TTL. */

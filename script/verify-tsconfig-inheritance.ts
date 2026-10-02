@@ -7,15 +7,11 @@
  *
  * - base + chain must resolve (a missing extends target fails closed),
  * - the issue-named emit constraints hold — protocol keeps declaration
- *   emission (and stays non-composite, reference-free), llm stays no-emit,
+ *   emission (and stays non-composite, reference-free),
  * - no intended input silently leaves compilation: every source file under
  *   the claimed source roots belongs to at least one project,
  * - the protocol build project derives one `.d.ts` per input, and when
  *   `dist/` exists the emitted declaration set matches exactly.
- *
- * `packages/ledger/bench` is intentionally
- * absent from the source roots: no tsconfig project claimed them before the
- * shared base existed, and changing compilation membership is a #501 non-goal.
  *
  * Modes:
  *   bun run script/verify-tsconfig-inheritance.ts                     verify the repo
@@ -375,8 +371,7 @@ export function repoManifest(): Manifest {
     projects: discoverRepoProjects(),
     emitPolicy: {
       // #501 preservation constraints: protocol keeps declaration emission
-      // (non-composite, reference-free per the captured baseline), llm stays
-      // no-emit.
+      // (non-composite, reference-free per the captured baseline).
       "packages/protocol/tsconfig.json": {
         declaration: true,
         noEmit: false,
@@ -389,8 +384,6 @@ export function repoManifest(): Manifest {
         forbidComposite: true,
         forbidProjectReferences: true,
       },
-      "packages/llm/tsconfig.json": { noEmit: true },
-      "packages/llm/tsconfig.test.json": { noEmit: true },
     },
     sourceRoots: [
       ...tsconfigWorkspaces().flatMap((workspace) => [

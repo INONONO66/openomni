@@ -70,7 +70,7 @@ for (const extension of ["ts", "tsx"]) {
     ["direction", "packages/ui/src/view", 'import "@openomni/protocol";'],
     ["deep package", "apps/openomni/src/view", 'import "@openomni/protocol/src/index";'],
     ["deep relative", "apps/openomni/src/view", 'import { x } from "../../../other";'],
-    ["driver band", "packages/channels/src/view", 'import "@openomni/ledger";'],
+    ["driver band", "packages/channels/src/view", 'import "@openomni/agent";'],
     ["golden principle", "apps/openomni/src/view", "try { work(); } catch {}"],
   ]) {
     test(`dependency CLI discovers ${name} in ${extension}`, () => {
@@ -172,7 +172,7 @@ for (const projected of [false, true]) {
       "const sink = createProjectedSink(events, configuredSink, sessionID, trace.traceId);";
     put(
       root,
-      "packages/llm/src/processor/index.ts",
+      "packages/agent/src/model/processor/index.ts",
       projected
         ? `function emit() { ${bind} sink.onMessage(message); }`
         : `function unrelated() { ${bind} } function emit(sink) { sink.onMessage(message); }`,

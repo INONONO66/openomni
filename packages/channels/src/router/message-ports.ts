@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
 import type { ChannelError } from "../errors";
-import type { PolicyEvaluationInput } from "@openomni/policy";
+import type { PolicyEvaluationInput } from "@openomni/agent";
 import type {
   BusEvent,
   Gateway,

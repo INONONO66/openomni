@@ -1,11 +1,11 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Provider } from "@openomni/llm";
+import type { Provider } from "@openomni/agent";
 import { z } from "zod";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";

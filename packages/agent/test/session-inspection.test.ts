@@ -10,8 +10,8 @@ import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/ef
 import { OutcomeUnknown, CommitFailed } from "../src/errors";
 import { seedPolicy } from "./helpers/seed-policy";
 import { approveWriteRow } from "./helpers/compiled-policy";
-import { SessionHandleStore } from "@openomni/ledger";
-import { LlmRunFailure, type Run } from "@openomni/llm";
+import * as SessionHandleStore from "../src/store/fence";
+import { LlmRunFailure, type Run } from "../src/model";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import { closeSessions, createTurnDispatcher, type SessionRunner } from "../src/index";
 import { resolveSessionRuntime } from "../src/session-contract";
@@ -67,7 +67,7 @@ const runtime: SessionRuntime = {
         parentActionId: null,
       }).pipe(
         Effect.mapError(
-          (error: import("@openomni/ledger").LedgerError) => new CommitFailed({ error }),
+          (error: import("../src/store/errors").LedgerError) => new CommitFailed({ error }),
         ),
       );
       yield* wake(message.destinationSessionId, parentRunner, runtime).pipe(

@@ -15,8 +15,6 @@
     ]
   },
   "naming": {
-    "grandfathered": [
-      "packages/protocol/src/policy/policy-point.ts:PolicyPointModule"
-    ]
+    "grandfathered": []
   }
 }

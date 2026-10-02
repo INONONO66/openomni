@@ -1,12 +1,8 @@
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "@openomni/ledger";
+import * as SessionHandleStore from "../src/store/fence";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, PlainValueSchema, SessionTurn } from "@openomni/protocol";
-import {
-  FoldCheckpointIntegrityError,
-  foldHistoryState,
-  hydrateSessionHistory,
-} from "../src/session-lifecycle/history";
+import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/session-lifecycle/history";
 import { crashMatrixMain, crashWitness, emitCrashWitness, sessionId } from "./helpers/crash-matrix";
 import { foldCrashMain, foldCrashPoint } from "./helpers/fold-crash";
 import { isolatedRun } from "./helpers/isolated";

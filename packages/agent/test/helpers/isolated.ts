@@ -1,4 +1,6 @@
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import * as SessionHandleStore from "../../src/store/fence";
 import type { LedgerSession } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
 import type { createObservationBus } from "../../src/observation/bus";
@@ -85,6 +87,11 @@ export async function runAgent<A, E>(program: Effect.Effect<A, E>): Promise<A> {
 /** Execute an asynchronous test program with its original runner failure semantics. */
 export function runTestPromise<A, E>(program: Effect.Effect<A, E>): Promise<A> {
   return Effect.runPromise(program);
+}
+
+/** Execute an asynchronous test program and surface its Exit (#1246: model helpers delegate here). */
+export function runTestExit<A, E>(program: Effect.Effect<A, E>): Promise<Exit.Exit<A, E>> {
+  return Effect.runPromiseExit(program);
 }
 
 /**
