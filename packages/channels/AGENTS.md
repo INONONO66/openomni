@@ -1,5 +1,7 @@
 # packages/channels
 
+2026-10-02, #1248 Effect timing: drivers own no timers and no runner — every delay, retry, reconnect, heartbeat, and poll loop is an Effect program executed through the injected `run: EffectRunner` option (the app binds `runAppEffect`). `src/support/schedule.ts` is the single reconnect policy (exponential 1s→60s via `Schedule.min`, ±20% jitter, `RECONNECT_ATTEMPT_BOUND` 10); `src/support/socket-shell.ts` runs one interruptible retry streak per close (halt `Deferred` + `Effect.raceFirst`; exhaustion = typed dead shell publishing `reconnectFailed`); `src/support/fetch-retry.ts` is `Effect.retry` (≤3 attempts, 429 retry-after respected); uncertain deliveries record `unknown`, never resend, and publish one Owner-visible Warn (`src/support/deliver.ts`). Tests drive `ManagedRuntime(TestClock.layer())` from the package's runner owner (`test/helpers/effect.ts`).
+
 2026-10-01, #1244 typed failures: `ChannelsFailure` is the package-owned carrier for untyped causes (`decodeChannelFailure`); driver and router errors stay `Data.TaggedError` classes in `src/errors.ts`, bare `throw new Error` is zero in `src/`, and handler/websocket frames report failures through typed ports rather than console logging.
 
 2026-09-07, #969 Owner answers: `router/request/owner-answer.ts` accepts only the typed gateway arm with injected `authenticateAnswer` evidence. WebSocket `onRequestAnswer` composes with that same `ingest`; credentials never enter message recording or request actions. Upgrade-token authentication and ordinary text provenance remain separate.
@@ -37,7 +39,8 @@ src/
 │   ├── github/       # Webhooks with retryable 5xx failures and delivery-marker comment read-back
 │   └── slack/        # Socket Mode surface (two tokens: xoxb- bot + xapp- app-level; ack-before-dispatch,
 │                     #   fresh-URL reconnect) with workspace-mandatory TEAM:USER endpoint keys
-└── support/          # Band-local helpers: format renderers/chunking, bounded dedupe, fetch retry, trigger evaluation
+└── support/          # Band-local helpers: format renderers/chunking, bounded dedupe, Effect fetch retry,
+                      #   shared reconnect schedule + socket reconnect shell (#1248), trigger evaluation
 ```
 
 ## DEPENDENCIES (the band import contract)

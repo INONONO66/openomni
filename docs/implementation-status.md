@@ -1,8 +1,37 @@
 # Implementation Status
 
-## #1247 agent package reorganized by responsibility (epic #1260 P5, ⏳ pending merge)
+## #1248 channel timers on Effect Schedule/Fiber/Deferred (epic #1260, ⏳ pending merge)
 
-On `epic1260/1247-agent-dirs` (2026-10-02, base `9b4e4b8c`). `packages/agent/src`
+On `epic1260/1248-channels-effect` (2026-10-02, base `0ebef4b0`, rebased onto
+#1250's merge `9b4e4b8c`). Every channel-driver timer is an Effect program on
+an injected runtime: drivers compose Effect values and the app supplies the
+one runner port (`EffectRunner` in `packages/channels/src/types.ts`, bound to
+`runAppEffect` in `apps/openomni/src/index.ts`). `setTimeout(`/`setInterval(`/
+`new Promise(`/`calculateBackoff` grep to zero in `packages/channels/src`.
+One shared reconnect policy (`src/support/schedule.ts`): exponential from 1s
+capped at 60s via `Schedule.min` (this pin has no either combinator), ±20%
+jitter, and a 10-attempt supervisor bound. One close starts ONE retry streak
+(`src/support/socket-shell.ts`): `Effect.retry` raced (`Effect.raceFirst`)
+against a halt `Deferred`, so `stop()` interrupts mid-backoff; exhaustion is a
+typed dead shell that publishes `reconnectFailed` and drops sends — generation
+counters are deleted, custody is fiber interruption and AbortController
+identity (Telegram poller). `fetchWithRetry` is `Effect.retry` with at most
+three attempts honoring 429 retry-after; the Discord heartbeat is an
+`Effect.delay`/`Effect.forever` loop whose missed-ACK watchdog closes with the
+resume-safe code; the process reply wait is `Effect.timeoutOrElse` on the app
+runtime clock (`apps/openomni/src/composition/process-replies.ts`). Uncertain
+deliveries stay `unknown`, are never resent, and now publish one Owner-visible
+Warn per physical attempt (`src/support/deliver.ts`). Tests drive the fake
+clock through per-test `ManagedRuntime(TestClock.layer())` helpers (the named
+runner owners); new suites: backoff-schedule, socket-shell-interrupt,
+heartbeat-watchdog, poller-interrupt, process-replies-timeout,
+supervisor-bounce, unknown-no-resend. Found en route: Effect v4 `Effect.race`
+resolves with the first SUCCESS, so racing a failable wait against a halt
+Deferred hangs on failure — every such race uses `Effect.raceFirst`.
+
+## #1247 agent package reorganized by responsibility (epic #1260 P5, merged as `a5ee6c4d` (PR #1266))
+
+On `epic1260/1247-agent-dirs` (2026-10-02, base `9b4e4b8c`, merged as `a5ee6c4d`, PR #1266). `packages/agent/src`
 has exactly seven directories plus `index.ts`: `kernel/` (turn loop, gate,
 tool dispatch, ports, failures), `session/` (entity, run, mailbox, request,
 bus, commit, alarm), `store/` (fence, session-file, storage adapters),
