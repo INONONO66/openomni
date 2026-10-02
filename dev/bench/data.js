@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790917611655,
+  "lastUpdate": 1790927927484,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76285,6 +76285,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 92509,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ebef4b0ba1c263a8e9ccdd6e8370d8fe3896e5d",
+          "message": "#1246 Merge the package tree from ten workspaces to five (#1264)\n\n* #1246 PHASE 0: move ipc/codemode into machines, policy/ledger/llm into agent and channels, rewrite imports, merge package deps\n\n* #1246 machines-absorb: fold ipc+codemode into machines; one MachinesFailure fallback; typedCall beside its callers\n\n* #1246 protocol-dead: delete unconsumed policy/ingress/tool/channel contracts (#1030)\n\n- policy: drop PolicyPoint registry, PolicyPlan, PolicyObligation (+decision\n  obligations field), PolicyEffectType, Timing/FailPolicy (definition.ts),\n  and the four unobserved policy event kinds (event/policy.ts)\n- ingress: drop AgentDefSchema/AgentDef, WorkerLifecycleSchema,\n  ActivationMetadata (+activation/agent fields), ResolvedInboundEvent\n- tool: drop Tool.Config, Tool.Placement, Spec.placement/requires\n- channel: drop SurfaceKey.parse/ParsedKey/KNOWN_KINDS\n- resource: drop coordinator/runtime Source variants\n- channels authn: timing narrowed to literal \"run.start\"\n- scripts: remove policy-point-registration guard rule; retarget stale\n  canonical-evaluator pin to packages/agent/src/kernel/gate/match.ts;\n  shrink naming baseline; regenerate schema snapshot\n- docs: scrub deleted-contract references\n\n* #1246 agent-absorb: fold policy/ledger/llm into agent; channel stores into channels\n\n* #1246 topology-ci-docs: five-package topology, CI lanes, scripts and docs sweep\n\n* #1246 lead: flatten agent bench to one level, drop duplicate AgentFailure case and unused Diagnostic alias (lint + check-deps green)\n\n* #1246 review r1: bench test runs the store entry on fresh output; drop absence-only test and assertion; ownership docs name the machines interpreter and the agent model plane\n\n---------\n\nCo-authored-by: OmO <omo@openomni.local>",
+          "timestamp": "2026-10-02T16:55:50+09:00",
+          "tree_id": "f2d99cd8fa18c64b9cfb4f3160857373ba79703e",
+          "url": "https://github.com/INONONO66/openomni/commit/0ebef4b0ba1c263a8e9ccdd6e8370d8fe3896e5d"
+        },
+        "date": 1790927926878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 998,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1342,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1429912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 423869,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6600997,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 709,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 196246,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 790599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 457626,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3095,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11901523,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1483049,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19053,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 173223,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 868853,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 264155,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14375741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 169051,
             "unit": "ns/op"
           }
         ]
