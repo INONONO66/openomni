@@ -20,9 +20,7 @@ beforeEach(() => {
 test.each([
   { kind: "actor", value: "actor-owner" },
   { kind: "channel", value: "discord:owner-workspace:owner-dm" },
-] as const)("blacklisted $kind is refused before inbox commit", async (entry:
-  | { readonly kind: "actor"; readonly value: "actor-owner" }
-  | { readonly kind: "channel"; readonly value: "discord:owner-workspace:owner-dm" }) => {
+] as const)("blacklisted $kind is refused before inbox commit", async (entry: { readonly kind: "actor"; readonly value: "actor-owner"; } | { readonly kind: "channel"; readonly value: "discord:owner-workspace:owner-dm"; }) => {
   ledger().stores.blacklist.put({ id: "blacklisted", ...entry, createdBy: "owner" });
   expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",

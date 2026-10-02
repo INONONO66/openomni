@@ -8,12 +8,7 @@ function capture() {
     stderr.push(String(chunk));
     return true;
   });
-  return {
-    stderr,
-    exits,
-    exit: (code: number) => exits.push(code),
-    restore: () => write.mockRestore(),
-  };
+  return { stderr, exits, exit: (code: number) => exits.push(code), restore: () => write.mockRestore() };
 }
 
 test("a clean main runs once and neither exits nor writes to stderr", async () => {

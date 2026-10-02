@@ -14,10 +14,7 @@ test.each([
   "bot",
   "owner",
   "ambient",
-] as const)("perimeter resolves %s addressee independently from sender standing", async (addressee:
-  | "owner"
-  | "bot"
-  | "ambient") => {
+] as const)("perimeter resolves %s addressee independently from sender standing", async (addressee: "owner" | "bot" | "ambient") => {
   ledger().stores.channelGrants.put({
     id: "channel",
     surface: "ws",
@@ -38,29 +35,23 @@ test.each([
   });
   const projected: Array<Parameters<GatewayRouterPorts["run"]>[1]["message"]> = [];
   const router = makeRouter({
-    run: (
-      _sender: Parameters<GatewayRouterPorts["run"]>[0],
-      request: Parameters<GatewayRouterPorts["run"]>[1],
-    ) =>
-      Effect.sync(() => {
-        projected.push(request.message);
-        return { terminal: "blocked_pre" as const, reason: "capture", matchedRuleIds: [] };
-      }),
+    run: (_sender: Parameters<GatewayRouterPorts["run"]>[0], request: Parameters<GatewayRouterPorts["run"]>[1]) => Effect.sync(() => {
+      projected.push(request.message);
+      return { terminal: "blocked_pre" as const, reason: "capture", matchedRuleIds: [] };
+    }),
   });
-  await runEffect(
-    router.ingest(
-      { kind: "external", surface: "ws", externalId: "owner" },
-      {
-        eventId: "mention",
-        surface: "ws",
-        channelId: "room",
-        dm: false,
-        addressees: [{ externalId: "mentioned" }],
-        payload: "hello",
-        render: "hello",
-      },
-    ),
-  );
+  await runEffect(router.ingest(
+    { kind: "external", surface: "ws", externalId: "owner" },
+    {
+      eventId: "mention",
+      surface: "ws",
+      channelId: "room",
+      dm: false,
+      addressees: [{ externalId: "mentioned" }],
+      payload: "hello",
+      render: "hello",
+    },
+  ));
   expect(projected).toMatchObject([{ sender: "external", senderTier: "owner", addressee }]);
   expect(ledger().stores.actors.resolveEndpoint("ws", "owner")?.identity.trustTier).toBe("owner");
   expect(commits).toEqual([]);
@@ -70,25 +61,21 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   const router = makeRouter({
     now: () => 10,
   });
-  const result = await runEffect(
-    router.ingest(
-      { kind: "session", id: "sender" },
-      {
-        to: { kind: "session", id: "child" },
-        type: "message",
-        content: "question",
-        deadline: 100,
-        replyTo: "binding",
-      },
-    ),
-  );
+  const result = await runEffect(router.ingest(
+    { kind: "session", id: "sender" },
+    {
+      to: { kind: "session", id: "child" },
+      type: "message",
+      content: "question",
+      deadline: 100,
+      replyTo: "binding",
+    },
+  ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(
-    sessionTree("sender", ledger().sessions.actions).filter(
-      (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm",
-    ),
-  ).toEqual([]);
+  expect(sessionTree("sender", ledger().sessions.actions).filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
+    [],
+  );
   expect(ledger().kernel.requestRows("sender")).toMatchObject([
     { deadline: 100, expectedResponders: ["child"] },
   ]);

@@ -1,20 +1,9 @@
 import { AgentFailure } from "../../src/store/errors";
-import {
-  canonicalDigest,
-  FoldCheckpoint,
-  PlainObjectSchema,
-  PlainValueSchema,
-  type LedgerAction,
-} from "@openomni/protocol";
+import { canonicalDigest, FoldCheckpoint, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
 import { z } from "zod";
 import { Effect } from "effect";
 import { runAgent } from "./executor";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  withSessionServices,
-  type SessionFixture,
-} from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/plugins/compaction/successor";
 import { closeSessions } from "../../src/session/run";
@@ -23,11 +12,7 @@ import { hydrateSessionHistory } from "../../src/inspect/history";
 import { foldCheckpointAction } from "../../src/session/commit";
 import { requireCommit } from "../../src/testing/commit";
 import { requestLedger } from "./request-ledger";
-import {
-  paddingActions,
-  reconstructionFixture,
-  reconstructionSession,
-} from "./reconstruction-fixture";
+import { paddingActions, reconstructionFixture, reconstructionSession, } from "./reconstruction-fixture";
 
 export const foldCrashPoint = z.enum([
   "fold_checkpoint_committed_before_wake",

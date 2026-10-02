@@ -2,89 +2,57 @@ import { writeFileSync } from "node:fs";
 import { decodeJson, digest, InventoryError, type Json } from "./quality-inventory";
 
 type NativeInput = {
-  command: string[];
-  cwd: string;
-  timeout?: number;
-  receipt?: string;
-  onStderr?: (chunk: Uint8Array) => void;
+	command: string[];
+	cwd: string;
+	timeout?: number;
+	receipt?: string;
+	onStderr?: (chunk: Uint8Array) => void;
 };
 /** A child's failure message carries the nested process excerpt (up to 16 KB);
  * cutting it shorter hides the traceback the excerpt exists to surface. */
 const ERROR_LIMIT = 20_000;
 function formatErrors(errors: Json[]): string {
-  return errors
-    .slice(0, 20)
-    .map((error: Json) => JSON.stringify(error).slice(0, ERROR_LIMIT))
-    .join("; ");
+	return errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, ERROR_LIMIT)).join("; ");
 }
 function structuredFailure(stdout: string): string | undefined {
-  try {
-    const parsed = decodeJson(stdout);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      Array.isArray(parsed.errors)
-    )
-      return formatErrors(parsed.errors);
-  } catch {
-    /* Invalid child output falls through to raw stderr. */
-  }
-  return undefined;
+	try {
+		const parsed = decodeJson(stdout);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.errors))
+			return formatErrors(parsed.errors);
+	} catch { /* Invalid child output falls through to raw stderr. */ }
+	return undefined;
 }
 export function nativeFailure(stdout: string, stderr: string): string {
-  const failure = structuredFailure(stdout) ?? (stderr || stdout);
-  return failure.slice(-ERROR_LIMIT);
+	const failure = structuredFailure(stdout) ?? (stderr || stdout);
+	return failure.slice(-ERROR_LIMIT);
 }
 /** Exit 1 is a complete measurement with findings, not infrastructure success. */
 export async function nativeJson(input: NativeInput) {
-  const child = Bun.spawn(input.command, {
-    cwd: input.cwd,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: input.timeout ?? 1_800_000,
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(
-      child.stderr.pipeThrough(
-        new TransformStream<Uint8Array, Uint8Array>({
-          transform(chunk, controller) {
-            input.onStderr?.(chunk);
-            controller.enqueue(chunk);
-          },
-        }),
-      ),
-    ).text(),
-    child.exited,
-  ]);
-  if (input.receipt)
-    writeFileSync(
-      input.receipt,
-      JSON.stringify({
-        command: input.command,
-        cwd: input.cwd,
-        runtime: Bun.version,
-        exitCode,
-        signal: child.signalCode,
-        stdout,
-        stderr,
-      }),
-      { flag: "wx" },
-    );
-  if (child.signalCode || ![0, 1].includes(exitCode)) {
-    throw new InventoryError(
-      "native_process",
-      input.command[0] ?? "",
-      `${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr)}`,
-    );
-  }
-  return {
-    command: input.command,
-    exitCode,
-    stderr,
-    stdoutHash: digest(stdout),
-    document: decodeJson(stdout),
-  };
+	const child = Bun.spawn(input.command, {
+		cwd: input.cwd,
+		stdin: "ignore",
+		stdout: "pipe",
+		stderr: "pipe",
+		timeout: input.timeout ?? 1_800_000,
+	});
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(child.stdout).text(),
+		new Response(child.stderr.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) { input.onStderr?.(chunk); controller.enqueue(chunk); },
+		}))).text(),
+		child.exited,
+	]);
+	if (input.receipt) writeFileSync(input.receipt, JSON.stringify({ command: input.command, cwd: input.cwd, runtime: Bun.version, exitCode, signal: child.signalCode, stdout, stderr }), { flag: "wx" });
+	if (child.signalCode || ![0, 1].includes(exitCode)) {
+		throw new InventoryError(
+			"native_process",
+			input.command[0] ?? "",
+			`${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr)}`,
+		);
+	}
+	return {
+		command: input.command, exitCode, stderr,
+		stdoutHash: digest(stdout),
+		document: decodeJson(stdout),
+	};
 }

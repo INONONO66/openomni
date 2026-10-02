@@ -17,12 +17,7 @@ describe("evaluatePermission", () => {
   it("fails closed when input contains a non-JSON value", () => {
     expect(
       evaluatePermission(
-        {
-          action: "tool.call",
-          inputRules: [
-            { toolPattern: "*", field: "value", pattern: "x", action: "allow", priority: 1 },
-          ],
-        },
+        { action: "tool.call", inputRules: [{ toolPattern: "*", field: "value", pattern: "x", action: "allow", priority: 1 }] },
         { ...request("tool"), input: { value: () => "not JSON" } },
       ),
     ).toMatchObject({ action: "abort", decision: "deny", reason: "unsafe_input_rule" });

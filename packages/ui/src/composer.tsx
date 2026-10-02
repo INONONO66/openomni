@@ -35,7 +35,7 @@ export function ApprovalTray({
         {current.summary}
         <span className="text-voice-secondary"> · {current.reason}</span>
       </Voice>
-
+      
       {more > 0 &&
         (onNext === undefined ? (
           <Voice className="text-voice-secondary" voice="meta">
@@ -60,7 +60,7 @@ export function ApprovalTray({
         >
           <Voice voice="meta">Approve</Voice>
         </button>
-
+        
         <button
           className="focus-ring rounded-sm px-2 py-0.5 text-voice-meta transition-quiet hover:text-fg"
           data-deny
@@ -128,11 +128,11 @@ export function Composer({
   readonly onValueChange: (value: string) => void;
   /** Called on Enter and on the send affordance. Never with an empty value. */
   readonly onSubmit: () => void;
-
+  
   readonly onStop?: (() => void) | undefined;
   /** Locks the field and the send control while a turn is in flight. */
   readonly sending?: boolean;
-
+  
   readonly disabled?: boolean;
   /** Left meta: the model, the session — the surface's words, not ours. */
   readonly hint?: string | undefined;
@@ -187,7 +187,7 @@ export function Composer({
             rows={1}
             value={value}
           />
-
+          
           {sending && onStop !== undefined ? (
             <button
               aria-label="Stop response"
@@ -197,6 +197,7 @@ export function Composer({
               onClick={onStop}
               type="button"
             >
+              
               {/* biome-ignore lint/a11y/noSvgWithoutTitle: aria-hidden; the button carries the name */}
               <svg
                 aria-hidden
@@ -210,6 +211,7 @@ export function Composer({
               </svg>
             </button>
           ) : (
+            
             <button
               aria-label="Send"
               className="focus-ring -mb-0.5 shrink-0 rounded-sm p-1 text-voice-ambient transition-quiet hover:text-fg disabled:pointer-events-none disabled:opacity-40"

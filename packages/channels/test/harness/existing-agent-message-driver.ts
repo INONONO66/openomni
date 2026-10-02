@@ -54,39 +54,35 @@ async function prepareScenario() {
       return { value: "accepted", externalMessageId: "platform" };
     },
   });
-  const fire = await runEffect(
-    messaging.send({
-      messageId: "notify",
-      traceId: "trace",
-      senderId: "owner",
-      target: { actorId: "target" },
-      operation: "fire_and_forget",
-      body: "notice",
-      at: 10,
-    }),
-  );
+  const fire = await runEffect(messaging.send({
+    messageId: "notify",
+    traceId: "trace",
+    senderId: "owner",
+    target: { actorId: "target" },
+    operation: "fire_and_forget",
+    body: "notice",
+    at: 10,
+  }));
   const countAfterFire = ledger().kernel.requestRows().length;
-  await runEffect(
-    messaging.send({
-      messageId: "physical",
-      traceId: "trace",
-      senderId: "owner",
-      target: { actorId: "target" },
-      operation: "awaited",
-      body: "verdict",
-      at: 10,
-      requestSpec: {
-        requestId: "request:qa:briefing",
-        sessionId: "session:qa-owner",
-        expectedResponders: ["a", "b", "c"],
-        allowedActions: ["report_result"],
-        resolution: "quorum",
-        threshold: 2,
-        deadline: 100,
-        correlation: { channelId: "room" },
-      },
-    }),
-  );
+  await runEffect(messaging.send({
+    messageId: "physical",
+    traceId: "trace",
+    senderId: "owner",
+    target: { actorId: "target" },
+    operation: "awaited",
+    body: "verdict",
+    at: 10,
+    requestSpec: {
+      requestId: "request:qa:briefing",
+      sessionId: "session:qa-owner",
+      expectedResponders: ["a", "b", "c"],
+      allowedActions: ["report_result"],
+      resolution: "quorum",
+      threshold: 2,
+      deadline: 100,
+      correlation: { channelId: "room" },
+    },
+  }));
   const first = await runEffect(answer("request:qa:briefing", "a", "reply-a", 20));
   return { messaging, baseline, deliveries, fire, countAfterFire, first };
 }
@@ -145,35 +141,32 @@ async function duplicateAmbiguous(context: ScenarioContext) {
   const before = ledger().kernel.requestById("request:qa:briefing");
   const replay = await runEffect(answer("request:qa:briefing", "a", "reply-a", 20));
   const replayUnchanged =
-    JSON.stringify(before) === JSON.stringify(ledger().kernel.requestById("request:qa:briefing"));
+    JSON.stringify(before) ===
+    JSON.stringify(ledger().kernel.requestById("request:qa:briefing"));
   const duplicate = await runEffect(answer("request:qa:briefing", "a", "reply-a-new", 21));
   const claim = { endpointId: "endpoint", channelId: "room", replyToMessageId: "platform" };
   originalAction("second-request", "session:qa-owner");
-  await runEffect(
-    channelRequests(requestPort(() => 30)).open({
-      requestId: "second-request",
-      sessionId: "session:qa-owner",
-      expectedResponders: ["a"],
-      correlation: claim,
-      allowedActions: ["report_result"],
-      resolution: "first",
-      threshold: 1,
-      deadline: 100,
-      at: 30,
-    }),
-  );
+  await runEffect(channelRequests(requestPort(() => 30)).open({
+    requestId: "second-request",
+    sessionId: "session:qa-owner",
+    expectedResponders: ["a"],
+    correlation: claim,
+    allowedActions: ["report_result"],
+    resolution: "first",
+    threshold: 1,
+    deadline: 100,
+    at: 30,
+  }));
   const ambiguous = findRequestCandidates(ledger().kernel.requestRows(), claim);
-  const denied = await runEffect(
-    messaging.send({
-      messageId: "multi",
-      traceId: "trace",
-      senderId: "owner",
-      target: { actorId: "multi" },
-      operation: "fire_and_forget",
-      body: "ambiguous",
-      at: 30,
-    }),
-  );
+  const denied = await runEffect(messaging.send({
+    messageId: "multi",
+    traceId: "trace",
+    senderId: "owner",
+    target: { actorId: "multi" },
+    operation: "fire_and_forget",
+    body: "ambiguous",
+    at: 30,
+  }));
   const after = ledger().kernel.requestById("request:qa:briefing");
   const unchanged =
     before?.state === after?.state &&
@@ -213,11 +206,7 @@ function quorumState(request: SessionTransition.Request | undefined) {
   return {
     state: request?.state ?? "",
     replies: request?.replies.length ?? 0,
-    responders: new Set(
-      request?.replies.map(
-        (reply: SessionTransition.Request["replies"][number]) => reply.responderId,
-      ),
-    ).size,
+    responders: new Set(request?.replies.map((reply: SessionTransition.Request["replies"][number]) => reply.responderId)).size,
     threshold: request?.threshold ?? 0,
   };
 }

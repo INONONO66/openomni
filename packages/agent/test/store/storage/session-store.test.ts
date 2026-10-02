@@ -167,7 +167,9 @@ test("createSessionKernel serves session facts from the session file and policy 
     expect(session.decisionFacts.head("k1")?.rowHash).toBe(outcome.fact.rowHash);
 
     // Policy rows come from the catalog, not the session file.
-    expect(catalog.policies.append(policyFixture)).toBe(true);
+    expect(
+      catalog.policies.append(policyFixture),
+    ).toBe(true);
     expect(kernel.policyRows()).toHaveLength(1);
     expect(kernel.currentPolicyGeneration()).toBe(1);
 

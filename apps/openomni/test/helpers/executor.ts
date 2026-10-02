@@ -22,26 +22,19 @@ export const seededPolicy = compilePolicySnapshot({
 
 /** Production executor composition with deterministic in-memory receipts. */
 export const fixtureLedger = {
-  commit(action: Parameters<Parameters<typeof createExecutor>[0]["ledger"]["commit"]>[0]) {
-    ordinal += 1;
-    return Effect.succeed({
-      action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
-      revision: ordinal,
-    });
-  },
+    commit(action: Parameters<Parameters<typeof createExecutor>[0]["ledger"]["commit"]>[0]) {
+      ordinal += 1;
+      return Effect.succeed({
+        action: LedgerAction.Node.parse({ ...action, ordinal, ...fixtureHashes(ordinal) }),
+        revision: ordinal,
+      });
+    },
 };
 
-export const executorServices = executorLayer({
-  policy: seededPolicy,
-  clock: () => 1,
-  entropy: () => `test-action-${ordinal + 1}`,
-  observations: { publish: () => undefined },
-});
-export const executor = runSyncEffect(
-  createExecutor({
-    ledger: fixtureLedger,
-    identity: { sessionId: "test", role: "resident", parentActionId: null },
-    // In-memory ledger: durable retry scheduling is covered by the agent package tests.
-    retryAlarm: nullRetryAlarm,
-  }).pipe(Effect.provide(executorServices)),
-);
+export const executorServices = executorLayer({ policy: seededPolicy, clock: () => 1, entropy: () => `test-action-${ordinal + 1}`, observations: { publish: () => undefined } });
+export const executor = runSyncEffect(createExecutor({
+  ledger: fixtureLedger,
+  identity: { sessionId: "test", role: "resident", parentActionId: null },
+  // In-memory ledger: durable retry scheduling is covered by the agent package tests.
+  retryAlarm: nullRetryAlarm,
+}).pipe(Effect.provide(executorServices)));

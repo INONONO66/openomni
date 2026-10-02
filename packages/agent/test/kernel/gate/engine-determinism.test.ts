@@ -1,19 +1,8 @@
 import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { describe, expect, it } from "bun:test";
-import {
-  compilePolicySnapshot,
-  createPolicyCompiler,
-  type PolicyEvaluationInput,
-} from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot, createPolicyCompiler, type PolicyEvaluationInput } from "../../../src/kernel/gate/compile";
 import type { PolicyRow, Storage } from "@openomni/protocol";
-import {
-  atGeneration,
-  compaction,
-  draft,
-  MemoryPolicyRows,
-  unrelatedRows,
-  withPolicyRows,
-} from "./row-fixtures";
+import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows, withPolicyRows } from "./row-fixtures";
 
 const request: PolicyEvaluationInput = {
   kind: "tool",
@@ -45,38 +34,37 @@ function initialRows() {
 }
 
 describe("compiled policy snapshot determinism", () => {
-  it("pins a turn while the transactional writer advances new evaluators", () =>
-    withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
-      source.appendGeneration(() => initialRows());
-      const compiler = createPolicyCompiler({
-        registry: KERNEL_POLICY_REGISTRY,
-        source,
-        mandatory: ["compaction"],
-      });
-      const oldEvaluator = compiler.pin(1);
-      const before = oldEvaluator.evaluate(request);
+  it("pins a turn while the transactional writer advances new evaluators", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    source.appendGeneration(() => initialRows());
+    const compiler = createPolicyCompiler({
+      registry: KERNEL_POLICY_REGISTRY,
+      source,
+      mandatory: ["compaction"],
+    });
+    const oldEvaluator = compiler.pin(1);
+    const before = oldEvaluator.evaluate(request);
 
-      const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) => [
-        ...current,
-        draft(
-          "deny-read",
-          "tool",
-          "pre",
-          { type: "deny", reason: "read suspended" },
-          { match: { op: "read" }, priority: 2_000 },
-        ),
-      ]);
-      const current = compiler.pin(generation);
-      expect(generation).toBe(2);
-      expect(before.verdict).toBe("allow");
-      expect(current.evaluate(request)).toMatchObject({
-        generation: 2,
-        verdict: "deny",
-        matchedRuleIds: ["deny-read"],
-        reason: "read suspended",
-      });
-      expect(oldEvaluator.evaluate(request)).toEqual(before);
-    }));
+    const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) => [
+      ...current,
+      draft(
+        "deny-read",
+        "tool",
+        "pre",
+        { type: "deny", reason: "read suspended" },
+        { match: { op: "read" }, priority: 2_000 },
+      ),
+    ]);
+    const current = compiler.pin(generation);
+    expect(generation).toBe(2);
+    expect(before.verdict).toBe("allow");
+    expect(current.evaluate(request)).toMatchObject({
+      generation: 2,
+      verdict: "deny",
+      matchedRuleIds: ["deny-read"],
+      reason: "read suspended",
+    });
+    expect(oldEvaluator.evaluate(request)).toEqual(before);
+  }));
 
   it("derives the same content hash and result regardless of insertion order", () => {
     const rows = initialRows();

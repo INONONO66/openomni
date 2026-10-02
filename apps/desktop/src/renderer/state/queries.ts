@@ -1,12 +1,6 @@
 import type { SessionRead } from "@openomni/protocol";
 import { GatewayUnavailableError } from "../errors";
-import {
-  queryOptions,
-  useQueries,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { GatewayChatTransport } from "../chat/gateway-transport";
 import type { LocalSession, Session } from "./store";
@@ -36,91 +30,56 @@ export const queryKeys = {
  * an empty continuation: no new actions is not new authority, and replacing
  * the cached slice would erase the authoritative last-activity timestamp.
  */
-function newerPage(
-  previous: SessionRead.Page | undefined,
-  page: SessionRead.Page,
-): SessionRead.Page {
+function newerPage(previous: SessionRead.Page | undefined, page: SessionRead.Page): SessionRead.Page {
   if (previous === undefined || page.epoch > previous.epoch) return page;
   if (page.epoch < previous.epoch || page.headRevision < previous.headRevision) return previous;
   return page.headRevision === previous.headRevision &&
     (page.afterRevision < previous.afterRevision || page.actions.length === 0)
-    ? previous
-    : page;
+    ? previous : page;
 }
 
-export function sessionReadOptions(
-  client: QueryClient,
-  transport: GatewayChatTransport | null,
-  sessionId: string,
-) {
+export function sessionReadOptions(client: QueryClient, transport: GatewayChatTransport | null, sessionId: string) {
   return queryOptions({
     queryKey: queryKeys.session(sessionId),
     enabled: transport !== null,
     queryFn: async () => {
       if (transport === null) throw new GatewayUnavailableError("gateway not configured");
       const prior = client.getQueryData<SessionRead.Page>(queryKeys.session(sessionId));
-      const page = await transport.readSession(
-        sessionId,
-        prior === undefined
-          ? undefined
-          : {
-              revision: prior.actions[prior.actions.length - 1]?.revision ?? prior.afterRevision,
-              epoch: prior.epoch,
-            },
-      );
+      const page = await transport.readSession(sessionId, prior === undefined ? undefined : {
+        revision: prior.actions[prior.actions.length - 1]?.revision ?? prior.afterRevision,
+        epoch: prior.epoch,
+      });
       return newerPage(client.getQueryData<SessionRead.Page>(queryKeys.session(sessionId)), page);
     },
     retry: false,
   });
 }
 
-export function subscribeSessionReads(
-  client: QueryClient,
-  transport: GatewayChatTransport,
-): () => void {
+export function subscribeSessionReads(client: QueryClient, transport: GatewayChatTransport): () => void {
   return transport.subscribeSession((page) => {
-    client.setQueryData<SessionRead.Page>(queryKeys.session(page.sessionId), (prior) =>
-      newerPage(prior, page),
-    );
+    client.setQueryData<SessionRead.Page>(queryKeys.session(page.sessionId), (prior) => newerPage(prior, page));
   });
 }
 
-export function sessionReadModel(
-  session: LocalSession,
-  page: SessionRead.Page | undefined,
-): Session {
+export function sessionReadModel(session: LocalSession, page: SessionRead.Page | undefined): Session {
   const authoritative = page?.sessionId === session.durableSessionId ? page : undefined;
   return {
     ...session,
     phase: authoritative?.phase ?? null,
     phaseSince: authoritative?.phaseSince ?? session.createdAt,
-    lastActivityAt:
-      authoritative?.actions[authoritative.actions.length - 1]?.at ?? session.lastActivityAt,
+    lastActivityAt: authoritative?.actions[authoritative.actions.length - 1]?.at ?? session.lastActivityAt,
   };
 }
 
-export function useSessionReadModels(
-  sessions: readonly LocalSession[],
-  transport: GatewayChatTransport | null,
-) {
+export function useSessionReadModels(sessions: readonly LocalSession[], transport: GatewayChatTransport | null) {
   const client = useQueryClient();
-  useEffect(
-    () => (transport === null ? undefined : subscribeSessionReads(client, transport)),
-    [client, transport],
-  );
-  const ids = [
-    ...new Set(
-      sessions.flatMap((session) =>
-        session.durableSessionId === undefined ? [] : [session.durableSessionId],
-      ),
-    ),
-  ];
+  useEffect(() => transport === null ? undefined : subscribeSessionReads(client, transport), [client, transport]);
+  const ids = [...new Set(sessions.flatMap((session) => session.durableSessionId === undefined ? [] : [session.durableSessionId]))];
   const reads = useQueries({
     queries: ids.map((id) => sessionReadOptions(client, transport, id)),
   });
-  return sessions.map((session) =>
-    sessionReadModel(session, reads[ids.indexOf(session.durableSessionId ?? "")]?.data),
-  );
+  return sessions.map((session) => sessionReadModel(session,
+    reads[ids.indexOf(session.durableSessionId ?? "")]?.data));
 }
 
 /**

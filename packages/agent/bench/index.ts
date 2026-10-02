@@ -34,11 +34,9 @@ for (const size of [20, 100, 500]) {
   bench.add(
     `compaction/${size}-messages`,
     async () => {
-      await runBenchEffect(
-        Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
-          trigger: "threshold",
-        }).pipe(Effect.provide(Entropy.layer(entropySource("bench")))),
-      );
+      await runBenchEffect(Compaction.compact(messages, compactionOptions, BENCH_TRACE, BENCH_EVENTS, {
+        trigger: "threshold",
+      }).pipe(Effect.provide(Entropy.layer(entropySource("bench")))));
     },
     { async: true },
   );

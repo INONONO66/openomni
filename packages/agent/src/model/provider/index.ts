@@ -71,44 +71,38 @@ export namespace Provider {
     readonly authFilePath: string;
   }): Effect.Effect<Model, LlmError> {
     return Effect.gen(function* () {
-      const data = yield* ModelsDev.get();
-      const provider = data[input.provider];
-      if (provider === undefined) {
-        return yield* new ModelResolutionError({
-          message: `Unknown provider: ${input.provider}`,
-          provider: input.provider,
-          model: input.id,
-          reason: "provider_not_found",
-        });
-      }
-      const catalog = catalogModels(provider);
-      const exact = catalog[input.id];
-      if (exact !== undefined) return exact;
-      const auth = yield* Auth.get(input.provider, input.authFilePath);
-      if (auth?.type === "proxy") {
-        const ids = yield* fetchProxyModels(auth.baseURL, input.now, auth.apiKey).pipe(
-          Effect.mapError(
-            (error) =>
-              new ModelResolutionError({
-                message: `Proxy model listing failed for provider: ${input.provider}`,
-                provider: input.provider,
-                model: input.id,
-                reason: "proxy_listing_failed",
-                cause: String(error),
-              }),
-          ),
-        );
-        const discovered = enrichWithCatalog(ids, catalog, input.provider).find(
-          (model) => model.id === input.id,
-        );
-        if (discovered !== undefined) return discovered;
-      }
+    const data = yield* ModelsDev.get();
+    const provider = data[input.provider];
+    if (provider === undefined) {
       return yield* new ModelResolutionError({
-        message: `Model not found: ${input.provider}/${input.id}`,
+        message: `Unknown provider: ${input.provider}`,
         provider: input.provider,
         model: input.id,
-        reason: "model_not_found",
+        reason: "provider_not_found",
       });
+    }
+    const catalog = catalogModels(provider);
+    const exact = catalog[input.id];
+    if (exact !== undefined) return exact;
+    const auth = yield* Auth.get(input.provider, input.authFilePath);
+    if (auth?.type === "proxy") {
+      const ids = yield* fetchProxyModels(auth.baseURL, input.now, auth.apiKey).pipe(Effect.mapError((error) =>
+        new ModelResolutionError({
+          message: `Proxy model listing failed for provider: ${input.provider}`,
+          provider: input.provider, model: input.id, reason: "proxy_listing_failed", cause: String(error),
+        }),
+      ));
+      const discovered = enrichWithCatalog(ids, catalog, input.provider).find(
+        (model) => model.id === input.id,
+      );
+      if (discovered !== undefined) return discovered;
+    }
+    return yield* new ModelResolutionError({
+      message: `Model not found: ${input.provider}/${input.id}`,
+      provider: input.provider,
+      model: input.id,
+      reason: "model_not_found",
+    });
     });
   }
 }

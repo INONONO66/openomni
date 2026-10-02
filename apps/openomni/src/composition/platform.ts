@@ -35,10 +35,7 @@ export const captureNow: Effect.Effect<() => number> = Clock.clockWith((clock) =
  * stamps their times. Compositions that need isolation pass their own bus
  * through `AppRuntimeOptions.observations`.
  */
-export function platformBus(
-  entropy: EntropySource,
-  now: () => number,
-): ReturnType<typeof createObservationBus> {
+export function platformBus(entropy: EntropySource, now: () => number): ReturnType<typeof createObservationBus> {
   return createObservationBus({ id: entropy.id, now });
 }
 
@@ -61,8 +58,5 @@ function wallClockOverride(now: () => number, base: Clock.Clock): Clock.Clock {
 
 /** The Clock layer `AppLive` mounts when composition injects `now`. */
 export function wallClockLayer(now: () => number): Layer.Layer<never> {
-  return Layer.effect(
-    Clock.Clock,
-    Clock.clockWith((base) => Effect.succeed(wallClockOverride(now, base))),
-  );
+  return Layer.effect(Clock.Clock, Clock.clockWith((base) => Effect.succeed(wallClockOverride(now, base))));
 }

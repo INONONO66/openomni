@@ -5,9 +5,9 @@ type EntropySource = Kernel.EntropySource;
 const ObservationSink = Kernel.ObservationSink;
 
 /** Composition-root-supplied entropy and a borrowed root observation port; time comes from Effect's Clock. */
-export function AgentProcessLive(
-  observations: Context.Service.Shape<typeof ObservationSink>,
-  entropy: EntropySource,
-) {
-  return Layer.mergeAll(Entropy.layer(entropy), Layer.succeed(ObservationSink, observations));
+export function AgentProcessLive(observations: Context.Service.Shape<typeof ObservationSink>, entropy: EntropySource) {
+  return Layer.mergeAll(
+    Entropy.layer(entropy),
+    Layer.succeed(ObservationSink, observations),
+  );
 }

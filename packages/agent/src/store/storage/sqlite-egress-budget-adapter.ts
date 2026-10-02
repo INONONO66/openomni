@@ -86,7 +86,14 @@ export function createSqliteEgressBudgetAdapter(
           db.query(
             `INSERT INTO egress_debit (id, sender_id, target_actor_id, class, at, time_created)
              VALUES (?, ?, ?, ?, ?, ?)`,
-          ).run(parsed.id, parsed.senderId, parsed.targetActorId, parsed.class, parsed.at, now());
+          ).run(
+            parsed.id,
+            parsed.senderId,
+            parsed.targetActorId,
+            parsed.class,
+            parsed.at,
+            now(),
+          );
         },
       });
     },

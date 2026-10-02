@@ -2,17 +2,7 @@ import type { CommitReceipt } from "../store/services";
 import type { LedgerError } from "../store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
-import {
-  canonicalDigest,
-  PlainValueSchema,
-  SessionTurn,
-  FoldCheckpoint,
-  type LedgerAction,
-  type LedgerSession,
-  SessionGeneration,
-  Inbox,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "../store/fence";
@@ -78,7 +68,8 @@ export function commitFoldBatch(
       actions.push(
         foldCheckpointAction({
           sessionId: input.sessionId,
-          parentId: kernel.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
+          parentId:
+            kernel.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
           revision: input.expectedRevision,
           at: input.now,
           reason: "interval",
@@ -188,6 +179,7 @@ export function toolSnapshot(tool: SessionTool): SessionGeneration.Tool {
 export function internalOrigin(sessionId: string): Inbox.Origin {
   return { encodingVersion: 1, value: { kind: "session", id: sessionId } };
 }
+
 
 interface TurnEnvelopeActionInput {
   readonly id: string;
@@ -311,7 +303,9 @@ export function turnCheckpointAction(input: {
 
 export function deliveryActions(
   items: readonly Inbox.Row[],
-  target: { readonly kind: "turn"; readonly turnId: string } | { readonly kind: "inbox" },
+  target:
+    | { readonly kind: "turn"; readonly turnId: string }
+    | { readonly kind: "inbox" },
   boundary: SessionTurn.Boundary,
   parentId: string | null,
 ): LedgerAction.Append[] {
@@ -506,11 +500,7 @@ export function receivedMessages(
   kernel: SessionKernel,
   sessionId: string,
 ): { readonly rows: Inbox.Row[]; readonly delivered: ReadonlySet<string> } {
-  const received: {
-    readonly action: LedgerAction.Node;
-    readonly kind: Inbox.Kind;
-    readonly content: string;
-  }[] = [];
+  const received: { readonly action: LedgerAction.Node; readonly kind: Inbox.Kind; readonly content: string }[] = [];
   const delivered = new Set<string>();
   let afterRevision = 0;
   for (;;) {
@@ -518,8 +508,7 @@ export function receivedMessages(
     for (const action of page.actions) {
       if (action.kind === "prompt") {
         const effect = ReceivedEffect.safeParse(action.effect.value);
-        if (effect.success)
-          received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
+        if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
       } else if (action.kind === "inbox.deliver") {
         const intent = DeliverIntent.safeParse(action.intent.value);
         if (intent.success) delivered.add(intent.data.inboxId);
@@ -551,3 +540,4 @@ export function receivedMessages(
 export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
   return kernel.pendingMessages(sessionId);
 }
+

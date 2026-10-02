@@ -27,40 +27,28 @@ const spoof = {
 
 describe("internal actor projection sanitization", () => {
   test("unregistered endpoints cannot supply canonical authority", () => {
-    expect(resolveIngressActor(ledger().stores, makeEvent("user-1", spoof), 1).meta?.actor).toEqual(
-      {
-        role: "user",
-        id: "user-1",
-      },
-    );
+    expect(resolveIngressActor(ledger().stores, makeEvent("user-1", spoof), 1).meta?.actor).toEqual({
+      role: "user",
+      id: "user-1",
+    });
   });
 
   test("legacy actor id is not an authenticated external id", () => {
     registerOwnerEndpoint("guild");
     const { userId: _userId, ...event } = makeEvent("user-1", spoof);
-    expect(resolveIngressActor(ledger().stores, event, 1).meta?.actor).toStrictEqual({
-      role: "user",
-    });
+    expect(resolveIngressActor(ledger().stores, event, 1).meta?.actor).toStrictEqual({ role: "user" });
   });
 
   test("same external id on another surface has no canonical identity", () => {
     registerOwnerEndpoint("guild");
     expect(
-      resolveIngressActor(
-        ledger().stores,
-        { ...makeEvent("user-1", spoof), surface: "telegram" },
-        1,
-      ).meta?.actor,
+      resolveIngressActor(ledger().stores, { ...makeEvent("user-1", spoof), surface: "telegram" }, 1).meta?.actor,
     ).toEqual({ role: "user", id: "user-1" });
   });
 
   test("missing registry cannot preserve claimed authority", () => {
     expect(
-      resolveIngressActor(
-        unconfiguredChannelStores(() => 1),
-        makeEvent("user-1", spoof),
-        1,
-      ).meta?.actor,
+      resolveIngressActor(unconfiguredChannelStores(() => 1), makeEvent("user-1", spoof), 1).meta?.actor,
     ).toEqual({
       role: "user",
       id: "user-1",

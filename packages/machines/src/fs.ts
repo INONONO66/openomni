@@ -382,19 +382,11 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
 
       const link = readLinkAt(dirfd, segment);
       if (!("target" in link)) {
-        throw new FilesystemFailure({
-          operation: "fs.open",
-          message: `export root is not a directory: ${configuredRoot}`,
-          cause: "export root walk hit a non-directory component",
-        });
+        throw new FilesystemFailure({ operation: "fs.open", message: `export root is not a directory: ${configuredRoot}`, cause: "export root walk hit a non-directory component" });
       }
       expansions += 1;
       if (expansions > MAX_SYMLINK_EXPANSIONS) {
-        throw new FilesystemFailure({
-          operation: "fs.open",
-          message: `export root has too many symlink levels: ${configuredRoot}`,
-          cause: "symlink expansion exceeded MAX_SYMLINK_EXPANSIONS",
-        });
+        throw new FilesystemFailure({ operation: "fs.open", message: `export root has too many symlink levels: ${configuredRoot}`, cause: "symlink expansion exceeded MAX_SYMLINK_EXPANSIONS" });
       }
       // Both branches must be lexically normalized. An absolute target may
       // still carry "."/".." components, and leaving them raw makes
@@ -426,20 +418,11 @@ function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWal
 
 function directoryNames(fd: number, testHooks: FsDriverTestHooks): string[] {
   const duplicate = openAt(fd, ".", constants.O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-  if (!("fd" in duplicate))
-    throw new FilesystemFailure({
-      operation: "fs.list",
-      message: "directory duplication failed",
-      cause: `openat errno ${duplicate.errno}`,
-    });
+  if (!("fd" in duplicate)) throw new FilesystemFailure({ operation: "fs.list", message: "directory duplication failed", cause: `openat errno ${duplicate.errno}` });
   const directory = (testHooks.openDirectoryStream ?? libc.symbols.fdopendir)(duplicate.fd);
   if (directory === null) {
     closeSync(duplicate.fd);
-    throw new FilesystemFailure({
-      operation: "fs.list",
-      message: "fdopendir failed",
-      cause: "fdopendir returned NULL",
-    });
+    throw new FilesystemFailure({ operation: "fs.list", message: "fdopendir failed", cause: "fdopendir returned NULL" });
   }
   const names: string[] = [];
   try {
@@ -562,94 +545,69 @@ export function createFsDriver(
   exports: ReadonlyMap<string, string>,
   testHooks: FsDriverTestHooks = {},
 ): Effect.Effect<FsDriver, MachineError> {
-  return Effect.try({
-    try: () => {
-      const roots = new Map<string, Root>();
-      let rootsOpened = false;
-      try {
-        for (const [name, configuredRoot] of exports) {
-          roots.set(name, openRoot(configuredRoot, testHooks));
-        }
-        rootsOpened = true;
-      } finally {
-        if (!rootsOpened)
-          for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
-      }
+  return Effect.try({ try: () => {
+  const roots = new Map<string, Root>();
+  let rootsOpened = false;
+  try {
+    for (const [name, configuredRoot] of exports) {
+      roots.set(name, openRoot(configuredRoot, testHooks));
+    }
+    rootsOpened = true;
+  } finally {
+    if (!rootsOpened)
+      for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
+  }
 
-      let closed = false;
-      function performTarget(
-        request: Machine.FsRequest,
-        target: OpenedTarget,
-        data: Buffer | undefined,
-        shown: string,
-      ): Machine.FsResult {
-        try {
-          if (data !== undefined) return executeWrite(target, data, shown);
-          if (request.op === "read") return executeRead(target, request, shown);
-          if (request.op === "list") return executeList(target, testHooks);
-          return executeStat(target);
-        } finally {
-          closeSync(target.fd);
-        }
-      }
+  let closed = false;
+  function performTarget(request: Machine.FsRequest, target: OpenedTarget, data: Buffer | undefined, shown: string): Machine.FsResult {
+    try {
+      if (data !== undefined) return executeWrite(target, data, shown);
+      if (request.op === "read") return executeRead(target, request, shown);
+      if (request.op === "list") return executeList(target, testHooks);
+      return executeStat(target);
+    } finally {
+      closeSync(target.fd);
+    }
+  }
 
-      function executeRequest(request: Machine.FsRequest): Machine.FsResult {
-        const root = roots.get(request.export);
-        if (root === undefined) {
-          return refused("export_not_available", `export is not available: ${request.export}`);
-        }
+  function executeRequest(request: Machine.FsRequest): Machine.FsResult {
+    const root = roots.get(request.export);
+    if (root === undefined) {
+      return refused("export_not_available", `export is not available: ${request.export}`);
+    }
 
-        const shown = displayPath(request.path);
-        const segments = requestSegments(request.path);
-        if (segments === undefined) {
-          return refused("path_escapes_export", `path escapes export: ${shown}`);
-        }
+    const shown = displayPath(request.path);
+    const segments = requestSegments(request.path);
+    if (segments === undefined) {
+      return refused("path_escapes_export", `path escapes export: ${shown}`);
+    }
 
-        const data = request.op === "write" ? Buffer.from(request.data, "base64") : undefined;
-        if (data !== undefined && data.length > Machine.FS_WRITE_MAX_BYTES) {
-          return refused("too_large", "write exceeds socket byte cap");
-        }
-        const target = walk(
-          root,
-          segments,
-          request.op === "list",
-          request.op === "stat",
-          shown,
-          openFlags(request.op),
-          testHooks,
-        );
+    const data = request.op === "write" ? Buffer.from(request.data, "base64") : undefined;
+    if (data !== undefined && data.length > Machine.FS_WRITE_MAX_BYTES) {
+      return refused("too_large", "write exceeds socket byte cap");
+    }
+    const target = walk(
+      root,
+      segments,
+      request.op === "list",
+      request.op === "stat",
+      shown,
+      openFlags(request.op),
+      testHooks,
+    );
 
-        if (isRefusal(target)) return target;
+    if (isRefusal(target)) return target;
 
-        return performTarget(request, target, data, shown);
-      }
-      const driver = (request: Machine.FsRequest): Effect.Effect<Machine.FsResult, MachineError> =>
-        Effect.try({
-          try: () => executeRequest(request),
-          catch: decodeMachineFailure("fs.operation"),
-        }).pipe(
-          Effect.mapError(
-            (error) =>
-              new FilesystemFailure({
-                operation: "fs.operation",
-                message: `filesystem operation failed for: ${displayPath(request.path)}`,
-                cause: String(error),
-              }),
-          ),
-        );
+    return performTarget(request, target, data, shown);
+  }
+  const driver = (request: Machine.FsRequest): Effect.Effect<Machine.FsResult, MachineError> => Effect.try({ try: () => executeRequest(request), catch: decodeMachineFailure("fs.operation") }).pipe(Effect.mapError((error) => new FilesystemFailure({ operation: "fs.operation", message: `filesystem operation failed for: ${displayPath(request.path)}`, cause: String(error) })));
 
-      driver.close = () =>
-        Effect.try({
-          try: () => {
-            if (closed) return;
-            closed = true;
-            for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
-            roots.clear();
-          },
-          catch: decodeMachineFailure("fs.close"),
-        });
-      return driver;
-    },
-    catch: decodeMachineFailure("fs.open"),
-  });
+  driver.close = () => Effect.try({ try: () => {
+    if (closed) return;
+    closed = true;
+    for (const root of roots.values()) closeRootDescriptor(testHooks, root.fd);
+    roots.clear();
+  }, catch: decodeMachineFailure("fs.close") });
+  return driver;
+  }, catch: decodeMachineFailure("fs.open") });
 }

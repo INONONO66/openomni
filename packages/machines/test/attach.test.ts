@@ -168,9 +168,7 @@ describe("machine attach handshake", () => {
           const duplicate = await captureError(handle.runCode(cell));
           expect(duplicate).toBeInstanceOf(MachineCellError);
           expect(duplicate).toMatchObject({
-            _tag: "MachineCellError",
-            code: "duplicate_cell_id",
-            cellId: cell.cellId,
+            _tag: "MachineCellError", code: "duplicate_cell_id", cellId: cell.cellId,
           });
           finish.resolve();
           expect((await running).status).toBe("cancelled");
@@ -227,10 +225,7 @@ describe("machine attach handshake", () => {
           const outcome = captureError(running);
           await started.promise;
           controller.abort();
-          expect(await outcome).toMatchObject({
-            _tag: "TransportFailure",
-            operation: "cell.cancel",
-          });
+          expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.cancel" });
         } finally {
           client.close();
         }
@@ -568,11 +563,7 @@ describe("machine attach handshake", () => {
     });
     try {
       await expect(attachMachineDaemon({ socketPath: path, offer: offer() })).rejects.toMatchObject(
-        {
-          _tag: "MachinesFailure",
-          operation: "daemon.attach.response",
-          cause: expect.stringContaining("invalid"),
-        },
+        { _tag: "MachinesFailure", operation: "daemon.attach.response", cause: expect.stringContaining("invalid") },
       );
     } finally {
       rogue.close();

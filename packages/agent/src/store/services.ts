@@ -26,3 +26,4 @@ export interface LedgerHandles {
   readonly catalog: CatalogStore;
   readonly openSession: (sessionId: string) => SessionStore;
 }
+

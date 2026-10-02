@@ -73,10 +73,7 @@ function promptUntilEntered(handle: SessionHandle, entered: Deferred.Deferred<Se
 }
 
 /** Zero-grace close fixture plus the runner-entry gate. */
-function zeroGraceFixture(): Effect.Effect<{
-  entered: Deferred.Deferred<SessionRunnerInput>;
-  fixture: SessionFixture;
-}> {
+function zeroGraceFixture(): Effect.Effect<{ entered: Deferred.Deferred<SessionRunnerInput>; fixture: SessionFixture }> {
   return Effect.gen(function* () {
     seedPolicy();
     const entered = yield* Deferred.make<SessionRunnerInput>();

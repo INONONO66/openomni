@@ -46,7 +46,5 @@ export function matchBlacklist(
   input: BlacklistMatchInput,
   now: number,
 ): Actor.BlacklistEntry | undefined {
-  return stores.blacklist
-    .list()
-    .find((entry) => isActive(entry, now) && entryMatches(entry, input));
+  return stores.blacklist.list().find((entry) => isActive(entry, now) && entryMatches(entry, input));
 }

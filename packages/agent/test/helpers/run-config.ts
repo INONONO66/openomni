@@ -3,9 +3,7 @@ import { Effect } from "effect";
 import type {} from "../../src/kernel/types";
 import { collector } from "./observation-collector";
 
-export function toolBudgetConfig(
-  maxToolCalls: number,
-): Pick<ChatAgentConfig, "events" | "model" | "budget"> {
+export function toolBudgetConfig(maxToolCalls: number): Pick<ChatAgentConfig, "events" | "model" | "budget"> {
   return {
     events: collector(),
     model: { provider: "provider", id: "model" },
@@ -13,10 +11,7 @@ export function toolBudgetConfig(
   };
 }
 
-export function overflowCompactionConfig(): Pick<
-  ChatAgentConfig,
-  "events" | "model" | "compaction"
-> {
+export function overflowCompactionConfig(): Pick<ChatAgentConfig, "events" | "model" | "compaction"> {
   return {
     events: collector(),
     model: { provider: "provider", id: "model" },

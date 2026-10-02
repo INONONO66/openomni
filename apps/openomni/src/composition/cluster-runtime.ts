@@ -18,13 +18,7 @@ const openSessionStore = Journal.openSessionStore;
 type LedgerHandles = Journal.LedgerHandles;
 type ObservationFailurePort = Journal.ObservationFailurePort;
 type ObservationPublishFailure = Journal.ObservationPublishFailure;
-import {
-  createActorRegistry,
-  createChannelGrantStore,
-  createChannelInstanceStore,
-  createPersonStore,
-  createSecretStore,
-} from "@openomni/channels";
+import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
 import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";
@@ -60,7 +54,9 @@ export function clusterHostLayer(options: ClusterHostOptions) {
   return SingleRunner.layer({
     runnerStorage: "sql",
     shardingConfig: {
-      entityMaxIdleTime: Duration.millis(Math.max(options.entityIdleMs, ENTITY_REAPER_INTERVAL_MS)),
+      entityMaxIdleTime: Duration.millis(
+        Math.max(options.entityIdleMs, ENTITY_REAPER_INTERVAL_MS),
+      ),
       entityMessagePollInterval: Duration.millis(100),
       entityReplyPollInterval: Duration.millis(100),
     },
@@ -153,9 +149,7 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
         {
           now: options.now,
           onObservationFailure,
-          ...(options.observationSink === undefined
-            ? {}
-            : { observationSink: options.observationSink }),
+          ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
         },
       );
       entry = { store, kernel: Journal.SessionHandleStore.createSessionKernel(store, catalog) };
@@ -181,13 +175,14 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
       openSession: (sessionId) =>
         sessionsDir === undefined
           ? opened(sessionId).store
-          : openSessionStore(sessionFilePath(sessionsDir, sessionId), {
-              now: options.now,
-              onObservationFailure,
-              ...(options.observationSink === undefined
-                ? {}
-                : { observationSink: options.observationSink }),
-            }),
+          : openSessionStore(
+              sessionFilePath(sessionsDir, sessionId),
+              {
+                now: options.now,
+                onObservationFailure,
+                ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
+              },
+            ),
     },
     openKernel: (sessionId) => opened(sessionId).kernel,
     sessionStore: (sessionId) => opened(sessionId).store,
@@ -368,8 +363,7 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
   };
   return {
     bind: (ports) => {
-      if (bound !== undefined)
-        throw new AppInvariantError("session entity ports are already bound");
+      if (bound !== undefined) throw new AppInvariantError("session entity ports are already bound");
       bound = ports;
     },
     ports: {
@@ -449,11 +443,7 @@ export function createSessionLivePlane(): SessionLivePlane {
     ids: () => [...entries.keys()],
     wrapRunner: (sessionId, runner) => (input) =>
       Effect.suspend(() => {
-        const entry: LiveTurnEntry = {
-          approvals: undefined,
-          boundary: input.boundary,
-          ledger: input.ledger,
-        };
+        const entry: LiveTurnEntry = { approvals: undefined, boundary: input.boundary, ledger: input.ledger };
         entries.set(sessionId, entry);
         return runner({
           ...input,

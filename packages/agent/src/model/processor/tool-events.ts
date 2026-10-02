@@ -162,28 +162,14 @@ export function drainToolSettlements(
     let event = firstEvent;
     while (state.pendingTools.size > 0) {
       if (event.type === "tool-result" || event.type === "tool-error") {
-        yield* Effect.try({
-          try: () => handleToolResult(ProviderEvent.parse(event), state, context),
-          catch: decodeLlmFailure("stream.settlement"),
-        });
+        yield* Effect.try({ try: () => handleToolResult(ProviderEvent.parse(event), state, context), catch: decodeLlmFailure("stream.settlement") });
         if (state.pendingTools.size === 0) return;
       }
-      const next = yield* Effect.tryPromise({
-        try: () => iterator.next(),
-        catch: decodeLlmFailure("stream.settlement.next"),
-      });
+      const next = yield* Effect.tryPromise({ try: () => iterator.next(), catch: decodeLlmFailure("stream.settlement.next") });
       if (next.done) return;
       event = next.value;
     }
-  }).pipe(
-    Effect.timeoutOption(ABORT_SETTLE_GRACE_MS),
-    Effect.catch((error) =>
-      Effect.sync(() => {
-        context.note("stream.settlement.failed", {
-          error: typeof error.cause === "string" ? error.cause : String(error),
-        });
-      }),
-    ),
-    Effect.asVoid,
-  );
+  }).pipe(Effect.timeoutOption(ABORT_SETTLE_GRACE_MS), Effect.catch((error) => Effect.sync(() => {
+    context.note("stream.settlement.failed", { error: typeof error.cause === "string" ? error.cause : String(error) });
+  })), Effect.asVoid);
 }

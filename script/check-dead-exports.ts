@@ -33,9 +33,7 @@ const KNIP_CMD = ["bunx", "knip", "--reporter", "json", "--no-exit-code"];
 const KnipFileRecordSchema = z.object({ file: z.string() }).catchall(PlainValueSchema);
 const KnipReportSchema = z.object({ issues: z.array(KnipFileRecordSchema) });
 const DeadExportBaselineSchema = z.object({ grandfathered: z.array(z.string()).optional() });
-const KnipConfigSchema = z.object({
-  workspaces: z.record(z.string(), PlainValueSchema).optional(),
-});
+const KnipConfigSchema = z.object({ workspaces: z.record(z.string(), PlainValueSchema).optional() });
 
 export type KnipFileRecord = z.infer<typeof KnipFileRecordSchema>;
 
@@ -178,28 +176,16 @@ export function runProductionKnip(options: {
   readonly cache?: boolean;
 }): { ok: true; stdout: string } | { ok: false; code: string; message: string } {
   const version = Bun.spawnSync([process.execPath, options.executable, "--version"], {
-    cwd: options.root,
-    timeout: 30_000,
+    cwd: options.root, timeout: 30_000,
   });
   if (version.exitCode !== 0 || version.stdout.toString().trim() !== "6.31.0")
     return { ok: false, code: "tool_version", message: "census requires knip 6.31.0" };
-  const result = Bun.spawnSync(
-    [
-      process.execPath,
-      options.executable,
-      "--config",
-      options.config,
-      "--reporter",
-      "json",
-      "--no-exit-code",
-      "--include-entry-exports",
-      "--include",
-      "files,exports,nsExports,types,nsTypes,enumMembers,namespaceMembers,unresolved",
-      "--no-progress",
-      ...(options.cache ? ["--cache"] : []),
-    ],
-    { cwd: options.root, timeout: 120_000 },
-  );
+  const result = Bun.spawnSync([
+    process.execPath, options.executable, "--config", options.config,
+    "--reporter", "json", "--no-exit-code", "--include-entry-exports",
+    "--include", "files,exports,nsExports,types,nsTypes,enumMembers,namespaceMembers,unresolved",
+    "--no-progress", ...(options.cache ? ["--cache"] : []),
+  ], { cwd: options.root, timeout: 120_000 });
   if (result.exitCode !== 0)
     return { ok: false, code: "knip_failure", message: result.stderr.toString().slice(0, 2000) };
   return { ok: true, stdout: result.stdout.toString() };
@@ -252,30 +238,26 @@ export function censusConsumerFindings(
       aliases.set(alias, row.definition);
     }
   }
-  return rows
-    .filter((row) => !consumerSatisfies(row))
-    .map((row) => ({
-      ...row.definition,
-      class: row.class,
-      message:
-        row.class === "publisher"
-          ? "event has no production publisher"
-          : row.class === "store"
-            ? "store is registered but never read in production"
-            : "export has no production consumer; tests and barrels do not count",
-    }));
+  return rows.filter((row) => !consumerSatisfies(row)).map((row) => ({
+    ...row.definition,
+    class: row.class,
+    message:
+      row.class === "publisher"
+        ? "event has no production publisher"
+        : row.class === "store"
+          ? "store is registered but never read in production"
+          : "export has no production consumer; tests and barrels do not count",
+  }));
 }
 
 /** Backward-compatible export-only projection used by the dead-export owner. */
-export function productionConsumerFindings(
-  rows: readonly {
-    readonly definition: CensusDefinition;
-    readonly consumers: readonly { readonly role?: ConsumerRole }[];
-  }[],
-): { path: string; line: number; symbol: string; class: "export" }[] {
-  return censusConsumerFindings(rows.map((row) => ({ ...row, class: "export" as const }))).map(
-    ({ path, line, symbol }) => ({ path, line, symbol, class: "export" }),
-  );
+export function productionConsumerFindings(rows: readonly {
+  readonly definition: CensusDefinition;
+  readonly consumers: readonly { readonly role?: ConsumerRole }[];
+}[]): { path: string; line: number; symbol: string; class: "export" }[] {
+  return censusConsumerFindings(
+    rows.map((row) => ({ ...row, class: "export" as const })),
+  ).map(({ path, line, symbol }) => ({ path, line, symbol, class: "export" }));
 }
 
 export function readBaseline(): DeadExportBaseline {
@@ -353,10 +335,7 @@ function selfTest(): number {
 // main
 // ---------------------------------------------------------------------------
 
-export async function main(
-  loadReports: () => Promise<readonly [KnipReport, KnipReport]> = () =>
-    Promise.all([runKnip(), runKnip(".", true, true)]),
-): Promise<number> {
+export async function main(loadReports: () => Promise<readonly [KnipReport, KnipReport]> = () => Promise.all([runKnip(), runKnip(".", true, true)])): Promise<number> {
   const args = new Set(process.argv.slice(2));
 
   if (args.has("--self-test")) {
@@ -404,7 +383,4 @@ export async function main(
   return 1;
 }
 
-if (import.meta.main)
-  await runScriptMain(async () => {
-    process.exitCode = await main();
-  });
+if (import.meta.main) await runScriptMain(async () => { process.exitCode = await main(); });

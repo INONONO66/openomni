@@ -9,13 +9,7 @@ import { failure, turnExecutor } from "../../helpers/effect-g1";
 import { runTestAgent, runUserMessage } from "../../helpers/effect-g2";
 import { expectUncalledBudget } from "../../helpers/execution-assertions";
 import { isolated } from "../../helpers/isolated";
-import {
-  completeModel,
-  mockLlm,
-  countingStopLlm,
-  createStopOutcome,
-  providerFailure,
-} from "../../helpers/mock-llm";
+import { completeModel, mockLlm, countingStopLlm, createStopOutcome, providerFailure } from "../../helpers/mock-llm";
 import { runInput } from "../../helpers/run-input";
 
 const model = { provider: "anthropic", id: "claude-3-haiku-20240307" };
@@ -61,13 +55,11 @@ describe("one terminal record per started run", () => {
       if (event.msg === "agent.run.completed") terminal.resolve(event);
     });
     try {
-      const result = await isolated(
-        runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-          events: Bus,
-          model,
-          llm: mockLlm(completeModel),
-        }),
-      );
+      const result = await isolated(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model,
+        llm: mockLlm(completeModel),
+      }));
       expect(result.finishReason).toBe("stop");
       expect(await bounded(terminal.promise, "run completed")).toMatchObject({
         msg: "agent.run.completed",
@@ -84,19 +76,12 @@ describe("one terminal record per started run", () => {
     const records = observeRunTerminals();
     const provider = countingStopLlm();
     try {
-      const result = await isolated(
-        Effect.flip(
-          runUserMessage(
-            {
-              events: Bus,
-              model,
-              budget: { maxTurns: 0 },
-              llm: provider.llm,
-            },
-            "hi",
-          ),
-        ),
-      );
+      const result = await isolated(Effect.flip(runUserMessage({
+        events: Bus,
+        model,
+        budget: { maxTurns: 0 },
+        llm: provider.llm,
+      }, "hi")));
       expectUncalledBudget(result, provider.calls);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
     } finally {
@@ -107,22 +92,14 @@ describe("one terminal record per started run", () => {
   it("records final classified retry facts at the terminal ceiling", async () => {
     const records = observeRunTerminals();
     const retries: number[] = [];
-    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) =>
-      retries.push(event.attempt),
-    );
+    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) => retries.push(event.attempt));
     const failed = awaitRunFailed();
     try {
-      expect(
-        await isolated(
-          failure(
-            runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-              events: Bus,
-              model,
-              llm: timingOutLlm,
-            }),
-          ),
-        ),
-      ).toMatchObject({ _tag: "LlmRunFailure", cause: { statusCode: 408 } });
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model,
+        llm: timingOutLlm,
+      })))).toMatchObject({ _tag: "LlmRunFailure", cause: { statusCode: 408 } });
       expect((await bounded(failed.promise, "run failed")).context).toEqual({
         reason: "timeout",
         attempt: 3,
@@ -142,9 +119,7 @@ describe("one terminal record per started run", () => {
     const controller = new AbortController();
     const waiting = Promise.withResolvers<void>();
     const retries: number[] = [];
-    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) =>
-      retries.push(event.attempt),
-    );
+    const unsubscribeRetry = Bus.subscribe(RunEvents.ErrorRetry, (event) => retries.push(event.attempt));
     const failed = awaitRunFailed();
     const { executor } = turnExecutor(compiledPolicy(), [], {
       signal: controller.signal,
@@ -154,18 +129,14 @@ describe("one terminal record per started run", () => {
         settle: () => Effect.void,
       },
     });
-    const running = isolated(
-      failure(
-        runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-          events: Bus,
-          model,
-          executor,
-          execution: executor,
-          signal: controller.signal,
-          llm: timingOutLlm,
-        }),
-      ),
-    );
+    const running = isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+      events: Bus,
+      model,
+      executor,
+      execution: executor,
+      signal: controller.signal,
+      llm: timingOutLlm,
+    })));
     try {
       await bounded(waiting.promise, "retry backoff entered");
       controller.abort();
@@ -194,18 +165,12 @@ describe("one terminal record per started run", () => {
     controller.abort();
     const failed = awaitRunFailed();
     try {
-      expect(
-        await isolated(
-          failure(
-            runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-              events: Bus,
-              model,
-              signal: controller.signal,
-              llm: mockLlm(async () => createStopOutcome()),
-            }),
-          ),
-        ),
-      ).toMatchObject({ _tag: "Interrupted" });
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model,
+        signal: controller.signal,
+        llm: mockLlm(async () => createStopOutcome()),
+      })))).toMatchObject({ _tag: "Interrupted" });
       expect((await bounded(failed.promise, "pre-provider abort")).context?.reason).toBe("aborted");
       expect(retries).toEqual([]);
       expect(records.messages).toEqual(["agent.run.started", "agent.run.failed"]);
@@ -221,17 +186,11 @@ describe("one terminal record per started run", () => {
     const failed = awaitRunFailed();
     const terminal = Symbol.for("terminal");
     try {
-      expect(
-        await isolated(
-          failure(
-            runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-              events: Bus,
-              model,
-              llm: { resolveModel: () => Effect.die(terminal) },
-            }),
-          ),
-        ),
-      ).toBe(terminal);
+      expect(await isolated(failure(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model,
+        llm: { resolveModel: () => Effect.die(terminal) },
+      })))).toBe(terminal);
       const event = await bounded(failed.promise, "pre-provider defect");
       expect(event.error).toBe("Symbol(terminal)");
       // #1245: a defect with no failure facts publishes the machine-consumed

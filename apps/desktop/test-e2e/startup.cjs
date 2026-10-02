@@ -12,9 +12,7 @@ app.on("web-contents-created", (_event, contents) => {
   contents.on("console-message", ({ level, message }) => {
     if (level === "error") record("console", message);
   });
-  contents.on("preload-error", (_event, path, error) =>
-    record("preload", `${path}: ${error.message}`),
-  );
+  contents.on("preload-error", (_event, path, error) => record("preload", `${path}: ${error.message}`));
   contents.on("did-fail-load", (_event, code, description, url) => {
     record("load", `${code}: ${description}: ${url}`);
   });

@@ -47,14 +47,7 @@ export function selectChatTransport(
   // gateway with no configured token has nothing to match an `auth` pair
   // against, and answers the attempt with a 401.
   if (endpoint.token === undefined || endpoint.token.length === 0) {
-    return {
-      kind: "gateway",
-      transport: createGatewayChatTransport({
-        url: endpoint.url,
-        id,
-        onSessionBound: bindDurableSession,
-      }),
-    };
+    return { kind: "gateway", transport: createGatewayChatTransport({ url: endpoint.url, id, onSessionBound: bindDurableSession }) };
   }
 
   if (!HTTP_TOKEN.test(endpoint.token)) {
@@ -71,12 +64,7 @@ export function selectChatTransport(
   const protocols = ["auth", endpoint.token];
   return {
     kind: "gateway",
-    transport: createGatewayChatTransport({
-      url: endpoint.url,
-      protocols,
-      id,
-      onSessionBound: bindDurableSession,
-    }),
+    transport: createGatewayChatTransport({ url: endpoint.url, protocols, id, onSessionBound: bindDurableSession }),
     protocols,
   };
 }

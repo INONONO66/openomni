@@ -19,11 +19,10 @@ async function bootDoneApp(prefix: string, wsToken: string) {
     config: suite.config(prefix, { wsToken }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) =>
-        Effect.sync(() => {
-          sink.onMessage(assistantMessage(input, { text: "done" }));
-          return { type: "stop" as const };
-        }),
+      run: (input, sink) => Effect.sync(() => {
+        sink.onMessage(assistantMessage(input, { text: "done" }));
+        return { type: "stop" as const };
+      }),
     },
   });
   return { app, plane: await planeOf(app.runtime) };
@@ -48,10 +47,7 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
   const cursor = { revision: first.actions.at(-1)?.revision ?? 0, epoch: first.epoch };
   await terminal;
   await closeSocket(socket);
-  const reconnect = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [
-    "auth",
-    "cursor-token",
-  ]);
+  const reconnect = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "cursor-token"]);
 
   const replayFrame = nextFrame(reconnect, (frame) => frame.type === "session_page");
   reconnect.send(JSON.stringify({ type: "session_read", sessionId, limit: 4, cursor }));
@@ -60,69 +56,39 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
   expect(Array.isArray(replay.actions)).toBe(true);
   const actions = replay.actions;
   if (!Array.isArray(actions)) throw new Error("invalid replay actions");
-  expect(
-    actions.every(
-      (action) =>
-        typeof action === "object" &&
-        action !== null &&
-        !Array.isArray(action) &&
-        typeof action.revision === "number" &&
-        action.revision > cursor.revision,
-    ),
-  ).toBe(true);
+  expect(actions.every((action) => typeof action === "object" &&
+    action !== null && !Array.isArray(action) && typeof action.revision === "number" &&
+    action.revision > cursor.revision)).toBe(true);
 
   const gapFrame = nextFrame(reconnect, (frame) => frame.type === "session_gap");
-  reconnect.send(
-    JSON.stringify({
-      type: "session_read",
-      sessionId,
-      limit: 4,
-      cursor: { revision: cursor.revision, epoch: cursor.epoch + 1 },
-    }),
-  );
+  reconnect.send(JSON.stringify({
+    type: "session_read",
+    sessionId,
+    limit: 4,
+    cursor: { revision: cursor.revision, epoch: cursor.epoch + 1 },
+  }));
   expect(await gapFrame).toMatchObject({ type: "session_gap", oldestRevision: 0, sessionId });
 
   const repair = nextFrame(reconnect, (frame) => frame.type === "session_snapshot");
   reconnect.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
   expect(await repair).toMatchObject({
-    type: "session_snapshot",
-    sessionId,
-    state: "idle",
-    phase: "completed",
-    headRevision: kernel.row(sessionId).revision,
-    nextRevision: null,
+    type: "session_snapshot", sessionId, state: "idle", phase: "completed",
+    headRevision: kernel.row(sessionId).revision, nextRevision: null,
   });
   await closeSocket(reconnect);
-  const staleReconnect = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [
-    "auth",
-    "cursor-token",
-  ]);
+  const staleReconnect = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "cursor-token"]);
   const stale = nextFrame(staleReconnect, (frame) => frame.type === "session_gap");
-  staleReconnect.send(
-    JSON.stringify({
-      type: "session_read",
-      sessionId,
-      limit: 256,
-      cursor: { revision: kernel.row(sessionId).revision + 1, epoch: kernel.row(sessionId).fence },
-    }),
-  );
-  expect(await stale).toMatchObject({
-    type: "session_gap",
-    sessionId,
-    headRevision: kernel.row(sessionId).revision,
-  });
+  staleReconnect.send(JSON.stringify({
+    type: "session_read", sessionId, limit: 256,
+    cursor: { revision: kernel.row(sessionId).revision + 1, epoch: kernel.row(sessionId).fence },
+  }));
+  expect(await stale).toMatchObject({ type: "session_gap", sessionId, headRevision: kernel.row(sessionId).revision });
   const repaired = nextFrame(staleReconnect, (frame) => frame.type === "session_snapshot");
   staleReconnect.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
-  expect(await repaired).toMatchObject({
-    type: "session_snapshot",
-    phase: "completed",
-    nextRevision: null,
-  });
+  expect(await repaired).toMatchObject({ type: "session_snapshot", phase: "completed", nextRevision: null });
 
   const refused = nextFrame(staleReconnect, (frame) => frame.type === "error");
-  staleReconnect.send(
-    JSON.stringify({ type: "session_read", sessionId: "missing-session", limit: 4 }),
-  );
+  staleReconnect.send(JSON.stringify({ type: "session_read", sessionId: "missing-session", limit: 4 }));
   expect(await refused).toMatchObject({ type: "error", reason: "session_not_found" });
 });
 
@@ -131,10 +97,7 @@ test("a registered reader receives authoritative commits after its captured head
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "reader-token"]);
   const order: string[] = [];
   socket.addEventListener("message", (event) => {
-    const frame = z
-      .object({ type: z.string() })
-      .loose()
-      .safeParse(JSON.parse(String(event.data)));
+    const frame = z.object({ type: z.string() }).loose().safeParse(JSON.parse(String(event.data)));
     if (frame.success && (frame.data.type === "receipt" || frame.data.type === "session_bound")) {
       order.push(frame.data.type);
     }
@@ -149,17 +112,10 @@ test("a registered reader receives authoritative commits after its captured head
   const bound = await boundFrame;
   expect(order).toEqual(["receipt", "session_bound"]);
   const target = bound.result;
-  if (
-    target === null ||
-    typeof target !== "object" ||
-    Array.isArray(target) ||
-    target.status !== "executed" ||
-    target.handle === null ||
-    typeof target.handle !== "object" ||
-    Array.isArray(target.handle) ||
-    typeof target.handle.target !== "string"
-  )
-    throw new Error("missing durable session target");
+  if (target === null || typeof target !== "object" || Array.isArray(target) ||
+      target.status !== "executed" || target.handle === null ||
+      typeof target.handle !== "object" || Array.isArray(target.handle) ||
+      typeof target.handle.target !== "string") throw new Error("missing durable session target");
   const sessionId = target.handle.target;
   await firstTerminal;
   const snapshot = nextFrame(socket, (frame) => frame.type === "session_snapshot");
@@ -168,13 +124,10 @@ test("a registered reader receives authoritative commits after its captured head
   const headRevision = initial.headRevision;
   if (typeof headRevision !== "number") throw new Error("missing head revision");
 
-  const advanced = nextFrame(
-    socket,
-    (frame) =>
-      frame.type === "session_page" &&
-      typeof frame.headRevision === "number" &&
-      frame.headRevision > headRevision,
-  );
+  const advanced = nextFrame(socket, (frame) =>
+    frame.type === "session_page" &&
+    typeof frame.headRevision === "number" &&
+    frame.headRevision > headRevision);
   const secondTerminal = nextResidentTurn(plane);
   socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "second" }));
   const next = await advanced;
@@ -183,14 +136,7 @@ test("a registered reader receives authoritative commits after its captured head
   const actions = next.actions;
   if (!Array.isArray(actions)) throw new Error("missing authoritative action page");
   expect(actions.length).toBeGreaterThan(0);
-  expect(
-    actions.every(
-      (action) =>
-        action !== null &&
-        typeof action === "object" &&
-        !Array.isArray(action) &&
-        typeof action.revision === "number" &&
-        action.revision > headRevision,
-    ),
-  ).toBe(true);
+  expect(actions.every((action) => action !== null && typeof action === "object" &&
+    !Array.isArray(action) && typeof action.revision === "number" &&
+    action.revision > headRevision)).toBe(true);
 });

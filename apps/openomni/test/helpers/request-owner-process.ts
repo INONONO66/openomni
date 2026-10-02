@@ -89,13 +89,10 @@ async function serve() {
   let opened = false;
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (plane === undefined) return;
-    const action = sessionTree(event.sessionId, plane.sessionStore(event.sessionId).actions).find(
-      (item) => item.id === event.id,
+    const action = sessionTree(event.sessionId, plane.sessionStore(event.sessionId).actions).find((item) => item.id === event.id);
+    const request = plane.openKernel(event.sessionId).requestRows(event.sessionId).find(
+      (item) => item.callId === ORIGINAL_CALL.id && item.state === "open",
     );
-    const request = plane
-      .openKernel(event.sessionId)
-      .requestRows(event.sessionId)
-      .find((item) => item.callId === ORIGINAL_CALL.id && item.state === "open");
     if (
       !opened &&
       request !== undefined &&
@@ -158,29 +155,27 @@ async function serve() {
       clock: () => at,
     },
     llm: {
-      resolveModel: (model) =>
-        Effect.succeed({
-          id: model.id,
-          name: model.id,
-          providerID: model.provider,
-        }),
-      run: (input, sink) =>
-        Effect.sync(() => {
-          modelCalls += 1;
-          emit({ type: "model", snapshot: state() });
-          if (recovering) {
-            const person = plane?.stores.persons.get(PERSON.id);
-            if (person?.trustTier !== "manager" || person.revision !== 0) {
-              throw new Error("LLM entered before original protected Person mutation");
-            }
-            sink.onMessage(assistantMessage(input, { text: "Recovered original invocation." }));
-            return { type: "stop" };
+      resolveModel: (model) => Effect.succeed({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+      }),
+      run: (input, sink) => Effect.sync(() => {
+        modelCalls += 1;
+        emit({ type: "model", snapshot: state() });
+        if (recovering) {
+          const person = plane?.stores.persons.get(PERSON.id);
+          if (person?.trustTier !== "manager" || person.revision !== 0) {
+            throw new Error("LLM entered before original protected Person mutation");
           }
-          const result = requestToolStep(input, sink, ORIGINAL_CALL);
-          if (result !== undefined)
-            throw new Error(`unexpected pre-crash tool result: ${result.output}`);
+          sink.onMessage(assistantMessage(input, { text: "Recovered original invocation." }));
           return { type: "stop" };
-        }),
+        }
+        const result = requestToolStep(input, sink, ORIGINAL_CALL);
+        if (result !== undefined)
+          throw new Error(`unexpected pre-crash tool result: ${result.output}`);
+        return { type: "stop" };
+      }),
     },
   });
   plane = await planeOf(app.runtime);

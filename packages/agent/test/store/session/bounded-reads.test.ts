@@ -151,10 +151,7 @@ test("a full open-turn page whose tail intent cannot be re-read is a named invar
   } catch (error) {
     if (error instanceof LedgerInvariant) thrown = error;
   }
-  expect(thrown).toMatchObject({
-    operation: "session.openTurns",
-    message: "open turn intent missing: turn-255",
-  });
+  expect(thrown).toMatchObject({ operation: "session.openTurns", message: "open turn intent missing: turn-255" });
 });
 
 test("a terminal row without a turnId does not hide every open turn", () => {
@@ -199,7 +196,10 @@ test("snapshot pages retain all deliveries for the selected turn without loading
   for (let index = 0; index < 257; index += 1) {
     deliveries.push({ role: "user", text: `${index}` });
   }
-  expect(snapshot.turns[0]?.messages).toEqual([...deliveries, { role: "assistant", text: "done" }]);
+  expect(snapshot.turns[0]?.messages).toEqual([
+    ...deliveries,
+    { role: "assistant", text: "done" },
+  ]);
   expect(kernel.getSnapshot("bounded", 2).turns.map((tail) => tail.turnId)).toEqual([
     "older",
     "current",

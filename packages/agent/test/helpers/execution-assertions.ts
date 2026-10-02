@@ -2,10 +2,7 @@ import { expect } from "bun:test";
 import type { LedgerAction, Tool } from "@openomni/protocol";
 import type { AgentResult } from "../../src/kernel/types";
 
-export function expectFailedToolCommit(
-  result: Tool.Result,
-  committed: readonly LedgerAction.Append[],
-) {
+export function expectFailedToolCommit(result: Tool.Result, committed: readonly LedgerAction.Append[]) {
   expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   expect(committed.filter((action) => action.kind === "tool")).toHaveLength(2);
 }

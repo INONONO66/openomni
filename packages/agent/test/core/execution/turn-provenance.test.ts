@@ -19,10 +19,7 @@ describe("turn provenance", () => {
           events: Bus,
           model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
           llm: mockLlm(
-            async (
-              input: import("../../../src/model").RunInput,
-              sink: import("../../../src/model").Sink,
-            ) => {
+            async (input: import("../../../src/model").RunInput, sink: import("../../../src/model").Sink) => {
               messages = [...input.messages];
               return completeModel(input, sink);
             },

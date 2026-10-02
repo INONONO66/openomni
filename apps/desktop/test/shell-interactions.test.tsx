@@ -23,9 +23,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
   window.localStorage.setItem(SIDEBAR_OPEN_KEY, "false");
   window.localStorage.setItem(SIDEBAR_WIDTH_KEY, "288");
   const key = (value: string) =>
-    window.document.dispatchEvent(
-      new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }),
-    );
+    window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
   const click = async (selector: string) => {
     const button = host.querySelector<HTMLElement>(selector);
     expect(button).not.toBeNull();
@@ -60,9 +58,7 @@ test("mounted shell restores preferences, navigates, creates and searches sessio
     await act(() =>
       window.document
         .querySelector('[data-ui="Sidebar.Nav"] button:nth-child(2)')
-        ?.dispatchEvent(
-          new window.MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-        ),
+        ?.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true })),
     );
     expect(consoleStore.state.tabs.length).toBe(tabsBefore + 1);
     expect(activeTab(consoleStore.state)?.place ?? null).toEqual({

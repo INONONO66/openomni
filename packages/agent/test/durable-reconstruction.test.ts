@@ -8,16 +8,8 @@ import * as SessionHandleStore from "../src/store/fence";
 import { isolatedRun } from "./helpers/isolated";
 import { openCrashStores } from "./helpers/crash-stores";
 import { sessionTree } from "./helpers/session-tree";
-import {
-  FoldCheckpointIntegrityError,
-  foldHistoryState,
-  hydrateSessionHistory,
-} from "../src/inspect/history";
-import {
-  reconstructionMain,
-  reconstructionProcessMain,
-  reconstructionWitness,
-} from "./helpers/durable-reconstruction";
+import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/inspect/history";
+import { reconstructionMain, reconstructionProcessMain, reconstructionWitness, } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
 import { z } from "zod";
@@ -35,14 +27,12 @@ const childDeadlineMs = 60_000;
 /** The witness travels through a regular file: the child's stdout pipe is non-blocking on Linux. */
 const refusalSchema = z.object({
   name: z.literal("FoldCheckpointIntegrityError"),
-  data: z
-    .object({
-      code: z.literal("fold_checkpoint_integrity"),
-      reason: z.string(),
-      checkpointId: z.string(),
-      sessionId: z.string(),
-    })
-    .passthrough(),
+  data: z.object({
+    code: z.literal("fold_checkpoint_integrity"),
+    reason: z.string(),
+    checkpointId: z.string(),
+    sessionId: z.string(),
+  }).passthrough(),
 });
 
 async function child<S extends z.ZodType>(stage: string, dbPath: string, schema: S) {
@@ -306,9 +296,7 @@ test("in-process reconstruction uses capped suffix reads and rejects a stale see
         expect(corrupted).toBeDefined();
         expect(isolation.kernel.verifyChain(reconstructionSession).kind).toBe("intact");
         const before = sessionTree(isolation.kernel, reconstructionSession);
-        expect(() => hydrateSessionHistory(isolation.kernel, reconstructionSession)).toThrow(
-          FoldCheckpointIntegrityError,
-        );
+        expect(() => hydrateSessionHistory(isolation.kernel, reconstructionSession)).toThrow(FoldCheckpointIntegrityError);
         expect(sessionTree(isolation.kernel, reconstructionSession)).toEqual(before);
         await reconstructionProcessMain(["wake", dbPath], emit, exit);
         expect(emitted.pop()).toMatchObject({

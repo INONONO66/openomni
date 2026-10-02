@@ -52,16 +52,11 @@ export function createProcessSessionTransport(options: {
       answer.principal.principalId !== sessionId ||
       answer.outbound?.sourceSessionId !== sessionId
     )
-      throw new ProcessSessionError(
-        "process answer principal does not match its authenticated child",
-      );
-    const receipt: z.infer<typeof ProcessReplyReceipt> = await options
-      .answer(answer)
-      .then(
-        (resolution) => ({ ok: true as const, inputId: answer.inputId, resolution }),
-        CauseText.transform((error) => ({ ok: false as const, inputId: answer.inputId, error }))
-          .parse,
-      );
+      throw new ProcessSessionError("process answer principal does not match its authenticated child");
+    const receipt: z.infer<typeof ProcessReplyReceipt> = await options.answer(answer).then(
+      (resolution) => ({ ok: true as const, inputId: answer.inputId, resolution }),
+      CauseText.transform((error) => ({ ok: false as const, inputId: answer.inputId, error })).parse,
+    );
     write(`${JSON.stringify(receipt)}\n`);
   }
   return {
@@ -94,8 +89,7 @@ export function createProcessSessionTransport(options: {
             }
           }
           const code = await child.exited;
-          if (code !== 0)
-            throw new ProcessSessionError(`session process exited ${code}: ${sessionId}`);
+          if (code !== 0) throw new ProcessSessionError(`session process exited ${code}: ${sessionId}`);
         } finally {
           reader.releaseLock();
           if (child.exitCode === null) child.kill();

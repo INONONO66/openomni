@@ -87,47 +87,47 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   at: number,
 ): Effect.Effect<void, ChannelError> {
   return Effect.gen(function* () {
-    const matched = resolution.requestExecution;
-    if (matched.kind === "none") return;
-    const record = matched.record;
-    const actor = resolution.event.meta?.actor;
-    const candidates = responderCandidates(
-      targetsOfRequest(stores, record),
-      ingressEvidence(resolution.event, matched.correlation),
-    );
-    let outcome: SessionTransition.Resolution = "rejected";
-    if (
-      record.mode === "reply" &&
-      candidates.length === 1 &&
-      actor?.actorId !== undefined &&
-      actor.actorId === candidates[0] &&
-      matched.requestedAction !== "invalid"
-    ) {
-      outcome = yield* requests.answer({
-        inputId: resolution.event.id,
-        requestId: record.requestId,
-        sessionId: record.sessionId,
-        receivedAt:
-          record.replies.find((reply) => reply.replyId === resolution.event.id)?.receivedAt ?? at,
-        principal: {
-          kind: actor.trustTier === "owner" ? "owner" : "actor",
-          principalId: actor.actorId,
-          evidenceId: resolution.event.id,
-        },
-        bindingDigest: record.bindingDigest,
-        inputHash: record.inputHash,
-        effectHash: record.effectHash,
-        generation: record.generation,
-        toolsHash: record.toolsHash,
-        domainRevisions: record.domainRevisions,
-        decision: "reply",
-        allowedAction: matched.requestedAction,
-        content,
-      });
-    }
-    if (outcome === "attached" || outcome === "resolved") return;
-    const reason = `request reply rejected: ${outcome}`;
-    recordRouteNotDelivered(stores, resolution.event, decision, reason, at);
-    return yield* new IngressRoutingError("request_reply_rejected", reason, decision);
+  const matched = resolution.requestExecution;
+  if (matched.kind === "none") return;
+  const record = matched.record;
+  const actor = resolution.event.meta?.actor;
+  const candidates = responderCandidates(
+    targetsOfRequest(stores, record),
+    ingressEvidence(resolution.event, matched.correlation),
+  );
+  let outcome: SessionTransition.Resolution = "rejected";
+  if (
+    record.mode === "reply" &&
+    candidates.length === 1 &&
+    actor?.actorId !== undefined &&
+    actor.actorId === candidates[0] &&
+    matched.requestedAction !== "invalid"
+  ) {
+    outcome = yield* requests.answer({
+      inputId: resolution.event.id,
+      requestId: record.requestId,
+      sessionId: record.sessionId,
+      receivedAt:
+        record.replies.find((reply) => reply.replyId === resolution.event.id)?.receivedAt ?? at,
+      principal: {
+        kind: actor.trustTier === "owner" ? "owner" : "actor",
+        principalId: actor.actorId,
+        evidenceId: resolution.event.id,
+      },
+      bindingDigest: record.bindingDigest,
+      inputHash: record.inputHash,
+      effectHash: record.effectHash,
+      generation: record.generation,
+      toolsHash: record.toolsHash,
+      domainRevisions: record.domainRevisions,
+      decision: "reply",
+      allowedAction: matched.requestedAction,
+      content,
+    });
+  }
+  if (outcome === "attached" || outcome === "resolved") return;
+  const reason = `request reply rejected: ${outcome}`;
+  recordRouteNotDelivered(stores, resolution.event, decision, reason, at);
+  return yield* new IngressRoutingError("request_reply_rejected", reason, decision);
   });
 }

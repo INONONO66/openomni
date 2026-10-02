@@ -5,30 +5,18 @@ import { Bus } from "./observation";
 
 afterEach(() => Bus.reset());
 
-const event = BusEvent.define(
-  "helper.observation",
-  z.object({ sessionId: z.string(), value: z.number() }),
-);
+const event = BusEvent.define("helper.observation", z.object({ sessionId: z.string(), value: z.number() }));
 
 test("fanout validates and transforms once before matching and delivery", async () => {
   let parses = 0;
-  const transformed = BusEvent.define(
-    "helper.transformed",
-    event.schema.transform((data) => {
-      parses += 1;
-      return { ...data, value: data.value + 1 };
-    }),
-  );
+  const transformed = BusEvent.define("helper.transformed", event.schema.transform((data) => {
+    parses += 1;
+    return { ...data, value: data.value + 1 };
+  }));
   const received: number[] = [];
   for (let index = 0; index < 100; index += 1)
     Bus.subscribe(transformed, (data) => received.push(data.value), { match: { value: 2 } });
-  Bus.subscribe(
-    transformed,
-    () => {
-      throw new Error("nonmatching subscriber delivered");
-    },
-    { match: { sessionId: "other" } },
-  );
+  Bus.subscribe(transformed, () => { throw new Error("nonmatching subscriber delivered"); }, { match: { sessionId: "other" } });
   Bus.publish(transformed, { sessionId: "session", value: 1 });
   await Bus.flush();
   expect(parses).toBe(1);

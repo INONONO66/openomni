@@ -35,22 +35,14 @@ export function withSummarizerDeadline(
   deadlineMs = DEFAULT_SUMMARIZER_DEADLINE_MS,
   signal?: AbortSignal,
 ): NonNullable<CompactionOptions["onSummarize"]> {
-  return (messages, previousAnchor, budget, operationSignal = signal) =>
-    Effect.gen(function* () {
-      if (operationSignal?.aborted) return yield* Effect.interrupt;
-      return yield* summarize(messages, previousAnchor, budget, operationSignal).pipe(
-        Effect.timeoutOrElse({
-          duration: deadlineMs,
-          orElse: () =>
-            Effect.fail(
-              new AgentFailure({
-                operation: "compaction.summarize",
-                cause: `summarizer_deadline:${deadlineMs}`,
-              }),
-            ),
-        }),
-      );
-    });
+  return (messages, previousAnchor, budget, operationSignal = signal) => Effect.gen(function* () {
+    if (operationSignal?.aborted) return yield* Effect.interrupt;
+    return yield* summarize(messages, previousAnchor, budget, operationSignal).pipe(
+      Effect.timeoutOrElse({ duration: deadlineMs, orElse: () => Effect.fail(new AgentFailure({
+        operation: "compaction.summarize", cause: `summarizer_deadline:${deadlineMs}`,
+      }))}),
+    );
+  });
 }
 
 /**
@@ -145,62 +137,62 @@ export function attemptAnchoredCut(
   onSummarize: NonNullable<CompactionOptions["onSummarize"]>,
 ): Effect.Effect<AnchoredCutAttempt, ExecutionError, Entropy> {
   return Effect.gen(function* () {
-    const { id } = yield* Entropy;
-    const anchorTime = yield* Clock.currentTimeMillis;
-    const previousAnchor = latestAnchorBody(cutSpan);
-    const summarizerInput = cutSpan.filter(
-      (message) => message.info.role !== "user" && !isAnchorMessage(message),
-    );
-    const { messages: boundedInput, budget } = prepareSummarizerInput(
-      summarizerInput,
-      contextWindowTokens,
-      previousAnchor,
-    );
-    let anchorText = precomputed ?? previousAnchor;
-    let summarizerError: Error | undefined;
-    if (precomputed === undefined && boundedInput.length > 0) {
-      const merged = yield* Effect.result(onSummarize(boundedInput, previousAnchor, budget));
-      if (Result.isSuccess(merged)) {
-        anchorText = merged.success.trim().length > 0 ? merged.success : previousAnchor;
-      } else {
-        if (merged.failure._tag === "Interrupted") return yield* merged.failure;
-        summarizerError = merged.failure;
-        anchorText = previousAnchor;
-      }
+  const { id } = yield* Entropy;
+  const anchorTime = yield* Clock.currentTimeMillis;
+  const previousAnchor = latestAnchorBody(cutSpan);
+  const summarizerInput = cutSpan.filter(
+    (message) => message.info.role !== "user" && !isAnchorMessage(message),
+  );
+  const { messages: boundedInput, budget } = prepareSummarizerInput(
+    summarizerInput,
+    contextWindowTokens,
+    previousAnchor,
+  );
+  let anchorText = precomputed ?? previousAnchor;
+  let summarizerError: Error | undefined;
+  if (precomputed === undefined && boundedInput.length > 0) {
+    const merged = yield* Effect.result(onSummarize(boundedInput, previousAnchor, budget));
+    if (Result.isSuccess(merged)) {
+      anchorText = merged.success.trim().length > 0 ? merged.success : previousAnchor;
+    } else {
+      if (merged.failure._tag === "Interrupted") return yield* merged.failure;
+      summarizerError = merged.failure;
+      anchorText = previousAnchor;
     }
+  }
 
-    const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
-    if (anchorText === undefined && preservedUsers.length === 0) return { summarizerError };
-    const stampedUsers = preservedUsers.map((message) =>
-      carriesUserSpeech(message) ? stampTimeMarker(message, id) : message,
-    );
-    const keptWindow = replacementRecord(stampedUsers, keepSpan);
-    const stampedAny = stampedUsers.some((message) => message.parts.some(isTimeCarriageMarkerPart));
-    const anchorMessages =
-      anchorText === undefined
-        ? []
-        : [
-            buildAnchorMessage(
-              anchorText,
-              firstRemoved.info.sessionID,
-              firstRemoved.info.agent,
-              keptWindow,
-              stampedAny,
-              { now: () => anchorTime, id },
-            ),
-          ];
-    const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
-    if (estimateContentChars(compacted) >= estimateContentChars(working)) {
-      return { summarizerError };
-    }
-    return {
-      cut: {
-        messages: compacted,
-        compacted: true,
-        removedCount: cutSpan.length - preservedUsers.length,
-      },
-      summarizerError,
-    };
+  const preservedUsers = selectPreservedUsers(cutSpan, preserveBudget);
+  if (anchorText === undefined && preservedUsers.length === 0) return { summarizerError };
+  const stampedUsers = preservedUsers.map((message) =>
+    carriesUserSpeech(message) ? stampTimeMarker(message, id) : message,
+  );
+  const keptWindow = replacementRecord(stampedUsers, keepSpan);
+  const stampedAny = stampedUsers.some((message) => message.parts.some(isTimeCarriageMarkerPart));
+  const anchorMessages =
+    anchorText === undefined
+      ? []
+      : [
+          buildAnchorMessage(
+            anchorText,
+            firstRemoved.info.sessionID,
+            firstRemoved.info.agent,
+            keptWindow,
+            stampedAny,
+            { now: () => anchorTime, id },
+          ),
+        ];
+  const compacted = [...anchorMessages, ...stampedUsers, ...keepSpan];
+  if (estimateContentChars(compacted) >= estimateContentChars(working)) {
+    return { summarizerError };
+  }
+  return {
+    cut: {
+      messages: compacted,
+      compacted: true,
+      removedCount: cutSpan.length - preservedUsers.length,
+    },
+    summarizerError,
+  };
   });
 }
 

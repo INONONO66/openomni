@@ -23,27 +23,25 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   const path = socketPath();
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
   let cells: ComposedCodemode;
-  const host = await acquireEffect(
-    createMachineHost({
-      socketPath: path,
-      id: testIds("cli-host"),
-      enrollment: (id) => ({
-        machineId: id,
-        name: id,
-        tags: [id],
-        allowedCapabilities: capabilities,
-        allowedExports: ["data"],
-        enrolledAt: 1,
-      }),
-      events: {
-        publish() {
-          return;
-        },
-      },
-      now: () => 2,
-      callTool: (call) => cells.callTool(call),
+  const host = await acquireEffect(createMachineHost({
+    socketPath: path,
+    id: testIds("cli-host"),
+    enrollment: (id) => ({
+      machineId: id,
+      name: id,
+      tags: [id],
+      allowedCapabilities: capabilities,
+      allowedExports: ["data"],
+      enrolledAt: 1,
     }),
-  );
+    events: {
+      publish() {
+        return;
+      },
+    },
+    now: () => 2,
+    callTool: (call) => cells.callTool(call),
+  }));
   cells = await acquireEffect(composeCodemode(host, { id: testIds("cli-compose") }));
   const children: ReturnType<typeof spawn>[] = [];
   const exits: Promise<void>[] = [];
@@ -112,11 +110,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       "state = 41",
       "(ids, list(readback), written['bytesWritten'], shell['stdout'], shell['stderr'], shell['exitCode'], nested['value'])",
     ].join("\n");
-    const run = modelToolOutput(
-      "eval",
-      { cells: testCellPorts(cells) },
-      { role: "resident", sessionId: "qa-one" },
-    );
+    const run = modelToolOutput("eval", { cells: testCellPorts(cells) }, { role: "resident", sessionId: "qa-one" });
     const result = await run({ operation: { op: "run", code, timeout: 10 } });
     expect(result).toBe("(['A', 'B'], [0, 255, 128, 65], 4, b'out', b'err', 7, '42')");
     expect(await run({ operation: { op: "run", code: "state + 1", timeout: 1 } })).toBe("42");
@@ -126,18 +120,14 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       { role: "resident", sessionId: "qa-two" },
     )({ operation: { op: "run", code: "state", timeout: 15 } });
     expect(other).toContain("NameError");
-    const write = await runEffect(
-      host.get("B").fs.write(join(rootB, "receipt"), Buffer.from([0, 255, 128, 65])),
-    );
-    const execution = await runEffect(
-      host.get("B").exec("printf out; printf err >&2; exit 7", rootB),
-    );
+    const write = await runEffect(host
+      .get("B")
+      .fs.write(join(rootB, "receipt"), Buffer.from([0, 255, 128, 65])));
+    const execution = await runEffect(host.get("B").exec("printf out; printf err >&2; exit 7", rootB));
     if (execution.status !== "completed") throw new Error("QA exec did not complete");
-    const codeResult = await runEffect(
-      host
-        .get("B")
-        .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 15_000 }),
-    );
+    const codeResult = await runEffect(host
+      .get("B")
+      .runCode({ cellId: "qa-code", code: "6 * 7", tenant: "qa-raw", timeoutMs: 15_000 }));
     expect(codeResult).toMatchObject({ status: "completed", value: "42" });
     console.log(
       "machines-codemode QA",

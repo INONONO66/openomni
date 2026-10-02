@@ -206,14 +206,13 @@ export class WebSocketHandler {
   ): Effect.Effect<WebSocketFrameOutcome, ChannelError> {
     return Effect.gen({ self: this }, function* () {
       yield* Effect.try({
-        try: () =>
-          this.publish(Operational.Events.Debug, {
-            traceId: newTraceId(this.config.id),
-            time: this.config.now(),
-            component: "server",
-            msg: "websocket message received",
-            context: { surfaceKey: connection.surfaceKey },
-          }),
+        try: () => this.publish(Operational.Events.Debug, {
+          traceId: newTraceId(this.config.id),
+          time: this.config.now(),
+          component: "server",
+          msg: "websocket message received",
+          context: { surfaceKey: connection.surfaceKey },
+        }),
         catch: decodeChannelFailure("websocket.observe"),
       });
       const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
@@ -271,16 +270,9 @@ function decodeFrame(raw: string): Effect.Effect<z.infer<typeof WebSocketFrame>,
     const document = yield* Effect.try({
       try: () => z.record(z.string(), z.json()).safeParse(JSON.parse(raw)),
       catch: decodeChannelFailure("websocket.decode"),
-    }).pipe(
-      Effect.mapError(
-        (failure) =>
-          new InvalidInbound({
-            operation: "websocket.frame",
-            reason: "invalid_json",
-            cause: failure.cause,
-          }),
-      ),
-    );
+    }).pipe(Effect.mapError((failure) => new InvalidInbound({
+      operation: "websocket.frame", reason: "invalid_json", cause: failure.cause,
+    })));
     if (!document.success) {
       return yield* new InvalidInbound({ operation: "websocket.frame", reason: "invalid_frame" });
     }
@@ -288,8 +280,7 @@ function decodeFrame(raw: string): Effect.Effect<z.infer<typeof WebSocketFrame>,
     if (!frame.success) {
       return yield* new InvalidInbound({
         operation: "websocket.frame",
-        reason:
-          document.data.type === "request_answer" ? "invalid_request_answer" : "text_required",
+        reason: document.data.type === "request_answer" ? "invalid_request_answer" : "text_required",
       });
     }
     return frame.data;

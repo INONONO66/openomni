@@ -96,46 +96,38 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       }
     };
     const observations = observationService({
-      publish(event, payload) {
-        Bus.publish(event, payload);
-        const plane = planeRef.current;
-        if (
-          mode === "crash-window" &&
-          plane !== undefined &&
-          event === L0Observation.ActionCommittedEvent &&
-          !saved.current
-        ) {
-          const committed = L0Observation.ActionCommittedEvent.schema.parse(payload);
-          const action = sessionTree(sessionId, plane.sessionStore(sessionId).actions).find(
-            (node) => node.id === committed.id,
-          );
+        publish(event, payload) {
+          Bus.publish(event, payload);
+          const plane = planeRef.current;
           if (
-            action?.kind === "tool" &&
-            z
-              .object({ terminal: z.literal("executed"), callId: z.literal("call-A") })
-              .safeParse(action.effect.value).success
+            mode === "crash-window" &&
+            plane !== undefined &&
+            event === L0Observation.ActionCommittedEvent &&
+            !saved.current
           ) {
-            // Snapshot synchronously at commit, before the next native Effect result.
-            // Bus subscriptions are observational microtasks, not commit barriers.
-            snapshot(
-              sessionFilePath(sessionsDir, sessionId),
-              sessionFilePath(crashSessionsDir, sessionId),
+            const committed = L0Observation.ActionCommittedEvent.schema.parse(payload);
+            const action = sessionTree(sessionId, plane.sessionStore(sessionId).actions).find(
+              (node) => node.id === committed.id,
             );
-            snapshot(catalogPath, crashCatalogPath);
-            saved.current = true;
-            interruptInbox();
+            if (
+              action?.kind === "tool" &&
+              z
+                .object({ terminal: z.literal("executed"), callId: z.literal("call-A") })
+                .safeParse(action.effect.value).success
+            ) {
+              // Snapshot synchronously at commit, before the next native Effect result.
+              // Bus subscriptions are observational microtasks, not commit barriers.
+              snapshot(sessionFilePath(sessionsDir, sessionId), sessionFilePath(crashSessionsDir, sessionId));
+              snapshot(catalogPath, crashCatalogPath);
+              saved.current = true;
+              interruptInbox();
+            }
           }
-        }
-        if (mode === "error-window" && event === Tool.Events.Completed)
-          throw new Error("crash after committed result");
-      },
+          if (mode === "error-window" && event === Tool.Events.Completed)
+            throw new Error("crash after committed result");
+        },
     });
-    const plane = createAppLedger({
-      now: testClock(),
-      catalogPath,
-      sessionsDir,
-      observationSink: observations,
-    });
+    const plane = createAppLedger({ now: testClock(), catalogPath, sessionsDir, observationSink: observations });
     planeRef.current = plane;
     const runtime: SessionRuntime = {
       authorizeConfigure: allowConfigure,
@@ -174,29 +166,23 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     const runner = createSessionChatRunner({
       prepare(input) {
         return Effect.gen(function* () {
-          const dispatcher = yield* createTurnDispatcher(input, runtime);
-          return {
-            traceContext: { traceId: "recovery", sessionId, runId: input.resultId },
-            config: {
-              executor: dispatcher.executor,
-              tools: [...dispatcher.specs],
-              toolWave: (calls, signal) =>
-                dispatcher.executeWave(calls, { sessionId, turnId: input.turnId, signal }),
-              model: { provider: "anthropic", id: "claude-opus-4-5" },
-              auth: { type: "api", key: "recovery-key" },
-              transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
-            },
-          };
+        const dispatcher = yield* createTurnDispatcher(input, runtime);
+        return {
+          traceContext: { traceId: "recovery", sessionId, runId: input.resultId },
+          config: {
+            executor: dispatcher.executor,
+            tools: [...dispatcher.specs],
+            toolWave: (calls, signal) =>
+              dispatcher.executeWave(calls, { sessionId, turnId: input.turnId, signal }),
+            model: { provider: "anthropic", id: "claude-opus-4-5" },
+            auth: { type: "api", key: "recovery-key" },
+            transport: { baseUrl: `http://127.0.0.1:${provider.port}/v1` },
+          },
+        };
         });
       },
     });
-    const services = await acquireEffect(
-      generationServices({
-        definitions: { resident: definitions, worker: [] },
-        observations,
-        plane,
-      }),
-    );
+    const services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, observations, plane }));
     let unsubscribe: () => void = () => undefined;
     const drainScope = effectScope();
     try {
@@ -233,8 +219,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       if (mode === "crash-window") {
         expect(saved.current).toBe(true);
         await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
-        const crashPlane = createAppLedger({
-          now: testClock(),
+        const crashPlane = createAppLedger({ now: testClock(),
           catalogPath: crashCatalogPath,
           sessionsDir: crashSessionsDir,
         });
@@ -257,10 +242,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
           listSessions: crashPlane.listSessions,
         };
         const recovered = await acquireEffect(
-          generationServices({
-            definitions: { resident: definitions, worker: [] },
-            plane: crashPlane,
-          }),
+          generationServices({ definitions: { resident: definitions, worker: [] }, plane: crashPlane }),
         );
         await bounded(
           drainScope.run(

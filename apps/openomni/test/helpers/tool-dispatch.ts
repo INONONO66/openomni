@@ -1,9 +1,6 @@
 import { testToolPorts } from "./tool-ports";
 import { Effect } from "effect";
-import {
-  runnerTestLayer,
-  catalogLayer,
-} from "../../../../packages/agent/test/helpers/service-layers";
+import { runnerTestLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { acquireSyncEffect } from "./effect";
 import { runEffect } from "./effect";
 import { spyOn } from "bun:test";
@@ -22,39 +19,20 @@ export function dispatchModelTool(
   origin: CatalogOrigin = RESIDENT,
   now?: () => number,
 ) {
-  const definitions =
-    now === undefined
-      ? catalogDefinitions({ ...testToolPorts, clock: Date.now, ...ports })
-      : undefined;
-  const acquire = (catalog: ReturnType<typeof catalogDefinitions>) =>
-    acquireSyncEffect(
-      createTurnDispatcher(
-        {
-          sessionId: origin.sessionId,
-          role: origin.role,
-          actionId: "fixture-turn",
-          ledger: fixtureLedger,
-        },
-        {},
-      ).pipe(
-        Effect.provide(catalogLayer(catalog)),
-        Effect.provide(executorServices),
-        Effect.provide(runnerTestLayer),
-      ),
-    );
+  const definitions = now === undefined ? catalogDefinitions({ ...testToolPorts, clock: Date.now, ...ports }) : undefined;
+  const acquire = (catalog: ReturnType<typeof catalogDefinitions>) => acquireSyncEffect(createTurnDispatcher({
+    sessionId: origin.sessionId, role: origin.role, actionId: "fixture-turn", ledger: fixtureLedger,
+  }, {}).pipe(Effect.provide(catalogLayer(catalog)), Effect.provide(executorServices), Effect.provide(runnerTestLayer)));
   const persistentDispatcher = definitions === undefined ? undefined : acquire(definitions);
   return async (input: PlainObject) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);
     try {
-      const currentDefinitions =
-        definitions ?? catalogDefinitions({ ...testToolPorts, clock: Date.now, ...ports });
+      const currentDefinitions = definitions ?? catalogDefinitions({ ...testToolPorts, clock: Date.now, ...ports });
       const dispatcher = persistentDispatcher ?? acquire(currentDefinitions);
-      return await runEffect(
-        dispatcher.execute(
-          { id: `test-tool-call-${nextCallId++}`, tool: name, input },
-          { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },
-        ),
-      );
+      return await runEffect(dispatcher.execute(
+        { id: `test-tool-call-${nextCallId++}`, tool: name, input },
+        { sessionId: origin.sessionId, turnId: `test-turn-${nextCallId}` },
+      ));
     } finally {
       clock?.mockRestore();
     }

@@ -61,17 +61,9 @@ function decide(
       expectedRevision: 1,
       payload,
     },
-    {
-      row,
-      invocation: actions.find((action) => action.id === "invocation"),
-      inputRecord: actions.find(
-        (action) =>
-          PlainObjectSchema.parse(action.intent.value).inputId ===
-          (payload.kind === "request.answer" ? payload.answer.inputId : payload.kind),
-      ),
-      request: pending,
-      domainRevisions: { person: 3 },
-    },
+    { row, invocation: actions.find((action) => action.id === "invocation"),
+      inputRecord: actions.find((action) => PlainObjectSchema.parse(action.intent.value).inputId === (payload.kind === "request.answer" ? payload.answer.inputId : payload.kind)),
+      request: pending, domainRevisions: { person: 3 } },
   );
 }
 it("opens only the exact existing invocation and original effect", () => {
@@ -324,9 +316,7 @@ it("proposes observed global approval count only for a new approval open", () =>
     decideRequestTransition(command, {
       ...snapshot,
       request: opened.request,
-      inputRecord: persisted.find(
-        (action) => PlainObjectSchema.parse(action.intent.value).inputId === command.inputId,
-      ),
+      inputRecord: persisted.find((action) => PlainObjectSchema.parse(action.intent.value).inputId === command.inputId),
     }),
   ).not.toHaveProperty("requestCount");
   const reply = { ...pending, mode: "reply" as const };
@@ -431,116 +421,55 @@ it("gives timeout and cancellation only one terminal winner", () => {
 // cannot exist); commissioning moved to the entity plane. What remains live is
 // the gateway admission intake: a received-message chain action committed in
 // the same fenced batch as the request open.
-it.each([
-  false,
-  true,
-])("gateway admission intake commits atomically with the request open (fault: %s)", (fault: boolean) =>
-  fileRequest((dbPath) =>
-    Effect.gen(function* () {
-      const { port, opening } = yield* requestPlane();
-      const kernel = isolatedLedger().kernel;
-      const before = sessionTree(kernel, "parent");
-      using raw = new Database(dbPath);
-      if (fault)
-        raw.run(`CREATE TRIGGER refuse_admission BEFORE INSERT ON action
+it.each([false, true])("gateway admission intake commits atomically with the request open (fault: %s)", (fault: boolean) => fileRequest((dbPath) => Effect.gen(function* () {
+  const { port, opening } = yield* requestPlane();
+  const kernel = isolatedLedger().kernel;
+  const before = sessionTree(kernel, "parent");
+  using raw = new Database(dbPath);
+  if (fault) raw.run(`CREATE TRIGGER refuse_admission BEFORE INSERT ON action
     WHEN NEW.id = 'commission:prompt'
     BEGIN SELECT RAISE(ABORT, 'test admission fault'); END`);
-      const admission: Inbox.Commit = {
-        id: "commission:prompt",
-        sessionId: "parent",
-        kind: "prompt",
-        content: "commission",
-        origin: {
-          encodingVersion: 1,
-          value: {
-            kind: "message",
-            messageId: "commission",
-            senderSessionId: "parent",
-            sourceActionId: "invocation",
-          },
-        },
-        parentActionId: "invocation",
-        createdAt: 100,
-      };
-      const opened = port.open({ ...opening, admission });
-      if (fault) {
-        expect(yield* Effect.flip(opened)).toMatchObject({
-          _tag: "CommitFailed",
-          error: { _tag: "AgentFailure" },
-        });
-        expect(sessionTree(kernel, "parent")).toEqual(before);
-        expect(kernel.requestById("invocation")).toBeUndefined();
-        expect(kernel.pendingMessages("parent")).toEqual([]);
-        return;
-      }
-      expect(yield* opened).toMatchObject({
-        callId: "original-call",
-        parsedInput: { text: "captured" },
-        state: "open",
-      });
-      // The deadline is durable on the request row (the alarms table is deleted).
-      expect(kernel.requestById("invocation")?.deadline).toBe(200);
-      expect(kernel.pendingMessages("parent").map(({ id }) => id)).toEqual(["commission:prompt"]);
-      expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "parent" }]);
-      // No lease release: the admission's fence owner stays durable.
-      expect(kernel.row("parent").fenceOwner).not.toBeNull();
-    }),
-  ));
+  const admission: Inbox.Commit = {
+    id: "commission:prompt", sessionId: "parent", kind: "prompt", content: "commission",
+    origin: { encodingVersion: 1, value: {
+      kind: "message", messageId: "commission", senderSessionId: "parent", sourceActionId: "invocation",
+    } },
+    parentActionId: "invocation", createdAt: 100,
+  };
+  const opened = port.open({ ...opening, admission });
+  if (fault) {
+    expect(yield* Effect.flip(opened)).toMatchObject({ _tag: "CommitFailed", error: { _tag: "AgentFailure" } });
+    expect(sessionTree(kernel, "parent")).toEqual(before);
+    expect(kernel.requestById("invocation")).toBeUndefined();
+    expect(kernel.pendingMessages("parent")).toEqual([]);
+    return;
+  }
+  expect(yield* opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, state: "open" });
+  // The deadline is durable on the request row (the alarms table is deleted).
+  expect(kernel.requestById("invocation")?.deadline).toBe(200);
+  expect(kernel.pendingMessages("parent").map(({ id }) => id)).toEqual(["commission:prompt"]);
+  expect(raw.query("SELECT id FROM session ORDER BY id").all()).toEqual([{ id: "parent" }]);
+  // No lease release: the admission's fence owner stays durable.
+  expect(kernel.row("parent").fenceOwner).not.toBeNull();
+})));
 
 it.each([
   { resolution: "first", threshold: 1 },
   { resolution: "quorum", threshold: 2 },
   { resolution: "all", threshold: 3 },
-] as const)("file-backed %s answers only the captured invocation", ({
-  resolution,
-  threshold,
-}: {
-  resolution: "first" | "quorum" | "all";
-  threshold: number;
-}) =>
-  fileRequest(() =>
-    Effect.gen(function* () {
-      const { port, opening } = yield* requestPlane();
-      const opened = yield* port.open({
-        ...opening,
-        resolution,
-        threshold,
-        expectedResponders: ["a", "b", "c"],
-      });
-      expect(opened).toMatchObject({
-        callId: "original-call",
-        parsedInput: { text: "captured" },
-        effectHash: canonicalDigest({ route: "children" }),
-      });
-      expect(
-        yield* port.answer({
-          ...planeAnswer(opened, "a", "ambiguous"),
-          bindingDigest: "wrong-request",
-        }),
-      ).toBe("rejected");
-      expect(isolatedLedger().kernel.pendingMessages("parent")).toEqual([]);
-      for (const [index, responder] of ["a", "b", "c"].entries()) {
-        const reply = planeAnswer(opened, responder);
-        const resolution =
-          index + 1 < threshold ? "attached" : index + 1 === threshold ? "resolved" : "duplicate";
-        expect(yield* port.answer(reply)).toBe(resolution);
-        expect(yield* port.answer({ ...reply, inputId: `${responder}:again` })).toBe("duplicate");
-      }
-      expect(isolatedLedger().kernel.requestById(opened.requestId)).toMatchObject({
-        state: "resolved",
-        replies: opened.expectedResponders
-          .slice(0, threshold)
-          .map((responderId) => ({ responderId })),
-      });
-      expect(
-        isolatedLedger()
-          .kernel.pendingMessages("parent")
-          .map(({ id }) => isolatedLedger().kernel.actionById(id)?.parentId),
-      ).toEqual(Array.from({ length: threshold }, () => "invocation"));
-      expect(
-        sessionTree(isolatedLedger().kernel, "parent").filter(
-          ({ id }) => id === "invocation:resolution",
-        ),
-      ).toHaveLength(1);
-    }),
-  ));
+] as const)("file-backed %s answers only the captured invocation", ({ resolution, threshold }: { resolution: "first" | "quorum" | "all"; threshold: number }) => fileRequest(() => Effect.gen(function* () {
+  const { port, opening } = yield* requestPlane();
+  const opened = yield* port.open({ ...opening, resolution, threshold, expectedResponders: ["a", "b", "c"] });
+  expect(opened).toMatchObject({ callId: "original-call", parsedInput: { text: "captured" }, effectHash: canonicalDigest({ route: "children" }) });
+  expect(yield* port.answer({ ...planeAnswer(opened, "a", "ambiguous"), bindingDigest: "wrong-request" })).toBe("rejected");
+  expect(isolatedLedger().kernel.pendingMessages("parent")).toEqual([]);
+  for (const [index, responder] of ["a", "b", "c"].entries()) {
+    const reply = planeAnswer(opened, responder);
+    const resolution = index + 1 < threshold ? "attached" : index + 1 === threshold ? "resolved" : "duplicate";
+    expect(yield* port.answer(reply)).toBe(resolution);
+    expect(yield* port.answer({ ...reply, inputId: `${responder}:again` })).toBe("duplicate");
+  }
+  expect(isolatedLedger().kernel.requestById(opened.requestId)).toMatchObject({ state: "resolved", replies: opened.expectedResponders.slice(0, threshold).map((responderId) => ({ responderId })) });
+  expect(isolatedLedger().kernel.pendingMessages("parent").map(({ id }) => isolatedLedger().kernel.actionById(id)?.parentId)).toEqual(Array.from({ length: threshold }, () => "invocation"));
+  expect(sessionTree(isolatedLedger().kernel, "parent").filter(({ id }) => id === "invocation:resolution")).toHaveLength(1);
+})));

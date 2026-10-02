@@ -3,20 +3,12 @@ import ts from "typescript";
 import { InventoryError } from "./quality-inventory";
 
 /** JSONC stays inside the compiler parser; no configuration programs or watchers. */
-export function readProject(
-  root: string,
-  path: string,
-): { fileNames: string[]; options: ts.CompilerOptions } {
+export function readProject(root: string, path: string): { fileNames: string[]; options: ts.CompilerOptions } {
   const configPath = resolve(root, path);
   const config = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (config.error) throw new InventoryError("config", path, "native configuration diagnostic");
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    dirname(configPath),
-    {},
-    configPath,
-  );
+  if (config.error)
+    throw new InventoryError("config", path, "native configuration diagnostic");
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath), {}, configPath);
   if (parsed.errors.length || (!parsed.fileNames.length && !parsed.projectReferences?.length))
     throw new InventoryError("config", path, "native configuration diagnostic");
   return { fileNames: parsed.fileNames, options: parsed.options };
@@ -36,8 +28,7 @@ export class CensusPrograms {
     const getSourceFile = this.host.getSourceFile;
     this.host.getSourceFile = (fileName, languageVersion, onError) => {
       const path = resolve(fileName);
-      const mode =
-        typeof languageVersion === "object" ? languageVersion.impliedNodeFormat : undefined;
+      const mode = typeof languageVersion === "object" ? languageVersion.impliedNodeFormat : undefined;
       const key = JSON.stringify([path, this.sourceOptions, mode]);
       const cached = this.sources.get(key);
       if (cached) return cached;
@@ -53,13 +44,8 @@ export class CensusPrograms {
   program(fileNames: string[], options: ts.CompilerOptions): ts.Program {
     // Config location is provenance, not a semantic compiler option. Resolved
     // paths and every actual option participate, so differing projects stay separate.
-    const entries = Object.entries(options)
-      .filter(([key]) => key !== "configFilePath" && key !== "configFile")
-      .sort(([a], [b]) => a.localeCompare(b));
-    const key = JSON.stringify([
-      [...new Set(fileNames.map((path) => resolve(path)))].sort(),
-      entries,
-    ]);
+    const entries = Object.entries(options).filter(([key]) => key !== "configFilePath" && key !== "configFile").sort(([a], [b]) => a.localeCompare(b));
+    const key = JSON.stringify([[...new Set(fileNames.map((path) => resolve(path)))].sort(), entries]);
     const cached = this.programs.get(key);
     if (cached) {
       this.stats.reused++;

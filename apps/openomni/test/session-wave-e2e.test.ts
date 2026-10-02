@@ -183,9 +183,7 @@ test("real provider returns calls before any app tool body starts", async () => 
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
   // When: the public channel triggers a model step with a native tool call.
   const response = nextResidentTurn(plane(), 5000);
-  socket.send(
-    JSON.stringify({ type: "message", eventId: newTraceId(), text: "read current status" }),
-  );
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "read current status" }));
   await response;
   // Then: provider I/O did not execute the body before returning its calls.
   expect(countsAtModelReturn[0]).toBe(0);
@@ -232,13 +230,7 @@ async function waveApp(
   };
   const sessionsDir = config.sessionsDir;
   if (sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
-  return {
-    app,
-    socket,
-    received,
-    sessionDbPath: (sessionId: string) => sessionFilePath(sessionsDir, sessionId),
-    cleanup,
-  };
+  return { app, socket, received, sessionDbPath: (sessionId: string) => sessionFilePath(sessionsDir, sessionId), cleanup };
 }
 
 function toolResults(sessionId: string) {
@@ -263,9 +255,10 @@ function nextTerminal(): Promise<void> {
     }, 5000);
     const stop = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.sessionId === "gateway-ingress" || event.kind !== "turn") return;
-      const terminal = tree(event.sessionId).find((action) => action.id === event.id);
-      if (terminal === undefined || Journal.SessionHandleStore.turnTerminal(terminal) === undefined)
-        return;
+      const terminal = tree(event.sessionId).find(
+        (action) => action.id === event.id,
+      );
+      if (terminal === undefined || Journal.SessionHandleStore.turnTerminal(terminal) === undefined) return;
       clearTimeout(timer);
       stop();
       resolve();
@@ -278,9 +271,7 @@ function nextTerminal(): Promise<void> {
 }
 
 function activeRow() {
-  const row = plane()
-    .listSessions()
-    .find((item) => item.id !== "gateway-ingress");
+  const row = plane().listSessions().find((item) => item.id !== "gateway-ingress");
   if (row === undefined) throw new Error("missing app session");
   return row;
 }
@@ -302,7 +293,9 @@ function nextApproval(app: Awaited<ReturnType<typeof waveApp>>["app"]) {
 
 function requireBApproval() {
   const policies = plane().catalog.policies;
-  expect(policies.append(approvalPolicy("approve-B"))).toBe(true);
+  expect(
+    policies.append(approvalPolicy("approve-B")),
+  ).toBe(true);
 }
 
 test("after-model SDK interrupt starts zero bodies and seals one interrupted terminal", async () => {
@@ -369,12 +362,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
       name === "D" ? true : undefined,
     ),
   );
-  const { socket, received, sessionDbPath, cleanup } = await waveApp(definitions, [
-    "A",
-    "B",
-    "C",
-    "D",
-  ]);
+  const { socket, received, sessionDbPath, cleanup } = await waveApp(definitions, ["A", "B", "C", "D"]);
   const response = nextResidentTurn(plane(), 5000);
   try {
     // When: complete parallel bodies in reverse while D is a sequential barrier.
@@ -547,9 +535,7 @@ test("noncooperative bodies release the wave but retain fence ownership and cann
   ];
   const { app, socket, received } = await waveApp(definitions, ["A", "B"]);
   try {
-    socket.send(
-      JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt running wave" }),
-    );
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt running wave" }));
     await bounded(entered.promise);
     const row = activeRow();
     const handle = app.sessions.get(row.id);
@@ -615,12 +601,9 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       const results = await runEffect(dispatcher.executeWave([call], context));
       return results.every((result) => result.isError) ? "outcome_unknown" : "executed";
     };
-    const invoke = (
-      executor: ReturnType<typeof currentExecutor>,
-    ): Promise<string | InvocationClosed> =>
+    const invoke = (executor: ReturnType<typeof currentExecutor>): Promise<string | InvocationClosed> =>
       attemptInvoke(executor).catch((error: Error) =>
-        error instanceof InvocationClosed ? error : error.name,
-      );
+        error instanceof InvocationClosed ? error : error.name);
     const { app, socket, received, cleanup } = await waveApp(
       [
         waveTool("A", async () => "A", true),
@@ -640,9 +623,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
     );
     let handle: AppSessionHandle | undefined;
     try {
-      socket.send(
-        JSON.stringify({ type: "message", eventId: newTraceId(), text: "run nested effect" }),
-      );
+      socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run nested effect" }));
       const executor = await bounded(captured.promise);
       const row = activeRow();
       sessionId = row.id;
@@ -664,10 +645,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
         await bounded(interrupted);
       }
       await bounded(parentSettled.promise);
-      expect(await bounded(wrapperSettled.promise)).toMatchObject({
-        _tag: "InvocationClosed",
-        reason: "settled",
-      });
+      expect(await bounded(wrapperSettled.promise)).toMatchObject({ _tag: "InvocationClosed", reason: "settled" });
       expect(existsSync(marker)).toBe(false);
       expect(signal.aborted).toBe(true);
       expect(
@@ -686,9 +664,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
       const innerIntent = tree(row.id).find(
         (action) =>
           action.kind === "tool" &&
-          z
-            .object({ phase: z.literal("intent"), callId: z.literal("inner-call") })
-            .safeParse(action.intent.value).success,
+          z.object({ phase: z.literal("intent"), callId: z.literal("inner-call") }).safeParse(action.intent.value).success,
       );
       if (innerIntent === undefined) throw new Error("missing inner intent row");
       const innerRows = () => tree(row.id).filter((action) => action.parentId === innerIntent.id);
@@ -785,13 +761,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
       );
       let handle: AppSessionHandle | undefined;
       try {
-        socket.send(
-          JSON.stringify({
-            type: "message",
-            eventId: newTraceId(),
-            text: "run timed nested effect",
-          }),
-        );
+        socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run timed nested effect" }));
         const executor = await bounded(captured.promise);
         const row = activeRow();
         sessionId = row.id;
@@ -999,9 +969,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
     }),
   );
   const response = nextTerminal();
-  socket.send(
-    JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt at the drain" }),
-  );
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt at the drain" }));
   await response;
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);

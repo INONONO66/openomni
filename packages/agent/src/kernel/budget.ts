@@ -71,11 +71,7 @@ function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
  * needs (reads the clock, mutates nothing, emits nothing) — see
  * {@link publishBudgetTelemetry}, the single production consumer.
  */
-export function evaluateBudget(
-  state: BudgetState,
-  now: () => number,
-  budget?: AgentBudget,
-): BudgetEvaluation {
+export function evaluateBudget(state: BudgetState, now: () => number, budget?: AgentBudget): BudgetEvaluation {
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
   const elapsedMs = now() - state.startTime;
@@ -168,11 +164,7 @@ export function publishBudgetTelemetry(
   return evaluation.status;
 }
 
-export function describeBudgetRemaining(
-  state: BudgetState,
-  now: () => number,
-  budget?: AgentBudget,
-): string {
+export function describeBudgetRemaining(state: BudgetState, now: () => number, budget?: AgentBudget): string {
   const parts: string[] = [];
 
   const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;

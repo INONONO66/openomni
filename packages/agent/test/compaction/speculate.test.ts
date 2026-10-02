@@ -449,7 +449,9 @@ describe("run-scoped compaction speculation", () => {
             summarize: () =>
               Effect.suspend(() => {
                 calls += 1;
-                return Effect.fail(new AgentFailure({ operation: "test", cause: "provider down" }));
+                return Effect.fail(
+                  new AgentFailure({ operation: "test", cause: "provider down" }),
+                );
               }),
           });
           for (let attempt = 0; attempt < 3; attempt += 1) {

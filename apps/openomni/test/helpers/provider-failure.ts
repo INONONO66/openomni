@@ -14,18 +14,18 @@ export function providerFailure(
   }),
 ): Model.Run.Failure {
   return new LlmRunFailure({
-    message,
-    aborted: cause.name === "AbortError",
-    contextOverflow: false,
-    visibleOutput: false,
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      reasoningTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    },
-    cause: APICallError.isInstance(cause) ? cause : String(cause),
-    retryAfterMs: 0,
+      message,
+      aborted: cause.name === "AbortError",
+      contextOverflow: false,
+      visibleOutput: false,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+      cause: APICallError.isInstance(cause) ? cause : String(cause),
+      retryAfterMs: 0,
   });
 }

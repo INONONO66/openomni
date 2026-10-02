@@ -17,22 +17,18 @@ describe("Resident compaction", () => {
       plane,
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
-      tools: { ...testToolPorts },
+      tools: { ...testToolPorts,},
       llm: {
-        resolveModel: (model) =>
-          Effect.succeed({
-            id: model.id,
-            name: model.id,
-            providerID: model.provider,
-            limit: { context: 100_000 },
-          }),
-        run: (input, sink: Sink) =>
-          Effect.sync(() => {
-            sink.onMessage(
-              assistantMessage(input, { text: `seed answer ${"filler ".repeat(30)}` }),
-            );
-            return { type: "stop" };
-          }),
+        resolveModel: (model) => Effect.succeed(({
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+          limit: { context: 100_000 },
+        })),
+        run: (input, sink: Sink) => Effect.sync(() => {
+          sink.onMessage(assistantMessage(input, { text: `seed answer ${"filler ".repeat(30)}` }));
+          return { type: "stop" };
+        }),
       },
     });
     for (let index = 0; index < 6; index += 1) {
@@ -49,28 +45,26 @@ describe("Resident compaction", () => {
         contextWindowTokens: 700,
         elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
       }),
-      tools: { ...testToolPorts },
+      tools: { ...testToolPorts,},
       llm: {
-        resolveModel: (model) =>
-          Effect.succeed({
-            id: model.id,
-            name: model.id,
-            providerID: model.provider,
-            limit: { context: 700 },
-          }),
-        run: (input, sink: Sink) =>
-          Effect.sync(() => {
-            calls += 1;
-            messageCounts.push(input.messages?.length ?? 0);
-            sink.onMessage(
-              assistantMessage(input, {
-                call: calls,
-                reason: calls === 1 ? "tool-calls" : "stop",
-                tokens: { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-              }),
-            );
-            return { type: "stop" };
-          }),
+        resolveModel: (model) => Effect.succeed(({
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+          limit: { context: 700 },
+        })),
+        run: (input, sink: Sink) => Effect.sync(() => {
+          calls += 1;
+          messageCounts.push(input.messages?.length ?? 0);
+          sink.onMessage(
+            assistantMessage(input, {
+              call: calls,
+              reason: calls === 1 ? "tool-calls" : "stop",
+              tokens: { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            }),
+          );
+          return { type: "stop" };
+        }),
       },
     });
 

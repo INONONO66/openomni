@@ -104,9 +104,7 @@ export function createChannelSupervisor(deps: SupervisorDeps): ChannelSupervisor
       deps.deliveryRoutes.delete(surfaceId);
       revokeGrant();
     };
-    const failure = await built.surface
-      .start(deps.traceId())
-      .then(() => undefined, ThrownError.parse);
+    const failure = await built.surface.start(deps.traceId()).then(() => undefined, ThrownError.parse);
     if (failure !== undefined) {
       // Fail-closed: a stage that did not start owns nothing.
       await unwind(false);

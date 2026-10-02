@@ -8,12 +8,11 @@ import { appFixture } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
 
 /** The provider-model resolution every fake-llm boot uses. */
-export const fakeProviderModel = (model: { provider: string; id: string }) =>
-  Effect.succeed({
-    id: model.id,
-    name: model.id,
-    providerID: model.provider,
-  });
+export const fakeProviderModel = (model: { provider: string; id: string }) => Effect.succeed({
+  id: model.id,
+  name: model.id,
+  providerID: model.provider,
+});
 
 export interface ResidentSuite {
   /** A tracked temp directory, removed after each test. */

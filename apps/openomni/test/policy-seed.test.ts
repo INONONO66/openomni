@@ -77,7 +77,9 @@ test("budget presence alone does not complete a generation; preserve existing po
     const policies = open().policies;
     expect(seedKernelPolicyRows(policies)).toBe(1);
     expect(policies.rows(1).map(identity).sort()).toEqual(expectedIds);
-    const budget = policies.rows(1).find((row) => identity(row) === budgetId);
+    const budget = policies
+      .rows(1)
+      .find((row) => identity(row) === budgetId);
     if (budget === undefined) throw new Error("missing seeded budget");
     const custom = { ...budget, name: "site-policy", priority: 42, generation: 2 };
     expect(policies.append({ ...budget, generation: 2 })).toBe(true);

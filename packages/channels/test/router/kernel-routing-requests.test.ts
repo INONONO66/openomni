@@ -8,16 +8,10 @@ import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort, seededRequests } from "../helpers/requests";
 import { replaceDecisionFacts } from "../helpers/ledger";
 import { beforeEach, expect, test } from "bun:test";
-import { Channel, Ingress, type Gateway, type SessionTransition } from "@openomni/protocol";
+import { Channel, Ingress, type Gateway , type SessionTransition } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
 import { createExistingAgentMessaging } from "../../src/router/messaging/send";
-import {
-  commits,
-  kernelRouter,
-  makeRouter,
-  resetRouterState,
-  routingDecisions,
-} from "./_router-fixture";
+import { commits, kernelRouter, makeRouter, resetRouterState, routingDecisions, } from "./_router-fixture";
 
 const sender = { kind: "external", surface: "telegram", externalId: "seller-1" } as const;
 function facts(
@@ -39,11 +33,7 @@ function scope(id: string) {
   return { surface: "telegram", channel: "telegram:dm", id: `telegram::telegram%3Adm:${id}` };
 }
 function registerResponder(actorId = "actor-external-worker", externalId = "seller-1"): void {
-  ledger().stores.actors.registerIdentity({
-    id: actorId,
-    kind: "human",
-    trustTier: "assigned_worker",
-  });
+  ledger().stores.actors.registerIdentity({ id: actorId, kind: "human", trustTier: "assigned_worker" });
   ledger().stores.actors.registerEndpoint({
     id: `telegram:${externalId}`,
     actorId,
@@ -90,13 +80,11 @@ test("correlated reply resolves the request and commits only to its owner", asyn
 });
 
 test("first quorum reply commits input but leaves the request open", async () => {
-  await runEffect(
-    await openRequest("quorum", {
-      expectedResponders: ["actor-external-worker", "b", "c"],
-      resolution: "quorum",
-      threshold: 2,
-    }),
-  );
+  await runEffect(await openRequest("quorum", {
+    expectedResponders: ["actor-external-worker", "b", "c"],
+    resolution: "quorum",
+    threshold: 2,
+  }));
   expect(await runEffect(kernelRouter().ingest(sender, facts("reply")))).toMatchObject({
     status: "executed",
     handle: { target: "request-owner" },
@@ -113,13 +101,11 @@ async function expectStableReplyReplay(): Promise<void> {
 }
 
 test("duplicate unresolved reply reuses its receipt without another durable input", async () => {
-  await runEffect(
-    await openRequest("duplicate", {
-      expectedResponders: ["actor-external-worker", "b"],
-      resolution: "quorum",
-      threshold: 2,
-    }),
-  );
+  await runEffect(await openRequest("duplicate", {
+    expectedResponders: ["actor-external-worker", "b"],
+    resolution: "quorum",
+    threshold: 2,
+  }));
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
   await expectStableReplyReplay();
   expect(ledger().kernel.requestById("duplicate")?.replies).toHaveLength(1);
@@ -127,39 +113,35 @@ test("duplicate unresolved reply reuses its receipt without another durable inpu
 });
 
 test("late reply lazily expires the request while retaining partial progress", async () => {
-  await runEffect(
-    await openRequest("late", {
-      expectedResponders: ["actor-external-worker", "b"],
-      resolution: "quorum",
-      threshold: 2,
-      deadline: 10_000,
-    }),
-  );
+  await runEffect(await openRequest("late", {
+    expectedResponders: ["actor-external-worker", "b"],
+    resolution: "quorum",
+    threshold: 2,
+    deadline: 10_000,
+  }));
   const request = ledger().kernel.requestById("late");
   if (!request) throw new Error("missing request");
   expect(
-    await runEffect(
-      requestPort().answer({
-        inputId: "early",
-        requestId: "late",
-        sessionId: request.sessionId,
-        receivedAt: 1000,
-        principal: { kind: "actor", principalId: "b", evidenceId: "early" },
-        bindingDigest: request.bindingDigest,
-        inputHash: request.inputHash,
-        effectHash: request.effectHash,
-        generation: request.generation,
-        toolsHash: request.toolsHash,
-        domainRevisions: request.domainRevisions,
-        decision: "reply",
-        allowedAction: "report_result",
-        content: "partial",
-      }),
-    ),
+    await runEffect(requestPort().answer({
+      inputId: "early",
+      requestId: "late",
+      sessionId: request.sessionId,
+      receivedAt: 1000,
+      principal: { kind: "actor", principalId: "b", evidenceId: "early" },
+      bindingDigest: request.bindingDigest,
+      inputHash: request.inputHash,
+      effectHash: request.effectHash,
+      generation: request.generation,
+      toolsHash: request.toolsHash,
+      domainRevisions: request.domainRevisions,
+      decision: "reply",
+      allowedAction: "report_result",
+      content: "partial",
+    })),
   ).toBe("attached");
-  expect(
-    await effectFailure(makeRouter({ now: () => 10_001 }).ingest(sender, facts("late"))),
-  ).toMatchObject({
+  expect(await effectFailure(
+    makeRouter({ now: () => 10_001 }).ingest(sender, facts("late")),
+  )).toMatchObject({
     code: "request_reply_rejected",
     _tag: "IngressRoutingError",
   });
@@ -184,9 +166,7 @@ test("resolved reply redelivery preserves the original request revision", async 
 test.each([
   "before",
   "after",
-] as const)("reply redelivery repairs a crash %s the owner inbox commit without another input", async (site:
-  | "before"
-  | "after") => {
+] as const)("reply redelivery repairs a crash %s the owner inbox commit without another input", async (site: "before" | "after") => {
   await runEffect(await openRequest("handoff"));
   const handoffFault = new Error("inbox handoff fault");
   let fault = true;
@@ -196,19 +176,18 @@ test.each([
     now: () => now,
     requests: {
       ...requests,
-      answer: (input: Parameters<typeof requests.answer>[0]) =>
-        Effect.gen(function* () {
-          if (fault && site === "before") {
-            fault = false;
-            throw handoffFault;
-          }
-          const resolution = yield* requests.answer(input);
-          if (fault) {
-            fault = false;
-            throw handoffFault;
-          }
-          return resolution;
-        }),
+      answer: (input: Parameters<typeof requests.answer>[0]) => Effect.gen(function* () {
+        if (fault && site === "before") {
+          fault = false;
+          throw handoffFault;
+        }
+        const resolution = yield* requests.answer(input);
+        if (fault) {
+          fault = false;
+          throw handoffFault;
+        }
+        return resolution;
+      }),
     },
   });
   expect(await effectFailure(router.ingest(sender, facts("handoff-reply")))).toBe(handoffFault);
@@ -229,11 +208,9 @@ test.each([
 test("unexpected responder is refused with an authoritative route correction", async () => {
   registerResponder("intruder", "intruder");
   await runEffect(await openRequest("intruder", { expectedResponders: ["someone-else"] }));
-  expect(
-    await effectFailure(
-      kernelRouter().ingest({ ...sender, externalId: "intruder" }, facts("reply")),
-    ),
-  ).toMatchObject({
+  expect(await effectFailure(
+    kernelRouter().ingest({ ...sender, externalId: "intruder" }, facts("reply")),
+  )).toMatchObject({
     code: "request_reply_rejected",
     _tag: "IngressRoutingError",
   });
@@ -264,9 +241,7 @@ test("same-precedence ambiguity is denied before inbox commit", async () => {
   expect(commits).toEqual([]);
 });
 
-test.each(["throw", "wrong_type"] as const)("route correction %s fails closed", async (fault:
-  | "throw"
-  | "wrong_type") => {
+test.each(["throw", "wrong_type"] as const)("route correction %s fails closed", async (fault: "throw" | "wrong_type") => {
   await runEffect(await openRequest("correction", { expectedResponders: ["someone-else"] }));
   replaceDecisionFacts((facts: Parameters<Parameters<typeof replaceDecisionFacts>[0]>[0]) => ({
     ...facts,
@@ -283,11 +258,9 @@ test.each(["throw", "wrong_type"] as const)("route correction %s fails closed", 
 });
 
 test("missing decision-fact storage refuses a route correction", async () => {
-  await runEffect(
-    await openRequest("missing-correction", {
-      expectedResponders: ["someone-else"],
-    }),
-  );
+  await runEffect(await openRequest("missing-correction", {
+    expectedResponders: ["someone-else"],
+  }));
   replaceDecisionFacts((decisionFacts) => ({
     ...decisionFacts,
     record: (fact: Parameters<typeof decisionFacts.record>[0]) => {
@@ -306,18 +279,14 @@ test("missing decision-fact storage refuses a route correction", async () => {
 });
 
 test("recorded rejection correction is idempotent", async () => {
-  await runEffect(
-    await openRequest("correction", {
-      expectedResponders: ["actor-external-worker", "b"],
-      resolution: "quorum",
-      threshold: 2,
-    }),
-  );
+  await runEffect(await openRequest("correction", {
+    expectedResponders: ["actor-external-worker", "b"],
+    resolution: "quorum",
+    threshold: 2,
+  }));
   await runEffect(kernelRouter().ingest(sender, facts("reply")));
   for (let repeat = 0; repeat < 2; repeat += 1) {
-    expect(
-      await effectFailure(kernelRouter().ingest(sender, facts("another-reply"))),
-    ).toMatchObject({
+    expect(await effectFailure(kernelRouter().ingest(sender, facts("another-reply")))).toMatchObject({
       code: "request_reply_rejected",
     });
   }
@@ -360,27 +329,25 @@ test("awaited send resolves quorum from distinct authenticated responder endpoin
     ],
     publish: Bus.publish,
   });
-  const sent = await runEffect(
-    messaging.send({
-      messageId: "outbound",
-      senderId: "owner",
-      target: { actorId: "target" },
-      operation: "awaited",
-      body: "verdict",
-      at: 1,
-      traceId: "trace",
-      requestSpec: {
-        requestId: "quorum",
-        sessionId: "request-owner",
-        allowedActions: ["report_result"],
-        expectedResponders: ["r1", "r2", "r3"],
-        resolution: "quorum",
-        threshold: 2,
-        deadline: Number.MAX_SAFE_INTEGER,
-        correlation: { channelId: "telegram:dm" },
-      },
-    }),
-  );
+  const sent = await runEffect(messaging.send({
+    messageId: "outbound",
+    senderId: "owner",
+    target: { actorId: "target" },
+    operation: "awaited",
+    body: "verdict",
+    at: 1,
+    traceId: "trace",
+    requestSpec: {
+      requestId: "quorum",
+      sessionId: "request-owner",
+      allowedActions: ["report_result"],
+      expectedResponders: ["r1", "r2", "r3"],
+      resolution: "quorum",
+      threshold: 2,
+      deadline: Number.MAX_SAFE_INTEGER,
+      correlation: { channelId: "telegram:dm" },
+    },
+  }));
   expect(sent).toMatchObject({
     kind: "sent",
     operation: "awaited",
@@ -390,21 +357,17 @@ test("awaited send resolves quorum from distinct authenticated responder endpoin
   });
   for (const externalId of ["responder-1", "responder-2"]) {
     expect(
-      await runEffect(
-        kernelRouter().ingest(
-          { ...sender, externalId },
-          { ...facts(externalId), reply: { chain: [], replyToMessageId: "platform-message" } },
-        ),
-      ),
+      await runEffect(kernelRouter().ingest(
+        { ...sender, externalId },
+        { ...facts(externalId), reply: { chain: [], replyToMessageId: "platform-message" } },
+      )),
     ).toMatchObject({ status: "executed", handle: { target: "request-owner" } });
     expect(ledger().kernel.requestById("quorum")?.state).toBe(
       externalId === "responder-1" ? "open" : "resolved",
     );
   }
   expect(
-    ledger()
-      .kernel.requestById("quorum")
-      ?.replies.map((reply: SessionTransition.Request["replies"][number]) => reply.responderId),
+    ledger().kernel.requestById("quorum")?.replies.map((reply: SessionTransition.Request["replies"][number]) => reply.responderId),
   ).toEqual(["r1", "r2"]);
   expect(commits).toHaveLength(2);
 });

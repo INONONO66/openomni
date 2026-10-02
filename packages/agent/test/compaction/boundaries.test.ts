@@ -2,14 +2,12 @@ import { describe, expect, it } from "bun:test";
 import type { Message } from "@openomni/protocol";
 import { Cause, Effect, Exit } from "effect";
 import { planAnchoredCut } from "../../src/plugins/compaction/candidate";
-import {
-  createCompactionPlan,
-  restoreCompactionProjection,
-} from "../../src/plugins/compaction/durable";
+import { createCompactionPlan, restoreCompactionProjection } from "../../src/plugins/compaction/durable";
 import { CompactionSession } from "../../src/plugins/compaction/speculate";
 import { isolated } from "../helpers/isolated";
 import { withSummarizerDeadline } from "../../src/plugins/compaction/summary";
 import { textMessage } from "../helpers/messages";
+
 
 function history() {
   return [
@@ -22,23 +20,11 @@ describe("compaction boundary integrity", () => {
     const controller = new AbortController();
     controller.abort();
     let called = false;
-    const summarize = withSummarizerDeadline(
-      () => {
-        called = true;
-        return Effect.succeed("summary");
-      },
-      1000,
-      controller.signal,
-    );
-    const exit = await isolated(
-      Effect.exit(
-        summarize([], undefined, {
-          maxInputTokens: 10,
-          maxOutputTokens: 10,
-          contextWindowTokens: 100,
-        }),
-      ),
-    );
+    const summarize = withSummarizerDeadline(() => {
+      called = true;
+      return Effect.succeed("summary");
+    }, 1000, controller.signal);
+    const exit = await isolated(Effect.exit(summarize([], undefined, { maxInputTokens: 10, maxOutputTokens: 10, contextWindowTokens: 100 })));
     expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     expect(called).toBe(false);
   });

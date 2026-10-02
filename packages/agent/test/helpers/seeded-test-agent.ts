@@ -1,14 +1,6 @@
 import { testExecutor } from "./executor";
-import {
-  type ChatFixture as ChatAgentConfig,
-  type ChatFixture,
-  chatServices,
-} from "./chat-services";
-import {
-  compilePolicySnapshot,
-  KERNEL_POLICY_REGISTRY,
-  SEEDED_POLICY_ROWS,
-} from "../../src/kernel/gate/compile";
+import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, } from "./chat-services";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import { Effect } from "effect";
 import type { Sink } from "../../src/model";
 import type { ChatAgentInput } from "../../src/kernel/types";

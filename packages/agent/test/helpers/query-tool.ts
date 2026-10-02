@@ -3,10 +3,7 @@ import { defineTool } from "../../src/kernel/tool";
 import type { ExecutionRequest } from "../../src/kernel/gate/decide";
 import type { ToolExecutionContext } from "@openomni/protocol";
 
-export function timedQueryTool(
-  description: string,
-  execute: (input: Record<string, never>, context: ToolExecutionContext) => Promise<string>,
-) {
+export function timedQueryTool(description: string, execute: (input: Record<string, never>, context: ToolExecutionContext) => Promise<string>) {
   return defineTool({
     name: "timed",
     description,

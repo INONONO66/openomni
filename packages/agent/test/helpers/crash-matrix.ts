@@ -5,13 +5,7 @@ import { foldCrashMain, foldCrashPoint, foldCrashProof } from "./fold-crash";
 import { configureCrashPoint } from "./crash-configure";
 import { reconstructionCut, reconstructionPoint } from "./crash-reconstruction";
 import { turnTestLayer, catalogLayer, runnerTestLayer } from "./service-layers";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
 import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
 import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
@@ -19,13 +13,7 @@ import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
 import * as SessionHandleStore from "../../src/store/fence";
 import type { LedgerError } from "../../src/store/errors";
-import {
-  LedgerAction,
-  Message,
-  PlainObjectSchema,
-  PlainValueSchema,
-  type PlainValue,
-} from "@openomni/protocol";
+import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionLedger } from "../../src/kernel/gate/decide";
 import { createLedgerRetryAlarmPort } from "../../src/kernel/gate/decide";
@@ -140,22 +128,13 @@ export const committedCompactionPoints = new Set<CrashPoint>([
 type Witness = z.infer<typeof crashWitness>;
 const witnessSink = new AsyncLocalStorage<(witness: Witness) => void>();
 
-export function emitCrashWitness(
-  witness: Witness,
-  write: (fd: number, value: string) => void = writeSync,
-  exit: (code: number) => void = process.exit,
-): void {
+export function emitCrashWitness(witness: Witness, write: (fd: number, value: string) => void = writeSync, exit: (code: number) => void = process.exit): void {
   write(1, `${JSON.stringify(witness)}\n`);
   exit(0);
 }
 
 // Synchronous witness output also permits cuts inside the synchronous store commit port.
-function stop(
-  point: z.infer<typeof allCrashPoints>,
-  bodies: string[],
-  pending?: LedgerAction.Append,
-  fold?: z.infer<typeof foldCrashProof>,
-): never {
+function stop(point: z.infer<typeof allCrashPoints>, bodies: string[], pending?: LedgerAction.Append, fold?: z.infer<typeof foldCrashProof>): never {
   const kernel = isolatedLedger().kernel;
   const row = kernel.row(sessionId);
   const witness = crashWitness.parse({
@@ -238,26 +217,12 @@ function executePoint(point: CrashPoint, bodies: string[]) {
           return name;
         }),
       );
-      const dispatcher = yield* Effect.gen(function* () {
-        const turnInput: Parameters<typeof createTurnDispatcher>[0] & {
-          readonly policy?: ResolvedExecutorOptions["policy"];
-        } = {
+      const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = {
           ...recording.identity,
           actionId: recording.identity.turnId,
           ledger,
           policy: compiledPolicy(),
-        };
-        const turnRuntime: Parameters<typeof createTurnDispatcher>[1] &
-          Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = {
-          observations,
-          clock: recording.clock,
-          entropy: recording.entropy,
-        };
-        return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(
-          Effect.provide(catalogLayer(tools)),
-          Effect.provide(turnTestLayer(turnInput, turnRuntime)),
-        );
-      });
+        }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { observations, clock: recording.clock, entropy: recording.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer(tools)), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
       return yield* dispatcher.executeWave(
         tools.map((tool: (typeof tools)[number]) => ({
           id: tool.name,
@@ -328,20 +293,16 @@ function executePoint(point: CrashPoint, bodies: string[]) {
  * its activation authority never cleaned up.
  */
 function hibernateCut(point: CrashPoint, bodies: string[]) {
-  return () =>
-    Effect.sync(() => {
-      if (
-        point === "delivery_ack_committed_before_owner_cleanup" &&
-        bodies.includes("accepted") &&
-        isolatedLedger()
-          .kernel.outboundRows(sessionId)
-          .some(
-            (item: import("@openomni/protocol").SessionTransition.Outbound) =>
-              item.state === "delivered",
-          )
+  return () => Effect.sync(() => {
+    if (
+      point === "delivery_ack_committed_before_owner_cleanup" &&
+      bodies.includes("accepted") &&
+      isolatedLedger().kernel.outboundRows(sessionId).some(
+        (item: import("@openomni/protocol").SessionTransition.Outbound) => item.state === "delivered",
       )
-        stop(point, bodies);
-    });
+    )
+      stop(point, bodies);
+  });
 }
 
 function outboundPort(
@@ -393,13 +354,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
         return { kind: "result" as const, text: "durable reply" };
       });
     if (point === "inbox_admitted_before_turn_open") {
-      yield* Effect.gen(function* () {
-        const fixture: SessionFixture = runtime;
-        return yield* withSessionServices(
-          session({ id: sessionId, role: "resident", runner }, fixture),
-          fixture,
-        );
-      });
+      yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, role: "resident", runner }, fixture), fixture); });
       yield* commitReceivedMessage(isolatedLedger().kernel, {
         id: "admitted",
         sessionId,
@@ -411,13 +366,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       });
       return stop(point, bodies);
     }
-    yield* Effect.gen(function* () {
-      const fixture: SessionFixture = runtime;
-      return yield* withSessionServices(
-        session({ id: "parent", role: "resident", runner }, fixture),
-        fixture,
-      );
-    });
+    yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner }, fixture), fixture); });
     const commission = yield* commitReceivedMessage(isolatedLedger().kernel, {
       id: "commission",
       sessionId: "parent",
@@ -427,13 +376,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       origin: { encodingVersion: 1, value: {} },
       parentActionId: null,
     });
-    const child = yield* Effect.gen(function* () {
-      const fixture: SessionFixture = runtime;
-      return yield* withSessionServices(
-        session({ id: sessionId, parentId: "parent", role: "worker", runner }, fixture),
-        fixture,
-      );
-    });
+    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, parentId: "parent", role: "worker", runner }, fixture), fixture); });
     return yield* child
       .prompt("work", {
         encodingVersion: 1,
@@ -455,68 +398,37 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
   });
 }
 
-export async function crashMatrixMain(
-  args: string[],
-  emit: (witness: Witness) => void = emitCrashWitness,
-) {
+export async function crashMatrixMain(args: string[], emit: (witness: Witness) => void = emitCrashWitness) {
   const [cut, dbPath, stage] = z
     .tuple([allCrashPoints, z.string().min(1), z.enum(["initial", "resume"])])
     .parse(args);
   const main = async () => {
     const reconstruct = reconstructionPoint.safeParse(cut);
-    if (reconstruct.success)
-      return runAgent(
-        reconstructionCut(reconstruct.data, dbPath, (bodies, pending, proof) =>
-          stop(cut, bodies, pending, proof),
-        ).pipe(Effect.provide(runnerTestLayer)),
-      );
+    if (reconstruct.success) return runAgent(reconstructionCut(reconstruct.data, dbPath,
+      (bodies, pending, proof) => stop(cut, bodies, pending, proof)).pipe(Effect.provide(runnerTestLayer)));
     const fold = foldCrashPoint.safeParse(cut);
-    if (fold.success)
-      return foldCrashMain(fold.data, (bodies, pending, proof) =>
-        stop(cut, bodies, pending, proof),
-      );
+    if (fold.success) return foldCrashMain(fold.data, (bodies, pending, proof) => stop(cut, bodies, pending, proof));
     const point = crashPoint.parse(cut);
-    return runAgent(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const bodies: string[] = [];
-          if (stage === "resume") {
-            const fixture: SessionFixture = {
-              ...isolatedRuntime(),
-              observations,
-              clock: () => 100_000,
-              entropy: uniqueEntropy("resume"),
-              authorizeConfigure: allowConfigure,
-            };
-            yield* withSessionServices(
-              reactivateSession(
-                sessionId,
-                () =>
-                  Effect.sync(() => {
-                    stop(point, bodies);
-                    return { kind: "result" as const, text: "" };
-                  }),
-                fixture,
-              ),
-              fixture,
-            );
-          } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
-            yield* admissionPoint(point, bodies, dbPath);
-          } else yield* executePoint(point, bodies);
-        }).pipe(Effect.provide(runnerTestLayer)),
-      ),
-    );
+    return runAgent(Effect.scoped(Effect.gen(function* () {
+      const bodies: string[] = [];
+      if (stage === "resume") {
+        const fixture: SessionFixture = { ...isolatedRuntime(), observations, clock: () => 100_000, entropy: uniqueEntropy("resume"), authorizeConfigure: allowConfigure };
+        yield* withSessionServices(reactivateSession(sessionId, () => Effect.sync(() => {
+          stop(point, bodies);
+          return { kind: "result" as const, text: "" };
+        }), fixture), fixture);
+      } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
+        yield* admissionPoint(point, bodies, dbPath);
+      } else yield* executePoint(point, bodies);
+    }).pipe(Effect.provide(runnerTestLayer))));
   };
   return witnessSink.run(emit, () => {
     const ambient = activeIsolation();
     if (ambient !== undefined) return main();
-    return isolatedRun(
-      () => {
-        seedPolicy();
-        return main();
-      },
-      () => openCrashStores(dbPath),
-    );
+    return isolatedRun(() => {
+      seedPolicy();
+      return main();
+    }, () => openCrashStores(dbPath));
   });
 }
 

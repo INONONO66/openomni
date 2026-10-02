@@ -39,14 +39,8 @@ import * as protocolExports from "../packages/protocol/src/index.js";
 
 // Schema inspection never executes ports; absent capabilities are explicit test doubles.
 const schemaPorts: ToolPorts = {
-  alarms: undefined,
-  messages: undefined,
-  machines: undefined,
-  cells: undefined,
-  llm: undefined,
-  provisioning: undefined,
-  clock: () => 0,
-  id: () => "schema",
+  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  llm: undefined, provisioning: undefined, clock: () => 0, id: () => "schema",
 };
 const definitions = catalogDefinitions(schemaPorts);
 
@@ -171,7 +165,10 @@ const TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:[._][a-z][a-z0-9]*){0,2}$/;
 // context, limit); the budget is the sealed catalog's widest tool, not a spare allowance.
 const MAX_PUBLIC_FIELDS = 7;
 
-function localReference(root: PlainObject, reference: string): PlainObject | undefined {
+function localReference(
+  root: PlainObject,
+  reference: string,
+): PlainObject | undefined {
   if (!reference.startsWith("#/")) return undefined;
   let value: PlainValue | undefined = root;
   for (const encoded of reference.slice(2).split("/")) {
@@ -179,7 +176,9 @@ function localReference(root: PlainObject, reference: string): PlainObject | und
     const key = encoded.replaceAll("~1", "/").replaceAll("~0", "~");
     value = value[key];
   }
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value
+    : undefined;
 }
 
 function combineFieldSets(
@@ -219,7 +218,10 @@ function topLevelFieldSets(
     if (!Array.isArray(branches)) continue;
     for (const branch of branches) {
       if (typeof branch === "object" && branch !== null && !Array.isArray(branch)) {
-        sets = combineFieldSets(sets, topLevelFieldSets(branch, root, references));
+        sets = combineFieldSets(
+          sets,
+          topLevelFieldSets(branch, root, references),
+        );
       }
     }
   }
@@ -338,15 +340,13 @@ const TOOL_SOURCE_GLOB = "apps/openomni/src/tools/**/*.ts";
 const TOOL_CATEGORIES: readonly ToolCategory[] = ["query", "mutation", "authority", "execution"];
 
 function looksLikeToolDefinition(value: object): value is AnyToolDefinition {
-  return z
-    .object({
-      name: z.string(),
-      category: z.string(),
-      description: z.string(),
-      execute: z.function(),
-      render: z.function(),
-    })
-    .safeParse(value).success;
+  return z.object({
+    name: z.string(),
+    category: z.string(),
+    description: z.string(),
+    execute: z.function(),
+    render: z.function(),
+  }).safeParse(value).success;
 }
 
 export interface LocatedDefinition {
@@ -362,21 +362,10 @@ async function locateExportedDefinitions(
   for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
     const source = await Bun.file(join(ROOT, filePath)).text();
-    const module = z
-      .record(
-        z.string(),
-        z.union([
-          z.instanceof(Object),
-          z.string(),
-          z.number(),
-          z.boolean(),
-          z.bigint(),
-          z.symbol(),
-          z.null(),
-          z.undefined(),
-        ]),
-      )
-      .parse(createRequire(import.meta.url)(join(ROOT, filePath)));
+    const module = z.record(z.string(), z.union([
+      z.instanceof(Object), z.string(), z.number(), z.boolean(),
+      z.bigint(), z.symbol(), z.null(), z.undefined(),
+    ])).parse(createRequire(import.meta.url)(join(ROOT, filePath)));
     for (const value of Object.values(module)) {
       if (typeof value === "object" && value !== null && looksLikeToolDefinition(value))
         located.set(value, filePath);
@@ -469,7 +458,10 @@ export function definitionInvariantViolations(
 }
 
 export async function checkEarned(): Promise<Violation[]> {
-  return definitionInvariantViolations(definitions, await locateExportedDefinitions(definitions));
+  return definitionInvariantViolations(
+    definitions,
+    await locateExportedDefinitions(definitions),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,10 +480,7 @@ function isZodSchema(value: object): value is ZodObjectLike {
   return z.object({ safeParse: z.function() }).safeParse(value).success;
 }
 
-function shapeKeys(
-  schema: ZodObjectLike,
-  seen: Set<ZodObjectLike> = new Set(),
-): string[] | undefined {
+function shapeKeys(schema: ZodObjectLike, seen: Set<ZodObjectLike> = new Set()): string[] | undefined {
   if (seen.has(schema)) return undefined;
   seen.add(schema);
   if (schema.shape && typeof schema.shape === "object") {
@@ -530,10 +519,7 @@ export async function buildSchemaSnapshot(): Promise<SchemaSnapshot> {
     }
     // The imported protocol barrel is trusted code; its namespace properties
     // include schemas, functions, and scalar constants rather than JSON input.
-    const namespace = namespaceValue as Record<
-      string,
-      object | string | number | boolean | null | undefined
-    >;
+    const namespace = namespaceValue as Record<string, object | string | number | boolean | null | undefined>;
     for (const [exportName, exportValue] of Object.entries(namespace)) {
       if (typeof exportValue !== "object" || exportValue === null || !isZodSchema(exportValue)) {
         continue;
@@ -595,9 +581,7 @@ export function diffSnapshots(previous: SchemaSnapshot, current: SchemaSnapshot)
 }
 
 async function checkSchemaSnapshot(): Promise<Violation[]> {
-  const previous = z
-    .record(z.string(), z.array(z.string()))
-    .parse(decodeJson(readFileSync(SNAPSHOT_PATH, "utf8")));
+  const previous = z.record(z.string(), z.array(z.string())).parse(decodeJson(readFileSync(SNAPSHOT_PATH, "utf8")));
   const current = await buildSchemaSnapshot();
   return diffSnapshots(previous, current);
 }
@@ -611,12 +595,8 @@ export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(
   current: readonly T[],
 ): Violation[] {
   if (JSON.stringify(previous) === JSON.stringify(current)) return [];
-  const previousNames = previous.flatMap((value) =>
-    typeof value.name === "string" ? [value.name] : [],
-  );
-  const currentNames = current.flatMap((value) =>
-    typeof value.name === "string" ? [value.name] : [],
-  );
+  const previousNames = previous.flatMap((value) => typeof value.name === "string" ? [value.name] : []);
+  const currentNames = current.flatMap((value) => typeof value.name === "string" ? [value.name] : []);
   return [
     {
       check: "tool-schema-snapshot",
@@ -627,9 +607,9 @@ export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(
 }
 
 function checkToolSchemaSnapshot(): Violation[] {
-  const previous = z
-    .array(z.object({ name: z.string() }).catchall(z.json()))
-    .parse(decodeJson(readFileSync(TOOL_SNAPSHOT_PATH, "utf8")));
+  const previous = z.array(z.object({ name: z.string() }).catchall(z.json())).parse(
+    decodeJson(readFileSync(TOOL_SNAPSHOT_PATH, "utf8")),
+  );
   return diffToolSchemaSnapshots(previous, buildToolSchemaSnapshot());
 }
 
@@ -679,25 +659,10 @@ function definitionSelfTest(failures: string[]): void {
     [invalidDefinition],
     [{ definition: invalidDefinition, filePath: "apps/openomni/src/tools/.ts" }],
   ).map(({ message }) => message);
-  if (
-    !invalidMessages.some((message) => message.startsWith("[tool-name]")) ||
-    !invalidMessages.some((message) => message.startsWith("[tool-description]"))
-  )
-    failures.push("definition invariants missed empty name or description");
+  if (!invalidMessages.some((message) => message.startsWith("[tool-name]")) || !invalidMessages.some((message) => message.startsWith("[tool-description]"))) failures.push("definition invariants missed empty name or description");
   const unknownCategory: AnyToolDefinition = { ...exemplar };
   Object.defineProperty(unknownCategory, "category", { value: "unregistered" });
-  if (
-    !definitionInvariantViolations(
-      [unknownCategory],
-      [
-        {
-          definition: unknownCategory,
-          filePath: `apps/openomni/src/tools/${unknownCategory.name.replaceAll("_", "-")}.ts`,
-        },
-      ],
-    ).some(({ message }) => message.startsWith("[tool-category]"))
-  )
-    failures.push("definition invariants missed an unregistered tool category");
+  if (!definitionInvariantViolations([unknownCategory], [{ definition: unknownCategory, filePath: `apps/openomni/src/tools/${unknownCategory.name.replaceAll("_", "-")}.ts` }]).some(({ message }) => message.startsWith("[tool-category]"))) failures.push("definition invariants missed an unregistered tool category");
 }
 
 export function selfTest(): void {
@@ -760,12 +725,7 @@ export function selfTest(): void {
     properties: { a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, g: {} },
     $ref: "#/$defs/common~1fields",
   };
-  if (
-    lintToolSurface({ name: "read", description: "ok", inputSchema: recursiveSchema })
-      .map((failure) => failure.rule)
-      .join() !== "tool-max-fields"
-  )
-    failures.push("tool field budget walker lost escaped recursive reference fields");
+  if (lintToolSurface({ name: "read", description: "ok", inputSchema: recursiveSchema }).map((failure) => failure.rule).join() !== "tool-max-fields") failures.push("tool field budget walker lost escaped recursive reference fields");
 
   const snapshotViolations = diffSnapshots(
     { "Tool.Call": ["id", "input", "tool"] },
@@ -774,12 +734,7 @@ export function selfTest(): void {
   if (snapshotViolations.length !== 1 || !snapshotViolations[0]?.message.includes("input")) {
     failures.push("schema-snapshot did not flag a field rename");
   }
-  if (
-    diffSnapshots({ "Tool.Call": ["id"] }, {})
-      .map((violation) => violation.subject)
-      .join() !== "Tool.Call"
-  )
-    failures.push("schema-snapshot did not flag a removed type");
+  if (diffSnapshots({ "Tool.Call": ["id"] }, {}).map((violation) => violation.subject).join() !== "Tool.Call") failures.push("schema-snapshot did not flag a removed type");
   if (diffSnapshots({ "Tool.Call": ["id"] }, { "Tool.Call": ["id", "extra"] }).length !== 0) {
     failures.push("schema-snapshot flagged an additive change");
   }
@@ -824,13 +779,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return;
   }
 
-  const baseline = z
-    .object({
-      vocab: z.object({ unmappedNamespaces: z.array(z.string()) }),
-      tools: z.object({ exceptions: z.record(z.string(), z.array(z.string())) }).optional(),
-      naming: z.object({ grandfathered: z.array(z.string()) }),
-    })
-    .parse(decodeJson(readFileSync(BASELINE_PATH, "utf8")));
+  const baseline = z.object({
+    vocab: z.object({ unmappedNamespaces: z.array(z.string()) }),
+    tools: z.object({ exceptions: z.record(z.string(), z.array(z.string())) }).optional(),
+    naming: z.object({ grandfathered: z.array(z.string()) }),
+  }).parse(decodeJson(readFileSync(BASELINE_PATH, "utf8")));
   const violations = [
     ...(await checkVocabRatchet(baseline)),
     ...(await checkToolLint(baseline)),

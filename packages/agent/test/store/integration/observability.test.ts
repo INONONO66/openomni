@@ -100,9 +100,7 @@ describe("ledger-first observations", () => {
     const withNoop = noopActions.append(action("action-parity", "session-parity"), 0);
 
     expect(withThrow).toEqual(withNoop);
-    expect(routedFailures).toEqual([
-      { actionId: "action-parity", cause: new Error("sink failed") },
-    ]);
+    expect(routedFailures).toEqual([{ actionId: "action-parity", cause: new Error("sink failed") }]);
     expect(noopFailures).toEqual([]);
     expect(sessionTree("session-parity", throwingActions)).toEqual(
       sessionTree("session-parity", noopActions),
@@ -119,63 +117,63 @@ describe("ledger-first observations", () => {
     ["an Error", new Error("sink failed"), "sink failed"],
     ["a value String() cannot render", { toString: 0 }, "sink threw an unrepresentable object"],
     ["a revoked Proxy", revoked.proxy, "sink threw an unrepresentable object"],
-  ])("a sink throwing %s and a throwing port never unwind materialize, append or a batch commit", (_case, thrown, message) => {
-    const throwing: ObservationSink = {
-      publish() {
-        throw thrown;
-      },
-    };
-    const reported: string[] = [];
-    const port = (failure: ObservationPublishFailure): never => {
-      reported.push(`${failure.actionId}:${failure.cause.message}`);
-      throw new Error("reporter failed");
-    };
-    using db = openLedgerDatabase();
-    const transaction = <T>(operation: () => T): T => db.transaction(operation).immediate();
-    const actions = createActions(db, transaction, throwing, port);
-    const sessions = createSessions(db, transaction, throwing, port);
-
-    const materialized = runLedgerSync(
-      sessions.materialize({
-        row: session("session-ported"),
-        initialAction: {
-          ...action("action-configured", "session-ported"),
-          kind: "session.configure",
+  ])(
+    "a sink throwing %s and a throwing port never unwind materialize, append or a batch commit",
+    (_case, thrown, message) => {
+      const throwing: ObservationSink = {
+        publish() {
+          throw thrown;
         },
-      }),
-    );
-    expect(materialized).toMatchObject({ created: true, receipt: { revision: 1 } });
-    const appended = actions.append(action("action-appended", "session-ported"), 1);
-    expect(appended?.revision).toBe(2);
-    runLedgerSync(sessions.adoptFence({ sessionId: "session-ported", owner: "writer", fence: 1 }));
-    const committed = runLedgerSync(
-      sessions.commit({
-        sessionId: "session-ported",
-        owner: "writer",
-        fence: 1,
-        now: 101,
-        expectedRevision: 2,
-        actions: [
-          { ...action("action-first", "session-ported"), parentId: "action-appended" },
-          { ...action("action-second", "session-ported"), parentId: "action-first" },
-        ],
-        state: "running",
-      }),
-    );
+      };
+      const reported: string[] = [];
+      const port = (failure: ObservationPublishFailure): never => {
+        reported.push(`${failure.actionId}:${failure.cause.message}`);
+        throw new Error("reporter failed");
+      };
+      using db = openLedgerDatabase();
+      const transaction = <T,>(operation: () => T): T => db.transaction(operation).immediate();
+      const actions = createActions(db, transaction, throwing, port);
+      const sessions = createSessions(db, transaction, throwing, port);
 
-    expect(committed.receipts.map((receipt) => receipt.revision)).toEqual([3, 4]);
-    expect(sessions.get("session-ported")?.revision).toBe(4);
-    expect(sessionTree("session-ported", actions).map((node) => node.id)).toEqual([
-      "action-configured",
-      "action-appended",
-      "action-first",
-      "action-second",
-    ]);
-    // Every committed receipt was reported, including the second of the batch.
-    expect(reported).toEqual(
-      ["action-configured", "action-appended", "action-first", "action-second"].map(
-        (id) => `${id}:${message}`,
-      ),
-    );
-  });
+      const materialized = runLedgerSync(
+        sessions.materialize({
+          row: session("session-ported"),
+          initialAction: { ...action("action-configured", "session-ported"), kind: "session.configure" },
+        }),
+      );
+      expect(materialized).toMatchObject({ created: true, receipt: { revision: 1 } });
+      const appended = actions.append(action("action-appended", "session-ported"), 1);
+      expect(appended?.revision).toBe(2);
+      runLedgerSync(sessions.adoptFence({ sessionId: "session-ported", owner: "writer", fence: 1 }));
+      const committed = runLedgerSync(
+        sessions.commit({
+          sessionId: "session-ported",
+          owner: "writer",
+          fence: 1,
+          now: 101,
+          expectedRevision: 2,
+          actions: [
+            { ...action("action-first", "session-ported"), parentId: "action-appended" },
+            { ...action("action-second", "session-ported"), parentId: "action-first" },
+          ],
+          state: "running",
+        }),
+      );
+
+      expect(committed.receipts.map((receipt) => receipt.revision)).toEqual([3, 4]);
+      expect(sessions.get("session-ported")?.revision).toBe(4);
+      expect(sessionTree("session-ported", actions).map((node) => node.id)).toEqual([
+        "action-configured",
+        "action-appended",
+        "action-first",
+        "action-second",
+      ]);
+      // Every committed receipt was reported, including the second of the batch.
+      expect(reported).toEqual(
+        ["action-configured", "action-appended", "action-first", "action-second"].map(
+          (id) => `${id}:${message}`,
+        ),
+      );
+    },
+  );
 });

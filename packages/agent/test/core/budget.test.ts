@@ -86,9 +86,7 @@ describe("budget telemetry 4-state", () => {
 
   it("returns reassurance when between reassurance and warning thresholds", () => {
     const s = { ...createBudgetState(now), turns: 15 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe(
-      "reassurance",
-    );
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("reassurance");
   });
 
   it("returns warning when between warning and exceeded thresholds", () => {
@@ -98,9 +96,7 @@ describe("budget telemetry 4-state", () => {
 
   it("returns exceeded when at limit", () => {
     const s = { ...createBudgetState(now), turns: 24 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe(
-      "exceeded",
-    );
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("exceeded");
   });
 
   it("returns exceeded when tool runtime reaches its limit", () => {
@@ -184,9 +180,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const capture = captureBusEvents(event);
     try {
       expect(
-        publishBudgetTelemetry({ ...createBudgetState(now), turns }, TEST_RUN, Bus, now, {
-          maxTurns: 24,
-        }),
+        publishBudgetTelemetry({ ...createBudgetState(now), turns }, TEST_RUN, Bus, now, { maxTurns: 24 }),
       ).toBe(status);
       const [seen] = await capture.done;
       expect(capture.events).toHaveLength(1);
@@ -252,15 +246,11 @@ describe("default budget ceilings", () => {
       status: "exceeded",
       exceededLimit: "tool calls",
     });
-    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 39 }, now).status).toBe(
-      "warning",
-    );
+    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 39 }, now).status).toBe("warning");
   });
 
   it("enforces the default tool-runtime ceiling at two minutes", () => {
-    expect(
-      evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 120_000 }, now),
-    ).toMatchObject({
+    expect(evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 120_000 }, now)).toMatchObject({
       status: "exceeded",
       exceededLimit: "tool wall time",
     });

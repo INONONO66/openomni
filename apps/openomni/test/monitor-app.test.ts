@@ -24,29 +24,28 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) =>
-        Effect.sync(() => {
-          calls += 1;
-          if (calls === 1)
-            requestToolStep(input, sink, {
-              id: "monitor-create",
-              tool: "monitor",
-              input: {
-                operation: {
-                  op: "create",
-                  description: "external signal",
-                  source: {
-                    kind: "command",
-                    command: `cat '${fifo}'; read value`,
-                    filter: "^WAKE$",
-                    persistent: true,
-                  },
+      run: (input, sink) => Effect.sync(() => {
+        calls += 1;
+        if (calls === 1)
+          requestToolStep(input, sink, {
+            id: "monitor-create",
+            tool: "monitor",
+            input: {
+              operation: {
+                op: "create",
+                description: "external signal",
+                source: {
+                  kind: "command",
+                  command: `cat '${fifo}'; read value`,
+                  filter: "^WAKE$",
+                  persistent: true,
                 },
               },
-            });
-          else sink.onMessage(assistantMessage(input, { text: "observed" }));
-          return { type: "stop" as const };
-        }),
+            },
+          });
+        else sink.onMessage(assistantMessage(input, { text: "observed" }));
+        return { type: "stop" as const };
+      }),
     },
   });
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);
@@ -60,25 +59,27 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   });
   const waitTimer = setTimeout(() => waiting.reject(new Error("monitor did not suspend")), 5000);
   try {
-    ws.send(
-      JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch for the signal" }),
-    );
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch for the signal" }));
     await waiting.promise;
   } finally {
     clearTimeout(waitTimer);
     unsubscribeWaiting();
   }
-  const arm = plane.listSessions().flatMap((row) =>
-    sessionTree(row.id, plane.sessionStore(row.id).actions)
-      .filter((action) => action.kind === "alarm.arm")
-      .map((action) => ({ sessionId: row.id, watchId: action.id.split(":arm:")[0] ?? "" })),
-  )[0];
+  const arm = plane
+    .listSessions()
+    .flatMap((row) =>
+      sessionTree(row.id, plane.sessionStore(row.id).actions)
+        .filter((action) => action.kind === "alarm.arm")
+        .map((action) => ({ sessionId: row.id, watchId: action.id.split(":arm:")[0] ?? "" })),
+    )[0];
   if (arm === undefined) throw new Error("no created watch");
   const kernel = plane.openKernel(arm.sessionId);
   expect(calls).toBe(1);
   const armed = watchState(kernel, arm.sessionId, arm.watchId);
   expect(armed?.state).toMatchObject({ status: "armed", epoch: 1 }); // Already started by the tool-origin bus publication.
-  expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe("waiting");
+  expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe(
+    "waiting",
+  );
   expect(app.sessions.get(arm.sessionId)).toBeUndefined();
 
   const woke = Promise.withResolvers<void>();
@@ -87,7 +88,8 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   guard.addEventListener("abort", abort, { once: true });
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.sessionId !== arm.sessionId || event.kind !== "turn") return;
-    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result") woke.resolve();
+    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result")
+      woke.resolve();
   });
   suite.defer(() => {
     unsubscribe();

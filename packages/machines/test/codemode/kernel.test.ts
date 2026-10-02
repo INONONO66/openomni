@@ -183,14 +183,12 @@ describe("code-mode kernel substrate", () => {
     const kernel = new PythonKernel();
     try {
       await expect(
-        kernel.run(
-          { cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 15_000 },
-          () =>
-            (() => {
-              const answer = Machine.ToolCallResult.parse({ status: "completed", value: "ok" });
-              Reflect.set(answer, "value", 1n);
-              return Promise.resolve(answer);
-            })(),
+        kernel.run({ cellId: "unserializable-answer", code: "tool.test()", timeoutMs: 15_000 }, () =>
+          (() => {
+            const answer = Machine.ToolCallResult.parse({ status: "completed", value: "ok" });
+            Reflect.set(answer, "value", 1n);
+            return Promise.resolve(answer);
+          })(),
         ),
       ).rejects.toMatchObject({ message: "driver write failed" });
     } finally {

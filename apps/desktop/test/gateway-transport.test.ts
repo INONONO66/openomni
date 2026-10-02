@@ -214,7 +214,7 @@ describe("createGatewayChatTransport", () => {
   test("close before opening rejects and failed send closes its socket", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -338,7 +338,7 @@ describe("createGatewayChatTransport", () => {
       [{ type: "message", messageId: "authenticated", text: "connected" }],
     ]);
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url,
       protocols: ["openomni", "bearer.test-token"],
     });
@@ -434,7 +434,7 @@ describe("createGatewayChatTransport", () => {
   test("an abort settles while the socket is still opening", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -466,7 +466,7 @@ describe("createGatewayChatTransport", () => {
   test("aborting one turn fails sibling turns on the invalidated socket", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -508,7 +508,7 @@ describe("createGatewayChatTransport", () => {
   test("an unexpected socket close fails its pending turn", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -528,7 +528,7 @@ describe("createGatewayChatTransport", () => {
   test("an old socket close cannot drain a turn on its replacement", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -560,7 +560,7 @@ describe("createGatewayChatTransport", () => {
   test("a socket that fails while opening is replaced on retry", async () => {
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
     });
@@ -597,18 +597,11 @@ describe("createGatewayChatTransport", () => {
     // close that turn's stream — both answers have to be emitted.
     const readFrame = z.object({ type: z.string().optional() }).loose();
     const sessionPage = (kind: "session_snapshot" | "session_page", revision: number) => ({
-      type: kind,
-      sessionId: "durable",
-      state: "idle",
-      phase: "completed",
-      phaseSince: 100,
-      epoch: 1,
-      afterRevision: revision - 1,
-      headRevision: revision,
+      type: kind, sessionId: "durable", state: "idle", phase: "completed",
+      phaseSince: 100, epoch: 1, afterRevision: revision - 1, headRevision: revision,
       nextRevision: null,
       actions: [{ revision, actionId: `action-${revision}`, kind: "turn", at: 100 }],
-      usage: [],
-      toolWallMs: 0,
+      usage: [], toolWallMs: 0,
     });
     let turns = 0;
     const server = Bun.serve({
@@ -624,16 +617,10 @@ describe("createGatewayChatTransport", () => {
           }
           turns += 1;
           ws.send(JSON.stringify({ type: "receipt", status: "accepted" }));
-          ws.send(
-            JSON.stringify({
-              type: "session_bound",
-              result: {
-                status: "executed",
-                handle: { messageId: `input-${turns}`, target: "durable" },
-                delivery: { kind: "session" },
-              },
-            }),
-          );
+          ws.send(JSON.stringify({
+            type: "session_bound",
+            result: { status: "executed", handle: { messageId: `input-${turns}`, target: "durable" }, delivery: { kind: "session" } },
+          }));
           if (turns === 1) {
             ws.send(JSON.stringify({ type: "message", messageId: "msg-1", text: "answer 1" }));
             return;
@@ -646,10 +633,7 @@ describe("createGatewayChatTransport", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({
-      id: testId,
-      url: `ws://127.0.0.1:${server.port}`,
-    });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
     const stop = transport.subscribeSession(() => undefined);
 
     const first = await collect(await send(transport, [userMessage("one")]));
@@ -676,7 +660,7 @@ describe("createGatewayChatTransport", () => {
     ControlledSocket.instances.length = 0;
     const bound: [string, string][] = [];
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ControlledSocket,
       onSessionBound: (chatId, sessionId) => bound.push([chatId, sessionId]),
@@ -689,36 +673,20 @@ describe("createGatewayChatTransport", () => {
 
     controlled.receive(JSON.stringify({ type: "receipt", status: "accepted" }));
     // The retired result-bearing receipt is no longer a valid frame: ignored.
-    controlled.receive(
-      JSON.stringify({
-        type: "receipt",
-        status: "accepted",
-        result: {
-          status: "executed",
-          handle: { messageId: "in-0", target: "legacy" },
-          delivery: { kind: "session" },
-        },
-      }),
-    );
+    controlled.receive(JSON.stringify({
+      type: "receipt", status: "accepted",
+      result: { status: "executed", handle: { messageId: "in-0", target: "legacy" }, delivery: { kind: "session" } },
+    }));
     // A pre-blocked admission carries no durable target.
-    controlled.receive(
-      JSON.stringify({
-        type: "session_bound",
-        result: { status: "blocked_pre", reasonCode: "policy" },
-      }),
-    );
+    controlled.receive(JSON.stringify({
+      type: "session_bound", result: { status: "blocked_pre", reasonCode: "policy" },
+    }));
     expect(bound).toEqual([]);
 
-    controlled.receive(
-      JSON.stringify({
-        type: "session_bound",
-        result: {
-          status: "executed",
-          handle: { messageId: "in-1", target: "durable-1" },
-          delivery: { kind: "session" },
-        },
-      }),
-    );
+    controlled.receive(JSON.stringify({
+      type: "session_bound",
+      result: { status: "executed", handle: { messageId: "in-1", target: "durable-1" }, delivery: { kind: "session" } },
+    }));
     expect(bound).toEqual([["chat-1", "durable-1"]]);
     controlled.respond("done");
     await collect(stream);
@@ -800,10 +768,7 @@ describe("session reads over the gateway socket", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({
-      id: testId,
-      url: `ws://127.0.0.1:${server.port}`,
-    });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
     const seen: (number | null)[] = [];
     const stop = transport.subscribeSession((page) => seen.push(page.nextRevision));
 
@@ -823,17 +788,12 @@ describe("session reads over the gateway socket", () => {
       fetch: upgradeWebSocket,
       websocket: {
         message(ws: ServerWebSocket<undefined>) {
-          ws.send(
-            JSON.stringify({ type: "error", sessionId: "durable", reason: "session evicted" }),
-          );
+          ws.send(JSON.stringify({ type: "error", sessionId: "durable", reason: "session evicted" }));
         },
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({
-      id: testId,
-      url: `ws://127.0.0.1:${server.port}`,
-    });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
 
     await expect(transport.readSession("durable")).rejects.toThrow("session evicted");
   });
@@ -851,10 +811,7 @@ describe("session reads over the gateway socket", () => {
       },
     });
     servers.push(server);
-    const transport = createGatewayChatTransport({
-      id: testId,
-      url: `ws://127.0.0.1:${server.port}`,
-    });
+    const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
 
     const read = transport.readSession("durable");
     const rejection = read.then(
@@ -878,7 +835,7 @@ describe("session reads over the gateway socket", () => {
     }
     ControlledSocket.instances.length = 0;
     const transport = createGatewayChatTransport({
-      id: testId,
+    id: testId,
       url: "ws://controlled",
       WebSocketImpl: ReadFailingSocket,
     });

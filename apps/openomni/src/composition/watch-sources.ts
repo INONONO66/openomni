@@ -160,17 +160,14 @@ async function killCommandGroup(pid: number): Promise<void> {
       new Response(probe.stdout).text(),
       new Response(probe.stderr).text(),
     ]);
-    if (status !== 0)
-      throw new AlarmProcessGroupError(`alarm process-group readback failed: ${diagnostic.trim()}`);
+    if (status !== 0) throw new AlarmProcessGroupError(`alarm process-group readback failed: ${diagnostic.trim()}`);
     const alive = processes.split("\n").some((line) => {
       const [group, state] = line.trim().split(/\s+/);
       return Number(group) === pid && !state?.startsWith("Z");
     });
     if (!alive) return;
   }
-  throw new AlarmProcessGroupError(
-    `alarm process group ${pid} termination failed: ${error.trim()}`,
-  );
+  throw new AlarmProcessGroupError(`alarm process group ${pid} termination failed: ${error.trim()}`);
 }
 
 export function pathSource(

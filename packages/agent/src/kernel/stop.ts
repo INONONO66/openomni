@@ -38,9 +38,7 @@ function advanceStopState(previous: StopState, observation: StopObservation): St
     outputHash,
     repetition: observation.progress
       ? 0
-      : outputHash === previous.outputHash
-        ? previous.repetition + 1
-        : 1,
+      : outputHash === previous.outputHash ? previous.repetition + 1 : 1,
     stall: observation.progress || observation.toolCalls > 0 ? 0 : previous.stall + 1,
     blocked: observation.blocked && !observation.progress ? previous.blocked + 1 : 0,
     continuation: previous.continuation + 1,
@@ -48,9 +46,7 @@ function advanceStopState(previous: StopState, observation: StopObservation): St
 }
 
 function completionEligible(observation: StopObservation): boolean {
-  return (
-    observation.text.length > 0 && observation.toolCalls === 0 && !observation.continueRequested
-  );
+  return observation.text.length > 0 && observation.toolCalls === 0 && !observation.continueRequested;
 }
 
 /** Fixed precedence, including policy reads. Invocation is not effect/state progress. */
@@ -61,25 +57,25 @@ export function judgeStop<E, R>(
   completion: () => Effect.Effect<boolean, E, R>,
 ): Effect.Effect<{ state: StopState; verdict: StopVerdict }, E, R> {
   return Effect.gen(function* () {
-    const state = advanceStopState(previous, observation);
-    const done = (verdict: StopVerdict) => ({ state, verdict });
-    if (observation.interrupted) return done({ kind: "interrupted", reason: "abort" });
-    if (observation.exhausted) return done({ kind: "error", reason: "budget" });
-    if (completionEligible(observation)) {
-      const permitted = yield* completion();
-      if (permitted && observation.openIntent.length === 0 && !observation.blocked)
-        return done({ kind: "result", reason: "completion" });
-    }
-    if (state.repetition >= (yield* limit("exact_repeat")))
-      return done({ kind: "error", reason: "exact_repeat" });
-    if (state.stall >= (yield* limit("toolless_stall")))
-      return done({ kind: "error", reason: "toolless_stall" });
-    if (state.blocked >= (yield* limit("blocked_recurrence")))
-      return done({ kind: "error", reason: "blocked_recurrence" });
-    if (observation.alarmIds.length > 0)
-      return done({ kind: "waiting", reason: "live_wait", alarmIds: observation.alarmIds });
-    if (state.continuation >= (yield* limit("continuation")))
-      return done({ kind: "error", reason: "continuation" });
-    return done({ kind: "continue", reason: "continue" });
+  const state = advanceStopState(previous, observation);
+  const done = (verdict: StopVerdict) => ({ state, verdict });
+  if (observation.interrupted) return done({ kind: "interrupted", reason: "abort" });
+  if (observation.exhausted) return done({ kind: "error", reason: "budget" });
+  if (completionEligible(observation)) {
+    const permitted = yield* completion();
+    if (permitted && observation.openIntent.length === 0 && !observation.blocked)
+      return done({ kind: "result", reason: "completion" });
+  }
+  if (state.repetition >= (yield* limit("exact_repeat")))
+    return done({ kind: "error", reason: "exact_repeat" });
+  if (state.stall >= (yield* limit("toolless_stall")))
+    return done({ kind: "error", reason: "toolless_stall" });
+  if (state.blocked >= (yield* limit("blocked_recurrence")))
+    return done({ kind: "error", reason: "blocked_recurrence" });
+  if (observation.alarmIds.length > 0)
+    return done({ kind: "waiting", reason: "live_wait", alarmIds: observation.alarmIds });
+  if (state.continuation >= (yield* limit("continuation")))
+    return done({ kind: "error", reason: "continuation" });
+  return done({ kind: "continue", reason: "continue" });
   });
 }

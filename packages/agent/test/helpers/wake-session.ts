@@ -1,10 +1,6 @@
 import { Effect } from "effect";
 import { createController } from "../../src/testing/controller";
-import {
-  resolveSessionRuntime,
-  type SessionRunner,
-  type SessionRunnerResult,
-} from "../../src/session/run";
+import { resolveSessionRuntime, type SessionRunner, type SessionRunnerResult } from "../../src/session/run";
 import type { SessionError } from "../../src/kernel/failure";
 import type { SessionEntryServices } from "../../src/kernel/ports";
 
@@ -23,17 +19,10 @@ export function reactivateSession(
     Effect.gen(function* () {
       const resolved = yield* resolveSessionRuntime(runtime);
       const scope = yield* Effect.scope;
-      const controller = yield* createController(
-        runtime.openKernel(id),
-        id,
-        runner,
-        resolved,
-        {
-          reactivate: () => Effect.die("wake fixture does not reactivate"),
-          release: () => undefined,
-        },
-        scope,
-      );
+      const controller = yield* createController(runtime.openKernel(id), id, runner, resolved, {
+        reactivate: () => Effect.die("wake fixture does not reactivate"),
+        release: () => undefined,
+      }, scope);
       const result = yield* controller.reconcile();
       yield* controller.handle.close();
       return result;

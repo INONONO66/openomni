@@ -387,14 +387,7 @@ const SCREEN = renderToStaticMarkup(
     shell={SHELL}
     strip={{
       ...STRIP,
-      tabs: [
-        {
-          id: "budget",
-          title: "ledger append path",
-          icon: <svg aria-hidden="true" />,
-          active: true,
-        },
-      ],
+      tabs: [{ id: "budget", title: "ledger append path", icon: <svg aria-hidden="true" />, active: true }],
     }}
     transcript={{
       id: "budget",

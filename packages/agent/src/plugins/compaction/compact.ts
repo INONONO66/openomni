@@ -59,99 +59,88 @@ export namespace Compaction {
       readonly candidate?: CompactionCandidate;
     },
   ): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
-    return Clock.clockWith(Effect.succeed).pipe(
-      Effect.flatMap((clock) =>
-        Effect.suspend(() => {
-          const now = (): number => clock.currentTimeMillisUnsafe();
-          const messagesBefore = messages.length;
-          events.publish(RunEvents.CompactionStarted, {
-            ...identity,
-            time: now(),
-            messagesBefore,
-            ...(dispatch.measuredTokens === undefined
-              ? {}
-              : { contextTokens: dispatch.measuredTokens }),
-            trigger: dispatch.trigger,
-            summarizer: options.onSummarize !== undefined,
-          });
+    return Clock.clockWith(Effect.succeed).pipe(Effect.flatMap((clock) => Effect.suspend(() => {
+    const now = (): number => clock.currentTimeMillisUnsafe();
+    const messagesBefore = messages.length;
+    events.publish(RunEvents.CompactionStarted, {
+      ...identity,
+      time: now(),
+      messagesBefore,
+      ...(dispatch.measuredTokens === undefined ? {} : { contextTokens: dispatch.measuredTokens }),
+      trigger: dispatch.trigger,
+      summarizer: options.onSummarize !== undefined,
+    });
 
-          const finish = (
-            result: CompactionResult,
-            outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
-            elidedChars: number,
-            anchored?: boolean,
-            summarizerError?: Error,
-          ): CompactionResult => {
-            const estimatedTokensBefore = estimateMessagesTokens(messages);
-            const tokensBefore = dispatch.measuredTokens ?? estimatedTokensBefore;
-            const savedTokens = Math.max(
-              0,
-              estimatedTokensBefore - estimateMessagesTokens(result.messages),
-            );
-            const ineffective =
-              result.compacted && isIneffectiveCompaction(savedTokens, tokensBefore);
-            const completed = result.compacted
-              ? {
-                  ...result,
-                  record: createCompactionPlan(messages, result.messages, tokensBefore).record,
-                  yield: { savedTokens, tokensBefore },
-                  ineffective,
-                }
-              : result;
-            events.publish(RunEvents.CompactionCompleted, {
-              ...identity,
-              time: now(),
-              outcome,
-              messagesBefore,
-              messagesAfter: result.messages.length,
-              removedCount: result.removedCount,
-              elidedChars,
-              ...(result.compacted ? { savedTokens, tokensBefore, ineffective } : {}),
-              ...(anchored === undefined ? {} : { anchored }),
-              ...(summarizerError === undefined ? {} : { error: summarizerError.message }),
-            });
-            return completed;
-          };
+    const finish = (
+      result: CompactionResult,
+      outcome: "cut" | "reduced" | "nothing_reclaimed" | "no_user_boundary",
+      elidedChars: number,
+      anchored?: boolean,
+      summarizerError?: Error,
+    ): CompactionResult => {
+      const estimatedTokensBefore = estimateMessagesTokens(messages);
+      const tokensBefore = dispatch.measuredTokens ?? estimatedTokensBefore;
+      const savedTokens = Math.max(
+        0,
+        estimatedTokensBefore - estimateMessagesTokens(result.messages),
+      );
+      const ineffective = result.compacted && isIneffectiveCompaction(savedTokens, tokensBefore);
+      const completed = result.compacted
+        ? {
+            ...result,
+            record: createCompactionPlan(messages, result.messages, tokensBefore).record,
+            yield: { savedTokens, tokensBefore },
+            ineffective,
+          }
+        : result;
+      events.publish(RunEvents.CompactionCompleted, {
+        ...identity,
+        time: now(),
+        outcome,
+        messagesBefore,
+        messagesAfter: result.messages.length,
+        removedCount: result.removedCount,
+        elidedChars,
+        ...(result.compacted ? { savedTokens, tokensBefore, ineffective } : {}),
+        ...(anchored === undefined ? {} : { anchored }),
+        ...(summarizerError === undefined ? {} : { error: summarizerError.message }),
+      });
+      return completed;
+    };
 
-          const boundedOptions =
-            options.onSummarize === undefined
-              ? options
-              : {
-                  ...options,
-                  onSummarize: withSummarizerDeadline(
-                    options.onSummarize,
-                    options.summarizerDeadlineMs,
-                    dispatch.signal,
-                  ),
-                };
-          return compactUnbracketed(
-            messages,
-            boundedOptions,
-            dispatch.measuredTokens,
-            dispatch.candidate,
-            finish,
-          ).pipe(
-            Effect.onError((cause) =>
-              Effect.sync(() => {
-                const message = Cause.pretty(cause);
-                // The one exit finish() cannot serve: the summarizer threw. The
-                // bracket still closes — `failed` is this operation's terminal — and
-                // the throw propagates unchanged into the seam's fail-closed contract.
-                events.publish(RunEvents.CompactionCompleted, {
-                  ...identity,
-                  time: now(),
-                  outcome: "failed",
-                  messagesBefore,
-                  messagesAfter: messagesBefore,
-                  removedCount: 0,
-                  elidedChars: 0,
-                  error: message,
-                });
-              }),
-            ),
-          );
-        }),
-      ),
-    );
+    const boundedOptions =
+        options.onSummarize === undefined
+          ? options
+          : {
+              ...options,
+              onSummarize: withSummarizerDeadline(
+                options.onSummarize,
+                options.summarizerDeadlineMs,
+                dispatch.signal,
+              ),
+            };
+      return compactUnbracketed(
+        messages,
+        boundedOptions,
+        dispatch.measuredTokens,
+        dispatch.candidate,
+        finish,
+      ).pipe(Effect.onError((cause) => Effect.sync(() => {
+      const message = Cause.pretty(cause);
+      // The one exit finish() cannot serve: the summarizer threw. The
+      // bracket still closes — `failed` is this operation's terminal — and
+      // the throw propagates unchanged into the seam's fail-closed contract.
+      events.publish(RunEvents.CompactionCompleted, {
+        ...identity,
+        time: now(),
+        outcome: "failed",
+        messagesBefore,
+        messagesAfter: messagesBefore,
+        removedCount: 0,
+        elidedChars: 0,
+        error: message,
+      });
+      })));
+    })));
   }
 }

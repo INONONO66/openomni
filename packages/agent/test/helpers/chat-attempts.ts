@@ -10,17 +10,14 @@ export function runChatAttempts<T extends PlainValue>(
   evidence?: LlmAttempts<T>["evidence"],
   intent?: PlainObject,
 ) {
-  return executor.run(
-    { kind: "llm", op: "chat", intent: {}, effect: {} },
-    (parent: LedgerAction.Receipt) =>
-      executor.runAttempts(parent, {
-        prepare: (attempt: number) =>
-          Effect.succeed({
-            request: { op: "chat", intent: intent ?? { attempt }, effect: {} },
-            admit: () => Effect.void,
-            body: () => body(attempt),
-          }),
-        ...(evidence === undefined ? {} : { evidence }),
+  return executor.run({ kind: "llm", op: "chat", intent: {}, effect: {} }, (parent: LedgerAction.Receipt) =>
+    executor.runAttempts(parent, {
+      prepare: (attempt: number) => Effect.succeed({
+        request: { op: "chat", intent: intent ?? { attempt }, effect: {} },
+        admit: () => Effect.void,
+        body: () => body(attempt),
       }),
+      ...(evidence === undefined ? {} : { evidence }),
+    }),
   );
 }

@@ -7,11 +7,9 @@ import { Machine } from "@openomni/protocol";
 import { createFsDriver } from "./native";
 
 const [root, requests] = process.argv.slice(2);
-if (root === undefined || requests === undefined)
-  throw new Error("usage: fifo-request <root> <requests-json>");
+if (root === undefined || requests === undefined) throw new Error("usage: fifo-request <root> <requests-json>");
 const driver = createFsDriver(new Map([["docs", root]]));
 const results: Machine.FsResult[] = [];
-for (const request of z.array(Machine.FsRequest).parse(JSON.parse(requests)))
-  results.push(await driver(request));
+for (const request of z.array(Machine.FsRequest).parse(JSON.parse(requests))) results.push(await driver(request));
 driver.close();
 process.stdout.write(JSON.stringify(results));

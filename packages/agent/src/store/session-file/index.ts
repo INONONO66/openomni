@@ -14,14 +14,10 @@ import { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";
 import type { SessionWriteAdapter } from "../services";
 import { createSqliteDecisionFacts } from "../decision.js";
 import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "../storage/sqlite-l0-rows.js";
-import {
-  appendAction,
-  commitSession,
-  insertSession,
-  selectSession,
-} from "../storage/sqlite-l0-write.js";
+import { appendAction, commitSession, insertSession, selectSession } from "../storage/sqlite-l0-write.js";
 import { createSessions } from "../storage/sqlite-l0-sessions.js";
 import { reportCommitted, type ObservationFailurePort } from "../storage/sqlite-l0-observation.js";
+
 
 export { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";
 
@@ -105,6 +101,7 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
     time_created INTEGER NOT NULL
   )`,
 ];
+
 
 const pageSize = z.number().int().positive().max(256);
 const windowCount = z.number().int().nonnegative();
@@ -368,6 +365,7 @@ function createActionReads(db: Database): Reads {
   };
 }
 
+
 export function createActions(
   db: Database,
   transaction: <T>(operation: () => T) => T,
@@ -379,8 +377,7 @@ export function createActions(
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
-      if (receipt !== undefined)
-        reportCommitted(db, observationSink, onObservationFailure, receipt);
+      if (receipt !== undefined) reportCommitted(db, observationSink, onObservationFailure, receipt);
       return receipt;
     },
     actionById(id) {
@@ -533,6 +530,7 @@ function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict
   }
   return { kind: "intact", head: rows.length === 0 ? null : prevHash, length: rows.length };
 }
+
 
 // busy_timeout comes FIRST: the pragma is connection-local (it never touches
 // the database file), so applying it before any file-touching statement makes

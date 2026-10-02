@@ -117,9 +117,7 @@ describe("existing-agent-message-driver", () => {
   test.each([
     [new Error("serialization fault"), "Error"],
     ["serialization fault", "NonError"],
-  ] as const)("converts an unexpected %s into the driver error receipt", async (fault:
-    | Error
-    | string, errorType: "Error" | "NonError") => {
+  ] as const)("converts an unexpected %s into the driver error receipt", async (fault: Error | string, errorType: "Error" | "NonError") => {
     const stringify = spyOn(JSON, "stringify").mockImplementationOnce(() => {
       throw fault;
     });

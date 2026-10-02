@@ -14,16 +14,7 @@ import { createExistingAgentMessaging } from "../../../src/router/messaging/send
 import type { KernelDeliveryReceipt } from "../../../src/support/deliver";
 
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
-import {
-  expectAwaited,
-  expectDenied,
-  expectRequestSpecViolation,
-  buildAwaitedSendInput,
-  buildGrant,
-  buildSendInput,
-  messagingNow,
-  registerAgentFixture,
-} from "../../helpers/messaging.js";
+import { expectAwaited, expectDenied, expectRequestSpecViolation, buildAwaitedSendInput, buildGrant, buildSendInput, messagingNow, registerAgentFixture, } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 
 type SenderTargetGrant = Gateway.SenderTargetGrant;
@@ -44,12 +35,7 @@ function inspectDebitCount(): number {
       at: messagingNow,
     },
     0,
-    (state: {
-      countInWindow: number;
-      notifyInWindow: number;
-      converseInWindow: number;
-      lastSendAt?: number | undefined;
-    }) => {
+    (state: { countInWindow: number; notifyInWindow: number; converseInWindow: number; lastSendAt?: number | undefined; }) => {
       count = state.countInWindow;
       return "inspect" as const;
     },
@@ -80,9 +66,7 @@ type DecisionFacts = Storage.DecisionFactSubAdapter;
 type DecisionFact = Parameters<DecisionFacts["record"]>[0];
 type RecordResult = ReturnType<DecisionFacts["record"]>;
 
-function overrideAdmissionRecord(
-  record: (facts: DecisionFacts, fact: DecisionFact) => RecordResult,
-): void {
+function overrideAdmissionRecord(record: (facts: DecisionFacts, fact: DecisionFact) => RecordResult): void {
   replaceDecisionFacts((facts: DecisionFacts) => ({
     ...facts,
     record: (fact: DecisionFact) =>
@@ -121,17 +105,12 @@ describe("sender-target grant (policy plane)", () => {
     grants = [];
     const audits: { code: string; time: number; traceId: string }[] = [];
     const observed = Promise.withResolvers<void>();
-    Bus.observe(
-      (
-        event: { readonly name: string },
-        payload: string | number | bigint | boolean | symbol | object | null | undefined,
-      ) => {
-        if (event.name !== "messaging.denied") return;
-        const data = payload as { code: string; time: number; traceId: string };
-        audits.push({ code: data.code, time: data.time, traceId: data.traceId });
-        observed.resolve();
-      },
-    );
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
+      if (event.name !== "messaging.denied") return;
+      const data = payload as { code: string; time: number; traceId: string };
+      audits.push({ code: data.code, time: data.time, traceId: data.traceId });
+      observed.resolve();
+    });
 
     const receipt = await runEffect(messaging().send(buildSendInput()));
 
@@ -170,9 +149,7 @@ describe("explicit target resolution (fail closed)", () => {
   test("granted but unregistered target actor is denied target_missing", async () => {
     grants = [buildGrant("grant:ghost", { targetActorId: "actor:ghost" })];
 
-    const receipt = await runEffect(
-      messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })),
-    );
+    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
 
     expectDenied(receipt, "target_missing");
     expect(deliveries).toHaveLength(0);
@@ -182,19 +159,17 @@ describe("explicit target resolution (fail closed)", () => {
     grants = [buildGrant("grant:endpointless", { targetActorId: "actor:endpointless" })];
     registerAgentFixture("actor:endpointless");
 
-    const receipt = await runEffect(
-      messaging().send(buildSendInput({ target: { actorId: "actor:endpointless" } })),
-    );
+    const receipt = await runEffect(messaging().send(
+      buildSendInput({ target: { actorId: "actor:endpointless" } }),
+    ));
 
     expectDenied(receipt, "target_stale");
   });
 
   test("pinned endpoint that no longer exists is denied target_stale", async () => {
-    const receipt = await runEffect(
-      messaging().send(
-        buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:gone" } }),
-      ),
-    );
+    const receipt = await runEffect(messaging().send(
+      buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:gone" } }),
+    ));
 
     expectDenied(receipt, "target_stale");
   });
@@ -202,11 +177,9 @@ describe("explicit target resolution (fail closed)", () => {
   test("pinned endpoint re-bound to another actor is denied target_stale", async () => {
     registerAgentFixture("actor:other", [{ id: "endpoint:other", externalId: "other-1" }]);
 
-    const receipt = await runEffect(
-      messaging().send(
-        buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:other" } }),
-      ),
-    );
+    const receipt = await runEffect(messaging().send(
+      buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:other" } }),
+    ));
 
     expectDenied(receipt, "target_stale");
   });
@@ -222,11 +195,9 @@ describe("explicit target resolution (fail closed)", () => {
     });
 
     const unpinned = await runEffect(messaging().send(buildSendInput()));
-    const pinned = await runEffect(
-      messaging().send(
-        buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:target-b" } }),
-      ),
-    );
+    const pinned = await runEffect(messaging().send(
+      buildSendInput({ target: { actorId: "actor:target", endpointId: "endpoint:target-b" } }),
+    ));
 
     expectDenied(unpinned, "target_ambiguous");
     expect(pinned.kind).toBe("sent");
@@ -241,27 +212,22 @@ describe("fire-and-forget delivery", () => {
     const audits: { operation: string; requestId?: string; grantId: string; traceId: string }[] =
       [];
     const observed = Promise.withResolvers<void>();
-    Bus.observe(
-      (
-        event: { readonly name: string },
-        payload: string | number | bigint | boolean | symbol | object | null | undefined,
-      ) => {
-        if (event.name !== "messaging.sent") return;
-        const data = payload as {
-          operation: string;
-          requestId?: string;
-          grantId: string;
-          traceId: string;
-        };
-        audits.push({
-          operation: data.operation,
-          grantId: data.grantId,
-          traceId: data.traceId,
-          ...(data.requestId === undefined ? {} : { requestId: data.requestId }),
-        });
-        observed.resolve();
-      },
-    );
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
+      if (event.name !== "messaging.sent") return;
+      const data = payload as {
+        operation: string;
+        requestId?: string;
+        grantId: string;
+        traceId: string;
+      };
+      audits.push({
+        operation: data.operation,
+        grantId: data.grantId,
+        traceId: data.traceId,
+        ...(data.requestId === undefined ? {} : { requestId: data.requestId }),
+      });
+      observed.resolve();
+    });
 
     const receipt = await runEffect(messaging().send(buildSendInput()));
 
@@ -322,27 +288,20 @@ describe("awaited delivery", () => {
   test("a second awaited send for the same message is denied request_duplicate with an audit event", async () => {
     const audits: string[] = [];
     const observed = Promise.withResolvers<void>();
-    Bus.observe(
-      (
-        event: { readonly name: string },
-        payload: string | number | bigint | boolean | symbol | object | null | undefined,
-      ) => {
-        if (event.name !== "messaging.denied") return;
-        audits.push((payload as { code: string }).code);
-        observed.resolve();
-      },
-    );
+    Bus.observe((event: { readonly name: string; }, payload: string | number | bigint | boolean | symbol | object | null | undefined) => {
+      if (event.name !== "messaging.denied") return;
+      audits.push((payload as { code: string }).code);
+      observed.resolve();
+    });
     await runEffect(messaging().send(buildAwaitedSendInput()));
 
     const secondSpec = buildAwaitedSendInput().requestSpec;
     if (secondSpec === undefined) throw new Error("awaited fixture must carry a requestSpec");
-    const duplicate = await runEffect(
-      messaging().send(
-        buildAwaitedSendInput({
-          requestSpec: { ...secondSpec, requestId: "request:test-awaited-2" },
-        }),
-      ),
-    );
+    const duplicate = await runEffect(messaging().send(
+      buildAwaitedSendInput({
+        requestSpec: { ...secondSpec, requestId: "request:test-awaited-2" },
+      }),
+    ));
 
     expectDenied(duplicate, "request_duplicate");
     expect(ledger().kernel.requestRows()).toHaveLength(1);
@@ -359,8 +318,8 @@ describe("awaited delivery", () => {
 describe("delivery receipt", () => {
   test("a platform message id from the owner re-keys the request correlation to it", async () => {
     const withReceipt = createExistingAgentMessaging({
-      stores: ledger().stores,
-      transaction: channelTransaction,
+    stores: ledger().stores,
+    transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-77" }),
       grants: () => grants,
@@ -380,20 +339,14 @@ describe("delivery receipt", () => {
     expect(stored?.correlation.replyToMessageId).toBe("platform:msg-77");
     // Correlation now answers the platform id, not the internal message id.
     expect(
-      ledger()
-        .kernel.requestRows()
-        .filter(
-          (row: import("@openomni/protocol").SessionTransition.Request) =>
-            row.correlation.replyToMessageId === "platform:msg-77",
-        ),
+      ledger().kernel.requestRows().filter(
+        (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "platform:msg-77",
+      ),
     ).toHaveLength(1);
     expect(
-      ledger()
-        .kernel.requestRows()
-        .filter(
-          (row: import("@openomni/protocol").SessionTransition.Request) =>
-            row.correlation.replyToMessageId === "message:test-awaited",
-        ),
+      ledger().kernel.requestRows().filter(
+        (row: import("@openomni/protocol").SessionTransition.Request) => row.correlation.replyToMessageId === "message:test-awaited",
+      ),
     ).toHaveLength(0);
   });
 
@@ -405,8 +358,8 @@ describe("delivery receipt", () => {
 
   test("a fire-and-forget receipt records nothing — there is no request to re-key", async () => {
     const withReceipt = createExistingAgentMessaging({
-      stores: ledger().stores,
-      transaction: channelTransaction,
+    stores: ledger().stores,
+    transaction: channelTransaction,
       requests: channelRequests(seededRequests()),
       deliver: () => ({ value: "accepted", externalMessageId: "platform:msg-88" }),
       grants: () => grants,
@@ -424,9 +377,7 @@ describe("durable send admission faults", () => {
   test.each([
     ["unexpected type", "other.fact", {}],
     ["corrupt payload", "gateway.send.admitted", { signature: 7 }],
-  ] as const)("fails closed on an %s", async (_name: "unexpected type" | "corrupt payload", type:
-    | "other.fact"
-    | "gateway.send.admitted", data: PlainObject | { readonly signature: 7 }) => {
+  ] as const)("fails closed on an %s", async (_name: "unexpected type" | "corrupt payload", type: "other.fact" | "gateway.send.admitted", data: PlainObject | { readonly signature: 7 }) => {
     const input = buildSendInput({ messageId: `message:bad-${_name}` });
     const facts = ledger().sessions.decisionFacts;
     if (facts === undefined) throw new Error("decision fact sub-adapter missing");
@@ -438,10 +389,7 @@ describe("durable send admission faults", () => {
     });
     expect(recorded.kind).toBe("recorded");
 
-    expect(await effectFailure(messaging().send(input))).toMatchObject({
-      _tag: "ChannelsFailure",
-      operation: "message.transaction",
-    });
+    expect(await effectFailure(messaging().send(input))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -465,10 +413,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      expect(await effectFailure(reentrant.send(input))).toMatchObject({
-        _tag: "ChannelsFailure",
-        operation: "message.transaction",
-      });
+      expect(await effectFailure(reentrant.send(input))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
       expect(
         detachedFacts.head(`gateway_send:${encodeURIComponent(input.messageId)}`),
       ).toBeUndefined();
@@ -489,10 +434,7 @@ describe("durable send admission faults", () => {
     });
 
     try {
-      expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({
-        _tag: "ChannelsFailure",
-        operation: "message.transaction",
-      });
+      expect(await effectFailure(withoutFacts.send(buildSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
       expect(deliveries).toEqual([]);
     } finally {
       ledger().setDecisionFacts(detachedFacts);
@@ -505,10 +447,7 @@ describe("durable send admission faults", () => {
       return facts.record(fact);
     });
 
-    expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({
-      _tag: "ChannelsFailure",
-      operation: "message.transaction",
-    });
+    expect(await effectFailure(messaging().send(buildSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -520,10 +459,7 @@ describe("durable send admission faults", () => {
       );
       return facts.record(fact);
     });
-    expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({
-      _tag: "ChannelsFailure",
-      operation: "message.transaction",
-    });
+    expect(await effectFailure(messaging().send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -542,8 +478,8 @@ describe("durable send admission faults", () => {
 
   test("propagates an unexpected request-store failure before delivery", async () => {
     const service = createExistingAgentMessaging({
-      stores: ledger().stores,
-      transaction: channelTransaction,
+    stores: ledger().stores,
+    transaction: channelTransaction,
       requests: {
         ...channelRequests(seededRequests()),
         open: () => {
@@ -557,10 +493,7 @@ describe("durable send admission faults", () => {
       grants: () => grants,
       publish: Bus.publish,
     });
-    expect(await effectFailure(service.send(buildAwaitedSendInput()))).toMatchObject({
-      _tag: "ChannelsFailure",
-      operation: "message.transaction",
-    });
+    expect(await effectFailure(service.send(buildAwaitedSendInput()))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toEqual([]);
   });
 
@@ -568,9 +501,7 @@ describe("durable send admission faults", () => {
     const first = buildSendInput({ messageId: "message:immutable" });
     expect((await runEffect(messaging().send(first))).kind).toBe("sent");
 
-    expect(await effectFailure(messaging().send({ ...first, body: "mutated body" }))).toMatchObject(
-      { _tag: "ChannelsFailure", operation: "message.transaction" },
-    );
+    expect(await effectFailure(messaging().send({ ...first, body: "mutated body" }))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
   });
 
@@ -584,10 +515,7 @@ describe("durable send admission faults", () => {
     });
 
     expect((await runEffect(messaging().send(first))).kind).toBe("sent");
-    expect(await effectFailure(messaging().send(second))).toMatchObject({
-      _tag: "ChannelsFailure",
-      operation: "message.transaction",
-    });
+    expect(await effectFailure(messaging().send(second))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.transaction" });
     expect(deliveries).toHaveLength(1);
     expect(ledger().kernel.requestById(spec.requestId)?.correlation.replyToMessageId).toBe(
       "message:first-owner",
@@ -665,11 +593,7 @@ async function probe(point: FaultPoint): Promise<Probe> {
           })(),
         });
 
-  expect(await effectFailure(messaging.send(input))).toMatchObject(
-    point === "after_receipt_cas"
-      ? { name: "Error" }
-      : { _tag: "ChannelsFailure", operation: "message.deliver" },
-  );
+  expect(await effectFailure(messaging.send(input))).toMatchObject(point === "after_receipt_cas" ? { name: "Error" } : { _tag: "ChannelsFailure", operation: "message.deliver" });
   const resumed = await runEffect(messaging.send(input));
 
   return {
@@ -696,11 +620,7 @@ describe("gateway send crash reconciliation transition table", () => {
     ["after_wait", 2],
     ["after_effect", 2],
     ["after_receipt_cas", 2],
-  ] as const)("%s resumes with one debit and one external effect", async (point:
-    | "after_debit"
-    | "after_wait"
-    | "after_effect"
-    | "after_receipt_cas", attempts: 2) => {
+  ] as const)("%s resumes with one debit and one external effect", async (point: "after_debit" | "after_wait" | "after_effect" | "after_receipt_cas", attempts: 2) => {
     const result = await probe(point);
 
     expect(result.receipts[0]?.kind).toBe("sent");

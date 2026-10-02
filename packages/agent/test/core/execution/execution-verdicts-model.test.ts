@@ -3,12 +3,7 @@ import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { Effect, Fiber } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { describe, expect, it, mock } from "bun:test";
-import {
-  recordingLedger,
-  runTestOperation,
-  failure as effectFailure,
-  foreign,
-} from "../../helpers/effect-g2";
+import { recordingLedger, runTestOperation, failure as effectFailure, foreign, } from "../../helpers/effect-g2";
 import { compilePolicySnapshot } from "../../../src/kernel/gate/compile";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 

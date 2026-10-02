@@ -2,6 +2,7 @@ import type { Actor, Gateway, LedgerSession, PlainValue, Policy } from "@openomn
 import { PolicyDecision, PolicyPermission } from "@openomni/protocol";
 import { z } from "zod";
 
+
 /** Authenticated projections supplied by the gateway's execution owner. */
 export type MessagePolicyContext =
   | {
@@ -33,14 +34,15 @@ export function matchesMessage(
 ): boolean {
   if (context === undefined) return false;
   switch (rule.table) {
-    case "A":
-      return matchesExternal(rule, context);
-    case "B":
-      return matchesSession(rule, context);
+    case "A": return matchesExternal(rule, context);
+    case "B": return matchesSession(rule, context);
   }
 }
 
-function matchesExternal(rule: Gateway.RuleTableA, context: MessagePolicyContext): boolean {
+function matchesExternal(
+  rule: Gateway.RuleTableA,
+  context: MessagePolicyContext,
+): boolean {
   if (context.sender !== "external") return false;
   if (rule.senderTier !== undefined && rule.senderTier !== context.senderTier) return false;
   if (rule.addressee !== undefined && rule.addressee !== context.addressee) return false;
@@ -54,7 +56,10 @@ function matchesExternal(rule: Gateway.RuleTableA, context: MessagePolicyContext
   return checks[rule.check] === (rule.effect === "allow");
 }
 
-function matchesSession(rule: Gateway.RuleTableB, context: MessagePolicyContext): boolean {
+function matchesSession(
+  rule: Gateway.RuleTableB,
+  context: MessagePolicyContext,
+): boolean {
   if (context.sender !== "session" || rule.senderRole !== context.senderRole) return false;
   if (rule.targetKind !== undefined && rule.targetKind !== context.targetKind) return false;
   if (rule.targetRole !== undefined && rule.targetRole !== context.targetRole) return false;
@@ -68,18 +73,14 @@ function sessionCheck(
   context: Extract<MessagePolicyContext, { sender: "session" }>,
 ): boolean {
   switch (check.kind) {
-    case "parent_child":
-      return context.parentChild;
-    case "fanout":
-      return context.fanout < check.max;
-    case "depth":
-      return context.depth <= check.max;
-    case "deadline":
-      return context.withinParentDeadline;
-    case "actor_send":
-      return context.actorSendAllowed === true;
+    case "parent_child": return context.parentChild;
+    case "fanout": return context.fanout < check.max;
+    case "depth": return context.depth <= check.max;
+    case "deadline": return context.withinParentDeadline;
+    case "actor_send": return context.actorSendAllowed === true;
   }
 }
+
 
 export function clonePlain(value: PlainValue): PlainValue {
   if (Array.isArray(value)) return value.map(clonePlain);
@@ -94,6 +95,7 @@ export function freezePlain(value: PlainValue): PlainValue {
   }
   return value;
 }
+
 
 const POLICY_ID = "guardrail.permission";
 const PolicyInput = z.record(z.string(), z.json());
@@ -163,11 +165,7 @@ function evaluateInputRules(
   for (const rule of inputRules) {
     if (!matchesPattern(request.resource, rule.toolPattern)) continue;
 
-    const inputMatch = matchesInputField(
-      parsedInput.success ? parsedInput.data : undefined,
-      rule.field,
-      rule.pattern,
-    );
+    const inputMatch = matchesInputField(parsedInput.success ? parsedInput.data : undefined, rule.field, rule.pattern);
     if (inputMatch === "unsafe") {
       return verdict("deny", "unsafe_input_rule", rule.toolPattern);
     }

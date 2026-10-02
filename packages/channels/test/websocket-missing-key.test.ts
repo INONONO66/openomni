@@ -13,10 +13,9 @@ const connection = {
 
 function handlerWith(sink: (message: Channel.InboundMessage) => void): WebSocketHandler {
   return new WebSocketHandler(
-    (message) =>
-      Effect.sync(() => {
-        sink(message);
-      }),
+    (message) => Effect.sync(() => {
+      sink(message);
+    }),
     () => undefined,
     { now: () => 1_000, id: testWebSocketId() },
   );

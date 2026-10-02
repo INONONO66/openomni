@@ -60,11 +60,7 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("outage", { status: 503 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient(
-      "token",
-      () => undefined,
-      () => FIXED_NOW,
-    );
+    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
     await expect(client.fetchGatewayUrl()).rejects.toBeInstanceOf(DiscordGatewayFetchError);
   });
 
@@ -72,11 +68,7 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("forbidden", { status: 403 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient(
-      "token",
-      () => undefined,
-      () => FIXED_NOW,
-    );
+    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
     await expect(client.send("channel-1", "hello", "trace-1")).rejects.toBeInstanceOf(
       DiscordApiError,
     );

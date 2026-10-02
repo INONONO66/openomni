@@ -491,18 +491,17 @@ describe("doctor", () => {
     probeHealth: () => Promise.resolve(true),
   };
 
-  test.each([
-    "DISCORD_BOT_TOKEN",
-    "TELEGRAM_BOT_TOKEN",
-    "GITHUB_WEBHOOK_SECRET",
-  ])("legacy channel credential %s fails doctor", async (key) => {
-    const report = await runDoctor({
-      ...healthyPorts,
-      effectiveEnv: new Map([...healthyPorts.effectiveEnv, [key, "legacy"]]),
-    });
-    expect(report.ok).toBe(false);
-    expect(doctorStatuses(report).get("channel config")).toBe("fail");
-  });
+  test.each(["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"])(
+    "legacy channel credential %s fails doctor",
+    async (key) => {
+      const report = await runDoctor({
+        ...healthyPorts,
+        effectiveEnv: new Map([...healthyPorts.effectiveEnv, [key, "legacy"]]),
+      });
+      expect(report.ok).toBe(false);
+      expect(doctorStatuses(report).get("channel config")).toBe("fail");
+    },
+  );
 
   test("all green: ok verdict and the configured port is probed", async () => {
     let probed = 0;
@@ -633,12 +632,7 @@ describe("doctor", () => {
       },
     });
     expect(() => parseWsPort("70000")).toThrow(
-      expect.objectContaining({
-        data: {
-          code: "invalid_ws_port",
-          message: "OPENOMNI_WS_PORT must be an integer from 0 to 65535",
-        },
-      }),
+      expect.objectContaining({ data: { code: "invalid_ws_port", message: "OPENOMNI_WS_PORT must be an integer from 0 to 65535" } }),
     );
     expect(report.checks.find((check) => check.name === "health")).toEqual({
       name: "health",

@@ -13,9 +13,7 @@ const LANES = [
     dir: workspace.dir,
     coverage: workspace.coverageLane,
   })),
-  ...scriptPartitions
-    .filter((key) => key !== "scripts-contracts")
-    .map((key) => ({ key, dir: "script", coverage: true })),
+  ...scriptPartitions.filter((key) => key !== "scripts-contracts").map((key) => ({ key, dir: "script", coverage: true })),
 ];
 const planSchema = z
   .object({
@@ -42,9 +40,7 @@ const planSchema = z
       keys.size !== plan.matrix.include.length ||
       plan.verify !== keys.size > 0 ||
       (plan.full && keys.size !== LANES.length) ||
-      scriptPartitions
-        .filter((key) => key !== "scripts-contracts")
-        .some((key) => keys.has(key) !== plan.toolingTests) ||
+      scriptPartitions.filter((key) => key !== "scripts-contracts").some((key) => keys.has(key) !== plan.toolingTests) ||
       plan.matrix.include.some(
         (lane) =>
           !LANES.some(
@@ -71,13 +67,7 @@ function argv(command: readonly string[]): string[] {
       : [...command];
 }
 function run(command: readonly string[], cwd = ROOT, env: Record<string, string> = {}): void {
-  const child = Bun.spawnSync(argv(command), {
-    cwd,
-    env: { ...process.env, ...env },
-    stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  const child = Bun.spawnSync(argv(command), { cwd, env: { ...process.env, ...env }, stdin: "ignore", stdout: "inherit", stderr: "inherit" });
   if (child.exitCode !== 0) throw new CiError(command.join(" "));
 }
 
@@ -117,8 +107,7 @@ export function gate(plan: z.infer<typeof planSchema>, testOnly: boolean): void 
       : ([
           [
             "desktop-smoke",
-            plan.verify &&
-              plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui"),
+            plan.verify && plan.matrix.include.some((lane) => lane.key === "desktopApp" || lane.key === "ui"),
           ],
           ["static", plan.verify],
           ["deps", plan.verify],
@@ -156,9 +145,7 @@ function artifacts(mode: "pack" | "restore", root: string): void {
 function testLane(key: string | undefined, root: string): void {
   if (key && scriptPartitions.some((partition) => partition === key)) {
     run(scriptTestCommand(key), join(root, "script"));
-    if (key === "scripts-contracts")
-      for (const command of scriptContracts)
-        run(["bun", "run", `script/${command[0]}`, ...command.slice(1)], root);
+    if (key === "scripts-contracts") for (const command of scriptContracts) run(["bun", "run", `script/${command[0]}`, ...command.slice(1)], root);
     if (key === "scripts-tooling-1") pythonSelfTests(root);
     return;
   }
@@ -166,20 +153,10 @@ function testLane(key: string | undefined, root: string): void {
   if (!lane) throw new CiError(`unknown lane: ${key}`);
   const workspace = TOPOLOGY.find((candidate) => candidate.key === lane.key);
   const override = workspace && "ciTestCommand" in workspace ? workspace.ciTestCommand : undefined;
-  run(
-    override
-      ? override.split(" ")
-      : [
-          "bun",
-          "test",
-          "--timeout",
-          "15000",
-          ...(lane.coverage
-            ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"]
-            : []),
-        ],
-    join(root, lane.dir),
-  );
+  run(override ? override.split(" ") : [
+    "bun", "test", "--timeout", "15000",
+    ...(lane.coverage ? ["--coverage", "--coverage-reporter=lcov", "--coverage-dir=coverage"] : []),
+  ], join(root, lane.dir));
 }
 
 export function ciMain(argv = Bun.argv.slice(2)): void {

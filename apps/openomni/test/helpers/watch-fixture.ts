@@ -1,8 +1,4 @@
-import {
-  createAppLedger,
-  type AppLedgerPlane,
-  type SessionKernel,
-} from "../../src/composition/cluster-runtime";
+import { createAppLedger, type AppLedgerPlane, type SessionKernel } from "../../src/composition/cluster-runtime";
 import type { WatchSources } from "../../src/composition/watch-sources";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { runEffect } from "./effect";

@@ -8,15 +8,7 @@ import { Alarm, LedgerAction, type SessionTransition } from "@openomni/protocol"
 import { CommitFailed } from "../../src/kernel/failure";
 import type { ExecutorOptions } from "../../src/kernel/gate/decide";
 import { commitSessionRequest } from "../../src/session/mailbox";
-import {
-  createRetryAlarmPort,
-  deadlineDelivery,
-  retryDelivery,
-  watchFiredDelivery,
-  watchTimeoutDelivery,
-  watchTimeoutKey,
-  type AlarmChainReads,
-} from "../../src/session/alarm";
+import { createRetryAlarmPort, deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, watchTimeoutKey, type AlarmChainReads, } from "../../src/session/alarm";
 import { fixtureHashes } from "../helpers/compiled-policy";
 import { memoryExecutionReads } from "../helpers/execution-reads";
 import { requestLedger } from "../helpers/g0-request-ledger";
@@ -188,18 +180,10 @@ const openApproval = (id: string, deadline: number) =>
   Effect.gen(function* () {
     const request = yield* pendingRequest(id, deadline);
     const transition = (payload: SessionTransition.Payload, inputId: string, at: number) =>
-      commitSessionRequest(
-        isolatedLedger().kernel,
-        id,
-        { owner: `${id}:owner`, fence: 1 },
-        payload,
-        inputId,
-        at,
-        {
-          authorizeConfigure: allowConfigure,
-          ...isolatedRuntime(),
-        },
-      );
+      commitSessionRequest(isolatedLedger().kernel, id, { owner: `${id}:owner`, fence: 1 }, payload, inputId, at, {
+        authorizeConfigure: allowConfigure,
+        ...isolatedRuntime(),
+      });
     const opened = yield* transition({ kind: "request.open", request }, `${id}:open`, 100);
     expect(opened.resolution).toBe("opened");
     return { request, transition };

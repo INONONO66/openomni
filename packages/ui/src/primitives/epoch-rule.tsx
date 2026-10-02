@@ -10,7 +10,7 @@ export function EpochRule({
   readonly label: string;
   /** One qualifying fact — a time, a count. Tabular, one step quieter. */
   readonly meta?: string;
-
+  
   readonly onJump?: () => void;
   readonly className?: string;
 }) {
@@ -20,7 +20,7 @@ export function EpochRule({
           the glyph version printed. `w-8` is 32px — the row step — so the rule
           starts on the same grid every other element in the column lands on. */}
       <Hairline className="w-8 shrink-0" />
-
+      
       <span className="shrink-0 py-0.5 font-mono text-fg-faint text-meta">{label}</span>
       {meta !== undefined && (
         <span className="shrink-0 py-0.5 font-mono text-fg-faint text-micro tabular-nums">

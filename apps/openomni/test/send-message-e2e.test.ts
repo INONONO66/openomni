@@ -48,11 +48,10 @@ test.each([
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) =>
-        Effect.sync(() => {
-          sink.onMessage(assistantMessage(input, { text: "FINAL_SENTINEL" }));
-          return { type: "stop" };
-        }),
+      run: (input, sink) => Effect.sync(() => {
+        sink.onMessage(assistantMessage(input, { text: "FINAL_SENTINEL" }));
+        return { type: "stop" };
+      }),
     },
   });
   const plane = await planeOf(app.runtime);
@@ -76,30 +75,20 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
     config: suite.config("explicit-message-", {
       wsToken: "token",
       actors: [{ actorId: "owner", externalId: "owner", kind: "human", trustTier: "owner" }],
-      socialBudgets: [
-        {
-          id: "owner-budget",
-          targetActorId: "owner",
-          maxPerWindow: 1,
-          windowMs: 1000,
-          cooldownMs: 0,
-        },
-      ],
+      socialBudgets: [{ id: "owner-budget", targetActorId: "owner", maxPerWindow: 1, windowMs: 1000, cooldownMs: 0 }],
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) =>
-        Effect.sync(() => {
-          const result = requestToolStep(input, sink, {
-            id: "explicit-send",
-            tool: "send_message",
-            input: { to: { kind: "contact", id: "owner" }, message: "EXPLICIT_SENTINEL" },
-          });
-          if (result === undefined) return { type: "stop" };
-          expect(result.isError).not.toBe(true);
-          sink.onMessage(assistantMessage(input, { text: "LOCAL_ONLY_SENTINEL" }));
-          return { type: "stop" };
-        }),
+      run: (input, sink) => Effect.sync(() => {
+        const result = requestToolStep(input, sink, {
+          id: "explicit-send", tool: "send_message",
+          input: { to: { kind: "contact", id: "owner" }, message: "EXPLICIT_SENTINEL" },
+        });
+        if (result === undefined) return { type: "stop" };
+        expect(result.isError).not.toBe(true);
+        sink.onMessage(assistantMessage(input, { text: "LOCAL_ONLY_SENTINEL" }));
+        return { type: "stop" };
+      }),
     },
   });
   const plane = await planeOf(app.runtime);
@@ -113,13 +102,9 @@ test("an explicit model send_message routes through MessagePort.ingest to the ex
   expect(await delivered).toMatchObject({ text: "EXPLICIT_SENTINEL" });
   expect((await terminal).text).toBe("LOCAL_ONLY_SENTINEL");
   expect(ingest.mock.calls.filter(([sender]) => sender.kind === "session")).toEqual([
-    [
-      containing<IngestCall[0]>({ kind: "session" }),
-      containing<IngestCall[1]>({
-        to: { kind: "actor", actorId: "owner" },
-        content: "EXPLICIT_SENTINEL",
-      }),
-    ],
+    [containing<IngestCall[0]>({ kind: "session" }), containing<IngestCall[1]>({
+      to: { kind: "actor", actorId: "owner" }, content: "EXPLICIT_SENTINEL",
+    })],
   ]);
 });
 
@@ -140,10 +125,9 @@ test("a child session terminal commits exactly one parent reply with the origina
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     const eventPlane = planeRef.current;
     if (eventPlane === undefined) return;
-    const action = sessionTree(
-      event.sessionId,
-      eventPlane.sessionStore(event.sessionId).actions,
-    ).find((candidate) => candidate.id === event.id);
+    const action = sessionTree(event.sessionId, eventPlane.sessionStore(event.sessionId).actions).find(
+      (candidate) => candidate.id === event.id,
+    );
     if (action === undefined) return;
     if (action.kind === "inbox.deliver") {
       const delivery = SessionTurn.Delivery.safeParse(action.effect.value);
@@ -175,29 +159,26 @@ test("a child session terminal commits exactly one parent reply with the origina
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) =>
-        Effect.sync(() => {
-          const runPlane = planeRef.current;
-          if (runPlane === undefined) throw new Error("plane not resolved before model run");
-          if (
-            runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker"
-          ) {
-            sink.onMessage(assistantMessage(input, { text: "CHILD_SENTINEL" }));
-            return { type: "stop" };
-          }
-          if (!commissioned) {
-            const output = requestToolStep(input, sink, {
-              id: "commission",
-              tool: "send_message",
-              input: commissionInput({ message: "child request", reply_to: "original-binding" }),
-            });
-            if (output === undefined) return { type: "stop" };
-            expect(output.isError).toBeUndefined();
-            commissioned = true;
-          }
-          sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
+      run: (input, sink) => Effect.sync(() => {
+        const runPlane = planeRef.current;
+        if (runPlane === undefined) throw new Error("plane not resolved before model run");
+        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
+          sink.onMessage(assistantMessage(input, { text: "CHILD_SENTINEL" }));
           return { type: "stop" };
-        }),
+        }
+        if (!commissioned) {
+          const output = requestToolStep(input, sink, {
+            id: "commission",
+            tool: "send_message",
+            input: commissionInput({ message: "child request", reply_to: "original-binding" }),
+          });
+          if (output === undefined) return { type: "stop" };
+          expect(output.isError).toBeUndefined();
+          commissioned = true;
+        }
+        sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
+        return { type: "stop" };
+      }),
     },
   });
   planeRef.current = await planeOf(app.runtime);
@@ -208,9 +189,8 @@ test("a child session terminal commits exactly one parent reply with the origina
   if (child?.parentId === null || child?.parentId === undefined)
     throw new Error("child parent missing");
   const parentTree = sessionTree(child.parentId, plane.sessionStore(child.parentId).actions);
-  const rows = receivedMessages(plane, child.parentId).filter(
-    (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
-  );
+  const rows = receivedMessages(plane, child.parentId)
+    .filter((row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success);
   expect(rows).toHaveLength(1);
   expect(rows[0]?.origin.value).toMatchObject({
     sourceSessionId: child.id,
@@ -219,7 +199,9 @@ test("a child session terminal commits exactly one parent reply with the origina
   });
   expect(rows[0]?.content).toContain("CHILD_SENTINEL");
   const outbound = plane.openKernel(child.id).outboundRows(child.id)[0];
-  const receipt = parentTree.find((action) => action.id === outbound?.destinationReceipt?.id);
+  const receipt = parentTree.find(
+    (action) => action.id === outbound?.destinationReceipt?.id,
+  );
   expect(receipt).toMatchObject({
     kind: "reply",
     effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },

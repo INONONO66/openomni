@@ -118,27 +118,27 @@ function chooseAnchoredCut(
   candidate: CompactionCandidate | undefined,
 ) {
   return Effect.gen(function* () {
-    const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
-    const attempt = (boundary: number, anchor: string | undefined) =>
-      attemptAnchoredCut(
-        working.slice(0, boundary),
-        working.slice(boundary),
-        anchor,
-        working,
-        firstRemoved,
-        preserveBudget,
-        options.contextWindowTokens,
-        options.onSummarize,
-      );
-    if (candidate !== undefined && isWarmCandidateValid(candidate, working)) {
-      const promoted = yield* attempt(candidate.prefixIds.length, candidate.anchorBody);
-      if (promoted.cut !== undefined)
-        return { attempt: promoted, candidateOutcome: "promoted" as const };
-    }
-    return {
-      attempt: yield* attempt(cutoff, undefined),
-      candidateOutcome: candidate === undefined ? undefined : ("discarded" as const),
-    };
+  const preserveBudget = options.preserveUserMessageChars ?? DEFAULT_PRESERVE_USER_CHARS;
+  const attempt = (boundary: number, anchor: string | undefined) =>
+    attemptAnchoredCut(
+      working.slice(0, boundary),
+      working.slice(boundary),
+      anchor,
+      working,
+      firstRemoved,
+      preserveBudget,
+      options.contextWindowTokens,
+      options.onSummarize,
+    );
+  if (candidate !== undefined && isWarmCandidateValid(candidate, working)) {
+    const promoted = yield* attempt(candidate.prefixIds.length, candidate.anchorBody);
+    if (promoted.cut !== undefined)
+      return { attempt: promoted, candidateOutcome: "promoted" as const };
+  }
+  return {
+    attempt: yield* attempt(cutoff, undefined),
+    candidateOutcome: candidate === undefined ? undefined : ("discarded" as const),
+  };
   });
 }
 
@@ -156,64 +156,62 @@ export function compactUnbracketed(
   ) => CompactionResult,
 ): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
-    // A reversible cut names original content as its kept boundary. Even a
-    // zero-tail strategy must retain one atomic call/result entry unchanged.
-    const protectRecent = Math.max(1, options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT);
+  // A reversible cut names original content as its kept boundary. Even a
+  // zero-tail strategy must retain one atomic call/result entry unchanged.
+  const protectRecent = Math.max(1, options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT);
 
-    if (messages.length <= protectRecent) {
-      return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
-    }
+  if (messages.length <= protectRecent) {
+    return finish({ messages, compacted: false, removedCount: 0 }, "nothing_reclaimed", 0);
+  }
 
-    // Elision postpones a cut only when its estimated reclaim covers the measured overage.
-    const reduction = reduceHistoryBeforeCut(
-      messages,
-      options,
-      protectRecent,
-      measuredContextTokens,
-      finish,
+  // Elision postpones a cut only when its estimated reclaim covers the measured overage.
+  const reduction = reduceHistoryBeforeCut(
+    messages,
+    options,
+    protectRecent,
+    measuredContextTokens,
+    finish,
+  );
+  if (reduction.completed !== undefined) return reduction.completed;
+  const { working, elidedChars } = reduction;
+
+  // Without a summary anchor, the kept window must start at a user boundary.
+  const naturalCutoff = working.length - protectRecent;
+  const cutoff =
+    options.onSummarize === undefined ? snapToUserBoundary(working, naturalCutoff) : naturalCutoff;
+  const unavailable = finishUnavailableCut(cutoff, working, elidedChars, finish);
+  if (unavailable !== undefined) return unavailable;
+
+  const toRemove = working.slice(0, cutoff);
+  const toKeep = working.slice(cutoff);
+
+  const firstRemoved = toRemove[0];
+  if (options.onSummarize !== undefined && firstRemoved !== undefined) {
+    const { attempt, candidateOutcome } = yield* chooseAnchoredCut(
+      working,
+      toRemove.length,
+      firstRemoved,
+      { ...options, onSummarize: options.onSummarize },
+      candidate,
     );
-    if (reduction.completed !== undefined) return reduction.completed;
-    const { working, elidedChars } = reduction;
-
-    // Without a summary anchor, the kept window must start at a user boundary.
-    const naturalCutoff = working.length - protectRecent;
-    const cutoff =
-      options.onSummarize === undefined
-        ? snapToUserBoundary(working, naturalCutoff)
-        : naturalCutoff;
-    const unavailable = finishUnavailableCut(cutoff, working, elidedChars, finish);
-    if (unavailable !== undefined) return unavailable;
-
-    const toRemove = working.slice(0, cutoff);
-    const toKeep = working.slice(cutoff);
-
-    const firstRemoved = toRemove[0];
-    if (options.onSummarize !== undefined && firstRemoved !== undefined) {
-      const { attempt, candidateOutcome } = yield* chooseAnchoredCut(
-        working,
-        toRemove.length,
-        firstRemoved,
-        { ...options, onSummarize: options.onSummarize },
-        candidate,
-      );
-      return (
-        finishFallbackCut(attempt, candidateOutcome, working, naturalCutoff, elidedChars, finish) ??
-        finishAnchoredCut(attempt, candidateOutcome, messages, working, elidedChars, finish)
-      );
-    }
-
-    const compacted = [...toKeep];
-
-    return finish(
-      {
-        messages: compacted,
-        compacted: true,
-        removedCount: toRemove.length,
-      },
-      "cut",
-      elidedChars,
-      false,
+    return (
+      finishFallbackCut(attempt, candidateOutcome, working, naturalCutoff, elidedChars, finish) ??
+      finishAnchoredCut(attempt, candidateOutcome, messages, working, elidedChars, finish)
     );
+  }
+
+  const compacted = [...toKeep];
+
+  return finish(
+    {
+      messages: compacted,
+      compacted: true,
+      removedCount: toRemove.length,
+    },
+    "cut",
+    elidedChars,
+    false,
+  );
   });
 }
 

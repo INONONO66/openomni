@@ -21,6 +21,7 @@ const config = {
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
 } as const;
 
+
 test("tool ports bridge machine filesystem and exec effects through the app runtime", async () => {
   const runtime = { runPromise: runEffect } as never;
   const read = { op: "read", data: new Uint8Array([1]) };
@@ -53,18 +54,13 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
 });
 
 test("the server edge consumes the shared gateway runtime and its injected services", async () => {
-  const runtime = gatewayRuntime({
-    observations: Bus,
-    now: () => 123,
-    entropy: testEntropy(() => "fixed"),
-  });
+  const runtime = gatewayRuntime({ observations: Bus, now: () => 123, entropy: testEntropy(() => "fixed") });
   const first = await startOpenOmni({ config, runtime });
   try {
     expect(first.runtime).toBe(runtime);
     expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
     expect(
-      await runRuntimeEffect(
-        runtime,
+      await runRuntimeEffect(runtime,
         Effect.gen(function* () {
           return [yield* Clock.currentTimeMillis, (yield* Entropy).id()];
         }),
@@ -83,7 +79,10 @@ test("failed boot releases acquired resources in reverse and rethrows the typed 
   const runtime = gatewayRuntime({ observations: Bus });
   const order: string[] = [];
   const failure = new AppLifecycleFailure({ operation: "fixture.acquire", cause: "refused" });
-  const message = Object.getOwnPropertyDescriptor(AppLifecycleFailure.prototype, "message")?.get;
+  const message = Object.getOwnPropertyDescriptor(
+    AppLifecycleFailure.prototype,
+    "message",
+  )?.get;
   if (message === undefined) throw new Error("missing lifecycle failure message getter");
   expect(message.call(failure)).toBe("fixture.acquire: refused");
   const incident = spyOn(console, "error").mockImplementation(() => undefined);
@@ -161,21 +160,20 @@ test("scope finalizers all run and aggregate failures in reverse release order",
   const exit = await runRuntimeExit(runtime, runtime.disposeEffect);
   expect(order).toEqual(["second.close", "first.close"]);
   expect(Exit.isFailure(exit)).toBe(true);
-  if (Exit.isFailure(exit))
-    expect(
-      exit.cause.reasons
-        .filter(Cause.isDieReason)
-        .map((reason) => reason.defect as AppLifecycleFailure),
-    ).toEqual([second, first]);
+  if (Exit.isFailure(exit)) expect(exit.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect as AppLifecycleFailure)).toEqual([second, first]);
   await runtime.dispose();
 });
 
 test("a runtime with fixed entity ports refuses late rebinding", async () => {
   const ports = createSessionEntityPortsSlot().ports;
   await gatewayRuntime({ observations: Bus }).dispose();
-  const runtime = gatewayRuntime({ observations: Bus, entity: { owner: "fixed-entity", ports } });
+  const runtime = gatewayRuntime({ observations: Bus,
+    entity: { owner: "fixed-entity", ports },
+  });
   try {
-    await expect(startOpenOmni({ runtime, config })).rejects.toThrow(
+    await expect(
+      startOpenOmni({ runtime, config }),
+    ).rejects.toThrow(
       "session entity ports were fixed at runtime construction",
     );
   } finally {

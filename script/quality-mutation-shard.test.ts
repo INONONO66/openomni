@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  appendFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decodeJson, jsonNumber, jsonObject } from "./quality-inventory";
 import { joinMain, joinShardDocuments } from "./quality-mutation-join";
@@ -25,48 +18,25 @@ function canonicalizeInventory(input: Fixture): void {
   writeFileSync(input.inventory, JSON.stringify(decodeJson(readFileSync(input.inventory, "utf8"))));
 }
 function runnerArgv(input: Fixture): string[] {
-  const paths = {
-    contract: join(input.root, "contract.json"),
-    inventory: input.inventory,
-    decision,
-    "inventory-tool": tool,
-  };
+  const paths = { contract: join(input.root, "contract.json"), inventory: input.inventory, decision, "inventory-tool": tool };
   const base = ["--root", input.root, "--dependencies", dependencies];
-  for (const [key, path] of Object.entries(paths))
-    base.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
-  base.push(
-    "--python",
-    process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3",
-  );
+  for (const [key, path] of Object.entries(paths)) base.push(`--${key}`, path, `--${key}-sha256`, sha256(readFileSync(path)));
+  base.push("--python", process.env.QUALITY_MUTATION_PYTHON ?? process.env.D945_PYTHON ?? "python3");
   return base;
 }
 /** Run the campaign runner in this process so coverage observes the shard
  * paths; capture the receipt the CLI would print. */
-async function runnerMain(argv: string[]): Promise<{
-  exitCode: number;
-  document: ReturnType<typeof record>;
-  shard: ReturnType<typeof record>;
-  stderr: string;
-}> {
+async function runnerMain(argv: string[]): Promise<{ exitCode: number; document: ReturnType<typeof record>; shard: ReturnType<typeof record>; stderr: string }> {
   const logs: string[] = [];
   const errs: string[] = [];
   const originalLog = console.log;
   const originalError = console.error;
-  console.log = (...values: string[]) => {
-    logs.push(values.join(" "));
-  };
-  console.error = (...values: string[]) => {
-    errs.push(values.join(" "));
-  };
+  console.log = (...values: string[]) => { logs.push(values.join(" ")); };
+  console.error = (...values: string[]) => { errs.push(values.join(" ")); };
   try {
     const exitCode = await main(argv);
     const document = record(decode(logs.at(-1) ?? "{}"));
-    return {
-      exitCode,
-      document,
-      shard: typeof document.shard === "object" ? record(document.shard) : {},
-      stderr: errs.join("\n"),
-    };
+    return { exitCode, document, shard: typeof document.shard === "object" ? record(document.shard) : {}, stderr: errs.join("\n") };
   } finally {
     console.log = originalLog;
     console.error = originalError;
@@ -81,14 +51,9 @@ function configureDemoProject(root: string): void {
   cpSync(join(root, "src/tsconfig.json"), join(root, "packages/demo/tsconfig.json"));
   const contractPath = join(root, "contract.json");
   const contract = jsonObject(decodeJson(readFileSync(contractPath, "utf8")));
-  writeFileSync(
-    contractPath,
-    JSON.stringify({
-      ...contract,
-      roots: ["src", "packages"],
-      projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
-    }),
-  );
+  writeFileSync(contractPath, JSON.stringify({
+    ...contract, roots: ["src", "packages"], projects: ["src/tsconfig.json", "packages/demo/tsconfig.json"],
+  }));
 }
 
 test("shard slices resume append-only progress and join into the single full receipt", async () => {
@@ -101,11 +66,7 @@ test("shard slices resume append-only progress and join into the single full rec
       'import {test,expect} from "bun:test";import {run} from "../packages/demo/src/main";test("behavior",()=>{expect(run(2)).toBe(true);expect(run(0)).toBe(false);});',
   });
   configureDemoProject(input.root);
-  const regenerated = await execute(
-    [process.execPath, tool, "--root", input.root, "--contract", join(input.root, "contract.json")],
-    input.root,
-    15000,
-  );
+  const regenerated = await execute([process.execPath, tool, "--root", input.root, "--contract", join(input.root, "contract.json")], input.root, 15000);
   expect(regenerated.exitCode).toBe(0);
   writeFileSync(input.inventory, JSON.stringify(decodeJson(regenerated.stdout)));
   cpSync(import.meta.dir, join(input.root, "script"), { recursive: true });
@@ -120,40 +81,19 @@ test("shard slices resume append-only progress and join into the single full rec
   expect(partial.shard.budgetExhausted).toBe(true);
   expect(partial.shard.executed).toBe(0);
   expect(partial.shard.sliceComplete).toBe(false);
-  const headerOf = (path: string) =>
-    record(decode(readFileSync(path, "utf8").split("\n")[0] ?? "null"));
+  const headerOf = (path: string) => record(decode(readFileSync(path, "utf8").split("\n")[0] ?? "null"));
   const inventoryHash = String(headerOf(progress0).inventorySha256);
   // The one spawned run of the runner CLI: same partial resume, real exit code.
-  const spawned = await execute(
-    [process.execPath, runner, ...runnerArgv(input), ...shard0, "--budget", "1"],
-    input.root,
-    120000,
-  );
+  const spawned = await execute([process.execPath, runner, ...runnerArgv(input), ...shard0, "--budget", "1"], input.root, 120000);
   expect(spawned.exitCode).toBe(0);
   expect(record(record(decode(spawned.stdout)).shard).budgetExhausted).toBe(true);
   // A test selection outside the frozen inventory fails closed.
-  const absentTest = await runnerMain([
-    ...runnerArgv(input),
-    "--test",
-    "missing.test.ts",
-    "--budget",
-    "1",
-  ]);
+  const absentTest = await runnerMain([...runnerArgv(input), "--test", "missing.test.ts", "--budget", "1"]);
   expect(absentTest.exitCode).toBe(2);
   expect(record(absentTest.document.error).code).toBe("incompleteInventory");
   expect(String(record(absentTest.document.error).message)).toContain("Test absent from inventory");
   // Same inventory, another slice's artifact: mixing must fail closed.
-  const misSharded = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "1",
-    "--shard-count",
-    "2",
-    "--progress",
-    progress0,
-    "--budget",
-    "1",
-  ]);
+  const misSharded = await runnerMain([...runnerArgv(input), "--shard", "1", "--shard-count", "2", "--progress", progress0, "--budget", "1"]);
   expect(misSharded.exitCode).toBe(2);
   const misShardedError = record(misSharded.document.error);
   expect(misShardedError.code).toBe("progress");
@@ -164,126 +104,44 @@ test("shard slices resume append-only progress and join into the single full rec
   canonicalizeInventory(foreign);
   const foreignProgress = join(foreign.root, "foreign-progress.jsonl");
   cpSync(progress0, foreignProgress);
-  const discarded = await runnerMain([
-    ...runnerArgv(foreign),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    foreignProgress,
-    "--budget",
-    "1",
-  ]);
+  const discarded = await runnerMain([...runnerArgv(foreign), "--shard", "0", "--shard-count", "2", "--progress", foreignProgress, "--budget", "1"]);
   expect(discarded.exitCode).toBe(0);
   expect(discarded.stderr).toContain("progress artifact for inventory");
   expect(discarded.stderr).toContain("discarded (current ");
   const staleHash = headerOf(progress0).inventorySha256;
-  const rewritten = readFileSync(foreignProgress, "utf8")
-    .split("\n")
-    .filter((line) => line.length)
-    .map((line) => record(decode(line)));
+  const rewritten = readFileSync(foreignProgress, "utf8").split("\n").filter((line) => line.length).map((line) => record(decode(line)));
   expect(rewritten.length).toBeGreaterThan(0);
   for (const row of rewritten) expect(row.inventorySha256).not.toBe(staleHash);
   // An existing but unparseable header stays a hard refusal.
   const malformed = join(foreign.root, "malformed-progress.jsonl");
   writeFileSync(malformed, "not json\n");
-  const refused = await runnerMain([
-    ...runnerArgv(foreign),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    malformed,
-    "--budget",
-    "1",
-  ]);
+  const refused = await runnerMain([...runnerArgv(foreign), "--shard", "0", "--shard-count", "2", "--progress", malformed, "--budget", "1"]);
   expect(refused.exitCode).toBe(2);
   expect(record(refused.document.error).code).toBe("progress");
   // A parseable header with the wrong type or version is refused, not adopted.
   const badVersion = join(input.root, "bad-version-progress.jsonl");
   writeFileSync(badVersion, `${JSON.stringify({ ...headerOf(progress0), version: 2 })}\n`);
-  const versionRefused = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    badVersion,
-    "--budget",
-    "1",
-  ]);
+  const versionRefused = await runnerMain([...runnerArgv(input), "--shard", "0", "--shard-count", "2", "--progress", badVersion, "--budget", "1"]);
   expect(versionRefused.exitCode).toBe(2);
-  expect(String(record(versionRefused.document.error).message)).toContain(
-    "Malformed progress header",
-  );
+  expect(String(record(versionRefused.document.error).message)).toContain("Malformed progress header");
   // A row recorded against another inventory under a matching header is refused.
   const mixedRows = join(input.root, "mixed-rows-progress.jsonl");
-  writeFileSync(
-    mixedRows,
-    `${JSON.stringify(headerOf(progress0))}\n${JSON.stringify({ type: "result", run: "x", inventorySha256: "0".repeat(64) })}\n`,
-  );
-  const mixedRefused = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    mixedRows,
-    "--budget",
-    "1",
-  ]);
+  writeFileSync(mixedRows, `${JSON.stringify(headerOf(progress0))}\n${JSON.stringify({ type: "result", run: "x", inventorySha256: "0".repeat(64) })}\n`);
+  const mixedRefused = await runnerMain([...runnerArgv(input), "--shard", "0", "--shard-count", "2", "--progress", mixedRows, "--budget", "1"]);
   expect(mixedRefused.exitCode).toBe(2);
-  expect(String(record(mixedRefused.document.error).message)).toContain(
-    "Progress row inventory mismatch",
-  );
+  expect(String(record(mixedRefused.document.error).message)).toContain("Progress row inventory mismatch");
   // An unrecognized row type is refused, never skipped.
   const unknownRows = join(input.root, "unknown-rows-progress.jsonl");
-  writeFileSync(
-    unknownRows,
-    `${JSON.stringify(headerOf(progress0))}\n${JSON.stringify({ type: "weird", run: "x", inventorySha256: inventoryHash })}\n`,
-  );
-  const unknownRefused = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    unknownRows,
-    "--budget",
-    "1",
-  ]);
+  writeFileSync(unknownRows, `${JSON.stringify(headerOf(progress0))}\n${JSON.stringify({ type: "weird", run: "x", inventorySha256: inventoryHash })}\n`);
+  const unknownRefused = await runnerMain([...runnerArgv(input), "--shard", "0", "--shard-count", "2", "--progress", unknownRows, "--budget", "1"]);
   expect(unknownRefused.exitCode).toBe(2);
-  expect(String(record(unknownRefused.document.error).message)).toContain(
-    "Unrecognized progress row",
-  );
+  expect(String(record(unknownRefused.document.error).message)).toContain("Unrecognized progress row");
   // An unparseable line that is not final also stays a hard refusal.
   const tornMiddle = join(foreign.root, "torn-middle-progress.jsonl");
-  const [progressHead, ...progressTail] = readFileSync(progress0, "utf8")
-    .split("\n")
-    .filter((line) => line.length);
+  const [progressHead, ...progressTail] = readFileSync(progress0, "utf8").split("\n").filter((line) => line.length);
   expect(progressTail.length).toBeGreaterThan(0);
-  writeFileSync(
-    tornMiddle,
-    [progressHead, '{"type":"result","run":"torn', ...progressTail]
-      .map((line) => `${line}\n`)
-      .join(""),
-  );
-  const tornRefused = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    tornMiddle,
-    "--budget",
-    "1",
-  ]);
+  writeFileSync(tornMiddle, [progressHead, '{"type":"result","run":"torn', ...progressTail].map((line) => `${line}\n`).join(""));
+  const tornRefused = await runnerMain([...runnerArgv(input), "--shard", "0", "--shard-count", "2", "--progress", tornMiddle, "--budget", "1"]);
   expect(tornRefused.exitCode).toBe(2);
   expect(record(tornRefused.document.error).code).toBe("progress");
   // Resumed in-process run completes shard 0 within its budget.
@@ -296,55 +154,25 @@ test("shard slices resume append-only progress and join into the single full rec
   expect(sliceSize).toBeGreaterThan(0);
   expect(jsonNumber(first.shard.recorded)).toBe(sliceSize);
   expect(jsonNumber(first.shard.executed)).toBe(sliceSize);
-  const progressRows = readFileSync(progress0, "utf8")
-    .split("\n")
-    .filter((line) => line.length)
-    .map((line) => record(decode(line)));
+  const progressRows = readFileSync(progress0, "utf8").split("\n").filter((line) => line.length).map((line) => record(decode(line)));
   const sample = progressRows.find((row) => row.type === "result") ?? {};
   // A proven row whose recorded result contradicts its candidate is refused.
   const mismatch = join(input.root, "mismatch-progress.jsonl");
   cpSync(progress0, mismatch);
-  appendFileSync(
-    mismatch,
-    `${JSON.stringify({ ...sample, run: "mismatch-run", result: { ...record(sample.result), id: "0".repeat(64) } })}\n`,
-  );
-  appendFileSync(
-    mismatch,
-    `${JSON.stringify({ type: "proof", run: "mismatch-run", inventorySha256: inventoryHash, originalHashesVerified: true, cleanupVerified: true })}\n`,
-  );
-  const mismatched = await runnerMain([
-    ...runnerArgv(input),
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    mismatch,
-    "--budget",
-    "1",
-  ]);
+  appendFileSync(mismatch, `${JSON.stringify({ ...sample, run: "mismatch-run", result: { ...record(sample.result), id: "0".repeat(64) } })}\n`);
+  appendFileSync(mismatch, `${JSON.stringify({ type: "proof", run: "mismatch-run", inventorySha256: inventoryHash, originalHashesVerified: true, cleanupVerified: true })}\n`);
+  const mismatched = await runnerMain([...runnerArgv(input), "--shard", "0", "--shard-count", "2", "--progress", mismatch, "--budget", "1"]);
   expect(mismatched.exitCode).toBe(2);
-  expect(String(record(mismatched.document.error).message)).toContain(
-    "does not match its candidate",
-  );
+  expect(String(record(mismatched.document.error).message)).toContain("does not match its candidate");
   // Rows from a run that never appended its restoration/cleanup proof are never
   // carried: append a tampered duplicate under an unproven run id and confirm
   // the resumed run keeps the proven outcomes.
   const tamperedResult = { ...record(sample.result) };
   tamperedResult.outcome = tamperedResult.outcome === "killed" ? "survived" : "killed";
-  appendFileSync(
-    progress0,
-    `${JSON.stringify({ ...sample, run: "unproven-run", result: tamperedResult })}\n`,
-  );
+  appendFileSync(progress0, `${JSON.stringify({ ...sample, run: "unproven-run", result: tamperedResult })}\n`);
   // A proven environmental outcome is dropped from the carry and re-executed.
-  appendFileSync(
-    progress0,
-    `${JSON.stringify({ ...sample, run: "env-run", result: { ...record(sample.result), outcome: "infrastructure" } })}\n`,
-  );
-  appendFileSync(
-    progress0,
-    `${JSON.stringify({ type: "proof", run: "env-run", inventorySha256: inventoryHash, originalHashesVerified: true, cleanupVerified: true })}\n`,
-  );
+  appendFileSync(progress0, `${JSON.stringify({ ...sample, run: "env-run", result: { ...record(sample.result), outcome: "infrastructure" } })}\n`);
+  appendFileSync(progress0, `${JSON.stringify({ type: "proof", run: "env-run", inventorySha256: inventoryHash, originalHashesVerified: true, cleanupVerified: true })}\n`);
   // A job killed mid-append leaves a torn trailing line; the next run drops
   // exactly that line with a warning and repairs the artifact.
   appendFileSync(progress0, '{"type":"result","run":"torn');
@@ -370,66 +198,29 @@ test("shard slices resume append-only progress and join into the single full rec
   expect(jsonNumber(carried.shard.executed)).toBe(0);
   expect(jsonNumber(carried.shard.recorded)).toBe(sliceSize);
   expect(record(carried.document.counts)).toEqual(record(first.document.counts));
-  const lines = readFileSync(progress0, "utf8")
-    .split("\n")
-    .filter((line) => line.length)
-    .map((line) => record(decode(line)));
+  const lines = readFileSync(progress0, "utf8").split("\n").filter((line) => line.length).map((line) => record(decode(line)));
   expect(lines[0]?.type).toBe("shard-progress");
   // sliceSize proven rows plus the tampered unproven duplicate, the proven
   // environmental duplicate (all kept in the artifact) and the re-executed row.
   expect(lines.filter((line) => line.type === "result")).toHaveLength(sliceSize + 3);
   expect(lines.filter((line) => line.type === "proof").length).toBeGreaterThanOrEqual(4);
   // Second shard completes its disjoint slice.
-  expect(
-    await mutationMain([
-      ...base,
-      "--shard",
-      "1",
-      "--shard-count",
-      "2",
-      "--progress",
-      join(input.root, "progress", "shard-1.jsonl"),
-      "--output",
-      "shard-1",
-    ]),
-  ).toBe(0);
+  expect(await mutationMain([...base, "--shard", "1", "--shard-count", "2", "--progress", join(input.root, "progress", "shard-1.jsonl"), "--output", "shard-1"])).toBe(0);
   const second = shardDocument(input.root, "shard-1");
   expect(second.document.complete).toBe(true);
   // Join: all shards complete -> the existing full receipt shape plus one measurement receipt.
   const joinDir = join(input.root, "join-shards");
-  for (const [index, output] of [
-    ["0", "shard-0-c"],
-    ["1", "shard-1"],
-  ] as const) {
+  for (const [index, output] of [["0", "shard-0-c"], ["1", "shard-1"]] as const) {
     mkdirSync(join(joinDir, `quality-mutation-shard-${index}`), { recursive: true });
-    cpSync(
-      join(input.root, output, "native.json"),
-      join(joinDir, `quality-mutation-shard-${index}`, "native.json"),
-    );
+    cpSync(join(input.root, output, "native.json"), join(joinDir, `quality-mutation-shard-${index}`, "native.json"));
   }
-  const joinCode = joinMain([
-    "--root",
-    input.root,
-    "--contract",
-    "contract.json",
-    "--shards",
-    joinDir,
-    "--output",
-    "joined",
-  ]);
-  const joined = jsonObject(
-    jsonObject(decodeJson(readFileSync(join(input.root, "joined", "native.json"), "utf8")))
-      .document,
-  );
+  const joinCode = joinMain(["--root", input.root, "--contract", "contract.json", "--shards", joinDir, "--output", "joined"]);
+  const joined = jsonObject(jsonObject(decodeJson(readFileSync(join(input.root, "joined", "native.json"), "utf8"))).document);
   expect(joined.full).toBe(true);
   expect(joined.complete).toBe(true);
   const results = joined.results;
-  expect(Array.isArray(results) && results.length).toBe(
-    sliceSize + jsonNumber(second.shard.sliceSize),
-  );
-  const merged = jsonObject(
-    decodeJson(readFileSync(join(input.root, "joined", "current.json"), "utf8")),
-  );
+  expect(Array.isArray(results) && results.length).toBe(sliceSize + jsonNumber(second.shard.sliceSize));
+  const merged = jsonObject(decodeJson(readFileSync(join(input.root, "joined", "current.json"), "utf8")));
   expect(merged.analyzed).toEqual(["mutation"]);
   const survivors = jsonNumber(jsonObject(joined.counts).survived);
   expect(Array.isArray(merged.findings) && merged.findings.length).toBe(survivors);
@@ -437,54 +228,18 @@ test("shard slices resume append-only progress and join into the single full rec
   // Join with a partial shard document: incomplete summary, exit 0, no receipt.
   const partialDir = join(input.root, "join-partial");
   mkdirSync(join(partialDir, "quality-mutation-shard-1"), { recursive: true });
-  cpSync(
-    join(joinDir, "quality-mutation-shard-1", "native.json"),
-    join(partialDir, "quality-mutation-shard-1", "native.json"),
-  );
+  cpSync(join(joinDir, "quality-mutation-shard-1", "native.json"), join(partialDir, "quality-mutation-shard-1", "native.json"));
   mkdirSync(join(partialDir, "quality-mutation-shard-0"), { recursive: true });
-  writeFileSync(
-    join(partialDir, "quality-mutation-shard-0", "native.json"),
-    JSON.stringify({ command: ["runner"], exitCode: partial.exitCode, document: partial.document }),
-  );
-  expect(
-    joinMain([
-      "--root",
-      input.root,
-      "--contract",
-      "contract.json",
-      "--shards",
-      partialDir,
-      "--output",
-      "joined-partial",
-    ]),
-  ).toBe(0);
+  writeFileSync(join(partialDir, "quality-mutation-shard-0", "native.json"), JSON.stringify({ command: ["runner"], exitCode: partial.exitCode, document: partial.document }));
+  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-partial"])).toBe(0);
   expect(existsSync(join(input.root, "joined-partial"))).toBe(false);
   // Stale identity fails closed inside the real join function.
   expect(() =>
-    joinShardDocuments([first.document], {
-      inventoryHash: "0".repeat(64),
-      contractHash: "0".repeat(64),
-      paths: [],
-      typescript: [],
-    }),
+    joinShardDocuments([first.document], { inventoryHash: "0".repeat(64), contractHash: "0".repeat(64), paths: [], typescript: [] }),
   ).toThrow("stale shard inventory");
   // Spawned exit codes for the join entry point.
   const script = join(import.meta.dir, "quality-mutation-join.ts");
-  const incomplete = Bun.spawnSync(
-    [
-      process.execPath,
-      script,
-      "--root",
-      input.root,
-      "--contract",
-      "contract.json",
-      "--shards",
-      partialDir,
-      "--output",
-      "joined-spawn",
-    ],
-    { timeout: 120000 },
-  );
+  const incomplete = Bun.spawnSync([process.execPath, script, "--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-spawn"], { timeout: 120000 });
   expect(incomplete.exitCode).toBe(0);
   expect(incomplete.stderr.toString()).toContain("campaign incomplete: shards 1/2 complete");
   const missingBaseline = Bun.spawnSync([process.execPath, script], { timeout: 120000 });
@@ -497,31 +252,14 @@ test("shard arguments are validated before any campaign work starts", async () =
     mutationMain(["--pilot", "--shard", "0", "--shard-count", "2", "--progress", "p.jsonl"]),
   ).rejects.toThrow("--shard is incompatible with --pilot");
   await expect(
-    mutationMain([
-      "--shard",
-      "0",
-      "--shard-count",
-      "2",
-      "--progress",
-      "p.jsonl",
-      "--budget-minutes",
-      "0",
-    ]),
+    mutationMain(["--shard", "0", "--shard-count", "2", "--progress", "p.jsonl", "--budget-minutes", "0"]),
   ).rejects.toThrow("invalid --budget-minutes");
   // The runner itself refuses incomplete or piloted shard selections.
   const incomplete = await runnerMain(["--shard", "0"]);
   expect(incomplete.exitCode).toBe(2);
   expect(record(incomplete.document.error).code).toBe("arguments");
   expect(String(record(incomplete.document.error).message)).toContain("Sharded execution requires");
-  const piloted = await runnerMain([
-    "--shard",
-    "0",
-    "--shard-count",
-    "2",
-    "--progress",
-    "p.jsonl",
-    "--pilot",
-  ]);
+  const piloted = await runnerMain(["--shard", "0", "--shard-count", "2", "--progress", "p.jsonl", "--pilot"]);
   expect(piloted.exitCode).toBe(2);
   expect(String(record(piloted.document.error).message)).toContain("incompatible with pilot");
   expect(() => joinMain([])).toThrow("shard documents directory required");
@@ -539,35 +277,16 @@ test("an all-invalid slice completes per shard while the join enforces campaign 
   cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   const progress = join(input.root, "progress", "shard-0.jsonl");
   expect(
-    await mutationMain([
-      "--root",
-      input.root,
-      "--contract",
-      "contract.json",
-      "--decision",
-      decision,
-      "--shard",
-      "0",
-      "--shard-count",
-      "1",
-      "--progress",
-      progress,
-      "--output",
-      "shard-only",
-    ]),
+    await mutationMain(["--root", input.root, "--contract", "contract.json", "--decision", decision, "--shard", "0", "--shard-count", "1", "--progress", progress, "--output", "shard-only"]),
   ).toBe(0);
   const only = shardDocument(input.root, "shard-only");
   const counts = jsonObject(only.document.counts);
   expect(jsonNumber(counts.invalid)).toBeGreaterThan(0);
-  expect(
-    jsonNumber(counts.killed) + jsonNumber(counts.survived) + jsonNumber(counts.noCoverage),
-  ).toBe(0);
+  expect(jsonNumber(counts.killed) + jsonNumber(counts.survived) + jsonNumber(counts.noCoverage)).toBe(0);
   expect(only.document.complete).toBe(true);
   expect(only.shard.sliceComplete).toBe(true);
   // The valid-outcome sanity floor moved to the campaign level: the join
   // refuses to mint a receipt from a campaign with zero valid outcomes.
   const identity = fingerprint(input.root, "contract.json");
-  expect(() => joinShardDocuments([only.document], identity)).toThrow(
-    "no valid outcomes across shards",
-  );
+  expect(() => joinShardDocuments([only.document], identity)).toThrow("no valid outcomes across shards");
 }, 300000);

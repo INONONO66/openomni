@@ -41,10 +41,7 @@ function assistant(id: string): Message.WithParts {
   };
 }
 
-function executionInput(
-  executor: Executor,
-  observed: string[],
-): Parameters<typeof executeCompaction>[0] {
+function executionInput(executor: Executor, observed: string[]): Parameters<typeof executeCompaction>[0] {
   return {
     history: [assistant("first"), assistant("last")],
     executor,
@@ -81,8 +78,6 @@ it("fails with a catchTag-able CompactionExecutionError when the durable output 
   );
 
   // Then: the invalid_output refusal is a typed failure whose message carries the reason, and held observations never fired.
-  expect(recovered).toBe(
-    "caught:CompactionExecutionError:invalid_output|compaction execution refused: invalid_output",
-  );
+  expect(recovered).toBe("caught:CompactionExecutionError:invalid_output|compaction execution refused: invalid_output");
   expect(observed).toEqual([]);
 });

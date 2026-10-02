@@ -14,6 +14,7 @@ class ActorRegistryRefused extends Data.TaggedError("ActorRegistryRefused")<{
   readonly message: string;
 }> {}
 
+
 /** The catalog-handle slice the actor registry writes through (W5.2 F1). */
 export interface ActorRegistrySource {
   readonly actorRegistry?: ProtocolStorage.ActorRegistrySubAdapter;

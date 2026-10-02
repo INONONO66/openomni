@@ -28,7 +28,9 @@ describe("turn failure classification", () => {
   });
 
   test("payment status can be nested and cause walking is bounded", () => {
-    expect(classifyTurnFailure({ cause: { statusCode: 402 } }).reason).toBe("non_retryable");
+    expect(classifyTurnFailure({ cause: { statusCode: 402 } }).reason).toBe(
+      "non_retryable",
+    );
     let error: PlainValue = { statusCode: 402 };
     for (let index = 0; index < 9; index += 1) error = { cause: error };
     expect(classifyTurnFailure(error).reason).toBe("non_retryable");

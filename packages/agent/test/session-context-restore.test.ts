@@ -1,11 +1,5 @@
 import { sessionTree } from "./helpers/session-tree";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { describe, expect, spyOn, test } from "bun:test";
 import { Effect } from "effect";
 import { seedPolicy as seed } from "./helpers/seed-policy";
@@ -34,9 +28,13 @@ function runtime(): SessionRuntime {
 }
 function intentRecord(action: LedgerAction.Node): PlainObject {
   const value = action.intent.value;
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
 }
-function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.Node {
+function compactionIntent(
+  actions: readonly LedgerAction.Node[],
+): LedgerAction.Node {
   const found = actions.find(
     (action: LedgerAction.Node) =>
       action.kind === "compaction" &&
@@ -47,7 +45,10 @@ function compactionIntent(actions: readonly LedgerAction.Node[]): LedgerAction.N
   return found;
 }
 function program<E>(
-  body: (handle: SessionHandle, before: readonly LedgerAction.Node[]) => Effect.Effect<void, E>,
+  body: (
+    handle: SessionHandle,
+    before: readonly LedgerAction.Node[],
+  ) => Effect.Effect<void, E>,
   rows: NonNullable<Parameters<typeof seed>[0]> = [],
 ) {
   return Effect.scoped(
@@ -55,18 +56,11 @@ function program<E>(
       seed(rows);
 
       const current = runtime();
-      const compactingRunner: SessionRunner = (input: SessionRunnerInput) =>
-        Effect.gen(function* () {
-          const { executor } = yield* createTurnDispatcher(input, current);
-          return yield* answerThenCompact(executor, input);
-        });
-      const handle = yield* Effect.gen(function* () {
-        const fixture: SessionFixture = current;
-        return yield* withSessionServices(
-          session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture),
-          fixture,
-        );
+      const compactingRunner: SessionRunner = (input: SessionRunnerInput) => Effect.gen(function* () {
+        const { executor } = yield* createTurnDispatcher(input, current);
+        return yield* answerThenCompact(executor, input);
       });
+      const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = current; return yield* withSessionServices(session({ id: "ctx", role: "resident", runner: compactingRunner }, fixture), fixture); });
       yield* handle.prompt("hello");
       const before = sessionTree(isolatedLedger().kernel, "ctx");
       yield* body(handle, before);
@@ -75,45 +69,36 @@ function program<E>(
 }
 
 describe("restore_context_projection", () => {
-  test("folding minus a selected subtree is a no-I/O what-if, not a live restoration", () =>
-    isolated(
-      program((_handle, before) =>
-        Effect.sync(() => {
-          const selected = compactionIntent(before);
-          const excluded = new Set([selected.id]);
-          const retained = before.filter((action) => {
-            if (action.parentId !== null && excluded.has(action.parentId)) excluded.add(action.id);
-            return !excluded.has(action.id);
-          });
-          const original = structuredClone([...before]);
-          const expected = foldSessionHistory("ctx", before.slice(0, before.indexOf(selected)));
-          const kernel = isolatedLedger().kernel;
-          // The Storage singleton is gone; the what-if fold must touch neither the
-          // kernel's read plane nor its commit plane.
-          const reads = spyOn(kernel, "historyPage").mockImplementation(() => {
-            throw new Error("what-if storage access");
-          });
-          const writes = spyOn(kernel, "commit").mockImplementation(() => {
-            throw new Error("what-if storage access");
-          });
-          const publication = spyOn(Bus, "publish").mockImplementation(() => {
-            throw new Error("what-if publication");
-          });
-          try {
-            expect(foldSessionHistory("ctx", retained)).toEqual(expected);
-            expect(reads).not.toHaveBeenCalled();
-            expect(writes).not.toHaveBeenCalled();
-            expect(publication).not.toHaveBeenCalled();
-            expect(before).toEqual(original);
-          } finally {
-            reads.mockRestore();
-            writes.mockRestore();
-            publication.mockRestore();
-          }
-          expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual(original);
-        }),
-      ),
-    ));
+  test("folding minus a selected subtree is a no-I/O what-if, not a live restoration", () => isolated(
+    program((_handle, before) => Effect.sync(() => {
+      const selected = compactionIntent(before);
+      const excluded = new Set([selected.id]);
+      const retained = before.filter((action) => {
+        if (action.parentId !== null && excluded.has(action.parentId)) excluded.add(action.id);
+        return !excluded.has(action.id);
+      });
+      const original = structuredClone([...before]);
+      const expected = foldSessionHistory("ctx", before.slice(0, before.indexOf(selected)));
+      const kernel = isolatedLedger().kernel;
+      // The Storage singleton is gone; the what-if fold must touch neither the
+      // kernel's read plane nor its commit plane.
+      const reads = spyOn(kernel, "historyPage").mockImplementation(() => { throw new Error("what-if storage access"); });
+      const writes = spyOn(kernel, "commit").mockImplementation(() => { throw new Error("what-if storage access"); });
+      const publication = spyOn(Bus, "publish").mockImplementation(() => { throw new Error("what-if publication"); });
+      try {
+        expect(foldSessionHistory("ctx", retained)).toEqual(expected);
+        expect(reads).not.toHaveBeenCalled();
+        expect(writes).not.toHaveBeenCalled();
+        expect(publication).not.toHaveBeenCalled();
+        expect(before).toEqual(original);
+      } finally {
+        reads.mockRestore();
+        writes.mockRestore();
+        publication.mockRestore();
+      }
+      expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual(original);
+    })),
+  ));
 
   test("appends the typed compensation, restores the prior projection and leaves the compaction intact", () =>
     isolated(
@@ -129,7 +114,10 @@ describe("restore_context_projection", () => {
           expect(after.slice(0, before.length)).toEqual([...before]);
           const appended = after.slice(before.length);
           expect(
-            appended.map((action: LedgerAction.Node) => [action.kind, action.parentId]),
+            appended.map((action: LedgerAction.Node) => [
+              action.kind,
+              action.parentId,
+            ]),
           ).toEqual([
             ["policy.decision", compaction.id],
             ["compaction", compaction.id],
@@ -159,7 +147,10 @@ describe("restore_context_projection", () => {
             foldSessionHistory("ctx", after).map((entry: Message.WithParts) => entry.info.role),
           ).toEqual(["user", "assistant"]);
           expect(foldSessionHistory("ctx", after)).toEqual(
-            foldSessionHistory("ctx", before.slice(0, before.indexOf(compaction))),
+            foldSessionHistory(
+              "ctx",
+              before.slice(0, before.indexOf(compaction)),
+            ),
           );
           // No release plane: the adopted fence owner stays durable.
           expect(isolatedLedger().kernel.row("ctx").fenceOwner).not.toBeNull();
@@ -178,27 +169,29 @@ describe("restore_context_projection", () => {
       program(
         (handle: SessionHandle, before: readonly LedgerAction.Node[]) =>
           Effect.gen(function* () {
-            const outcome = yield* handle.restoreContext(compactionIntent(before).id);
+            const outcome = yield* handle.restoreContext(
+              compactionIntent(before).id,
+            );
             expect(outcome).toEqual({
               terminal: "blocked_pre",
               reason: "pinned_projection",
             });
             const after = sessionTree(isolatedLedger().kernel, "ctx");
             expect(
-              after.slice(before.length).map((action: LedgerAction.Node) => action.kind),
+              after
+                .slice(before.length)
+                .map((action: LedgerAction.Node) => action.kind),
             ).toEqual(["policy.decision"]);
-            expect(foldSessionHistory("ctx", after)).toEqual(foldSessionHistory("ctx", before));
+            expect(foldSessionHistory("ctx", after)).toEqual(
+              foldSessionHistory("ctx", before),
+            );
           }),
-        [
-          {
-            name: "no-restore",
-            kind: "turn",
-            phase: "post",
-            match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
-            verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
-            priority: 500,
-          },
-        ],
+        [{
+          name: "no-restore", kind: "turn", phase: "post",
+          match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
+          verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
+          priority: 500,
+        }],
       ),
     ));
 
@@ -219,10 +212,11 @@ describe("restore_context_projection", () => {
             (action: LedgerAction.Node) =>
               action.kind === "compaction" && action.parentId === compaction.id,
           );
-          const unexecuted = yield* Effect.flip(handle.restoreContext(result?.id ?? ""));
+          const unexecuted = yield* Effect.flip(
+            handle.restoreContext(result?.id ?? ""),
+          );
           expect(unexecuted).toMatchObject({
-            _tag: "ContextRestoreError",
-            reason: "not_executed",
+            _tag: "ContextRestoreError", reason: "not_executed",
             message: "context restore refused: not_executed",
           });
           expect(sessionTree(isolatedLedger().kernel, "ctx")).toEqual([...before]);

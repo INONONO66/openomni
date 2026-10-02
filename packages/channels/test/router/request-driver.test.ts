@@ -14,11 +14,7 @@ import { makeRouter, resetStores } from "./_router-fixture";
 import { originalAction, requestPort } from "../helpers/requests";
 
 function registerTelegramTarget(): void {
-  ledger().stores.actors.registerIdentity({
-    id: "target",
-    kind: "human",
-    trustTier: "collaborator",
-  });
+  ledger().stores.actors.registerIdentity({ id: "target", kind: "human", trustTier: "collaborator" });
   ledger().stores.actors.registerEndpoint({
     id: "endpoint",
     actorId: "target",
@@ -45,37 +41,25 @@ test("router opens the immutable original message action before real Telegram de
     observedRequestId = request?.requestId;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined, {
-    now: () => 10,
-    id: () => "driver-id",
-    random: () => 0,
-  });
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
   const router = makeRouter({
     now: () => 10,
     messaging: {
       grants: () => [
         { id: "grant", senderId: "source", targetActorId: "target", operations: ["awaited"] },
       ],
-      deliveryRoutes: new Map<string, ChannelDeliveryRoute>([
-        [
-          "telegram",
-          (externalId, body, key) =>
-            driver.deliver(externalId, body, key).then(kernelDeliveryReceipt),
-        ],
-      ]),
+      deliveryRoutes: new Map<string, ChannelDeliveryRoute>([["telegram", (externalId, body, key) => driver.deliver(externalId, body, key).then(kernelDeliveryReceipt)]]),
     },
   });
-  const result = await runEffect(
-    router.ingest(
-      { kind: "session", id: "source" },
-      {
-        to: { kind: "actor", actorId: "target" },
-        type: "message",
-        content: "original question",
-        deadline: 100,
-      },
-    ),
-  );
+  const result = await runEffect(router.ingest(
+    { kind: "session", id: "source" },
+    {
+      to: { kind: "actor", actorId: "target" },
+      type: "message",
+      content: "original question",
+      deadline: 100,
+    },
+  ));
   expect(result).toMatchObject({
     status: "executed",
     delivery: { kind: "actor", value: "accepted" },
@@ -84,18 +68,15 @@ test("router opens the immutable original message action before real Telegram de
   expect(observedRequestId).toBeDefined();
   expect(observedRequestId).not.toBe(result.handle.messageId);
   expect(
-    sessionTree("source", ledger().sessions.actions).find(
-      (action: import("@openomni/protocol").LedgerAction.Node) => action.id === observedRequestId,
-    )?.intent.value,
+    sessionTree("source", ledger().sessions.actions).find((action: import("@openomni/protocol").LedgerAction.Node) => action.id === observedRequestId)?.intent
+      .value,
   ).toMatchObject({ phase: "intent", value: { content: "original question" } });
 });
 
 test.each([
   "all",
   "quorum",
-] as const)("real Telegram delivery and normalized replies preserve %s request ownership and pins", async (resolution:
-  | "all"
-  | "quorum") => {
+] as const)("real Telegram delivery and normalized replies preserve %s request ownership and pins", async (resolution: "all" | "quorum") => {
   resetStores();
   for (const id of ["target", "r1", "r2", "r3"]) {
     ledger().stores.actors.registerIdentity({ id, kind: "human", trustTier: "assigned_worker" });
@@ -113,11 +94,7 @@ test.each([
     posted += 1;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined, {
-    now: () => 10,
-    id: () => "driver-id",
-    random: () => 0,
-  });
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
   const requests = channelRequests(requestPort(() => 10));
   const messaging = createExistingAgentMessaging({
     stores: ledger().stores,
@@ -127,9 +104,7 @@ test.each([
       { id: "grant", senderId: "source-session", targetActorId: "target", operations: ["awaited"] },
     ],
     deliver: (message: OutboundMessage) =>
-      driver
-        .deliver(message.target.externalId, message.body, message.idempotencyKey)
-        .then(kernelDeliveryReceipt),
+      driver.deliver(message.target.externalId, message.body, message.idempotencyKey).then(kernelDeliveryReceipt),
     publish: () => undefined,
   });
   const input = {
@@ -194,25 +169,18 @@ test.each([
       index === input.requestSpec.threshold ? "resolved" : "open",
     );
   }
-  expect(ledger().kernel.pendingMessages("source-session")).toHaveLength(
-    input.requestSpec.threshold,
-  );
+  expect(ledger().kernel.pendingMessages("source-session")).toHaveLength(input.requestSpec.threshold);
   expect(
-    ledger()
-      .kernel.requestById("original-message-action")
-      ?.replies.map(
-        (reply: { replyId: string; responderId: string; content: string; receivedAt: number }) =>
-          reply.responderId,
-      ),
+    ledger().kernel.requestById("original-message-action")?.replies.map(
+      (reply: { replyId: string; responderId: string; content: string; receivedAt: number; }) => reply.responderId,
+    ),
   ).toEqual(["r1", "r2", "r3"].slice(0, input.requestSpec.threshold));
 });
 
 test.each([
   "unknown",
   "rejected",
-] as const)("%s receipt with external id never becomes accepted on retry", async (value:
-  | "rejected"
-  | "unknown") => {
+] as const)("%s receipt with external id never becomes accepted on retry", async (value: "rejected" | "unknown") => {
   resetStores();
   registerTelegramTarget();
   originalAction("original", "source");

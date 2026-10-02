@@ -201,10 +201,7 @@ describe("topology conformance", () => {
     rmSync(join(root, workspace.dir, "src"), { recursive: true });
     rmSync(join(root, workspace.dir, "test"), { recursive: true });
     expect(topologyProblems([workspace], root).tsconfig).toEqual(
-      expect.arrayContaining([
-        `${workspace.dir}/src is missing`,
-        `${workspace.dir}/test is missing`,
-      ]),
+      expect.arrayContaining([`${workspace.dir}/src is missing`, `${workspace.dir}/test is missing`]),
     );
   });
 
@@ -254,19 +251,14 @@ test("the executable gate returns failure and reports every consumer of inventor
   } finally {
     write.mockRestore();
   }
-  expect(stderr.join("")).toContain(
-    "VIOLATION [topology] dependency-bands: workspace inventory drift",
-  );
-  expect(stderr.join("")).toContain(
-    "VIOLATION [topology] tsconfig: topology contributes zero tsconfig workspaces",
-  );
+  expect(stderr.join("")).toContain("VIOLATION [topology] dependency-bands: workspace inventory drift");
+  expect(stderr.join("")).toContain("VIOLATION [topology] tsconfig: topology contributes zero tsconfig workspaces");
 });
 
 test("topology generator checks and updates only its generated document section", async () => {
   const { root, workspace } = fixture();
   const document = join(root, "AGENTS.md");
-  const initial =
-    "before\n<!-- BEGIN GENERATED TOPOLOGY -->\nstale\n<!-- END GENERATED TOPOLOGY -->\nafter\n";
+  const initial = "before\n<!-- BEGIN GENERATED TOPOLOGY -->\nstale\n<!-- END GENERATED TOPOLOGY -->\nafter\n";
   writeFileSync(document, initial);
   const argv = process.argv;
   const exitCode = process.exitCode;

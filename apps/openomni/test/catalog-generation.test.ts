@@ -22,9 +22,7 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
   const runtime = gatewayRuntime({ observations: Bus });
   const plane = await planeOf(runtime);
   const resident = createResident({
-    model: { provider: "test", id: "test" },
-    apiKey: "test",
-    tools: testToolPorts,
+    model: { provider: "test", id: "test" }, apiKey: "test", tools: testToolPorts,
     sessionRuntime: {
       authorizeConfigure: allowConfigure,
       openKernel: plane.openKernel,
@@ -44,42 +42,28 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
     },
   };
   try {
-    const handle = await acquireAppResource(
-      runtime,
-      Effect.gen(function* () {
-        seedKernelPolicyRows(plane.catalog.policies);
-        yield* (yield* GenerationLayers).initialize(definitions);
-        return yield* session(
-          {
-            id: "catalog-once",
-            role: "resident",
-            tools: schema.map(sessionTool),
-            runner: () =>
-              Effect.gen(function* () {
-                turns.push((yield* ToolCatalog).definitions);
-                return { kind: "result" as const, text: "done" };
-              }),
-          },
-          {
-            authorizeConfigure: allowConfigure,
-            openKernel: plane.openKernel,
-            listSessions: plane.listSessions,
-          },
-        );
-      }),
-    );
+    const handle = await acquireAppResource(runtime, Effect.gen(function* () {
+      seedKernelPolicyRows(plane.catalog.policies);
+      yield* (yield* GenerationLayers).initialize(definitions);
+      return yield* session({
+        id: "catalog-once", role: "resident", tools: schema.map(sessionTool),
+        runner: () => Effect.gen(function* () {
+          turns.push((yield* ToolCatalog).definitions);
+          return { kind: "result" as const, text: "done" };
+        }),
+      }, {
+        authorizeConfigure: allowConfigure,
+        openKernel: plane.openKernel,
+        listSessions: plane.listSessions,
+      });
+    }));
     await runAppEffect(runtime, handle.prompt("first"));
     await runAppEffect(runtime, handle.prompt("second"));
     expect(layers).toHaveLength(1);
     expect(turns).toHaveLength(2);
     expect(turns[1]).toBe(turns[0]);
-    expect(turns[0]?.map((tool: AnyToolDefinition) => tool.name)).toEqual(
-      schema.map((tool: AnyToolDefinition) => tool.name),
-    );
-    await runAppEffect(
-      runtime,
-      handle.system.blocks.set([{ id: "changed", source: "test", content: "generation-two" }]),
-    );
+    expect(turns[0]?.map((tool: AnyToolDefinition) => tool.name)).toEqual(schema.map((tool: AnyToolDefinition) => tool.name));
+    await runAppEffect(runtime, handle.system.blocks.set([{ id: "changed", source: "test", content: "generation-two" }]));
     await runAppEffect(runtime, handle.prompt("third"));
     expect(layers).toHaveLength(2);
     expect(layers[1]).not.toBe(layers[0]);

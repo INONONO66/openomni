@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
-import {
-  adoptWriter,
-  materializeSession,
-} from "../../../packages/agent/test/store/helpers/session";
+import { adoptWriter, materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { readSessionCursor } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";
@@ -13,11 +10,7 @@ import { turnIntentAction as intentFor } from "./helpers/turn-intent";
 const SESSION = "phase-since";
 
 function readPhase(kernel: SessionKernel): { phase: string; phaseSince: number } {
-  const response = readSessionCursor(kernel, {
-    type: "session_read",
-    sessionId: SESSION,
-    limit: 256,
-  });
+  const response = readSessionCursor(kernel, { type: "session_read", sessionId: SESSION, limit: 256 });
   if (response.type === "session_gap") throw new Error("unexpected session gap");
   return { phase: response.phase, phaseSince: response.phaseSince };
 }
@@ -72,17 +65,15 @@ function phaseFixture() {
   materializeSession(kernel, SESSION);
   const authority = adoptWriter(kernel, SESSION, "phase-writer");
   const commit = (actions: readonly LedgerAction.Append[], state: LedgerSession.State) =>
-    runSyncEffect(
-      kernel.commit({
-        sessionId: SESSION,
-        owner: authority.owner,
-        fence: authority.fence,
-        now: actions[actions.length - 1]?.ts ?? 0,
-        expectedRevision: kernel.row(SESSION).revision,
-        actions: [...actions],
-        state,
-      }),
-    );
+    runSyncEffect(kernel.commit({
+      sessionId: SESSION,
+      owner: authority.owner,
+      fence: authority.fence,
+      now: actions[actions.length - 1]?.ts ?? 0,
+      expectedRevision: kernel.row(SESSION).revision,
+      actions: [...actions],
+      state,
+    }));
   return { plane, kernel, commit };
 }
 
@@ -160,11 +151,7 @@ test("a commit interleaved during the phase read yields a typed gap, never an ol
         return kernel.latestOpenTurn(sessionId);
       },
     };
-    const response = readSessionCursor(torn, {
-      type: "session_read",
-      sessionId: SESSION,
-      limit: 256,
-    });
+    const response = readSessionCursor(torn, { type: "session_read", sessionId: SESSION, limit: 256 });
     expect(response).toEqual({
       type: "session_gap",
       sessionId: SESSION,

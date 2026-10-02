@@ -30,9 +30,7 @@ export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")
   readonly operation: string;
   readonly cause: string;
 }> {
-  override get message(): string {
-    return `${this.operation}: ${this.cause}`;
-  }
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
 export const lifecycleFailure = (operation: string) =>
@@ -86,11 +84,7 @@ export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ??
   return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, bundles, captured)));
 }
 
-function appLayer(
-  options: AppRuntimeOptions,
-  bundles: Layer.Layer<BundleDefinitions>,
-  now: () => number,
-) {
+function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinitions>, now: () => number) {
   const entropy = options.entropy ?? platformEntropy();
   const observations = options.observations ?? platformBus(entropy, now);
   const plane = appLedgerLayer({

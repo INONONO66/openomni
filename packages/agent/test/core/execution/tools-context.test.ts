@@ -33,9 +33,7 @@ describe("tool execution context", () => {
       render: (_input: Record<string, never>, output: string) => output,
     });
     const { executor } = recordingExecutor();
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)]))),
-    );
+    const dispatcher = runAgentSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)]))));
 
     await isolated(
       Effect.scoped(
@@ -71,9 +69,7 @@ describe("tool execution context", () => {
     });
     const { executor } = recordingExecutor();
     const result = await isolated(
-      runAgentSync(
-        createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)]))),
-      ).execute(
+      runAgentSync(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([eraseTool(definition)])))).execute(
         { id: "cancelled", tool: "capture", input: {} },
         { sessionId: "session-call", turnId: "turn", signal: controller.signal },
       ),

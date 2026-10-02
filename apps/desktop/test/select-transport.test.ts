@@ -25,9 +25,7 @@ describe("the transport follows the endpoint", () => {
     // `["auth", token]` is the offer `packages/channels/src/authn/websocket.ts`
     // reads: the literal `auth` marks the pair, and the next protocol IS the
     // credential. Sending the bare token would authenticate nothing.
-    expect(
-      selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "s3cret" }, testId),
-    ).toMatchObject({
+    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "s3cret" }, testId)).toMatchObject({
       kind: "gateway",
       protocols: ["auth", "s3cret"],
     });
@@ -36,12 +34,10 @@ describe("the transport follows the endpoint", () => {
   test("Given an endpoint without a token, When selected, Then no subprotocol is offered", () => {
     // A loopback gateway with no configured token rejects an `auth` offer it
     // cannot match, so an empty offer is not the same as an absent one.
-    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws" }, testId)).not.toHaveProperty(
+    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws" }, testId)).not.toHaveProperty("protocols");
+    expect(selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" }, testId)).not.toHaveProperty(
       "protocols",
     );
-    expect(
-      selectChatTransport({ url: "ws://127.0.0.1:3000/ws", token: "" }, testId),
-    ).not.toHaveProperty("protocols");
   });
 
   test("Given a token no subprotocol can carry, When selected, Then it is refused by name", () => {

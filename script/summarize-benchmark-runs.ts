@@ -115,20 +115,15 @@ export function validateBenchmarkRuns(
     throw new Error(`Expected ${expectedRunCount} benchmark runs, found ${runs.length}`);
   }
 
-  const expected =
-    mode === "head"
-      ? [...EXPECTED_BENCHMARK_NAMES].sort()
-      : [...new Set(runs[0]?.metrics.map((metric) => metric.name))].sort();
+  const expected = mode === "head"
+    ? [...EXPECTED_BENCHMARK_NAMES].sort()
+    : [...new Set(runs[0]?.metrics.map((metric) => metric.name))].sort();
   const expectedSet = new Set<string>(EXPECTED_BENCHMARK_NAMES);
   const metrics: BenchmarkMetric[] = [];
   for (const run of runs) {
     const actual = run.metrics.map((metric) => metric.name).sort();
     const unexpected = actual.filter((name) => !expectedSet.has(name));
-    if (
-      expected.length === 0 ||
-      unexpected.length > 0 ||
-      actual.join("\n") !== expected.join("\n")
-    ) {
+    if (expected.length === 0 || unexpected.length > 0 || actual.join("\n") !== expected.join("\n")) {
       const missing = expected.filter((name) => !actual.includes(name));
       throw new Error(
         `Benchmark run ${run.name} has an incomplete metric set; missing [${missing.join(", ")}], unexpected [${unexpected.join(", ")}]`,

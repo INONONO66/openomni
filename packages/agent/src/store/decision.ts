@@ -4,6 +4,7 @@ import { DecisionFact, type Storage, type Storage as ProtocolStorage } from "@op
 import { z } from "zod";
 import { parseStoredJson } from "./json";
 
+
 /** Narrow first-writer-wins port on one store handle's transaction boundary. */
 namespace DecisionFacts {
   export type Port = ProtocolStorage.DecisionFactSubAdapter;
@@ -38,6 +39,7 @@ export function computeDecisionFactHash(input: {
     .update(JSON.stringify([input.key, input.type, input.data, input.timeCreated]))
     .digest("hex");
 }
+
 
 const SqliteRow = z.object({
   key: z.string(),

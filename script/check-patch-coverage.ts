@@ -52,8 +52,7 @@ type Merged = { hits: Map<number, number>; reports: number; seen: Map<number, nu
 
 function mergeLcov(union: Map<string, Merged>, file: string, root: string): void {
   const prefix = lcovPrefix(file);
-  if (prefix === "")
-    throw new Error(`lcov without workspace ancestor (flattened artifact?): ${file}`);
+  if (prefix === "") throw new Error(`lcov without workspace ancestor (flattened artifact?): ${file}`);
   let entry: Merged | undefined;
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (line.startsWith("SF:")) {
@@ -69,8 +68,7 @@ function mergeLcov(union: Map<string, Merged>, file: string, root: string): void
     }
     if (!line.startsWith("DA:") || entry === undefined) continue;
     const lineNumber = Number(line.slice(3).split(",")[0]);
-    if (!Number.isNaN(lineNumber))
-      entry.seen.set(lineNumber, (entry.seen.get(lineNumber) ?? 0) + 1);
+    if (!Number.isNaN(lineNumber)) entry.seen.set(lineNumber, (entry.seen.get(lineNumber) ?? 0) + 1);
     recordHit(entry.hits, line.slice(3));
   }
 }
@@ -134,55 +132,26 @@ function typeOnlySyntax(node: ts.Node): boolean {
   // TypeScript also calls runtime class heritage a TypeNode. Only implements
   // clauses are erased; an extends expression can execute arbitrary code.
   if (ts.isExpressionWithTypeArguments(node)) {
-    return (
-      ts.isHeritageClause(node.parent) && node.parent.token === ts.SyntaxKind.ImplementsKeyword
-    );
+    return ts.isHeritageClause(node.parent) && node.parent.token === ts.SyntaxKind.ImplementsKeyword;
   }
-  if (
-    ts.isImportDeclaration(node) ||
-    ts.isExportDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isTypeNode(node)
-  )
-    return true;
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeNode(node)) return true;
   if (!ts.isPropertyDeclaration(node) && !ts.isMethodDeclaration(node)) return false;
   // Decorators and initialized fields have runtime behavior, unlike declared
   // fields and bodyless method signatures. Ordinary class fields stay gated.
   if (ts.getDecorators(node)?.length) return false;
   if (ts.isMethodDeclaration(node)) return node.body === undefined;
-  return (
-    node.initializer === undefined &&
-    (ts
-      .getModifiers(node)
-      ?.some(
-        (modifier: ts.Modifier) =>
-          modifier.kind === ts.SyntaxKind.DeclareKeyword ||
-          modifier.kind === ts.SyntaxKind.AbstractKeyword,
-      ) ??
-      false)
-  );
+  return node.initializer === undefined && (ts.getModifiers(node)?.some(
+    (modifier: ts.Modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword || modifier.kind === ts.SyntaxKind.AbstractKeyword,
+  ) ?? false);
 }
 
 function closingSyntax(node: ts.Node): boolean {
   const parent = node.parent;
   switch (node.kind) {
     case ts.SyntaxKind.CloseBraceToken:
-      return (
-        ts.isBlock(parent) ||
-        ts.isModuleBlock(parent) ||
-        ts.isCaseBlock(parent) ||
-        ts.isClassDeclaration(parent) ||
-        ts.isClassExpression(parent) ||
-        ts.isObjectLiteralExpression(parent)
-      );
+      return ts.isBlock(parent) || ts.isModuleBlock(parent) || ts.isCaseBlock(parent) || ts.isClassDeclaration(parent) || ts.isClassExpression(parent) || ts.isObjectLiteralExpression(parent);
     case ts.SyntaxKind.CloseParenToken:
-      return (
-        ts.isCallExpression(parent) ||
-        ts.isNewExpression(parent) ||
-        ts.isParenthesizedExpression(parent) ||
-        ts.isFunctionLike(parent)
-      );
+      return ts.isCallExpression(parent) || ts.isNewExpression(parent) || ts.isParenthesizedExpression(parent) || ts.isFunctionLike(parent);
     case ts.SyntaxKind.CloseBracketToken:
       return ts.isArrayLiteralExpression(parent) || ts.isElementAccessExpression(parent);
     case ts.SyntaxKind.SemicolonToken:

@@ -1,16 +1,6 @@
 import { Result } from "effect";
-import {
-  Vault,
-  type ActorRegistry,
-  type ChannelInstanceStore,
-  type PersonStore,
-  type SecretStore,
-} from "@openomni/channels";
-import {
-  type ChannelRuntimeDeps,
-  type CredentialReader,
-  declaredChannelProfile,
-} from "../channels";
+import { Vault, type ActorRegistry, type ChannelInstanceStore, type PersonStore, type SecretStore } from "@openomni/channels";
+import { type ChannelRuntimeDeps, type CredentialReader, declaredChannelProfile } from "../channels";
 import { MOUNTED_CHANNEL_DEFAULT_TIER } from "../gateway";
 import type { DesiredChannels } from "./supervisor";
 import type { KekResolution } from "./vault-key";

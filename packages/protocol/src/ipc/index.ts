@@ -93,7 +93,11 @@ export namespace Ipc {
 
   const version = 2;
 
-  export function createRequest(id: string, method: string, params?: Request["params"]): Request {
+  export function createRequest(
+    id: string,
+    method: string,
+    params?: Request["params"],
+  ): Request {
     return { v: version, type: "request", id, method, params };
   }
 

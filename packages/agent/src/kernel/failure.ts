@@ -15,9 +15,7 @@ export class AgentStopError extends Data.TaggedError("AgentStopError")<{
   }
 }
 
-export class ContextAdmissionError extends Data.TaggedError("ContextAdmissionError")<
-  Record<never, never>
-> {}
+export class ContextAdmissionError extends Data.TaggedError("ContextAdmissionError")<Record<never, never>> {}
 
 export class PolicyDenied extends Data.TaggedError("PolicyDenied")<{
   readonly phase: "pre" | "post";
@@ -40,9 +38,7 @@ export class CommitFailed extends Data.TaggedError("CommitFailed")<{
   readonly error: LedgerError;
 }> {
   override get message(): string {
-    return this.error.message === ""
-      ? this.error._tag
-      : `${this.error._tag}: ${this.error.message}`;
+    return this.error.message === "" ? this.error._tag : `${this.error._tag}: ${this.error.message}`;
   }
 }
 
@@ -55,36 +51,28 @@ export class AgentFailure extends Data.TaggedError("AgentFailure")<{
   readonly operation: string;
   readonly cause: string;
 }> {
-  override get message(): string {
-    return `${this.operation}: ${this.cause}`;
-  }
+  override get message(): string { return `${this.operation}: ${this.cause}`; }
 }
 
 /** A context-restore the admission plane refused: the caller-selected compaction target is unknown or was never executed. */
 export class ContextRestoreError extends Data.TaggedError("ContextRestoreError")<{
   readonly reason: "unknown_compaction" | "not_executed";
 }> {
-  override get message(): string {
-    return `context restore refused: ${this.reason}`;
-  }
+  override get message(): string { return `context restore refused: ${this.reason}`; }
 }
 
 /** A compaction execution the admission plane refused or whose recorded output no longer matches. */
 export class CompactionExecutionError extends Data.TaggedError("CompactionExecutionError")<{
   readonly reason: string;
 }> {
-  override get message(): string {
-    return `compaction execution refused: ${this.reason}`;
-  }
+  override get message(): string { return `compaction execution refused: ${this.reason}`; }
 }
 
 /** A session commit the ledger refused; carries the full refusal verdict. */
 export class SessionCommitError extends Data.TaggedError("SessionCommitError")<{
   readonly result: Exclude<LedgerSession.CommitResult, { readonly ok: true }>;
 }> {
-  override get message(): string {
-    return `session commit ${this.result.reason}`;
-  }
+  override get message(): string { return `session commit ${this.result.reason}`; }
 }
 
 /** Named carrier for programmer-invariant violations thrown from non-Effect code paths. */
@@ -119,21 +107,11 @@ export class GenerationUnsettled extends Data.TaggedError("GenerationUnsettled")
 }
 
 export class BundleError extends Data.TaggedError("BundleError")<{
-  readonly code:
-    | "namespace"
-    | "duplicate"
-    | "requirement"
-    | "metadata"
-    | "missing_output"
-    | "acquisition"
-    | "policy"
-    | "selection";
+  readonly code: "namespace" | "duplicate" | "requirement" | "metadata" | "missing_output" | "acquisition" | "policy" | "selection";
   readonly bundle: string;
   readonly detail: string;
 }> {
-  override get message(): string {
-    return `${this.code}: ${this.bundle}: ${this.detail}`;
-  }
+  override get message(): string { return `${this.code}: ${this.bundle}: ${this.detail}`; }
 }
 
 export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalError")<{
@@ -149,18 +127,14 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
 export class InboundAuthorityViolation {
   readonly _tag = "InboundAuthorityViolation";
   constructor(readonly reason: "unknown_origin" | "undeclared_treatment") {}
-  get message(): string {
-    return `inbound authority violation: ${this.reason}`;
-  }
+  get message(): string { return `inbound authority violation: ${this.reason}`; }
 }
 
 /** A turn whose executor sealed without any runner-produced output: a distinct typed result cause, not a policy refusal. */
 export class RunnerOutputMissing {
   readonly _tag = "RunnerOutputMissing";
   constructor(readonly turnId: string) {}
-  get message(): string {
-    return `runner output missing: turn ${this.turnId}`;
-  }
+  get message(): string { return `runner output missing: turn ${this.turnId}`; }
 }
 
 /**
@@ -171,9 +145,7 @@ export class RunnerOutputMissing {
 export class SessionAdmissionRefused {
   readonly _tag = "SessionAdmissionRefused";
   constructor(readonly sessionId: string) {}
-  get message(): string {
-    return `session admission refused: ${this.sessionId}`;
-  }
+  get message(): string { return `session admission refused: ${this.sessionId}`; }
 }
 
 export type ExecutionError =
@@ -192,15 +164,7 @@ export type ExecutionError =
   | ExecutionApprovalError
   | AgentStopError;
 
-export type SessionError =
-  | ExecutionError
-  | SessionMissing
-  | LeaseLost
-  | GenerationUnavailable
-  | GenerationUnsettled
-  | LedgerError
-  | BundleError
-  | ContextRestoreError;
+export type SessionError = ExecutionError | SessionMissing | LeaseLost | GenerationUnavailable | GenerationUnsettled | LedgerError | BundleError | ContextRestoreError;
 
 // ─── from failure.ts (#1247) ───
 /** The typed error a Cause carries, else `synthesize` applied to the pretty-printed Cause (defects and interrupts). */
@@ -212,3 +176,5 @@ export function fromCause<E, F>(cause: Cause.Cause<E>, synthesize: (pretty: stri
 export function of<E>(cause: Cause.Cause<E>, operation: string): E | AgentFailure {
   return fromCause(cause, (pretty) => new AgentFailure({ operation, cause: pretty }));
 }
+
+

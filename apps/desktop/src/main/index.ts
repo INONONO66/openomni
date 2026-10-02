@@ -175,4 +175,5 @@ function bootstrap(host: { readonly env: Parameters<typeof resolveDesktopConfig>
   });
 }
 
+
 bootstrap(process);

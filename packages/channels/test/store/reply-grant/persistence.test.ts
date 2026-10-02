@@ -29,9 +29,7 @@ const grant = {
   expiresAt: 100,
 };
 
-function withClaimedGrant(
-  check: (db: Database, store: ReturnType<typeof createSqliteReplyGrantAdapter>) => void,
-): void {
+function withClaimedGrant(check: (db: Database, store: ReturnType<typeof createSqliteReplyGrantAdapter>) => void): void {
   const db = new Database(":memory:");
   try {
     bootstrapStoreDatabase(db, CATALOG_SCHEMA);
@@ -55,10 +53,11 @@ describe("durable reply-grant current projection", () => {
       // Race grant claims, not connection startup/WAL recovery. Keep the
       // initialized database open and await each contender's exact ready signal.
       for (const id of ["guest-1", "guest-2"]) {
-        const contender = fork(new URL("./race-worker.ts", import.meta.url), [path, id], {
-          execPath: process.execPath,
-          stdio: ["ignore", "inherit", "inherit", "ipc"],
-        });
+        const contender = fork(
+          new URL("./race-worker.ts", import.meta.url),
+          [path, id],
+          { execPath: process.execPath, stdio: ["ignore", "inherit", "inherit", "ipc"] },
+        );
         contenders.push(contender);
         exits.push(
           once(contender, "exit", { signal }).then((value) =>

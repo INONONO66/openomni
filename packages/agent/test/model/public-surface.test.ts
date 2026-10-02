@@ -7,14 +7,7 @@ import { apiError } from "./helpers/retry";
 import { Context } from "effect";
 
 test("LLM service and error values retain their machine tags", () => {
-  const service = {
-    run: (): never => {
-      throw new Error("fixture");
-    },
-    resolveModel: (): never => {
-      throw new Error("fixture");
-    },
-  };
+  const service = { run: (): never => { throw new Error("fixture"); }, resolveModel: (): never => { throw new Error("fixture"); } };
   expect(Llm.key).toBe("@openomni/agent/Llm");
   expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
   expect(apiError({ message: "bad", isRetryable: false })._tag).toBe("APIError");

@@ -80,11 +80,7 @@ beforeEach(() => {
     defaultTier: "collaborator",
     createdBy: "owner",
   });
-  ledger().stores.actors.registerIdentity({
-    id: "actor-buyer",
-    kind: "human",
-    trustTier: "collaborator",
-  });
+  ledger().stores.actors.registerIdentity({ id: "actor-buyer", kind: "human", trustTier: "collaborator" });
   ledger().stores.actors.registerEndpoint({
     id: "ep-buyer",
     actorId: "actor-buyer",
@@ -95,9 +91,7 @@ beforeEach(() => {
 });
 
 test("ungranted actor send is refused before transport", async () => {
-  expect(
-    await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply)),
-  ).toMatchObject({
+  expect(await runEffect(makeRouter().ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     status: "blocked_pre",
   });
   expect(delivered).toEqual([]);
@@ -124,9 +118,7 @@ test("admitted first contact grants a scoped reply through the same ingest", asy
 test("a granted endpoint without a channel delivery owner fails closed", async () => {
   const router = makeRouter(new Map());
   await admitFirstContact(router);
-  expect(
-    await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply)),
-  ).toMatchObject({ _tag: "ChannelsFailure", operation: "message.deliver" });
+  expect(await effectFailure(router.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({ _tag: "ChannelsFailure", operation: "message.deliver" });
   expect(delivered).toEqual([]);
 });
 
@@ -162,9 +154,7 @@ test("an admission denied after preflight fails as a typed send-admission confli
       ],
     },
   });
-  expect(
-    await effectFailure(suppressed.ingest({ kind: "session", id: "persona-owner" }, reply)),
-  ).toMatchObject({
+  expect(await effectFailure(suppressed.ingest({ kind: "session", id: "persona-owner" }, reply))).toMatchObject({
     _tag: "SendAdmissionConflict",
   });
   expect(delivered).toEqual([]);
@@ -218,10 +208,7 @@ test.each([
   "accepted",
   "rejected",
   "unknown",
-] as const)("actor %s receipt survives the composed router", async (value:
-  | "accepted"
-  | "rejected"
-  | "unknown") => {
+] as const)("actor %s receipt survives the composed router", async (value: "accepted" | "rejected" | "unknown") => {
   const router = makeRouter(new Map([["discord", async () => ({ value })]]));
   await admitFirstContact(router);
   expect(await sendActorReply(router)).toMatchObject({

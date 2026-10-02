@@ -7,12 +7,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 const realClient = { createRoot, hydrateRoot };
 import { GATEWAY_CHANNEL, type DesktopApi, type GatewayEndpoint } from "../src/preload/api";
 import { parseWindowBounds } from "../src/main/window-bounds";
-import {
-  bindStorePlatform,
-  consoleStore,
-  createSession,
-  INITIAL_CLIENT_STATE,
-} from "../src/renderer/state/store";
+import { bindStorePlatform, consoleStore, createSession, INITIAL_CLIENT_STATE } from "../src/renderer/state/store";
 import { testPlatform } from "./helpers/platform";
 
 type Globals = { document?: object; window?: object; desktop?: DesktopApi };

@@ -13,12 +13,7 @@ import { runAgent } from "./executor";
 import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
 import { runnerTestLayer } from "./service-layers";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  withSessionServices,
-  type SessionFixture,
-} from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
 import { createExecutor } from "../../src/kernel/gate/decide";
 import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session/run";
 import { createController } from "../../src/testing/controller";
@@ -99,59 +94,47 @@ export async function reconstructionMain(
       authorizeConfigure: allowConfigure,
       ...isolatedRuntime(),
     };
-    return runAgent(
-      Effect.scoped(
-        withSessionServices(
-          Effect.gen(function* () {
-            const resolved = yield* resolveSessionRuntime(runtime);
-            const scope = yield* Effect.scope;
-            const controller = yield* createController(
-              kernel,
-              reconstructionSession,
-              (input: SessionRunnerInput) =>
-                Effect.gen(function* () {
-                  const before = sessionTree(kernel, reconstructionSession);
-                  const executor = yield* createExecutor({
-                    ledger: input.ledger,
-                    identity: {
-                      sessionId: input.sessionId,
-                      role: input.role,
-                      turnId: input.turnId,
-                      parentActionId: input.turnId,
-                    },
-                  });
-                  yield* executor.recover();
-                  const pin = SessionTurn.Resume.parse(
-                    kernel.actionById(input.actionId)?.intent.value,
-                  ).context;
-                  witness.capture = {
-                    context: pin,
-                    toolsGeneration: input.toolsGeneration,
-                    toolsHash: input.toolsHash,
-                    systemHash: input.systemHash,
-                    history: z.array(Message.WithParts).parse(input.history),
-                    messages: input.messages.map((message) => ({ ...message })),
-                    recoveryUnchanged:
-                      canonicalDigest(before) ===
-                      canonicalDigest(sessionTree(kernel, reconstructionSession)),
-                  };
-                  boundary?.(witness);
-                  return { kind: "result" as const, text: "" };
-                }),
-              resolved,
-              {
-                reactivate: () => Effect.die("no reactivation in reconstruction main"),
-                release: () => undefined,
-              },
-              scope,
-            );
-            yield* controller.reconcile();
-            return witness;
-          }),
-          runtime,
-        ).pipe(Effect.provide(runnerTestLayer)),
-      ),
-    );
+    return runAgent(Effect.scoped(withSessionServices(Effect.gen(function* () {
+      const resolved = yield* resolveSessionRuntime(runtime);
+      const scope = yield* Effect.scope;
+      const controller = yield* createController(
+        kernel,
+        reconstructionSession,
+        (input: SessionRunnerInput) => Effect.gen(function* () {
+          const before = sessionTree(kernel, reconstructionSession);
+          const executor = yield* createExecutor({
+            ledger: input.ledger,
+            identity: {
+              sessionId: input.sessionId,
+              role: input.role,
+              turnId: input.turnId,
+              parentActionId: input.turnId,
+            },
+          });
+          yield* executor.recover();
+          const pin = SessionTurn.Resume.parse(
+            kernel.actionById(input.actionId)?.intent.value,
+          ).context;
+          witness.capture = {
+            context: pin,
+            toolsGeneration: input.toolsGeneration,
+            toolsHash: input.toolsHash,
+            systemHash: input.systemHash,
+            history: z.array(Message.WithParts).parse(input.history),
+            messages: input.messages.map((message) => ({ ...message })),
+            recoveryUnchanged:
+              canonicalDigest(before) === canonicalDigest(sessionTree(kernel, reconstructionSession)),
+          };
+          boundary?.(witness);
+          return { kind: "result" as const, text: "" };
+        }),
+        resolved,
+        { reactivate: () => Effect.die("no reactivation in reconstruction main"), release: () => undefined },
+        scope,
+      );
+      yield* controller.reconcile();
+      return witness;
+    }), runtime).pipe(Effect.provide(runnerTestLayer))));
   };
   // Crash-main seam: a spawned child owns its stores; an in-process caller's
   // isolation is reused so isolations never nest (they would deadlock). The
@@ -166,9 +149,7 @@ export async function reconstructionMain(
 /** Injectable witness/exit seam: the process cut is abrupt; the same main is tested in-process. */
 export async function reconstructionProcessMain(
   args: string[],
-  emit: (
-    value: Witness | ReturnType<InstanceType<typeof FoldCheckpointIntegrityError>["toObject"]>,
-  ) => void,
+  emit: (value: Witness | ReturnType<InstanceType<typeof FoldCheckpointIntegrityError>["toObject"]>) => void,
   exit: (code: number) => void,
 ) {
   const [stage, dbPath] = z

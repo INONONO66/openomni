@@ -132,9 +132,7 @@ describe("channel grant authority", () => {
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant(ledger().stores, { surface: "discord" })?.inboundTreatment).toBe(
-      "evidence_only",
-    );
+    expect(resolveChannelGrant(ledger().stores, { surface: "discord" })?.inboundTreatment).toBe("evidence_only");
   });
 
   test("returns no resolution when no raw fact matches", () => {

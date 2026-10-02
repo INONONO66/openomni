@@ -13,7 +13,10 @@ import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
 import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
 import { decodeChannelFailure } from "@openomni/channels";
-import { messageMaterialization, prepareMessage } from "../../src/composition/message-session";
+import {
+  messageMaterialization,
+  prepareMessage,
+} from "../../src/composition/message-session";
 import { localInbox } from "./ledger";
 import { allowConfigure, generationServices } from "./generation-services";
 const ToolCatalog = Kernel.ToolCatalog;
@@ -51,91 +54,61 @@ export function messageFixture(
   };
   const context = acquireSyncEffect(generationServices({ clock: () => 100, plane }));
   const requests = runSyncEffect(createSessionRequests(runtime).pipe(Effect.provide(context)));
-  const gateway = runSyncEffect(
-    createResidentGateway(
-      {
-        now: () => 100,
-        id: testIds("message-fixture"),
-        requests: channelRequests(requests),
-        inbox: {
-          commit: (input) =>
-            localInbox(
-              plane,
-              "message-fixture",
-              () => 100,
-            )(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))),
-        },
-        prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
-          messageMaterialization(
-            () => plane.openKernel(id).currentPolicyGeneration(),
-            testIds("materialize"),
-          )({
-            id,
-            parentId,
-            role: childRole,
-            runner,
-            tools,
-            preset: "",
-            at: 100,
-          }),
-        ),
-      },
-      messaging,
-    ).pipe(Effect.provide(context)),
-  );
+  const gateway = runSyncEffect(createResidentGateway({
+    now: () => 100,
+    id: testIds("message-fixture"),
+    requests: channelRequests(requests),
+    inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+    prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
+      messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("materialize"))({
+        id,
+        parentId,
+        role: childRole,
+        runner,
+        tools,
+        preset: "",
+        at: 100,
+      })),
+  }, messaging).pipe(Effect.provide(context)));
   let result: Tool.Result | undefined;
   // Optional mid-turn arrival: committed inside the running turn (riding the
   // live owner+fence) so it is still pending when the send is admitted —
   // boundary drains consume everything committed before the turn opened.
   let beforeDispatch: Effect.Effect<void> | undefined;
-  const handle = acquireSyncEffect(
-    session(
-      {
-        id: sessionId,
-        role,
-        runner: (input) =>
-          Effect.gen(function* () {
-            if (beforeDispatch !== undefined) {
-              const hook = beforeDispatch;
-              beforeDispatch = undefined;
-              yield* hook;
-            }
-            const payload = toolInput(
-              Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
-            );
-            const executor = yield* createExecutor({
-              identity: {
-                sessionId,
-                role,
-                parentActionId: input.turnId,
-                turnId: input.turnId,
-                toolsHash: input.toolsHash,
-                toolsGeneration: input.toolsGeneration,
-              },
-              ledger: input.ledger,
-            });
-            const dispatcher = yield* createDispatcher({ executor }).pipe(
-              Effect.provideService(ToolCatalog, {
-                definitions: [
-                  eraseTool(
-                    createSendMessageTool(
-                      { ingest: (...args) => runEffect(gateway.ingest(...args)) },
-                      () => 100,
-                    ),
-                  ),
-                ],
-              }),
-            );
-            result = yield* dispatcher.execute(
-              { id: crypto.randomUUID(), tool: "send_message", input: payload },
-              { sessionId, turnId: input.turnId },
-            );
-            return { kind: "result" as const, text: result.output ?? "" };
-          }),
-      },
-      runtime,
-    ).pipe(Effect.provide(context)),
-  );
+  const handle = acquireSyncEffect(session(
+    {
+      id: sessionId,
+      role,
+      runner: (input) => Effect.gen(function* () {
+        if (beforeDispatch !== undefined) {
+          const hook = beforeDispatch;
+          beforeDispatch = undefined;
+          yield* hook;
+        }
+        const payload = toolInput(
+          Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
+        );
+        const executor = yield* createExecutor({
+          identity: {
+            sessionId,
+            role,
+            parentActionId: input.turnId,
+            turnId: input.turnId,
+            toolsHash: input.toolsHash,
+            toolsGeneration: input.toolsGeneration,
+          },
+          ledger: input.ledger,
+        });
+        const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provideService(ToolCatalog, { definitions: [eraseTool(createSendMessageTool({ ingest: (...args) => runEffect(gateway.ingest(...args)) }, () => 100))] }));
+        result = yield* dispatcher.execute(
+          { id: crypto.randomUUID(), tool: "send_message", input: payload },
+          { sessionId, turnId: input.turnId },
+        );
+        return { kind: "result" as const, text: result.output ?? "" };
+      }),
+    },
+    runtime,
+  ).pipe(Effect.provide(context)));
   return {
     directory,
     plane,

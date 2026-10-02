@@ -132,38 +132,29 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
         match: { encodingVersion: 1, value: { op: "compaction" } },
         verdict: { encodingVersion: 1, value: { type: "allow" } },
       },
-      ...Gateway.RuleTableA.shape.check.options.map(
-        (
-          check:
-            | "identity"
-            | "grant_tier"
-            | "egress_budget"
-            | "event_id_dedupe"
-            | "reply_correlation",
-        ) => ({
-          generation: 1,
-          name: `message.external.${check}`,
-          kind: "message",
-          phase: "pre" as const,
-          priority: 1000,
-          match: {
-            encodingVersion: 1 as const,
-            value: {
-              message: Gateway.RuleTableA.parse({
-                id: `message.external.${check}`,
-                table: "A",
-                sender: "external",
-                check,
-                effect: "deny",
-              }),
-            },
+      ...Gateway.RuleTableA.shape.check.options.map((check: "identity" | "grant_tier" | "egress_budget" | "event_id_dedupe" | "reply_correlation") => ({
+        generation: 1,
+        name: `message.external.${check}`,
+        kind: "message",
+        phase: "pre" as const,
+        priority: 1000,
+        match: {
+          encodingVersion: 1 as const,
+          value: {
+            message: Gateway.RuleTableA.parse({
+              id: `message.external.${check}`,
+              table: "A",
+              sender: "external",
+              check,
+              effect: "deny",
+            }),
           },
-          verdict: {
-            encodingVersion: 1 as const,
-            value: { type: "deny", reason: `message.external.${check}` },
-          },
-        }),
-      ),
+        },
+        verdict: {
+          encodingVersion: 1 as const,
+          value: { type: "deny", reason: `message.external.${check}` },
+        },
+      })),
     ],
   });
   router = createGatewayRouter({
@@ -171,17 +162,15 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     transaction: channelTransaction,
     now,
     id: () => nextFixtureId("fixture-id"),
-    requests: channelRequests(
-      requestPort(now, (sessionIds: readonly string[]) => {
-        for (const sessionId of sessionIds) {
-          for (const row of ledger().kernel.pendingMessages(sessionId)) {
-            if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
-            commits.push({ ...row, parentActionId: null });
-            overrides.committed?.(row);
-          }
+    requests: channelRequests(requestPort(now, (sessionIds: readonly string[]) => {
+      for (const sessionId of sessionIds) {
+        for (const row of ledger().kernel.pendingMessages(sessionId)) {
+          if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
+          commits.push({ ...row, parentActionId: null });
+          overrides.committed?.(row);
         }
-      }),
-    ),
+      }
+    })),
     sink: <T>(event: import("@openomni/protocol").BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
@@ -189,84 +178,77 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
       Bus.publish(event, data);
     },
     inbox: {
-      commit: (row: Inbox.Commit) =>
-        Effect.gen(function* () {
-          yield* ledger().kernel.materialize({
-            id: row.sessionId,
-            parentId: null,
-            role: "resident",
-            tools: [],
-            system: { preset: "", blocks: [] },
-            policyGeneration: 0,
-            actionId: `${row.sessionId}:configure`,
-            at: 0,
-          });
-          const existed = ledger()
-            .kernel.pendingMessages(row.sessionId)
-            .some((input: Inbox.Row) => input.id === row.id);
-          const received = yield* commitReceivedMessage(row);
-          if (!existed) commits.push(row);
-          return received.row;
-        }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
-    },
-    prepare: (sender: Gateway.IngestSender, send: Gateway.SendMessage, target: string) =>
-      Effect.succeed({
-        target,
-        message:
-          sender.kind === "external"
-            ? {
-                sender: "external",
-                addressee: "bot",
-                identity: true,
-                grantTier: true,
-                egressBudget: true,
-                eventIdUnique: true,
-                replyCorrelation: true,
-              }
-            : {
-                sender: "session",
-                senderRole: "resident",
-                targetKind: send.to.kind,
-                type: send.type,
-                parentChild: true,
-                fanout: 0,
-                depth: 1,
-                withinParentDeadline: true,
-              },
-      }),
-    run: (
-      sender: Gateway.IngestSender,
-      request: Parameters<GatewayRouterPorts["run"]>[1],
-      body: Parameters<GatewayRouterPorts["run"]>[2],
-    ) =>
-      Effect.gen(function* () {
-        const decision = policy.evaluate({
-          kind: "message",
-          phase: "pre",
-          op: request.op,
-          value: request.intent,
-          message: request.message,
+      commit: (row: Inbox.Commit) => Effect.gen(function* () {
+        yield* ledger().kernel.materialize({
+          id: row.sessionId,
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 0,
+          actionId: `${row.sessionId}:configure`,
+          at: 0,
         });
-        if (decision.verdict === "deny")
-          return {
-            terminal: "blocked_pre",
-            matchedRuleIds: decision.matchedRuleIds,
-            reason: decision.reason ?? "denied",
-          };
-        const actionId = nextFixtureId("action");
-        if (sender.kind === "session") originalAction(actionId, sender.id, request.intent);
+        const existed = ledger().kernel.pendingMessages(row.sessionId).some(
+          (input: Inbox.Row) => input.id === row.id,
+        );
+        const received = yield* commitReceivedMessage(row);
+        if (!existed) commits.push(row);
+        return received.row;
+      }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
+    },
+    prepare: (sender: Gateway.IngestSender, send: Gateway.SendMessage, target: string) => Effect.succeed({
+      target,
+      message:
+        sender.kind === "external"
+          ? {
+              sender: "external",
+              addressee: "bot",
+              identity: true,
+              grantTier: true,
+              egressBudget: true,
+              eventIdUnique: true,
+              replyCorrelation: true,
+            }
+          : {
+              sender: "session",
+              senderRole: "resident",
+              targetKind: send.to.kind,
+              type: send.type,
+              parentChild: true,
+              fanout: 0,
+              depth: 1,
+              withinParentDeadline: true,
+            },
+    }),
+    run: (sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      const decision = policy.evaluate({
+        kind: "message",
+        phase: "pre",
+        op: request.op,
+        value: request.intent,
+        message: request.message,
+      });
+      if (decision.verdict === "deny")
         return {
-          terminal: "executed",
+          terminal: "blocked_pre",
           matchedRuleIds: decision.matchedRuleIds,
-          value: yield* body(
-            messageExecutionReceipt(
-              actionId,
-              sender.kind === "session" ? sender.id : "ingress",
-              request.intent,
-            ),
-          ),
+          reason: decision.reason ?? "denied",
         };
-      }),
+      const actionId = nextFixtureId("action");
+      if (sender.kind === "session") originalAction(actionId, sender.id, request.intent);
+      return {
+        terminal: "executed",
+        matchedRuleIds: decision.matchedRuleIds,
+        value: yield* body(
+          messageExecutionReceipt(
+            actionId,
+            sender.kind === "session" ? sender.id : "ingress",
+            request.intent,
+          ),
+        ),
+      };
+    }),
     ...overrides,
   });
   return router;

@@ -193,8 +193,7 @@ export namespace Retry {
     header: ReturnType<typeof headerDelay>,
     random: () => number,
   ): Decision {
-    if (header === undefined)
-      return { retry: true, reason, delayMs: backoffDelayMs(attempt, random) };
+    if (header === undefined) return { retry: true, reason, delayMs: backoffDelayMs(attempt, random) };
     if (header.ms <= RETRY_HEADER_DELAY_CAP)
       return { retry: true, reason, delayMs: Math.max(0, header.ms) };
     // Explicit directives fail fast; inferred resets demote to backoff.
@@ -205,12 +204,7 @@ export namespace Retry {
         detail: `server asked to wait ${header.ms}ms, above the ${RETRY_HEADER_DELAY_CAP}ms cap`,
       };
     }
-    return {
-      retry: true,
-      reason,
-      delayMs: backoffDelayMs(attempt, random),
-      retryAfterOverCap: true,
-    };
+    return { retry: true, reason, delayMs: backoffDelayMs(attempt, random), retryAfterOverCap: true };
   }
 
   /** Jitter subtracts at most one quarter of the ladder delay. */

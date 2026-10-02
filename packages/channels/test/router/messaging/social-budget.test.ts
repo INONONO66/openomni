@@ -5,7 +5,12 @@ import type { Gateway } from "@openomni/protocol";
 
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
 import { evaluateSocialBudget } from "../../../src/router/messaging/social-budget.js";
-import { expectDenied, buildGrant, buildSendInput, messagingNow } from "../../helpers/messaging.js";
+import {
+  expectDenied,
+  buildGrant,
+  buildSendInput,
+  messagingNow,
+} from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 import { registerSenderAndTarget, sendPorts } from "./_send-fixture";
 
@@ -174,9 +179,7 @@ describe("send kernel active-egress gate (#219 seam)", () => {
   function messaging(withGate = true) {
     return createExistingAgentMessaging({
       ...sendPorts(),
-      deliver: (
-        message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0],
-      ) => {
+      deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
         deliveries.push(message.messageId);
         return { value: "accepted" as const };
       },
@@ -226,18 +229,18 @@ describe("send kernel active-egress gate (#219 seam)", () => {
 
   test("cooldown-block: a second send within cooldownMs is cooldown_suppressed", async () => {
     budgets = [budget({ maxPerWindow: 10, cooldownMs: 30_000 })];
-    const first = await runEffect(
-      messaging().send(buildSendInput({ messageId: "message:1", at: messagingNow })),
-    );
-    const second = await runEffect(
-      messaging().send(buildSendInput({ messageId: "message:2", at: messagingNow + 5_000 })),
-    );
+    const first = await runEffect(messaging().send(
+      buildSendInput({ messageId: "message:1", at: messagingNow }),
+    ));
+    const second = await runEffect(messaging().send(
+      buildSendInput({ messageId: "message:2", at: messagingNow + 5_000 }),
+    ));
     expect(first.kind).toBe("sent");
     expectDenied(second, "cooldown_suppressed");
     // A send past the cooldown is admitted again.
-    const third = await runEffect(
-      messaging().send(buildSendInput({ messageId: "message:3", at: messagingNow + 40_000 })),
-    );
+    const third = await runEffect(messaging().send(
+      buildSendInput({ messageId: "message:3", at: messagingNow + 40_000 }),
+    ));
     expect(third.kind).toBe("sent");
     expect(deliveries).toEqual(["message:1", "message:3"]);
   });

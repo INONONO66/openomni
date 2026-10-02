@@ -25,8 +25,7 @@ export const approveWriteRow: PolicyRow.Row = {
 
 /** A compiled test policy with the mandatory row plus the supplied behavior rows. */
 export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPolicySnapshot {
-  return compilePolicySnapshot({
-    registry: KERNEL_POLICY_REGISTRY,
+  return compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     mandatory: [],
     rows: [mandatoryPolicyRow, ...rows],
@@ -34,17 +33,15 @@ export function compiledPolicy(rows: readonly PolicyRow.Row[] = []): CompiledPol
 }
 
 export function accountOutputDeniedPolicy() {
-  return compiledPolicy([
-    {
-      name: "deny-account-output",
-      kind: "tool",
-      phase: "post",
-      match: { encodingVersion: 1, value: { op: "account" } },
-      verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
-      priority: 1,
-      generation: 1,
-    },
-  ]);
+  return compiledPolicy([{
+    name: "deny-account-output",
+    kind: "tool",
+    phase: "post",
+    match: { encodingVersion: 1, value: { op: "account" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "output_denied" } },
+    priority: 1,
+    generation: 1,
+  }]);
 }
 
 /** An "allow everything" compiled policy for tests. */

@@ -39,7 +39,7 @@ test("the provider produces typed failure facts, never a legacy error shape", as
     visibleOutput: false,
     usage: { inputTokens: 0, outputTokens: 0 },
   });
-  expect(result.error.cause).toContain(cause.message);
+    expect(result.error.cause).toContain(cause.message);
 });
 
 test("stop and aborted are produced by the real attempt entry", async () => {
@@ -79,13 +79,7 @@ test("stop and aborted are produced by the real attempt entry", async () => {
 function overWire(call: Parameters<typeof run>[0]) {
   return async () => {
     const auth = await runEffect(
-      Auth.resolve(
-        call.model.providerID,
-        input.authFilePath,
-        call.auth,
-        call.authProvider,
-        call.allowAuthFallback,
-      ),
+      Auth.resolve(call.model.providerID, input.authFilePath, call.auth, call.authProvider, call.allowAuthFallback),
     );
     await getLanguage(call.model, auth, call.transport).doStream({
       prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
@@ -98,68 +92,33 @@ function overWire(call: Parameters<typeof run>[0]) {
 test("SDK retry ownership and route-bound credentials hold at the HTTP surface", async () => {
   const authorizations: Array<string | null> = [];
   const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
+    hostname: "127.0.0.1", port: 0,
     fetch: (request) => {
       authorizations.push(request.headers.get("authorization"));
-      return Response.json(
-        { error: { message: "overloaded", type: "server_error" } },
-        { status: 503 },
-      );
+      return Response.json({ error: { message: "overloaded", type: "server_error" } }, { status: 503 });
     },
   });
   const auth = { type: "api", key: "route-a-key" } as const;
   const userMessage: Message.WithParts = {
     info: {
-      id: "msg-user",
-      sessionID: "session",
-      role: "user",
-      time: { created: 1000 },
-      agent: "default",
-      model: { providerID: "provider", modelID: "model" },
+      id: "msg-user", sessionID: "session", role: "user", time: { created: 1000 },
+      agent: "default", model: { providerID: "provider", modelID: "model" },
     },
-    parts: [
-      { id: "part-user", sessionID: "session", messageID: "msg-user", type: "text", text: "hello" },
-    ],
+    parts: [{ id: "part-user", sessionID: "session", messageID: "msg-user", type: "text", text: "hello" }],
   };
-  const base = {
-    ...input,
-    messages: [userMessage],
-    auth,
-    authProvider: "provider",
-    allowAuthFallback: false,
-    transport: { baseUrl: `${server.url}v1` },
-  };
+  const base = { ...input, messages: [userMessage], auth, authProvider: "provider", allowAuthFallback: false,
+    transport: { baseUrl: `${server.url}v1` } };
   try {
-    expect(
-      streamArguments(
-        base,
-        "",
-        new AbortController().signal,
-        [],
-        getLanguage(base.model, auth, base.transport),
-      ).maxRetries,
-    ).toBe(0);
-    expect(await run(base, sink, { createStream: overWire(base) })).toMatchObject({
-      type: "error",
-      error: { cause: { statusCode: 503 } },
-    });
+    expect(streamArguments(base, "", new AbortController().signal, [],
+      getLanguage(base.model, auth, base.transport)).maxRetries).toBe(0);
+    expect(await run(base, sink, { createStream: overWire(base) })).toMatchObject({ type: "error", error: { cause: { statusCode: 503 } } });
     expect(authorizations).toEqual(["Bearer route-a-key"]);
     const changed = { ...base, model: { ...input.model, providerID: "fallback" } };
-    expect(await run(changed, sink, { createStream: overWire(changed) })).toMatchObject({
-      type: "error",
-      error: { visibleOutput: false },
-    });
+    expect(await run(changed, sink, { createStream: overWire(changed) })).toMatchObject({ type: "error", error: { visibleOutput: false } });
     expect(authorizations).toEqual(["Bearer route-a-key"]);
-    const rebound = {
-      ...changed,
-      authProvider: "fallback",
-      auth: { type: "api", key: "route-b-key" } as const,
-    };
-    expect(await run(rebound, sink, { createStream: overWire(rebound) })).toMatchObject({
-      type: "error",
-      error: { cause: { statusCode: 503 }, provider: "fallback" },
-    });
+    const rebound = { ...changed, authProvider: "fallback", auth: { type: "api", key: "route-b-key" } as const };
+    expect(await run(rebound, sink, { createStream: overWire(rebound) }))
+      .toMatchObject({ type: "error", error: { cause: { statusCode: 503 }, provider: "fallback" } });
     expect(authorizations).toEqual(["Bearer route-a-key", "Bearer route-b-key"]);
   } finally {
     await server.stop(true);
@@ -173,20 +132,13 @@ test("reasoning-only failure retains billed usage without marking an assistant p
       fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
         subscriptions += 1;
         yield { type: "reasoning-delta", id: "private", text: "reasoning" };
-        yield {
-          type: "step-finish",
-          usage: { inputTokens: 13, outputTokens: 7, reasoningTokens: 5 },
-        };
+        yield { type: "step-finish", usage: { inputTokens: 13, outputTokens: 7, reasoningTokens: 5 } };
         throw new Error("provider_lost");
       })(),
     }),
   });
   expect(subscriptions).toBe(1);
-  expect(outcome).toMatchObject({
-    type: "error",
-    error: {
-      visibleOutput: false,
-      usage: { inputTokens: 13, outputTokens: 7, reasoningTokens: 5 },
-    },
-  });
+  expect(outcome).toMatchObject({ type: "error", error: {
+    visibleOutput: false, usage: { inputTokens: 13, outputTokens: 7, reasoningTokens: 5 },
+  } });
 });

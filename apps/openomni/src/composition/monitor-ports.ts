@@ -1,6 +1,11 @@
 import type { Session } from "@openomni/agent";
 type SessionEntityTimerContext = Session.SessionEntityTimerContext;
-import { Alarm, EncodedPayload, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import {
+  Alarm,
+  EncodedPayload,
+  type LedgerAction,
+  type PlainObject,
+} from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
 import { MonitorRefused, type MonitorPorts, type WatchState } from "../tools/core/monitor-ports";
@@ -85,9 +90,7 @@ function firedTerminal(action: LedgerAction.Node): boolean {
 
 function firedContent(action: LedgerAction.Node | undefined): string | null {
   const value = action?.effect.value;
-  return value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
     typeof value?.content === "string"
     ? value.content
     : null;

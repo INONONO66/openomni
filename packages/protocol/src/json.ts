@@ -38,10 +38,7 @@ const strictPlainKey: PlainKeyPolicy = (key) =>
   key !== "__proto__" && key !== "constructor" && key !== "prototype";
 const persistedPlainKey: PlainKeyPolicy = () => true;
 
-function isPlainValueUnsafe<Input>(
-  value: Input,
-  keyPolicy: PlainKeyPolicy,
-): value is Input & PlainValue {
+function isPlainValueUnsafe<Input>(value: Input, keyPolicy: PlainKeyPolicy): value is Input & PlainValue {
   if (value === null || typeof value === "boolean" || typeof value === "string") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
   if (Array.isArray(value)) return isPlainArray(value, keyPolicy);
@@ -49,10 +46,7 @@ function isPlainValueUnsafe<Input>(
   return isPlainObject(value, keyPolicy);
 }
 
-function isPlainArray<Entry>(
-  value: readonly Entry[],
-  keyPolicy: PlainKeyPolicy,
-): value is Entry[] & PlainValue[] {
+function isPlainArray<Entry>(value: readonly Entry[], keyPolicy: PlainKeyPolicy): value is Entry[] & PlainValue[] {
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   // Named own properties make key count exceed length; holes surface as
   // absent index descriptors below — together this refuses sparse arrays,
@@ -96,7 +90,7 @@ export type JsonShapedValue =
 
 // Named generic acceptor (see isPersistedPlainValue on the callback typing):
 // runtime stays accept-anything, matching the z.unknown() it replaces.
-const acceptJsonShapedValue = <Input>(_value: Input): boolean => true;
+const acceptJsonShapedValue = <Input,>(_value: Input): boolean => true;
 export const JsonShapedValueSchema: z.ZodType<JsonShapedValue, JsonShapedValue> =
   z.custom<JsonShapedValue>(acceptJsonShapedValue);
 
@@ -178,9 +172,7 @@ function renderCanonical(value: CanonicalInput): string {
     for (const key of Object.keys(value).sort()) {
       const nested = (value as PlainObject)[key];
       if (nested === undefined)
-        throw new CanonicalJsonError({
-          message: `canonical JSON cannot express undefined at ${key}`,
-        });
+        throw new CanonicalJsonError({ message: `canonical JSON cannot express undefined at ${key}` });
       fields.push(`${JSON.stringify(key)}:${renderCanonical(nested)}`);
     }
     return `{${fields.join(",")}}`;

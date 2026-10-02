@@ -51,10 +51,7 @@ test("explicit over-cap directive declines; inferred reset demotes and publishes
     statusCode: 429,
     responseHeaders: { "retry-after": "3600" },
   });
-  expect(Retry.decide(1, explicit, sources())).toMatchObject({
-    retry: false,
-    reason: "rate_limit",
-  });
+  expect(Retry.decide(1, explicit, sources())).toMatchObject({ retry: false, reason: "rate_limit" });
   const inferred = apiError({
     message: "limit",
     isRetryable: true,
@@ -79,9 +76,6 @@ test("raw and wrapped transport failures use short probes and terminate on the t
     { retry: true, reason: "server_error", delayMs: 250 },
     { retry: true, reason: "server_error", delayMs: 250 },
   ]);
-  expect(Retry.decide(3, wrapped, sources(), 3)).toMatchObject({
-    retry: false,
-    reason: "server_error",
-  });
+  expect(Retry.decide(3, wrapped, sources(), 3)).toMatchObject({ retry: false, reason: "server_error" });
   expect(Retry.isInstantTransportFailure(wrapped, 2000)).toBe(false);
 });

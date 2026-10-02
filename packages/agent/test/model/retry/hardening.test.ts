@@ -145,11 +145,7 @@ describe("Retry billing classification", () => {
     statusCode,
     reason,
   }) => {
-    const decision = Retry.decide(
-      1,
-      apiError({ message, isRetryable: true, statusCode }),
-      sources(),
-    );
+    const decision = Retry.decide(1, apiError({ message, isRetryable: true, statusCode }), sources());
 
     expect(decision).toMatchObject({ retry: true, reason });
   });
@@ -206,11 +202,7 @@ describe("Retry billing classification", () => {
     void widened;
 
     // Runtime half: no retryable Decision can carry it.
-    const decision = Retry.decide(
-      1,
-      apiError({ message: "billing required", isRetryable: true }),
-      sources(),
-    );
+    const decision = Retry.decide(1, apiError({ message: "billing required", isRetryable: true }), sources());
     expect(decision.retry).toBe(false);
   });
 });

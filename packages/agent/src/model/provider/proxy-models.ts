@@ -32,63 +32,44 @@ function credentialFingerprint(apiKey: string | undefined): string {
 const ModelEntry = z.object({ id: z.string().min(1) }).loose();
 const ModelListing = z.object({ data: z.array(z.json()) });
 
-export function fetchProxyModels(
-  baseURL: string,
-  now: () => number,
-  apiKey?: string,
-): Effect.Effect<string[], LlmError> {
+export function fetchProxyModels(baseURL: string, now: () => number, apiKey?: string): Effect.Effect<string[], LlmError> {
   return Effect.gen(function* () {
-    const url = normalizeModelsURL(baseURL);
-    const cacheKey = `${url}:${credentialFingerprint(apiKey)}`;
-    const cached = modelCache.get(cacheKey);
-    if (cached && cached.expiresAt > now()) return cached.ids;
+  const url = normalizeModelsURL(baseURL);
+  const cacheKey = `${url}:${credentialFingerprint(apiKey)}`;
+  const cached = modelCache.get(cacheKey);
+  if (cached && cached.expiresAt > now()) return cached.ids;
 
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
+  const headers: Record<string, string> = {};
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
 
-    const response = yield* Effect.tryPromise({
-      try: (signal) => fetch(url, { headers, signal }),
-      catch: decodeLlmFailure("proxy.models.fetch"),
-    }).pipe(
-      Effect.mapError(
-        (error) =>
-          new ProxyModelsError({
-            message: `proxy model listing unreachable: ${String(error)}`,
-            url,
-            cause: String(error),
-          }),
-      ),
-    );
-    if (!response.ok) {
-      return yield* new ProxyModelsError({
-        message: `proxy model listing returned HTTP ${response.status}`,
-        url,
-        status: response.status,
-      });
-    }
-
-    const body = yield* Effect.tryPromise({
-      try: () => response.json().then(ModelListing.parse),
-      catch: decodeLlmFailure("proxy.models.json"),
-    }).pipe(
-      Effect.mapError(
-        (error) =>
-          new ProxyModelsError({
-            message: "proxy model listing returned invalid JSON",
-            url,
-            cause: String(error),
-          }),
-      ),
-    );
-
-    const ids = body.data.flatMap((entry) => {
-      const parsed = ModelEntry.safeParse(entry);
-      return parsed.success ? [parsed.data.id] : [];
+  const response = yield* Effect.tryPromise({
+    try: (signal) => fetch(url, { headers, signal }),
+    catch: decodeLlmFailure("proxy.models.fetch"),
+  }).pipe(Effect.mapError((error) => new ProxyModelsError({
+    message: `proxy model listing unreachable: ${String(error)}`, url, cause: String(error),
+  })));
+  if (!response.ok) {
+    return yield* new ProxyModelsError({
+      message: `proxy model listing returned HTTP ${response.status}`,
+      url,
+      status: response.status,
     });
-    modelCache.set(cacheKey, { ids, expiresAt: now() + CACHE_TTL_MS });
-    return ids;
+  }
+
+  const body = yield* Effect.tryPromise({
+    try: () => response.json().then(ModelListing.parse), catch: decodeLlmFailure("proxy.models.json"),
+  }).pipe(Effect.mapError((error) => new ProxyModelsError({
+    message: "proxy model listing returned invalid JSON", url, cause: String(error),
+  })));
+
+  const ids = body.data.flatMap((entry) => {
+    const parsed = ModelEntry.safeParse(entry);
+    return parsed.success ? [parsed.data.id] : [];
+  });
+  modelCache.set(cacheKey, { ids, expiresAt: now() + CACHE_TTL_MS });
+  return ids;
   });
 }
 

@@ -13,7 +13,9 @@ import { EpochMs } from "../time.js";
  * time and is rebuildable. Durable persistence lives in the channels store plane.
  */
 
-const PersonId = z.string().regex(/^person:[a-z0-9][a-z0-9-]*$/, "Person id must be person:<slug>");
+const PersonId = z
+  .string()
+  .regex(/^person:[a-z0-9][a-z0-9-]*$/, "Person id must be person:<slug>");
 
 const ChannelInstanceId = z
   .string()
@@ -22,7 +24,9 @@ const ChannelInstanceId = z
     "ChannelInstance id must be channel:<provider>:<slug>",
   );
 
-const SecretId = z.string().regex(/^secret:[a-z0-9][a-z0-9-]*$/, "Secret id must be secret:<slug>");
+const SecretId = z
+  .string()
+  .regex(/^secret:[a-z0-9][a-z0-9-]*$/, "Secret id must be secret:<slug>");
 
 /**
  * One platform identity bound to a Person. `workspace` is the platform's

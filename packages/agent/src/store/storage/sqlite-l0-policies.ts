@@ -18,11 +18,7 @@ export function createPolicies(
         if (drafts.length === 0) throw new PolicyGenerationRefused({ generation, reason: "empty" });
         for (const draft of drafts) {
           if (!this.append({ ...draft, generation })) {
-            throw new PolicyGenerationRefused({
-              generation,
-              reason: "conflict",
-              ruleName: draft.name,
-            });
+            throw new PolicyGenerationRefused({ generation, reason: "conflict", ruleName: draft.name });
           }
         }
         return generation;

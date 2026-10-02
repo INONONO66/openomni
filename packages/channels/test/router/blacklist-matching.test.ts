@@ -35,12 +35,8 @@ describe("blacklist perimeter matching", () => {
       createdBy: "act_owner",
     });
 
-    expect(matchBlacklist(ledger().stores, { candidates: ["discord:guild:dev"] }, 1)?.id).toBe(
-      "bl-pattern",
-    );
-    expect(
-      matchBlacklist(ledger().stores, { candidates: ["discord:other:prod"] }, 1),
-    ).toBeUndefined();
+    expect(matchBlacklist(ledger().stores, { candidates: ["discord:guild:dev"] }, 1)?.id).toBe("bl-pattern");
+    expect(matchBlacklist(ledger().stores, { candidates: ["discord:other:prod"] }, 1)).toBeUndefined();
   });
 
   test("matches channel facts against the canonical channel and candidates", () => {

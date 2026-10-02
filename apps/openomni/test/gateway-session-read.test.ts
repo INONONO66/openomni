@@ -3,10 +3,7 @@ import { Effect } from "effect";
 import { Bus } from "./helpers/bus";
 import { WebSocketHandler, type WsConnection } from "@openomni/channels";
 import type { LedgerAction, LedgerSession, PlainValue } from "@openomni/protocol";
-import {
-  adoptWriter,
-  materializeSession,
-} from "../../../packages/agent/test/store/helpers/session";
+import { adoptWriter, materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, readSessionCursor, webSocketCallbacks } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";
@@ -19,17 +16,15 @@ function readFixture(sessionId: string) {
   materializeSession(kernel, sessionId);
   const authority = adoptWriter(kernel, sessionId, "read-writer");
   const commit = (actions: readonly LedgerAction.Append[], state: LedgerSession.State) =>
-    runSyncEffect(
-      kernel.commit({
-        sessionId,
-        owner: authority.owner,
-        fence: authority.fence,
-        now: actions[actions.length - 1]?.ts ?? 0,
-        expectedRevision: kernel.row(sessionId).revision,
-        actions: [...actions],
-        state,
-      }),
-    );
+    runSyncEffect(kernel.commit({
+      sessionId,
+      owner: authority.owner,
+      fence: authority.fence,
+      now: actions[actions.length - 1]?.ts ?? 0,
+      expectedRevision: kernel.row(sessionId).revision,
+      actions: [...actions],
+      state,
+    }));
   return { plane, kernel, commit };
 }
 
@@ -131,10 +126,7 @@ test("a reader whose kernel read throws receives a session_read_failed error fra
         throw new Error("kernel read refused");
       },
     };
-    const handler = new WebSocketHandler(() => Effect.void, Bus.publish, {
-      now: () => 0,
-      id: testIds("ws"),
-    });
+    const handler = new WebSocketHandler(() => Effect.void, Bus.publish, { now: () => 0, id: testIds("ws") });
     const frames: string[] = [];
     const ws: WsConnection = {
       data: { surfaceKey: "ws::dm:test", authenticated: true, externalId: "reader" },

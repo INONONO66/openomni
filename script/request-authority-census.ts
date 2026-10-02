@@ -173,5 +173,4 @@ export function authorityMain(result: Awaited<ReturnType<typeof scanRequestAutho
   return Number(result.violations.length > 0);
 }
 
-if (import.meta.main)
-  process.exitCode = authorityMain(await scanRequestAuthority(join(import.meta.dir, "..")));
+if (import.meta.main) process.exitCode = authorityMain(await scanRequestAuthority(join(import.meta.dir, "..")));

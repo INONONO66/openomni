@@ -103,18 +103,11 @@ export namespace Processor {
 
     function closeStream(iterator: AsyncIterator<StreamEvent>): Effect.Effect<void> {
       return Effect.tryPromise({
-        try: () =>
-          iterator.return?.() ?? Promise.resolve({ done: true as const, value: undefined }),
+        try: () => iterator.return?.() ?? Promise.resolve({ done: true as const, value: undefined }),
         catch: decodeLlmFailure("stream.close"),
       }).pipe(
         Effect.timeoutOption(STREAM_CLOSE_GRACE_MS),
-        Effect.catch((error) =>
-          Effect.sync(() =>
-            publishInfo(events, sessionID, trace.traceId, now, "stream.close.failed", {
-              error: typeof error.cause === "string" ? error.cause : String(error),
-            }),
-          ),
-        ),
+        Effect.catch((error) => Effect.sync(() => publishInfo(events, sessionID, trace.traceId, now, "stream.close.failed", { error: typeof error.cause === "string" ? error.cause : String(error) }))),
         Effect.asVoid,
         Effect.interruptible,
       );
@@ -122,82 +115,61 @@ export namespace Processor {
 
     function process(streamInput: StreamInput): Effect.Effect<void, LlmError> {
       return Effect.suspend(() => {
-        publishStatus(events, sessionID, trace.traceId, now, "busy");
-        record({ type: "message.created", attemptId, message: { ...assistantMessage } });
-        const eventContext: StreamEventContext = {
-          sessionID,
-          messageID: assistantMessage.id,
+      publishStatus(events, sessionID, trace.traceId, now, "busy");
+      record({ type: "message.created", attemptId, message: { ...assistantMessage } });
+      const eventContext: StreamEventContext = {
+        sessionID,
+        messageID: assistantMessage.id,
+        attemptId,
+        sink,
+        record,
+        note: (msg, data) => publishInfo(events, sessionID, trace.traceId, now, msg, data),
+        now,
+        id,
+        promptText: streamInput.promptText,
+        estimateUsage,
+        externalTools: options.externalTools,
+        ...(toolNames === undefined ? {} : { toolNames }),
+      };
+      function finish(finish: Transcript.FinishReason): void {
+        record({
+          type: "message.finished",
           attemptId,
-          sink,
-          record,
-          note: (msg, data) => publishInfo(events, sessionID, trace.traceId, now, msg, data),
-          now,
-          id,
-          promptText: streamInput.promptText,
-          estimateUsage,
-          externalTools: options.externalTools,
-          ...(toolNames === undefined ? {} : { toolNames }),
-        };
-        function finish(finish: Transcript.FinishReason): void {
-          record({
-            type: "message.finished",
-            attemptId,
-            messageId: assistantMessage.id,
-            at: now(),
-            finish,
-            usage: eventState.usage,
-          });
-        }
-        return Effect.gen(function* () {
-          yield* Effect.try({
-            try: () => abort.throwIfAborted(),
-            catch: decodeLlmFailure("stream.abort"),
-          });
-          const stream = yield* createStream(streamInput);
-          const iterator = stream.fullStream[Symbol.asyncIterator]();
-          yield* Effect.gen(function* () {
-            for (;;) {
-              const next = yield* Effect.tryPromise({
-                try: () => iterator.next(),
-                catch: decodeLlmFailure("stream.next"),
-              });
-              if (next.done) break;
-              if (abort.aborted) {
-                yield* drainToolSettlements(iterator, next.value, eventState, eventContext);
-                yield* Effect.try({
-                  try: () => abort.throwIfAborted(),
-                  catch: decodeLlmFailure("stream.abort"),
-                });
-              }
-              yield* Effect.try({
-                try: () => handleStreamEvent(next.value, eventState, eventContext),
-                catch: decodeLlmFailure("stream.event"),
-              });
+          messageId: assistantMessage.id,
+          at: now(),
+          finish,
+          usage: eventState.usage,
+        });
+      }
+      return Effect.gen(function* () {
+        yield* Effect.try({ try: () => abort.throwIfAborted(), catch: decodeLlmFailure("stream.abort") });
+        const stream = yield* createStream(streamInput);
+        const iterator = stream.fullStream[Symbol.asyncIterator]();
+        yield* Effect.gen(function* () {
+          for (;;) {
+            const next = yield* Effect.tryPromise({ try: () => iterator.next(), catch: decodeLlmFailure("stream.next") });
+            if (next.done) break;
+            if (abort.aborted) {
+              yield* drainToolSettlements(iterator, next.value, eventState, eventContext);
+              yield* Effect.try({ try: () => abort.throwIfAborted(), catch: decodeLlmFailure("stream.abort") });
             }
-          }).pipe(Effect.ensuring(closeStream(iterator)));
-          settleAttempt(eventState, eventContext, {
-            aborted: false,
-            preserveTools: options.externalTools,
-          });
-          finish(mapFinishReason(eventState.finishReason));
-        }).pipe(
-          Effect.tapError((error) =>
-            Effect.sync(() => {
-              const aborted = abort.aborted || errorFacts(error).aborted === true;
-              settleAttempt(eventState, eventContext, { aborted });
-              finish(aborted ? "aborted" : "error");
-            }),
-          ),
-          Effect.onInterrupt(() =>
-            Effect.sync(() => {
-              settleAttempt(eventState, eventContext, { aborted: true });
-              finish("aborted");
-            }),
-          ),
-          Effect.ensuring(
-            Effect.sync(() => publishStatus(events, sessionID, trace.traceId, now, "idle")),
-          ),
-        );
+            yield* Effect.try({ try: () => handleStreamEvent(next.value, eventState, eventContext), catch: decodeLlmFailure("stream.event") });
+          }
+        }).pipe(Effect.ensuring(closeStream(iterator)));
+        settleAttempt(eventState, eventContext, { aborted: false, preserveTools: options.externalTools });
+        finish(mapFinishReason(eventState.finishReason));
+      }).pipe(
+        Effect.tapError((error) => Effect.sync(() => {
+          const aborted = abort.aborted || errorFacts(error).aborted === true;
+          settleAttempt(eventState, eventContext, { aborted });
+          finish(aborted ? "aborted" : "error");
+        })),
+        Effect.onInterrupt(() => Effect.sync(() => {
+          settleAttempt(eventState, eventContext, { aborted: true });
+          finish("aborted");
+        })),
+        Effect.ensuring(Effect.sync(() => publishStatus(events, sessionID, trace.traceId, now, "idle"))),
+      );
       });
     }
     return {

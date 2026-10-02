@@ -6,10 +6,7 @@ import { z } from "zod";
 import { RunEvents } from "../../src/kernel/turn";
 import { Bus } from "../helpers/bus";
 import { Compaction } from "../../src/plugins/compaction/compact";
-import type {
-  ResolvedCompactionOptions,
-  SummarizationBudget,
-} from "../../src/plugins/compaction/contract";
+import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/plugins/compaction/contract";
 import {
   estimateMessagesTokens,
   isIneffectiveCompaction,
@@ -577,18 +574,20 @@ describe("Compaction", () => {
       // `time` at every cut — so the record excludes them (#737): recording
       // them as content would replay them as pseudo-speech after resume.
       expect(kept).toEqual(
-        second.messages.slice(1).flatMap((m: Message.WithParts) =>
-          m.parts
-            .filter(
-              (part: Message.Part): part is Message.TextPart =>
-                part.type === "text" && part.metadata?.timeCarriage !== true,
-            )
-            .map((part: Message.TextPart) => ({
-              role: m.info.role,
-              text: part.text,
-              time: m.info.time.created,
-            })),
-        ),
+        second.messages
+          .slice(1)
+          .flatMap((m: Message.WithParts) =>
+            m.parts
+              .filter(
+                (part: Message.Part): part is Message.TextPart =>
+                  part.type === "text" && part.metadata?.timeCarriage !== true,
+              )
+              .map((part: Message.TextPart) => ({
+                role: m.info.role,
+                text: part.text,
+                time: m.info.time.created,
+              })),
+          ),
       );
     });
 

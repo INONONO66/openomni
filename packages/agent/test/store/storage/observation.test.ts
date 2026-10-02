@@ -1,17 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import {
-  Gateway,
-  type Inbox,
-  L0Observation,
-  LedgerAction,
-  type ObservationSink,
-  SessionTransition,
-} from "@openomni/protocol";
-import {
-  type ObservationPublishFailure,
-  publishCommitted,
-} from "../../../src/store/storage/sqlite-l0-observation";
+import { Gateway, type Inbox, L0Observation, LedgerAction, type ObservationSink, SessionTransition, } from "@openomni/protocol";
+import { type ObservationPublishFailure, publishCommitted } from "../../../src/store/storage/sqlite-l0-observation";
 import { createActions } from "../../../src/store/session-file";
 import { openLedgerDatabase } from "../helpers/ledger";
 
@@ -48,11 +38,7 @@ function capture() {
     scope(identity) {
       return {
         publish(event, payload) {
-          events.push({
-            name: event.name,
-            payload: JSON.stringify(payload),
-            sessionId: identity.sessionId,
-          });
+          events.push({ name: event.name, payload: JSON.stringify(payload), sessionId: identity.sessionId });
         },
       };
     },
@@ -86,12 +72,7 @@ test("a committed reply prompt publishes its scoped platform message identity", 
   expect(events).toEqual([
     {
       name: L0Observation.ActionCommittedEvent.name,
-      payload: JSON.stringify({
-        id: "reply-action",
-        sessionId: "session",
-        revision: 1,
-        kind: "prompt",
-      }),
+      payload: JSON.stringify({ id: "reply-action", sessionId: "session", revision: 1, kind: "prompt" }),
     },
     {
       name: Gateway.MessageObserved.name,
@@ -168,9 +149,7 @@ test("a reply deadline publishes a timeout from its original source identity", (
     createdAt: 3,
   });
 
-  expect(
-    publishCommitted(db, sink, action("request", "original:resolution", {}, { request })),
-  ).toBeUndefined();
+  expect(publishCommitted(db, sink, action("request", "original:resolution", {}, { request }))).toBeUndefined();
 
   expect(events[1]).toEqual({
     name: Gateway.MessageObserved.name,
@@ -213,7 +192,7 @@ test("the actions adapter routes a publish failure to its observation failure po
   using db = openLedgerDatabase();
   db.run("INSERT INTO session (id, role, state) VALUES ('session', 'resident', 'idle')");
   const failures: ObservationPublishFailure[] = [];
-  const transaction = <T>(operation: () => T): T => db.transaction(operation).immediate();
+  const transaction = <T,>(operation: () => T): T => db.transaction(operation).immediate();
   const actions = createActions(
     db,
     transaction,
@@ -240,5 +219,7 @@ test("the actions adapter routes a publish failure to its observation failure po
   );
 
   expect(receipt?.action.id).toBe("committed");
-  expect(failures).toEqual([{ actionId: "committed", cause: new Error("subscriber unavailable") }]);
+  expect(failures).toEqual([
+    { actionId: "committed", cause: new Error("subscriber unavailable") },
+  ]);
 });

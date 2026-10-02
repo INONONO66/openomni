@@ -1,22 +1,10 @@
 import { Effect } from "effect";
 import { interruptOn } from "../kernel/ports";
-import type { LedgerAction } from "@openomni/protocol";
-import type {
-  AlarmSkipReason,
-  AlarmDisposition,
-  AlarmChainReads,
-  WatchTimeoutArm,
-  RetryAlarmPort,
-  RetryAlarmDeps,
-} from "../kernel/alarm";
+import type { LedgerAction, SessionTransition } from "@openomni/protocol";
+import type { CommitFailed } from "../kernel/failure";
+import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
 
-export type {
-  AlarmDisposition,
-  AlarmChainReads,
-  WatchTimeoutArm,
-  RetryAlarmPort,
-  RetryAlarmDeps,
-} from "../kernel/alarm";
+export type { AlarmDisposition, AlarmChainReads, AlarmSenders, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
 
 /**
  * Timer plane over cluster DeliverAt (W5.2 review F2, plan D5/D8): a persisted
@@ -26,8 +14,14 @@ export type {
  * without committing anything.
  */
 
+
 const RUN: AlarmDisposition = { op: "run" };
 const skip = (reason: AlarmSkipReason): AlarmDisposition => ({ op: "skip", reason });
+
+
+
+
+
 
 const RETRY_SEPARATOR = ":retry:";
 const PAGE_LIMIT = 256;
@@ -91,6 +85,8 @@ export function watchTimeoutDelivery(
   if (reads.actionById(watchTimeoutKey(message)) !== undefined) return skip("duplicate_timeout");
   return RUN;
 }
+
+
 
 export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
   return {

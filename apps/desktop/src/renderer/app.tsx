@@ -24,12 +24,7 @@ import { sessionGlyphProps } from "./shell/session-glyph";
 import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { desktopBridge } from "./state/desktop-bridge";
-import {
-  queryKeys,
-  sessionReadModel,
-  useGatewayEndpoint,
-  useSessionReadModels,
-} from "./state/queries";
+import { queryKeys, sessionReadModel, useGatewayEndpoint, useSessionReadModels } from "./state/queries";
 import { historyMenuEntries, listedSessions, placeTitle, sessionIndex } from "./state/selectors";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -56,14 +51,7 @@ import {
 export function App({ platform, storage, host }: AppEnvironment) {
   const state = useStore(consoleStore);
   const now = host.now();
-  const {
-    sessions: localSessions,
-    tabs,
-    collapsedProjectIds,
-    sidebarOpen,
-    sidebarFloating,
-    sidebarWidth,
-  } = state;
+  const { sessions: localSessions, tabs, collapsedProjectIds, sidebarOpen, sidebarFloating, sidebarWidth } = state;
   const { transport, notice } = useChatEndpoint(host.id);
   const sessions = useSessionReadModels(localSessions, transport);
   const queryClient = useQueryClient();
@@ -81,30 +69,20 @@ export function App({ platform, storage, host }: AppEnvironment) {
   useShellLifecycle(storage);
   const chatFor = useSessionChats(transport);
 
-  const arrive = useCallback(
-    (boundary: Boundary | null = "selection") => {
-      const searching = search.current.searching;
-      setHeld((previous) =>
-        applyAtBoundary(
-          previous,
-          orderByAttention(
-            listedSessions(consoleStore.state.sessions).map((local) =>
-              sessionReadModel(
-                local,
-                queryClient.getQueryData<SessionRead.Page>(
-                  queryKeys.session(local.durableSessionId ?? ""),
-                ),
-              ),
-            ),
-            host.now(),
-          ),
-          searching ? null : boundary,
-        ),
-      );
-      if (!searching) setSidebarFloating(false);
-    },
-    [host, queryClient],
-  );
+  const arrive = useCallback((boundary: Boundary | null = "selection") => {
+    const searching = search.current.searching;
+    setHeld((previous) =>
+      applyAtBoundary(
+        previous,
+        orderByAttention(listedSessions(consoleStore.state.sessions).map((local) =>
+          sessionReadModel(local, queryClient.getQueryData<SessionRead.Page>(
+            queryKeys.session(local.durableSessionId ?? ""),
+          ))), host.now()),
+        searching ? null : boundary,
+      ),
+    );
+    if (!searching) setSidebarFloating(false);
+  }, [host, queryClient]);
 
   // A session's first prompt earns its title and its place in the list: that
   // appearance is a boundary, not a reorder held for the next navigation.

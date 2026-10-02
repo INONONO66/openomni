@@ -36,19 +36,9 @@ function makeIsolatedLedger(): IsolatedLedgerHandle {
   const kernel = SessionHandleStore.createSessionKernel(session, catalog);
   const materialize = kernel.materialize;
   // Match the app composition's catalog registration for this shared-file fixture.
-  kernel.materialize = (input) =>
-    materialize(input).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          catalog.indexSession({
-            id: input.id,
-            parentId: input.parentId,
-            role: input.role,
-            createdAt: input.at,
-          });
-        }),
-      ),
-    );
+  kernel.materialize = (input) => materialize(input).pipe(Effect.tap(() => Effect.sync(() => {
+    catalog.indexSession({ id: input.id, parentId: input.parentId, role: input.role, createdAt: input.at });
+  })));
   return {
     kernel,
     openKernel: () => kernel,
@@ -139,9 +129,7 @@ export function activeIsolation(): IsolatedLedger | undefined {
   return active;
 }
 
-type IsolatedOutcome<A> =
-  | { readonly ok: true; readonly value: A }
-  | { readonly ok: false; readonly thrown: Error };
+type IsolatedOutcome<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly thrown: Error };
 
 /**
  * Promise-shaped isolation for imperative crash mains and matrix cells: the
@@ -158,10 +146,7 @@ export function isolatedRun<A>(
         try {
           return { ok: true, value: await fn(ledger) };
         } catch (thrown) {
-          return {
-            ok: false,
-            thrown: thrown instanceof Error ? thrown : new Error(String(thrown)),
-          };
+          return { ok: false, thrown: thrown instanceof Error ? thrown : new Error(String(thrown)) };
         }
       }),
     makeLedger,

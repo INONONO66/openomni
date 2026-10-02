@@ -3,11 +3,7 @@ import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger, runTestSync } from "./isolated";
-import {
-  allowConfigure,
-  kernelRuntime,
-  type SessionFixture as SessionRuntime,
-} from "./session-services";
+import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime, } from "./session-services";
 import { Effect, Result } from "effect";
 import type { LedgerError } from "../../src/store/errors";
 import type { SessionKernel } from "../../src/session/entity";

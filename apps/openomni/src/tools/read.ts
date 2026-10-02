@@ -36,8 +36,7 @@ export function createReadTool(ports: FilePorts) {
           throw new ToolRefused("read", "offset and limit apply to utf8 reads only");
         const bytes = await filesystem(args.path, ports).read();
         return {
-          content:
-            args.encoding === "base64" ? bytes.toString("base64") : window(text(bytes), args),
+          content: args.encoding === "base64" ? bytes.toString("base64") : window(text(bytes), args),
           bytes: bytes.length,
         };
       }),

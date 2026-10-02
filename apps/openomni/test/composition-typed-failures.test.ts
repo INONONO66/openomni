@@ -3,10 +3,7 @@ import { Effect } from "effect";
 import type { Journal } from "@openomni/agent";
 type CommitReceipt = Journal.CommitReceipt;
 import type { LedgerSession } from "@openomni/protocol";
-import {
-  createIngressExecutor,
-  GATEWAY_INGRESS_SESSION,
-} from "../src/composition/ingress-executor";
+import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "../src/composition/ingress-executor";
 import { messageMaterialization, prepareMessage } from "../src/composition/message-session";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { seedKernelPolicyRows } from "../src/policy-seed";
@@ -17,36 +14,19 @@ import { testIds } from "./helpers/test-entropy";
 
 function materialize(plane: AppLedgerPlane) {
   return (id: string, parentId: string | null, role: LedgerSession.Role, runner: string) =>
-    messageMaterialization(
-      () => plane.openKernel(id).currentPolicyGeneration(),
-      testIds("typed-materialize"),
-    )({
-      id,
-      parentId,
-      role,
-      runner,
-      tools: [],
-      preset: "",
-      at: 100,
+    messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("typed-materialize"))({
+      id, parentId, role, runner, tools: [], preset: "", at: 100,
     });
 }
 
 /** A materialized sender row, optionally under an adopted fence. */
 function sender(plane: AppLedgerPlane, leased: boolean): void {
   const kernel = plane.openKernel("sender");
-  runSyncEffect(
-    kernel.materialize({
-      id: "sender",
-      parentId: null,
-      role: "resident",
-      tools: [],
-      bundles: [],
-      system: { preset: "", blocks: [] },
-      policyGeneration: 1,
-      actionId: crypto.randomUUID(),
-      at: 100,
-    }),
-  );
+  runSyncEffect(kernel.materialize({
+    id: "sender", parentId: null, role: "resident", tools: [], bundles: [],
+    system: { preset: "", blocks: [] }, policyGeneration: 1,
+    actionId: crypto.randomUUID(), at: 100,
+  }));
   plane.catalog.indexSession({ id: "sender", parentId: null, role: "resident", createdAt: 100 });
   if (leased) runSyncEffect(adoptTestFence(kernel, "sender", "owner"));
 }
@@ -55,16 +35,11 @@ test("message preparation fails in the typed admission channel without a sender 
   const plane = testPlane();
   sender(plane, false);
   try {
-    const failure = runSyncEffect(
-      Effect.flip(
-        prepareMessage(plane, materialize(plane))(
-          { kind: "session", id: "sender" },
-          { to: { kind: "session", id: "sender" }, type: "message", content: "hello" },
-          "sender",
-          "message",
-        ),
-      ),
-    );
+    const failure = runSyncEffect(Effect.flip(prepareMessage(plane, materialize(plane))(
+      { kind: "session", id: "sender" },
+      { to: { kind: "session", id: "sender" }, type: "message", content: "hello" },
+      "sender", "message",
+    )));
     expect(failure._tag).toBe("SendAdmissionConflict");
   } finally {
     plane.close();
@@ -75,20 +50,11 @@ test("child preparation refuses a pinned policy without admission bounds", () =>
   const plane = testPlane();
   sender(plane, true);
   try {
-    const failure = runSyncEffect(
-      Effect.flip(
-        prepareMessage(plane, materialize(plane))(
-          { kind: "session", id: "sender" },
-          {
-            to: { kind: "new_session", role: "worker", runner: "worker", parent: "me" },
-            type: "message",
-            content: "hello",
-          },
-          "child",
-          "message",
-        ),
-      ),
-    );
+    const failure = runSyncEffect(Effect.flip(prepareMessage(plane, materialize(plane))(
+      { kind: "session", id: "sender" },
+      { to: { kind: "new_session", role: "worker", runner: "worker", parent: "me" }, type: "message", content: "hello" },
+      "child", "message",
+    )));
     expect(failure._tag).toBe("SendAdmissionConflict");
     expect(plane.listSessions().map((row: LedgerSession.Row) => row.id)).toEqual(["sender"]);
   } finally {
@@ -110,29 +76,11 @@ test("ingress commit without a receipt becomes a typed corrupt-record commit fai
     commit(input).pipe(Effect.map((receipt: CommitReceipt) => ({ ...receipt, receipts: [] }))),
   );
   try {
-    const failure = await runEffect(
-      Effect.flip(
-        ingress(
-          { kind: "external", surface: "ws", externalId: "owner" },
-          {
-            kind: "message",
-            op: "send",
-            intent: {},
-            effect: {},
-            message: {
-              sender: "external",
-              eventIdUnique: true,
-              addressee: "bot",
-              identity: true,
-              grantTier: true,
-              egressBudget: true,
-              replyCorrelation: true,
-            },
-          },
-          () => Effect.succeed(null),
-        ),
-      ),
-    );
+    const failure = await runEffect(Effect.flip(ingress(
+      { kind: "external", surface: "ws", externalId: "owner" },
+      { kind: "message", op: "send", intent: {}, effect: {}, message: { sender: "external", eventIdUnique: true, addressee: "bot", identity: true, grantTier: true, egressBudget: true, replyCorrelation: true } },
+      () => Effect.succeed(null),
+    )));
     expect(failure._tag).toBe("CommitFailed");
     if (failure._tag === "CommitFailed") expect(failure.error._tag).toBe("CorruptRecord");
   } finally {

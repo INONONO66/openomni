@@ -13,23 +13,21 @@ import { testIds } from "./helpers/test-entropy";
 test.each([false, true])("machine entry adapter handles enrollment %s", async (enrolled) => {
   const home = mkdtempSync(join(tmpdir(), "openomni-machine-entry-"));
   const path = socketPath();
-  const host = await acquireEffect(
-    createMachineHost({
-      socketPath: path,
-      id: testIds("entry-host"),
-      enrollment: () =>
-        enrolled
-          ? {
-              machineId: "entry-machine",
-              name: "entry",
-              allowedCapabilities: ["kernel.py"],
-              enrolledAt: 1,
-            }
-          : undefined,
-      events: { publish: () => undefined },
-      now: () => 2,
-    }),
-  );
+  const host = await acquireEffect(createMachineHost({
+    socketPath: path,
+    id: testIds("entry-host"),
+    enrollment: () =>
+      enrolled
+        ? {
+            machineId: "entry-machine",
+            name: "entry",
+            allowedCapabilities: ["kernel.py"],
+            enrolledAt: 1,
+          }
+        : undefined,
+    events: { publish: () => undefined },
+    now: () => 2,
+  }));
   const announced = Promise.withResolvers<Machine.AttachResult>();
   const log = spyOn(console, "log").mockImplementation((line: string) => {
     announced.resolve(Machine.AttachResult.parse(JSON.parse(line)));

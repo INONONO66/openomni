@@ -545,12 +545,7 @@ describe("discord gateway state machine (#520)", () => {
       local,
       "test-token",
       () => Promise.resolve(local.url),
-      {
-        onDispatch: () => undefined,
-        onReady: () => {
-          ready += 1;
-        },
-      },
+      { onDispatch: () => undefined, onReady: () => { ready += 1; } },
       (event, payload) => {
         if (event.name === Operational.Events.Warn.name)
           warnings.push(z.object({ msg: z.string() }).parse(payload).msg);

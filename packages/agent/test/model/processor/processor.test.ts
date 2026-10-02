@@ -17,7 +17,11 @@ describe("Processor processor", () => {
     // second step-start fold reject (#1245).
     const processor = createProcessor({
       id: () => "00000000-0000-4000-8000-000000000000",
-      createStream: streamOf([{ type: "step-start" }, { type: "step-start" }, { type: "finish" }]),
+      createStream: streamOf([
+        { type: "step-start" },
+        { type: "step-start" },
+        { type: "finish" },
+      ]),
     });
 
     await expect(processor.process({ system: "", promptText: "" })).rejects.toThrow(

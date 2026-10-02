@@ -68,14 +68,8 @@ test("commit observations see durable request state after the complete batch", (
       seen.push(receipt.sessionId);
     },
   };
-  const session = openSessionStore(join(directory, "session.sqlite"), {
-    now: testNow,
-    observationSink: sink,
-  });
-  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), {
-    now: testNow,
-    observationSink: sink,
-  });
+  const session = openSessionStore(join(directory, "session.sqlite"), { now: testNow, observationSink: sink });
+  const catalog = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow, observationSink: sink });
   try {
     kernel = SessionHandleStore.createSessionKernel(session, catalog);
     const { request, original, commit } = requestFixture(kernel);

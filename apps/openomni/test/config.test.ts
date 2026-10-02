@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { Crypto, Effect } from "effect";
 import { BunCrypto } from "../src/composition/cluster-crypto";
-import { assertWsExposure, loadConfig, parseWsPort, resolveClusterStorage } from "../src/config";
+import {
+  assertWsExposure,
+  loadConfig,
+  parseWsPort,
+  resolveClusterStorage,
+} from "../src/config";
 import { startOpenOmni } from "../src/index";
 import { runEffect } from "./helpers/effect";
 
@@ -54,22 +59,21 @@ afterEach(() => {
 });
 
 describe("declared channel cutover", () => {
-  it.each([
-    "DISCORD_BOT_TOKEN",
-    "TELEGRAM_BOT_TOKEN",
-    "GITHUB_WEBHOOK_SECRET",
-  ])("refuses legacy %s with the typed provisioning replacement", (key) => {
-    process.env[key] = "legacy-secret";
-    expect(loadConfig).toThrow(
-      expect.objectContaining({
-        name: "OpenOmniConfigurationError",
-        data: containing({
-          code: "legacy_channel_credentials",
-          replacement: { tool: "provision", op: "channel_add" },
+  it.each(["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"])(
+    "refuses legacy %s with the typed provisioning replacement",
+    (key) => {
+      process.env[key] = "legacy-secret";
+      expect(loadConfig).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({
+            code: "legacy_channel_credentials",
+            replacement: { tool: "provision", op: "channel_add" },
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it("ignores blank legacy variables", () => {
     process.env.DISCORD_BOT_TOKEN = " ";
@@ -100,11 +104,7 @@ describe("cluster storage config", () => {
     }).toEqual(resolveClusterStorage({}, home));
     expect(
       resolveClusterStorage(
-        {
-          catalogPath: "/elsewhere/cat.sqlite",
-          sessionsDir: "/elsewhere/sessions",
-          entityIdleMs: 250,
-        },
+        { catalogPath: "/elsewhere/cat.sqlite", sessionsDir: "/elsewhere/sessions", entityIdleMs: 250 },
         home,
       ),
     ).toEqual({
@@ -134,20 +134,18 @@ describe("cluster storage config", () => {
     expectStorageDefaults();
   });
 
-  it.each([
-    "0",
-    "-5",
-    "1.5",
-    "not-ms",
-  ])("refuses OPENOMNI_ENTITY_IDLE_MS=%p with a typed configuration code", (raw) => {
-    process.env.OPENOMNI_ENTITY_IDLE_MS = raw;
-    expect(() => loadConfig(home)).toThrow(
-      expect.objectContaining({
-        name: "OpenOmniConfigurationError",
-        data: containing({ code: "invalid_entity_idle_ms" }),
-      }),
-    );
-  });
+  it.each(["0", "-5", "1.5", "not-ms"])(
+    "refuses OPENOMNI_ENTITY_IDLE_MS=%p with a typed configuration code",
+    (raw) => {
+      process.env.OPENOMNI_ENTITY_IDLE_MS = raw;
+      expect(() => loadConfig(home)).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({ code: "invalid_entity_idle_ms" }),
+        }),
+      );
+    },
+  );
 });
 
 describe("cluster crypto layer", () => {

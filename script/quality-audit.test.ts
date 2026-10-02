@@ -19,10 +19,7 @@ import {
   type Finding,
   typeFindings,
 } from "./quality-audit";
-import {
-  measureTypescriptFunctions,
-  type TypescriptMetricContract,
-} from "./quality-typescript-metrics";
+import { measureTypescriptFunctions, type TypescriptMetricContract } from "./quality-typescript-metrics";
 import { planChanges } from "./ci-plan";
 
 const finding: Finding = {
@@ -250,9 +247,11 @@ test("TypeScript metric thresholds are exclusive zero-baseline findings", () => 
     halsteadDifficulty: 80,
     crap: 25,
   };
-  expect(typescriptMetricFindings([metric], metricContract).map((finding) => finding.kind)).toEqual(
-    ["cyclomatic", "halstead", "crap"],
-  );
+  expect(typescriptMetricFindings([metric], metricContract).map((finding) => finding.kind)).toEqual([
+    "cyclomatic",
+    "halstead",
+    "crap",
+  ]);
 });
 
 test("clone parsing accounts for both endpoints in separate scan scopes", () => {
@@ -470,14 +469,7 @@ test("CLI publishing uses injected gh results, and measurement-only does not pub
 });
 
 test("typeFindings keeps owned rows only and folds duplicate sites into one count", () => {
-  const row = {
-    path: "src/a.ts",
-    line: 5,
-    offset: 0,
-    symbol: "Step",
-    kind: "implicitAny",
-    origin: "owned",
-  };
+  const row = { path: "src/a.ts", line: 5, offset: 0, symbol: "Step", kind: "implicitAny", origin: "owned" };
   const result = typeFindings([
     row,
     { ...row, offset: 3 },

@@ -23,7 +23,11 @@ import { z } from "zod";
 import { closeSessions } from "../../../src/session/run";
 import { session } from "../../../src/testing/registry";
 import { createSessionChatRunner } from "../../../src/session/run";
-import { sessionTool, defineTool, eraseTool } from "../../../src/kernel/tool";
+import {
+  sessionTool,
+  defineTool,
+  eraseTool,
+} from "../../../src/kernel/tool";
 import { createAssistantMessage } from "../../../src/kernel/message-factory";
 import { reopenableLedger } from "../../helpers/reopenable-ledger";
 import { restoreCompactionProjection } from "../../../src/plugins/compaction/durable";

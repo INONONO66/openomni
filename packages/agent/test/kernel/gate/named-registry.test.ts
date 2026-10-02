@@ -1,27 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  canonicalDigest,
-  type PlainValue,
-  RowVerdict,
-  RowVerdictRead,
-  PolicyRow,
-  type Storage,
-} from "@openomni/protocol";
-import {
-  compilePolicySnapshot,
-  createNamedPolicyRegistry,
-  createPolicyCompiler,
-  KERNEL_POLICY_REGISTRY,
-  NamedPolicyRegistryError,
-  SEEDED_POLICY_ROWS,
-} from "../../../src/kernel/gate/compile";
-import {
-  atGeneration,
-  compaction,
-  draft,
-  withPolicyRows,
-  type PolicyRowDraft,
-} from "./row-fixtures";
+import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
+import { compilePolicySnapshot, createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, NamedPolicyRegistryError, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
+import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input = {
   kind: "tool",
@@ -31,36 +11,30 @@ const input = {
 } as const;
 
 describe("immutable named policy registry", () => {
-  test("transactional derivation emits refs while retaining historical generation bytes", () =>
-    withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
-      source.appendGeneration(() => [
-        atGeneration(compaction, 1),
-        atGeneration(
-          draft("redact", "tool", "pre", { type: "transform", name: "redact", paths: ["secret"] }),
-          1,
-        ),
-      ]);
-      const bytes = JSON.stringify(source.rows(1));
-      const compiler = createPolicyCompiler({ source, registry: KERNEL_POLICY_REGISTRY });
-      const before = compiler.pin(1);
-      const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) =>
-        current.map((row: PolicyRow.Row) => ({
-          ...row,
-          verdict: { ...row.verdict, value: RowVerdictRead.parse(row.verdict.value) },
-        })),
-      );
-      expect(generation).toBe(2);
-      expect(
-        source.rows(2).find((row: PolicyRow.Row) => row.name === "redact")?.verdict.value,
-      ).toEqual({
-        type: "transform",
-        ref: "kernel/redact",
-        config: { paths: ["secret"] },
-      });
-      expect(JSON.stringify(source.rows(1))).toBe(bytes);
-      expect(compiler.pin(2).evaluate(input).value).toEqual(before.evaluate(input).value);
-      expect(compiler.pin(2).contentHash).not.toBe(before.contentHash);
-    }));
+  test("transactional derivation emits refs while retaining historical generation bytes", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+    source.appendGeneration(() => [
+      atGeneration(compaction, 1),
+      atGeneration(
+        draft("redact", "tool", "pre", { type: "transform", name: "redact", paths: ["secret"] }),
+        1,
+      ),
+    ]);
+    const bytes = JSON.stringify(source.rows(1));
+    const compiler = createPolicyCompiler({ source, registry: KERNEL_POLICY_REGISTRY });
+    const before = compiler.pin(1);
+    const generation = source.appendGeneration((current: readonly PolicyRow.Row[]) => current.map((row: PolicyRow.Row) => ({
+      ...row, verdict: { ...row.verdict, value: RowVerdictRead.parse(row.verdict.value) },
+    })));
+    expect(generation).toBe(2);
+    expect(source.rows(2).find((row: PolicyRow.Row) => row.name === "redact")?.verdict.value).toEqual({
+      type: "transform",
+      ref: "kernel/redact",
+      config: { paths: ["secret"] },
+    });
+    expect(JSON.stringify(source.rows(1))).toBe(bytes);
+    expect(compiler.pin(2).evaluate(input).value).toEqual(before.evaluate(input).value);
+    expect(compiler.pin(2).contentHash).not.toBe(before.contentHash);
+  }));
 
   test.each([
     "transform",
@@ -79,16 +53,14 @@ describe("immutable named policy registry", () => {
           atGeneration(draft("missing", "tool", "pre", verdict), 7),
         ],
       }),
-    ).toThrow(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          code: "unknown_ref",
-          generation: 7,
-          ruleName: "missing",
-          ref: "demo/missing",
-        }),
+    ).toThrow(expect.objectContaining({
+      data: expect.objectContaining({
+        code: "unknown_ref",
+        generation: 7,
+        ruleName: "missing",
+        ref: "demo/missing",
       }),
-    );
+    }));
   });
 
   test("ordered transforms capture copied implementations and deeply immutable configuration", () => {

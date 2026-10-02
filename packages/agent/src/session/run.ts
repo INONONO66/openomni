@@ -1,25 +1,7 @@
 import { Clock, Effect, Context, type Fiber, Exit, Layer, Scope, Semaphore, Cause } from "effect";
 import * as Failure from "../kernel/failure";
-import {
-  type SessionError,
-  type ExecutionError,
-  RunnerOutputMissing,
-  CommitFailed,
-  AgentFailure,
-  GenerationUnavailable,
-  GenerationUnsettled,
-  AgentInvariantViolation,
-  InboundAuthorityViolation,
-} from "../kernel/failure";
-import {
-  type ExecutionLedger,
-  type ExecutionApprovals,
-  type ExecutionResult,
-  type ExecutorOptions,
-  createRawSlots,
-  createExecutor,
-  type Executor,
-} from "../kernel/gate/decide";
+import { type SessionError, type ExecutionError, RunnerOutputMissing, CommitFailed, AgentFailure, GenerationUnavailable, GenerationUnsettled, AgentInvariantViolation, InboundAuthorityViolation } from "../kernel/failure";
+import { type ExecutionLedger, type ExecutionApprovals, type ExecutionResult, type ExecutorOptions, createRawSlots, createExecutor, type Executor } from "../kernel/gate/decide";
 import type { SessionPolicyRefusal } from "./messages";
 export { SessionPolicyRefusal } from "./messages";
 import { GenerationRawSlots } from "../kernel/gate/decide";
@@ -28,45 +10,11 @@ export { GenerationRawSlots } from "../kernel/gate/decide";
 import * as SessionHandleStore from "../store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
-import {
-  Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type ObservationSink,
-  type SessionGeneration,
-  type SessionHistory,
-  type SessionTurn,
-  SessionTransition,
-  canonicalDigest,
-  PlainValueSchema,
-  BusEvent,
-  type PlainValue,
-  type TraceContext,
-} from "@openomni/protocol";
+import { Inbox, type LedgerAction, type LedgerSession, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "../kernel/types";
 import type { decideSessionAdmission } from "./mailbox";
-import {
-  Entropy,
-  ObservationSink as ObservationService,
-  GenerationLayers,
-  type SessionEntryServices,
-  type RunnerServices,
-  GenerationOwnership,
-  type CapturedGeneration,
-  type GenerationServices,
-  interruptOn,
-} from "../kernel/ports";
-import {
-  commitFoldBatch,
-  turnCheckpointAction,
-  deliveryActions,
-  turnTerminalAction,
-  policyRefusalResult,
-  sessionRunnerResultValue,
-  sessionRunnerResultFromValue,
-  pendingBacklog,
-  receivedMessages,
-} from "./commit";
+import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "../kernel/ports";
+import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages, } from "./commit";
 import type { LedgerError } from "../store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
@@ -134,9 +82,7 @@ export interface SessionRunnerInput {
   readonly policyGeneration: number;
   readonly resumeCount: number;
   readonly signal: AbortSignal;
-  readonly boundary: (
-    boundary: SessionTurn.Boundary,
-  ) => Effect.Effect<SessionBoundaryResult, ExecutionError>;
+  readonly boundary: (boundary: SessionTurn.Boundary) => Effect.Effect<SessionBoundaryResult, ExecutionError>;
 }
 
 export interface SessionBoundaryResult {
@@ -172,9 +118,7 @@ export type SessionRunnerResult =
       readonly reported?: true;
     };
 
-export type SessionRunner = (
-  input: SessionRunnerInput,
-) => Effect.Effect<SessionRunnerResult, ExecutionError, RunnerServices>;
+export type SessionRunner = (input: SessionRunnerInput) => Effect.Effect<SessionRunnerResult, ExecutionError, RunnerServices>;
 
 export interface SessionRuntime {
   /** Dispatches only an already committed source obligation through gateway admission. */
@@ -188,17 +132,12 @@ export interface SessionRuntime {
     sessionId: string;
     turnId: string;
     revision: number;
-  }) => Effect.Effect<
-    readonly { actionId: string; kind: "message" | "approval" }[],
-    ExecutionError
-  >;
+  }) => Effect.Effect<readonly { actionId: string; kind: "message" | "approval" }[], ExecutionError>;
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
   readonly processId?: string;
   /** Required pinned pre-policy authority for `session.configure`; there is no allow fallback. */
-  readonly authorizeConfigure: (
-    input: Parameters<SessionHandleStore.ConfigureAuthority>[0],
-  ) => Effect.Effect<boolean, SessionError>;
+  readonly authorizeConfigure: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
@@ -235,30 +174,19 @@ export interface ResolvedSessionRuntime extends SessionRuntime {
   readonly services: Context.Context<SessionEntryServices>;
 }
 
-export function resolveSessionRuntime(
-  runtime: SessionRuntime,
-): Effect.Effect<ResolvedSessionRuntime, never, SessionEntryServices> {
+export function resolveSessionRuntime(runtime: SessionRuntime): Effect.Effect<ResolvedSessionRuntime, never, SessionEntryServices> {
   return Effect.gen(function* () {
     const services = yield* Effect.context<SessionEntryServices>();
     const clock = yield* Clock.clockWith(Effect.succeed);
     const entropy = yield* Entropy;
     const observations = yield* ObservationService;
     const generations = yield* GenerationLayers;
-    return {
-      ...runtime,
-      clock: () => clock.currentTimeMillisUnsafe(),
-      entropy: entropy.id,
-      observations,
-      generations,
-      services,
-    };
+    return { ...runtime, clock: () => clock.currentTimeMillisUnsafe(), entropy: entropy.id, observations, generations, services };
   });
 }
 
 interface SessionToolsHandle {
-  add(
-    tools: readonly SessionTool[],
-  ): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
+  add(tools: readonly SessionTool[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
   remove(names: readonly string[]): Effect.Effect<SessionGeneration.ConfigureReceipt, SessionError>;
 }
 
@@ -281,10 +209,7 @@ export interface SessionHandle {
   };
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
-  prompt(
-    content: string,
-    origin?: Inbox.Origin,
-  ): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
+  prompt(content: string, origin?: Inbox.Origin): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
   interrupt(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
   resume(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
   /** Record the typed compensation of one compaction (`restore_context_projection`); history is never erased. */
@@ -423,10 +348,12 @@ export function adoptSessionAuthority(
   const attempt: Effect.Effect<number, LedgerError> = Effect.suspend(() => {
     const current = kernel.row(sessionId);
     if (current.fenceOwner === owner) return Effect.succeed(current.fence);
-    return kernel.adoptFence({ sessionId, owner, fence: current.fence + 1 }).pipe(
-      Effect.map((receipt) => receipt.fence),
-      Effect.catchTag("FenceRefused", () => attempt),
-    );
+    return kernel
+      .adoptFence({ sessionId, owner, fence: current.fence + 1 })
+      .pipe(
+        Effect.map((receipt) => receipt.fence),
+        Effect.catchTag("FenceRefused", () => attempt),
+      );
   });
   return attempt;
 }
@@ -452,52 +379,28 @@ export function createSessionConfiguration(
       const before = kernel.latestGenerationFor(sessionId);
       const generation = before.generation + 1;
       const accepted = yield* runtime.authorizeConfigure({
-        sessionId,
-        role: kernel.row(sessionId).role,
-        operation,
-        generation,
+        sessionId, role: kernel.row(sessionId).role, operation, generation,
       });
-      if (!accepted)
-        return yield* new AgentFailure({ operation: "session.configure", cause: "denied" });
+      if (!accepted) return yield* new AgentFailure({ operation: "session.configure", cause: "denied" });
       const current = kernel.row(sessionId);
       const previous = kernel.latestGenerationFor(sessionId);
       if (previous.generation !== before.generation)
         return yield* new AgentFailure({ operation: "session.configure", cause: "stale" });
       const snapshot = SessionHandleStore.generationSnapshot({
-        generation,
-        revertTo: previous.generation,
-        tools: nextTools,
-        system: nextSystem,
-        policyGeneration: previous.policyGeneration,
+        generation, revertTo: previous.generation, tools: nextTools,
+        system: nextSystem, policyGeneration: previous.policyGeneration,
         bundles: previous.bundles,
       });
       const configured = SessionHandleStore.configureAction({
-        id: entropy(),
-        sessionId,
-        parentId: kernel.latestAction(sessionId)?.id ?? null,
-        operation,
-        snapshot,
-        at: clock(),
+        id: entropy(), sessionId, parentId: kernel.latestAction(sessionId)?.id ?? null,
+        operation, snapshot, at: clock(),
       });
       const commit = commitFoldBatch(kernel, {
-        sessionId,
-        owner,
-        fence: state.fence,
-        now: clock(),
-        expectedRevision: current.revision,
-        actions: [configured],
-        state: current.state,
-        generation: {
-          toolsGeneration: snapshot.generation,
-          systemHash: snapshot.systemHash,
-          policyGeneration: snapshot.policyGeneration,
-        },
+        sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
+        actions: [configured], state: current.state,
+        generation: { toolsGeneration: snapshot.generation, systemHash: snapshot.systemHash, policyGeneration: snapshot.policyGeneration },
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      const committed = yield* runtime.generations.configure(
-        { sessionId, generation },
-        snapshot,
-        commit,
-      );
+      const committed = yield* runtime.generations.configure({ sessionId, generation }, snapshot, commit);
       yield* ports.hibernate(committed.row);
       return { generation: snapshot.generation, revertTo: snapshot.revertTo };
     });
@@ -536,114 +439,80 @@ export function makeSessionGenerations(initial: GenerationBundle) {
     let current = first;
     let stopping = false;
 
-    const close = (entry: Entry) =>
-      Effect.uninterruptible(
-        Effect.gen(function* () {
-          yield* entry.owners.awaitSettled;
-          if (entry.closed) return;
-          entry.closed = true;
-          yield* Scope.close(entry.scope, Exit.void);
-        }),
-      );
-    const retire = (entry: Entry) =>
-      Effect.gen(function* () {
-        if (entry.retired) return;
-        entry.retired = true;
-        if (entry.owners.pending() === 0) yield* close(entry);
-        else yield* Effect.forkIn(close(entry), processScope);
-      });
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function* () {
-        stopping = true;
-        yield* Effect.forEach(entries.values(), close, { discard: true });
-      }),
-    );
+    const close = (entry: Entry) => Effect.uninterruptible(Effect.gen(function* () {
+      yield* entry.owners.awaitSettled;
+      if (entry.closed) return;
+      entry.closed = true;
+      yield* Scope.close(entry.scope, Exit.void);
+    }));
+    const retire = (entry: Entry) => Effect.gen(function* () {
+      if (entry.retired) return;
+      entry.retired = true;
+      if (entry.owners.pending() === 0) yield* close(entry);
+      else yield* Effect.forkIn(close(entry), processScope);
+    });
+    yield* Effect.addFinalizer(() => Effect.gen(function* () {
+      stopping = true;
+      yield* Effect.forEach(entries.values(), close, { discard: true });
+    }));
 
     function validate(bundle: GenerationBundle): Effect.Effect<void, SessionError> {
-      return bundle.id.sessionId !== initial.id.sessionId ||
-        bundle.id.generation !== bundle.snapshot.generation
-        ? Effect.fail(
-            new AgentFailure({
-              operation: "generation.identity",
-              cause: "snapshot_identity_mismatch",
-            }),
-          )
+      return bundle.id.sessionId !== initial.id.sessionId || bundle.id.generation !== bundle.snapshot.generation
+        ? Effect.fail(new AgentFailure({ operation: "generation.identity", cause: "snapshot_identity_mismatch" }))
         : Effect.void;
     }
 
     /** A known entry is capturable only while its snapshot matches and it still has live owners or is current. */
-    function admitCapture(
-      bundle: GenerationBundle,
-      entry: Entry | undefined,
-    ): Effect.Effect<void, SessionError> {
-      if (stopping)
-        return Effect.fail(new GenerationUnavailable({ generation: bundle.id.generation }));
+    function admitCapture(bundle: GenerationBundle, entry: Entry | undefined): Effect.Effect<void, SessionError> {
+      if (stopping) return Effect.fail(new GenerationUnavailable({ generation: bundle.id.generation }));
       if (entry === undefined) return Effect.void;
       if (entry.hash !== snapshotHash(bundle.snapshot))
-        return Effect.fail(
-          new AgentFailure({ operation: "generation.capture", cause: "snapshot_hash_mismatch" }),
-        );
+        return Effect.fail(new AgentFailure({ operation: "generation.capture", cause: "snapshot_hash_mismatch" }));
       if (entry.closed || (entry.retired && entry.owners.pending() === 0))
         return Effect.fail(new GenerationUnavailable({ generation: bundle.id.generation }));
       return Effect.void;
     }
 
-    function capture(
-      bundle = current.bundle,
-    ): Effect.Effect<CapturedGeneration, SessionError, Scope.Scope> {
-      return lock.withPermits(1)(
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            yield* validate(bundle);
-            let entry = entries.get(bundle.id.generation);
-            yield* admitCapture(bundle, entry);
-            if (entry === undefined) {
-              entry = yield* restore(acquire(bundle));
-              yield* bundle.activate;
-              entries.set(bundle.id.generation, entry);
-            }
-            const release = entry.owners.open();
-            yield* Effect.addFinalizer(() => Effect.sync(release));
-            const captured = entry;
-            if (captured.bundle.id.generation < current.bundle.id.generation)
-              yield* retire(captured);
-            const ownership: CapturedGeneration = {
-              id: captured.bundle.id,
-              snapshot: captured.bundle.snapshot,
-              isSelected: () => captured === current,
-              retain: () => captured.owners.open(),
-              provide: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.provide(work, context),
-            };
-            const context = captured.context.pipe(
-              Context.add(GenerationRawSlots, captured.owners),
-              Context.add(GenerationOwnership, ownership),
-            );
-            return ownership;
-          }),
-        ),
-      );
+    function capture(bundle = current.bundle): Effect.Effect<CapturedGeneration, SessionError, Scope.Scope> {
+      return lock.withPermits(1)(Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+        yield* validate(bundle);
+        let entry = entries.get(bundle.id.generation);
+        yield* admitCapture(bundle, entry);
+        if (entry === undefined) {
+          entry = yield* restore(acquire(bundle));
+          yield* bundle.activate;
+          entries.set(bundle.id.generation, entry);
+        }
+        const release = entry.owners.open();
+        yield* Effect.addFinalizer(() => Effect.sync(release));
+        const captured = entry;
+        if (captured.bundle.id.generation < current.bundle.id.generation) yield* retire(captured);
+        const ownership: CapturedGeneration = {
+          id: captured.bundle.id,
+          snapshot: captured.bundle.snapshot,
+          isSelected: () => captured === current,
+          retain: () => captured.owners.open(),
+          provide: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.provide(work, context),
+        };
+        const context = captured.context.pipe(Context.add(GenerationRawSlots, captured.owners), Context.add(GenerationOwnership, ownership));
+        return ownership;
+      })));
     }
 
     function configure<A>(bundle: GenerationBundle, commit: Effect.Effect<A, SessionError>) {
-      return lock.withPermits(1)(
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            yield* validate(bundle);
-            if (stopping || entries.has(bundle.id.generation))
-              return yield* new GenerationUnavailable({ generation: bundle.id.generation });
-            const candidate = yield* restore(acquire(bundle));
-            const receipt = yield* commit.pipe(
-              Effect.onError((cause) => Scope.close(candidate.scope, Exit.failCause(cause))),
-            );
-            yield* bundle.activate;
-            const previous = current;
-            entries.set(bundle.id.generation, candidate);
-            current = candidate;
-            yield* retire(previous);
-            return receipt;
-          }),
-        ),
-      );
+      return lock.withPermits(1)(Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+        yield* validate(bundle);
+        if (stopping || entries.has(bundle.id.generation))
+          return yield* new GenerationUnavailable({ generation: bundle.id.generation });
+        const candidate = yield* restore(acquire(bundle));
+        const receipt = yield* commit.pipe(Effect.onError((cause) => Scope.close(candidate.scope, Exit.failCause(cause))));
+        yield* bundle.activate;
+        const previous = current;
+        entries.set(bundle.id.generation, candidate);
+        current = candidate;
+        yield* retire(previous);
+        return receipt;
+      })));
     }
 
     /**
@@ -659,19 +528,15 @@ export function makeSessionGenerations(initial: GenerationBundle) {
         Effect.andThen(Effect.suspend(() => settle)),
       );
     });
-    const drain = lock.withPermits(1)(
-      Effect.gen(function* () {
-        stopping = true;
-        for (const entry of entries.values()) {
-          if (entry.owners.pending() > 0)
-            return yield* new GenerationUnsettled({
-              ...entry.bundle.id,
-              owners: entry.owners.pending(),
-            });
-        }
-        yield* Effect.forEach(entries.values(), retire, { discard: true });
-      }),
-    );
+    const drain = lock.withPermits(1)(Effect.gen(function* () {
+      stopping = true;
+      for (const entry of entries.values()) {
+        if (entry.owners.pending() > 0) return yield* new GenerationUnsettled({
+          ...entry.bundle.id, owners: entry.owners.pending(),
+        });
+      }
+      yield* Effect.forEach(entries.values(), retire, { discard: true });
+    }));
     return { capture, configure, drain, settle };
   });
 }
@@ -681,27 +546,20 @@ function snapshotHash(snapshot: SessionGeneration.Snapshot): string {
 }
 
 function acquire(bundle: GenerationBundle): Effect.Effect<Entry, SessionError> {
-  return Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.make();
-      const context = yield* restore(Layer.buildWithScope(bundle.layer, scope)).pipe(
-        Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
-      );
-      return {
-        bundle,
-        context,
-        scope,
-        owners: createRawSlots(),
-        hash: snapshotHash(bundle.snapshot),
-        retired: false,
-        closed: false,
-      };
-    }),
-  );
+  return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const context = yield* restore(Layer.buildWithScope(bundle.layer, scope)).pipe(
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+    );
+    return { bundle, context, scope, owners: createRawSlots(), hash: snapshotHash(bundle.snapshot), retired: false, closed: false };
+  }));
 }
 
 // ─── from session-outbound.ts (#1247) ───
-function outboundOpen(message: SessionTransition.OutboundMessage, at: number): LedgerAction.Append {
+export function outboundOpen(
+  message: SessionTransition.OutboundMessage,
+  at: number,
+): LedgerAction.Append {
   return {
     id: `${message.sourceActionId}:outbound`,
     parentId: message.sourceActionId,
@@ -723,10 +581,7 @@ function outboundOpen(message: SessionTransition.OutboundMessage, at: number): L
   };
 }
 
-function toolsGeneration(
-  kernel: SessionKernel,
-  message: SessionTransition.OutboundMessage,
-): number {
+function toolsGeneration(kernel: SessionKernel, message: SessionTransition.OutboundMessage): number {
   const terminal = SessionHandleStore.turnTerminal(kernel.actionById(message.sourceActionId));
   const intent =
     terminal === undefined
@@ -754,9 +609,7 @@ function acknowledge(
     receipt.action.sessionId !== message.destinationSessionId ||
     canonicalDigest(payload) !== canonicalDigest(PlainValueSchema.parse(message))
   ) {
-    throw new AgentInvariantViolation(
-      "outbound destination receipt does not match its recorded payload",
-    );
+    throw new AgentInvariantViolation("outbound destination receipt does not match its recorded payload");
   }
   return {
     id: `${message.messageId}:ack`,
@@ -789,59 +642,33 @@ export function dispatchSessionOutbound(
   clock: () => number,
 ): Effect.Effect<void, SessionError> {
   return Effect.suspend(() => {
-    const commit = (actions: LedgerAction.Append[]) =>
-      Effect.suspend(() => {
-        const row = kernel.row(sessionId);
-        return kernel
-          .commit({
-            sessionId,
-            owner,
-            fence,
-            now: clock(),
-            expectedRevision: row.revision,
-            actions,
-            state: row.state,
-          })
-          .pipe(
-            Effect.mapError((error) => new CommitFailed({ error })),
-            Effect.asVoid,
-          );
-      });
-    return Effect.forEach(
-      kernel.outboundRows(sessionId),
-      (item) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            if (item.state === "delivered") return;
-            // The receiver's durable commit is the proof, not a second dispatch. This
-            // also works after it consumed the prompt and the sender lost the ACK.
-            const received = kernel.outboundReceipt(
-              item.message.destinationSessionId,
-              item.message.messageId,
-            );
-            if (received !== undefined) {
-              yield* commit([acknowledge(item.message, received, clock())]);
-              return;
-            }
-            if (runtime.dispatchOutbound === undefined)
-              return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
-            const captured = yield* runtime.generations.capture({
-              sessionId,
-              generation: toolsGeneration(kernel, item.message),
-            });
-            const receipt = yield* captured
-              .provide(
-                runtime.dispatchOutbound({
-                  message: item.message,
-                  authority: { owner, fence },
-                }),
-              )
-              .pipe(Effect.provide(runtime.services));
-            yield* commit([acknowledge(item.message, receipt, clock())]);
-          }),
-        ),
-      { discard: true },
-    );
+    const commit = (actions: LedgerAction.Append[]) => Effect.suspend(() => {
+      const row = kernel.row(sessionId);
+      return kernel.commit({
+        sessionId, owner, fence, now: clock(), expectedRevision: row.revision,
+        actions, state: row.state,
+      }).pipe(Effect.mapError((error) => new CommitFailed({ error })), Effect.asVoid);
+    });
+    return Effect.forEach(kernel.outboundRows(sessionId), (item) => Effect.scoped(Effect.gen(function* () {
+      if (item.state === "delivered") return;
+      // The receiver's durable commit is the proof, not a second dispatch. This
+      // also works after it consumed the prompt and the sender lost the ACK.
+      const received = kernel.outboundReceipt(
+        item.message.destinationSessionId, item.message.messageId,
+      );
+      if (received !== undefined) {
+        yield* commit([acknowledge(item.message, received, clock())]);
+        return;
+      }
+      if (runtime.dispatchOutbound === undefined)
+        return yield* Effect.die(new Error("outbound receiving consumer is unavailable"));
+      const captured = yield* runtime.generations.capture({ sessionId, generation: toolsGeneration(kernel, item.message) });
+      const receipt = yield* captured.provide(runtime.dispatchOutbound({
+        message: item.message,
+        authority: { owner, fence },
+      })).pipe(Effect.provide(runtime.services));
+      yield* commit([acknowledge(item.message, receipt, clock())]);
+    })), { discard: true });
   });
 }
 
@@ -855,33 +682,27 @@ export function sessionStopEvidence(
 ): NonNullable<ChatAgentConfig["stopEvidence"]> {
   let ordinal = kernel.row(sessionId).revision;
   const start = kernel.actionById(turnId)?.ordinal ?? ordinal;
-  return () =>
-    Effect.gen(function* () {
-      const revision = kernel.row(sessionId).revision;
-      let progress = false;
-      let blocked = false;
-      while (ordinal < revision) {
-        const page = kernel.historyPage(sessionId, { afterRevision: ordinal, limit: 256 });
-        for (const action of page.actions) {
-          if (action.ordinal > revision) break;
-          progress ||= effectChanged(action);
-          blocked ||= effectBlocked(action);
-          ordinal = action.ordinal;
-        }
+  return () => Effect.gen(function* () {
+    const revision = kernel.row(sessionId).revision;
+    let progress = false;
+    let blocked = false;
+    while (ordinal < revision) {
+      const page = kernel.historyPage(sessionId, { afterRevision: ordinal, limit: 256 });
+      for (const action of page.actions) {
+        if (action.ordinal > revision) break;
+        progress ||= effectChanged(action);
+        blocked ||= effectBlocked(action);
+        ordinal = action.ordinal;
       }
-      const obligations = yield* openIntent?.({ sessionId, turnId, revision }) ??
-        Effect.succeed([]);
-      const pending = approvals()?.pending() ?? [];
-      return {
-        progress,
-        blocked,
-        openIntent: [
-          ...obligations.map((intent) => intent.actionId),
-          ...pending.map((approval) => approval.id),
-        ],
-        alarmIds: openAlarmIds(kernel, sessionId, start, revision),
-      };
-    });
+    }
+    const obligations = yield* (openIntent?.({ sessionId, turnId, revision }) ?? Effect.succeed([]));
+    const pending = approvals()?.pending() ?? [];
+    return {
+      progress, blocked,
+      openIntent: [...obligations.map((intent) => intent.actionId), ...pending.map((approval) => approval.id)],
+      alarmIds: openAlarmIds(kernel, sessionId, start, revision),
+    };
+  });
 }
 
 /**
@@ -902,10 +723,7 @@ function openAlarmIds(
     for (const action of page.actions) {
       if (action.ordinal > revision) break;
       if (action.kind === "alarm.arm") armed.set(action.id, action.id);
-      if (
-        (action.kind === "alarm.fired" || action.kind === "alarm.paused") &&
-        action.parentId !== null
-      )
+      if ((action.kind === "alarm.fired" || action.kind === "alarm.paused") && action.parentId !== null)
         armed.delete(action.parentId);
       cursor = action.ordinal;
     }
@@ -917,40 +735,14 @@ function openAlarmIds(
 function effectBlocked(action: LedgerAction.Node): boolean {
   const effect = action.effect.value;
   const intent = action.intent.value;
-  if (
-    action.kind === "policy.decision" &&
-    intent !== null &&
-    typeof intent === "object" &&
-    !Array.isArray(intent) &&
-    intent.verdict === "deny" &&
-    (intent.hook === "tool.pre" || intent.hook === "tool.post")
-  )
-    return true;
-  return (
-    action.kind === "tool" &&
-    effect !== null &&
-    typeof effect === "object" &&
-    !Array.isArray(effect) &&
-    (effect.terminal === "blocked_pre" ||
-      effect.terminal === "blocked_post" ||
-      effect.terminal === "failed")
-  );
+  if (action.kind === "policy.decision" && intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent.verdict === "deny" && (intent.hook === "tool.pre" || intent.hook === "tool.post")) return true;
+  return action.kind === "tool" && effect !== null && typeof effect === "object" && !Array.isArray(effect) && (effect.terminal === "blocked_pre" || effect.terminal === "blocked_post" || effect.terminal === "failed");
 }
 
 function effectChanged(action: LedgerAction.Node): boolean {
-  if (
-    action.kind === "session.configure" ||
-    action.kind === "alarm.arm" ||
-    action.kind === "inbox.deliver"
-  )
-    return true;
+  if (action.kind === "session.configure" || action.kind === "alarm.arm" || action.kind === "inbox.deliver") return true;
   const effect = action.effect.value;
-  return (
-    effect !== null &&
-    typeof effect === "object" &&
-    !Array.isArray(effect) &&
-    effect.stateChanged === true
-  );
+  return effect !== null && typeof effect === "object" && !Array.isArray(effect) && effect.stateChanged === true;
 }
 
 // ─── from session-turn.ts (#1247) ───
@@ -988,10 +780,7 @@ export function inboundAuthority(origin: PlainValue | undefined): InboundAuthori
   if (ExternalOrigin.safeParse(origin).success) {
     if (FullAccessOrigin.safeParse(origin).success) return { authority: "act" };
     if (EvidenceOnlyOrigin.safeParse(origin).success) return { authority: "evidence_only" };
-    return {
-      authority: "evidence_only",
-      violation: new InboundAuthorityViolation("undeclared_treatment"),
-    };
+    return { authority: "evidence_only", violation: new InboundAuthorityViolation("undeclared_treatment") };
   }
   return { authority: "evidence_only", violation: new InboundAuthorityViolation("unknown_origin") };
 }
@@ -1024,43 +813,24 @@ export function createSessionTurn(
   scope: Scope.Scope,
   ports: {
     readonly createExecutionLedger: (turnId?: string) => SessionActionCommitPort;
-    readonly evaluatePromptPolicies: (
-      items: readonly Inbox.Row[],
-    ) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices>;
-    readonly consumePolicyBlockedInbox: (
-      items: readonly Inbox.Row[],
-    ) => Effect.Effect<void, ExecutionError>;
+    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices>;
+    readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
   },
 ) {
   function runTurn(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError> {
-    return Effect.scoped(
-      Effect.gen(function* () {
-        const captured = yield* runtime.generations.capture({
-          sessionId,
-          generation: input.generation.generation,
-        });
-        const ownership = {
-          ...captured,
-          retain() {
-            const generation = captured.retain();
-            const session = state.rawSlots.open();
-            return () => {
-              generation();
-              session();
-            };
-          },
-        };
-        return yield* captured
-          .provide(runCaptured(input).pipe(Effect.provideService(GenerationOwnership, ownership)))
-          .pipe(Effect.provide(runtime.services));
-      }),
-    );
+    return Effect.scoped(Effect.gen(function* () {
+      const captured = yield* runtime.generations.capture({ sessionId, generation: input.generation.generation });
+      const ownership = { ...captured, retain() {
+        const generation = captured.retain();
+        const session = state.rawSlots.open();
+        return () => { generation(); session(); };
+      } };
+      return yield* captured.provide(runCaptured(input).pipe(Effect.provideService(GenerationOwnership, ownership))).pipe(Effect.provide(runtime.services));
+    }));
   }
 
-  function runCaptured(
-    input: TurnInput,
-  ): Effect.Effect<SessionRunnerResult, SessionError, RunnerServices> {
+  function runCaptured(input: TurnInput): Effect.Effect<SessionRunnerResult, SessionError, RunnerServices> {
     return Effect.gen(function* () {
       const services = yield* Effect.context<RunnerServices>();
       const row = kernel.row(sessionId);
@@ -1074,98 +844,54 @@ export function createSessionTurn(
         void raw.then(settle);
       };
       const execution = yield* createExecutor({
-        retryAlarm: runtime.retryAlarm,
-        signal: controller.signal,
-        retainEffect,
-        closeGraceMs: runtime.closeGraceMs,
-        ledger,
+        retryAlarm: runtime.retryAlarm, signal: controller.signal, retainEffect,
+        closeGraceMs: runtime.closeGraceMs, ledger,
         identity: { sessionId, role: row.role, parentActionId: input.turnId },
       });
-      const boundary = (
-        kind: SessionTurn.Boundary,
-      ): Effect.Effect<SessionBoundaryResult, ExecutionError> =>
-        Effect.gen(function* () {
-          if (controller.signal.aborted) return { messages: [], interrupted: true };
-          const drained = yield* drainBoundary(input, kind, parentActionId);
-          parentActionId = drained.parentActionId;
-          boundaryActionId = drained.boundaryActionId;
-          if (drained.interrupted) controller.abort();
-          return { messages: drained.messages, interrupted: drained.interrupted };
-        }).pipe(Effect.provide(services));
+      const boundary = (kind: SessionTurn.Boundary): Effect.Effect<SessionBoundaryResult, ExecutionError> => Effect.gen(function* () {
+        if (controller.signal.aborted) return { messages: [], interrupted: true };
+        const drained = yield* drainBoundary(input, kind, parentActionId);
+        parentActionId = drained.parentActionId;
+        boundaryActionId = drained.boundaryActionId;
+        if (drained.interrupted) controller.abort();
+        return { messages: drained.messages, interrupted: drained.interrupted };
+      }).pipe(Effect.provide(services));
       let runnerResult: SessionRunnerResult = runnerOutputMissingResult(input.turnId);
       const body = Effect.gen(function* () {
         if (controller.signal.aborted) return yield* Effect.interrupt;
         const hydrated = hydrateSessionHistory(kernel, sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
-        const origin = receivedMessages(kernel, sessionId).rows.find(
-          (item) => item.id === promptId,
-        )?.origin;
+        const origin = receivedMessages(kernel, sessionId).rows.find((item) => item.id === promptId)?.origin;
         const inbound = inboundAuthority(origin?.value);
         if (inbound.violation !== undefined) {
           const observations = yield* ObservationService;
-          scopeObservation(
-            observations,
-            { sessionId, turnId: input.turnId },
-            { now: clock, id: entropy },
-          ).publish(InboundAuthorityViolated, {
-            reason: inbound.violation.reason,
-            ...(promptId === undefined ? {} : { messageId: promptId }),
-          });
+          scopeObservation(observations, { sessionId, turnId: input.turnId }, { now: clock, id: entropy }).publish(
+            InboundAuthorityViolated,
+            { reason: inbound.violation.reason, ...(promptId === undefined ? {} : { messageId: promptId }) },
+          );
         }
         runnerResult = yield* runner({
           authority: inbound.authority,
-          sessionId,
-          kernel,
-          role: row.role,
-          turnId: input.turnId,
-          actionId: input.parentActionId,
-          ledger,
-          retainEffect,
-          bindApprovals: (approvals) => {
-            state.activeApprovals = approvals;
-          },
-          stopEvidence: sessionStopEvidence(
-            kernel,
-            sessionId,
-            input.turnId,
-            () => state.activeApprovals,
-            runtime.openIntent,
-          ),
-          resultId: input.resultId,
-          parentActionId,
-          boundaryActionId,
+          sessionId, kernel, role: row.role, turnId: input.turnId, actionId: input.parentActionId,
+          ledger, retainEffect, bindApprovals: (approvals) => { state.activeApprovals = approvals; },
+          stopEvidence: sessionStopEvidence(kernel, sessionId, input.turnId, () => state.activeApprovals, runtime.openIntent),
+          resultId: input.resultId, parentActionId, boundaryActionId,
           messages: hydrated.messages,
           history: hydrated.history,
-          tools: input.generation.tools,
-          toolsGeneration: input.generation.generation,
-          toolsHash: input.generation.toolsHash,
-          system: input.generation.systemValue,
-          systemHash: input.generation.systemHash,
-          policyGeneration: input.generation.policyGeneration,
-          resumeCount: input.resumeCount,
-          signal: controller.signal,
-          boundary,
+          tools: input.generation.tools, toolsGeneration: input.generation.generation, toolsHash: input.generation.toolsHash,
+          system: input.generation.systemValue, systemHash: input.generation.systemHash, policyGeneration: input.generation.policyGeneration,
+          resumeCount: input.resumeCount, signal: controller.signal, boundary,
         });
         return sessionRunnerResultValue(runnerResult);
       });
-      const work = execution.runExisting(
-        {
-          kind: "turn",
-          op: "session",
-          intent: {
-            turnId: input.turnId,
-            resultId: input.resultId,
-            resumeCount: input.resumeCount,
-            resume: input.resume,
-            toolsGeneration: input.generation.generation,
-            toolsHash: input.generation.toolsHash,
-            systemHash: input.generation.systemHash,
-            policyGeneration: input.generation.policyGeneration,
-          },
-          effect: { terminal: "sealed" },
-        },
-        () => withSignal(body, controller.signal),
-      );
+      const work = execution.runExisting({
+        kind: "turn", op: "session",
+        intent: {
+          turnId: input.turnId, resultId: input.resultId, resumeCount: input.resumeCount, resume: input.resume,
+          toolsGeneration: input.generation.generation, toolsHash: input.generation.toolsHash,
+          systemHash: input.generation.systemHash, policyGeneration: input.generation.policyGeneration,
+        }, effect: { terminal: "sealed" },
+      }, () => withSignal(body, controller.signal));
       const exit = yield* Effect.exit(work);
       const result = resultOf(exit, runnerResult);
       if (state.controller === controller) state.controller = undefined;
@@ -1174,40 +900,21 @@ export function createSessionTurn(
       const retained = state.rawSlots.pending() > 0;
       if (!state.terminalFrozen) {
         const latestAction = kernel.latestAction(sessionId);
-        if (latestAction === undefined)
-          return yield* Effect.die(new Error(`session tree is empty: ${sessionId}`));
-        yield* seal(
-          {
-            turnId: input.turnId,
-            resultId: input.resultId,
-            resumeCount: input.resumeCount,
-            boundaryActionId,
-            toolsGeneration: input.generation.generation,
-            toolsHash: input.generation.toolsHash,
-            systemHash: input.generation.systemHash,
-            policyGeneration: input.generation.policyGeneration,
-            action: latestAction,
-          },
-          result,
-        );
+        if (latestAction === undefined) return yield* Effect.die(new Error(`session tree is empty: ${sessionId}`));
+        yield* seal({
+          turnId: input.turnId, resultId: input.resultId, resumeCount: input.resumeCount, boundaryActionId,
+          toolsGeneration: input.generation.generation, toolsHash: input.generation.toolsHash,
+          systemHash: input.generation.systemHash, policyGeneration: input.generation.policyGeneration, action: latestAction,
+        }, result);
       }
       if (retained) {
-        state.retainedRunner = yield* Effect.forkIn(
-          state.rawSlots.awaitSettled.pipe(
-            Effect.tapError((error) =>
-              Effect.sync(() => {
-                state.retainedFailure = error;
-              }),
-            ),
-            Effect.onExit(() =>
-              Effect.gen(function* () {
-                state.retainedRunner = undefined;
-                yield* ports.hibernate(kernel.row(sessionId)).pipe(Effect.orDie);
-              }),
-            ),
-          ),
-          scope,
-        );
+        state.retainedRunner = yield* Effect.forkIn(state.rawSlots.awaitSettled.pipe(
+          Effect.tapError((error) => Effect.sync(() => { state.retainedFailure = error; })),
+          Effect.onExit(() => Effect.gen(function* () {
+            state.retainedRunner = undefined;
+            yield* ports.hibernate(kernel.row(sessionId)).pipe(Effect.orDie);
+          })),
+        ), scope);
       }
       return result;
     });
@@ -1230,49 +937,29 @@ export function createSessionTurn(
         checkpointId,
       );
       const checkpoint = turnCheckpointAction({
-        id: checkpointId,
-        parentId: parentActionId,
-        sessionId,
-        turnId: input.turnId,
-        resultId: input.resultId,
-        resumeCount: input.resumeCount,
-        boundaryActionId: checkpointId,
-        boundary,
-        at: clock(),
+        id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
+        resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary, at: clock(),
       });
       const current = kernel.row(sessionId);
       yield* commitFoldBatch(kernel, {
-        sessionId,
-        owner,
-        fence: state.fence,
-        now: clock(),
-        expectedRevision: current.revision,
+        sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [checkpoint, ...deliveries],
         state: current.state === "interrupted" ? "interrupted" : "running",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(pending, input.turnId, boundary, clock(), observations, entropy);
       return {
-        messages: pending
-          .filter((item) => item.kind === "prompt")
-          .map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
+        messages: pending.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
         interrupted: pending.some((item) => item.kind === "interrupt"),
-        parentActionId: deliveries.at(-1)?.id ?? checkpointId,
-        boundaryActionId: checkpointId,
+        parentActionId: deliveries.at(-1)?.id ?? checkpointId, boundaryActionId: checkpointId,
       };
     });
   }
 
-  function seal(
-    open: SessionHandleStore.OpenTurn,
-    result: SessionRunnerResult,
-  ): Effect.Effect<void, SessionError> {
+  function seal(open: SessionHandleStore.OpenTurn, result: SessionRunnerResult): Effect.Effect<void, SessionError> {
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
       const latest = kernel.latestAction(sessionId);
-      const interrupts =
-        result.kind === "interrupted"
-          ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt")
-          : [];
+      const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt") : [];
       const deliveries = deliveryActions(
         interrupts,
         { kind: "turn", turnId: open.turnId },
@@ -1280,39 +967,17 @@ export function createSessionTurn(
         latest?.id ?? open.action.id,
       );
       const terminal = turnTerminalAction({
-        id: open.resultId,
-        parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
-        sessionId,
-        turnId: open.turnId,
-        result,
-        resumeCount: open.resumeCount,
-        boundaryActionId: open.boundaryActionId,
-        at: clock(),
+        id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
+        sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),
       });
       const reply = parentReply(kernel, current, terminal, result);
       yield* commitFoldBatch(kernel, {
-        sessionId,
-        owner,
-        fence: state.fence,
-        now: clock(),
-        expectedRevision: current.revision,
-        actions: [
-          ...deliveries,
-          terminal,
-          ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)]),
-        ],
+        sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
+        actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
         state: result.kind === "interrupted" ? "interrupted" : "idle",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      observeDrained(
-        interrupts,
-        open.turnId,
-        "before_llm",
-        clock(),
-        runtime.observations,
-        runtime.entropy,
-      );
-      if (reply !== undefined)
-        yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
+      observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations, runtime.entropy);
+      if (reply !== undefined) yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
     });
   }
   return { runTurn, seal };
@@ -1322,10 +987,7 @@ function withSignal<A, E, R>(work: Effect.Effect<A, E, R>, signal: AbortSignal) 
   return work.pipe(Effect.raceFirst(interruptOn(signal)));
 }
 
-function resultOf(
-  exit: Exit.Exit<ExecutionResult, ExecutionError>,
-  value: SessionRunnerResult,
-): SessionRunnerResult {
+function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: SessionRunnerResult): SessionRunnerResult {
   if (Exit.isFailure(exit)) {
     if (Cause.hasInterrupts(exit.cause)) return { kind: "interrupted", text: "" };
     const cause = Failure.of(exit.cause, "session.turn");
@@ -1333,8 +995,7 @@ function resultOf(
   }
   const outcome = exit.value;
   if (outcome.terminal !== "executed") return policyRefusalResult(outcome.reason);
-  if (canonicalDigest(outcome.value) === canonicalDigest(sessionRunnerResultValue(value)))
-    return value;
+  if (canonicalDigest(outcome.value) === canonicalDigest(sessionRunnerResultValue(value))) return value;
   return sessionRunnerResultFromValue(outcome.value) ?? policyRefusalResult("invalid_output");
 }
 
@@ -1342,80 +1003,47 @@ function resultOf(
 interface SessionChatRun {
   readonly config: ChatAgentConfig & { readonly executor: Executor };
   readonly traceContext: TraceContext.Type;
-  readonly around?: (
-    operation: Effect.Effect<AgentResult, ExecutionError, RunnerServices>,
-  ) => Effect.Effect<AgentResult, ExecutionError, RunnerServices>;
+  readonly around?: (operation: Effect.Effect<AgentResult, ExecutionError, RunnerServices>) => Effect.Effect<AgentResult, ExecutionError, RunnerServices>;
 }
 
 interface SessionChatRunnerOptions {
-  readonly prepare: (
-    input: SessionRunnerInput,
-  ) => Effect.Effect<SessionChatRun, ExecutionError, RunnerServices>;
+  readonly prepare: (input: SessionRunnerInput) => Effect.Effect<SessionChatRun, ExecutionError, RunnerServices>;
   readonly reportError?: (error: Error, input: SessionRunnerInput) => string | undefined;
 }
 
 export function createSessionChatRunner(options: SessionChatRunnerOptions): SessionRunner {
-  return (input) =>
-    Effect.gen(function* () {
-      const messages = input.messages.map((message) => ({
-        role: message.role,
-        content: message.text,
-        id: message.id,
-      }));
-      const prepared = yield* options.prepare(input);
-      const executor = prepared.config.executor;
-      if (
-        executor.recover === undefined ||
-        executor.runAttempts === undefined ||
-        executor.judgeStop === undefined
-      )
-        return yield* Effect.die(new Error("durable chat runner requires session authority"));
-      const captured = hydrateSessionHistory(input.kernel, input.sessionId);
-      yield* executor.recover();
-      const refreshed = refreshSessionHistory(input.kernel, input.sessionId, captured);
-      const operation = runAgent(
-        {
-          messages,
-          history: refreshed.history,
-          traceContext: prepared.traceContext,
-        },
-        {
-          ...prepared.config,
-          pinnedModel: pinnedModelSelection(input.kernel, input.sessionId, input.turnId),
-          execution: { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop },
-          signal: input.signal,
-          boundary: input.boundary,
-          stopEvidence: input.stopEvidence,
-        },
-      );
-      const result = yield* prepared.around?.(operation) ?? operation;
-      if (result.waiting !== undefined)
-        return {
-          kind: "waiting",
-          text: result.text,
-          ...result.waiting,
-        } satisfies SessionRunnerResult;
-      return {
-        kind: "result",
-        text: result.text,
-        finishReason: result.finishReason,
-        usage: result.usage,
-      } satisfies SessionRunnerResult;
-    }).pipe(
-      Effect.catch((error): Effect.Effect<SessionRunnerResult, ExecutionError> => {
-        if (error._tag === "Interrupted" || (error._tag === "LlmRunFailure" && error.aborted))
-          return Effect.succeed({ kind: "interrupted" } satisfies SessionRunnerResult);
-        const reported = options.reportError?.(error, input);
-        return reported === undefined
-          ? Effect.fail(error)
-          : Effect.succeed({
-              kind: "error",
-              text: reported,
-              cause: error,
-              reported: true,
-            } satisfies SessionRunnerResult);
-      }),
-    );
+  return (input) => Effect.gen(function* () {
+    const messages = input.messages.map((message) => ({ role: message.role, content: message.text, id: message.id }));
+    const prepared = yield* options.prepare(input);
+    const executor = prepared.config.executor;
+    if (executor.recover === undefined || executor.runAttempts === undefined || executor.judgeStop === undefined)
+      return yield* Effect.die(new Error("durable chat runner requires session authority"));
+    const captured = hydrateSessionHistory(input.kernel, input.sessionId);
+    yield* executor.recover();
+    const refreshed = refreshSessionHistory(input.kernel, input.sessionId, captured);
+    const operation = runAgent({
+      messages,
+      history: refreshed.history,
+      traceContext: prepared.traceContext,
+    }, {
+      ...prepared.config,
+      pinnedModel: pinnedModelSelection(input.kernel, input.sessionId, input.turnId),
+      execution: { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop },
+      signal: input.signal,
+      boundary: input.boundary,
+      stopEvidence: input.stopEvidence,
+    });
+    const result = yield* (prepared.around?.(operation) ?? operation);
+    if (result.waiting !== undefined) return { kind: "waiting", text: result.text, ...result.waiting } satisfies SessionRunnerResult;
+    return { kind: "result", text: result.text, finishReason: result.finishReason, usage: result.usage } satisfies SessionRunnerResult;
+  }).pipe(Effect.catch((error): Effect.Effect<SessionRunnerResult, ExecutionError> => {
+    if (error._tag === "Interrupted" || (error._tag === "LlmRunFailure" && error.aborted))
+      return Effect.succeed({ kind: "interrupted" } satisfies SessionRunnerResult);
+    const reported = options.reportError?.(error, input);
+    return reported === undefined ? Effect.fail(error) : Effect.succeed({
+      kind: "error", text: reported, cause: error, reported: true,
+    } satisfies SessionRunnerResult);
+  }));
 }
 
 // ─── session handle plane seam (#1247): the registry lives in testing/ ───
@@ -1425,10 +1053,7 @@ export interface SessionHandlePlane {
   close(): Effect.Effect<void, SessionError>;
 }
 const handlePlanes = new WeakMap<SessionRuntime, SessionHandlePlane>();
-export function installSessionHandlePlane(
-  runtime: SessionRuntime,
-  plane: SessionHandlePlane,
-): void {
+export function installSessionHandlePlane(runtime: SessionRuntime, plane: SessionHandlePlane): void {
   handlePlanes.set(runtime, plane);
 }
 export function getSessionHandle(id: string, runtime: SessionRuntime): SessionHandle | undefined {

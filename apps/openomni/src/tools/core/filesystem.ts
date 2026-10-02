@@ -10,24 +10,12 @@ import { parseLocus, type Locus } from "../locus";
 type FsValue<Op extends Machine.FsValue["op"]> = Extract<Machine.FsValue, { op: Op }>;
 interface ToolMachine {
   readonly fs: {
-    read(
-      path: string,
-      window?: { offset?: number; limit?: number },
-    ): Promise<Omit<FsValue<"read">, "data"> & { readonly data: Uint8Array }>;
+    read(path: string, window?: { offset?: number; limit?: number }): Promise<Omit<FsValue<"read">, "data"> & { readonly data: Uint8Array }>;
     write(path: string, data: Uint8Array): Promise<FsValue<"write">>;
     list(path: string): Promise<FsValue<"list">>;
     stat(path: string): Promise<FsValue<"stat">>;
   };
-  exec(
-    cmd: string,
-    cwd: string,
-  ): Promise<
-    | Exclude<Machine.ExecResult, { status: "completed" }>
-    | (Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & {
-        readonly stdout: Uint8Array;
-        readonly stderr: Uint8Array;
-      })
-  >;
+  exec(cmd: string, cwd: string): Promise<Exclude<Machine.ExecResult, { status: "completed" }> | (Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & { readonly stdout: Uint8Array; readonly stderr: Uint8Array })>;
 }
 
 export interface FilePorts {

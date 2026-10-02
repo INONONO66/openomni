@@ -12,11 +12,7 @@ import {
   type Executor,
 } from "./helpers/effect-g3-dispatcher";
 import { AgentFailure } from "../src/kernel/failure";
-import {
-  currentInvocation,
-  requireOpenInvocation,
-  ExecutorContextError,
-} from "../src/kernel/gate/decide";
+import { currentInvocation, requireOpenInvocation, ExecutorContextError } from "../src/kernel/gate/decide";
 import { GenerationOwnership, SessionLayer } from "../src/kernel/ports";
 import { z } from "zod";
 import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
@@ -46,44 +42,34 @@ const call = (name: string) => ({ id: `call-${name}`, tool: name, input: {} });
 
 describe("createTurnDispatcher", () => {
   it("exposes the captured invocation only inside its dispatched tool body", () =>
-    isolated(
-      Effect.gen(function* () {
-        expect(currentInvocation).toThrow(ExecutorContextError);
-        const generation = yield* GenerationOwnership;
-        const { policy } = yield* SessionLayer;
-        const recording = recordingLedger();
-        let bodies = 0;
-        const dispatcher = yield* createTurnDispatcher(
-          {
-            sessionId: context.sessionId,
-            role: "resident",
-            actionId: context.turnId,
-            ledger: recording.ledger,
-          },
-          {},
-        ).pipe(
-          Effect.provide(
-            catalogLayer([
-              tool("invocation", async () => {
-                const frame = requireOpenInvocation();
-                expect(frame).toBe(currentInvocation());
-                expect(frame.executor).toBe(currentExecutor());
-                expect(frame.cell.executor).toBe(frame.executor);
-                expect(frame.policy).toBe(policy);
-                expect(frame.generation).toBe(generation);
-                bodies += 1;
-                return "captured";
-              }),
-            ]),
-          ),
-        );
-        expect(yield* dispatcher.execute(call("invocation"), context)).toMatchObject({
-          output: "captured",
-        });
-        expect(bodies).toBe(1);
-        expect(currentInvocation).toThrow(ExecutorContextError);
-      }),
-    ));
+    isolated(Effect.gen(function* () {
+      expect(currentInvocation).toThrow(ExecutorContextError);
+      const generation = yield* GenerationOwnership;
+      const { policy } = yield* SessionLayer;
+      const recording = recordingLedger();
+      let bodies = 0;
+      const dispatcher = yield* createTurnDispatcher({
+        sessionId: context.sessionId,
+        role: "resident",
+        actionId: context.turnId,
+        ledger: recording.ledger,
+      }, {}).pipe(Effect.provide(catalogLayer([
+        tool("invocation", async () => {
+          const frame = requireOpenInvocation();
+          expect(frame).toBe(currentInvocation());
+          expect(frame.executor).toBe(currentExecutor());
+          expect(frame.cell.executor).toBe(frame.executor);
+          expect(frame.policy).toBe(policy);
+          expect(frame.generation).toBe(generation);
+          bodies += 1;
+          return "captured";
+        }),
+      ])));
+      expect(yield* dispatcher.execute(call("invocation"), context)).toMatchObject({ output: "captured" });
+      expect(bodies).toBe(1);
+      expect(currentInvocation).toThrow(ExecutorContextError);
+    })),
+  );
 
   it("composes a durable executor and commits intent before result", async () => {
     const recording = recordingLedger();
@@ -95,21 +81,10 @@ describe("createTurnDispatcher", () => {
         ledger: recording.ledger,
       },
       {},
-    ).pipe(
-      Effect.provide(catalogLayer([tool("echo", async () => "ok")])),
-      Effect.provide(
-        executorLayer({
-          policy: allowAllPolicy,
-          observations: { publish: () => undefined },
-          clock: () => 1,
-          entropy: recording.entropy,
-        }),
-      ),
-    );
+    ).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")])),
+      Effect.provide(executorLayer({ policy: allowAllPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy })));
 
-    const result = await isolated(
-      Effect.flatMap(dispatcher, (value) => value.execute(call("echo"), context)),
-    );
+    const result = await isolated(Effect.flatMap(dispatcher, (value) => value.execute(call("echo"), context)));
 
     expect(result.isError).toBeUndefined();
     expect(result.output).toBe("ok");
@@ -123,16 +98,7 @@ describe("createTurnDispatcher", () => {
 describe("wave tracking", () => {
   it("hands every model wave to trackWave as a settlement promise", async () => {
     const tracked: Promise<void>[] = [];
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor: passThrough, trackWave: (wave) => tracked.push(wave) }).pipe(
-        Effect.provide(
-          catalogLayer([
-            tool("ok", async () => "fine"),
-            tool("boom", async () => Promise.reject(new Error("x"))),
-          ]),
-        ),
-      ),
-    );
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough, trackWave: (wave) => tracked.push(wave) }).pipe(Effect.provide(catalogLayer([tool("ok", async () => "fine"), tool("boom", async () => Promise.reject(new Error("x")))]))));
 
     const results = await isolated(dispatcher.executeWave([call("ok"), call("boom")], context));
     await isolated(dispatcher.execute(call("ok"), context));
@@ -150,18 +116,12 @@ describe("currentExecutor", () => {
 
   it("returns the executor running the tool body", async () => {
     let seen: Executor | undefined;
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor: passThrough }).pipe(
-        Effect.provide(
-          catalogLayer([
-            tool("probe", async () => {
-              seen = currentExecutor();
-              return "probed";
-            }),
-          ]),
-        ),
-      ),
-    );
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
+        tool("probe", async () => {
+          seen = currentExecutor();
+          return "probed";
+        }),
+      ]))));
 
     await isolated(dispatcher.execute(call("probe"), context));
 
@@ -171,14 +131,10 @@ describe("currentExecutor", () => {
 
 describe("tool body outcomes", () => {
   it("settles a never-resolving body as timed_out", async () => {
-    const dispatcher = runAgentSync(
-      createDispatcher({
+    const dispatcher = runAgentSync(createDispatcher({
         executor: passThrough,
         timeoutMs: 5,
-      }).pipe(
-        Effect.provide(catalogLayer([tool("stall", () => new Promise<string>(() => undefined))])),
-      ),
-    );
+      }).pipe(Effect.provide(catalogLayer([tool("stall", () => new Promise<string>(() => undefined))]))));
 
     const result = await isolated(dispatcher.execute(call("stall"), context));
 
@@ -189,51 +145,39 @@ describe("tool body outcomes", () => {
     const caller = new AbortController();
     const bodyEntered = Promise.withResolvers<void>();
     let sawCallerReason = false;
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(
-        Effect.provide(
-          catalogLayer([
-            tool("abortable", (_input, { signal }) => {
-              bodyEntered.resolve();
-              return new Promise<string>((_resolve, reject) => {
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    expect(() => signal.throwIfAborted()).toThrow("caller aborted");
-                    sawCallerReason = true;
-                    reject(new Error("aborted"));
-                  },
-                  { once: true },
-                );
-              });
-            }),
-          ]),
-        ),
-      ),
-    );
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough, timeoutMs: 1000 }).pipe(Effect.provide(catalogLayer([
+        tool("abortable", (_input, { signal }) => {
+          bodyEntered.resolve();
+          return new Promise<string>((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                expect(() => signal.throwIfAborted()).toThrow("caller aborted");
+                sawCallerReason = true;
+                reject(new Error("aborted"));
+              },
+              { once: true },
+            );
+          });
+        }),
+      ]))));
 
-    const result = await isolated(
-      Effect.gen(function* () {
-        const fiber = yield* Effect.forkChild(
-          dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }),
-        );
-        yield* Effect.promise(() => bodyEntered.promise);
-        const reason = new Error("caller aborted");
-        caller.abort(reason);
-        return yield* Fiber.join(fiber);
-      }),
-    );
+    const result = await isolated(Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(dispatcher.execute(call("abortable"), { ...context, signal: caller.signal }));
+      yield* Effect.promise(() => bodyEntered.promise);
+      const reason = new Error("caller aborted");
+      caller.abort(reason);
+      return yield* Fiber.join(fiber);
+    }));
     expect(sawCallerReason).toBe(true);
     expect(result).toMatchObject({ isError: true, errorKind: "execution_failed" });
   });
 
   it("clears the timer when the body finishes inside the timeout", async () => {
-    const dispatcher = runAgentSync(
-      createDispatcher({
-        executor: passThrough,
-        timeoutMs: 1000,
-      }).pipe(Effect.provide(catalogLayer([tool("fast", async () => "done")]))),
-    );
+    const dispatcher = runAgentSync(createDispatcher({
+      executor: passThrough,
+      timeoutMs: 1000,
+    }).pipe(Effect.provide(catalogLayer([tool("fast", async () => "done")]))));
 
     const result = await isolated(dispatcher.execute(call("fast"), context));
 
@@ -242,19 +186,13 @@ describe("tool body outcomes", () => {
   });
 
   it("fails closed when the body violates the output schema", async () => {
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor: passThrough }).pipe(
-        Effect.provide(
-          catalogLayer([
-            tool(
-              "bad-output",
-              async () => "anything",
-              z.string().refine(() => false),
-            ),
-          ]),
+    const dispatcher = runAgentSync(createDispatcher({ executor: passThrough }).pipe(Effect.provide(catalogLayer([
+        tool(
+          "bad-output",
+          async () => "anything",
+          z.string().refine(() => false),
         ),
-      ),
-    );
+      ]))));
 
     const result = await isolated(dispatcher.execute(call("bad-output"), context));
 
@@ -271,16 +209,9 @@ describe("tool body outcomes", () => {
         return Effect.fail(failure);
       },
     };
-    const dispatcher = runAgentSync(
-      createDispatcher({ executor: failing }).pipe(
-        Effect.provide(catalogLayer([tool("echo", async () => "ok")])),
-      ),
-    );
+    const dispatcher = runAgentSync(createDispatcher({ executor: failing }).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")]))));
 
     const result = await isolated(Effect.result(dispatcher.execute(call("echo"), context)));
-    expect(result).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "AgentFailure", operation: "test" },
-    });
+    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "AgentFailure", operation: "test" } });
   });
 });

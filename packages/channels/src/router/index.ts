@@ -135,97 +135,93 @@ export function createGatewayRouter(ports: GatewayRouterPorts): GatewayRouter {
   }
 
   return {
-    ingest: (rawSender, envelope) =>
-      Effect.gen(function* () {
-        const startedAt = clock();
-        const sender = Gateway.IngestSender.parse(rawSender);
-        if ("kind" in envelope && envelope.kind === "request_answer") {
-          return yield* answerOwnerRequest(stores, ports, sender, envelope, startedAt);
-        }
-        const external =
-          sender.kind === "external"
-            ? externalMessage(
-                stores,
-                sender,
-                Gateway.IngressFacts.parse(envelope),
-                ports.sink,
-                startedAt,
-                messagingPorts?.budgets?.() ?? [],
-                ports.requests,
-                ports.id,
-              )
-            : undefined;
-        const send = sendFromEnvelope(external, envelope);
-        const target = sendTarget(send);
-        const proposedId = external?.event.id ?? ports.id();
-        const prepared = yield* ports.prepare(sender, send, target, proposedId);
-        const messageId = prepared.messageId ?? proposedId;
-        const handle = { messageId, target: prepared.target };
-        const message = projectMessage(sender, send, prepared, external, startedAt);
-        const progress: Parameters<typeof executeMessage>[1] = {
-          commitMs: 0,
-          committed: undefined,
-        };
-        const result = yield* ports.run(
-          sender,
-          {
-            kind: "message",
-            op: "send_message",
-            intent: { messageId, sender, ...send },
-            effect: { type: "message", target: prepared.target },
-            message,
-          },
-          (intent) =>
-            executeMessage(
-              {
-                stores,
-                sender,
-                send,
-                prepared,
-                external,
-                ports,
-                messaging,
-                messageId,
-                handle,
-                startedAt,
-                clock,
-                admitReplyGrant: () => admitReplyGrant(external, startedAt, messageId),
-              },
-              progress,
-              intent,
-            ),
-        );
-        observe(sender, {
-          kind: "message.sent",
-          messageId,
-          sender,
-          targetKind: send.to.kind,
-          type: send.type,
-          bytes: new TextEncoder().encode(send.content).byteLength,
-        });
-        observe(
-          sender,
-          result.terminal === "blocked_pre"
-            ? {
-                kind: "message.rejected",
-                messageId,
-                matchedRuleIds: [...result.matchedRuleIds],
-                ingestMs: clock() - startedAt,
-                verdict: "deny",
-              }
-            : {
-                kind: "message.admitted",
-                messageId,
-                matchedRuleIds: [...result.matchedRuleIds],
-                ingestMs: clock() - startedAt,
-                verdict: "allow",
-              },
-        );
-        if (progress.committed !== undefined) {
-          observe(sender, { kind: "message.committed", messageId, commitMs: progress.commitMs });
-          ports.committed?.(progress.committed);
-        }
-        return ingestResult(result, handle);
-      }),
+    ingest: (rawSender, envelope) => Effect.gen(function* () {
+      const startedAt = clock();
+      const sender = Gateway.IngestSender.parse(rawSender);
+      if ("kind" in envelope && envelope.kind === "request_answer") {
+        return yield* answerOwnerRequest(stores, ports, sender, envelope, startedAt);
+      }
+      const external =
+        sender.kind === "external"
+          ? externalMessage(
+              stores,
+              sender,
+              Gateway.IngressFacts.parse(envelope),
+              ports.sink,
+              startedAt,
+              messagingPorts?.budgets?.() ?? [],
+              ports.requests,
+              ports.id,
+            )
+          : undefined;
+      const send = sendFromEnvelope(external, envelope);
+      const target = sendTarget(send);
+      const proposedId = external?.event.id ?? ports.id();
+      const prepared = yield* ports.prepare(sender, send, target, proposedId);
+      const messageId = prepared.messageId ?? proposedId;
+      const handle = { messageId, target: prepared.target };
+      const message = projectMessage(sender, send, prepared, external, startedAt);
+      const progress: Parameters<typeof executeMessage>[1] = { commitMs: 0, committed: undefined };
+      const result = yield* ports.run(
+        sender,
+        {
+          kind: "message",
+          op: "send_message",
+          intent: { messageId, sender, ...send },
+          effect: { type: "message", target: prepared.target },
+          message,
+        },
+        (intent) =>
+          executeMessage(
+            {
+              stores,
+              sender,
+              send,
+              prepared,
+              external,
+              ports,
+              messaging,
+              messageId,
+              handle,
+              startedAt,
+              clock,
+              admitReplyGrant: () => admitReplyGrant(external, startedAt, messageId),
+            },
+            progress,
+            intent,
+          ),
+      );
+      observe(sender, {
+        kind: "message.sent",
+        messageId,
+        sender,
+        targetKind: send.to.kind,
+        type: send.type,
+        bytes: new TextEncoder().encode(send.content).byteLength,
+      });
+      observe(
+        sender,
+        result.terminal === "blocked_pre"
+          ? {
+              kind: "message.rejected",
+              messageId,
+              matchedRuleIds: [...result.matchedRuleIds],
+              ingestMs: clock() - startedAt,
+              verdict: "deny",
+            }
+          : {
+              kind: "message.admitted",
+              messageId,
+              matchedRuleIds: [...result.matchedRuleIds],
+              ingestMs: clock() - startedAt,
+              verdict: "allow",
+            },
+      );
+      if (progress.committed !== undefined) {
+        observe(sender, { kind: "message.committed", messageId, commitMs: progress.commitMs });
+        ports.committed?.(progress.committed);
+      }
+      return ingestResult(result, handle);
+    }),
   };
 }

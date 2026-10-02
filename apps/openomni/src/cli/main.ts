@@ -157,9 +157,7 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
       child.once("exit", (code) => settle(code ?? 1));
       child.once("error", () => settle(1));
       const detach =
-        options.followSignal === undefined
-          ? undefined
-          : listenForAbort(options.followSignal, abort);
+        options.followSignal === undefined ? undefined : listenForAbort(options.followSignal, abort);
     });
   }
 
@@ -173,23 +171,21 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     async attachMachine(configPath) {
       const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
-        const daemon = await runtime.runPromise(
-          attachConfiguredMachine(configPath, platformEntropy().id),
-        );
-        console.log(JSON.stringify(daemon.attachment));
-        if (daemon.attachment.status === "refused") {
-          return 1;
-        }
-        installShutdownHandlers({
-          stop: runtime.dispose,
-          exit: (code) => process.exit(code),
-          on: (signal, handler) => process.once(signal, handler),
-        });
-        // v4: dispose() interrupts every fiber the runtime runs, which would turn
-        // the SIGTERM path into a rejection here. daemon.closed needs no context,
-        // so await it outside the runtime; a MachineError still rejects as in v3.
-        await Effect.runPromise(daemon.closed);
-        return 0;
+      const daemon = await runtime.runPromise(attachConfiguredMachine(configPath, platformEntropy().id));
+      console.log(JSON.stringify(daemon.attachment));
+      if (daemon.attachment.status === "refused") {
+        return 1;
+      }
+      installShutdownHandlers({
+        stop: runtime.dispose,
+        exit: (code) => process.exit(code),
+        on: (signal, handler) => process.once(signal, handler),
+      });
+      // v4: dispose() interrupts every fiber the runtime runs, which would turn
+      // the SIGTERM path into a rejection here. daemon.closed needs no context,
+      // so await it outside the runtime; a MachineError still rejects as in v3.
+      await Effect.runPromise(daemon.closed);
+      return 0;
       } finally {
         await runtime.dispose();
       }

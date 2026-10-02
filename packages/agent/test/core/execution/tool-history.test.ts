@@ -61,10 +61,7 @@ function agent(run: MockLlmFn, steeringPending?: () => boolean) {
   return createTestAgent({
     events: Bus,
     model: { provider: "anthropic", id: providerModel.id },
-    llm: {
-      run: (input, sink) => Effect.promise(() => run(input, sink)),
-      resolveModel: () => Effect.succeed(providerModel),
-    },
+    llm: { run: (input, sink) => Effect.promise(() => run(input, sink)), resolveModel: () => Effect.succeed(providerModel) },
     ...(steeringPending === undefined ? {} : { steeringPending }),
   });
 }
@@ -74,21 +71,19 @@ describe("tool-bearing history", () => {
     const inputs: Message.WithParts[][] = [];
     let pending = true;
     let calls = 0;
-    const result = await isolated(
-      agent(
-        async (input, sink: Sink) => {
-          calls += 1;
-          inputs.push([...(input.messages as Message.WithParts[])]);
-          input.shouldYield?.();
-          if (calls === 1) {
-            pending = false;
-            sink.onMessage(toolSnapshot("first", "answer", "tool-calls"));
-          } else sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
-          return createStopOutcome();
-        },
-        () => pending,
-      ).run(runInput([{ role: "user", content: "question" }])),
-    );
+    const result = await isolated(agent(
+      async (input, sink: Sink) => {
+        calls += 1;
+        inputs.push([...(input.messages as Message.WithParts[])]);
+        input.shouldYield?.();
+        if (calls === 1) {
+          pending = false;
+          sink.onMessage(toolSnapshot("first", "answer", "tool-calls"));
+        } else sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
+        return createStopOutcome();
+      },
+      () => pending,
+    ).run(runInput([{ role: "user", content: "question" }])));
 
     expect(result.finishReason).toBe("stop");
     const second = inputs[1] ?? [];
@@ -117,24 +112,22 @@ describe("tool-bearing history", () => {
     let pending = true;
     let calls = 0;
     try {
-      const running = isolated(
-        agent(
-          async (input, sink) => {
-            calls += 1;
-            inputs.push([...(input.messages as Message.WithParts[])]);
-            if (calls === 1) {
-              input.shouldYield?.();
-              pending = false;
-              sink.onMessage(toolSnapshot("first", "answer", "tool-calls"));
-              return createStopOutcome();
-            }
-            if (calls === 2) return { type: "error", error: providerFailure("transient failure") };
-            sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
+      const running = isolated(agent(
+        async (input, sink) => {
+          calls += 1;
+          inputs.push([...(input.messages as Message.WithParts[])]);
+          if (calls === 1) {
+            input.shouldYield?.();
+            pending = false;
+            sink.onMessage(toolSnapshot("first", "answer", "tool-calls"));
             return createStopOutcome();
-          },
-          () => pending,
-        ).run(runInput([{ role: "user", content: "question" }])),
-      );
+          }
+          if (calls === 2) return { type: "error", error: providerFailure("transient failure") };
+          sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
+          return createStopOutcome();
+        },
+        () => pending,
+      ).run(runInput([{ role: "user", content: "question" }])));
       await bounded(retry.promise);
       const result = await running;
       expect(calls).toBe(3);
@@ -149,22 +142,20 @@ describe("tool-bearing history", () => {
   it("does not resurrect prior text when the next turn emits an empty snapshot", async () => {
     let pending = true;
     let calls = 0;
-    const result = await isolated(
-      failure(
-        agent(
-          async (input, sink) => {
-            calls += 1;
-            if (calls === 1) {
-              input.shouldYield?.();
-              pending = false;
-              sink.onMessage(toolSnapshot("first", "done", "tool-calls"));
-            } else sink.onMessage(createAssistantMessage("", "", "session", messageSource));
-            return createStopOutcome();
-          },
-          () => pending,
-        ).run(runInput([{ role: "user", content: "question" }])),
-      ),
-    );
+    const result = await isolated(failure(agent(
+      async (input, sink) => {
+        calls += 1;
+        if (calls === 1) {
+          input.shouldYield?.();
+          pending = false;
+          sink.onMessage(toolSnapshot("first", "done", "tool-calls"));
+        } else sink.onMessage(createAssistantMessage("", "", "session", messageSource));
+        return createStopOutcome();
+      },
+      () => pending,
+    )
+      .run(runInput([{ role: "user", content: "question" }]))
+      ));
     expect(result).toMatchObject({ code: "agent_stop", reason: "toolless_stall" });
     expect(calls).toBe(3);
   });

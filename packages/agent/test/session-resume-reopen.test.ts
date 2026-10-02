@@ -3,13 +3,7 @@ import { PlainValueSchema } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
 import type { RunInput, Sink } from "../src/model";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
@@ -71,9 +65,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                             entered.resolve();
                             return yield* Effect.never;
                           }
-                          sink.onMessage(
-                            createAssistantMessage("recovered", "", input.sessionId, messageSource),
-                          );
+                          sink.onMessage(createAssistantMessage("recovered", "", input.sessionId, messageSource));
                           return { type: "stop" };
                         }),
                     },

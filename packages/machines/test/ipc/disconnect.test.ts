@@ -13,12 +13,7 @@ describe("disconnect observers", () => {
     const server = await createIpcServer(
       socketPath("disconnect"),
       (_method, _params, respond) => respond({ ok: true }),
-      {
-        onDisconnect: (id) => {
-          disconnects.push(id);
-          next.resolve(id);
-        },
-      },
+      { onDisconnect: (id) => { disconnects.push(id); next.resolve(id); } },
     );
     servers.push(server);
     return {

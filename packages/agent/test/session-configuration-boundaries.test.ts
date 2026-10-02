@@ -1,10 +1,5 @@
 import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
-import {
-  isolatedRuntime,
-  type SessionFixture as SessionRuntime,
-  type SessionFixture,
-  withSessionServices,
-} from "./helpers/session-services";
+import { isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
@@ -34,20 +29,11 @@ function withSession<E, R>(
     };
     seedPolicy();
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    const handle = yield* Effect.gen(function* () {
-      const fixture: SessionFixture = runtime;
-      return yield* withSessionServices(
-        session(
-          {
-            id: "configuration-session",
-            role: "resident",
-            runner: () => Effect.succeed({ kind: "result", text: "done" }),
-          },
-          fixture,
-        ),
-        fixture,
-      );
-    });
+    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
+        id: "configuration-session",
+        role: "resident",
+        runner: () => Effect.succeed({ kind: "result", text: "done" }),
+      }, fixture), fixture); });
     yield* test(handle);
   });
 }
@@ -106,9 +92,10 @@ it("rejects configuration whose authorization outlives its captured generation",
                   operation: "session.configure",
                   cause: "stale",
                 });
-                expect(SessionHandleStore.latestGeneration(sessionTree(handle.id)).generation).toBe(
-                  receipt.generation,
-                );
+                expect(
+                  SessionHandleStore.latestGeneration(sessionTree(handle.id))
+                    .generation,
+                ).toBe(receipt.generation);
               } finally {
                 release.resolve();
               }

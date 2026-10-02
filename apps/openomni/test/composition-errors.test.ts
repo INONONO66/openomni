@@ -28,16 +28,13 @@ test("component failure observation preserves an unprintable rejection", async (
       states.push("disposed");
     }),
   ];
-  const component = observeComponent(
-    {
-      traceId: newTraceId(),
-      sessionId: "unprintable",
-      runId: "run",
-      componentId: "fixture",
-      componentGeneration: 1,
-    },
-    Bus,
-  );
+  const component = observeComponent({
+    traceId: newTraceId(),
+    sessionId: "unprintable",
+    runId: "run",
+    componentId: "fixture",
+    componentGeneration: 1,
+  }, Bus);
   try {
     const result = await runEffect(Effect.flip(component.run(Effect.fail(failure))));
     expect(result).toBe(failure);
@@ -52,7 +49,7 @@ test("resident materialization refuses unregistered runners before storage", () 
   const resident = createResident({
     model: { provider: "fixture", id: "fixture" },
     apiKey: "fixture",
-    tools: { ...testToolPorts },
+    tools: { ...testToolPorts,},
     sessionRuntime: {
       authorizeConfigure: allowConfigure,
       openKernel: plane.openKernel,

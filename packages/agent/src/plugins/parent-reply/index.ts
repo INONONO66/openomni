@@ -17,8 +17,8 @@ export function parentReply(
   result: SessionRunnerResult,
 ): SessionTransition.OutboundMessage | undefined {
   if (row.parentId === null || result.kind === "waiting") return undefined;
-  const original = receivedMessages(kernel, row.id)
-    .rows.map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
+  const original = receivedMessages(kernel, row.id).rows
+    .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;
   const message = {

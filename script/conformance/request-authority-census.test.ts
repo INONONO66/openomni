@@ -44,10 +44,7 @@ describe("original-action authority census", () => {
       expect.objectContaining({ rule: "legacy-api" }),
     );
     expect(
-      authorityViolations(
-        "packages/agent/src/store/storage/preflight.ts",
-        `db.exec("DELETE FROM ${waitTable}")`,
-      ),
+      authorityViolations("packages/agent/src/store/storage/preflight.ts", `db.exec("DELETE FROM ${waitTable}")`),
     ).toContainEqual(expect.objectContaining({ rule: "legacy-sql" }));
   });
 

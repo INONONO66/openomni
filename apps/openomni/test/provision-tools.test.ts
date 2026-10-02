@@ -106,18 +106,16 @@ describe("provision output boundary", () => {
   test("rejects malformed output through the dispatcher", async () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port, () => 1000));
-    const result = await runEffect(
-      dispatcherFixture([{ ...tool, execute: async () => ({ op: "status" }) }], {
-        executor,
-      }).execute(
-        {
-          id: "provision-invalid-output",
-          tool: "provision",
-          input: { operation: { op: "status", args: {} } },
-        },
-        { sessionId: "provision-session", turnId: "provision-turn" },
-      ),
-    );
+    const result = await runEffect(dispatcherFixture([{ ...tool, execute: async () => ({ op: "status" }) }], {
+      executor,
+    }).execute(
+      {
+        id: "provision-invalid-output",
+        tool: "provision",
+        input: { operation: { op: "status", args: {} } },
+      },
+      { sessionId: "provision-session", turnId: "provision-turn" },
+    ));
 
     expect(result).toEqual({
       toolCallId: "provision-invalid-output",
@@ -236,12 +234,7 @@ describe("owner Person protection and sole owner", () => {
     endpoints: [{ channel: "telegram", externalId: "1" }],
   };
   function putOwner() {
-    plane().stores.persons.put({
-      ...ownerManifest,
-      revision: 0,
-      createdBy: "openomni-init",
-      updatedAt: NOW,
-    });
+    plane().stores.persons.put({ ...ownerManifest, revision: 0, createdBy: "openomni-init", updatedAt: NOW });
   }
   test("same-tier owner endpoint edits suspend and apply only after consent", async () => {
     putOwner();
@@ -495,16 +488,8 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     const { port } = portWith();
     const provisionTools = ["provision"];
     const definitions = catalogDefinitions({ ...testToolPorts, provisioning: port });
-    const resident = definitions
-      .filter((entry: import("@openomni/protocol").AnyToolDefinition) =>
-        entry.visibility.model.includes("resident"),
-      )
-      .map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
-    const worker = definitions
-      .filter((entry: import("@openomni/protocol").AnyToolDefinition) =>
-        entry.visibility.model.includes("worker"),
-      )
-      .map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
+    const resident = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("resident")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
+    const worker = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("worker")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
     for (const name of provisionTools) {
       expect(resident).toContain(name);
       expect(worker).not.toContain(name);
@@ -583,18 +568,16 @@ describe("refusal branches", () => {
     const { port } = portWith();
     const tool = eraseTool(createProvisionTool(port, () => 1000));
     for (const approvalId of ["contact-approval", "another-person-approval"]) {
-      const result = await runEffect(
-        dispatcherFixture([tool], { executor }).execute(
-          {
-            id: approvalId,
-            tool: "provision",
-            input: {
-              operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST, approvalId } },
-            },
+      const result = await runEffect(dispatcherFixture([tool], { executor }).execute(
+        {
+          id: approvalId,
+          tool: "provision",
+          input: {
+            operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST, approvalId } },
           },
-          { sessionId: "test", turnId: "turn" },
-        ),
-      );
+        },
+        { sessionId: "test", turnId: "turn" },
+      ));
       expect(result.errorKind).toBe("invalid_input");
     }
     expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
@@ -602,25 +585,18 @@ describe("refusal branches", () => {
 
   test("missing request authority refuses instead of applying a protected mutation", async () => {
     const { port } = portWith();
-    const result = await runEffect(
-      Effect.result(
-        dispatcherFixture([eraseTool(createProvisionTool(port, () => 1000))], {
-          executor,
-        }).execute(
-          {
-            id: "no-authority",
-            tool: "provision",
-            input: { operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } } },
-          },
-          { sessionId: "test", turnId: "turn" },
-        ),
-      ),
-    );
+    const result = await runEffect(Effect.result(dispatcherFixture([eraseTool(createProvisionTool(port, () => 1000))], {
+      executor,
+    }).execute(
+      {
+        id: "no-authority",
+        tool: "provision",
+        input: { operation: { op: "contact_add", args: { manifest: MANAGER_MANIFEST } } },
+      },
+      { sessionId: "test", turnId: "turn" },
+    )));
     expect(result._tag).toBe("Failure");
-    expect(result._tag === "Failure" && result.failure).toMatchObject({
-      _tag: "ExecutionApprovalError",
-      code: "approval_authority_unavailable",
-    });
+    expect(result._tag === "Failure" && result.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "approval_authority_unavailable" });
     expect(plane().stores.persons.get(MANAGER_MANIFEST.id)).toBeUndefined();
   });
 

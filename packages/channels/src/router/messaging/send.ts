@@ -77,47 +77,40 @@ function deliverSend(
   target: DeliveryTarget,
   request: SessionTransition.Request | undefined,
   ports: MessagingPorts,
-): Effect.Effect<
-  {
-    readonly request: SessionTransition.Request | undefined;
-    readonly value: "accepted" | "rejected" | "unknown";
-  },
-  ChannelError
-> {
+): Effect.Effect<{
+  readonly request: SessionTransition.Request | undefined;
+  readonly value: "accepted" | "rejected" | "unknown";
+}, ChannelError> {
   return Effect.gen(function* () {
-    const delivery = yield* Effect.tryPromise({
-      try: async () =>
-        ports.deliver({
-          messageId: input.messageId,
-          idempotencyKey: input.messageId,
-          senderId: input.senderId,
-          operation: input.operation,
-          body: input.body,
-          target,
-          ...(request === undefined ? {} : { requestId: request.requestId }),
-        }),
-      catch: decodeChannelFailure("message.deliver"),
-    });
-    const value = delivery.value;
-    if (request === undefined) return { request, value };
-    const recorded = yield* ports.requests.receipt({
-      inputId: canonicalKey([
-        input.messageId,
-        "delivery",
-        value,
-        delivery.externalMessageId ?? null,
-        input.at,
-      ]),
-      requestId: request.requestId,
-      sessionId: request.sessionId,
-      sourceActionId: request.requestId,
-      ...(delivery.externalMessageId === undefined
-        ? {}
-        : { externalMessageId: delivery.externalMessageId }),
+  const delivery = yield* Effect.tryPromise({ try: async () => ports.deliver({
+    messageId: input.messageId,
+    idempotencyKey: input.messageId,
+    senderId: input.senderId,
+    operation: input.operation,
+    body: input.body,
+    target,
+    ...(request === undefined ? {} : { requestId: request.requestId }),
+  }), catch: decodeChannelFailure("message.deliver") });
+  const value = delivery.value;
+  if (request === undefined) return { request, value };
+  const recorded = yield* ports.requests.receipt({
+    inputId: canonicalKey([
+      input.messageId,
+      "delivery",
       value,
-      at: input.at,
-    });
-    return { request: recorded, value };
+      delivery.externalMessageId ?? null,
+      input.at,
+    ]),
+    requestId: request.requestId,
+    sessionId: request.sessionId,
+    sourceActionId: request.requestId,
+    ...(delivery.externalMessageId === undefined
+      ? {}
+      : { externalMessageId: delivery.externalMessageId }),
+    value,
+    at: input.at,
+  });
+  return { request: recorded, value };
   });
 }
 
@@ -189,22 +182,20 @@ export function createExistingAgentMessaging(ports: MessagingPorts): ExistingAge
 
   function send(rawInput: SendInput): Effect.Effect<SendReceipt, ChannelError> {
     return Effect.gen(function* () {
-      const input = SendInput.parse(rawInput);
-      const checked = authorizeSend(ports.stores, input, ports.grants());
-      if (!checked.ok) return deny(input, checked.code, checked.reason);
-      const authorization = { input, target: checked.target, grant: checked.grant };
-      const { target } = authorization;
-      // No promise may escape the admission/debit/request write unit.
-      const opened = yield* ports.transaction(
-        Effect.gen(function* () {
-          const admission = admitSend(ports.stores, authorization, ports, deny);
-          if ("kind" in admission) return { denied: admission };
-          return { request: yield* openSendRequest(input, target, ports) };
-        }),
-      );
-      if (opened.denied !== undefined) return opened.denied;
-      const request = yield* deliverSend(input, target, opened.request, ports);
-      return recordSent(authorization, request, ports);
+    const input = SendInput.parse(rawInput);
+    const checked = authorizeSend(ports.stores, input, ports.grants());
+    if (!checked.ok) return deny(input, checked.code, checked.reason);
+    const authorization = { input, target: checked.target, grant: checked.grant };
+    const { target } = authorization;
+    // No promise may escape the admission/debit/request write unit.
+    const opened = yield* ports.transaction(Effect.gen(function* () {
+      const admission = admitSend(ports.stores, authorization, ports, deny);
+      if ("kind" in admission) return { denied: admission };
+      return { request: yield* openSendRequest(input, target, ports) };
+    }));
+    if (opened.denied !== undefined) return opened.denied;
+    const request = yield* deliverSend(input, target, opened.request, ports);
+    return recordSent(authorization, request, ports);
     });
   }
 

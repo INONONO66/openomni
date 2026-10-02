@@ -15,20 +15,14 @@ import {
 } from "../src/renderer/state/queries";
 import { bindDurableSession } from "../src/renderer/state/session-actions";
 import {
-  consoleStore,
-  createSession,
-  INITIAL_CLIENT_STATE,
-  openTab,
-  setDraft,
+  consoleStore, createSession, INITIAL_CLIENT_STATE, openTab, setDraft,
 } from "../src/renderer/state/store";
 import { upgradeWebSocket } from "./helpers/chat-server";
 import { testId } from "./helpers/platform";
 
 const cleanups: (() => void)[] = [];
 beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
-afterEach(() => {
-  for (const close of cleanups.splice(0).reverse()) close();
-});
+afterEach(() => { for (const close of cleanups.splice(0).reverse()) close(); });
 
 test("gateway endpoint reads the bridge and stays null outside Electron", async () => {
   expect(await fetchGatewayEndpoint()).toBeNull();
@@ -47,18 +41,10 @@ test("gateway endpoint reads the bridge and stays null outside Electron", async 
 
 function page(phase: SessionRead.Page["phase"], revision: number, epoch = 2): SessionRead.Page {
   return SessionRead.Page.parse({
-    type: "session_page",
-    sessionId: "durable",
-    epoch,
-    state: phase === "running" ? "running" : "idle",
-    phase,
-    phaseSince: 100,
-    afterRevision: revision - 1,
-    headRevision: revision,
-    nextRevision: null,
+    type: "session_page", sessionId: "durable", epoch, state: phase === "running" ? "running" : "idle",
+    phase, phaseSince: 100, afterRevision: revision - 1, headRevision: revision, nextRevision: null,
     actions: [{ revision, actionId: `action-${revision}`, kind: "turn", at: 100 }],
-    usage: [],
-    toolWallMs: 0,
+    usage: [], toolWallMs: 0,
   });
 }
 
@@ -70,43 +56,22 @@ function serveReads() {
     port: 0,
     fetch: upgradeWebSocket,
     websocket: {
-      open: (socket: ServerWebSocket<undefined>) => {
-        connection = socket;
-      },
+      open: (socket: ServerWebSocket<undefined>) => { connection = socket; },
       message(socket: ServerWebSocket<undefined>, raw) {
         const frame = z.record(z.string(), z.json()).parse(JSON.parse(String(raw)));
         if (frame.type !== "session_read") {
           socket.send(JSON.stringify({ type: "receipt", status: "accepted" }));
-          socket.send(
-            JSON.stringify({
-              type: "session_bound",
-              result: {
-                status: "executed",
-                handle: { messageId: "input", target: "durable" },
-                delivery: { kind: "session" },
-              },
-            }),
-          );
+          socket.send(JSON.stringify({
+            type: "session_bound",
+            result: { status: "executed", handle: { messageId: "input", target: "durable" }, delivery: { kind: "session" } },
+          }));
           return;
         }
         const request = SessionRead.Request.parse(frame);
         requests.push(request);
-        socket.send(
-          JSON.stringify(
-            request.cursor?.epoch === 1
-              ? {
-                  type: "session_gap",
-                  sessionId: "durable",
-                  epoch: 2,
-                  headRevision: 3,
-                  oldestRevision: 0,
-                }
-              : {
-                  ...page("running", 3),
-                  type: request.cursor === undefined ? "session_snapshot" : "session_page",
-                },
-          ),
-        );
+        socket.send(JSON.stringify(request.cursor?.epoch === 1
+          ? { type: "session_gap", sessionId: "durable", epoch: 2, headRevision: 3, oldestRevision: 0 }
+          : { ...page("running", 3), type: request.cursor === undefined ? "session_snapshot" : "session_page" }));
       },
     },
   });
@@ -133,10 +98,7 @@ test("session_read repairs a stale cursor with a fresh snapshot on the existing 
   const wire = serveReads();
   const transport = createGatewayChatTransport({ id: testId, url: wire.url });
   const repaired = await transport.readSession("durable", { revision: 1, epoch: 1 });
-  expect(wire.requests.map((request) => request.cursor)).toEqual([
-    { revision: 1, epoch: 1 },
-    undefined,
-  ]);
+  expect(wire.requests.map((request) => request.cursor)).toEqual([{ revision: 1, epoch: 1 }, undefined]);
   expect(repaired).toMatchObject({ type: "session_snapshot", epoch: 2, headRevision: 3 });
 });
 
@@ -149,22 +111,14 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
   setDraft(localId, "unsent");
   const localState = consoleStore.state;
   let bound: (() => void) | undefined;
-  const binding = new Promise<void>((resolve) => {
-    bound = resolve;
-  });
+  const binding = new Promise<void>((resolve) => { bound = resolve; });
   const transport = createGatewayChatTransport({
     id: testId,
     url: wire.url,
-    onSessionBound: (id, durableId) => {
-      bindDurableSession(id, durableId);
-      bound?.();
-    },
+    onSessionBound: (id, durableId) => { bindDurableSession(id, durableId); bound?.(); },
   });
   const stream = await transport.sendMessages({
-    trigger: "submit-message",
-    chatId: localId,
-    messageId: undefined,
-    abortSignal: undefined,
+    trigger: "submit-message", chatId: localId, messageId: undefined, abortSignal: undefined,
     messages: [{ id: "user", role: "user", parts: [{ type: "text", text: "hello" }] }],
   });
   await binding;
@@ -180,10 +134,7 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
 
   const received = new Promise<void>((resolve) => {
     const stop = transport.subscribeSession((next) => {
-      if (next.headRevision === 4) {
-        stop();
-        resolve();
-      }
+      if (next.headRevision === 4) { stop(); resolve(); }
     });
   });
   wire.send(page("completed", 4));
@@ -201,10 +152,7 @@ test("durable query pages own phase and attention while tabs and drafts stay loc
   expect(chunks).toEqual(["start", "text-start", "text-delta", "text-end", "finish"]);
   const delayed = new Promise<void>((resolve) => {
     const stop = transport.subscribeSession((next) => {
-      if (next.headRevision === 3) {
-        stop();
-        resolve();
-      }
+      if (next.headRevision === 3) { stop(); resolve(); }
     });
   });
   wire.send(page("running", 3));
@@ -230,43 +178,20 @@ test("an empty same-epoch same-head continuation keeps the authoritative activit
         const request = SessionRead.Request.parse(JSON.parse(String(raw)));
         requests.push(request);
         const head = {
-          sessionId: "durable",
-          state: "idle" as const,
-          phase: "completed" as const,
-          phaseSince: 900,
-          epoch: 2,
-          headRevision: 1,
-          nextRevision: null,
-          usage: [],
-          toolWallMs: 0,
+          sessionId: "durable", state: "idle" as const, phase: "completed" as const,
+          phaseSince: 900, epoch: 2, headRevision: 1, nextRevision: null, usage: [], toolWallMs: 0,
         };
-        socket.send(
-          JSON.stringify(
-            request.cursor === undefined
-              ? {
-                  ...head,
-                  type: "session_snapshot",
-                  afterRevision: 0,
-                  actions: [{ revision: 1, actionId: "action-1", kind: "turn", at: 900 }],
-                }
-              : {
-                  ...head,
-                  type: "session_page",
-                  afterRevision: request.cursor.revision,
-                  actions: [],
-                },
-          ),
-        );
+        socket.send(JSON.stringify(request.cursor === undefined
+          ? { ...head, type: "session_snapshot", afterRevision: 0,
+              actions: [{ revision: 1, actionId: "action-1", kind: "turn", at: 900 }] }
+          : { ...head, type: "session_page", afterRevision: request.cursor.revision, actions: [] }));
       },
     },
   });
   cleanups.push(() => server.stop(true));
   const client = new QueryClient();
   cleanups.push(() => client.clear());
-  const transport = createGatewayChatTransport({
-    id: testId,
-    url: `ws://127.0.0.1:${server.port}`,
-  });
+  const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
   const localId = createSession(10);
   bindDurableSession(localId, "durable");
   const local = consoleStore.state.sessions[0];

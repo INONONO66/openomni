@@ -1,41 +1,17 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readlinkSync,
-  readdirSync,
-  realpathSync,
-} from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { projectOptions } from "./check-types-census";
 import type { TestSelectionReceipt } from "./run-quality-mutations";
 
-export type Entry = {
-  path: string;
-  sha256: string;
-  bytes: number;
-  category: string;
-  language: string;
-};
+export type Entry = { path: string; sha256: string; bytes: number; category: string; language: string };
 export type Contract = { projects: string[]; roots: string[]; topology: boolean };
-export type Inventory = {
-  files: Entry[];
-  historical: Entry[];
-  embedded: Entry[];
-  configurations: { path: string; sha256: string }[];
-};
-export const mutationFailure: { current: { code: string; message: string } | null } = {
-  current: null,
-};
+export type Inventory = { files: Entry[]; historical: Entry[]; embedded: Entry[]; configurations: { path: string; sha256: string }[] };
+export const mutationFailure: { current: { code: string; message: string } | null } = { current: null };
 export class MutationError {
   readonly name = "MutationError";
-  constructor(
-    readonly code: string,
-    readonly message: string,
-    readonly reach?: { test: string; receipt: TestSelectionReceipt },
-  ) {}
+  constructor(readonly code: string, readonly message: string, readonly reach?: { test: string; receipt: TestSelectionReceipt }) { }
 }
 export function fail(code: string, message: string): never {
   mutationFailure.current = { code, message };
@@ -45,19 +21,10 @@ export function sha256(data: string | Buffer): string {
   return createHash("sha256").update(data).digest("hex");
 }
 export function pathIn(root: string, path: string): string {
-  if (
-    !path ||
-    isAbsolute(path) ||
-    path.includes("\\") ||
-    path.split("/").some((part) => !part || part === "." || part === "..")
-  )
+  if (!path || isAbsolute(path) || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === ".."))
     return fail("schema", `Unsafe relative path: ${path}`);
   const absolute = resolve(root, path);
-  if (
-    existsSync(absolute) &&
-    (lstatSync(absolute).isSymbolicLink() ||
-      !realpathSync(absolute).startsWith(`${realpathSync(root)}/`))
-  )
+  if (existsSync(absolute) && (lstatSync(absolute).isSymbolicLink() || !realpathSync(absolute).startsWith(`${realpathSync(root)}/`)))
     return fail("schema", `Source escapes root: ${path}`);
   return absolute;
 }
@@ -66,35 +33,17 @@ function projectProgram(root: string, path: string): ts.Program {
   console.error(`[mutation] compiler project ${path}`);
   try {
     const parsed = projectOptions(root, path);
-    return ts.createProgram(parsed.fileNames, {
-      ...parsed.options,
-      noEmit: true,
-      incremental: false,
-      composite: false,
-    });
-  } catch {
-    return fail("configuration", `invalid native project: ${path}`);
-  }
+    return ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true, incremental: false, composite: false });
+  } catch { return fail("configuration", `invalid native project: ${path}`); }
 }
 export function inventoryCompilerOptions(root: string): ts.CompilerOptions {
   return {
-    strict: true,
-    noEmit: true,
-    allowJs: true,
-    checkJs: false,
-    rootDir: root,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    jsx: ts.JsxEmit.Preserve,
-    skipLibCheck: true,
+    strict: true, noEmit: true, allowJs: true, checkJs: false,
+    rootDir: root, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.Preserve, skipLibCheck: true,
   };
 }
-export function* programs(
-  directory: string,
-  contract: Contract,
-  inventory: Inventory,
-): Generator<ts.Program, void, undefined> {
+export function* programs(directory: string, contract: Contract, inventory: Inventory): Generator<ts.Program, void, undefined> {
   const root = realpathSync(directory);
   const covered = new Set<string>();
   for (const path of contract.projects) {
@@ -104,10 +53,8 @@ export function* programs(
     for (const name of program.getRootFileNames()) covered.add(realpathSync(name));
     yield program;
   }
-  const remaining = inventory.files
-    .filter((file) => ["typescript", "javascript"].includes(file.language))
-    .map((file) => pathIn(root, file.path))
-    .filter((path) => !covered.has(realpathSync(path)));
+  const remaining = inventory.files.filter((file) => ["typescript", "javascript"].includes(file.language))
+    .map((file) => pathIn(root, file.path)).filter((path) => !covered.has(realpathSync(path)));
   if (remaining.length) {
     const options = inventoryCompilerOptions(root);
     const host = ts.createCompilerHost(options);
@@ -117,9 +64,7 @@ export function* programs(
 }
 export function formatDiagnostic(diagnostic: ts.Diagnostic, cwd: string): string {
   return ts.formatDiagnostics([diagnostic], {
-    getCanonicalFileName: (name) => name,
-    getCurrentDirectory: () => cwd,
-    getNewLine: () => "\n",
+    getCanonicalFileName: (name) => name, getCurrentDirectory: () => cwd, getNewLine: () => "\n",
   });
 }
 // The one diagnostic ownership rule shared by baseline and candidate checks:
@@ -144,9 +89,7 @@ export function diagnostics(items: Iterable<ts.Program>, cwd = process.cwd()): s
   return errors;
 }
 function visitExecutionTree(root: string, hasher: Bun.CryptoHasher, directory: string): void {
-  for (const name of readdirSync(directory).sort((a, b) =>
-    Buffer.compare(Buffer.from(a), Buffer.from(b)),
-  )) {
+  for (const name of readdirSync(directory).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))) {
     const path = join(directory, name);
     if (lstatSync(path).isSymbolicLink()) {
       const link = readlinkSync(path);

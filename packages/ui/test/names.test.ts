@@ -25,7 +25,7 @@ function references(src: string, key: string): boolean {
 
 describe("the address book", () => {
   test("a part reference does not satisfy its parent token", () => {
-    const src = "<span data-ui={UI_NAMES.TabIcon} />";
+    const src = '<span data-ui={UI_NAMES.TabIcon} />';
     expect(references(src, "TabIcon")).toBe(true);
     expect(references(src, "Tab")).toBe(false);
   });

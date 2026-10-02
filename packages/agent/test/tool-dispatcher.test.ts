@@ -3,25 +3,13 @@ import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, it } from "bun:test";
-import {
-  createDispatcher,
-  defineTool,
-  eraseTool,
-  sessionTool,
-  ToolRefused,
-  toolInputSchema,
-  toolSpec,
-} from "../src/kernel/tool";
+import { createDispatcher, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec } from "../src/kernel/tool";
 import { recordingExecutor } from "./helpers/effect-g2";
 import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
 
 function dispatcher(definitions: readonly import("@openomni/protocol").AnyToolDefinition[]) {
-  return runAgentSync(
-    createDispatcher({ executor: recordingExecutor().executor }).pipe(
-      Effect.provide(catalogLayer(definitions)),
-    ),
-  );
+  return runAgentSync(createDispatcher({ executor: recordingExecutor().executor }).pipe(Effect.provide(catalogLayer(definitions))));
 }
 
 function definition(options: {
@@ -56,20 +44,14 @@ describe("tool dispatcher public contract", () => {
               await released.promise;
             },
           });
-          const dispatch = runAgentSync(
-            createDispatcher({ executor: recording.executor }).pipe(
-              Effect.provide(
-                catalogLayer([
-                  definition({
-                    execute: async () => {
-                      bodies += 1;
-                      return "result";
-                    },
-                  }),
-                ]),
-              ),
-            ),
-          );
+          const dispatch = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+              definition({
+                execute: async () => {
+                  bodies += 1;
+                  return "result";
+                },
+              }),
+            ]))));
           const running = yield* Effect.forkScoped(dispatch.execute(call, context));
           yield* Effect.promise(() => reached.promise).pipe(Effect.timeout("5 seconds"));
           expect(recording.committed[0]?.kind).toBe("policy.decision");
@@ -139,17 +121,10 @@ describe("tool dispatcher public contract", () => {
           ];
           const wave = yield* dispatch.executeWave(rejected, context);
           for (const [index, rejectedCall] of rejected.entries()) {
-            for (const result of [
-              wave[index],
-              yield* dispatch.execute(rejectedCall, context),
-              yield* dispatch.executeCell(rejectedCall, context),
-            ]) {
+            for (const result of [wave[index], yield* dispatch.execute(rejectedCall, context), yield* dispatch.executeCell(rejectedCall, context)]) {
               expect(result).toMatchObject({
-                id: rejectedCall.id,
-                toolCallId: rejectedCall.id,
-                toolName: rejectedCall.tool,
-                isError: true,
-                errorKind: index === 0 ? "unregistered_tool" : "invalid_input",
+                id: rejectedCall.id, toolCallId: rejectedCall.id, toolName: rejectedCall.tool,
+                isError: true, errorKind: index === 0 ? "unregistered_tool" : "invalid_input",
               });
             }
           }
@@ -171,13 +146,9 @@ describe("tool dispatcher public contract", () => {
           ]);
           const failure = new Error("TOOL_FAILURE_SENTINEL");
           const recording = recordingExecutor();
-          const failed = runAgentSync(
-            createDispatcher({ executor: recording.executor }).pipe(
-              Effect.provide(
-                catalogLayer([definition({ execute: () => Promise.reject(failure) })]),
-              ),
-            ),
-          );
+          const failed = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
+            definition({ execute: () => Promise.reject(failure) }),
+          ]))));
 
           expect(yield* refused.execute(call, context)).toMatchObject({
             isError: true,
@@ -194,22 +165,14 @@ describe("tool dispatcher public contract", () => {
             });
           }
           const terminals = recording.committed.flatMap((action) => {
-            const parsed = z
-              .object({
-                phase: z.literal("result"),
-                terminal: z.literal("executed"),
-                evidence: z.object({
-                  failures: z.array(
-                    z.object({
-                      tag: z.literal("ToolBodyFailed"),
-                      tool: z.string(),
-                      cause: z.string(),
-                    }),
-                  ),
-                }),
-                toolResult: z.object({ errorKind: z.string() }).optional(),
-              })
-              .safeParse(action.effect.value);
+            const parsed = z.object({
+              phase: z.literal("result"),
+              terminal: z.literal("executed"),
+              evidence: z.object({ failures: z.array(z.object({
+                tag: z.literal("ToolBodyFailed"), tool: z.string(), cause: z.string(),
+              })) }),
+              toolResult: z.object({ errorKind: z.string() }).optional(),
+            }).safeParse(action.effect.value);
             return parsed.success ? [parsed.data] : [];
           });
           expect(terminals).toHaveLength(2);
@@ -218,11 +181,7 @@ describe("tool dispatcher public contract", () => {
               { tag: "ToolBodyFailed", tool: "echo", cause: String(failure) },
             ]);
           }
-          expect(
-            terminals.flatMap((terminal) =>
-              terminal.toolResult === undefined ? [] : [terminal.toolResult.errorKind],
-            ),
-          ).toEqual(["execution_failed"]);
+          expect(terminals.flatMap((terminal) => terminal.toolResult === undefined ? [] : [terminal.toolResult.errorKind])).toEqual(["execution_failed"]);
         }),
       ),
     ));

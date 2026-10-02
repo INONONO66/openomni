@@ -66,7 +66,9 @@ export function materializeInboxTarget(
     if (!exists) {
       const limits = input.limits;
       if (limits !== undefined && create.row.parentId !== null) {
-        const children = plane.listSessions().filter((row) => row.parentId === create.row.parentId);
+        const children = plane
+          .listSessions()
+          .filter((row) => row.parentId === create.row.parentId);
         if (children.length >= limits.fanout)
           return yield* new AgentFailure({
             operation: "message.commit",
@@ -104,7 +106,9 @@ export function materializeInboxTarget(
 }
 
 export function createMessageInboxCommit(deps: MessageInboxDeps) {
-  return function commitMessageInbox(input: Inbox.Commit): Effect.Effect<Inbox.Row, AgentFailure> {
+  return function commitMessageInbox(
+    input: Inbox.Commit,
+  ): Effect.Effect<Inbox.Row, AgentFailure> {
     return Effect.gen(function* () {
       const outbound = yield* outboundMessage;
       const message = outbound?.input.message;
@@ -319,9 +323,7 @@ export function prepareMessage(
       const fanout = bounds.flatMap((check) => (check.kind === "fanout" ? [check.max] : []));
       const depths = bounds.flatMap((check) => (check.kind === "depth" ? [check.max] : []));
       if (send.to.kind === "new_session" && (fanout.length === 0 || depths.length === 0))
-        return yield* new SendAdmissionConflict({
-          message: "child admission bounds missing from pinned policy",
-        });
+        return yield* new SendAdmissionConflict({ message: "child admission bounds missing from pinned policy" });
       const depth = sessionDepth(source.parentId, rows);
       const openChildren = rows.filter((row) => row.parentId === sender.id).length;
       return {

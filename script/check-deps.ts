@@ -45,14 +45,12 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
-const Manifest = z
-  .object({
-    dependencies: z.record(z.string(), z.string()).optional(),
-    devDependencies: z.record(z.string(), z.string()).optional(),
-    peerDependencies: z.record(z.string(), z.string()).optional(),
-    optionalDependencies: z.record(z.string(), z.string()).optional(),
-  })
-  .catchall(PlainValueSchema);
+const Manifest = z.object({
+  dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
+  peerDependencies: z.record(z.string(), z.string()).optional(),
+  optionalDependencies: z.record(z.string(), z.string()).optional(),
+}).catchall(PlainValueSchema);
 type Manifest = z.infer<typeof Manifest>;
 
 /** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
@@ -170,10 +168,7 @@ type ScannedSource = { filePath: string; source: string };
  * rule, one read. Every validator below consumes this instead of repeating the
  * scan options.
  */
-async function* scanRepositorySources(
-  pattern: string,
-  root = ".",
-): AsyncGenerator<ScannedSource, void, void> {
+async function* scanRepositorySources(pattern: string, root = "."): AsyncGenerator<ScannedSource, void, void> {
   const sourceGlob = new Glob(pattern);
 
   for await (const filePath of sourceGlob.scan({
@@ -726,14 +721,11 @@ const AGENT_SRC_PREFIX = "packages/agent/src/";
  * pinned by AGENT_BAND_RATCHET below: the count per file may shrink, never
  * grow (#1255 turns the ratchet into a full ban).
  */
-const AGENT_BANDS: Record<
-  string,
-  {
-    readonly internal: ReadonlySet<string>;
-    readonly externalBans: readonly string[];
-    readonly tokenBans: readonly RegExp[];
-  }
-> = {
+const AGENT_BANDS: Record<string, {
+  readonly internal: ReadonlySet<string>;
+  readonly externalBans: readonly string[];
+  readonly tokenBans: readonly RegExp[];
+}> = {
   kernel: {
     internal: new Set(["kernel"]),
     externalBans: ["effect/cluster", "bun:sqlite", "ai", "@ai-sdk/"],
@@ -747,16 +739,8 @@ const AGENT_BANDS: Record<
   store: { internal: new Set(["store"]), externalBans: [], tokenBans: [] },
   model: { internal: new Set(["model"]), externalBans: [], tokenBans: [] },
   plugins: { internal: new Set(["plugins", "kernel", "model"]), externalBans: [], tokenBans: [] },
-  inspect: {
-    internal: new Set(["inspect", "kernel", "store", "session"]),
-    externalBans: [],
-    tokenBans: [],
-  },
-  testing: {
-    internal: new Set(["testing", "kernel", "session", "store", "model", "plugins", "inspect"]),
-    externalBans: [],
-    tokenBans: [],
-  },
+  inspect: { internal: new Set(["inspect", "kernel", "store", "session"]), externalBans: [], tokenBans: [] },
+  testing: { internal: new Set(["testing", "kernel", "session", "store", "model", "plugins", "inspect"]), externalBans: [], tokenBans: [] },
 };
 
 /** inspect/ may import session reads but never the live bus (issue table 1). */
@@ -907,15 +891,11 @@ async function validateDeepImports(): Promise<string[]> {
   return violations;
 }
 
-async function* scannedImports(pattern: RegExp): AsyncGenerator<
-  {
-    filePath: string;
-    importPath: string;
-    line: number;
-  },
-  void,
-  void
-> {
+async function* scannedImports(pattern: RegExp): AsyncGenerator<{
+  filePath: string;
+  importPath: string;
+  line: number;
+}, void, void> {
   for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     for (const match of source.matchAll(pattern)) {
       const importPath = match[1];
@@ -1067,10 +1047,7 @@ function selfTest(): number {
   const anyExceptSelf: PackageRule = { ...twoTier, allowedDeps: "any-except-self" };
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/agent")],
-    [
-      "open workspace band rejects its own package",
-      !isAllowedDep(anyExceptSelf, "@openomni/self-test"),
-    ],
+    ["open workspace band rejects its own package", !isAllowedDep(anyExceptSelf, "@openomni/self-test")],
     ["open workspace band permits another package", isAllowedDep(anyExceptSelf, "@openomni/agent")],
     ["src refuses what only the manifest lists", !isAllowedSourceDep(twoTier, "@openomni/agent")],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],

@@ -1,11 +1,11 @@
 /**
  * W5.2 L2.4 — test cluster runtime hosting the REAL Session entity (plan §3
- * L2.1 `src/session/entity.ts`) on a SingleRunner: sql message/runner
+ * L2.1 `src/cluster/session-entity.ts`) on a SingleRunner: sql message/runner
  * storage plus the ledger catalog schema in one catalog file, per-session
  * ledger files under `sessionsDir`. Every Effect here is executed through the
  * allowlisted `runAgent` helper so the runner-site ratchet does not grow.
  *
- * The wire contract is `src/session/messages.ts`: `Prompt`/`Interrupt`/
+ * The wire contract is `src/cluster/messages.ts`: `Prompt`/`Interrupt`/
  * `Resume` payloads are `{ messageId, content, origin }` (origin = canonical
  * JSON of the protocol origin value) acked with `ChainAppendReceipt`
  * `{ ordinal, actionHash, deduped }`; `Deadline` is `{ requestId, deadlineAt }`
@@ -43,34 +43,14 @@ import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { openCatalogStore } from "../../src/store/catalog";
 import { openSessionStore } from "../../src/store/session-file";
-import {
-  SessionEntity,
-  SessionEntityContext,
-  SessionEntityLive,
-  type SessionEntityEnv,
-} from "../../src/session/entity";
+import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/session/entity";
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import {
-  deadlineDelivery,
-  retryDelivery,
-  watchFiredDelivery,
-  watchTimeoutDelivery,
-  type AlarmChainReads,
-} from "../../src/session/alarm";
-import type {
-  SessionEntityPorts,
-  SessionEntityTimerContext,
-  SessionEntityTurnInput,
-} from "../../src/session/run";
+import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/session/alarm";
+import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session/run";
 import type { SessionError } from "../../src/kernel/failure";
-import {
-  deliveryActions,
-  turnIntentAction,
-  turnResumeAction,
-  turnTerminalAction,
-} from "../../src/session/commit";
+import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session/commit";
 import { runAgent } from "./executor";
 
 export interface TestClusterOptions {
@@ -221,7 +201,12 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
               boundaryActionId: null,
               at: Date.now(),
             }),
-            ...deliveryActions([item], { kind: "turn", turnId }, "before_llm", resumeId),
+            ...deliveryActions(
+              [item],
+              { kind: "turn", turnId },
+              "before_llm",
+              resumeId,
+            ),
           ],
           "running",
         );
@@ -251,7 +236,12 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
             boundaryActionId: null,
             at: Date.now(),
           }),
-          ...deliveryActions([item], { kind: "turn", turnId }, "before_llm", turnId),
+          ...deliveryActions(
+            [item],
+            { kind: "turn", turnId },
+            "before_llm",
+            turnId,
+          ),
         ],
         "running",
       );
@@ -263,7 +253,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
     }).pipe(Effect.orDie);
 }
 
-/** Chain-guarded timer folds straight from `src/session/alarm` (C2/F2). */
+/** Chain-guarded timer folds straight from `src/cluster/timers` (C2/F2). */
 function makeTimerPort(): SessionEntityPorts["timers"] {
   const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
     actionById: context.kernel.actionById,

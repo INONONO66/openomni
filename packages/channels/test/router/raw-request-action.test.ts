@@ -6,13 +6,7 @@ import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort } from "../helpers/requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import {
-  type Gateway,
-  type Inbox,
-  type BusEvent,
-  type PlainValue,
-  Ingress,
-} from "@openomni/protocol";
+import { type Gateway, type Inbox, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { IngressRoutingError } from "../../src/errors";
 import { recordingInbox } from "./_recording-inbox";
@@ -44,13 +38,11 @@ test.each([
   [{ unexpected: true }, "invalid"],
 ] as const)("raw request reply projects %j as %s", async (action: PlainValue, expectedAction: string) => {
   // Given a durable request accepting only report_result.
-  await runEffect(
-    await openRequest("request-raw-action", {
-      sessionId: "request-owner",
-      correlation: { channelId: "dm", tokenHash: "token" },
-      expectedResponders: ["responder"],
-    }),
-  );
+  await runEffect(await openRequest("request-raw-action", {
+    sessionId: "request-owner",
+    correlation: { channelId: "dm", tokenHash: "token" },
+    expectedResponders: ["responder"],
+  }));
   const commits: Inbox.Commit[] = [];
   const decisions: Ingress.RoutingDecisionPayload[] = [];
   const ids = { value: 0 };
@@ -59,56 +51,47 @@ test.each([
     stores: ledger().stores,
     transaction: channelTransaction,
     now: () => 1,
-    id: () => {
-      ids.value += 1;
-      return `raw-id-${ids.value}`;
-    },
+    id: () => { ids.value += 1; return `raw-id-${ids.value}`; },
     sink: <T>(event: BusEvent.Descriptor<T>, data: T) => {
       if (event.name === Ingress.Events.RoutingDecision.name) {
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
       }
     },
     inbox: recordingInbox(commits),
-    prepare: (_sender: Gateway.IngestSender, _message: Gateway.SendMessage, target: string) =>
-      Effect.succeed({
-        target,
-        message: {
-          sender: "external",
-          addressee: "bot",
-          identity: true,
-          grantTier: true,
-          egressBudget: true,
-          eventIdUnique: true,
-          replyCorrelation: true,
+    prepare: (_sender: Gateway.IngestSender, _message: Gateway.SendMessage, target: string) => Effect.succeed({
+      target,
+      message: {
+        sender: "external",
+        addressee: "bot",
+        identity: true,
+        grantTier: true,
+        egressBudget: true,
+        eventIdUnique: true,
+        replyCorrelation: true,
+      },
+    }),
+    run: (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
+      return {
+      terminal: "executed",
+      matchedRuleIds: [],
+      value: yield* body({
+        action: {
+          id: "source",
+          sessionId: "request-owner",
+          parentId: null,
+          kind: "message",
+          intent: { encodingVersion: 1, value: { value: request.intent } },
+          effect: { encodingVersion: 1, value: {} },
+          irreversible: true,
+          ordinal: 1,
+          prevHash: "fixture-prev",
+          actionHash: "fixture-hash",
+          ts: 1,
         },
+        revision: 1,
       }),
-    run: (
-      _sender: Gateway.IngestSender,
-      request: Parameters<GatewayRouterPorts["run"]>[1],
-      body: Parameters<GatewayRouterPorts["run"]>[2],
-    ) =>
-      Effect.gen(function* () {
-        return {
-          terminal: "executed",
-          matchedRuleIds: [],
-          value: yield* body({
-            action: {
-              id: "source",
-              sessionId: "request-owner",
-              parentId: null,
-              kind: "message",
-              intent: { encodingVersion: 1, value: { value: request.intent } },
-              effect: { encodingVersion: 1, value: {} },
-              irreversible: true,
-              ordinal: 1,
-              prevHash: "fixture-prev",
-              actionHash: "fixture-hash",
-              ts: 1,
-            },
-            revision: 1,
-          }),
-        };
-      }),
+      };
+    }),
   });
   const facts: Gateway.IngressFacts = {
     eventId: "reply",

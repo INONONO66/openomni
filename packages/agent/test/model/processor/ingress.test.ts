@@ -18,9 +18,7 @@ describe("processor ingress", () => {
   test("accepts opaque SDK tool output and error values", () => {
     expect(ProviderEvent.safeParse({ type: "tool-result", output: 123n }).success).toBe(true);
     expect(ProviderEvent.safeParse({ type: "tool-result", output: new Date() }).success).toBe(true);
-    expect(ProviderEvent.safeParse({ type: "error", error: Symbol("sdk-error") }).success).toBe(
-      true,
-    );
+    expect(ProviderEvent.safeParse({ type: "error", error: Symbol("sdk-error") }).success).toBe(true);
   });
 
   test("a rejected nested payload fails the attempt before projecting", async () => {
@@ -75,8 +73,7 @@ describe("processor ingress", () => {
       }),
     });
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      _tag: "TransportFailure",
-      providerErrorName: "AbortError",
+      _tag: "TransportFailure", providerErrorName: "AbortError",
     });
     expect(capture.finalParts()).toMatchObject([{ type: "text", text: "partial" }]);
     expect(processor.message.finish).toBe("aborted");

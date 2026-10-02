@@ -69,13 +69,7 @@ async function createMachineHost(options: Omit<Parameters<typeof createHost>[0],
 async function attachMachineDaemon(
   options: Omit<Parameters<typeof attachDaemon>[0], "id">,
 ): Promise<MachineDaemon> {
-  const daemon = await acquireEffect(
-    attachDaemon({
-      id: testIds("e2e-daemon"),
-      ...options,
-      runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner,
-    }),
-  );
+  const daemon = await acquireEffect(attachDaemon({ id: testIds("e2e-daemon"), ...options, runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner }));
   suite.defer(() => runEffect(daemon.close()));
   return daemon;
 }
@@ -113,30 +107,29 @@ test("app root runs machine read write shell and code through one eval cell", as
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input: RunInput, sink: Sink) =>
-        Effect.sync(() => {
-          const call = requestToolStep(input, sink, {
-            id: "machine-cell",
-            tool: "eval",
-            input: {
-              operation: {
-                op: "run",
-                code: [
-                  `m = codemode.getMachine('${MACHINE_ID}')`,
-                  `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
-                  `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
-                  `shell = m.bash('printf shell; exit 7', ${JSON.stringify(root)})`,
-                  `code = m.eval('6 * 7')`,
-                  "(readback, shell['stdout'], shell['exitCode'], code['value'])",
-                ].join("\n"),
-                timeout: 15,
-              },
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        const call = requestToolStep(input, sink, {
+          id: "machine-cell",
+          tool: "eval",
+          input: {
+            operation: {
+              op: "run",
+              code: [
+                `m = codemode.getMachine('${MACHINE_ID}')`,
+                `m.write(${JSON.stringify(join(root, "value"))}, bytes([0, 255, 128, 65]))`,
+                `readback = list(m.read(${JSON.stringify(join(root, "value"))})['data'])`,
+                `shell = m.bash('printf shell; exit 7', ${JSON.stringify(root)})`,
+                `code = m.eval('6 * 7')`,
+                "(readback, shell['stdout'], shell['exitCode'], code['value'])",
+              ].join("\n"),
+              timeout: 15,
             },
-          });
-          if (call === undefined) return { type: "stop" };
-          sink.onMessage(assistantMessage(input, { text: call.output }));
-          return { type: "stop" };
-        }),
+          },
+        });
+        if (call === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: call.output }));
+        return { type: "stop" };
+      }),
     },
   });
   const plane = await planeOf(app.runtime);
@@ -178,51 +171,46 @@ test("a cell creates three child sessions through send_message", async () => {
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input: RunInput, sink: Sink) =>
-        Effect.sync(() => {
-          const plane = planeRef.current;
-          if (plane === undefined) throw new Error("plane not resolved before model run");
-          if (
-            plane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker"
-          ) {
-            // Each worker answers with the instruction it was actually given, so
-            // a cell that dropped or duplicated one would be visible.
-            const asked = (input.messages.at(-1)?.parts ?? [])
-              .flatMap((part) => (part.type === "text" ? [part.text] : []))
-              .join(" ");
-            sink.onMessage(
-              assistantMessage(input, { text: `done(${asked.replace(/^.*?: /, "")})` }),
-            );
-            return { type: "stop" };
-          }
-
-          residentTurns.push(input.trace.sessionId);
-          const offered = (input.tools ?? []).map((tool) => tool.name).sort();
-          const executed = requestToolStep(input, sink, {
-            id: "call-1",
-            tool: "eval",
-            input: {
-              operation: {
-                op: "run",
-                code: [
-                  "answers = [",
-                  "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}')['target']",
-                  "  for name in ('lint', 'types', 'tests')",
-                  "]",
-                  "len(set(answers))",
-                ].join("\n"),
-                timeout: 20,
-              },
-            },
-          });
-          if (executed === undefined) return { type: "stop" };
-          sink.onMessage(
-            assistantMessage(input, {
-              text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`,
-            }),
-          );
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        const plane = planeRef.current;
+        if (plane === undefined) throw new Error("plane not resolved before model run");
+        if (plane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
+          // Each worker answers with the instruction it was actually given, so
+          // a cell that dropped or duplicated one would be visible.
+          const asked = (input.messages.at(-1)?.parts ?? [])
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
+            .join(" ");
+          sink.onMessage(assistantMessage(input, { text: `done(${asked.replace(/^.*?: /, "")})` }));
           return { type: "stop" };
-        }),
+        }
+
+        residentTurns.push(input.trace.sessionId);
+        const offered = (input.tools ?? []).map((tool) => tool.name).sort();
+        const executed = requestToolStep(input, sink, {
+          id: "call-1",
+          tool: "eval",
+          input: {
+            operation: {
+              op: "run",
+              code: [
+                "answers = [",
+                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}')['target']",
+                "  for name in ('lint', 'types', 'tests')",
+                "]",
+                "len(set(answers))",
+              ].join("\n"),
+              timeout: 20,
+            },
+          },
+        });
+        if (executed === undefined) return { type: "stop" };
+        sink.onMessage(
+          assistantMessage(input, {
+            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`,
+          }),
+        );
+        return { type: "stop" };
+      }),
     },
   });
 
@@ -280,23 +268,22 @@ test("the catalog remains available while machine execution refuses without atta
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input: RunInput, sink: Sink) =>
-        Effect.sync(() => {
-          offered = (input.tools ?? []).map((tool) => tool.name);
-          // Availability is an endpoint precondition, not a second catalog gate.
-          const forced = requestToolStep(input, sink, {
-            id: "call-1",
-            tool: "eval",
-            input: { operation: { op: "run", code: "1", timeout: 1 } },
-          });
-          if (forced === undefined) return { type: "stop" };
-          sink.onMessage(
-            assistantMessage(input, {
-              text: `forced=${forced?.output ?? "nothing"}`,
-            }),
-          );
-          return { type: "stop" };
-        }),
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        offered = (input.tools ?? []).map((tool) => tool.name);
+        // Availability is an endpoint precondition, not a second catalog gate.
+        const forced = requestToolStep(input, sink, {
+          id: "call-1",
+          tool: "eval",
+          input: { operation: { op: "run", code: "1", timeout: 1 } },
+        });
+        if (forced === undefined) return { type: "stop" };
+        sink.onMessage(
+          assistantMessage(input, {
+            text: `forced=${forced?.output ?? "nothing"}`,
+          }),
+        );
+        return { type: "stop" };
+      }),
     },
   });
 
@@ -347,16 +334,15 @@ test("a cell cannot present another cell's id when calling back", async () => {
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
-    callTool: (call) =>
-      Effect.promise(async () => {
-        served.push(`${call.name}@${call.cellId}`);
-        if (call.name === "hold") {
-          await forgingServed;
-          return { status: "completed" as const, value: "held" };
-        }
-        announceServed();
-        return { status: "completed" as const, value: call.cellId };
-      }),
+    callTool: (call) => Effect.promise(async () => {
+      served.push(`${call.name}@${call.cellId}`);
+      if (call.name === "hold") {
+        await forgingServed;
+        return { status: "completed" as const, value: "held" };
+      }
+      announceServed();
+      return { status: "completed" as const, value: call.cellId };
+    }),
   });
   await attachMachineDaemon({
     socketPath,
@@ -369,23 +355,19 @@ test("a cell cannot present another cell's id when calling back", async () => {
     },
   });
 
-  const slow = runEffect(
-    host.get(MACHINE_ID).runCode({
-      cellId: "AAA",
-      code: "tool.hold()",
-      timeoutMs: 15_000,
-      tenant: "tenant-one",
-    }),
-  );
-  const forging = await runEffect(
-    host.get(MACHINE_ID).runCode({
-      cellId: "BBB",
-      // The call carries no id of its own; naming one changes nothing.
-      code: "tool.send_message(cellId='AAA', instruction='borrow')",
-      timeoutMs: 15_000,
-      tenant: "tenant-two",
-    }),
-  );
+  const slow = runEffect(host.get(MACHINE_ID).runCode({
+    cellId: "AAA",
+    code: "tool.hold()",
+    timeoutMs: 15_000,
+    tenant: "tenant-one",
+  }));
+  const forging = await runEffect(host.get(MACHINE_ID).runCode({
+    cellId: "BBB",
+    // The call carries no id of its own; naming one changes nothing.
+    code: "tool.send_message(cellId='AAA', instruction='borrow')",
+    timeoutMs: 15_000,
+    tenant: "tenant-two",
+  }));
   await slow;
 
   // Completion itself proves the overlap: on one interpreter AAA's hold would
@@ -455,19 +437,13 @@ async function startCellHarness(ports: Partial<ToolPorts>) {
     states.push(state);
     return state;
   };
-  const observedCells: typeof portsForCells = {
-    cell: {
-      run: (...args: Parameters<typeof portsForCells.cell.run>) =>
-        recordState(portsForCells.cell.run(...args)),
-      peek: (...args: Parameters<typeof portsForCells.cell.peek>) =>
-        recordState(portsForCells.cell.peek(...args)),
-      stop: (...args: Parameters<typeof portsForCells.cell.stop>) =>
-        recordState(portsForCells.cell.stop(...args)),
-    },
-  };
+  const observedCells: typeof portsForCells = { cell: {
+    run: (...args: Parameters<typeof portsForCells.cell.run>) => recordState(portsForCells.cell.run(...args)),
+    peek: (...args: Parameters<typeof portsForCells.cell.peek>) => recordState(portsForCells.cell.peek(...args)),
+    stop: (...args: Parameters<typeof portsForCells.cell.stop>) => recordState(portsForCells.cell.stop(...args)),
+  } };
   const executeResult = dispatchModelTool("eval", { ...ports, cells: observedCells }, CELL_ORIGIN);
-  const execute = async (input: PlainObject): Promise<string> =>
-    String((await executeResult(input)).output);
+  const execute = async (input: PlainObject): Promise<string> => String((await executeResult(input)).output);
   return {
     states,
     socketPath,
@@ -518,26 +494,17 @@ test("a detached eval cell admits nested calls after run returns and refuses the
     runEffect(Effect.promise(() => promise).pipe(Effect.timeout("5 seconds")));
   let calls = 0;
   let nestedBodies = 0;
-  const harness = await startCellHarness({
-    llm: async () => {
-      calls += 1;
-      if (calls === 1) {
-        firstEntered.resolve();
-        return firstReply.promise;
-      }
-      secondEntered.resolve(currentInvocation());
-      return secondReply.promise;
-    },
-  });
+  const harness = await startCellHarness({ llm: async () => {
+    calls += 1;
+    if (calls === 1) { firstEntered.resolve(); return firstReply.promise; }
+    secondEntered.resolve(currentInvocation());
+    return secondReply.promise;
+  } });
   try {
     expect(await harness.run("0")).toBe("0");
-    const starting = harness.executeResult({
-      operation: {
-        op: "run",
-        code: "completion('hold')\ncompletion('after-detach')",
-        timeout: 1,
-      },
-    });
+    const starting = harness.executeResult({ operation: {
+      op: "run", code: "completion('hold')\ncompletion('after-detach')", timeout: 1,
+    } });
     await bounded(firstEntered.promise);
     expect(await starting).not.toHaveProperty("isError", true);
     const state = harness.states.at(-1);
@@ -546,49 +513,20 @@ test("a detached eval cell admits nested calls after run returns and refuses the
     firstReply.resolve("first");
     const frame = await bounded(secondEntered.promise);
     expect(calls).toBe(2);
-    const request = {
-      kind: "tool",
-      op: "cell-lifetime",
-      intent: {},
-      effect: { category: "query" },
-    };
-    expect(
-      await runEffect(
-        frame.executor.run(request, () =>
-          Effect.sync(() => {
-            nestedBodies += 1;
-            return "after-detach";
-          }),
-        ),
-      ),
-    ).toEqual({ terminal: "executed", value: "after-detach" });
-    const pending = runEffect(
-      Effect.result(
-        frame.executor.run(request, () =>
-          Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)),
-        ),
-      ),
-    );
+    const request = { kind: "tool", op: "cell-lifetime", intent: {}, effect: { category: "query" } };
+    expect(await runEffect(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "after-detach";
+    })))).toEqual({ terminal: "executed", value: "after-detach" });
+    const pending = runEffect(Effect.result(frame.executor.run(request, () =>
+      Effect.sync(() => pendingEntered.resolve()).pipe(Effect.andThen(Effect.never)))));
     await bounded(pendingEntered.promise);
-    expect(
-      await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } }),
-    ).not.toHaveProperty("isError", true);
-    expect(await bounded(pending)).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "InvocationClosed", reason: "interrupted" },
-    });
-    expect(
-      await runEffect(
-        Effect.result(
-          frame.executor.run(request, () =>
-            Effect.sync(() => {
-              nestedBodies += 1;
-              return "forbidden";
-            }),
-          ),
-        ),
-      ),
-    ).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed" } });
+    expect(await harness.executeResult({ operation: { op: "stop", cell_id: state.cellId } })).not.toHaveProperty("isError", true);
+    expect(await bounded(pending)).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed", reason: "interrupted" } });
+    expect(await runEffect(Effect.result(frame.executor.run(request, () => Effect.sync(() => {
+      nestedBodies += 1;
+      return "forbidden";
+    }))))).toMatchObject({ _tag: "Failure", failure: { _tag: "InvocationClosed" } });
     expect(nestedBodies).toBe(1);
   } finally {
     firstReply.resolve("cleanup");
@@ -635,19 +573,12 @@ test("eval background run and peek stay running; stop settles the typed cancelle
     const cellId = started.cellId;
     expect(started.output).toEqual({ stdout: "started\n", stderr: "" });
     expect(calls()).toBe(1);
-    expect(await executeResult({ operation: { op: "peek", cell_id: cellId } })).not.toHaveProperty(
-      "isError",
-      true,
-    );
+    expect(await executeResult({ operation: { op: "peek", cell_id: cellId } })).not.toHaveProperty("isError", true);
     expect(states.at(-1)).toEqual(started);
-    expect(await executeResult({ operation: { op: "stop", cell_id: cellId } })).not.toHaveProperty(
-      "isError",
-      true,
-    );
+    expect(await executeResult({ operation: { op: "stop", cell_id: cellId } })).not.toHaveProperty("isError", true);
     expect(states.at(-1)).toEqual({ ...started, status: "cancelled" });
     expect(await executeResult({ operation: { op: "peek", cell_id: cellId } })).toMatchObject({
-      isError: true,
-      errorKind: "precondition_failed",
+      isError: true, errorKind: "precondition_failed",
     });
     release.resolve();
     expect(await run("6 * 7")).toBe("42");

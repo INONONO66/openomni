@@ -17,9 +17,7 @@ export function fixedClock(now: () => number): Clock.Clock {
     monotonicTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
     monotonicTimeNanos: nanos,
     sleep: (duration) =>
-      Effect.promise(
-        () => new Promise((resolve) => setTimeout(resolve, Duration.toMillis(duration))),
-      ),
+      Effect.promise(() => new Promise((resolve) => setTimeout(resolve, Duration.toMillis(duration)))),
   };
 }
 
@@ -30,13 +28,7 @@ export function fixedClockLayer(now: () => number) {
 /** A deterministic EntropySource: prefixed counter ids, fixed random. */
 export function entropySource(prefix = "id"): EntropySource {
   let n = 0;
-  return {
-    id: () => {
-      n += 1;
-      return `${prefix}-${n}`;
-    },
-    random: () => 0,
-  };
+  return { id: () => { n += 1; return `${prefix}-${n}`; }, random: () => 0 };
 }
 
 let entropyInstances = 0;

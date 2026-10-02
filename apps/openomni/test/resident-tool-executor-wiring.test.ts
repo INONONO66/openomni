@@ -27,8 +27,7 @@ test("a resident tool call is executed and observed through the durable executor
   const resident = createResident({
     model: { provider: "fake", id: "resident-test" },
     apiKey: "test-key",
-    tools: {
-      ...testToolPorts,
+    tools: { ...testToolPorts,
       cells: {
         cell: {
           async run() {
@@ -55,23 +54,21 @@ test("a resident tool call is executed and observed through the durable executor
       })(),
     },
     llm: {
-      resolveModel: (model) =>
-        Effect.succeed({
-          id: model.id,
-          name: model.id,
-          providerID: model.provider,
-        }),
-      run: (input: RunInput, sink: Sink) =>
-        Effect.sync(() => {
-          const result = requestToolStep(input, sink, {
-            id: "call-1",
-            tool: "eval",
-            input: { operation: { op: "run", code: "1", timeout: 1 } },
-          });
-          if (result === undefined) return { type: "stop" };
-          sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
-          return { type: "stop" as const };
-        }),
+      resolveModel: (model) => Effect.succeed({
+        id: model.id,
+        name: model.id,
+        providerID: model.provider,
+      }),
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        const result = requestToolStep(input, sink, {
+          id: "call-1",
+          tool: "eval",
+          input: { operation: { op: "run", code: "1", timeout: 1 } },
+        });
+        if (result === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
+        return { type: "stop" as const };
+      }),
     },
   });
 

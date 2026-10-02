@@ -1,13 +1,6 @@
 import * as SessionHandleStore from "../store/fence";
 import type { SessionKernel } from "../session/entity";
-import {
-  canonicalDigest,
-  type LedgerAction,
-  type PlainObject,
-  type PlainValue,
-  SessionHistory,
-  SessionTransition,
-} from "@openomni/protocol";
+import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue, SessionHistory, SessionTransition, } from "@openomni/protocol";
 import { z } from "zod";
 
 export const InspectRequest = SessionHistory.InspectRequest.extend({
@@ -136,12 +129,7 @@ export function inspectSession(
   // Review F3: the descendant visit budget is independent of the mandatory
   // root visit, so every advertised children continuation advances.
   let descendants = limit;
-  const visit = (
-    id: string,
-    remaining: number,
-    afterRevision: number,
-    afterChild: string,
-  ): InspectionPage => {
+  const visit = (id: string, remaining: number, afterRevision: number, afterChild: string): InspectionPage => {
     const reader = id === sessionId ? kernel : openKernel(id);
     const current = reader.row(id);
     const page = reader.historyPage(id, { afterRevision, limit: budget });
@@ -161,12 +149,8 @@ export function inspectSession(
     }
     if (childRows.length === limit) nextChildrenCursor ??= lastChild;
     return {
-      ...inspectActions(
-        page.actions,
-        id,
-        current.parentId,
-        page.headRevision,
-        (afterRevision) => reader.historyPage(id, { afterRevision, limit: 256 }).actions,
+      ...inspectActions(page.actions, id, current.parentId, page.headRevision, (afterRevision) =>
+        reader.historyPage(id, { afterRevision, limit: 256 }).actions,
       ),
       nextCursor: page.nextRevision,
       nextChildrenCursor,

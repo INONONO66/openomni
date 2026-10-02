@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Retry } from "../../../src/model/retry";
 
-import {
-  apiError,
-  FIXED_RETRY_NOW,
-  rateLimitError,
-  sources,
-  type SdkErrorInput,
-} from "../helpers/retry";
+import { apiError, FIXED_RETRY_NOW, rateLimitError, sources, type SdkErrorInput } from "../helpers/retry";
 
 function retryableError(headers?: Record<string, string>) {
   return apiError({
@@ -36,9 +30,7 @@ function delayOf<E>(attempt: number, error: E): number {
 
 describe("Retry", () => {
   test("does not expose removed agent-level retry namespace members", async () => {
-    const retrySource = await Bun.file(
-      new URL("../../../src/model/retry/index.ts", import.meta.url),
-    ).text();
+    const retrySource = await Bun.file(new URL("../../../src/model/retry/index.ts", import.meta.url)).text();
     expect(Object.hasOwn(Retry, "DEFAULT_AGENT_RETRY_POLICY")).toBe(false);
     expect(Object.hasOwn(Retry, "calculateAgentBackoffMs")).toBe(false);
     expect(Object.hasOwn(Retry, "classifyAgentRetryReason")).toBe(false);
@@ -119,10 +111,7 @@ describe("Retry", () => {
         message: JSON.stringify({ type: "error", error: { code: 42, message: 7 } }),
         isRetryable: true,
       });
-      expect(Retry.decide(1, error, sources())).toMatchObject({
-        retry: true,
-        reason: "server_error",
-      });
+      expect(Retry.decide(1, error, sources())).toMatchObject({ retry: true, reason: "server_error" });
     });
 
     test("does not expose the removed delay dual path", async () => {
@@ -246,14 +235,8 @@ describe("Retry", () => {
     test("trusts the provider retryable flag when payload and status are opaque", () => {
       const plainText = apiError({ message: "Plain text error", isRetryable: true });
       const invalidJson = apiError({ message: "{ invalid json", isRetryable: true });
-      expect(Retry.decide(1, plainText, sources())).toMatchObject({
-        retry: true,
-        reason: "server_error",
-      });
-      expect(Retry.decide(1, invalidJson, sources())).toMatchObject({
-        retry: true,
-        reason: "server_error",
-      });
+      expect(Retry.decide(1, plainText, sources())).toMatchObject({ retry: true, reason: "server_error" });
+      expect(Retry.decide(1, invalidJson, sources())).toMatchObject({ retry: true, reason: "server_error" });
     });
 
     test("does not expose the folded-away prose classifier", () => {
@@ -262,9 +245,7 @@ describe("Retry", () => {
   });
 
   test("removed retry wrapper does not expose withRetry", async () => {
-    const retrySource = await Bun.file(
-      new URL("../../../src/model/retry/index.ts", import.meta.url),
-    ).text();
+    const retrySource = await Bun.file(new URL("../../../src/model/retry/index.ts", import.meta.url)).text();
     expect(Object.hasOwn(Retry, "withRetry")).toBe(false);
     expect(retrySource).not.toMatch(/\bwithRetry\b/);
   });

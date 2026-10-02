@@ -1,10 +1,4 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  type DecipherGCM,
-} from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, type DecipherGCM } from "node:crypto";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
 
@@ -12,10 +6,13 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
 
-type DecipherFactory = (algorithm: "aes-256-gcm", key: Uint8Array, iv: Uint8Array) => DecipherGCM;
+type DecipherFactory = (
+  algorithm: "aes-256-gcm",
+  key: Uint8Array,
+  iv: Uint8Array,
+) => DecipherGCM;
 
-const defaultDecipherFactory: DecipherFactory = (algorithm, key, iv) =>
-  createDecipheriv(algorithm, key, iv);
+const defaultDecipherFactory: DecipherFactory = (algorithm, key, iv) => createDecipheriv(algorithm, key, iv);
 
 function pack(iv: Uint8Array, tag: Uint8Array, data: Uint8Array): Uint8Array<ArrayBuffer> {
   const packed = new Uint8Array(iv.length + tag.length + data.length);

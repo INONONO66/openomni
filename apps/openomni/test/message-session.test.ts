@@ -108,12 +108,10 @@ test("inbox target materialization refuses a child beyond its pinned fanout", as
       operation: "message.commit",
       cause: "child fanout limit exhausted",
     });
-    expect(
-      plane
-        .listSessions()
-        .map((row) => row.id)
-        .sort(),
-    ).toEqual(["first-child", "parent"]);
+    expect(plane.listSessions().map((row) => row.id).sort()).toEqual([
+      "first-child",
+      "parent",
+    ]);
   } finally {
     plane.close();
   }

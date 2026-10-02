@@ -40,9 +40,7 @@ describe("wall-time budget ceiling on the injected clock", () => {
     const exceededRecords = () =>
       events
         .named(Operational.Events.Warn.name)
-        .filter(
-          (event) => Operational.Events.Warn.schema.parse(event).context?.type === "exceeded",
-        );
+        .filter((event) => Operational.Events.Warn.schema.parse(event).context?.type === "exceeded");
 
     time = 99;
     expect(publishBudgetTelemetry(state, run, events, now, budget)).not.toBe("exceeded");

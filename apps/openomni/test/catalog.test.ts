@@ -7,14 +7,8 @@ import { catalogDefinitions, type ToolPorts } from "../src/tools/core/catalog";
 import type { LlmCall } from "../src/tools/completion";
 
 const ports: ToolPorts = {
-  alarms: undefined,
-  messages: undefined,
-  machines: undefined,
-  cells: undefined,
-  llm: undefined,
-  provisioning: undefined,
-  clock: () => 0,
-  id: () => "tool-id",
+  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  llm: undefined, provisioning: undefined, clock: () => 0, id: () => "tool-id",
 };
 const definitions = catalogDefinitions(ports);
 
@@ -88,22 +82,13 @@ function operationOps(name: string): readonly string[] {
 }
 
 function assertSealedNames(catalog: readonly AnyToolDefinition[]): void {
-  expect(catalog.map((tool: AnyToolDefinition) => tool.name)).toEqual([
-    ...MODEL_DOOR,
-    ...CELL_ONLY,
-  ]);
+  expect(catalog.map((tool: AnyToolDefinition) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
 }
 
 describe("tool catalog", () => {
   it("constructs fresh definitions without sharing port closures", () => {
-    const first = catalogDefinitions({
-      ...ports,
-      llm: async ({ prompt }: LlmCall) => `first:${prompt}`,
-    });
-    const replacement = catalogDefinitions({
-      ...ports,
-      llm: async ({ prompt }: LlmCall) => `second:${prompt}`,
-    });
+    const first = catalogDefinitions({ ...ports, llm: async ({ prompt }: LlmCall) => `first:${prompt}` });
+    const replacement = catalogDefinitions({ ...ports, llm: async ({ prompt }: LlmCall) => `second:${prompt}` });
     expect(replacement).not.toBe(first);
     expect(replacement.find((tool: AnyToolDefinition) => tool.name === "completion")).not.toBe(
       first.find((tool: AnyToolDefinition) => tool.name === "completion"),
@@ -112,15 +97,11 @@ describe("tool catalog", () => {
   it("rejects a thirteenth catalog tool", () => {
     const exemplar = definitions[0];
     if (exemplar === undefined) throw new Error("empty catalog");
-    expect(() =>
-      assertSealedNames([...definitions, { ...exemplar, name: "thirteenth" }]),
-    ).toThrow();
+    expect(() => assertSealedNames([...definitions, { ...exemplar, name: "thirteenth" }])).toThrow();
   });
   it("is sealed at eleven model-door tools plus the cell-only completion", () => {
     assertSealedNames(definitions);
-    expect(definitions.map(toolSpec).map((tool: ReturnType<typeof toolSpec>) => tool.name)).toEqual(
-      [...MODEL_DOOR, ...CELL_ONLY],
-    );
+    expect(definitions.map(toolSpec).map((tool: ReturnType<typeof toolSpec>) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
     for (const tool of definitions) {
       expect(tool.visibility.model.length > 0).toBe(MODEL_DOOR.includes(tool.name));
       expect(tool.visibility.cell.length > 0).toBe(true);
@@ -131,15 +112,16 @@ describe("tool catalog", () => {
     for (const tool of definitions) {
       expect(tool.name).toMatch(/^[a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)*$/);
       const properties = Object.keys(record(toolInputSchema(tool).properties));
-      expect(
-        properties.some((key: string) => /^(op|action|command_kind|operation_kind)$/.test(key)),
-      ).toBe(false);
+      expect(properties.some((key: string) => /^(op|action|command_kind|operation_kind)$/.test(key))).toBe(
+        false,
+      );
       expect(properties.includes("operation")).toBe(tool.name in OPS);
     }
     for (const [name, ops] of Object.entries(OPS)) expect(operationOps(name)).toEqual(ops);
   });
   it("projects every input as an object root", () => {
-    for (const definition of definitions) expect(toolInputSchema(definition).type).toBe("object");
+    for (const definition of definitions)
+      expect(toolInputSchema(definition).type).toBe("object");
   });
   it("derives safe solely from category and shares both doors for path tools", () => {
     for (const tool of definitions) {

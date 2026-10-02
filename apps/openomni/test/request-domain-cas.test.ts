@@ -63,14 +63,9 @@ test("a second Owner decision cannot spend the same promotion CAS", async () => 
     { id: "contact:cas", kind: "unknown", trustTier: "observer", standing: "provisional" },
     { id: "ep:cas", channel: "ws", externalId: "cas" },
   );
-  const running = protectedDispatch(
-    createProvisionTool(provisionPort(plane), () => 1000),
-    {
-      operation: { op: "contact_promote", args: { actorId: "contact:cas" } },
-    },
-    undefined,
-    { plane },
-  );
+  const running = protectedDispatch(createProvisionTool(provisionPort(plane), () => 1000), {
+    operation: { op: "contact_promote", args: { actorId: "contact:cas" } },
+  }, undefined, { plane });
   try {
     await bounded(running.opened);
     const approvals = running.executor.approvals;
@@ -79,14 +74,8 @@ test("a second Owner decision cannot spend the same promotion CAS", async () => 
     expect((await running.answer()).isError).toBeUndefined();
     const promoted = actors.getIdentity("contact:cas");
     expect(promoted?.standing).toBe("registered");
-    expect(
-      await runEffect(
-        Effect.result(approvals.answer({ request, decision: "refuse", credential: "owner-token" })),
-      ),
-    ).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "ExecutionApprovalError", code: "stale_approval" },
-    });
+    expect(await runEffect(Effect.result(approvals.answer({ request, decision: "refuse", credential: "owner-token" }))))
+      .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
     expect(actors.getIdentity("contact:cas")).toEqual(promoted);
   } finally {
     await running.close();

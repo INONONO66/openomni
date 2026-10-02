@@ -2,13 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  agentBandViolations,
-  checkBundleImports,
-  checkDocFreshness,
-  main,
-  validateAgentBands,
-} from "./check-deps";
+import { agentBandViolations, checkBundleImports, checkDocFreshness, main, validateAgentBands } from "./check-deps";
 import { checkPython } from "./check-quality-python";
 import { TOPOLOGY } from "./topology";
 
@@ -391,7 +385,12 @@ test.each([
     "// @ts-ignore",
     "type suppression directive",
   ],
-  ["empty catch", "packages/agent/src/illegal.ts", "try { value() } catch {}", "empty catch block"],
+  [
+    "empty catch",
+    "packages/agent/src/illegal.ts",
+    "try { value() } catch {}",
+    "empty catch block",
+  ],
 ])("refuses %s through the real dependency gate", async (_name, path, source, message) => {
   const root = fixture({ [path]: source });
   const result = await run(root);
@@ -441,9 +440,7 @@ test("in-process self-test exercises the dependency and perimeter rules", async 
 test("missing package manifest fails closed before source scanning", async () => {
   const root = fixture({});
   rmSync(join(root, "packages/protocol/package.json"));
-  await expect(runInProcess(root)).rejects.toThrow(
-    "Missing required file: packages/protocol/package.json",
-  );
+  await expect(runInProcess(root)).rejects.toThrow("Missing required file: packages/protocol/package.json");
 });
 
 test("deep-import fix suggestions retain the package barrel identity", async () => {
@@ -462,8 +459,7 @@ test("deep-import fix suggestions retain the package barrel identity", async () 
 
 test("rejects self-root imports, unsafe casts, and catch-all source filenames", async () => {
   const root = fixture({
-    "packages/agent/src/utils.ts":
-      'import { value } from "../../src/core";\nconst result = value as any;',
+    "packages/agent/src/utils.ts": 'import { value } from "../../src/core";\nconst result = value as any;',
   });
   const result = await runInProcess(root);
   expect(result.code).toBe(1);
@@ -499,9 +495,7 @@ test("doc freshness distinguishes new, stale, and unreadable history without git
     expect(warnings).toContain(
       "STALE: packages/protocol/AGENTS.md — last updated 50 commits ago (threshold: 50)",
     );
-    expect(warnings).toContain(
-      "WARNING: doc freshness unavailable for packages/machines/AGENTS.md",
-    );
+    expect(warnings).toContain("WARNING: doc freshness unavailable for packages/machines/AGENTS.md");
     expect(warnings).toContain("WARNING: tracked doc missing: packages/agent/AGENTS.md");
     expect(warnings).not.toContain("WARNING: doc freshness unavailable for AGENTS.md");
   } finally {
@@ -514,7 +508,9 @@ test("doc freshness reports unavailable git history outside a repository", async
   const cwd = process.cwd();
   process.chdir(root);
   try {
-    expect(await checkDocFreshness()).toContain("WARNING: doc freshness unavailable for AGENTS.md");
+    expect(await checkDocFreshness()).toContain(
+      "WARNING: doc freshness unavailable for AGENTS.md",
+    );
   } finally {
     process.chdir(cwd);
   }
@@ -530,7 +526,7 @@ test("in-process Python gate rejects warning diagnostics and accepts clean sourc
 });
 
 test("in-process Python gate rejects checker version drift and invalid flags", () => {
-  const root = fixture({ checker: "#!/bin/sh\nprintf 'basedpyright 0.0.0\\n'\n" });
+  const root = fixture({ "checker": "#!/bin/sh\nprintf 'basedpyright 0.0.0\\n'\n" });
   const executable = join(root, "checker");
   chmodSync(executable, 0o700);
   const previous = process.env.BASEDPYRIGHT;

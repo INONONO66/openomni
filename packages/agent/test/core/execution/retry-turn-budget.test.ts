@@ -32,18 +32,15 @@ describe("turn budget across retries", () => {
       if (event.msg === "agent.run.completed") completed.resolve(event);
     });
     try {
-      const running = isolated(
-        runTestAgent(runInput([{ role: "user", content: "hi" }]), {
-          events: Bus,
-          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-          llm: mockLlm(async (input, sink) => {
-            calls += 1;
-            if (calls === 1)
-              return { type: "error", error: providerFailure("transient provider hiccup") };
-            return completeModel(input, sink);
-          }),
+      const running = isolated(runTestAgent(runInput([{ role: "user", content: "hi" }]), {
+        events: Bus,
+        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+        llm: mockLlm(async (input, sink) => {
+          calls += 1;
+          if (calls === 1) return { type: "error", error: providerFailure("transient provider hiccup") };
+          return completeModel(input, sink);
         }),
-      );
+      }));
       await bounded(retry.promise, "retry published");
       expect((await running).finishReason).toBe("stop");
       expect(calls).toBe(2);

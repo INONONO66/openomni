@@ -8,9 +8,7 @@ import {
   type SessionId,
 } from "./store";
 
-export function sessionIndex<T extends LocalSession>(
-  sessions: readonly T[],
-): ReadonlyMap<SessionId, T> {
+export function sessionIndex<T extends LocalSession>(sessions: readonly T[]): ReadonlyMap<SessionId, T> {
   return new Map(sessions.map((session) => [session.id, session]));
 }
 

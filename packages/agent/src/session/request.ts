@@ -1,19 +1,9 @@
-import {
-  canonicalDigest,
-  PlainValueSchema,
-  SessionTransition,
-  type Inbox,
-  type LedgerAction,
-  type LedgerSession,
-  type PlainValue,
-  type SessionGeneration,
-  type PlainObject,
-} from "@openomni/protocol";
+import { canonicalDigest, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
 import { Clock, Effect } from "effect";
 import { AgentFailure, CommitFailed, type ExecutionError } from "../kernel/failure";
+import { receivedMessageAction } from "./commit";
 import { requestBindingDigest } from "./request-binding";
 export { requestBindingDigest } from "./request-binding";
-import { receivedMessageAction } from "./commit";
 import * as SessionHandleStore from "../store/fence";
 import type { SessionKernel } from "./entity";
 import { type SessionRuntime, getSessionHandle, adoptSessionAuthority } from "./run";
@@ -43,6 +33,7 @@ function all(...checks: readonly boolean[]): boolean {
   return checks.every((check) => check);
 }
 
+
 /** Pure request authority. The caller applies the whole plan under the captured lease/revision. */
 export function decideRequestTransition(
   command: SessionTransition.Command,
@@ -54,9 +45,7 @@ export function decideRequestTransition(
   )
     return rejected;
   const inputDigest = requestInputDigest(command.payload);
-  return (
-    repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest)
-  );
+  return repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
 }
 
 type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;
@@ -96,13 +85,10 @@ function transitionExisting(
   inputDigest: string,
 ): RequestDecision {
   switch (payload.kind) {
-    case "request.delivery":
-      return recordDelivery(command, request, payload.receipt, inputDigest);
-    case "request.answer":
-      return answerRequest(command, snapshot, request, payload.answer, inputDigest);
+    case "request.delivery": return recordDelivery(command, request, payload.receipt, inputDigest);
+    case "request.answer": return answerRequest(command, snapshot, request, payload.answer, inputDigest);
     case "request.timeout":
-    case "request.cancel":
-      return closeRequest(command, request, payload, inputDigest);
+    case "request.cancel": return closeRequest(command, request, payload, inputDigest);
   }
 }
 
@@ -139,19 +125,14 @@ function repeatedInput(
 ): RequestDecision | undefined {
   const previous = snapshot.inputRecord;
   if (previous === undefined) return undefined;
-  const requestId =
-    command.payload.kind === "request.open"
-      ? command.payload.request.requestId
-      : targetRequestId(command.payload);
-  if (
-    !all(
-      previous.sessionId === command.sessionId,
-      previous.parentId === requestId,
-      previous.id === `${requestId}:input:${command.inputId}`,
-      objectValue(previous.intent.value)?.inputId === command.inputId,
-    )
-  )
-    return rejected;
+  const requestId = command.payload.kind === "request.open"
+    ? command.payload.request.requestId : targetRequestId(command.payload);
+  if (!all(
+    previous.sessionId === command.sessionId,
+    previous.parentId === requestId,
+    previous.id === `${requestId}:input:${command.inputId}`,
+    objectValue(previous.intent.value)?.inputId === command.inputId,
+  )) return rejected;
   return replayedInput(previous, snapshot.request, inputDigest);
 }
 
@@ -369,14 +350,11 @@ function recordDelivery(
   inputDigest: string,
 ): RequestDecision {
   let request = current;
-  if (
-    !all(
-      receipt.sessionId === command.sessionId,
-      receipt.sourceActionId === request.requestId,
-      receipt.inputId === command.inputId,
-    )
-  )
-    return rejected;
+  if (!all(
+    receipt.sessionId === command.sessionId,
+    receipt.sourceActionId === request.requestId,
+    receipt.inputId === command.inputId,
+  )) return rejected;
   if (receipt.externalMessageId !== undefined) {
     request = {
       ...request,
@@ -560,10 +538,8 @@ function closeRequest(
 ): RequestDecision {
   if (current.state !== "open") return recordRequest(command, current, inputDigest, "duplicate");
   switch (payload.kind) {
-    case "request.timeout":
-      return expireRequest(command, current, inputDigest);
-    case "request.cancel":
-      return cancelRequest(command, current, payload.principal, inputDigest);
+    case "request.timeout": return expireRequest(command, current, inputDigest);
+    case "request.cancel": return cancelRequest(command, current, payload.principal, inputDigest);
   }
 }
 
@@ -606,12 +582,8 @@ export interface SessionRequestPort {
     at: number;
     admission?: Inbox.Commit;
   }): Effect.Effect<SessionTransition.Request, ExecutionError>;
-  answer(
-    input: SessionTransition.Answer,
-  ): Effect.Effect<SessionTransition.Resolution, ExecutionError>;
-  receipt(
-    input: SessionTransition.DeliveryReceipt,
-  ): Effect.Effect<SessionTransition.Request, ExecutionError>;
+  answer(input: SessionTransition.Answer): Effect.Effect<SessionTransition.Resolution, ExecutionError>;
+  receipt(input: SessionTransition.DeliveryReceipt): Effect.Effect<SessionTransition.Request, ExecutionError>;
 }
 
 function requestGeneration(
@@ -622,7 +594,9 @@ function requestGeneration(
   if (turnId === null) return kernel.latestGenerationFor(sessionId);
   const turn = SessionHandleStore.turnIntent(kernel.actionById(turnId));
   const generation =
-    turn === undefined ? undefined : kernel.generationFor(sessionId, turn.toolsGeneration);
+    turn === undefined
+      ? undefined
+      : kernel.generationFor(sessionId, turn.toolsGeneration);
   if (
     turn === undefined ||
     generation === undefined ||
@@ -636,18 +610,9 @@ function requestGeneration(
 
 /** The gateway gets this injected kernel port, never a lifecycle store. */
 /** The recorded invocation a request reopens; anything else is an invariant break, not a session failure. */
-function originalInvocation(
-  kernel: SessionKernel,
-  requestId: string,
-): (PlainObject & { readonly value: PlainValue }) | undefined {
+function originalInvocation(kernel: SessionKernel, requestId: string): (PlainObject & { readonly value: PlainValue }) | undefined {
   const intent = kernel.actionById(requestId)?.intent.value;
-  if (
-    intent === null ||
-    intent === undefined ||
-    typeof intent !== "object" ||
-    Array.isArray(intent) ||
-    intent.value === undefined
-  )
+  if (intent === null || intent === undefined || typeof intent !== "object" || Array.isArray(intent) || intent.value === undefined)
     return undefined;
   return { ...intent, value: intent.value };
 }
@@ -691,172 +656,143 @@ function openedRequest(
   return request;
 }
 
-export function createSessionRequests(
-  runtime: SessionRuntime,
-): Effect.Effect<SessionRequestPort, never, Entropy> {
+export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<SessionRequestPort, never, Entropy> {
   return Effect.gen(function* () {
-    const clock = yield* Clock.clockWith(Effect.succeed).pipe(
-      Effect.map((service) => () => service.currentTimeMillisUnsafe()),
+  const clock = yield* Clock.clockWith(Effect.succeed).pipe(Effect.map((service) => () => service.currentTimeMillisUnsafe()));
+  const { id } = yield* Entropy;
+  function transition(
+    sessionId: string,
+    payload: SessionTransition.Payload,
+    inputId: string,
+    at: number,
+    admission?: Inbox.Commit,
+  ) {
+    return Effect.gen(function* () {
+    const live = getSessionHandle(sessionId, runtime);
+    if (live !== undefined) return yield* live.requests.transition(payload, inputId, at, admission);
+    // Out-of-turn authority is a fence adoption (W5.2 F5): this writer becomes
+    // the session's current activation for exactly this commit. A concurrently
+    // live activation elsewhere observes the higher fence and goes stale; on
+    // the entity plane these transitions route through the entity instead.
+    const owner = `${runtime.processId ?? process.pid}:request:${id()}`;
+    const kernel = runtime.openKernel(sessionId);
+    const now = clock();
+    const fence = yield* adoptSessionAuthority(kernel, sessionId, owner).pipe(
+      Effect.mapError((error) => new CommitFailed({ error })),
     );
-    const { id } = yield* Entropy;
-    function transition(
-      sessionId: string,
-      payload: SessionTransition.Payload,
-      inputId: string,
-      at: number,
-      admission?: Inbox.Commit,
-    ) {
-      return Effect.gen(function* () {
-        const live = getSessionHandle(sessionId, runtime);
-        if (live !== undefined)
-          return yield* live.requests.transition(payload, inputId, at, admission);
-        // Out-of-turn authority is a fence adoption (W5.2 F5): this writer becomes
-        // the session's current activation for exactly this commit. A concurrently
-        // live activation elsewhere observes the higher fence and goes stale; on
-        // the entity plane these transitions route through the entity instead.
-        const owner = `${runtime.processId ?? process.pid}:request:${id()}`;
-        const kernel = runtime.openKernel(sessionId);
-        const now = clock();
-        const fence = yield* adoptSessionAuthority(kernel, sessionId, owner).pipe(
-          Effect.mapError((error) => new CommitFailed({ error })),
-        );
-        return yield* commitSessionRequest(
-          kernel,
-          sessionId,
-          { owner, fence },
-          payload,
-          inputId,
-          Math.max(at, now),
-          runtime,
-          admission,
-        );
-      });
+    return yield* commitSessionRequest(
+      kernel, sessionId, { owner, fence }, payload, inputId, Math.max(at, now), runtime, admission,
+    );
+    });
+  }
+  function timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError> {
+    return Effect.gen(function* () {
+    const request = findRequest(requestId);
+    if (request === undefined)
+      return yield* Effect.die(new Error(`deadline request missing: ${requestId}`));
+    const result = yield* transition(
+      request.sessionId,
+      { kind: "request.timeout", requestId },
+      `${requestId}:deadline`,
+      at,
+    );
+    if (
+      result.actions.length > 0 &&
+      result.request?.mode === "approval" &&
+      result.request.state !== "open"
+    )
+      runtime.onRequestReady?.(request.sessionId);
+    });
+  }
+  function findRequest(requestId: string): SessionTransition.Request | undefined {
+    for (const row of runtime.listSessions()) {
+      const request = runtime.openKernel(row.id).requestById(requestId);
+      if (request !== undefined) return request;
     }
-    function timeout(requestId: string, at: number): Effect.Effect<void, ExecutionError> {
+    return undefined;
+  }
+  return {
+    list: () => runtime.listSessions().flatMap((row) => runtime.openKernel(row.id).requestRows(row.id)),
+    timeout,
+    cancel(input) {
       return Effect.gen(function* () {
-        const request = findRequest(requestId);
-        if (request === undefined)
-          return yield* Effect.die(new Error(`deadline request missing: ${requestId}`));
         const result = yield* transition(
-          request.sessionId,
-          { kind: "request.timeout", requestId },
-          `${requestId}:deadline`,
-          at,
+          input.sessionId,
+          { kind: "request.cancel", requestId: input.requestId, principal: input.principal },
+          input.inputId,
+          input.at,
         );
-        if (
-          result.actions.length > 0 &&
-          result.request?.mode === "approval" &&
-          result.request.state !== "open"
-        )
-          runtime.onRequestReady?.(request.sessionId);
+        if (result.actions.length > 0 && result.request?.mode === "approval" && result.request.state !== "open")
+          runtime.onRequestReady?.(input.sessionId);
+        return result.resolution;
       });
-    }
-    function findRequest(requestId: string): SessionTransition.Request | undefined {
-      for (const row of runtime.listSessions()) {
-        const request = runtime.openKernel(row.id).requestById(requestId);
-        if (request !== undefined) return request;
-      }
-      return undefined;
-    }
-    return {
-      list: () =>
-        runtime.listSessions().flatMap((row) => runtime.openKernel(row.id).requestRows(row.id)),
-      timeout,
-      cancel(input) {
-        return Effect.gen(function* () {
-          const result = yield* transition(
-            input.sessionId,
-            { kind: "request.cancel", requestId: input.requestId, principal: input.principal },
-            input.inputId,
-            input.at,
-          );
-          if (
-            result.actions.length > 0 &&
-            result.request?.mode === "approval" &&
-            result.request.state !== "open"
-          )
-            runtime.onRequestReady?.(input.sessionId);
-          return result.resolution;
-        });
-      },
-      open(input) {
-        return Effect.gen(function* () {
-          const kernel = runtime.openKernel(input.sessionId);
-          const intent = originalInvocation(kernel, input.requestId);
-          if (intent === undefined)
-            return yield* Effect.die(new Error(`original invocation missing: ${input.requestId}`));
-          const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
-          const generation = requestGeneration(kernel, input.sessionId, turnId);
-          if (generation === undefined)
-            return yield* new AgentFailure({
-              operation: "request.open",
-              cause: "original_generation_unavailable",
-            });
-          const request = openedRequest(input, intent, turnId, generation);
-          const decision = yield* transition(
-            input.sessionId,
-            { kind: "request.open", request },
-            `${input.requestId}:open`,
-            input.at,
-            input.admission,
-          );
-          if (decision.request === undefined)
-            return yield* new AgentFailure({
-              operation: "request.open",
-              cause: `refused:${input.requestId}`,
-            });
-          return decision.request;
-        });
-      },
-      answer(answer) {
-        return Effect.gen(function* () {
-          const result = yield* transition(
-            answer.sessionId,
-            { kind: "request.answer", answer },
-            answer.inputId,
-            clock(),
-          );
-          if (result.receive !== undefined) runtime.onInboxCommitted?.([result.receive.sessionId]);
-          if (
-            result.actions.length > 0 &&
-            result.request?.mode === "approval" &&
-            result.request.state !== "open"
-          )
-            runtime.onRequestReady?.(answer.sessionId);
-          return result.resolution;
-        });
-      },
-      receipt(receipt) {
-        return Effect.gen(function* () {
-          const result = yield* transition(
-            receipt.sessionId,
-            { kind: "request.delivery", receipt },
-            receipt.inputId,
-            clock(),
-          );
-          if (result.request === undefined)
-            return yield* new AgentFailure({
-              operation: "request.receipt",
-              cause: `refused:${receipt.requestId}`,
-            });
-          return result.request;
-        });
-      },
-    } satisfies SessionRequestPort;
+    },
+    open(input) {
+      return Effect.gen(function* () {
+      const kernel = runtime.openKernel(input.sessionId);
+      const intent = originalInvocation(kernel, input.requestId);
+      if (intent === undefined)
+        return yield* Effect.die(new Error(`original invocation missing: ${input.requestId}`));
+      const turnId = typeof intent.turnId === "string" ? intent.turnId : null;
+      const generation = requestGeneration(kernel, input.sessionId, turnId);
+      if (generation === undefined)
+        return yield* new AgentFailure({ operation: "request.open", cause: "original_generation_unavailable" });
+      const request = openedRequest(input, intent, turnId, generation);
+      const decision = yield* transition(
+        input.sessionId,
+        { kind: "request.open", request },
+        `${input.requestId}:open`,
+        input.at,
+        input.admission,
+      );
+      if (decision.request === undefined)
+        return yield* new AgentFailure({ operation: "request.open", cause: `refused:${input.requestId}` });
+      return decision.request;
+      });
+    },
+    answer(answer) {
+      return Effect.gen(function* () {
+      const result = yield* transition(
+        answer.sessionId,
+        { kind: "request.answer", answer },
+        answer.inputId,
+        clock(),
+      );
+      if (result.receive !== undefined) runtime.onInboxCommitted?.([result.receive.sessionId]);
+      if (
+        result.actions.length > 0 &&
+        result.request?.mode === "approval" &&
+        result.request.state !== "open"
+      )
+        runtime.onRequestReady?.(answer.sessionId);
+      return result.resolution;
+      });
+    },
+    receipt(receipt) {
+      return Effect.gen(function* () {
+      const result = yield* transition(
+        receipt.sessionId,
+        { kind: "request.delivery", receipt },
+        receipt.inputId,
+        clock(),
+      );
+      if (result.request === undefined)
+        return yield* new AgentFailure({ operation: "request.receipt", cause: `refused:${receipt.requestId}` });
+      return result.request;
+      });
+    },
+  } satisfies SessionRequestPort;
   });
 }
 
+
 function requestIdentity(payload: SessionTransition.Payload): string {
   switch (payload.kind) {
-    case "request.open":
-      return payload.request.requestId;
-    case "request.answer":
-      return payload.answer.requestId;
-    case "request.delivery":
-      return payload.receipt.requestId;
+    case "request.open": return payload.request.requestId;
+    case "request.answer": return payload.answer.requestId;
+    case "request.delivery": return payload.receipt.requestId;
     case "request.timeout":
-    case "request.cancel":
-      return payload.requestId;
+    case "request.cancel": return payload.requestId;
   }
 }
 
@@ -874,18 +810,14 @@ export function commitSessionRequest(
     const row = kernel.row(sessionId);
     const requestId = requestIdentity(payload);
     const request = kernel.requestById(requestId);
-    const decision = decideRequestTransition(
-      { version: 1, sessionId, inputId, at, expectedRevision: row.revision, authority, payload },
-      {
-        row,
-        inputRecord: kernel.requestInputById(sessionId, inputId),
-        invocation: kernel.actionById(requestId),
-        request,
-        requests: kernel.requestRows(),
-        domainRevisions:
-          request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
-      },
-    );
+    const decision = decideRequestTransition({ version: 1, sessionId, inputId, at, expectedRevision: row.revision, authority, payload }, {
+      row,
+      inputRecord: kernel.requestInputById(sessionId, inputId),
+      invocation: kernel.actionById(requestId),
+      request,
+      requests: kernel.requestRows(),
+      domainRevisions: request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
+    });
     if (decision.actions.length > 0) {
       // Reply intakes and gateway admissions are received-message chain
       // actions in the same fenced batch (the inbox table is gone). A
@@ -896,17 +828,15 @@ export function commitSessionRequest(
         ...(decision.receive === undefined ? [] : [decision.receive]),
         ...(admission === undefined || admission.sessionId !== sessionId ? [] : [admission]),
       ].map((commit) => receivedMessageAction({ ...commit, at: commit.createdAt }));
-      yield* kernel
-        .commit({
-          sessionId,
-          ...authority,
-          now: at,
-          expectedRevision: row.revision,
-          actions: [...decision.actions, ...intake],
-          state: row.state,
-          ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
-        })
-        .pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      yield* kernel.commit({
+        sessionId,
+        ...authority,
+        now: at,
+        expectedRevision: row.revision,
+        actions: [...decision.actions, ...intake],
+        state: row.state,
+        ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
+      }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
     }
     return decision;
   });

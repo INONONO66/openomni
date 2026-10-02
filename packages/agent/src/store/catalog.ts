@@ -149,6 +149,7 @@ export const CATALOG_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_policy_read ON policy(generation, kind, phase, priority DESC, name)",
 ];
 
+
 export interface SessionIndexRow {
   readonly id: string;
   readonly parentId: string | null;
@@ -226,13 +227,9 @@ export class CatalogStore extends StoreHandle {
 
   childSessionsPage(parentId: string, afterId: string, limit: number): SessionIndexRow[] {
     const size = z.number().int().positive().max(256).parse(limit);
-    return z
-      .array(SessionIndexSqlRow)
-      .parse(
-        this.db
-          .query("SELECT * FROM session_index WHERE parent_id = ? AND id > ? ORDER BY id LIMIT ?")
-          .all(parentId, afterId, size),
-      );
+    return z.array(SessionIndexSqlRow).parse(this.db.query(
+      "SELECT * FROM session_index WHERE parent_id = ? AND id > ? ORDER BY id LIMIT ?",
+    ).all(parentId, afterId, size));
   }
 
   /**

@@ -119,10 +119,8 @@ export function createShellCommandSender({
       (window) => !window.isDestroyed() && !window.webContents.isDestroyed(),
     );
     const owner = focused
-      ? (windows.find((window) => window.id === focused.id) ??
-        windows.find(
-          (window) => window.webContents.devToolsWebContents?.id === focused.webContents.id,
-        ))
+      ? windows.find((window) => window.id === focused.id) ??
+        windows.find((window) => window.webContents.devToolsWebContents?.id === focused.webContents.id)
       : windows.find((window) => window.id === getLastFocusedWindowId());
     owner?.webContents.send(SHELL_COMMAND_CHANNEL, command);
   };

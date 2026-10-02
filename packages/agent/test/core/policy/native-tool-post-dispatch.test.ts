@@ -29,121 +29,56 @@ const context = { sessionId: "session-1", turnId: "turn-1" };
 
 function transformingExecutor(replacement: string | null) {
   return recordingExecutor({
-    policy: compiledPolicy([
-      {
-        name: "redact-account",
-        kind: "tool",
-        phase: "post",
-        match: { encodingVersion: 1, value: { op: "account" } },
-        verdict: {
-          encodingVersion: 1,
-          value: { type: "transform", name: "redact", paths: ["result.output.id"], replacement },
-        },
-        priority: 1,
-        generation: 1,
-      },
-    ]),
+    policy: compiledPolicy([{
+      name: "redact-account",
+      kind: "tool",
+      phase: "post",
+      match: { encodingVersion: 1, value: { op: "account" } },
+      verdict: { encodingVersion: 1, value: { type: "transform", name: "redact", paths: ["result.output.id"], replacement } },
+      priority: 1,
+      generation: 1,
+    }]),
   }).executor;
 }
 
 describe("tool post-policy refusal", () => {
-  it("publishes one completion only after the blocked-post result commits", async () =>
-    isolated(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const observations = recordingToolObservations();
-          const resultCommit = actionCommitGate("account:result");
-          const recording = recordingExecutor({
-            policy: accountOutputDeniedPolicy(),
-            onCommit: resultCommit.onCommit,
-            onObservation: observations.observe,
-          });
-          const running = yield* Effect.forkScoped(
-            runAgentSync(
-              createDispatcher({ executor: recording.executor }).pipe(
-                Effect.provide(catalogLayer([definition])),
-              ),
-            ).execute(call, context),
-          );
-          yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
-          expect(observations.names).toHaveLength(1);
-          expect(observations.names[0]).toBe(Tool.Events.Started.name);
-          resultCommit.release();
-          const result = yield* Fiber.join(running);
-          expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-          expect(observations.names).toEqual([
-            Tool.Events.Started.name,
-            Tool.Events.Completed.name,
-          ]);
-        }),
-      ),
-    ));
+  it("publishes one completion only after the blocked-post result commits", async () => isolated(Effect.scoped(Effect.gen(function* () {
+    const observations = recordingToolObservations();
+    const resultCommit = actionCommitGate("account:result");
+    const recording = recordingExecutor({ policy: accountOutputDeniedPolicy(), onCommit: resultCommit.onCommit, onObservation: observations.observe });
+    const running = yield* Effect.forkScoped(runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([definition])))).execute(call, context));
+    yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
+    expect(observations.names).toHaveLength(1);
+    expect(observations.names[0]).toBe(Tool.Events.Started.name);
+    resultCommit.release();
+    const result = yield* Fiber.join(running);
+    expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+    expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
+  }))));
 
-  it("returns an error result through the model door", async () =>
-    isolated(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const result = yield* runAgentSync(
-            createDispatcher({
-              executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor,
-            }).pipe(Effect.provide(catalogLayer([definition]))),
-          ).execute(call, context);
-          expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-          expect(result.output).toContain("output_denied");
-        }),
-      ),
-    ));
+  it("returns an error result through the model door", async () => isolated(Effect.scoped(Effect.gen(function* () {
+    const result = yield* runAgentSync(createDispatcher({ executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).pipe(Effect.provide(catalogLayer([definition])))).execute(call, context);
+    expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
+    expect(result.output).toContain("output_denied");
+  }))));
 
-  it("throws through the cell door", async () =>
-    isolated(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const exit = yield* Effect.exit(
-            runAgentSync(
-              createDispatcher({
-                executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor,
-              }).pipe(Effect.provide(catalogLayer([definition]))),
-            ).executeCell(call, context),
-          );
-          expect(Exit.isFailure(exit)).toBe(true);
-          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ToolRefused);
-        }),
-      ),
-    ));
+  it("throws through the cell door", async () => isolated(Effect.scoped(Effect.gen(function* () {
+    const exit = yield* Effect.exit(runAgentSync(createDispatcher({ executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).pipe(Effect.provide(catalogLayer([definition])))).executeCell(call, context));
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ToolRefused);
+  }))));
 
   for (const door of ["model", "cell"] as const) {
-    it(`${door} door uses a valid transformed output`, async () =>
-      isolated(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const dispatcher = runAgentSync(
-              createDispatcher({ executor: transformingExecutor("masked") }).pipe(
-                Effect.provide(catalogLayer([definition])),
-              ),
-            );
-            const result = yield* door === "model"
-              ? dispatcher.execute(call, context)
-              : dispatcher.executeCell(call, context);
-            expect(result.output).toEqual(door === "model" ? "masked" : { id: "masked" });
-          }),
-        ),
-      ));
+    it(`${door} door uses a valid transformed output`, async () => isolated(Effect.scoped(Effect.gen(function* () {
+      const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor("masked") }).pipe(Effect.provide(catalogLayer([definition]))));
+      const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
+      expect(result.output).toEqual(door === "model" ? "masked" : { id: "masked" });
+    }))));
 
-    it(`${door} door rejects a transformed output that breaks the schema`, async () =>
-      isolated(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const dispatcher = runAgentSync(
-              createDispatcher({ executor: transformingExecutor(null) }).pipe(
-                Effect.provide(catalogLayer([definition])),
-              ),
-            );
-            const result = yield* door === "model"
-              ? dispatcher.execute(call, context)
-              : dispatcher.executeCell(call, context);
-            expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
-          }),
-        ),
-      ));
+    it(`${door} door rejects a transformed output that breaks the schema`, async () => isolated(Effect.scoped(Effect.gen(function* () {
+      const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor(null) }).pipe(Effect.provide(catalogLayer([definition]))));
+      const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
+      expect(result).toMatchObject({ isError: true, errorKind: "invalid_output" });
+    }))));
   }
 });

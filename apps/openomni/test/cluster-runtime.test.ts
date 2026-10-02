@@ -117,8 +117,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
       }),
     timers: sessionTimerPort(),
   };
-  const runtime = gatewayRuntime({
-    observations: Bus,
+  const runtime = gatewayRuntime({ observations: Bus,
     catalogPath,
     sessionsDir,
     entityIdleMs: 60_000,
@@ -162,18 +161,8 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
         }),
       ),
     );
-    expect(first).toEqual({
-      ordinal: 2,
-      actionHash: first.actionHash,
-      deduped: false,
-      admission: "turn",
-    });
-    expect(replay).toEqual({
-      ordinal: 2,
-      actionHash: first.actionHash,
-      deduped: true,
-      admission: "turn",
-    });
+    expect(first).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: false, admission: "turn" });
+    expect(replay).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: true, admission: "turn" });
     expect(timer).toEqual({ outcome: "noop" });
     expect(deadline).toEqual({ outcome: "noop" });
     expect(fired).toEqual({ outcome: "noop" });
@@ -190,8 +179,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
 
 test("a post-commit publish failure reaches the injected port and leaves the write result intact", () => {
   const failures: ObservationPublishFailure[] = [];
-  const plane = createAppLedger({
-    now: testClock(),
+  const plane = createAppLedger({ now: testClock(),
     observationSink: REFUSING_SINK,
     onObservationFailure: (failure) => failures.push(failure),
   });
@@ -211,17 +199,13 @@ test("a post-commit publish failure reaches the injected port and leaves the wri
 
 test("without an injected port a publish failure on a file-mode handle is an incident log line", () => {
   const incident = spyOn(console, "error").mockImplementation((): void => undefined);
-  const plane = createAppLedger({
-    now: testClock(),
+  const plane = createAppLedger({ now: testClock(),
     sessionsDir: join(tempDir(), "sessions"),
     observationSink: REFUSING_SINK,
   });
   const store = plane.handles.openSession("ported-session");
   try {
-    materializeSession(
-      Journal.SessionHandleStore.createSessionKernel(store, plane.catalog),
-      "ported-session",
-    );
+    materializeSession(Journal.SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
     expect(store.sessions.get("ported-session")?.id).toBe("ported-session");
     expect(incident.mock.calls).toEqual([
       ["ledger observation publish failed: ported-session:configure", new Error("sink failed")],

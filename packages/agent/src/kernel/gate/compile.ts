@@ -15,6 +15,7 @@ import {
 import { z } from "zod";
 import { clonePlain, freezePlain, matchesMessage, type MessagePolicyContext } from "./match";
 
+
 interface NamedTransformer {
   readonly name: string;
   readonly apply: (args: PlainValue, config: PlainValue) => PlainValue;
@@ -104,6 +105,7 @@ export const KERNEL_POLICY_REGISTRY: NamedPolicyRegistry = createNamedPolicyRegi
   transformers: [{ name: "kernel/redact", apply: redact }],
   obligations: [{ name: "kernel/budget-clamp" }],
 });
+
 
 const MANDATORY_RULE_NAMES = ["compaction"] as const;
 type RuleName = (typeof MANDATORY_RULE_NAMES)[number];

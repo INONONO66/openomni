@@ -33,16 +33,14 @@ const cases: readonly ConformanceCase[] = [
     rendered: "*hi* `code`",
     limit: 4096,
     credential: { token: "tg-token" },
-    build: (publish) =>
-      ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish, injectedOptions()),
+    build: (publish) => ChannelProviders.telegram.create({ token: "tg-token" }, {}, publish, injectedOptions()),
   },
   {
     provider: ChannelProviders.discord,
     rendered: "**hi** `code`",
     limit: 2000,
     credential: { token: "dc-token" },
-    build: (publish) =>
-      ChannelProviders.discord.create({ token: "dc-token" }, {}, publish, injectedOptions()),
+    build: (publish) => ChannelProviders.discord.create({ token: "dc-token" }, {}, publish, injectedOptions()),
   },
   {
     provider: ChannelProviders.github,
@@ -63,12 +61,7 @@ const cases: readonly ConformanceCase[] = [
     limit: 4000,
     credential: { botToken: "xoxb-test", appToken: "xapp-test" },
     build: (publish) =>
-      ChannelProviders.slack.create(
-        { botToken: "xoxb-test", appToken: "xapp-test" },
-        {},
-        publish,
-        injectedOptions(),
-      ),
+      ChannelProviders.slack.create({ botToken: "xoxb-test", appToken: "xapp-test" }, {}, publish, injectedOptions()),
   },
 ];
 

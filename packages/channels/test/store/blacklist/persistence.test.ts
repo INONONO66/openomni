@@ -37,8 +37,6 @@ describe("BlacklistStore SQLite persistence", () => {
   });
 
   test("raw reads fail closed when the blacklist sub-adapter is absent", () => {
-    expect(() => createBlacklistStore({ now: testNow }).list()).toThrow(
-      "does not implement blacklist",
-    );
+    expect(() => createBlacklistStore({ now: testNow }).list()).toThrow("does not implement blacklist");
   });
 });

@@ -94,11 +94,9 @@ export async function reconstructionFixture(
       reconstructionSession,
       index < scale.updates - 1 ? "same-id" : "answer",
     );
-    await runAgent(
-      executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
-        Effect.succeed(PlainValueSchema.parse(message)),
-      ),
-    );
+    await runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+      Effect.succeed(PlainValueSchema.parse(message)),
+    ));
   }
   const tool = textMessage(
     "assistant",
@@ -115,38 +113,33 @@ export async function reconstructionFixture(
     callID: "open-call",
     state: { status: "pending", input: {} },
   });
-  await runAgent(
-    executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
-      Effect.succeed(PlainValueSchema.parse(tool)),
-    ),
-  );
+  await runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+    Effect.succeed(PlainValueSchema.parse(tool)),
+  ));
   const padded = recording.commitBatch(
     paddingActions(reconstructionSession, recording.identity.turnId, scale.padding),
   );
   requireCommit(padded);
-  await runAgent(
-    executor.run(
-      {
-        kind: "tool",
-        op: "read",
-        intent: {},
-        effect: {},
-        toolObservation: { turnId: recording.identity.turnId, callId: "open-call" },
-        toolResult: () => ({
-          id: "open-call",
-          toolCallId: "open-call",
-          toolName: "read",
-          output: "settled",
-          isError: false,
-        }),
-      },
-      () =>
-        Effect.sync(() => {
-          bodies.push("tool");
-          return "settled";
-        }),
-    ),
-  );
+  await runAgent(executor.run(
+    {
+      kind: "tool",
+      op: "read",
+      intent: {},
+      effect: {},
+      toolObservation: { turnId: recording.identity.turnId, callId: "open-call" },
+      toolResult: () => ({
+        id: "open-call",
+        toolCallId: "open-call",
+        toolName: "read",
+        output: "settled",
+        isError: false,
+      }),
+    },
+    () => Effect.sync(() => {
+      bodies.push("tool");
+      return "settled";
+    }),
+  ));
   const generation = SessionHandleStore.generationSnapshot({
     generation: 2,
     revertTo: 1,
@@ -172,41 +165,28 @@ export async function reconstructionFixture(
   );
   requireCommit(changed);
   const compact = (summarize = async () => "durable summary") =>
-    runAgent(
-      executeCompaction({
-        history: hydrateSessionHistory(isolatedLedger().kernel, reconstructionSession).history,
-        executor,
-        events: {
-          publish(event) {
-            if (event.name === RunEvents.CompactionCompleted.name) publications.push(event.name);
-          },
+    runAgent(executeCompaction({
+      history: hydrateSessionHistory(isolatedLedger().kernel, reconstructionSession).history,
+      executor,
+      events: {
+        publish(event) {
+          if (event.name === RunEvents.CompactionCompleted.name) publications.push(event.name);
         },
-        options: {
-          contextWindowTokens: 10_000,
-          protectRecentMessages: 2,
-          onSummarize: () =>
-            Effect.gen(function* () {
-              bodies.push("summary");
-              return yield* Effect.tryPromise({
-                try: summarize,
-                catch: (cause) =>
-                  new AgentFailure({ operation: "test.summarize", cause: String(cause) }),
-              });
-            }),
-        },
-        identity: { traceId: "restart", sessionId: reconstructionSession },
-        dispatch: { trigger: "yield" },
-      }).pipe(Effect.provide(Entropy.layer({ id: recording.entropy, random: () => 0 }))),
-    );
+      },
+      options: {
+        contextWindowTokens: 10_000,
+        protectRecentMessages: 2,
+        onSummarize: () => Effect.gen(function* () {
+          bodies.push("summary");
+          return yield* Effect.tryPromise({ try: summarize, catch: (cause) => new AgentFailure({ operation: "test.summarize", cause: String(cause) }) });
+        }),
+      },
+      identity: { traceId: "restart", sessionId: reconstructionSession },
+      dispatch: { trigger: "yield" },
+    }).pipe(Effect.provide(Entropy.layer({ id: recording.entropy, random: () => 0 }))));
   const suffix = () =>
-    runAgent(
-      executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
-        Effect.succeed(
-          PlainValueSchema.parse(
-            textMessage("assistant", "suffix", reconstructionSession, "suffix"),
-          ),
-        ),
-      ),
-    );
+    runAgent(executor.run({ kind: "message", op: "assistant", intent: {}, effect: {} }, () =>
+      Effect.succeed(PlainValueSchema.parse(textMessage("assistant", "suffix", reconstructionSession, "suffix"))),
+    ));
   return { recording, executor, bodies, publications, compact, suffix };
 }

@@ -12,37 +12,14 @@ it("shared budget assertions reject wrong reasons and unexpected provider calls"
   const stopped = Object.assign(new Error("stopped"), { code: "agent_stop", reason: "budget" });
   expectUncalledBudget(stopped, 0);
   expect(() => expectUncalledBudget(stopped, 1)).toThrow();
-  expect(() =>
-    expectUncalledBudget(
-      Object.assign(new Error("other"), { code: "agent_stop", reason: "other" }),
-      0,
-    ),
-  ).toThrow();
+  expect(() => expectUncalledBudget(Object.assign(new Error("other"), { code: "agent_stop", reason: "other" }), 0)).toThrow();
 });
 
-it("shared tool assertions remain sensitive to result and durable commit mutations", () =>
-  isolated(
-    Effect.gen(function* () {
-      const recording = recordingExecutor();
-      const dispatcher = runAgentSync(
-        createDispatcher({ executor: recording.executor }).pipe(
-          Effect.provide(
-            catalogLayer([
-              timedQueryTool("reject before timeout", async () => {
-                throw new Error("failed");
-              }),
-            ]),
-          ),
-        ),
-      );
-      const result = yield* dispatcher.execute(
-        { id: "check", tool: "timed", input: {} },
-        { sessionId: "session-1", turnId: "turn-1" },
-      );
-      expectFailedToolCommit(result, recording.committed);
-      expect(() =>
-        expectFailedToolCommit({ ...result, isError: false }, recording.committed),
-      ).toThrow();
-      expect(() => expectFailedToolCommit(result, [])).toThrow();
-    }),
-  ));
+it("shared tool assertions remain sensitive to result and durable commit mutations", () => isolated(Effect.gen(function* () {
+  const recording = recordingExecutor();
+  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([timedQueryTool("reject before timeout", async () => { throw new Error("failed"); })]))));
+  const result = yield* dispatcher.execute({ id: "check", tool: "timed", input: {} }, { sessionId: "session-1", turnId: "turn-1" });
+  expectFailedToolCommit(result, recording.committed);
+  expect(() => expectFailedToolCommit({ ...result, isError: false }, recording.committed)).toThrow();
+  expect(() => expectFailedToolCommit(result, [])).toThrow();
+})));

@@ -44,6 +44,7 @@ export function claimWithinCountedWindow<State>(operations: {
   });
 }
 
+
 export const RESUME_BUDGET = 10;
 
 /** The storage capabilities one kernel handle reads and writes. */
@@ -564,10 +565,7 @@ function getSnapshotIn(
   turns = 1,
 ): SessionTurn.Snapshot {
   if (!Number.isInteger(turns) || turns < 0)
-    throw new LedgerInvariant({
-      operation: "session.snapshot",
-      message: "turn count must be non-negative",
-    });
+    throw new LedgerInvariant({ operation: "session.snapshot", message: "turn count must be non-negative" });
   return context.stores().transaction(() => snapshotFor(context, rowIn(context, sessionId), turns));
 }
 
@@ -643,10 +641,7 @@ function watchSnapshotIn(
       snapshot,
       subscribe(handler: (observation: SessionTurn.Observation) => void) {
         if (closed)
-          throw new LedgerInvariant({
-            operation: "session.watch",
-            message: "session watch is unsubscribed",
-          });
+          throw new LedgerInvariant({ operation: "session.watch", message: "session watch is unsubscribed" });
         handlers.add(handler);
         return () => handlers.delete(handler);
       },
@@ -883,11 +878,8 @@ function makeSessionKernel(context: SessionKernelContext) {
     },
     row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
     listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
-    childSessionsPage: (
-      sessionId: string,
-      afterId: string,
-      limit: number,
-    ): { readonly id: string }[] => context.childSessionsPage(sessionId, afterId, limit),
+    childSessionsPage: (sessionId: string, afterId: string, limit: number): { readonly id: string }[] =>
+      context.childSessionsPage(sessionId, afterId, limit),
     policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
     currentPolicyGeneration: (): number =>
       policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
@@ -919,7 +911,6 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       policies: catalog.policies,
     }),
     writable: () => true,
-    childSessionsPage: (parentId, afterId, limit) =>
-      catalog.childSessionsPage(parentId, afterId, limit),
+    childSessionsPage: (parentId, afterId, limit) => catalog.childSessionsPage(parentId, afterId, limit),
   });
 }

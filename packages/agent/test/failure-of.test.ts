@@ -13,11 +13,7 @@ describe("Failure.of", () => {
     const cause = Cause.die(new Error("boom"));
     const failure = Failure.of(cause, "stage.op");
     expect(failure).toBeInstanceOf(AgentFailure);
-    expect(failure).toMatchObject({
-      _tag: "AgentFailure",
-      operation: "stage.op",
-      cause: expect.stringContaining("boom"),
-    });
+    expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "stage.op", cause: expect.stringContaining("boom") });
   });
 
   it("synthesizes a AgentFailure for an interrupt", () => {
@@ -32,8 +28,6 @@ describe("Failure.fromCause", () => {
     const error = new Interrupted();
     const synthesize = (pretty: string) => ({ synthesized: pretty });
     expect(Failure.fromCause(Cause.fail(error), synthesize)).toBe(error);
-    expect(Failure.fromCause(Cause.die("bad"), synthesize)).toEqual({
-      synthesized: expect.stringContaining("bad"),
-    });
+    expect(Failure.fromCause(Cause.die("bad"), synthesize)).toEqual({ synthesized: expect.stringContaining("bad") });
   });
 });

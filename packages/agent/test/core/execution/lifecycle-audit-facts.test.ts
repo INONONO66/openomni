@@ -32,17 +32,15 @@ describe("canonical lifecycle audit facts", () => {
     });
     let calls = 0;
     try {
-      await isolated(
-        runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
-          events: Bus,
-          model: { provider: "test", id: "model" },
-          llm: mockLlm(async (_input, sink) => {
-            calls += 1;
-            sink.onMessage(measuredMessage(calls === 1 ? 3 : 4));
-            return calls === 1 ? { type: "continue" } : { type: "stop" };
-          }),
+      await isolated(runTestAgent(runInput([{ role: "user", content: "continue once" }]), {
+        events: Bus,
+        model: { provider: "test", id: "model" },
+        llm: mockLlm(async (_input, sink) => {
+          calls += 1;
+          sink.onMessage(measuredMessage(calls === 1 ? 3 : 4));
+          return calls === 1 ? { type: "continue" } : { type: "stop" };
         }),
-      );
+      }));
       await bounded(done.promise);
       expect(responseTokens).toEqual([3, 4]);
     } finally {

@@ -6,13 +6,7 @@ import { openSessionStore } from "../../src/store/session-file";
 import * as SessionHandleStore from "../../src/store/fence";
 import { Effect } from "effect";
 import { SessionEntity } from "../../src/session/entity";
-import {
-  clusterTempDir,
-  readChain,
-  runCluster,
-  sendPrompt,
-  sessionFileFor,
-} from "../helpers/cluster-runtime";
+import { clusterTempDir, readChain, runCluster, sendPrompt, sessionFileFor, } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-session-entity-coverage-");
@@ -42,18 +36,16 @@ async function materializeSession(
   const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
   const kernel = SessionHandleStore.createSessionKernel(store, catalog);
   try {
-    await runAgent(
-      kernel.materialize({
-        id: sessionId,
-        parentId: null,
-        role: "resident",
-        tools: [],
-        system: { preset: "", blocks: [] },
-        policyGeneration: 1,
-        actionId: `${sessionId}:materialize`,
-        at: 1,
-      }),
-    );
+    await runAgent(kernel.materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: 1,
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }));
     await prepare?.({ catalog, kernel });
   } finally {
     store.close();
@@ -180,44 +172,33 @@ test("a received prompt retries exactly one revision refusal", async () => {
   const sessionId = "received-revision-race";
   const create = SessionHandleStore.createSessionKernel;
   let commits = 0;
-  const spy = spyOn(SessionHandleStore, "createSessionKernel").mockImplementation(
-    (store, catalog) => {
-      const kernel = create(store, catalog);
-      return new Proxy(kernel, {
-        get(target, property, receiver) {
-          if (property !== "commit") return Reflect.get(target, property, receiver);
-          const commit: typeof kernel.commit = (input) => {
-            if (input.actions[0]?.id !== "received-race") return target.commit(input);
-            commits += 1;
-            if (commits === 1) {
-              const row = target.row(input.sessionId);
-              return Effect.fail(
-                new CommitRefused({
-                  sessionId: input.sessionId,
-                  reason: "revision",
-                  expectedRevision: input.expectedRevision,
-                  currentRevision: row.revision + 1,
-                  fence: input.fence,
-                  currentFence: row.fence,
-                }),
-              );
-            }
-            return target.commit(input);
-          };
-          return commit;
-        },
-      });
-    },
-  );
+  const spy = spyOn(SessionHandleStore, "createSessionKernel").mockImplementation((store, catalog) => {
+    const kernel = create(store, catalog);
+    return new Proxy(kernel, {
+      get(target, property, receiver) {
+        if (property !== "commit") return Reflect.get(target, property, receiver);
+        const commit: typeof kernel.commit = (input) => {
+          if (input.actions[0]?.id !== "received-race") return target.commit(input);
+          commits += 1;
+          if (commits === 1) {
+            const row = target.row(input.sessionId);
+            return Effect.fail(new CommitRefused({
+              sessionId: input.sessionId, reason: "revision",
+              expectedRevision: input.expectedRevision, currentRevision: row.revision + 1,
+              fence: input.fence, currentFence: row.fence,
+            }));
+          }
+          return target.commit(input);
+        };
+        return commit;
+      },
+    });
+  });
   try {
     const receipt = await runCluster(options, sendPrompt(sessionId, "received-race", "retry"));
     expect(receipt.deduped).toBe(false);
     expect(commits).toBe(2);
-    expect(
-      readChain(sessionFileFor(sessionsDir, sessionId), sessionId).filter(
-        (row) => row.id === "received-race",
-      ),
-    ).toHaveLength(1);
+    expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).filter((row) => row.id === "received-race")).toHaveLength(1);
   } finally {
     spy.mockRestore();
   }

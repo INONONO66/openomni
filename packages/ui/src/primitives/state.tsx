@@ -38,6 +38,7 @@ export function StatusDot({
         viewBox="0 0 6 6"
         width="6"
       >
+        
         <circle
           cx="3"
           cy="3"
@@ -47,7 +48,7 @@ export function StatusDot({
           stroke={shape === "ring" ? "currentColor" : "none"}
           strokeWidth="1"
         />
-
+        
         {shape === "slashed" ? (
           <>
             <mask id={maskId}>

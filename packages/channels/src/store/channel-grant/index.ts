@@ -19,9 +19,7 @@ export function createChannelGrantStore(source: {
   return {
     put(input: Actor.ChannelGrant): Actor.ChannelGrant {
       const store = requireAdapter();
-      const grant = Actor.ChannelGrant.parse(
-        withStoreTimestamps(input, store.get(input.id), source.now()),
-      );
+      const grant = Actor.ChannelGrant.parse(withStoreTimestamps(input, store.get(input.id), source.now()));
       store.set(grant);
       return grant;
     },
