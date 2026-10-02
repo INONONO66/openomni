@@ -1,6 +1,6 @@
 # Implementation Status
 
-## #1250 model and desktop unified on AI SDK 7 (epic #1260, ⏳ pending merge)
+## #1250 model and desktop unified on AI SDK 7 (epic #1260, merged as `9b4e4b8c` (PR #1265))
 
 On `epic1260/1250-ai-7` (2026-10-02, base `0ebef4b0`). `packages/agent` and
 `apps/openomni` pin `ai@7.0.93` (the exact desktop version) with provider
@@ -22,7 +22,7 @@ tool approval, runtime contexts, and default AI Gateway routing stay off. Deskto
 untouched; the desktop boundaries recompile and their transport/session tests
 pass unchanged.
 
-## #1246 ten packages merged into five (epic #1260 P4 after #1245, ⏳ pending merge)
+## #1246 ten packages merged into five (epic #1260 P4 after #1245, merged as `0ebef4b0` (PR #1264))
 
 On `epic1260/1246-packages-10-5` (2026-10-02). The repository has exactly five
 packages plus two apps; the retired directories and their package names grep to
@@ -58,7 +58,7 @@ zero everywhere, including scripts, CI, and docs.
   historical, and this section plus `AGENTS.md` are authoritative for current
   wiring.
 
-## #1245 injected configuration, clock and entropy (epic #1260 P3 after #1244, ⏳ pending merge)
+## #1245 injected configuration, clock and entropy (epic #1260 P3 after #1244, merged as `c1d5ebd2` (PR #1263))
 
 On `epic1260/1245-inject-clock-entropy` (2026-10-01, base `a4478b0e`). Ambient
 time, entropy and environment reads are replaced by injection; seven
