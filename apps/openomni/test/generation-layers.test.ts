@@ -11,6 +11,7 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { composedPointTable } from "../src/composition/point-table";
+import type { PolicyRow } from "@openomni/protocol";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
 import { allowConfigure } from "./helpers/generation-services";
 import { configureAuthority } from "../src/composition/generation-layers";
@@ -121,17 +122,18 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
 
 test("a capability omitted from the composition removes its points: tool rows fail closed; composed, they govern (#1251 r3)", async () => {
   const reduced = Kernel.KERNEL_CAPABILITY_POINTS.filter((capability) => capability.bundle !== "tool");
-  const governed = [
+  const denyWrites: Omit<PolicyRow.Row, "generation"> = {
+    name: "no-writes", kind: "tool", phase: "pre", priority: 1_000,
+    match: { encodingVersion: 1, value: { op: "write" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "frozen" } },
+  };
+  const governed: Omit<PolicyRow.Row, "generation">[] = [
     {
       name: "compaction", kind: "compaction", phase: "pre", priority: 1_000,
       match: { encodingVersion: 1, value: {} },
       verdict: { encodingVersion: 1, value: { type: "allow" } },
     },
-    {
-      name: "no-writes", kind: "tool", phase: "pre", priority: 1_000,
-      match: { encodingVersion: 1, value: { op: "write" } },
-      verdict: { encodingVersion: 1, value: { type: "deny", reason: "frozen" } },
-    },
+    denyWrites,
   ];
   const withoutTool = gatewayRuntime({ observations: Bus, capabilities: reduced });
   try {
@@ -173,7 +175,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
       seedKernelPolicyRows(plane.catalog.policies);
       const generation = plane.catalog.policies.appendGeneration((current) => [
         ...current.map(({ generation: _generation, ...rest }) => rest),
-        governed[1],
+        denyWrites,
       ]);
       yield* generations.initialize({ resident: [], worker: [] });
       yield* plane.openKernel("tooled").materialize({
