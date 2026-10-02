@@ -1,10 +1,10 @@
 import { runEffect } from "./helpers/native";
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
-import type { jsonSchema, StepResult, streamText, ToolSet } from "ai";
+import { mockAiModule, streamOf, type StreamTextArgs } from "./helpers/ai-mock";
 import type { StreamEvent } from "../../src/model/processor/stream-events";
 import type { Sink } from "../../src/model/sink";
 import { Bus, collector } from "./helpers/observation";
@@ -18,35 +18,20 @@ const TEST_TRACE = { traceId: newTraceId(), sessionId: "session-test", runId: "r
 type RunModule = typeof import("./helpers/native");
 let run: RunModule["run"];
 
-type StreamTextArgs = Parameters<typeof streamText>[0];
-
 let capturedStreamArgs: StreamTextArgs | undefined;
 
 let mockStreamChunks: StreamEvent[] = [{ type: "finish" }];
 
-/** What the mocked `streamText` hands back: the chunks as the SDK's fullStream. */
-function streamOf(chunks: StreamEvent[]) {
-  return {
-    fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-      yield* chunks;
-    })(),
-  };
-}
-
-function mockAiModule() {
-  mock.module("ai", () => ({
+function mockCapturingAi(): void {
+  mockAiModule({
     streamText: (args: StreamTextArgs) => {
       capturedStreamArgs = args;
       return streamOf(mockStreamChunks);
     },
-    jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
-    stepCountIs: (stepCount: number) => {
-      return (input: { steps: readonly StepResult<ToolSet>[] }) => input.steps.length === stepCount;
-    },
-  }));
+  });
 }
 
-mockAiModule();
+mockCapturingAi();
 
 const testAuth = { type: "api", key: "test-key-run" } as const;
 const testModel: Provider.Model = {
@@ -68,7 +53,7 @@ describe("run", () => {
 
   beforeEach(() => {
     mockStreamChunks = [{ type: "finish" }];
-    mockAiModule();
+    mockCapturingAi();
     capturedMessages = [];
     capturedToolCalls = [];
     capturedToolResults = [];
@@ -317,7 +302,7 @@ describe("run", () => {
       { type: "finish-step" },
       { type: "finish" },
     ];
-    mockAiModule();
+    mockCapturingAi();
 
     const outcome = await run(
       {
@@ -345,7 +330,7 @@ describe("run", () => {
     // final attempt's fold — so a retried attempt's billed usage vanished
     // from telemetry.
     let call = 0;
-    mock.module("ai", () => ({
+    mockAiModule({
       streamText: () => {
         call++;
         return streamOf(
@@ -375,9 +360,8 @@ describe("run", () => {
               ],
         );
       },
-      jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
-      stepCountIs: () => () => false,
-    }));
+      isStepCount: () => () => false,
+    });
 
     const collected = collector();
     const outcome = await run(

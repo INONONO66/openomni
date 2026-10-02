@@ -1,7 +1,7 @@
 
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { jsonSchema, streamText } from "ai";
+import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
+import { mockAiModule, streamOf, type StreamTextArgs } from "./helpers/ai-mock";
 import { Bus, newTraceId } from "./helpers/observation";
 import { clientIdentity } from "../../src/model/provider/identity";
 import type { Sink } from "../../src/model/sink";
@@ -12,26 +12,19 @@ const TEST_TRACE = {
   runId: "run-transport",
 };
 
-type StreamTextArgs = Parameters<typeof streamText>[0];
-
 let capturedStreamArgs: StreamTextArgs | undefined;
 
-function mockAiModule() {
-  mock.module("ai", () => ({
+function mockCapturingAi(): void {
+  mockAiModule({
     streamText: (args: StreamTextArgs) => {
       capturedStreamArgs = args;
-      return {
-        fullStream: (async function* (): AsyncGenerator<{ type: "finish" }, void, undefined> {
-          yield { type: "finish" };
-        })(),
-      };
+      return streamOf([{ type: "finish" }]);
     },
-    jsonSchema: (schema: Parameters<typeof jsonSchema>[0]) => ({ jsonSchema: schema }),
-    stepCountIs: () => () => true,
-  }));
+    isStepCount: () => () => true,
+  });
 }
 
-mockAiModule();
+mockCapturingAi();
 
 type RunModule = typeof import("./helpers/native");
 let run: RunModule["run"];
@@ -93,7 +86,7 @@ async function runWith(transport?: {
 
 describe("run() operator transport threading", () => {
   beforeEach(() => {
-    mockAiModule();
+    mockCapturingAi();
     capturedStreamArgs = undefined;
   });
 

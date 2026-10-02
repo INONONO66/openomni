@@ -1,14 +1,15 @@
-import { beforeEach, mock } from "bun:test";
-import type { PlainObject } from "@openomni/protocol";
+import { beforeEach } from "bun:test";
 import type { ModelMessage, ToolSet } from "ai";
+import type { PlainObject } from "@openomni/protocol";
 import { run, type RunInput } from "./native";
 import type { StreamEvent } from "../../../src/model/processor/stream-events";
 import type { Sink } from "../../../src/model/sink";
+import { mockAiModule, streamOf, type Condition } from "./ai-mock";
 import { collector } from "./observation";
 import { capturingSink } from "./processor";
 import { fixedNow, sequentialIds } from "./fixtures";
 
-export type Condition = (input: { steps: Array<{ usage?: { inputTokens?: number } }> }) => boolean;
+export type { Condition } from "./ai-mock";
 interface Arguments {
   instructions?: ModelMessage[];
   messages: ModelMessage[];
@@ -31,21 +32,16 @@ export function useStreamCapture() {
     stepCount = undefined;
     chunks = [{ type: "finish" }];
     events.reset();
-    mock.module("ai", () => ({
-      streamText: (input: Arguments) => {
+    mockAiModule<Arguments>({
+      streamText: (input) => {
         args = input;
-        return {
-          fullStream: (async function* (): AsyncGenerator<StreamEvent, void, undefined> {
-            yield* chunks;
-          })(),
-        };
+        return streamOf(chunks);
       },
-      jsonSchema: (schema: PlainObject) => ({ jsonSchema: schema }),
-      stepCountIs: (count: number): Condition => {
+      isStepCount: (count: number): Condition => {
         stepCount = count;
         return ({ steps }) => steps.length === count;
       },
-    }));
+    });
   });
   return {
     events,

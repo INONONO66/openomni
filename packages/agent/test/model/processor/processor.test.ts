@@ -201,7 +201,7 @@ describe("Processor processor", () => {
   });
 
   test("settles unresolved tool calls when the stream ends cleanly", async () => {
-    // stepCountIs can stop the stream after tool-call events whose results
+    // isStepCount can stop the stream after tool-call events whose results
     // will never arrive; those parts must not stay pending forever.
     const capture = capturingSink();
     const processor = createProcessor({
