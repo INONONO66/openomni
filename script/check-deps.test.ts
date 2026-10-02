@@ -616,7 +616,7 @@ test("#1247 S8 pin: the real agent index passes, a grown name fails", async () =
 
   const grown = `${real}\nexport { somethingNew } from "./kernel/turn";\n`;
   const violations = agentIndexPerimeterViolations(grown);
-  expect(violations.some((line) => line.includes("exports somethingNew outside the pinned #1248 S8 perimeter"))).toBe(true);
+  expect(violations.some((line) => line.includes("exports somethingNew outside the pinned S8 perimeter"))).toBe(true);
 });
 
 test("#1247 S8 pin: an eighth namespace and a non-barrel export form fail; shrink passes", () => {
@@ -637,13 +637,13 @@ test("#1247 S8 pin: alias, indentation, and missing semicolon cannot smuggle a n
   const aliased = agentIndexPerimeterViolations(
     'export { evaluatePermission as rogue } from "./kernel/gate/match";\n',
   );
-  expect(aliased.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+  expect(aliased.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 
   const indented = agentIndexPerimeterViolations('  export { rogue } from "./kernel/turn";\n');
-  expect(indented.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+  expect(indented.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 
   const semicolonFree = agentIndexPerimeterViolations('export { rogue } from "./kernel/turn"\n');
-  expect(semicolonFree.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+  expect(semicolonFree.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 
   // Aliasing a pinned name onto another pinned name stays within the perimeter.
   const pinnedAlias = agentIndexPerimeterViolations(
@@ -690,5 +690,5 @@ test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolera
     "packages/agent/src/index.ts": 'export { rogue } from "./kernel/turn";\n',
   });
   const violations = await validateAgentIndexPerimeter(planted);
-  expect(violations.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+  expect(violations.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 });

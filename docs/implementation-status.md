@@ -10,8 +10,8 @@ bus, commit, alarm), `store/` (fence, session-file, storage adapters),
 (history, index) and `testing/` (registry, controller — the session registry
 and `requireCommit` are test-only). `index.ts` exports seven namespaces (`Kernel`,
 `Session`, `Bundle`, `Journal`, `Model`, `Inspect`, `Testing`) plus the pinned
-nine-name S8 perimeter consumed by `packages/channels` (#1248 owns that
-fence); `script/check-deps.ts` fails if the pin grows or changes. The legacy
+nine-name S8 perimeter consumed by `packages/channels` (legal channels -> agent
+band edges; no lane owns retiring it); `script/check-deps.ts` fails if the pin grows or changes. The legacy
 timer and lease vocabularies are renamed to the alarm and fence names on TS
 surfaces only — the durable SQLite columns stay `lease_owner`/`lease_fence`
 byte-identical. The old flat controller module and `core/settled.ts` are

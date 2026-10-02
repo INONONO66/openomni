@@ -7,8 +7,9 @@ export * as Model from "./model";
 export * as Inspect from "./inspect";
 export * as Testing from "./testing";
 
-// ─── S8 perimeter (#1248 owns packages/channels/src): named exports pinned by
-// the channels package until its own lane retires them. Do not grow this list.
+// ─── S8 perimeter: named exports consumed by packages/channels (legal
+// channels -> agent band edges), pinned shrink-only by script/check-deps.ts.
+// Do not grow this list; retiring it is a separate decision, owned by no lane.
 export { decisionFromEvaluation, evaluatePermission } from "./kernel/gate/match";
 export type { PolicyEvaluationInput } from "./kernel/gate/compile";
 export { requireSubAdapter, withStoreTimestamps } from "./store/storage/timestamped-store";

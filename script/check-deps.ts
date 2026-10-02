@@ -873,10 +873,11 @@ export async function validateAgentBands(root = "."): Promise<string[]> {
 }
 
 /**
- * #1247/#1248 S8 perimeter pin: `packages/agent/src/index.ts` exports exactly
+ * #1247 S8 perimeter pin: `packages/agent/src/index.ts` exports exactly
  * the seven namespaces plus at most these nine named exports consumed by
- * `packages/channels`. Shrink-only: removals are fine, any new name or any
- * other export form fails. #1248 owns retiring the named list.
+ * `packages/channels` (legal channels -> agent band edges). Shrink-only:
+ * removals are fine, any new name or any other export form fails. No epic
+ * child owns retiring the named list; retirement is a separate decision.
  */
 const AGENT_INDEX_NAMESPACES: ReadonlySet<string> = new Set([
   "Kernel",
@@ -924,7 +925,7 @@ function scanNamedExports(sourceFile: ts.SourceFile, clause: ts.NamedExports, sc
     scan.named.push(exported);
     if (!AGENT_INDEX_PINNED_NAMED_EXPORTS.has(exported)) {
       scan.violations.push(
-        `VIOLATION: ${AGENT_INDEX_PATH}:${perimeterLine(sourceFile, specifier)} exports ${exported} outside the pinned #1248 S8 perimeter — shrink only, never grow`,
+        `VIOLATION: ${AGENT_INDEX_PATH}:${perimeterLine(sourceFile, specifier)} exports ${exported} outside the pinned S8 perimeter — shrink only, never grow`,
       );
     }
   }
