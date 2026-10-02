@@ -112,19 +112,20 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
 /**
  * Perimeter mail whose provenance the turn could not authenticate: the turn
  * runs with `evidence_only` authority and this fact is recorded as a
- * violation observation (issue #1245).
+ * violation observation (issue #1245). A recorded fact, never a failure-channel
+ * value: tagged like `SessionPolicyRefusal`, not an `Error`.
  */
-export class InboundAuthorityViolation extends Data.TaggedError("InboundAuthorityViolation")<{
-  readonly reason: "unknown_origin" | "undeclared_treatment";
-}> {
-  override get message(): string { return `inbound authority violation: ${this.reason}`; }
+export class InboundAuthorityViolation {
+  readonly _tag = "InboundAuthorityViolation";
+  constructor(readonly reason: "unknown_origin" | "undeclared_treatment") {}
+  get message(): string { return `inbound authority violation: ${this.reason}`; }
 }
 
-/** A turn whose executor sealed without any runner-produced output: a distinct failure, not a policy refusal. */
-export class RunnerOutputMissing extends Data.TaggedError("RunnerOutputMissing")<{
-  readonly turnId: string;
-}> {
-  override get message(): string { return `runner output missing: turn ${this.turnId}`; }
+/** A turn whose executor sealed without any runner-produced output: a distinct typed result cause, not a policy refusal. */
+export class RunnerOutputMissing {
+  readonly _tag = "RunnerOutputMissing";
+  constructor(readonly turnId: string) {}
+  get message(): string { return `runner output missing: turn ${this.turnId}`; }
 }
 
 /**
@@ -132,10 +133,10 @@ export class RunnerOutputMissing extends Data.TaggedError("RunnerOutputMissing")
  * mutually inconsistent (e.g. a running session with no open turn). Recorded
  * as a typed refusal fact; drains report it instead of folding into a stop.
  */
-export class SessionAdmissionRefused extends Data.TaggedError("SessionAdmissionRefused")<{
-  readonly sessionId: string;
-}> {
-  override get message(): string { return `session admission refused: ${this.sessionId}`; }
+export class SessionAdmissionRefused {
+  readonly _tag = "SessionAdmissionRefused";
+  constructor(readonly sessionId: string) {}
+  get message(): string { return `session admission refused: ${this.sessionId}`; }
 }
 
 export type ExecutionError =

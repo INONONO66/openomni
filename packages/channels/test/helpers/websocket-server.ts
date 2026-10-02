@@ -7,7 +7,7 @@ type ConnectionData = Parameters<WebSocketHandler["ws"]["open"]>[0]["data"];
 /** Deterministic per-server id minter; websocket tests never read ambient entropy. */
 export function testWebSocketId(): () => string {
   const state = { value: 0 };
-  return () => `ws-id-${(state.value += 1)}`;
+  return () => { state.value += 1; return `ws-id-${state.value}`; };
 }
 
 export function websocketCallbacks(handler: WebSocketHandler) {

@@ -2,7 +2,7 @@ import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree"
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Bus } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { L0Observation } from "@openomni/protocol";
 import { watchState } from "../src/composition/monitor-ports";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
@@ -59,7 +59,7 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   });
   const waitTimer = setTimeout(() => waiting.reject(new Error("monitor did not suspend")), 5000);
   try {
-    ws.send(JSON.stringify({ type: "message", text: "watch for the signal" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch for the signal" }));
     await waiting.promise;
   } finally {
     clearTimeout(waitTimer);

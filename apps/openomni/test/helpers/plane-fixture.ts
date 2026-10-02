@@ -3,6 +3,7 @@ import { createChannelStores } from "@openomni/channels";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import { channelStoreSource } from "../../src/gateway";
 import { testPlane } from "./ledger";
+import { testClock } from "./test-entropy";
 
 /** A per-test standalone ledger plane and its channel-store view; the
  * beforeEach/afterEach hooks bind to the calling describe scope. */
@@ -12,7 +13,7 @@ export function planeFixture() {
     if (planeRef.current === undefined) throw new Error("test plane not open");
     return planeRef.current;
   }
-  const channelStores = () => createChannelStores(channelStoreSource(plane()));
+  const channelStores = () => createChannelStores(channelStoreSource(plane(), testClock()));
   beforeEach(() => {
     planeRef.current = testPlane();
   });

@@ -13,7 +13,7 @@ import { elideToolOutputs } from "./reduce";
 import { resolveThresholdTokens, ESTIMATED_CHARS_PER_TOKEN } from "./estimate";
 import { isAnchorMessage, isWarmCandidateValid } from "./candidate";
 import { attemptAnchoredCut } from "./summary";
-import { Entropy } from "../core/entropy";
+import type { Entropy } from "../core/entropy";
 import type { CompactionCandidate } from "./speculate";
 
 function reduceHistoryBeforeCut(

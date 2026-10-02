@@ -5,7 +5,8 @@ import { PassThrough, Readable } from "node:stream";
 import { acquireAppResource, gatewayRuntime } from "../src/gateway";
 import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
-import { Bus, sessionTool } from "@openomni/agent";
+import { sessionTool } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { Database } from "bun:sqlite";
 import { catalogDefinitions } from "../src/tools/core/catalog";
 import { rmSync } from "node:fs";
@@ -38,7 +39,7 @@ function processPlane(fixture: { directory: string }): ProcessPlane {
   return {
     catalogPath,
     sessionsDir,
-    runtime: gatewayRuntime({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
+    runtime: gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
   };
 }
 

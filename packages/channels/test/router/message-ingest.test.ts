@@ -20,7 +20,7 @@ afterEach(() => {
 
 function testId(prefix: string): () => string {
   const state = { value: 0 };
-  return () => `${prefix}-${(state.value += 1)}`;
+  return () => { state.value += 1; return `${prefix}-${state.value}`; };
 }
 
 function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {

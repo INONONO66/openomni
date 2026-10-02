@@ -13,7 +13,6 @@ import { makeSessionGenerations, type GenerationBundle } from "../src/session-ge
 import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
-import { createObservationBus } from "../src/observation/bus";
 import { executeToolBody } from "../src/tool-body";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
 import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";

@@ -86,7 +86,8 @@ export async function ownerMessageTargets(
 // The real compiler evaluates perimeter A rows and actor grants; app tests cover the full executor/tree.
 const fixtureIds = { value: 0 };
 function nextFixtureId(prefix: string): string {
-  return `${prefix}-${(fixtureIds.value += 1)}`;
+  fixtureIds.value += 1;
+  return `${prefix}-${fixtureIds.value}`;
 }
 
 export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): GatewayRouter {

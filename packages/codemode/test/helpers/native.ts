@@ -22,7 +22,7 @@ export class PythonKernel {
 /** Deterministic injected cell-id entropy (#1245) for tests. */
 function sequentialCellIds(): () => string {
   let n = 0;
-  return () => `cell-${(n += 1)}`;
+  return () => { n += 1; return `cell-${n}`; };
 }
 
 export function createCodemode(options: {

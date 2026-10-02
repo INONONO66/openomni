@@ -6,7 +6,7 @@ import { connectIpcClient as connectNative, createIpcServer as listenNative } fr
 
 function resilienceIds(prefix: string): () => string {
   let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
+  return () => { n += 1; return `${prefix}-${n}`; };
 }
 import { acquire } from "./helpers/effects";
 import { connectIpcClient } from "./helpers/native";

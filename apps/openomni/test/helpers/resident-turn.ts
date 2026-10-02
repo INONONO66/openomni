@@ -1,4 +1,4 @@
-import { Bus } from "@openomni/agent";
+import { Bus } from "./bus";
 import { L0Observation, type SessionTurn } from "@openomni/protocol";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import { eventSignal } from "./event-signal";

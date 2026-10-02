@@ -9,7 +9,7 @@ import { NamedPolicyRegistry } from "../src/bundle";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/errors";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/executor-context";
 import type { ExecutionResult } from "../src/executor-contract";
-import { createObservationBus } from "../src/observation/bus";
+import type { createObservationBus } from "../src/observation/bus";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { createTurnDispatcher, sessionTool } from "../src/tool-dispatcher";

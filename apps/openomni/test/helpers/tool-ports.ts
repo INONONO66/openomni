@@ -1,4 +1,5 @@
 import type { ToolPorts } from "../../src/tools/core/catalog";
+import { testIds } from "./test-entropy";
 
 /** Explicit absent-capability fixture; individual tests supply only the ports they exercise. */
 export const testToolPorts: ToolPorts = {
@@ -9,4 +10,5 @@ export const testToolPorts: ToolPorts = {
   llm: undefined,
   provisioning: undefined,
   clock: () => 0,
+  id: testIds("tool"),
 };

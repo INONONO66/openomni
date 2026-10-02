@@ -9,7 +9,6 @@ import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyReg
 import { makeSessionGenerations } from "../src/session-generations";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { createTurnDispatcher, defineTool, sessionTool } from "../src/tool-dispatcher";
-import { createObservationBus } from "../src/observation/bus";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { sessionTree } from "./helpers/session-tree";

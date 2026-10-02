@@ -5,7 +5,7 @@ import { executeCompaction } from "../../compaction/execute-cut";
 import { resolveCompactionGeometry } from "../../compaction/geometry";
 import type { ObservedChatAgentConfig as ChatAgentConfig } from "../types";
 import { applyCompactionMessages, type AgentRunBase, type RunState } from "./state";
-import { Entropy } from "../entropy";
+import type { Entropy } from "../entropy";
 
 type CompactionApplyResult = "compacted" | "deferred" | "none";
 

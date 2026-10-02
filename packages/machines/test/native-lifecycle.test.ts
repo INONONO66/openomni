@@ -14,7 +14,7 @@ import { enrollment, offer } from "./helpers";
 
 function lifecycleIds(prefix: string): () => string {
   let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
+  return () => { n += 1; return `${prefix}-${n}`; };
 }
 
 const command = "sleep 60 & grandchild=$!; printf '%s %s\\n' \"$$\" \"$grandchild\"; wait";

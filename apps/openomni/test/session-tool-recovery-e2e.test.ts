@@ -10,7 +10,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  Bus,
   closeSessions,
   createSessionChatRunner,
   createTurnDispatcher,
@@ -20,6 +19,7 @@ import {
   sessionTool,
   type SessionRuntime,
 } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { SessionHandleStore } from "@openomni/ledger";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
@@ -33,6 +33,7 @@ import { drainSession, resolvedRuntimeFor } from "./helpers/ledger";
 
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import { bounded, commitInterrupt, ProviderRequest as Request } from "./helpers/session-wave";
+import { testClock } from "./helpers/test-entropy";
 
 function response(names: readonly string[]): Response {
   const blocks =
@@ -128,7 +129,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
             throw new Error("crash after committed result");
         },
     });
-    const plane = createAppLedger({ catalogPath, sessionsDir, observationSink: observations });
+    const plane = createAppLedger({ now: testClock(), catalogPath, sessionsDir, observationSink: observations });
     planeRef.current = plane;
     const runtime: SessionRuntime = {
       authorizeConfigure: allowConfigure,
@@ -220,7 +221,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       if (mode === "crash-window") {
         expect(saved.current).toBe(true);
         await runEffect(closeSessions(runtime).pipe(Effect.provide(services)));
-        const crashPlane = createAppLedger({
+        const crashPlane = createAppLedger({ now: testClock(),
           catalogPath: crashCatalogPath,
           sessionsDir: crashSessionsDir,
         });

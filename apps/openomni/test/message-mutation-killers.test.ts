@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { join } from "node:path";
 import { createSurfaceKeyStore } from "@openomni/ledger";
 import { canonicalDigest, Gateway } from "@openomni/protocol";

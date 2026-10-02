@@ -13,8 +13,7 @@ import { type ChannelError, createChannelStores, decodeChannelFailure, type Chan
 import type { ChannelGrantStore, SessionHandleStore } from "@openomni/ledger";
 import type { Actor, Gateway } from "@openomni/protocol";
 import {
-  Bus,
-  Clock, Entropy, GenerationLayers, currentInvocation,
+  Entropy, GenerationLayers, ObservationSink, currentInvocation,
   type SessionEntryServices, type BundleDefinitions,
   createSessionRequests,
   currentExecutor,
@@ -29,8 +28,9 @@ import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
-import { Effect, Result, Exit, ManagedRuntime, Scope } from "effect";
+import { type Context, Effect, Result, Exit, ManagedRuntime, Scope } from "effect";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
+import { captureNow } from "./composition/platform";
 import type { WatchSources } from "./composition/watch-sources";
 import { createWatchMonitorPorts } from "./composition/monitor-ports";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
@@ -279,6 +279,7 @@ export function readSessionCursor(
 export function webSocketCallbacks(
   runtime: AppRuntime,
   handler: WebSocketHandler,
+  sink: Context.Service.Shape<typeof ObservationSink>,
   openSession?: (sessionId: string) => SessionHandleStore.SessionKernel | undefined,
 ) {
   const inflight = new Set<Promise<void>>();
@@ -307,7 +308,7 @@ export function webSocketCallbacks(
       }
     };
     // Register before capture; notifications only hint at authoritative reads.
-    subscriptions.set(request.sessionId, Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    subscriptions.set(request.sessionId, sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.revision > sentRevision) send();
     }, { match: { sessionId: request.sessionId } }));
     send();
@@ -362,7 +363,7 @@ export async function createMonitorPorts(
     Effect.gen(function* () {
       return {
         plane: yield* AppLedger,
-        clock: yield* Clock,
+        clock: yield* captureNow,
         entropy: yield* Entropy,
       };
     }),
@@ -370,8 +371,8 @@ export async function createMonitorPorts(
   return createWatchMonitorPorts({
     openKernel: plane.openKernel,
     sources,
-    clock: clock.now,
-    entropy: entropy.next,
+    clock,
+    entropy: entropy.id,
     run: <A>(effect: Effect.Effect<A, Error>, signal: AbortSignal): Promise<A> =>
       runtime.runPromise(Effect.result(effect), { signal }).then((result) => {
         if (Result.isFailure(result)) throw new MonitorRefused(result.failure);
@@ -520,6 +521,8 @@ export function createResidentGateway(
 ): Effect.Effect<GatewayRouter, import("@openomni/agent").ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
   return Effect.gen(function* () {
     const plane = yield* AppLedger;
+    const observations = yield* ObservationSink;
+    const stamp = { now: ports.now, id: ports.id };
     registerTrustedChannelGrant(plane.stores.channelGrants, {
       surface: "ws",
       defaultTier: LOOPBACK_BOOTSTRAP_TIER,
@@ -531,7 +534,7 @@ export function createResidentGateway(
       stores: ports.stores ?? createChannelStores(channelStoreSource(plane, ports.now)),
       transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
       requests,
-      sink: scopeObservation(Bus, { sessionId: "gateway-ingress" }).publish,
+      sink: scopeObservation(observations, { sessionId: "gateway-ingress" }, stamp).publish,
       run: (sender, request, body) =>
         Effect.gen(function* () {
           const execute = (intent: Parameters<typeof body>[0]) =>
@@ -549,9 +552,9 @@ export function createResidentGateway(
           };
         }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
       observe: (sender, observation) =>
-        scopeObservation(Bus, {
+        scopeObservation(observations, {
           sessionId: sender.kind === "session" ? sender.id : "gateway-ingress",
-        }).publish(GatewayProtocol.MessageObserved, observation),
+        }, stamp).publish(GatewayProtocol.MessageObserved, observation),
       ...(messaging === undefined
         ? {}
         : {

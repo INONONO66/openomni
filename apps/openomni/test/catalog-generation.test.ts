@@ -9,11 +9,12 @@ import type { CatalogSelection, GenerationDefinitions } from "../src/composition
 import { testToolPorts } from "./helpers/tool-ports";
 import { allowConfigure } from "./helpers/generation-services";
 import { planeOf } from "./helpers/ledger";
+import { Bus } from "./helpers/bus";
 
 test("two turns retain one catalog Layer; configure acquires a fresh generation catalog", async () => {
   const layers: Layer.Layer<ToolCatalog>[] = [];
   const turns: (readonly AnyToolDefinition[])[] = [];
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const plane = await planeOf(runtime);
   const resident = createResident({
     model: { provider: "test", id: "test" }, apiKey: "test", tools: testToolPorts,

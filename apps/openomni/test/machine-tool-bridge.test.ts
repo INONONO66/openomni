@@ -270,6 +270,7 @@ describe("code-mode tool bridge", () => {
     });
     let runCellRequests = 0;
     const daemon = await acquireEffect(connectIpcClient(path, {
+      idSource: testIds("ipc"),
       onRequest: (method, params, respond) => Effect.promise(async () => {
         if (method !== Machine.WireMethod.RunCode) return;
         runCellRequests += 1;
@@ -321,7 +322,7 @@ describe("code-mode tool bridge", () => {
     const path = socketPath();
     const { host, reached } = await bridgeProbe(path);
     // A bare connection: no offer, no attach, straight to the tool channel.
-    const intruder = await acquireEffect(connectIpcClient(path, {}));
+    const intruder = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc") }));
     try {
       await expect(
         runEffect(typedCall(
@@ -341,7 +342,7 @@ describe("code-mode tool bridge", () => {
   test("an attached daemon cannot invoke tools outside a cell the host dispatched", async () => {
     const path = socketPath();
     const { host, reached } = await bridgeProbe(path);
-    const client = await acquireEffect(connectIpcClient(path, {}));
+    const client = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc") }));
     try {
       await attachAsBridgeMachine(client);
       // Attached, but this host never dispatched a cell called "ghost".
@@ -368,6 +369,7 @@ describe("code-mode tool bridge", () => {
     // from the very connection the cell ran on — the only way to prove the
     // cell is retired rather than merely unknown to some other connection.
     const daemon = await acquireEffect(connectIpcClient(path, {
+      idSource: testIds("ipc"),
       onRequest: (method, _params, respond) => Effect.sync(() => {
         if (method === Machine.WireMethod.RunCode) {
           respond({

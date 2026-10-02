@@ -1,5 +1,5 @@
 import { Clock, Effect, type Context } from "effect";
-import type { SessionError, ExecutionError } from "./errors";
+import type { SessionError, ExecutionError, RunnerOutputMissing } from "./errors";
 import type { ExecutionLedger } from "./executor-contract";
 import type { SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "./cluster/kernel-registry";
@@ -109,7 +109,7 @@ export type SessionRunnerResult =
   | {
       readonly kind: "error";
       readonly text: string;
-      readonly cause?: Error | SessionPolicyRefusal;
+      readonly cause?: Error | SessionPolicyRefusal | RunnerOutputMissing;
       readonly reported?: true;
     };
 

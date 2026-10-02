@@ -28,7 +28,7 @@ export function fixedClockLayer(now: () => number) {
 /** A deterministic EntropySource: prefixed counter ids, fixed random. */
 export function entropySource(prefix = "id"): EntropySource {
   let n = 0;
-  return { id: () => `${prefix}-${(n += 1)}`, random: () => 0 };
+  return { id: () => { n += 1; return `${prefix}-${n}`; }, random: () => 0 };
 }
 
 let entropyInstances = 0;

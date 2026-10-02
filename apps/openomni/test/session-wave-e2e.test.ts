@@ -6,11 +6,11 @@ import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  Bus,
   currentExecutor,
   InvocationClosed,
   type ExecutionApprovalRequest,
 } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { SessionHandleStore } from "@openomni/ledger";
 import { z } from "zod";
 import {
@@ -184,7 +184,7 @@ test("real provider returns calls before any app tool body starts", async () => 
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wave-token"]);
   // When: the public channel triggers a model step with a native tool call.
   const response = nextResidentTurn(plane(), 5000);
-  socket.send(JSON.stringify({ type: "message", text: "read current status" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "read current status" }));
   await response;
   // Then: provider I/O did not execute the body before returning its calls.
   expect(countsAtModelReturn[0]).toBe(0);
@@ -321,7 +321,7 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
   );
   // When: interrupt at the real provider-return boundary, before any tool body.
   const settled = nextTerminal();
-  socket.send(JSON.stringify({ type: "message", text: "run A" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run A" }));
   await bounded(interrupted.promise);
   // The seal is the turn fiber's own commit; await its exact terminal signal.
   await settled;
@@ -367,7 +367,7 @@ test("all pre decisions precede A B C and reverse completion preserves ledger/pr
   const response = nextResidentTurn(plane(), 5000);
   try {
     // When: complete parallel bodies in reverse while D is a sequential barrier.
-    socket.send(JSON.stringify({ type: "message", text: "run wave" }));
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run wave" }));
     await bounded(entered.promise);
     expect(started).toEqual(["A", "B", "C"]);
     expect(preCounts).toEqual([4, 4, 4]);
@@ -438,7 +438,7 @@ for (const decision of ["approve", "refuse"] as const) {
     requireBApproval();
     const waiting = nextApproval(app);
     const response = nextResidentTurn(plane(), 5000);
-    socket.send(JSON.stringify({ type: "message", text: "approved wave" }));
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "approved wave" }));
     const { handle, request } = await bounded(waiting);
     expect(started).toEqual([]);
     expect(request).toMatchObject({ callId: "call-B", generation: 1, intent: { slot: "B" } });
@@ -483,7 +483,7 @@ test("interrupting pending B cancels every unstarted positional slot", async () 
   const { app, socket, received } = await waveApp(trackedWaveTools(started), ["A", "B", "C"]);
   requireBApproval();
   const waiting = nextApproval(app);
-  socket.send(JSON.stringify({ type: "message", text: "hold wave" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "hold wave" }));
   const { handle, request } = await bounded(waiting);
   expect(started).toEqual([]);
   const settled = nextTerminal();
@@ -536,7 +536,7 @@ test("noncooperative bodies release the wave but retain fence ownership and cann
   ];
   const { app, socket, received } = await waveApp(definitions, ["A", "B"]);
   try {
-    socket.send(JSON.stringify({ type: "message", text: "interrupt running wave" }));
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt running wave" }));
     await bounded(entered.promise);
     const row = activeRow();
     const handle = app.sessions.get(row.id);
@@ -624,7 +624,7 @@ for (const door of ["captured-cell", "captured-wave"] as const) {
     );
     let handle: AppSessionHandle | undefined;
     try {
-      socket.send(JSON.stringify({ type: "message", text: "run nested effect" }));
+      socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run nested effect" }));
       const executor = await bounded(captured.promise);
       const row = activeRow();
       sessionId = row.id;
@@ -762,7 +762,7 @@ for (const door of ["current-cell", "current-wave", "captured-cell", "captured-w
       );
       let handle: AppSessionHandle | undefined;
       try {
-        socket.send(JSON.stringify({ type: "message", text: "run timed nested effect" }));
+        socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run timed nested effect" }));
         const executor = await bounded(captured.promise);
         const row = activeRow();
         sessionId = row.id;
@@ -847,7 +847,7 @@ test("approval-time prompts retain durable identities and enter the next model s
   requireBApproval();
   const waiting = nextApproval(app);
   const response = nextResidentTurn(plane(), 5000);
-  socket.send(JSON.stringify({ type: "message", text: "initial" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "initial" }));
   const { handle, request } = await bounded(waiting);
   // When: two durable prompts arrive while the wave is held, before any next
   // boundary - committed under the live activation's borrowed authority.
@@ -914,7 +914,7 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   requireBApproval();
   const waiting = nextApproval(app);
   const response = nextResidentTurn(plane(), 5000);
-  socket.send(JSON.stringify({ type: "message", text: "deadline wave" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "deadline wave" }));
   const { handle, request } = await bounded(waiting);
   try {
     expect(request.expiresAt).toBe(101);
@@ -970,7 +970,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
     }),
   );
   const response = nextTerminal();
-  socket.send(JSON.stringify({ type: "message", text: "interrupt at the drain" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt at the drain" }));
   await response;
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
@@ -987,7 +987,7 @@ test("an interrupt after wave results drains before another provider step", asyn
     }),
   );
   const response = nextTerminal();
-  socket.send(JSON.stringify({ type: "message", text: "stop after A" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "stop after A" }));
   await response;
   expect(received).toHaveLength(1);
   expect(toolResults(activeRow().id)).toMatchObject([{ callId: "call-A", terminal: "executed" }]);

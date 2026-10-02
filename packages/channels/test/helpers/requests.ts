@@ -29,7 +29,7 @@ function fixedClock(clock: () => number): Clock.Clock {
 
 const entropyCounter = { value: 0 };
 const testEntropy = {
-  id: () => `entropy-${(entropyCounter.value += 1)}`,
+  id: () => { entropyCounter.value += 1; return `entropy-${entropyCounter.value}`; },
   random: () => 0,
 };
 

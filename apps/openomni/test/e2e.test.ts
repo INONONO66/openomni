@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { newTraceId } from "./helpers/bus";
 import { describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
 import { AssertionError } from "node:assert/strict";
@@ -187,7 +188,7 @@ describe("OpenOmni Resident WebSocket", () => {
       const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
       expect(ws.protocol).toBe("auth");
       const response = nextResidentTurn(plane);
-      ws.send(JSON.stringify({ type: "message", text: "967-U1 input" }));
+      ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "967-U1 input" }));
       const reply = await response;
       expect(reply).toMatchObject({ text: REPLY });
       expect(providerCalls).toBe(1);
@@ -280,7 +281,7 @@ describe("OpenOmni Resident WebSocket", () => {
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
     expect(ws.protocol).toBe("auth");
     const reply = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", text: "Help me judge this." }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "Help me judge this." }));
 
     expect(await reply).toMatchObject({ text: REPLY });
 
@@ -329,9 +330,9 @@ describe("OpenOmni Resident WebSocket", () => {
   });
 
   it("mounts a declared GitHub driver on the existing HTTP server", async () => {
-    const config = suite.config("declared-github-", { wsToken: WS_TOKEN });
-    suite.defer(declareChannel(statePath(config.catalogPath), "github", { secret: "github-webhook-secret" }));
-    const app = await bootWithConfig(config);
+    const declared = suite.config("declared-github-", { wsToken: WS_TOKEN });
+    const kek = declareChannel(statePath(declared.catalogPath), "github", { secret: "github-webhook-secret" });
+    const app = await bootWithConfig({ ...declared, kek });
 
     const response = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
       method: "POST",

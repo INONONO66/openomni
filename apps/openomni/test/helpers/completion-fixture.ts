@@ -1,4 +1,5 @@
-import { Bus, ObservationSink } from "@openomni/agent";
+import { ObservationSink } from "@openomni/agent";
+import { Bus } from "./bus";
 import { Llm, Provider, run } from "@openomni/llm";
 import { Effect } from "effect";
 import { createCompletionPort } from "../../src/composition/completion";

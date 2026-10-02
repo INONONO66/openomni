@@ -88,9 +88,9 @@ export function prepareTurnTools(state: RunState, config: ChatAgentConfig): Prep
     ? (call: Tool.Call, context?: Tool.ExecutionContext) =>
         Clock.currentTimeMillis.pipe(Effect.flatMap((startedAt) =>
           configuredExecutor(call, context).pipe(Effect.ensuring(
-            Clock.currentTimeMillis.pipe(Effect.map((endedAt) => {
+            Clock.currentTimeMillis.pipe(Effect.flatMap((endedAt) => Effect.sync(() => {
               state.budgetState = recordToolCall(state.budgetState, endedAt - startedAt);
-            })),
+            }))),
           )),
         ))
     : undefined;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { PROCESS_SESSION_NO_REQUEST_EXIT } from "../src/process-entry";
 import { startOpenOmni } from "../src/index";
 

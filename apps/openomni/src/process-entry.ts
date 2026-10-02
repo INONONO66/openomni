@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
 import {
-  Bus, BundleDefinitions, Clock, Entropy, GenerationLayers, ObservationSink,
+  BundleDefinitions, Entropy, GenerationLayers, ObservationSink,
   closeSessions,
   createSessionRequests,
   createSessionEntityRunTurn,
@@ -29,6 +29,7 @@ import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import { createCompletionPort } from "./composition/completion";
 import { configureAuthority } from "./composition/generation-layers";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
+import { captureNow } from "./composition/platform";
 import { createResident } from "./resident";
 import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
@@ -118,6 +119,9 @@ export function serveProcessSession(
   const generations = yield* GenerationLayers;
   const plane = yield* AppLedger;
   const scope = yield* AppScope;
+  const now = yield* captureNow;
+  const entropy = yield* Entropy;
+  const observations = yield* ObservationSink;
   const owner = `process:${process.pid}`;
   seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows);
   const runtime: SessionRuntime = {
@@ -127,7 +131,7 @@ export function serveProcessSession(
     onInboxCommitted: committed,
     dispatchOutbound: dispatchOutboundMessage(
       (...args) => gateway.ingest(...args),
-      Date.now,
+      now,
       plane.openKernel,
     ),
     authorizeConfigure: configureAuthority(generations, plane.openKernel),
@@ -143,6 +147,7 @@ export function serveProcessSession(
       apiKey: request.apiKey,
       ...(request.transport === undefined ? {} : { transport: request.transport }),
     },
+    { now, id: entropy.id },
   );
   const resident = createResident({
     bundles: bundles.names,
@@ -150,16 +155,18 @@ export function serveProcessSession(
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),
     sessionRuntime: runtime,
-    tools: toolPorts(appRuntime, { messages, completion: llm }),
+    tools: toolPorts(appRuntime, { messages, completion: llm, now, id: entropy.id }),
     policyGeneration: () =>
       plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
   });
   yield* generations.initialize(resident.definitions);
   const requests = yield* createSessionRequests(runtime);
-  const commitInbox = localInboxCommit(plane, owner, Date.now);
+  const commitInbox = localInboxCommit(plane, owner, now);
   const gateway = createGatewayRouter({
-    sink: Bus.publish,
-    stores: createChannelStores(channelStoreSource(plane)),
+    sink: observations.publish,
+    now,
+    id: entropy.id,
+    stores: createChannelStores(channelStoreSource(plane, now)),
     transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
     inbox: { commit: (input) => commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
     prepare: prepareMessage(plane, resident.materialize),
@@ -182,9 +189,9 @@ export function serveProcessSession(
   // adopt the fence once, then run admitted decisions until the chain says stop.
   const resolved: Parameters<typeof createSessionEntityRunTurn>[1] = {
     ...runtime,
-    clock: (yield* Clock).now,
-    entropy: (yield* Entropy).next,
-    observations: yield* ObservationSink,
+    clock: now,
+    entropy: entropy.id,
+    observations,
     generations,
     services: yield* Effect.context<SessionEntryServices>(),
   };

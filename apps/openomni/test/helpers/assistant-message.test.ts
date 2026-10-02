@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RunInput } from "@openomni/llm";
 import { assistantMessage } from "./assistant-message";
+import { testIds } from "./test-entropy";
 
 const input: RunInput = {
   messages: [],
@@ -8,6 +9,8 @@ const input: RunInput = {
   model: { id: "model-id", providerID: "provider-id", name: "Test model" },
   trace: { traceId: "trace-id", sessionId: "session-id", runId: "run-id" },
   events: { publish: () => undefined },
+  now: () => 0,
+  id: testIds("run"),
 };
 
 describe("assistantMessage", () => {

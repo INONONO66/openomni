@@ -7,7 +7,7 @@ export const fixedNow = (): number => FIXED_NOW;
 /** Deterministic unique-id stub for injected `id` sources (#1245). */
 export function sequentialIds(prefix = "fixed-id"): () => string {
   let counter = 0;
-  return () => `${prefix}-${(counter += 1)}`;
+  return () => { counter += 1; return `${prefix}-${counter}`; };
 }
 
 export const anthropicModel: Provider.Model = {

@@ -5,7 +5,7 @@ import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/prot
 import type { Executor } from "../executor";
 import { RunEvents } from "../core/execution/events";
 import { Compaction } from "./compact";
-import { Entropy } from "../core/entropy";
+import type { Entropy } from "../core/entropy";
 
 type CompactionArguments = Parameters<typeof Compaction.compact>;
 

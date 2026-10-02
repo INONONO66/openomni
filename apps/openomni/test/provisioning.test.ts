@@ -17,6 +17,7 @@ import {
 import { resolveKek, vaultKeyPath } from "../src/provisioning/vault-key";
 
 import { putChannelCredential } from "./helpers/channel-credential";
+import { testChannelDeps } from "./helpers/test-entropy";
 
 const NOW = 1_756_000_000_000;
 const KEY_B64 = Buffer.from(new Uint8Array(32).fill(7)).toString("base64");

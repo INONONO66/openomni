@@ -30,6 +30,8 @@ import {
   requestStateAction,
 } from "../../../packages/ledger/test/helpers/request";
 import { materializeSession } from "../../../packages/ledger/test/helpers/session";
+import { testClock } from "./helpers/test-entropy";
+import { Bus } from "./helpers/bus";
 
 /** A sink that refuses every post-commit publish. */
 const REFUSING_SINK: ObservationSink = {
@@ -56,8 +58,9 @@ async function provisionSession(
   sessionsDir: string,
   sessionId: string,
 ): Promise<void> {
-  const catalog = openCatalogStore(catalogPath);
-  const store = openSessionStore(sessionFilePath(sessionsDir, sessionId));
+  const now = testClock();
+  const catalog = openCatalogStore(catalogPath, { now });
+  const store = openSessionStore(sessionFilePath(sessionsDir, sessionId), { now });
   try {
     const kernel = SessionHandleStore.createSessionKernel(store, catalog);
     await runEffect(
@@ -118,7 +121,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
       }),
     timers: sessionTimerPort(),
   };
-  const runtime = gatewayRuntime({
+  const runtime = gatewayRuntime({ observations: Bus,
     catalogPath,
     sessionsDir,
     entityIdleMs: 60_000,
@@ -162,8 +165,8 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
         }),
       ),
     );
-    expect(first).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: false });
-    expect(replay).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: true });
+    expect(first).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: false, admission: "turn" });
+    expect(replay).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: true, admission: "turn" });
     expect(timer).toEqual({ outcome: "noop" });
     expect(deadline).toEqual({ outcome: "noop" });
     expect(fired).toEqual({ outcome: "noop" });
@@ -180,7 +183,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
 
 test("a post-commit publish failure reaches the injected port and leaves the write result intact", () => {
   const failures: ObservationPublishFailure[] = [];
-  const plane = createAppLedger({
+  const plane = createAppLedger({ now: testClock(),
     observationSink: REFUSING_SINK,
     onObservationFailure: (failure) => failures.push(failure),
   });
@@ -200,7 +203,7 @@ test("a post-commit publish failure reaches the injected port and leaves the wri
 
 test("without an injected port a publish failure on a file-mode handle is an incident log line", () => {
   const incident = spyOn(console, "error").mockImplementation((): void => undefined);
-  const plane = createAppLedger({
+  const plane = createAppLedger({ now: testClock(),
     sessionsDir: join(tempDir(), "sessions"),
     observationSink: REFUSING_SINK,
   });
@@ -219,7 +222,7 @@ test("without an injected port a publish failure on a file-mode handle is an inc
 });
 
 test("deadline delivery expires an open request through the activation fence", async () => {
-  const plane = createAppLedger();
+  const plane = createAppLedger({ now: testClock() });
   try {
     const kernel = plane.openKernel("request-session");
     const fixture = requestFixture(kernel);
@@ -246,7 +249,7 @@ test("deadline delivery expires an open request through the activation fence", a
 });
 
 test("late-bound entity ports refuse early use and forward after one binding", async () => {
-  const plane = createAppLedger();
+  const plane = createAppLedger({ now: testClock() });
   try {
     const kernel = plane.openKernel("request-session");
     const fixture = requestFixture(kernel);

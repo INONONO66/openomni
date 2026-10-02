@@ -2,7 +2,8 @@ import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
-import { Bus, newTraceId } from "@openomni/agent";
+import { newTraceId } from "./helpers/bus";
+import { Bus } from "./helpers/bus";
 import { Component } from "@openomni/protocol";
 import { observeComponent } from "../src/observation/component";
 import { createResident } from "../src/resident";
@@ -33,7 +34,7 @@ test("component failure observation preserves an unprintable rejection", async (
     runId: "run",
     componentId: "fixture",
     componentGeneration: 1,
-  });
+  }, Bus);
   try {
     const result = await runEffect(Effect.flip(component.run(Effect.fail(failure))));
     expect(result).toBe(failure);

@@ -27,7 +27,6 @@ import { CommitFailed } from "../src/errors";
 import { GenerationOwnership } from "../src/services";
 import { GenerationRawSlots } from "../src/session-generations";
 import { receivedMessages } from "../src/session-record";
-import { createObservationBus } from "../src/observation/bus";
 import type { SessionKernel } from "../src/cluster/kernel-registry";
 import { Bus } from "./helpers/bus";
 

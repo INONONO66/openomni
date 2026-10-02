@@ -16,6 +16,7 @@ import { effectScope } from "./helpers/effect-scope";
 import { drainSession, localInbox, resolvedRuntimeFor } from "./helpers/ledger";
 import { fakeProviderModel } from "./helpers/resident-suite";
 import { provisionPort } from "./helpers/provision-port";
+import { testIds } from "./helpers/test-entropy";
 
 type RunnerInput = Parameters<SessionRunner>[0];
 
@@ -42,6 +43,8 @@ for (const scenario of [
       },
     });
     const gateway = runSyncEffect(createResidentGateway({
+      now: Date.now,
+      id: testIds("authority-gateway"),
       inbox: { commit: (input) =>
         localInbox(resident.plane, "authority-gateway", Date.now)(input).pipe(
           Effect.mapError(decodeChannelFailure("inbox.commit")),

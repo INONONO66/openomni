@@ -254,7 +254,7 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
         case "stop":
           return { kind: "stop" as const };
         case "refused": {
-          const refusal = new SessionAdmissionRefused({ sessionId: authority.sessionId });
+          const refusal = new SessionAdmissionRefused(authority.sessionId);
           yield* Effect.logWarning(refusal.message);
           return { kind: "refused" as const, refusal };
         }

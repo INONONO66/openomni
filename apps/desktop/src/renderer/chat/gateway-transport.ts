@@ -346,7 +346,8 @@ export function createGatewayChatTransport(
       pending.push(turn);
       let sent = false;
       try {
-        live.send(JSON.stringify(replyToId === undefined ? { text } : { text, replyToId }));
+        const eventId = options.id();
+        live.send(JSON.stringify(replyToId === undefined ? { eventId, text } : { eventId, text, replyToId }));
         sent = true;
       } finally {
         if (!sent) closeSocket(live);

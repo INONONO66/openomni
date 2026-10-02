@@ -8,7 +8,7 @@ export * from "../../src/errors";
 
 function sequentialIds(prefix: string): () => string {
   let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
+  return () => { n += 1; return `${prefix}-${n}`; };
 }
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });

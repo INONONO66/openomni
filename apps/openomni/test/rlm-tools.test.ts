@@ -207,7 +207,7 @@ describe("the completion tool", () => {
     spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const run = mock(() => Effect.succeed({ type: "stop" as const }));
     expect(
-      await runEffect(Provider.resolveModel({ provider: "anthropic", id: "listed" })),
+      await runEffect(Provider.resolveModel({ provider: "anthropic", id: "listed", now: () => 0 })),
     ).toMatchObject({
       id: "listed",
       providerID: "anthropic",
@@ -222,7 +222,7 @@ describe("the completion tool", () => {
       ).rejects.toMatchObject({
         _tag: "AgentFailure",
         operation: "completion.resolve",
-        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ provider, id })))),
+        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ provider, id, now: () => 0 })))),
       });
     }
     expect(run).not.toHaveBeenCalled();

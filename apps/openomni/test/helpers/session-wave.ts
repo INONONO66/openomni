@@ -1,6 +1,7 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect, type Result } from "effect";
-import { Bus, defineTool, eraseTool } from "@openomni/agent";
+import { defineTool, eraseTool } from "@openomni/agent";
+import { Bus } from "./bus";
 import type { AppSessionHandle } from "../../src/index";
 import { LlmCall, type AnyToolDefinition, type LedgerAction } from "@openomni/protocol";
 import { SessionHandleStore, type AdoptReceipt, type LedgerError } from "@openomni/ledger";

@@ -32,7 +32,8 @@ export function transientProvider(
   return {
     resolveModel: (model) =>
       Effect.suspend(() => {
-        resolved.push(model);
+        // Record the model ref only: the resolve input also carries the injected clock (#1245).
+        resolved.push({ provider: model.provider, id: model.id });
         return fakeProviderModel(model);
       }),
     run: (input, sink) =>

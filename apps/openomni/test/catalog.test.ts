@@ -6,7 +6,7 @@ import type { LlmCall } from "../src/tools/completion";
 
 const ports: ToolPorts = {
   alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
-  llm: undefined, provisioning: undefined, clock: () => 0,
+  llm: undefined, provisioning: undefined, clock: () => 0, id: () => "tool-id",
 };
 const definitions = catalogDefinitions(ports);
 

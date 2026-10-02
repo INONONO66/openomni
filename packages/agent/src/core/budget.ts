@@ -62,7 +62,7 @@ export function effectiveMaxToolCalls(budget?: AgentBudget): number {
 }
 
 /** The tool wall-time ceiling the budget enforces (-1 = unlimited); shared with the wave-level enforcement in tool-wave.ts. */
-export function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
+function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
   return budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
 }
 

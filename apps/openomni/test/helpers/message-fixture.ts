@@ -2,7 +2,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  Bus,
   createDispatcher,
   createExecutor,
   createSessionRequests,
@@ -10,6 +9,7 @@ import {
   session,
   type SessionRuntime,
 } from "@openomni/agent";
+import { Bus } from "./bus";
 import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
 import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
@@ -40,7 +40,7 @@ export function messageFixture(
   const directory = mkdtempSync(join(tmpdir(), "message-policy-"));
   const catalogPath = join(directory, "catalog.sqlite");
   const sessionsDir = join(directory, "sessions");
-  const plane = createAppLedger({ catalogPath, sessionsDir, observationSink: Bus });
+  const plane = createAppLedger({ now: () => 100, catalogPath, sessionsDir, observationSink: Bus });
   seedKernelPolicyRows(plane.catalog.policies);
   const sessionId = "sender";
   const runtime: SessionRuntime = {
@@ -56,7 +56,8 @@ export function messageFixture(
   const context = acquireSyncEffect(generationServices({ clock: () => 100, plane }));
   const requests = runSyncEffect(createSessionRequests(runtime).pipe(Effect.provide(context)));
   const gateway = runSyncEffect(createResidentGateway({
-    clock: () => 100,
+    now: () => 100,
+    id: testIds("message-fixture"),
     requests: channelRequests(requests),
     inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>

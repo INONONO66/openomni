@@ -8,12 +8,8 @@ import { encode, LineDecoder } from "../src/framing";
 import { createIpcServer } from "../src/server";
 import { acquire, run } from "./helpers/effects";
 import { captureError, deferred, within } from "./helpers/signal";
+import { sequentialIds } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
-
-function sequentialIds(prefix: string): () => string {
-  let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
-}
 
 async function rawServer() {
   const accepted = deferred<net.Socket>();

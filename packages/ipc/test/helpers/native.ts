@@ -9,7 +9,7 @@ export { classifyIpcMessage } from "../../src/peer-request-table";
 
 export function sequentialIds(prefix: string): IdSource {
   let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
+  return () => { n += 1; return `${prefix}-${n}`; };
 }
 type Handler = (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void, notify: (method: string, params?: Ipc.Notification["params"]) => void, connectionId: string) => void | Promise<void>;
 function handlerEffect(body: () => void | Promise<void>) {

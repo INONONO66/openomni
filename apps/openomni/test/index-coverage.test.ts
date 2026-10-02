@@ -2,10 +2,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import {
-  Bus,
-  type ExecutionApprovalRequest,
+import type {
+  ExecutionApprovalRequest,
 } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 import { CommitRefused } from "@openomni/ledger";
 import { L0Observation } from "@openomni/protocol";
@@ -43,7 +43,7 @@ test.each(["revision", "fence"] as const)(
     });
     const plane = await planeOf(app.runtime);
     const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "interrupt-token"]);
-    socket.send(JSON.stringify({ type: "message", text: "interrupt this turn" }));
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "interrupt this turn" }));
     const sessionId = await bounded(entered.promise);
     const handle = app.sessions.get(sessionId);
     if (handle === undefined) throw new Error("live turn missing");
@@ -135,7 +135,7 @@ test("live approval readiness notifies the facade and arms its deadline", async 
   ]);
   const response = nextResidentTurn(plane, 5000);
 
-  socket.send(JSON.stringify({ type: "message", text: "request approval" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "request approval" }));
 
   const sessionId = await bounded(modelEntered.promise);
   expect(running.sessions.get(sessionId)).toBeDefined();
@@ -221,7 +221,7 @@ test("a path watch timeout reaches the session entity", async () => {
     "index-watch-token",
   ]);
 
-  socket.send(JSON.stringify({ type: "message", text: "create timeout watch" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "create timeout watch" }));
 
   await bounded(fired.promise);
   expect(calls).toBeGreaterThanOrEqual(1);
@@ -306,7 +306,7 @@ test("a deadline-bearing external send opens and arms its live request", async (
   const deadlineFailure = spyOn(console, "error").mockImplementation(() => undefined);
   suite.defer(() => deadlineFailure.mockRestore());
 
-  owner.send(JSON.stringify({ text: "send with deadline" }));
+  owner.send(JSON.stringify({ eventId: newTraceId(), text: "send with deadline" }));
 
   await bounded(sendEntered.promise);
   if (config.catalogPath === undefined) throw new Error("missing test catalog");

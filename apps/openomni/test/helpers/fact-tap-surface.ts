@@ -5,7 +5,8 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Bus, defineTool, eraseTool } from "@openomni/agent";
+import { defineTool, eraseTool } from "@openomni/agent";
+import { Bus, newTraceId } from "./bus";
 import { run, type Provider } from "@openomni/llm";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
@@ -155,7 +156,7 @@ try {
   const plane = await planeOf(app.runtime);
   ws = await openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fixture-token"]);
   const terminal = nextResidentTurn(plane, 5000);
-  ws.send(JSON.stringify({ type: "message", text: "967 input" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "967 input" }));
   const reply = await terminal;
 
   // Then: the committed turn retains the provider reply without external dispatch.

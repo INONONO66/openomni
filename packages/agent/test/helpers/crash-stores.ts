@@ -1,5 +1,4 @@
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
-import type { createObservationBus } from "../../src/observation/bus";
 import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 

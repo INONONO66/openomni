@@ -6,7 +6,8 @@ import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";
 import type { FixtureLlm } from "./app-fixture";
 import { afterEach } from "bun:test";
-import { Bus, closeSessions, type SessionRuntime } from "@openomni/agent";
+import { closeSessions, type SessionRuntime } from "@openomni/agent";
+import { Bus } from "./bus";
 import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
 import { runEffect, runSyncEffect } from "./effect";
@@ -85,7 +86,9 @@ export function residentRunner(
         sessionId,
         kind: "prompt",
         content,
-        origin: { encodingVersion: 1, value: { kind: "test" } },
+        // Owner prompts enter with the perimeter's recorded full-access treatment (#1245:
+        // unknown provenance is evidence-only, so a fixture prompt must declare its authority).
+        origin: { encodingVersion: 1, value: { kind: "external", inboundTreatment: "full_access" } },
         createdAt: (fixture?.clock ?? Date.now)(),
         parentActionId: null,
         ...(exists

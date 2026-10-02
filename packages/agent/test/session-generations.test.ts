@@ -5,7 +5,6 @@ import { KERNEL_POLICY_REGISTRY } from "@openomni/policy";
 import { Effect, Fiber, Layer } from "effect";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { AgentGenerationLive } from "./helpers/generation-layer";
-import { createObservationBus } from "../src/observation/bus";
 import { ObservationSink } from "../src/services";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session-generations";
 import { allowAllPolicy } from "./helpers/compiled-policy";

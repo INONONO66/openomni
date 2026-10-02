@@ -15,7 +15,7 @@ describe("process entropy", () => {
 
   it("AgentProcessLive threads the composition root's entropy, no ambient fallback", () => {
     let n = 0;
-    const source = { id: () => `root-${(n += 1)}`, random: () => 0.5 };
+    const source = { id: () => { n += 1; return `root-${n}`; }, random: () => 0.5 };
     const entropy = runAgentSync(Entropy.pipe(Effect.provide(AgentProcessLive(testBus(), source))));
     expect(entropy.id()).toBe("root-1");
     expect(entropy.id()).toBe("root-2");

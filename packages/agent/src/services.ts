@@ -6,7 +6,7 @@ import type {
   SessionGeneration,
 } from "@openomni/protocol";
 import { Context, type Effect, type Scope } from "effect";
-import { Entropy } from "./core/entropy";
+import type { Entropy } from "./core/entropy";
 import type { SessionError } from "./errors";
 import type { NamedPolicyRegistry } from "./bundle";
 import type { GenerationRawSlots } from "./session-generations";

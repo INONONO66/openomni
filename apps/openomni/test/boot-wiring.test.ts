@@ -23,6 +23,7 @@ import { planeOf } from "./helpers/ledger";
 import { planeFixture } from "./helpers/plane-fixture";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
+import { Bus, newTraceId } from "./helpers/bus";
 
 const suite = residentSuite();
 
@@ -49,7 +50,7 @@ describe("boot tool catalog", () => {
       "boot-catalog-token",
     ]);
     const reply = nextResidentTurn(await planeOf(app.runtime));
-    ws.send(JSON.stringify({ type: "message", text: "catalog" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "catalog" }));
 
     expect(await reply).toMatchObject({ text: "ready" });
     expect(await toolNames).not.toContain("work_items");
@@ -317,7 +318,7 @@ describe("channel supervisor", () => {
       rows: [row(channel, "0:0", "channel:telegram:main")],
       statuses: [],
     }));
-    const runtime = gatewayRuntime({});
+    const runtime = gatewayRuntime({ observations: Bus });
     await runAppBoot(
       runtime,
       bootResource(Effect.succeed(supervisor), (resource) =>

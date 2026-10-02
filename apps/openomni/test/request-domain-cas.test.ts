@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { Tool } from "@openomni/protocol";

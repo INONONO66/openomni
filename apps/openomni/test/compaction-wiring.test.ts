@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { LlmLive } from "@openomni/llm";
-import { Bus, ObservationSink } from "@openomni/agent";
+import { ObservationSink } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { RunInput, Sink } from "@openomni/llm";
@@ -87,12 +88,12 @@ describe("compaction composition configuration", () => {
     ]);
     for (let index = 0; index < 6; index += 1) {
       const reply = nextResidentTurn(plane);
-      ws.send(JSON.stringify({ type: "message", text: `seed ${index} ${"filler ".repeat(30)}` }));
+      ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: `seed ${index} ${"filler ".repeat(30)}` }));
       await reply;
     }
     constrained = true;
     const reply = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", text: "compact now" }));
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "compact now" }));
     await reply;
 
     expect(messageCounts).toHaveLength(2);

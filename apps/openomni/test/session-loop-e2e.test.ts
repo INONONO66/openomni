@@ -1,4 +1,5 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -70,7 +71,7 @@ test("real app SSE compaction commits reversible evidence through the session ex
   // When: enough completed turns cross the actual compaction threshold.
   for (let index = 0; index < 4; index += 1) {
     const received = nextResidentTurn(plane, 5000);
-    socket.send(JSON.stringify({ type: "message", text: `input-${index}` }));
+    socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: `input-${index}` }));
     expect((await received).text).toBe("retained evidence ".repeat(160).trimEnd());
   }
   // Then: the real durable action has content-addressed original evidence.

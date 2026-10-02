@@ -9,6 +9,7 @@ import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";
 import { PROVISION_POLICY_ROWS } from "../src/tools/provision";
+import { testClock } from "./helpers/test-entropy";
 
 const identity = (row: Omit<PolicyRow.Row, "generation">) =>
   JSON.stringify([row.name, row.kind, row.phase]);
@@ -27,7 +28,7 @@ function withDatabase(run: (open: () => CatalogStore, path: string) => void): vo
   const path = join(directory, "catalog.sqlite");
   const opened: CatalogStore[] = [];
   const open = () => {
-    const catalog = openCatalogStore(path);
+    const catalog = openCatalogStore(path, { now: testClock() });
     opened.push(catalog);
     return catalog;
   };

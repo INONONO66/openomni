@@ -15,7 +15,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openCatalogStore, openSessionStore, SessionHandleStore } from "@openomni/ledger";
 import type { SessionKernel } from "../src/cluster/kernel-registry";
-import { createObservationBus } from "../src/observation/bus";
 import { receivedMessages } from "../src/session-record";
 import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { createExecutor } from "../src/index";

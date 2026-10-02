@@ -53,14 +53,14 @@ export function inboundAuthority(origin: PlainValue | undefined): InboundAuthori
   if (ExternalOrigin.safeParse(origin).success) {
     if (FullAccessOrigin.safeParse(origin).success) return { authority: "act" };
     if (EvidenceOnlyOrigin.safeParse(origin).success) return { authority: "evidence_only" };
-    return { authority: "evidence_only", violation: new InboundAuthorityViolation({ reason: "undeclared_treatment" }) };
+    return { authority: "evidence_only", violation: new InboundAuthorityViolation("undeclared_treatment") };
   }
-  return { authority: "evidence_only", violation: new InboundAuthorityViolation({ reason: "unknown_origin" }) };
+  return { authority: "evidence_only", violation: new InboundAuthorityViolation("unknown_origin") };
 }
 
 /** The turn's result when the runner never produced one: a typed missing-output failure, not a policy refusal. */
 export function runnerOutputMissingResult(turnId: string): SessionRunnerResult {
-  const cause = new RunnerOutputMissing({ turnId });
+  const cause = new RunnerOutputMissing(turnId);
   return { kind: "error", text: cause.message, cause };
 }
 

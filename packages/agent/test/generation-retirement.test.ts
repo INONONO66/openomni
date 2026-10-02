@@ -8,7 +8,6 @@ import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { makeSessionGenerations, GenerationRawSlots } from "../src/session-generations";
 import { SessionLayer, ToolCatalog, ObservationSink } from "../src/services";
 import { NamedPolicyRegistry } from "../src/bundle";
-import { createObservationBus } from "../src/observation/bus";
 
 function generation(number: number, close: () => void) {
   const snapshot = SessionHandleStore.generationSnapshot({ generation: number, revertTo: number - 1,

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { z } from "zod";
-import { Bus } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import { L0Observation } from "@openomni/protocol";
 import { readSessionCursor } from "../src/gateway";
 import { planeOf } from "./helpers/ledger";
@@ -37,7 +37,7 @@ test("a reconnect replays only committed revisions beyond its cursor", async () 
   suite.defer(unsubscribe);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "cursor-token"]);
   const terminal = nextResidentTurn(plane);
-  socket.send(JSON.stringify({ type: "message", text: "first" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "first" }));
   const sessionId = await bounded(committed.promise);
   const kernel = plane.openKernel(sessionId);
   const first = readSessionCursor(kernel, { type: "session_read", sessionId, limit: 4 });
@@ -105,7 +105,7 @@ test("a registered reader receives authoritative commits after its captured head
   const accepted = nextFrame(socket, (frame) => frame.type === "receipt");
   const boundFrame = nextFrame(socket, (frame) => frame.type === "session_bound");
   const firstTerminal = nextResidentTurn(plane);
-  socket.send(JSON.stringify({ type: "message", text: "first" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "first" }));
   // Frozen frame: the accepted receipt is exactly its base two keys …
   expect(await accepted).toEqual({ type: "receipt", status: "accepted" });
   // … and the durable binding follows on the same socket as session_bound.
@@ -129,7 +129,7 @@ test("a registered reader receives authoritative commits after its captured head
     typeof frame.headRevision === "number" &&
     frame.headRevision > headRevision);
   const secondTerminal = nextResidentTurn(plane);
-  socket.send(JSON.stringify({ type: "message", text: "second" }));
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "second" }));
   const next = await advanced;
   await secondTerminal;
   expect(next.afterRevision).toBe(headRevision);

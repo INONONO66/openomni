@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./helpers/bus";
 import { describe, expect, test } from "bun:test";
 import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
 import type { RunInput } from "@openomni/llm";
@@ -21,6 +21,7 @@ import { prepareMessage } from "../src/composition/message-session";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { messageFixture } from "./helpers/message-fixture";
 import { rmSync } from "node:fs";
+import { testIds } from "./helpers/test-entropy";
 
 type ResidentRun = NonNullable<NonNullable<Parameters<typeof residentRunner>[0]["llm"]>["run"]>;
 function testResident(run: ResidentRun) {
@@ -34,6 +35,8 @@ function testResident(run: ResidentRun) {
     },
   });
   const gateway = runSyncEffect(createResidentGateway({
+    now: Date.now,
+    id: testIds("gateway-contract"),
     inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(resident.plane, resident.materialize),
   }).pipe(Effect.provide(resident.services)));
@@ -104,7 +107,7 @@ describe("channel grant registration", () => {
     const resident = testResident(() => Effect.sync(() => {
       throw new Error("model must not run");
     }));
-    const residentStores = createChannelStores(channelStoreSource(resident.plane));
+    const residentStores = createChannelStores(channelStoreSource(resident.plane, Date.now));
     const namedSurfaces = ["discord", "github", "slack", "telegram"] as const;
     const revokers = namedSurfaces.map((surface) =>
       registerTrustedChannelGrant(resident.plane.stores.channelGrants, { surface, defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER }),

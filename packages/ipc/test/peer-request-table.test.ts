@@ -10,7 +10,7 @@ type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
 /** Deterministic injected id entropy (#1245): no table is constructed without one. */
 function sequentialIds(prefix: string): () => string {
   let n = 0;
-  return () => `${prefix}-${(n += 1)}`;
+  return () => { n += 1; return `${prefix}-${n}`; };
 }
 
 function requestFrom(frames: Frame[], index = 0): Ipc.Request {

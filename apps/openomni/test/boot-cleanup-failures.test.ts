@@ -4,9 +4,10 @@ import { bootResource } from "../src/composition/boot";
 import { gatewayRuntime, runAppBoot } from "../src/gateway";
 import { startOpenOmni } from "../src/index";
 import { AppLifecycleFailure } from "../src/runtime";
+import { Bus } from "./helpers/bus";
 
 test("boot retains both the acquisition failure and the failing cleanup", async () => {
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const acquire = new AppLifecycleFailure({ operation: "fixture.acquire", cause: "refused" });
   const release = new AppLifecycleFailure({ operation: "fixture.release", cause: "refused" });
   const incident = spyOn(console, "error").mockImplementation((): void => undefined);
@@ -29,7 +30,7 @@ test("server bind failure preserves its cleanup failure and closes storage", asy
   const occupied = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("occupied") });
   const port = occupied.port;
   if (port === undefined) throw new Error("fixture server did not bind a port");
-  const runtime = gatewayRuntime({});
+  const runtime = gatewayRuntime({ observations: Bus });
   const release = new AppLifecycleFailure({ operation: "fixture.release", cause: "refused" });
   await runAppBoot(runtime, bootResource(Effect.void, () => Effect.fail(release)));
   try {

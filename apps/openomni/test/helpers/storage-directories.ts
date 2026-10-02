@@ -1,6 +1,6 @@
 import { afterEach } from "bun:test";
 import { rmSync } from "node:fs";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./bus";
 
 /** Owns teardown for file-backed storage fixtures registered by the calling suite. */
 export function storageDirectories(resetBus = false): string[] {

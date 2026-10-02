@@ -7,12 +7,13 @@ import { AppScope } from "../../src/runtime";
 import { seedKernelPolicyRows } from "../../src/policy-seed";
 import { auditBundle } from "./bundle-fixture";
 import { allowConfigure } from "./generation-services";
+import { Bus } from "./bus";
 
 const [catalogPath, sessionsDir, auditPath] = z
   .tuple([z.string(), z.string(), z.string()])
   .parse(process.argv.slice(2));
 const audit = auditBundle(auditPath);
-const runtime = gatewayRuntime({ catalogPath, sessionsDir, bundles: BundlesLive([audit.definition]) });
+const runtime = gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, bundles: BundlesLive([audit.definition]) });
 // IPC is subscribed before announcing the commit barrier, so the child remains
 // alive until the parent delivers SIGKILL, not until a scheduling delay expires.
 process.on("message", () => { throw new Error("unexpected parent command"); });

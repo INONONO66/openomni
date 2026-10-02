@@ -5,7 +5,7 @@ import { RunEvents } from "../core/execution/events";
 import type { CompactionYield } from "./geometry";
 import type { CompactionCandidate } from "./speculate";
 import type { ResolvedCompactionOptions, CompactionResult } from "./contract";
-import { Entropy } from "../core/entropy";
+import type { Entropy } from "../core/entropy";
 import {
   resolveThresholdTokens,
   estimateMessagesTokens,

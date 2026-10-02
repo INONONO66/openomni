@@ -19,8 +19,8 @@ describe("run budget terminal facts", () => {
         const events = collector();
         let modelCalls = 0;
         let executions = 0;
-        const entered = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
-        const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+        const entered = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
+        const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()] as const;
         const toolExecutor = (call: Tool.Call) =>
           Effect.gen(function* () {
             executions += 1;
@@ -38,12 +38,12 @@ describe("run budget terminal facts", () => {
             };
           });
         const control = Effect.gen(function* () {
-          yield* Effect.promise(() => entered[0]!.promise);
+          yield* Effect.promise(() => entered[0].promise);
           yield* TestClock.adjust(4);
-          gates[0]!.resolve();
-          yield* Effect.promise(() => entered[1]!.promise);
+          gates[0].resolve();
+          yield* Effect.promise(() => entered[1].promise);
           yield* TestClock.adjust(6);
-          gates[1]!.resolve();
+          gates[1].resolve();
         });
         const agent = failure(
           runTestAgent(runInput([{ role: "user", content: "hi" }]), {

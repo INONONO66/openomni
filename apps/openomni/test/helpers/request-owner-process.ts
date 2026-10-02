@@ -1,7 +1,7 @@
 import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
 import { Effect } from "effect";
 import { Database } from "bun:sqlite";
-import { Bus } from "@openomni/agent";
+import { Bus } from "./bus";
 import { L0Observation, type PlainValue, type Tool } from "@openomni/protocol";
 import { z } from "zod";
 import { appFixture } from "./app-fixture";

@@ -5,7 +5,8 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { interpreterWitness } from "./helpers/interpreter-witness";
-import { Bus, currentInvocation, type InvocationFrame } from "@openomni/agent";
+import { currentInvocation, type InvocationFrame } from "@openomni/agent";
+import { Bus, newTraceId } from "./helpers/bus";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
 import type { RunInput, Sink } from "@openomni/llm";
@@ -144,7 +145,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   suite.defer(() => runEffect(daemon.close()));
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
   const reply = nextResidentTurn(plane, 15_000);
-  ws.send(JSON.stringify({ type: "message", text: "exercise machine" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "exercise machine" }));
   const answer = String((await reply).text);
   expect(answer).toContain("[0, 255, 128, 65]");
   expect(answer).toContain("b'shell'");
@@ -219,7 +220,7 @@ test("a cell creates three child sessions through send_message", async () => {
     WS_TOKEN,
   ]);
   const reply = nextResidentTurn(planeRef.current, 30_000);
-  ws.send(JSON.stringify({ type: "message", text: "check everything" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "check everything" }));
 
   const answer = String((await reply).text);
 
@@ -288,7 +289,7 @@ test("the catalog remains available while machine execution refuses without atta
     WS_TOKEN,
   ]);
   const reply = nextResidentTurn(await planeOf(app.runtime), 15_000);
-  ws.send(JSON.stringify({ type: "message", text: "run something" }));
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "run something" }));
 
   const answer = String((await reply).text);
 
