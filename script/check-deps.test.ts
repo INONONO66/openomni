@@ -611,7 +611,7 @@ test("#1247 bands: external bans catch exact and prefixed specifiers, legal exte
 });
 
 test("#1247 S8 pin: the real agent index passes, a grown name fails", async () => {
-  const real = await Bun.file("packages/agent/src/index.ts").text();
+  const real = await Bun.file(join(import.meta.dir, "..", "packages/agent/src/index.ts")).text();
   expect(agentIndexPerimeterViolations(real)).toEqual([]);
 
   const grown = `${real}\nexport { somethingNew } from "./kernel/turn";\n`;

@@ -131,8 +131,12 @@ passing metadata checks beside sibling `mergeAll` inputs. An observer may have
 **Generation LayerMap.** `SessionGeneration.Id` is `{sessionId, generation}`
 (`packages/protocol/src/ledger/l0.ts`). The app's
 `apps/openomni/src/composition/generation-layers.ts` owns a session-keyed map of
-retained managers; `GenerationRawSlots` in `packages/agent/src/kernel/gate/decide.ts` owns each
-manager's numeric entries and acquired contexts. This is one live owner, not
+retained managers; `makeSessionGenerations` in
+`packages/agent/src/session/run.ts` owns each manager's numeric entries,
+acquired contexts, capture/configure, retirement and close (the
+`GenerationRawSlots` Context service in
+`packages/agent/src/kernel/gate/decide.ts` carries only the raw
+open/pending/await-settled slots). This is one live owner, not
 an unused Layer cache plus controller rebuilds. Boot initializes immutable
 role definitions once before ingress/recovery; bundle definitions alone live
 in process scope, while selected bundle resources build in generation scopes.

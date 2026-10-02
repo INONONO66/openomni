@@ -466,8 +466,9 @@ storage acquisition/release.
 `apps/openomni/src/composition/generation-layers.ts` constructs the selected
 catalog, scoped local observations, named registry and compiled policy; its
 session-keyed managers use `packages/agent/src/session-generations.ts`
-(since #1247 `packages/agent/src/kernel/gate/decide.ts`, re-exported
-through `packages/agent/src/session/run.ts`) for
+(since #1247 `makeSessionGenerations` in
+`packages/agent/src/session/run.ts`; the `GenerationRawSlots` raw-slot
+service lives in `packages/agent/src/kernel/gate/decide.ts`) for
 capture/configure and retirement. Boot initializes immutable role definitions
 before recovery. Installed bundle names are passed to new sessions, and bundle
 rows enter existing policy seeding (`apps/openomni/src/index.ts`,
