@@ -72,9 +72,9 @@ authority explicit. A bundle has exactly four extension points:
 
 | Extension point | Contract | Source |
 | --- | --- | --- |
-| Tool catalog and system configuration | `ToolCatalog` supplies definitions; recorded `session.configure` operations `tools.add`, `tools.remove` and `system.blocks.set` select the next generation, never replace an in-flight catalog. | `packages/agent/src/services.ts`, `packages/agent/src/session-configuration.ts` |
-| Policy rows | Data-only pre/post verdicts are `allow`, `deny`, `require_approval`, `transform` or `obligation`. Named implementations come from the captured bundle Layer, not a callback-registration API. | `packages/policy/src/row-compiler.ts`, `packages/agent/src/bundle.ts` |
-| Observation subscriptions | `ObservationSink.subscribe` observes committed execution; it never decides admission or writes durable truth. Subscriptions belong to their Scope. | `packages/agent/src/observation/bus.ts`, `apps/openomni/src/composition/generation-layers.ts` |
+| Tool catalog and system configuration | `ToolCatalog` supplies definitions; recorded `session.configure` operations `tools.add`, `tools.remove` and `system.blocks.set` select the next generation, never replace an in-flight catalog. | `packages/agent/src/kernel/ports.ts`, `packages/agent/src/session/run.ts` |
+| Policy rows | Data-only pre/post verdicts are `allow`, `deny`, `require_approval`, `transform` or `obligation`. Named implementations come from the captured bundle Layer, not a callback-registration API. | `packages/agent/src/kernel/gate/compile.ts`, `packages/agent/src/kernel/bundle.ts` |
+| Observation subscriptions | `ObservationSink.subscribe` observes committed execution; it never decides admission or writes durable truth. Subscriptions belong to their Scope. | `packages/agent/src/session/bus.ts`, `apps/openomni/src/composition/generation-layers.ts` |
 | Entity mailbox messages | A bundle addresses a session through `send_message` / gateway ingestion and entity-owned mailbox admission at a step boundary, not an injected executor or direct ledger writer. | `apps/openomni/src/tools/send-message.ts`, `apps/openomni/src/gateway.ts`, `packages/agent/src/session/entity.ts` |
 
 Anything else requires a kernel change. No arbitrary code-callback registration,
@@ -86,7 +86,7 @@ subscribers and ordinary Effect callbacks are not banned by this rule.
 `yield*` at acquisition and retain the selected services; parallel plain-option
 service APIs are not the floor. The executor consumes `Clock`, `Entropy`,
 `ObservationSink` and `SessionLayer`; the dispatcher consumes `ToolCatalog`
-(`packages/agent/src/executor.ts`, `packages/agent/src/tool-dispatcher.ts`).
+(`packages/agent/src/kernel/gate/decide.ts`, `packages/agent/src/kernel/tool.ts`).
 LLM work consumes `Llm` (`packages/agent/src/kernel/turn.ts`); app
 write consumers receive ledger handles explicitly from the composition plane
 (`apps/openomni/src/composition/cluster-runtime.ts`).
@@ -110,7 +110,7 @@ kind is categorically unloadable; a process-scoped service simply has no
 session generation in which to be replaced. There is no second mount/unmount
 lifecycle owner.
 
-**Definition and composition.** `packages/agent/src/bundle.ts` owns
+**Definition and composition.** `packages/agent/src/kernel/bundle.ts` owns
 `bundle({ name, requires, provides, layer, tools?, rows?, events? })` and
 `compose(seed, bundles)`. Infer a Layer value first, then pass it to `bundle`;
 its genuine Tag tuples must exactly match the Layer inputs and outputs.
@@ -131,7 +131,7 @@ passing metadata checks beside sibling `mergeAll` inputs. An observer may have
 **Generation LayerMap.** `SessionGeneration.Id` is `{sessionId, generation}`
 (`packages/protocol/src/ledger/l0.ts`). The app's
 `apps/openomni/src/composition/generation-layers.ts` owns a session-keyed map of
-retained managers; `packages/agent/src/session-generations.ts` owns each
+retained managers; `GenerationRawSlots` in `packages/agent/src/kernel/gate/decide.ts` owns each
 manager's numeric entries and acquired contexts. This is one live owner, not
 an unused Layer cache plus controller rebuilds. Boot initializes immutable
 role definitions once before ingress/recovery; bundle definitions alone live
@@ -144,7 +144,7 @@ them. Bundle rows enter the existing durable policy generation before capture,
 not an unrecorded compiler overlay. Installing definitions affects new sessions;
 tools still require recorded catalog selection. W0.5 adds no membership setter
 or unmount operation (`apps/openomni/src/index.ts`,
-`apps/openomni/src/policy-seed.ts`, `packages/agent/src/session-configuration.ts`).
+`apps/openomni/src/policy-seed.ts`, `createSessionConfiguration` in `packages/agent/src/session/run.ts`).
 
 Capture pins one context, policy, catalog, named registry and local observation
 bus. Same-session acquisition/configure is serialized; the same Id cannot

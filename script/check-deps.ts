@@ -902,49 +902,88 @@ const AGENT_INDEX_PINNED_NAMED_EXPORTS: ReadonlySet<string> = new Set([
 
 const AGENT_INDEX_PATH = "packages/agent/src/index.ts";
 
-export function agentIndexPerimeterViolations(source: string): string[] {
-  const violations: string[] = [];
-  const namespaces = new Set<string>();
-  const named: string[] = [];
-  for (const match of source.matchAll(/^export\s[^;]*;/gms)) {
-    const statement = match[0];
-    const line = lineNumberForOffset(source, match.index);
-    const namespaceMatch = statement.match(/^export \* as (\w+) from/);
-    if (namespaceMatch?.[1]) {
-      namespaces.add(namespaceMatch[1]);
-      continue;
-    }
-    const namedMatch = statement.match(/^export (?:type )?\{([^}]*)\} from/s);
-    if (!namedMatch?.[1]) {
-      violations.push(
-        `VIOLATION: ${AGENT_INDEX_PATH}:${line} uses an export form outside the #1247 surface (seven namespaces + pinned S8 names only)`,
+type PerimeterScan = {
+  readonly violations: string[];
+  readonly namespaces: Set<string>;
+  readonly named: string[];
+};
+
+function perimeterLine(sourceFile: ts.SourceFile, node: ts.Node): number {
+  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+}
+
+function perimeterFormViolation(sourceFile: ts.SourceFile, node: ts.Node): string {
+  return `VIOLATION: ${AGENT_INDEX_PATH}:${perimeterLine(sourceFile, node)} uses an export form outside the #1247 surface (seven namespaces + pinned S8 names only)`;
+}
+
+function scanNamedExports(sourceFile: ts.SourceFile, clause: ts.NamedExports, scan: PerimeterScan): void {
+  for (const specifier of clause.elements) {
+    // `specifier.name` is the EXPORTED name (the one after `as`);
+    // `propertyName` is the local source name when aliased.
+    const exported = specifier.name.text;
+    scan.named.push(exported);
+    if (!AGENT_INDEX_PINNED_NAMED_EXPORTS.has(exported)) {
+      scan.violations.push(
+        `VIOLATION: ${AGENT_INDEX_PATH}:${perimeterLine(sourceFile, specifier)} exports ${exported} outside the pinned #1248 S8 perimeter — shrink only, never grow`,
       );
-      continue;
-    }
-    for (const entry of namedMatch[1].split(",")) {
-      const name = entry.trim().replace(/^type /, "").split(/\s+as\s+/)[0]?.trim();
-      if (name === undefined || name.length === 0) continue;
-      named.push(name);
-      if (!AGENT_INDEX_PINNED_NAMED_EXPORTS.has(name)) {
-        violations.push(
-          `VIOLATION: ${AGENT_INDEX_PATH}:${line} exports ${name} outside the pinned #1248 S8 perimeter — shrink only, never grow`,
-        );
-      }
     }
   }
-  for (const name of namespaces) {
+}
+
+function scanExportDeclaration(
+  sourceFile: ts.SourceFile,
+  declaration: ts.ExportDeclaration,
+  scan: PerimeterScan,
+): void {
+  const clause = declaration.exportClause;
+  if (clause !== undefined && ts.isNamespaceExport(clause)) {
+    scan.namespaces.add(clause.name.text);
+    return;
+  }
+  if (clause !== undefined && ts.isNamedExports(clause)) {
+    scanNamedExports(sourceFile, clause, scan);
+    return;
+  }
+  // `export * from "..."` without `as`, or any other clause shape.
+  scan.violations.push(perimeterFormViolation(sourceFile, declaration));
+}
+
+function scanIndexStatement(sourceFile: ts.SourceFile, statement: ts.Statement, scan: PerimeterScan): void {
+  if (ts.isExportDeclaration(statement)) {
+    scanExportDeclaration(sourceFile, statement, scan);
+    return;
+  }
+  if (ts.isExportAssignment(statement)) {
+    // `export default ...` / `export = ...`
+    scan.violations.push(perimeterFormViolation(sourceFile, statement));
+    return;
+  }
+  const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
+  if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+    // `export const/function/class/type/interface ...` declarations.
+    scan.violations.push(perimeterFormViolation(sourceFile, statement));
+  }
+}
+
+export function agentIndexPerimeterViolations(source: string): string[] {
+  const scan: PerimeterScan = { violations: [], namespaces: new Set(), named: [] };
+  const sourceFile = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
+  for (const statement of sourceFile.statements) {
+    scanIndexStatement(sourceFile, statement, scan);
+  }
+  for (const name of scan.namespaces) {
     if (!AGENT_INDEX_NAMESPACES.has(name)) {
-      violations.push(
+      scan.violations.push(
         `VIOLATION: ${AGENT_INDEX_PATH} exports namespace ${name} outside the seven #1247 namespaces`,
       );
     }
   }
-  if (named.length > AGENT_INDEX_PINNED_NAMED_EXPORTS.size) {
-    violations.push(
-      `VIOLATION: ${AGENT_INDEX_PATH} has ${named.length} named exports over the pinned ${AGENT_INDEX_PINNED_NAMED_EXPORTS.size} — shrink only, never grow`,
+  if (scan.named.length > AGENT_INDEX_PINNED_NAMED_EXPORTS.size) {
+    scan.violations.push(
+      `VIOLATION: ${AGENT_INDEX_PATH} has ${scan.named.length} named exports over the pinned ${AGENT_INDEX_PINNED_NAMED_EXPORTS.size} — shrink only, never grow`,
     );
   }
-  return violations;
+  return scan.violations;
 }
 
 export async function validateAgentIndexPerimeter(root = "."): Promise<string[]> {

@@ -7,16 +7,18 @@ has exactly seven directories plus `index.ts`: `kernel/` (turn loop, gate,
 tool dispatch, ports, failures), `session/` (entity, run, mailbox, request,
 bus, commit, alarm), `store/` (fence, session-file, storage adapters),
 `model/`, `plugins/` (compaction, model-selection, parent-reply), `inspect/`
-(history, index) and `testing/` (registry, controller — `SessionRegistry` and
-`requireCommit` are test-only). `index.ts` exports seven namespaces (`Kernel`,
+(history, index) and `testing/` (registry, controller — the session registry
+and `requireCommit` are test-only). `index.ts` exports seven namespaces (`Kernel`,
 `Session`, `Bundle`, `Journal`, `Model`, `Inspect`, `Testing`) plus the pinned
 nine-name S8 perimeter consumed by `packages/channels` (#1248 owns that
-fence); `script/check-deps.ts` fails if the pin grows or changes. Timer→Alarm
-and lease→fence are renamed on TS surfaces only — the durable SQLite columns
-stay `lease_owner`/`lease_fence` byte-identical. `session-controller.ts` and
-`core/settled.ts` are deleted; the retired tokens (`TimerDisposition`,
-`RetryTimerPort`, `leaseOwner`, `leaseFence`, `LeaseRefused`,
-`session-controller`) grep to zero. Intra-agent imports are banded
+fence); `script/check-deps.ts` fails if the pin grows or changes. The legacy
+timer and lease vocabularies are renamed to the alarm and fence names on TS
+surfaces only — the durable SQLite columns stay `lease_owner`/`lease_fence`
+byte-identical. The old flat controller module and `core/settled.ts` are
+deleted; the issue's retired token families (the timer-port pair, the
+camel-case lease trio, the flat controller module name, and the registry
+symbol outside `testing/`) grep to zero across packages/apps/script/docs
+(see the lane report for the literal commands). Intra-agent imports are banded
 (kernel→session→store…) with a shrink-only ratchet in `script/check-deps.ts`.
 
 Measured deviations, accepted by the Owner
@@ -215,7 +217,8 @@ every consumer keeps its drop/warn/default and abort-once semantics.
   envelopes (each now emits one warn string per dropped frame), ipc
   `LineDecoder` malformed reporting, llm retry payloads, the desktop renderer
   transport frame and saved window bounds (`?? WINDOW_DEFAULT`).
-- **One Cause-to-failure fold.** `packages/agent/src/failure.ts` exports
+- **One Cause-to-failure fold.** `packages/agent/src/failure.ts` (since
+  #1247 `packages/agent/src/kernel/failure.ts`) exports
   `fromCause(cause, synthesize)` (typed error if the Cause carries one, else
   `synthesize(Cause.pretty(cause))`) and the agent profile `of(cause,
   operation)` that synthesizes `AgentFailure` (#1244; `ForeignFailure` until then). Consumers: executor tool and
@@ -450,7 +453,8 @@ W5.0 (#1195) Effect pin `3.22.2` → `4.0.0-rc.118` (exact, published 2026-09-28
 | Consumed Effect Layer floor (#1184), 2026-09-24 | wired in worktree; full acceptance not asserted | Effect factories consume Tags; AppLive composes package Layers and an app-owned generation map; validated bundle definitions and named policy contributions build in captured generation scopes. Sources and remaining boundaries follow below. |
 
 At the #1184 inspection paths (since #1247: `packages/agent/src/kernel/gate/decide.ts`, `packages/agent/src/kernel/tool.ts`, `packages/agent/src/kernel/turn.ts`): `packages/agent/src/executor.ts` resolves Clock, Entropy, ObservationSink and
-SessionLayer; `packages/agent/src/tool-dispatcher.ts` resolves ToolCatalog.
+SessionLayer; `packages/agent/src/tool-dispatcher.ts` (since #1247
+`packages/agent/src/kernel/tool.ts`) resolves ToolCatalog.
 `packages/agent/src/core/execution/run.ts` (since #1247 `packages/agent/src/kernel/turn.ts`) and
 `apps/openomni/src/composition/completion.ts` resolve Llm and ObservationSink.
 App boot and gateway thread the ledger plane explicitly
@@ -461,14 +465,18 @@ storage acquisition/release.
 `apps/openomni/src/runtime.ts` builds AppLive with a final Layer.mergeAll.
 `apps/openomni/src/composition/generation-layers.ts` constructs the selected
 catalog, scoped local observations, named registry and compiled policy; its
-session-keyed managers use `packages/agent/src/session-generations.ts` for
+session-keyed managers use `packages/agent/src/session-generations.ts`
+(since #1247 `packages/agent/src/kernel/gate/decide.ts`, re-exported
+through `packages/agent/src/session/run.ts`) for
 capture/configure and retirement. Boot initializes immutable role definitions
 before recovery. Installed bundle names are passed to new sessions, and bundle
 rows enter existing policy seeding (`apps/openomni/src/index.ts`,
 `apps/openomni/src/policy-seed.ts`). Existing configure operations carry recorded
-membership unchanged (`packages/agent/src/session-configuration.ts`).
+membership unchanged (`packages/agent/src/session-configuration.ts`; since
+#1247 `createSessionConfiguration` in `packages/agent/src/session/run.ts`).
 
-`packages/agent/src/bundle.ts` validates definitions and ordered composition,
+`packages/agent/src/bundle.ts` (since #1247
+`packages/agent/src/kernel/bundle.ts`) validates definitions and ordered composition,
 including named policy services. The executor records original arguments when
 pre-transforms apply (`packages/agent/src/executor.ts`,
 `packages/agent/src/executor-record.ts`; both since #1247 `packages/agent/src/kernel/gate/decide.ts`). These are source-inspection claims,
@@ -575,7 +583,7 @@ WebSocket/path wake still commits one fired pair and reaches revision 59.
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/session/bus.ts`, `apps/openomni/src/observation/` |
 | Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; machines owns the injected interpreter runner under `src/codemode/` since #1246. Old app filesystem/list-machines tools remain absent. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/` |
 | Code mode | Public factory supplies machine object handles named after the tools (`read/write/ls/bash/eval`) and `cell.run/peek/stop`. The injected daemon runner owns lazy per-tenant Python processes, parallel/completion helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single `eval` tool delegates to codemode: `run` waits `timeout` seconds then answers `running` with a `cell_id`, `peek` reads the streamed partial output (`machine.peek_code`), `stop` interrupts and settles the cell as `cancelled` with its output, never re-running it; a ten-minute ceiling bounds background cells. Cell-only `completion({prompt, model?, system?, schema?})` has a 32-call per-catalog budget; a `schema` answer is validated host-side and returned as canonical JSON; batching is the cell's `parallel()`. | `packages/machines/src/codemode/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/eval.ts`, `apps/openomni/src/tools/completion.ts` |
-| Tool catalog and prompts | The catalog is sealed (#949): eleven model-door tools `read`, `write`, `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`, `provision` plus the cell-only `completion`; snake_case names, one `op` discriminator under `operation` for eval/monitor/provision, flat `tools/<name>.ts` (`_` written `-` in file names; `lint:tools` `[tool-file-name]` pins the correspondence). There is no `approval` tool: `provision.contact_promote`/`contact_merge` carry `require_approval` policy rows resolved through the kernel request path. `lint:tools` and the catalog test pin the exact set and refuse retired names. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/tool-dispatcher.ts` |
+| Tool catalog and prompts | The catalog is sealed (#949): eleven model-door tools `read`, `write`, `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`, `provision` plus the cell-only `completion`; snake_case names, one `op` discriminator under `operation` for eval/monitor/provision, flat `tools/<name>.ts` (`_` written `-` in file names; `lint:tools` `[tool-file-name]` pins the correspondence). There is no `approval` tool: `provision.contact_promote`/`contact_merge` carry `require_approval` policy rows resolved through the kernel request path. `lint:tools` and the catalog test pin the exact set and refuse retired names. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/kernel/tool.ts` |
 | CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
 
 #949 stage 1 removes the target-selection workspace and capability-based catalog fold; call-time admission belongs to executor `tool.pre`. Model fallback selection belongs to `packages/llm`. Together with #991's codemode workspace, the generated topology describes twelve workspaces. The standalone waiting/approval folds and stores are removed by #969. #949 stage 2 seals the catalog, folds approval into `provision`, and drops the catalog's conditional Proxy port scaffolding: every tool is constructed statically and refuses at execution when its port is absent. #949 stage 3 adds `eval` `peek`/`stop` over a background cell registry with streamed partial output, `completion` options `{model, system, schema}`, and renames the codemode handle methods to the tool names.
@@ -610,7 +618,7 @@ The producer manifest no longer permits independent waiting/approval streams or 
 
 `packages/agent/src/executor-recovery.ts` (since #1247 `packages/agent/src/kernel/gate/decide.ts`) owns the recovery product. Every intent records its `recovery` classification (`local_transactional`, `endpoint_idempotent`, `read_back_reconcilable`, `ambiguous_no_replay`; kernel-local compaction/message intents default to local-transactional, everything else to ambiguous-no-replay). A post-body exception at `post_policy`, `reverter` or `result_commit` reads the original terminal slot first, settles `failed` from the body's known evidence and treats a thrown reverter as no proof of rollback; a refused recovery commit propagates and the intent stays recovery-pending. `DurableExecutor.recover()` settles crash-open intents: an ordinary open tool records one `outcome_unknown` with no body, a lost provider attempt makes the logical llm outcome unknown rather than silently retrying, an llm whose attempts all settled fails from that evidence, and local projections fail from the ledger read-back. Request-bearing waves stay with the captured tool dispatcher, which now runs executor recovery before its captured waves and never runs a tool.
 
-The provider retry owner is unchanged (`createAttemptRunner` in `packages/agent/src/executor-attempts.ts`); each attempt intent pins `attempt`, `maxAttempts` and `retryReason`, and the settled result carries the llm `AttemptEvidence` (usage, `visibleOutput`, finish reason, `Auth.reference` credential handle: type plus a 16-hex digest, never the key). Provider retry, crash-open resume and goal continuation remain distinct budgets with their own durable parents and IDs.
+The provider retry owner is unchanged (`createAttemptRunner` in `packages/agent/src/executor-attempts.ts`, since #1247 `packages/agent/src/kernel/gate/decide.ts`); each attempt intent pins `attempt`, `maxAttempts` and `retryReason`, and the settled result carries the llm `AttemptEvidence` (usage, `visibleOutput`, finish reason, `Auth.reference` credential handle: type plus a 16-hex digest, never the key). Provider retry, crash-open resume and goal continuation remain distinct budgets with their own durable parents and IDs.
 
 `restore_model_selection` (`packages/agent/src/model-selection.ts`, `packages/agent/src/core/execution/run.ts`; since #1247 `plugins/model-selection.ts` and `kernel/turn.ts`) runs at the turn boundary when the earlier turn's last chat attempt ended on a configured fallback: an executed action releases the primary, a refused one keeps the fallback pinned for the turn with the policy decision as the only record. `restore_context_projection` (`packages/agent/src/compaction/restore.ts` — since #1247 `plugins/compaction/restore.ts` — `SessionHandle.restoreContext`, `createSessionAdmission.restoreContextProjection`) rebuilds the projection from the compaction's own recipe under the held lease and appends it as a compensation with the compaction as parent; unknown or unexecuted compactions are refused before anything is recorded, and the original compaction facts are untouched. The contract's proposed relocation of admission/turn code into `session-lifecycle/*.ts` did not happen; the owners stayed in place until #1247 moved them into `session/` and `kernel/`. Tests: `packages/agent/test/executor-recovery.test.ts`, `core/model-restore.test.ts`, `model-selection.test.ts`, `session-context-restore.test.ts`, `session-chat-runner.test.ts`, `core/execution/llm-attempts.test.ts`, `packages/llm/test/run-outcome.test.ts`, `packages/llm/test/auth/storage.test.ts`.
 

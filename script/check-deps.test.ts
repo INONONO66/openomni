@@ -632,6 +632,56 @@ test("#1247 S8 pin: an eighth namespace and a non-barrel export form fail; shrin
   expect(shrunk).toEqual([]);
 });
 
+test("#1247 S8 pin: alias, indentation, and missing semicolon cannot smuggle a name", () => {
+  // The EXPORTED name (after `as`) is what goes public; the pinned local name must not whitelist it.
+  const aliased = agentIndexPerimeterViolations(
+    'export { evaluatePermission as rogue } from "./kernel/gate/match";\n',
+  );
+  expect(aliased.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+
+  const indented = agentIndexPerimeterViolations('  export { rogue } from "./kernel/turn";\n');
+  expect(indented.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+
+  const semicolonFree = agentIndexPerimeterViolations('export { rogue } from "./kernel/turn"\n');
+  expect(semicolonFree.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
+
+  // Aliasing a pinned name onto another pinned name stays within the perimeter.
+  const pinnedAlias = agentIndexPerimeterViolations(
+    'export { decisionFromEvaluation as evaluatePermission } from "./kernel/gate/match";\n',
+  );
+  expect(pinnedAlias).toEqual([]);
+});
+
+test("#1247 S8 pin: unaliased star export and default export are rejected forms", () => {
+  const star = agentIndexPerimeterViolations('export * from "./kernel";\n');
+  expect(star.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+
+  const defaulted = agentIndexPerimeterViolations("const x = 1;\nexport default x;\n");
+  expect(defaulted.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+});
+
+test("#1247 S8 pin: a tenth named export trips the count diagnostic itself", () => {
+  const names = [
+    "decisionFromEvaluation",
+    "evaluatePermission",
+    "PolicyEvaluationInput",
+    "requireSubAdapter",
+    "withStoreTimestamps",
+    "createDecisionFactPort",
+    "createSurfaceKeyStore",
+    "StoredEndpoint",
+    "StoredIdentity",
+    // Tenth entry re-exports a pinned name under a second pinned alias, so every
+    // NAME stays pinned and only the count rule can catch the growth.
+    "evaluatePermission as decisionFromEvaluation",
+  ];
+  const source = names.map((name) => `export { ${name} } from "./kernel/gate/match";`).join("\n");
+  const violations = agentIndexPerimeterViolations(source);
+  expect(violations).toContain(
+    "VIOLATION: packages/agent/src/index.ts has 10 named exports over the pinned 9 — shrink only, never grow",
+  );
+});
+
 test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolerates its absence", async () => {
   const clean = fixture({});
   expect(await validateAgentIndexPerimeter(clean)).toEqual([]);
