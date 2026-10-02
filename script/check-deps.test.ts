@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkBundleImports, checkDocFreshness, main } from "./check-deps";
+import { agentBandViolations, checkBundleImports, checkDocFreshness, main, validateAgentBands } from "./check-deps";
 import { checkPython } from "./check-quality-python";
 import { TOPOLOGY } from "./topology";
 
@@ -544,4 +544,34 @@ test("in-process Python gate rejects checker version drift and invalid flags", (
     if (previous === undefined) delete process.env.BASEDPYRIGHT;
     else process.env.BASEDPYRIGHT = previous;
   }
+});
+
+test("#1247 bands: a planted kernel->session import emits a VIOLATION line", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { runSession } from "../session/run";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toStartWith("VIOLATION: packages/agent/src/kernel/planted.ts:1");
+});
+
+test("#1247 ratchet: growth over the pinned baseline fails, within-baseline passes", async () => {
+  const clean = fixture({
+    "packages/agent/src/kernel/pure.ts": 'import { ok } from "./other";',
+  });
+  expect(await validateAgentBands(clean)).toEqual([]);
+
+  // kernel/failure.ts is pinned at 1; a second violation in it must fail.
+  const grown = fixture({
+    "packages/agent/src/kernel/failure.ts":
+      'import { a } from "../session/run";\nimport { b } from "../model/errors";',
+  });
+  const violations = await validateAgentBands(grown);
+  expect(violations.some((line) => line.includes("over the #1247 ratchet of 1"))).toBe(true);
+
+  // Exactly at the pinned count: the ratchet holds without failing.
+  const pinned = fixture({
+    "packages/agent/src/kernel/failure.ts": 'import { a } from "../session/run";',
+  });
+  expect(await validateAgentBands(pinned)).toEqual([]);
 });

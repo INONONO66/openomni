@@ -709,6 +709,156 @@ async function validateChannelsIntraPackageBanding(): Promise<string[]> {
   return violations;
 }
 
+// ─── #1247: agent directory bands ──────────────────────────────────────────
+
+const AGENT_SRC_PREFIX = "packages/agent/src/";
+
+/**
+ * #1247 agent responsibility bands (issue table 1). Key = directory under
+ * packages/agent/src; `internal` = sibling bands a file may relative-import;
+ * `externalBans` = module-specifier prefixes refused outright; `tokenBans`
+ * = ambient authority tokens the band may not name. Existing violations are
+ * pinned by AGENT_BAND_RATCHET below: the count per file may shrink, never
+ * grow (#1255 turns the ratchet into a full ban).
+ */
+const AGENT_BANDS: Record<string, {
+  readonly internal: ReadonlySet<string>;
+  readonly externalBans: readonly string[];
+  readonly tokenBans: readonly RegExp[];
+}> = {
+  kernel: {
+    internal: new Set(["kernel"]),
+    externalBans: ["effect/cluster", "bun:sqlite", "ai", "@ai-sdk/"],
+    tokenBans: [/\bDate\.now\b/, /\bMath\.random\b/, /\bcrypto\.randomUUID\b/, /\bprocess\.env\b/],
+  },
+  session: {
+    internal: new Set(["session", "kernel", "store"]),
+    externalBans: ["ai", "@ai-sdk/", "bun:sqlite"],
+    tokenBans: [],
+  },
+  store: { internal: new Set(["store"]), externalBans: [], tokenBans: [] },
+  model: { internal: new Set(["model"]), externalBans: [], tokenBans: [] },
+  plugins: { internal: new Set(["plugins", "kernel", "model"]), externalBans: [], tokenBans: [] },
+  inspect: { internal: new Set(["inspect", "kernel", "store", "session"]), externalBans: [], tokenBans: [] },
+  testing: { internal: new Set(["testing", "kernel", "session", "store", "model", "plugins", "inspect"]), externalBans: [], tokenBans: [] },
+};
+
+/** inspect/ may import session reads but never the live bus (issue table 1). */
+const AGENT_INSPECT_BUS_BAN = "session/bus";
+
+function agentBandOf(filePath: string): string | undefined {
+  if (!filePath.startsWith(AGENT_SRC_PREFIX)) return undefined;
+  const rest = filePath.slice(AGENT_SRC_PREFIX.length);
+  if (!rest.includes("/")) return undefined; // root files (index.ts) assemble the namespaces
+  const dir = rest.split("/")[0] ?? "";
+  return dir in AGENT_BANDS ? dir : undefined;
+}
+
+function resolveAgentRelative(filePath: string, importPath: string): string {
+  const segments = filePath.split("/").slice(0, -1);
+  for (const segment of importPath.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  return segments.join("/");
+}
+
+/** Pure per-file scan so the self-test and script tests can plant violations. */
+export function agentBandViolations(filePath: string, source: string): string[] {
+  const band = agentBandOf(filePath);
+  if (band === undefined) return [];
+  const rules = AGENT_BANDS[band];
+  if (rules === undefined) return [];
+  const violations: string[] = [];
+  const importPattern = /(?:from\s+|import\s+|import\s*\(\s*)["']([^"']+)["']/g;
+  for (const match of source.matchAll(importPattern)) {
+    const spec = match[1];
+    if (spec === undefined) continue;
+    const line = lineNumberForOffset(source, match.index);
+    if (spec.startsWith(".")) {
+      const resolved = resolveAgentRelative(filePath, spec);
+      if (!resolved.startsWith(AGENT_SRC_PREFIX)) continue;
+      const rest = resolved.slice(AGENT_SRC_PREFIX.length);
+      const target = rest.includes("/") ? (rest.split("/")[0] ?? "") : "";
+      if (band === "inspect" && rest.startsWith(AGENT_INSPECT_BUS_BAN)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: inspect/ folds the journal and may never touch the live bus`,
+        );
+        continue;
+      }
+      if (target !== "" && target in AGENT_BANDS && !rules.internal.has(target)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: ${band}/ may not import ${target}/`,
+        );
+      }
+      continue;
+    }
+    for (const ban of rules.externalBans) {
+      if (spec === ban || spec.startsWith(ban.endsWith("/") ? ban : `${ban}/`)) {
+        violations.push(
+          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: ${band}/ may not depend on ${ban}`,
+        );
+      }
+    }
+  }
+  for (const token of rules.tokenBans) {
+    const global = new RegExp(token.source, "g");
+    for (const match of source.matchAll(global)) {
+      const line = lineNumberForOffset(source, match.index);
+      violations.push(
+        `VIOLATION: ${filePath}:${line} names ambient authority ${match[0]} — #1247 bands: ${band}/ takes clock/entropy/config through ports`,
+      );
+    }
+  }
+  return violations;
+}
+
+/**
+ * #1247 ratchet baseline, regenerated after the directory moves (same
+ * violations, new paths). Counts may only shrink; a new file or a higher
+ * count fails the gate. #1255 drives every entry to zero.
+ */
+const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
+  ["packages/agent/src/kernel/compaction.ts", 3],
+  ["packages/agent/src/kernel/failure.ts", 1],
+  ["packages/agent/src/kernel/gate/decide.ts", 7],
+  ["packages/agent/src/kernel/index.ts", 1],
+  ["packages/agent/src/kernel/ports.ts", 2],
+  ["packages/agent/src/kernel/turn.ts", 6],
+  ["packages/agent/src/kernel/types.ts", 2],
+  ["packages/agent/src/model/errors.ts", 1],
+  ["packages/agent/src/plugins/compaction/successor.ts", 2],
+  ["packages/agent/src/plugins/model-selection.ts", 1],
+  ["packages/agent/src/plugins/parent-reply/index.ts", 3],
+  ["packages/agent/src/session/commit.ts", 2],
+  ["packages/agent/src/session/mailbox.ts", 2],
+  ["packages/agent/src/session/run.ts", 3],
+  ["packages/agent/src/store/errors.ts", 1],
+]);
+
+export async function validateAgentBands(root = "."): Promise<string[]> {
+  const counts = new Map<string, string[]>();
+  for await (const { filePath, source } of scanRepositorySources(
+    `${AGENT_SRC_PREFIX}**/*.ts`,
+    root,
+  )) {
+    const found = agentBandViolations(filePath, source);
+    if (found.length > 0) counts.set(filePath, found);
+  }
+  const violations: string[] = [];
+  for (const [filePath, found] of [...counts.entries()].sort()) {
+    const allowed = AGENT_BAND_RATCHET.get(filePath) ?? 0;
+    if (found.length > allowed) {
+      violations.push(
+        ...found,
+        `VIOLATION: ${filePath} has ${found.length} band violations over the #1247 ratchet of ${allowed} — shrink only, never grow`,
+      );
+    }
+  }
+  return violations;
+}
+
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
@@ -1055,6 +1205,57 @@ function selfTest(): number {
       ).length === 1,
     ],
     [
+      "S8: the channels judgment band may not name the Journal ports",
+      channelsAgentSurfaceViolations(
+        "packages/channels/src/router/index.ts",
+        'import { Journal } from "@openomni/agent";',
+      ).length === 1,
+    ],
+    [
+      "#1247: a kernel file may not import session/",
+      agentBandViolations(
+        "packages/agent/src/kernel/evil.ts",
+        'import { runSession } from "../session/run";',
+      ).length === 1,
+    ],
+    [
+      "#1247: a kernel file may not name ambient authority",
+      agentBandViolations("packages/agent/src/kernel/evil.ts", "const t = Date.now();").length ===
+        1,
+    ],
+    [
+      "#1247: session/ may import kernel/ and store/",
+      agentBandViolations(
+        "packages/agent/src/session/run.ts",
+        'import { x } from "../kernel/turn";\nimport { y } from "../store/fence";',
+      ).length === 0,
+    ],
+    [
+      "#1247: inspect/ may never touch the live bus",
+      agentBandViolations(
+        "packages/agent/src/inspect/evil.ts",
+        'import { bus } from "../session/bus";',
+      ).length === 1,
+    ],
+    [
+      "#1247: store/ may not import kernel/",
+      agentBandViolations(
+        "packages/agent/src/store/evil.ts",
+        'import { fail } from "../kernel/failure";',
+      ).length === 1,
+    ],
+    [
+      "#1247: testing/ may import anything in the package",
+      agentBandViolations(
+        "packages/agent/src/testing/registry.ts",
+        'import { run } from "../session/run";\nimport { k } from "../kernel/turn";',
+      ).length === 0,
+    ],
+    [
+      "#1247: the band rules scope to packages/agent/src",
+      agentBandViolations("apps/openomni/src/runtime.ts", "const t = Date.now();").length === 0,
+    ],
+    [
       "S8: a wholesale agent re-export is refused",
       channelsAgentSurfaceViolations(
         "packages/channels/src/router/index.ts",
@@ -1079,6 +1280,7 @@ export async function main(): Promise<void> {
   const depViolations = await validateDependencyDirection();
   const sourceImportViolations = await validateSourceImportDirection();
   const channelsBandingViolations = await validateChannelsIntraPackageBanding();
+  const agentBandViolationList = await validateAgentBands();
   const bundleViolations = await checkBundleImports();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
@@ -1088,6 +1290,7 @@ export async function main(): Promise<void> {
     ...depViolations,
     ...sourceImportViolations,
     ...channelsBandingViolations,
+    ...agentBandViolationList,
     ...bundleViolations.map(
       (finding) => `VIOLATION: ${finding.code} ${finding.file}:${finding.line}`,
     ),
