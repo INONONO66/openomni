@@ -53,7 +53,7 @@ export interface PointRecord {
  * Condition fields every consultation supplies today (the v3 execution
  * context); every point accepts them in `when` alongside its own fields.
  */
-const CONTEXT_WHEN_FIELDS = ["op", "operation", "role", "sessionId"] as const;
+const CONTEXT_WHEN_FIELDS: readonly string[] = ["op", "operation", "role", "sessionId"];
 
 function point(
   id: PointId,
@@ -70,7 +70,7 @@ function point(
     rewritableFields: Object.freeze([...rewritableFields]),
     whenFields: Object.freeze([
       ...CONTEXT_WHEN_FIELDS,
-      ...whenFields.filter((field) => !CONTEXT_WHEN_FIELDS.includes(field as never)),
+      ...whenFields.filter((field) => !CONTEXT_WHEN_FIELDS.includes(field)),
     ]),
     ...(flags?.end === true ? { end: true } : {}),
     ...(flags?.rewriteOpen === true ? { rewriteOpen: true } : {}),
