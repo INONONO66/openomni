@@ -11,8 +11,11 @@ permissive defaults become explicit typed outcomes.
   `OpenOmniConfig.kek` via `resolveKek(env, home)` and injected into declared
   provisioning), `apps/openomni/src/cli/env-file.ts` (`processEnvironment()`
   for cli/main and watch-sources spawn env), and
-  `packages/llm/src/model/loader.ts` (`resolveAuthFilePath(env)`; auth
-  storage takes the path plus an injected `id`). The desktop reads env only
+  `packages/llm/src/model/loader.ts` (`resolveAuthFilePath(env)`, called
+  once when `LlmLive` is constructed; the Layer closes over the path and
+  `Auth.all/get/set/resolve` and raw `run`/`Provider.resolveModel` take
+  `authFilePath` explicitly, so `auth/storage.ts` has no env read and no
+  resolver call). The desktop reads env only
   through `bootstrap(process)` → `resolveDesktopConfig(env)` in the new
   `apps/desktop/src/main/config.ts` (`gateway-endpoint.ts` deleted); the
   config is pinned once at module load.
