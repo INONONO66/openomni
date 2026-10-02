@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { CommitRefused, type LedgerError } from "./store/errors";
 import * as SessionHandleStore from "./store/fence";
-import { type CommitReceipt } from "./store/services";
+import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./services";
 import { canonicalDigest, PlainValueSchema, type SessionGeneration, type SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";

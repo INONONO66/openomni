@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
 import { L0Write } from "../../src/store/session-file";
-import { type LedgerError } from "../../src/store/errors";
+import type { LedgerError } from "../../src/store/errors";
 import { createSessionKernel, type SessionKernel } from "../../src/store/fence";
 import type { CatalogStore } from "../../src/store/catalog";
 import { openCatalogStore } from "../../src/store/catalog";

@@ -12,7 +12,7 @@ import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
 import * as SessionHandleStore from "../../src/store/fence";
-import { type LedgerError } from "../../src/store/errors";
+import type { LedgerError } from "../../src/store/errors";
 import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
 import type { ExecutionLedger } from "../../src/executor";

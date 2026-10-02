@@ -3,7 +3,7 @@ import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
 import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
-import { type LedgerError } from "../src/store/errors";
+import type { LedgerError } from "../src/store/errors";
 import type { AnyToolDefinition, LedgerAction, PlainValue, SessionGeneration } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { z } from "zod";

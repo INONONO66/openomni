@@ -101,8 +101,8 @@ jobs:
               # #1246 folded the ledger session benches into the agent package;
               # the paired reference checkout may predate the fold, so measure
               # whichever owner the checkout has. Benchmark names are unchanged.
-              if [ -f packages/agent/bench/store/index.ts ]; then
-                bun run --cwd packages/agent bench/store/index.ts
+              if [ -f packages/agent/bench/store.ts ]; then
+                bun run --cwd packages/agent bench/store.ts
                 cp packages/agent/bench-results/session.json "$output/session.json"
               else
                 bun run --cwd packages/ledger bench

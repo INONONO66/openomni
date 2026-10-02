@@ -18,7 +18,7 @@ const RUNNER_OWNERS = new Set([
   "packages/machines/test/helpers/effect.ts",
   "packages/machines/test/ipc/helpers/effects.ts",
   "packages/agent/bench/turns.ts",
-  "packages/agent/bench/store/index.ts",
+  "packages/agent/bench/store.ts",
 ]);
 const runnerNames = new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]);
 

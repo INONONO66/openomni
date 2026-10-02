@@ -1,8 +1,8 @@
 import { Effect, Result } from "effect";
 import { type LedgerSession, type SessionGeneration, SessionTurn } from "@openomni/protocol";
-import type * as SessionHandleStore from "../../src/store/fence";
-import { runLedgerSync } from "../../test/store/helpers/effect";
-import { materializeSession } from "../../test/store/helpers/session";
+import type * as SessionHandleStore from "../src/store/fence";
+import { runLedgerSync } from "../test/store/helpers/effect";
+import { materializeSession } from "../test/store/helpers/session";
 
 /** Populate two committed turn actions per turn through the fenced L0 commit. */
 export function seedTurnHistory(

@@ -96,7 +96,7 @@ test("all events collect the accepted SHA and head on one runner before the sole
   expect(steps[collection]?.run).toContain("if (( run % 2 )); then revisions=(reference head); else revisions=(head reference); fi");
   expect(steps[collection]?.run).toContain('measure reference "$REFERENCE_WORKTREE" "$GITHUB_WORKSPACE/bench-results/reference/runs/$run"');
   expect(steps[collection]?.run).toContain('measure head "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/bench-results/runs/$run"');
-  expect(steps[collection]?.run).toContain("bun run --cwd packages/agent bench/store/index.ts");
+  expect(steps[collection]?.run).toContain("bun run --cwd packages/agent bench/store.ts");
   expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/session.json "$output/session.json"');
   expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/agent.json "$output/agent.json"');
   expect(steps[summary]?.run).toContain("bun run script/summarize-benchmark-runs.ts\n");

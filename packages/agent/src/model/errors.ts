@@ -5,7 +5,6 @@ export { AgentFailure };
 import { Data } from "effect";
 import { z } from "zod";
 
-type Diagnostic = { readonly operation: string; readonly cause: string };
 
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
