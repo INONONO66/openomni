@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { FIXED_NOW } from "./helpers/injected";
+import { FIXED_NOW, testRun } from "./helpers/injected";
 import { z } from "zod";
 import { GitHubClient } from "../src/provider/github/client";
 import { fetchWithRetry } from "../src/support/fetch-retry";
@@ -28,7 +28,7 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
+      const client = new GitHubClient(() => undefined, () => FIXED_NOW, testRun, "token");
       expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
         value: "sent",
         externalMessageId: "1",
@@ -58,7 +58,7 @@ describe("GitHubClient", () => {
     const published: Array<{ name: string; data: z.infer<typeof schema> }> = [];
     const client = new GitHubClient((descriptor, data) => {
       published.push({ name: descriptor.name, data: schema.parse(data) });
-    }, () => FIXED_NOW);
+    }, () => FIXED_NOW, testRun);
 
     await client.postComment("openomni/project", 7, "the answer", "trace-github-test", "delivery");
 
@@ -81,7 +81,7 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
+      const client = new GitHubClient(() => undefined, () => FIXED_NOW, testRun, "token");
       await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
         _tag: "DeliveryNotSent",
         operation: "github.listComments",
@@ -99,7 +99,7 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
+      const client = new GitHubClient(() => undefined, () => FIXED_NOW, testRun, "token");
       await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
         _tag: "DeliveryNotSent",
         operation: "github.listComments",
@@ -137,7 +137,7 @@ describe("GitHubClient", () => {
           { method: "POST" },
           {
             traceId: "trace-rate-limit",
-            now: () => FIXED_NOW,
+            run: testRun,
             label: "github/postComment",
             retryAfterSchema: z
               .object({ retryAfter: z.number() })

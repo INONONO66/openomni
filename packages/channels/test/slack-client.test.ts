@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { SlackClient } from "../src/provider/slack/client";
-import { FIXED_NOW } from "./helpers/injected";
+import { testRun } from "./helpers/injected";
 import { SlackApiError } from "../src/errors";
 import type { PublishPort } from "../src/types";
 import type { PlainValue } from "@openomni/protocol";
@@ -46,7 +46,7 @@ describe("SlackClient", () => {
     globalThis.fetch = realFetch;
   });
 
-  const client = () => new SlackClient("xoxb-bot", "xapp-app", noopPublish, () => FIXED_NOW);
+  const client = () => new SlackClient("xoxb-bot", "xapp-app", noopPublish, testRun);
 
   it("opens the Socket Mode URL with the app token — the only app-token call", async () => {
     const { calls } = installFetchMock(() => ({

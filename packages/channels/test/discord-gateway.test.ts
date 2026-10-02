@@ -1,4 +1,5 @@
 import { bounded } from "./helpers/bounded";
+import { Schedule } from "effect";
 import { injectedOptions } from "./helpers/injected";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { ServerWebSocket } from "bun";
@@ -73,7 +74,8 @@ class EventStream<Value> {
   }
 }
 
-const immediateDelay = () => Promise.resolve();
+/** Zero-delay reconnect policy: the schedule seam the shell retries on. */
+const immediateSchedule = Schedule.exponential(0);
 
 function createFakeGateway(options: {
   heartbeatIntervalMs: number;
@@ -203,7 +205,6 @@ function createTracedGateway(
 
 function createMissedAckHarness(local: FakeGateway) {
   const backoffStarted = Promise.withResolvers<void>();
-  const releaseBackoff = Promise.withResolvers<void>();
   let clientClosed: Promise<number> | undefined;
   const gateway = createTracedGateway(
     local,
@@ -217,12 +218,17 @@ function createMissedAckHarness(local: FakeGateway) {
         clientClosed = local.waitForClose();
       },
     },
-    noopPublish,
-    injectedOptions(),
-    () => {
-      backoffStarted.resolve();
-      return releaseBackoff.promise;
+    // The shell publishes the close Warn synchronously when the reconnect
+    // streak starts — the exact signal that the backoff sleep is pending.
+    (event, data) => {
+      if (
+        event.name === Operational.Events.Warn.name &&
+        z.object({ msg: z.string() }).parse(data).msg === "discord connection closed, reconnecting"
+      ) {
+        backoffStarted.resolve();
+      }
     },
+    injectedOptions(),
   );
 
   return {
@@ -235,11 +241,8 @@ function createMissedAckHarness(local: FakeGateway) {
       return local.nativeCloses.at(-1);
     },
     start: () => gateway.start(),
-    stop() {
-      // Stop before releasing backoff, including when start/assertions fail.
-      gateway.stop();
-      releaseBackoff.resolve();
-    },
+    // Stop interrupts the streak mid-backoff via the shell's halt Deferred.
+    stop: () => gateway.stop(),
   };
 }
 
@@ -365,7 +368,7 @@ describe("discord gateway state machine (#520)", () => {
         if (payload.msg === "discord session resumed") sessionResumed.resolve();
       },
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
 
     const resumeReceived = local.waitFor((payload) => payload.op === GatewayOp.RESUME);
@@ -424,7 +427,7 @@ describe("discord gateway state machine (#520)", () => {
       },
       noopPublish,
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
 
     // The first socket drops before READY, so start()'s open promise rejects;
@@ -451,17 +454,12 @@ describe("discord gateway state machine (#520)", () => {
     let fetchCalls = 0;
     const secondFetch = Promise.withResolvers<void>();
     const reconnectDone = Promise.withResolvers<void>();
-    let delayCalls = 0;
     const fetchGatewayUrl = () => {
       fetchCalls += 1;
       if (fetchCalls === 1) return Promise.resolve(local.url); // initial connect
       gateway?.stop();
       secondFetch.resolve();
       return Promise.reject(new Error("persistent outage"));
-    };
-    const delay = () => {
-      delayCalls += 1;
-      return Promise.resolve();
     };
 
     gateway = createTracedGateway(
@@ -474,7 +472,7 @@ describe("discord gateway state machine (#520)", () => {
       },
       noopPublish,
       injectedOptions(),
-      delay,
+      immediateSchedule,
     );
 
     const shell = Reflect.get(gateway, "shell") as SocketReconnectShell;
@@ -483,12 +481,11 @@ describe("discord gateway state machine (#520)", () => {
       await schedule(...args);
       reconnectDone.resolve();
     };
-    // Await the exact reconnect completion: a stopped fetch must not even sleep again.
+    // Await the exact streak completion: a stopped shell must not fetch again.
     await expect(gateway.start()).rejects.toBeInstanceOf(Error);
     await bounded(secondFetch.promise);
     await bounded(reconnectDone.promise);
     expect(fetchCalls).toBe(2);
-    expect(delayCalls).toBe(1);
   });
 
   it("re-identifies (never resumes) after a non-resumable INVALID_SESSION", async () => {
@@ -518,7 +515,7 @@ describe("discord gateway state machine (#520)", () => {
       },
       noopPublish,
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
 
     const secondReady = readyEvents.waitFor(() => true, 2);
@@ -551,7 +548,7 @@ describe("discord gateway state machine (#520)", () => {
           warnings.push(z.object({ msg: z.string() }).parse(payload).msg);
       },
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
 
     await gateway.start();

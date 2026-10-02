@@ -2,7 +2,7 @@ import { DeliveryNotSent } from "../../errors";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import type { DeliveryReceipt } from "../../support/deliver";
 
 /** One comment page from the list endpoint — only `body` is read, extra keys pass. */
@@ -12,6 +12,7 @@ export class GitHubClient {
   constructor(
     private readonly publish: PublishPort,
     private readonly now: () => number,
+    private readonly run: EffectRunner,
     private readonly token?: string,
   ) {}
 
@@ -68,7 +69,7 @@ export class GitHubClient {
       },
       {
         traceId,
-        now: this.now,
+        run: this.run,
         publish: this.publish,
         label: "github/postComment",
       },
@@ -113,7 +114,7 @@ export class GitHubClient {
         { method: "GET", headers },
         {
           traceId,
-          now: this.now,
+          run: this.run,
           publish: this.publish,
           label: "github/listComments",
         },

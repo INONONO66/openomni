@@ -11,7 +11,7 @@ import { TelegramClient } from "./client";
 import { TelegramNormalizer } from "./normalizer";
 import { TelegramPoller } from "./poller";
 import type { TelegramMessage } from "./types";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 
 export class TelegramAdapter implements Channel.Surface {
   readonly id = "telegram";
@@ -31,10 +31,11 @@ export class TelegramAdapter implements Channel.Surface {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
   ) {
     this.dedupe = new Dedupe(options.now);
-    this.client = new TelegramClient(token, publish, options.now);
+    this.client = new TelegramClient(token, publish, options.now, options.run);
   }
 
   onMessage(handler: Channel.MessageHandler): void {

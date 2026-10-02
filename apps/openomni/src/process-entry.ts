@@ -20,11 +20,13 @@ import { Effect } from "effect";
 import {
   acquireAppResource,
   channelRequests,
+  runAppEffect,
   channelStoreSource,
   channelTransaction,
   gatewayRuntime,
   toolPorts,
 } from "./gateway";
+import { AppInvariantError } from "./invariant";
 import { AppScope, type AppRuntime } from "./runtime";
 import { type Inbox, Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
@@ -249,12 +251,19 @@ export async function runProcessEntry(io: {
   exit: (code: number) => never;
   gatewayRuntime?: typeof gatewayRuntime;
 }): Promise<void> {
-  const replies = createProcessReplyChannel(io.stdin, io.log);
+  // The reply channel exists before the runtime (the first frame carries the
+  // runtime's paths), but answers only flow while serveProcessSession runs —
+  // by then the runtime is constructed, so the lazy run port is total.
+  let runtime: AppRuntime | undefined;
+  const replies = createProcessReplyChannel(io.stdin, io.log, (effect) => {
+    if (runtime === undefined) throw new AppInvariantError("process reply before runtime construction");
+    return runAppEffect(runtime, effect);
+  });
   try {
     const line = await replies.first;
     if (line === undefined) io.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
     const request = ProcessSessionRequest.parse(JSON.parse(line));
-    const runtime = (io.gatewayRuntime ?? gatewayRuntime)({
+    runtime = (io.gatewayRuntime ?? gatewayRuntime)({
       catalogPath: request.catalogPath,
       sessionsDir: request.sessionsDir,
       // Never the shared catalog: the parent's SingleRunner owns its cluster_* tables.

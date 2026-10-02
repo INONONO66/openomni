@@ -13,7 +13,7 @@ import {
 import { DiscordGateway } from "./gateway";
 import { DiscordNormalizer } from "./normalizer";
 import { type DiscordMessage, DiscordMessageSchema } from "./types";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { sendText } from "../../support/send-text";
 import { DISCORD_RENDER } from "./format";
 
@@ -36,10 +36,11 @@ export class DiscordAdapter implements Channel.Surface {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
   ) {
     this.dedupe = new Dedupe(options.now);
-    this.client = new DiscordClient(token, publish, options.now);
+    this.client = new DiscordClient(token, publish, options.run);
     this.gateway = new DiscordGateway(
       token,
       () => this.client.fetchGatewayUrl(),

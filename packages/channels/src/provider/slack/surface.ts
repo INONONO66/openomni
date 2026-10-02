@@ -4,7 +4,7 @@ import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
 import { SLACK_RENDER } from "./format";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { SlackClient } from "./client";
 import {
   DeliveryNotSent,
@@ -36,10 +36,11 @@ export class SlackAdapter implements Channel.Surface {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
   ) {
     this.dedupe = new Dedupe(options.now);
-    this.client = new SlackClient(credentials.botToken, credentials.appToken, publish, options.now);
+    this.client = new SlackClient(credentials.botToken, credentials.appToken, publish, options.run);
     this.socket = new SlackSocket(
       (traceId) => this.client.openSocketUrl(traceId),
       { onEvent: (envelope, traceId) => this.handleEnvelope(envelope, traceId) },

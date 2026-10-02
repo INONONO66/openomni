@@ -38,7 +38,7 @@ export const GitHubProvider: ChannelProvider<GitHubCredentials, "github"> = {
       credentials.secret,
       config,
       publish,
-      { now: options.now, id: options.id },
+      { now: options.now, id: options.id, run: options.run },
       credentials.token,
     );
     return {

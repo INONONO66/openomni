@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import type { ServerWebSocket, WebSocketOptions } from "bun";
+import { Operational } from "@openomni/protocol";
+import { Schedule } from "effect";
 import { z } from "zod";
 import { SlackSocket } from "../src/provider/slack/socket";
 import { DiscordGateway } from "../src/provider/discord/gateway";
 import { TelegramPoller } from "../src/provider/telegram/poller";
 import { TelegramUpdateSchema } from "../src/provider/telegram/types";
-import { SocketReconnectShell } from "../src/support/socket-shell";
-import { calculateBackoff } from "../src/support/reconnect-backoff";
 import { bounded } from "./helpers/bounded";
 import { injectedOptions } from "./helpers/injected";
 
@@ -64,7 +64,6 @@ for (const provider of ["slack", "discord"] as const) {
     const received = Promise.withResolvers<void>();
     const events: string[] = [];
     const logs: string[] = [];
-    let delays = 0;
     const server = websocketServer((ws, server) => {
       peers.push(ws);
       ws.send(
@@ -88,9 +87,6 @@ for (const provider of ["slack", "discord"] as const) {
     const publish = (event: { name: string }) => {
       logs.push(event.name);
     };
-    const delay = async () => {
-      delays++;
-    };
     const socket =
       provider === "slack"
         ? new SlackSocket(
@@ -103,7 +99,6 @@ for (const provider of ["slack", "discord"] as const) {
             },
             publish,
             injectedOptions(),
-            delay,
           )
         : new DiscordGateway(
             "token",
@@ -117,7 +112,6 @@ for (const provider of ["slack", "discord"] as const) {
             },
             publish,
             injectedOptions(),
-            delay,
           );
     const frame = (id: string) =>
       provider === "slack"
@@ -134,7 +128,6 @@ for (const provider of ["slack", "discord"] as const) {
       retired.dispatchEvent(new CloseEvent("close", { code: 4000 }));
       retired.dispatchEvent(new Event("error"));
       expect(events).toEqual([]);
-      expect(delays).toBe(0);
       expect(logs).toHaveLength(logsBefore);
       peers[1]?.send(JSON.stringify(frame("current")));
       await bounded(received.promise);
@@ -146,71 +139,6 @@ for (const provider of ["slack", "discord"] as const) {
     }
   });
 }
-
-test("a retired reconnect sleeper cannot replace a new real socket", async () => {
-  const sleeping = Promise.withResolvers<number>();
-  const wake = Promise.withResolvers<void>();
-  let connections = 0;
-  const server = websocketServer((ws) => {
-    connections++;
-    ws.send("ready");
-  });
-  const url = `ws://127.0.0.1:${server.port}`;
-  let reconnects = 0;
-  const shell: SocketReconnectShell = new SocketReconnectShell(
-    () => undefined,
-    {
-      urlFetchFailed: "fetch",
-      closed: "closed",
-      reconnectFailed: "reconnect",
-      socketError: "socket",
-    },
-    (ms) => {
-      sleeping.resolve(ms);
-      return wake.promise;
-    },
-    (address) =>
-      shell.openWebSocket(address, (ws, settle) => {
-        ws.addEventListener("message", () => {
-          if (settle.current()) settle.resolveOnce();
-        });
-      }),
-    injectedOptions(),
-  );
-  try {
-    shell.begin();
-    await bounded(shell.connect(async () => url));
-    const retired = shell.scheduleReconnect(4000, async () => {
-      reconnects++;
-    });
-    const backoff = await bounded(sleeping.promise);
-    expect(backoff).toBe(2000);
-    shell.begin();
-    await bounded(shell.connect(async () => url));
-    wake.resolve();
-    await bounded(retired);
-    expect(reconnects).toBe(0);
-    expect(connections).toBe(2);
-  } finally {
-    wake.resolve();
-    shell.stop();
-    await server.stop(true);
-  }
-});
-
-test("reconnect has a floor, exponential cap, and injected jitter", () => {
-  const zero = () => 0;
-  const floor = calculateBackoff(0, zero);
-  const cap = calculateBackoff(20, zero);
-  expect(floor).toBe(1000);
-  expect(calculateBackoff(1, zero)).toBe(2000);
-  expect(calculateBackoff(2, zero)).toBe(4000);
-  expect(cap).toBe(60_000);
-  expect(calculateBackoff(30, zero)).toBe(60_000);
-  const half = () => 0.5;
-  expect(calculateBackoff(0, half)).toBe(1500);
-  expect(calculateBackoff(20, half)).toBe(60_500);
-});
 
 const update = (id: number) => ({
   update_id: id,
@@ -239,7 +167,8 @@ test("Telegram ignores a retired HTTP response even when cancellation arrives to
   });
   const delivered: number[] = [];
   const poller = new TelegramPoller(
-    // A response already in flight may survive abort; generation, not abort alone, owns custody.
+    // A response already in flight may survive abort; the cycle's own
+    // AbortController, not abort alone, owns custody of the checkpoint.
     telegramUpdates(server),
     collectTelegramMessages(delivered),
     () => undefined,
@@ -261,9 +190,7 @@ test("Telegram ignores a retired HTTP response even when cancellation arrives to
   }
 });
 
-test("Telegram reconnect uses jittered backoff and its retired sleeper cannot poll again", async () => {
-  const sleeping = Promise.withResolvers<number>();
-  const wake = Promise.withResolvers<void>();
+test("Telegram poll errors warn once per cycle and retry on the injected schedule", async () => {
   const arrived = Promise.withResolvers<void>();
   let requests = 0;
   const server = Bun.serve({
@@ -275,32 +202,28 @@ test("Telegram reconnect uses jittered backoff and its retired sleeper cannot po
     },
   });
   const delivered: number[] = [];
+  const warns: string[] = [];
   const poller = new TelegramPoller(
     telegramUpdates(server),
     collectTelegramMessages(delivered, () => {
       poller.stop();
       arrived.resolve();
     }),
-    () => undefined,
-    injectedOptions(),
-    (ms) => {
-      sleeping.resolve(ms);
-      return wake.promise;
+    (event, data) => {
+      if (event.name === Operational.Events.Warn.name)
+        warns.push(z.object({ msg: z.string() }).parse(data).msg);
     },
+    injectedOptions(),
+    Schedule.exponential(0),
   );
   try {
-    const retired = poller.start();
-    const backoff = await bounded(sleeping.promise);
-    expect(backoff).toBe(2000);
-    const current = poller.start();
+    const loop = poller.start();
     await bounded(arrived.promise);
-    await bounded(current);
-    wake.resolve();
-    await bounded(retired);
+    await bounded(loop);
     expect(delivered).toEqual([2]);
     expect(requests).toBe(2);
+    expect(warns).toEqual(["telegram poll error"]);
   } finally {
-    wake.resolve();
     poller.stop();
     await server.stop(true);
   }

@@ -1,4 +1,5 @@
 import type { Channel } from "@openomni/protocol";
+import type { EffectRunner } from "../types.js";
 import type { z } from "zod";
 import type { PublishPort } from "../types.js";
 
@@ -133,6 +134,8 @@ export interface ChannelProvider<TCredentials, TId extends string = string> {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      /** Executes driver Effect programs (retry, reconnect, heartbeat) on the app runtime. */
+      readonly run: EffectRunner;
     },
   ): ProviderRuntime;
 }

@@ -1,4 +1,5 @@
 import type { Channel, BusEvent } from "@openomni/protocol";
+import type { Effect } from "effect";
 
 /**
  * Observation port: channel code reports Operational telemetry through this
@@ -27,3 +28,12 @@ export interface ChannelClient {
 export interface InboundNormalizer<TPayload> {
   normalize(payload: TPayload): Channel.InboundMessage | null;
 }
+
+/**
+ * Executes one channel Effect program on the app runtime and settles with its
+ * typed outcome. Channel code composes Effect programs (schedules, fibers,
+ * deadlines) but never owns a runner — the composition root injects this port
+ * (production: the app's managed runtime; tests: the package test runner, with
+ * TestClock when the program sleeps).
+ */
+export type EffectRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;

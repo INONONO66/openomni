@@ -6,7 +6,7 @@ import { Dedupe } from "../../support/dedupe";
 import { requireHandler } from "../../support/handler-frame";
 import { GitHubClient } from "./client";
 import { GitHubWebhookPayloadSchemas } from "./types";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { type DeliveryReceipt, DeliveryReconciliation } from "../../support/deliver";
 import { authenticateGitHubWebhook } from "../../authn/github";
 import type { ChannelAuthnDecisionObserver } from "../../authn/types";
@@ -108,12 +108,16 @@ export class GitHubAdapter implements Channel.Surface {
     private readonly secret: string,
     readonly config: Channel.Config,
     private readonly publish: PublishPort,
-    private readonly options: { readonly now: () => number; readonly id: () => string },
+    private readonly options: {
+      readonly now: () => number;
+      readonly id: () => string;
+      readonly run: EffectRunner;
+    },
     githubToken?: string,
     private readonly authOptions: GitHubAuthOptions = {},
   ) {
     this.dedupe = new Dedupe(options.now);
-    this.client = new GitHubClient(publish, options.now, githubToken);
+    this.client = new GitHubClient(publish, options.now, options.run, githubToken);
   }
 
   async deliver(

@@ -74,12 +74,25 @@ export function deliverKeyed(
   publish: PublishPort,
   options: { readonly now: () => number; readonly id: () => string },
 ): Promise<DeliveryReceipt> {
+  // #1248: an uncertain outcome is recorded as unknown AND surfaced to the
+  // Owner — the reconciliation map refuses to resend it, so without a notice
+  // the message would vanish silently.
+  const unknownNotice = (traceId: string, reason: string): DeliveryReceipt => {
+    publish(Operational.Events.Warn, {
+      traceId,
+      time: options.now(),
+      component: "server",
+      msg: "delivery outcome unknown; uncertain send will not be retried",
+      context: { idempotencyKey, reason },
+    });
+    return { value: "unknown" };
+  };
   const attempt = async (): Promise<DeliveryReceipt> => {
     const traceId = newTraceId(options.id);
     try {
       const externalMessageId = await send(traceId);
       return externalMessageId === undefined
-        ? { value: "unknown" }
+        ? unknownNotice(traceId, "platform returned no message id")
         : { value: "sent", externalMessageId };
     } catch (error) {
       if (!(error instanceof Error)) throw error;
@@ -100,14 +113,13 @@ export function deliverKeyed(
         });
         return { value: "unknown" };
       }
-      return {
-        value:
-          error instanceof DeliveryNotSent ||
-          isRejected(error) ||
-          NotConnected.safeParse(error).success
-            ? "not_sent"
-            : "unknown",
-      };
+      if (
+        error instanceof DeliveryNotSent ||
+        isRejected(error) ||
+        NotConnected.safeParse(error).success
+      )
+        return { value: "not_sent" };
+      return unknownNotice(traceId, String(error));
     }
   };
   return reconciliation.run(idempotencyKey, attempt);

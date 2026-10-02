@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
-import type { ChannelClient, PublishPort } from "../../types";
+import type { ChannelClient, EffectRunner, PublishPort } from "../../types";
 import { SlackApiError } from "../../errors";
 
 const BASE_URL = "https://slack.com/api";
@@ -28,7 +28,7 @@ export class SlackClient implements ChannelClient {
     private readonly botToken: string,
     private readonly appToken: string,
     private readonly publish: PublishPort,
-    private readonly now: () => number,
+    private readonly run: EffectRunner,
   ) {}
 
   /** `apps.connections.open` — the only app-token call; returns the Socket Mode wss URL. */
@@ -103,7 +103,7 @@ export class SlackClient implements ChannelClient {
         },
         body: JSON.stringify(body),
       },
-      { traceId, now: this.now, label: `slack ${method}`, publish: this.publish },
+      { traceId, run: this.run, label: `slack ${method}`, publish: this.publish },
     );
     if (!res.ok) {
       throw new SlackApiError({

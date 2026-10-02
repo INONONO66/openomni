@@ -1,26 +1,28 @@
 import { AppInvariantError } from "../invariant";
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
-import { Result } from "effect";
+import type { EffectRunner } from "@openomni/channels";
+import { Deferred, Effect, Exit, Result } from "effect";
 import { ThrownError } from "../thrown";
 import type { SessionTransition } from "@openomni/protocol";
 import { ProcessReplyReceipt } from "./process-session";
 
+/** #1248: the receiving session has this long to acknowledge an answer frame. */
+const RECEIPT_DEADLINE_MS = 30_000;
+
 /** Transport response correlation only; durable delivery truth remains in the source action tree. */
-export function createProcessReplyChannel(input: Readable, write: (line: string) => void) {
+export function createProcessReplyChannel(
+  input: Readable,
+  write: (line: string) => void,
+  run: EffectRunner,
+) {
   const lines = createInterface({ input });
   const first = Promise.withResolvers<string | undefined>();
   let opened = false;
-  const pending = new Map<
-    string,
-    {
-      resolve(value: SessionTransition.Resolution): void;
-      reject(error: Error): void;
-    }
-  >();
+  const pending = new Map<string, Deferred.Deferred<SessionTransition.Resolution, Error>>();
   function fail(error: Error): void {
     first.reject(error);
-    for (const entry of pending.values()) entry.reject(error);
+    for (const entry of pending.values()) Deferred.doneUnsafe(entry, Exit.fail(error));
   }
   lines.on("line", (line) => {
     if (!opened) {
@@ -42,29 +44,36 @@ export function createProcessReplyChannel(input: Readable, write: (line: string)
       fail(new Error("unsolicited process receiving receipt"));
       return;
     }
-    if (receipt.ok) entry.resolve(receipt.resolution);
-    else entry.reject(new Error(receipt.error));
+    Deferred.doneUnsafe(
+      entry,
+      receipt.ok ? Exit.succeed(receipt.resolution) : Exit.fail(new Error(receipt.error)),
+    );
   });
   lines.on("close", () => {
     if (!opened) first.resolve(undefined);
-    for (const entry of pending.values()) entry.reject(new Error("process reply transport closed"));
+    const closed = new Error("process reply transport closed");
+    for (const entry of pending.values()) Deferred.doneUnsafe(entry, Exit.fail(closed));
   });
   lines.on("error", fail);
   return {
     first: first.promise,
     async answer(answer: SessionTransition.Answer): Promise<SessionTransition.Resolution> {
-      const response = Promise.withResolvers<SessionTransition.Resolution>();
       if (pending.has(answer.inputId)) throw new AppInvariantError("process reply is already in flight");
+      const response = Deferred.makeUnsafe<SessionTransition.Resolution, Error>();
       pending.set(answer.inputId, response);
-      const timer = setTimeout(
-        () => response.reject(new Error("process receiving receipt timed out")),
-        30_000,
-      );
       try {
         write(JSON.stringify({ kind: "request_answer", answer }));
-        return await response.promise;
+        // The wait is an Effect on the injected runtime's clock: hitting the
+        // deadline interrupts the wait and fails with the typed timeout error.
+        return await run(
+          Deferred.await(response).pipe(
+            Effect.timeoutOrElse({
+              duration: RECEIPT_DEADLINE_MS,
+              orElse: () => Effect.fail(new Error("process receiving receipt timed out")),
+            }),
+          ),
+        );
       } finally {
-        clearTimeout(timer);
         pending.delete(answer.inputId);
       }
     },

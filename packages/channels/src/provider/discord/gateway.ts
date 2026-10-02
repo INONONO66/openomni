@@ -1,8 +1,8 @@
 import { newTraceId } from "../../support/trace";
 import { Operational, parseJson } from "@openomni/protocol";
-import { sleep } from "../../support/fetch-retry";
+import type { reconnectSchedule } from "../../support/schedule";
 import { SocketReconnectShell, type SocketSettle } from "../../support/socket-shell";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { GatewayHeartbeat } from "./heartbeat";
 import {
   type GatewayFrame,
@@ -67,19 +67,21 @@ export class DiscordGateway {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
-    delay: (ms: number) => Promise<void> = sleep,
+    schedule?: typeof reconnectSchedule,
   ) {
     this.shell = new SocketReconnectShell(
       publish,
       DISCORD_SHELL_MESSAGES,
-      delay,
       (url) => this.openSocket(url),
       options,
+      schedule,
     );
     this.heartbeat = new GatewayHeartbeat(
       () => this.sendGateway({ op: GatewayOp.HEARTBEAT, d: this.sequence }),
       () => this.shell.closeSocket(4000),
+      options.run,
     );
   }
 
@@ -94,11 +96,12 @@ export class DiscordGateway {
     this.shell.stop();
   }
 
-  private reconnect(traceId: string): Promise<void> {
-    // Socket failures retry through close handling; only URL fetches use the REST backoff.
-    return this.resumeUrl && this.sessionId
-      ? this.openSocket(this.resumeUrl)
-      : this.shell.reconnectVia(this.fetchGatewayUrl, traceId);
+  private async reconnect(): Promise<void> {
+    // A resumable session skips the URL fetch; either path's rejection is one
+    // failed attempt of the shell's bounded reconnect streak.
+    const url =
+      this.resumeUrl && this.sessionId ? this.resumeUrl : await this.fetchGatewayUrl();
+    await this.openSocket(url);
   }
 
   private openSocket(url: string): Promise<void> {
@@ -139,7 +142,7 @@ export class DiscordGateway {
         return;
       }
       if (this.shell.running) {
-        await this.shell.scheduleReconnect(event.code, (traceId) => this.reconnect(traceId));
+        await this.shell.scheduleReconnect(event.code, () => this.reconnect());
       }
     });
   }
@@ -231,12 +234,10 @@ export class DiscordGateway {
       // gateway origin before it can ever become a socket target, so a
       // spoofed READY cannot redirect the resume connection elsewhere.
       this.resumeUrl = validResumeUrl(ready.data.resume_gateway_url, this.gatewayOrigin);
-      this.shell.reset();
       this.callbacks.onReady({ botId: ready.data.user.id, botUsername: ready.data.user.username });
       return true;
     }
     if (event === "RESUMED") {
-      this.shell.reset();
       this.publish(Operational.Events.Info, {
         traceId: newTraceId(this.options.id),
         time: this.options.now(),

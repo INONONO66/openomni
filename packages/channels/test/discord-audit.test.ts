@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { FIXED_NOW, injectedOptions } from "./helpers/injected";
+import { injectedOptions, testRun } from "./helpers/injected";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import {
@@ -60,7 +60,7 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("outage", { status: 503 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
+    const client = new DiscordClient("token", () => undefined, testRun);
     await expect(client.fetchGatewayUrl()).rejects.toBeInstanceOf(DiscordGatewayFetchError);
   });
 
@@ -68,7 +68,7 @@ describe("Discord audit regressions", () => {
     globalThis.fetch = Object.assign(async () => new Response("forbidden", { status: 403 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new DiscordClient("token", () => undefined, () => FIXED_NOW);
+    const client = new DiscordClient("token", () => undefined, testRun);
     await expect(client.send("channel-1", "hello", "trace-1")).rejects.toBeInstanceOf(
       DiscordApiError,
     );

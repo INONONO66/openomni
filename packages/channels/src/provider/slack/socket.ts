@@ -1,8 +1,8 @@
 import { Operational, parseJson } from "@openomni/protocol";
-import { sleep } from "../../support/fetch-retry";
+import type { reconnectSchedule } from "../../support/schedule";
 import { SocketReconnectShell } from "../../support/socket-shell";
 import { newTraceId } from "../../support/trace";
-import type { PublishPort } from "../../types";
+import type { EffectRunner, PublishPort } from "../../types";
 import { type SocketEnvelope, SocketEnvelopeSchema } from "./types";
 
 const SLACK_SHELL_MESSAGES = {
@@ -37,15 +37,16 @@ export class SlackSocket {
       readonly now: () => number;
       readonly id: () => string;
       readonly random: () => number;
+      readonly run: EffectRunner;
     },
-    delay: (ms: number) => Promise<void> = sleep,
+    schedule?: typeof reconnectSchedule,
   ) {
     this.shell = new SocketReconnectShell(
       publish,
       SLACK_SHELL_MESSAGES,
-      delay,
       (url) => this.openSocket(url),
       options,
+      schedule,
     );
   }
 
@@ -59,13 +60,13 @@ export class SlackSocket {
   }
 
   /**
-   * Reconnect with a fresh URL under the shared backoff schedule. The URL
-   * fetch itself retries here (bounded by `running`) because it rejects
-   * during exactly the transient outages that cluster reconnects — the same
-   * failure mode the discord gateway hit in #540.
+   * Reconnect with a fresh URL. The fetch rejects during exactly the
+   * transient outages that cluster reconnects (#540) — its rejection is one
+   * failed attempt of the shell's bounded streak, retried on the schedule.
    */
-  private reconnect(traceId: string): Promise<void> {
-    return this.shell.reconnectVia(() => this.fetchSocketUrl(traceId), traceId);
+  private async reconnect(traceId: string): Promise<void> {
+    const url = await this.fetchSocketUrl(traceId);
+    await this.openSocket(url);
   }
 
   private openSocket(url: string): Promise<void> {
@@ -75,7 +76,6 @@ export class SlackSocket {
         const envelope = this.parseEnvelope(String(event.data));
         if (envelope === undefined) return;
         if (envelope.type === "hello") {
-          this.shell.reset();
           settle.resolveOnce();
           return;
         }
