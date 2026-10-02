@@ -5,10 +5,9 @@ import type { StreamEvent } from "../../../src/model/processor/stream-events";
 export type StreamTextArgs = Parameters<typeof streamText>[0];
 
 /** The step shape the model's stop conditions actually read. */
-export type StopConditionInput = {
+export type Condition = (input: {
   steps: ReadonlyArray<{ usage?: { inputTokens?: number } }>;
-};
-export type Condition = (input: StopConditionInput) => boolean;
+}) => boolean;
 
 /** What the mocked `streamText` hands back: the chunks as the SDK's fullStream. */
 export function streamOf(chunks: StreamEvent[]): {
