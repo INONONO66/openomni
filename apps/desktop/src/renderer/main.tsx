@@ -1,14 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App, type AppEnvironment } from "./app";
-import { RendererInvariantError } from "./errors";
 import { createPlatform } from "./platform";
+import { rendererRoot } from "./root";
 import { bindStorePlatform } from "./state/store";
 import { StateProvider } from "./state/provider";
 import "./styles.css";
 
-const root = document.getElementById("root");
-if (!root) throw new RendererInvariantError("renderer root element missing");
+const root = rendererRoot(document);
 
 // The window has a tab strip, and the frame's `--shell-top` reads that fact
 // from `<html>` before any component mounts (packages/ui/src/styles.css).

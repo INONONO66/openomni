@@ -1,30 +1,16 @@
 import { expect, test } from "bun:test";
 import { RendererInvariantError } from "../src/renderer/errors";
-import { installGlobals } from "./helpers";
+import { rendererRoot } from "../src/renderer/root";
 
-/**
- * The renderer entry evaluates at import time, so the missing-root invariant
- * is exercised through a query-busted import: the specifier gets its own
- * module instance without disturbing the cached happy-path evaluation that
- * entry-wiring.test.ts pins.
- */
-test("the renderer entry refuses to boot without its root element", async () => {
-  const listeners = {
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-  };
-  const restoreGlobals = installGlobals({
-    window: { ...listeners, localStorage: {} },
-    document: {
-      ...listeners,
-      documentElement: { dataset: {} },
-      getElementById: () => null,
-    },
-  });
-  const specifier = `../src/renderer/main?${"without-root"}`;
-  try {
-    await expect(import(specifier)).rejects.toThrow(RendererInvariantError);
-  } finally {
-    restoreGlobals();
-  }
+const documentWith = (root: HTMLElement | null) => ({
+  getElementById: (id: string) => (id === "root" ? root : null),
+});
+
+test("the renderer entry refuses to boot without its root element", () => {
+  expect(() => rendererRoot(documentWith(null))).toThrow(RendererInvariantError);
+});
+
+test("the renderer entry mounts into the root element the document provides", () => {
+  const root = { id: "root" } as HTMLElement;
+  expect(rendererRoot(documentWith(root))).toBe(root);
 });
