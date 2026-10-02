@@ -1,6 +1,6 @@
 import { Kernel } from "@openomni/agent";
 const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
-const { assertPointGenerationRows, composePointTable, KERNEL_CAPABILITY_POINTS, POINT_GENERATION_ROW } = Kernel;
+const { assertPointGenerationRows, composePointTable, KERNEL_CAPABILITY_POINTS, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Kernel;
 
 /** The merged core+capability point registration table the boot validates rows against (#1251). */
 const POINT_TABLE = composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
@@ -41,16 +41,22 @@ export function seedKernelPolicyRows(
   bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = [],
 ): number {
   return policies.appendGeneration((current) => {
+    // Convert the latest generation's semantics onto the fourteen-point
+    // contract and validate every row BEFORE any early return: a completed
+    // generation carrying an unmappable custom row still rejects the boot.
+    const converted = current.map((row) => translateLegacyPolicyRow(row));
+    assertPointGenerationRows(converted, POINT_TABLE);
     const next = new Map([...KERNEL_POLICY_ROWS, ...bundleRows].map((row) => [policyId(row), row]));
     // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
-    for (const row of current) next.set(policyId(row), row);
-    const currentIds = new Set(current.map(policyId));
-    if (currentIds.size === next.size && [...next.keys()].every((id) => currentIds.has(id))) {
+    for (const row of converted) next.set(policyId(row), row);
+    // Identity compares the STORED rows: a conversion that changed any row's
+    // point identity must land as a new generation even when the converted
+    // set already matches the target.
+    const storedIds = new Set(current.map(policyId));
+    if (storedIds.size === next.size && [...next.keys()].every((id) => storedIds.has(id))) {
       return undefined;
     }
-    const drafts = [...next.values()];
-    assertPointGenerationRows(drafts, POINT_TABLE);
-    return drafts;
+    return [...next.values()];
   });
 }
 

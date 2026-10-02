@@ -6,10 +6,12 @@ import {
   assertPointGenerationRows,
   legacyPointOf,
   POINT_GENERATION_ROW,
+  translateLegacyPolicyRow,
 } from "../src/kernel/gate/compose";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { GateComposeError } from "../src/kernel/points";
 import { openCatalogStore } from "../src/store/catalog";
-import { draft } from "./kernel/gate/row-fixtures";
+import { atGeneration, compaction, draft } from "./kernel/gate/row-fixtures";
 import { fullPointTable } from "./helpers/gate-rows";
 
 const table = fullPointTable();
@@ -55,6 +57,31 @@ describe("permission-row migration (#1251)", () => {
       if (!GateComposeError.isInstance(error)) throw error;
       expect(error.data).toEqual({ code: "unknown_point", point: "fold.checkpoint.pre" });
     }
+  });
+
+  it("a base-era turn/post compaction deny keeps refusing summarization after conversion (#1251 r1)", () => {
+    const deny = draft(
+      "no-summaries",
+      "turn",
+      "post",
+      { type: "deny", reason: "no summaries" },
+      { match: { op: "compaction" }, priority: 2_000 },
+    );
+    const converted = translateLegacyPolicyRow(deny);
+    expect(converted).toMatchObject({ kind: "compaction", phase: "pre" });
+    expect(converted.match.value).toEqual({});
+
+    // Even an untouched historical generation translates at compile: the
+    // pinned snapshot keeps the base-era refusal on the compaction point.
+    const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
+      generation: 1,
+      rows: [atGeneration(compaction, 1), atGeneration(deny, 1)],
+      mandatory: ["compaction"],
+    });
+    expect(snapshot.evaluate({ kind: "compaction", phase: "pre", op: "compact", value: {} }).verdict).toBe("deny");
+    // The turn envelope itself is no longer governed by the converted row.
+    expect(snapshot.evaluate({ kind: "turn", phase: "post", op: "finish", value: {} }).verdict).toBe("allow");
   });
 
   it("converts the latest generation once, preserving historical generations byte-for-byte", () => {
