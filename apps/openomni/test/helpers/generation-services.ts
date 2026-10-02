@@ -11,6 +11,7 @@ import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import { GenerationLayersLive } from "../../src/composition/generation-layers";
+import { AppPointTable, composedPointTable } from "../../src/composition/point-table";
 import { wallClockLayer } from "../../src/composition/platform";
 import { testClock, testEntropy } from "./test-entropy";
 
@@ -40,6 +41,7 @@ export function generationServices(options: {
       AgentProcessLive(options.observations ?? Bus, testEntropy(options.entropy)),
       BundlesLive([]),
       Layer.succeed(AppLedger, plane),
+      Layer.succeed(AppPointTable, composedPointTable()),
       wallClockLayer(now),
     );
     const layer = GenerationLayersLive.pipe(Layer.provideMerge(process), Layer.merge(options.llm === undefined ? LlmLive : Layer.succeed(Llm, options.llm)));

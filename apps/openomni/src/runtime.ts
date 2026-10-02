@@ -24,6 +24,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { GenerationLayersLive } from "./composition/generation-layers";
+import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
 
 export class AppLifecycleFailure extends Data.TaggedError("AppLifecycleFailure")<{
@@ -77,6 +78,8 @@ export interface AppRuntimeOptions {
   readonly observations?: Context.Service.Shape<typeof ObservationSink>;
   readonly llm?: Layer.Layer<Llm>;
   readonly bundles?: Layer.Layer<BundleDefinitions>;
+  /** The capability registrations this composition selects (#1251); absent = every built-in this app ships. */
+  readonly capabilities?: readonly Kernel.CapabilityPointRegistration[];
 }
 
 export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
@@ -112,8 +115,9 @@ function wiredLayer(
     observationSink: observations,
   });
   const process = AgentProcessLive(observations, entropy);
+  const pointTable = Layer.succeed(AppPointTable, composedPointTable(options.capabilities));
   const generations = GenerationLayersLive.pipe(
-    Layer.provideMerge(Layer.mergeAll(process, bundles, plane)),
+    Layer.provideMerge(Layer.mergeAll(process, bundles, plane, pointTable)),
   );
   const host = clusterHostLayer({
     catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
@@ -142,6 +146,7 @@ function wiredLayer(
     Layer.effect(AppScope, Effect.scope).pipe(Layer.provideMerge(generations)),
     options.llm ?? LlmLive,
     binding,
+    pointTable,
     entity.pipe(Layer.provide(plane)),
   ).pipe(Layer.provideMerge(host));
   return options.now === undefined ? app : Layer.mergeAll(app, wallClockLayer(now));
@@ -151,6 +156,7 @@ export type AppServices =
   | Entropy
   | ObservationSink
   | AppLedger
+  | AppPointTable
   | AppScope
   | Llm
   | BundleDefinitions

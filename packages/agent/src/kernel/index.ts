@@ -14,6 +14,7 @@ export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SE
 export { decisionFromEvaluation, evaluatePermission } from "./gate/match";
 export {
   composePointTable, executionPoint, GateComposeError, KERNEL_CAPABILITY_POINTS,
+  type CapabilityPointRegistration, type GatePointTable,
 } from "./points";
 export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/migrate";
 export {

@@ -1,14 +1,8 @@
 import { Kernel } from "@openomni/agent";
 const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
-const { assertPointGenerationRows, composePointTable, KERNEL_CAPABILITY_POINTS, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Kernel;
-
-/**
- * The merged core+capability point registration table of this app's
- * composition (#1251): the boot validates rows against it and every
- * generation Layer compiles its policy snapshot against it.
- */
-export const POINT_TABLE = composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
+const { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Kernel;
 import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
+import { composedPointTable } from "./composition/point-table";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
 import { PROVISION_POLICY_ROWS } from "./tools/provision";
 
@@ -43,16 +37,21 @@ const KERNEL_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
 export function seedKernelPolicyRows(
   policies: ProtocolStorage.PolicyRowSubAdapter,
   bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = [],
+  /** The composition's merged point table (#1251); the default is the full built-in composition this app ships. */
+  table: Kernel.GatePointTable = composedPointTable(),
 ): number {
   return policies.appendGeneration((current) => {
     // Convert the latest generation's semantics onto the fourteen-point
     // contract and validate every row BEFORE any early return: a completed
     // generation carrying an unmappable custom row still rejects the boot.
     const converted = current.map((row) => translateLegacyPolicyRow(row));
-    assertPointGenerationRows(converted, POINT_TABLE);
+    assertPointGenerationRows(converted, table);
     const next = new Map([...KERNEL_POLICY_ROWS, ...bundleRows].map((row) => [policyId(row), row]));
     // Preserve existing policy values and site-specific ids; fill missing mandatory ids.
     for (const row of converted) next.set(policyId(row), row);
+    // The rows this boot writes must themselves map onto the composition's
+    // points: a composition without a capability refuses its rows at seed.
+    assertPointGenerationRows([...next.values()], table);
     // Identity compares the STORED rows: a conversion that changed any row's
     // point identity must land as a new generation even when the converted
     // set already matches the target.
