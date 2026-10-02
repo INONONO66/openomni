@@ -186,8 +186,11 @@ describe("restore_context_projection", () => {
               foldSessionHistory("ctx", before),
             );
           }),
+        // The untouched base-era fixture: before #1251, restore restrictions
+        // lived on `turn/post` through the removed `policyPoint` mapping.
+        // Migration must keep this exact historical row refusing restores.
         [{
-          name: "no-restore", kind: "compaction", phase: "pre",
+          name: "no-restore", kind: "turn", phase: "post",
           match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
           verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
           priority: 500,

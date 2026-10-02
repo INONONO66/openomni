@@ -7,7 +7,7 @@ import {
   legacyPointOf,
   POINT_GENERATION_ROW,
   translateLegacyPolicyRow,
-} from "../src/kernel/gate/compose";
+} from "../src/kernel/gate/migrate";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { GateComposeError } from "../src/kernel/points";
 import { openCatalogStore } from "../src/store/catalog";
@@ -69,7 +69,7 @@ describe("permission-row migration (#1251)", () => {
     );
     const converted = translateLegacyPolicyRow(deny);
     expect(converted).toMatchObject({ kind: "compaction", phase: "pre" });
-    expect(converted.match.value).toEqual({});
+    expect(converted.match.value).toEqual({ op: "compact" });
 
     // Even an untouched historical generation translates at compile: the
     // pinned snapshot keeps the base-era refusal on the compaction point.
@@ -82,6 +82,50 @@ describe("permission-row migration (#1251)", () => {
     expect(snapshot.evaluate({ kind: "compaction", phase: "pre", op: "compact", value: {} }).verdict).toBe("deny");
     // The turn envelope itself is no longer governed by the converted row.
     expect(snapshot.evaluate({ kind: "turn", phase: "post", op: "finish", value: {} }).verdict).toBe("allow");
+  });
+
+  it("a base-era turn/post restore deny keeps refusing restores with its real operation (#1251 r2)", () => {
+    const deny = draft(
+      "no-restore",
+      "turn",
+      "post",
+      { type: "deny", reason: "pinned_projection" },
+      { match: { op: "restore_context_projection" }, priority: 500 },
+    );
+    const converted = translateLegacyPolicyRow(deny);
+    expect(converted).toMatchObject({ kind: "compaction", phase: "pre" });
+    expect(converted.match.value).toEqual({ op: "restore_context_projection" });
+
+    const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
+      generation: 1,
+      rows: [atGeneration(compaction, 1), atGeneration(deny, 1)],
+      mandatory: ["compaction"],
+    });
+    expect(
+      snapshot.evaluate({ kind: "compaction", phase: "pre", op: "restore_context_projection", value: {} }),
+    ).toMatchObject({ verdict: "deny", reason: "pinned_projection" });
+    // The restore-specific restriction never spills onto ordinary summarization.
+    expect(snapshot.evaluate({ kind: "compaction", phase: "pre", op: "compact", value: {} }).verdict).toBe("allow");
+  });
+
+  it("a wildcard turn/post row still governs compaction operations as the old mapping consulted it (#1251 r2)", () => {
+    const freeze = draft("frozen", "turn", "post", { type: "deny", reason: "frozen" }, { priority: 2_000 });
+    expect(translateLegacyPolicyRow(freeze)).toEqual(freeze);
+
+    const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
+      generation: 1,
+      rows: [atGeneration(compaction, 1), atGeneration(freeze, 1)],
+      mandatory: ["compaction"],
+    });
+    for (const op of ["compact", "restore_context_projection"]) {
+      expect(snapshot.evaluate({ kind: "compaction", phase: "pre", op, value: {} })).toMatchObject({
+        verdict: "deny",
+        reason: "frozen",
+      });
+    }
+    expect(snapshot.evaluate({ kind: "turn", phase: "post", op: "finish", value: {} }).verdict).toBe("deny");
   });
 
   it("converts the latest generation once, preserving historical generations byte-for-byte", () => {
