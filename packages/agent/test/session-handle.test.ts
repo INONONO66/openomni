@@ -508,8 +508,8 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "result", text: "complete" });
         expect(actions.filter((action) => action.kind === "prompt")).toHaveLength(1);
         expect(actions.filter((action) => action.kind === "turn")).toHaveLength(2);
+        // Prompt has no post point (#1251): the executor consults prompt.pre only.
         expect(decisions.map(policyHook).sort()).toEqual([
-          "prompt.post",
           "prompt.pre",
           "turn.post",
           "turn.pre",
@@ -524,7 +524,7 @@ describe("durable session handle", () => {
             .filter((action) => policyHook(action)?.startsWith("turn."))
             .every((action) => action.parentId === turn?.id),
         ).toBe(true);
-        expect(decisions.map(policyGeneration)).toEqual([1, 1, 1, 1]);
+        expect(decisions.map(policyGeneration)).toEqual([1, 1, 1]);
         expect(observedDecisionIds).toEqual(new Set(decisions.map((action) => action.id)));
         expect(observedBeforeCommit).toEqual([]);
       }),
@@ -585,12 +585,38 @@ describe("durable session handle", () => {
       expect(inbox).toEqual(["consumed"]);
     }));
 
-  test("a prompt post denial records both prompt decisions but never starts a turn", () =>
-    promptDeniedAt("post", "prompt post refused", ({ hooks }) => {
-      expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
-    }));
+  test("a prompt post row is never consulted: prompt has no post point (#1251)", () =>
+    testProgram(
+      Effect.gen(function* () {
+        const handle = yield* declare(
+          residentOptions("prompt-post-unconsulted", () =>
+            Effect.sync(() => {
+              return { kind: "result", text: "ran" };
+            }),
+          ),
+        );
+        const result = yield* awaitSignal(handle.prompt("not blocked"));
+        expect(result).toEqual({ kind: "result", text: "ran" });
+        const hooks = tree(handle.id)
+          .filter((action) => action.kind === "policy.decision")
+          .map(policyHook);
+        expect(hooks).not.toContain("prompt.post");
+      }),
+      {
+        policies: [
+          {
+            name: "deny-prompt-post",
+            kind: "prompt",
+            phase: "post",
+            match: { encodingVersion: 1, value: { op: "inbox" } },
+            verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
+            priority: 2_000,
+          },
+        ],
+      },
+    ));
 
-  test("fails closed when prompt post policy transforms its immutable receipt", () =>
+  test("a prompt post transform row never touches the immutable receipt: prompt has no post point (#1251)", () =>
     testProgram(
       Effect.gen(function* () {
         let calls = 0;
@@ -598,19 +624,15 @@ describe("durable session handle", () => {
           residentOptions("prompt-transform", () =>
             Effect.sync(() => {
               calls += 1;
-              return { kind: "result", text: "must not run" };
+              return { kind: "result", text: "runs untouched" };
             }),
           ),
         );
 
         const result = yield* awaitSignal(handle.prompt("immutable prompt"));
 
-        expect(result).toMatchObject({
-          kind: "error",
-          cause: { _tag: "SessionPolicyRefusal", reason: "invalid_output" },
-        });
-        expect(calls).toBe(0);
-        expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
+        expect(result).toEqual({ kind: "result", text: "runs untouched" });
+        expect(calls).toBe(1);
       }),
       {
         policies: [
@@ -799,8 +821,8 @@ describe("durable session handle", () => {
           expect(calls).toBe(phase === "pre" ? 0 : 1);
           expect(hooks).toEqual(
             phase === "pre"
-              ? ["prompt.pre", "prompt.post", "turn.pre"]
-              : ["prompt.pre", "prompt.post", "turn.pre", "turn.post"],
+              ? ["prompt.pre", "turn.pre"]
+              : ["prompt.pre", "turn.pre", "turn.post"],
           );
           expect(terminals(handle.id).at(0)).toMatchObject({ kind: "error" });
         }),

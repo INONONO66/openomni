@@ -264,7 +264,7 @@ export interface CompilePolicySnapshotOptions {
   readonly kinds?: readonly string[];
 }
 
-const DEFAULT_COMPILE_KINDS = [...CORE_ACTION_KINDS, "session.configure"] as const;
+const DEFAULT_COMPILE_KINDS = [...CORE_ACTION_KINDS, "compaction", "session.configure"] as const;
 
 function rowKey(row: Pick<PolicyRow.Row, "name" | "kind" | "phase">): string {
   return `${row.name}\u0000${row.kind}\u0000${row.phase}`;
@@ -699,7 +699,7 @@ function seeded(
 
 /** Kernel-owned initial data; the numeric limits are read from these rows. */
 export const SEEDED_POLICY_ROWS: readonly PolicyRowDraft[] = Object.freeze([
-  seeded("compaction", "turn", "post", { op: "compaction" }, { type: "allow" }, 1_000),
+  seeded("compaction", "compaction", "pre", {}, { type: "allow" }, 1_000),
   seeded(
     "continuation-cap",
     "turn",

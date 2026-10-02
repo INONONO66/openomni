@@ -126,7 +126,7 @@ describe("restore_context_projection", () => {
             ["fold.checkpoint", nth(appended, 3).id],
           ]);
           expect(nth(appended, 0).intent.value).toMatchObject({
-            hook: "turn.post",
+            hook: "compaction.pre",
             op: "restore_context_projection",
           });
           expect(nth(appended, 1).intent.value).toMatchObject({
@@ -187,7 +187,7 @@ describe("restore_context_projection", () => {
             );
           }),
         [{
-          name: "no-restore", kind: "turn", phase: "post",
+          name: "no-restore", kind: "compaction", phase: "pre",
           match: { encodingVersion: 1, value: { op: "restore_context_projection" } },
           verdict: { encodingVersion: 1, value: { type: "deny", reason: "pinned_projection" } },
           priority: 500,

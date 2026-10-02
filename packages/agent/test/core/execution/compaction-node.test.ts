@@ -256,11 +256,11 @@ it("refuses compaction before the summarizer when compiled pre policy denies it"
     policy: compiledPolicy([
       {
         name: "deny-compaction",
-        kind: "turn",
-        phase: "post",
+        kind: "compaction",
+        phase: "pre",
         generation: 1,
         priority: 2000,
-        match: { encodingVersion: 1, value: { op: "compaction" } },
+        match: { encodingVersion: 1, value: { op: "compact" } },
         verdict: { encodingVersion: 1, value: { type: "deny", reason: "hold" } },
       },
     ]),

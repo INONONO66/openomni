@@ -13,7 +13,9 @@ import { createAssistantMessage } from "../../../src/kernel/message-factory";
 import { recordingLedger } from "../../helpers/g0-effect";
 import { runInput } from "../../helpers/run-input";
 
-test("the final result consumes the executor-transformed canonical assistant rather than raw provider text", async () => {
+// Message has no registered post point (#1251): a message post transform row is
+// never consulted, so the canonical assistant passes through unchanged.
+test("a message post transform row never rewrites the canonical assistant: message has no post point", async () => {
   const recording = recordingLedger();
   const executor = testExecutor({
     policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
@@ -74,6 +76,6 @@ test("the final result consumes the executor-transformed canonical assistant rat
       },
     }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "question" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
   );
-  expect(result.text).toBe("redacted");
-  expect(result.steps).toEqual([{ type: "text", content: "redacted" }]);
+  expect(result.text).toBe("raw text");
+  expect(result.steps).toEqual([{ type: "text", content: "raw text" }]);
 });

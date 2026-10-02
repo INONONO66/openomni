@@ -478,11 +478,10 @@ function releaseBodies(fixture: WaveFixture, order: readonly WaveCall[]) {
 function shape(snapshot: SessionSnapshot | undefined): string[] {
     return (snapshot?.actions ?? []).map((action: LedgerAction.Node) => `${action.kind}:${phaseOf(action) ?? "-"}`);
 }
-/** cfg, P, prompt.pre/post, delivery, T, turn.pre: the seven-action session wrapper of 6.3. */
+/** cfg, P, prompt.pre, delivery, T, turn.pre: the six-action session wrapper of 6.3 (prompt has no post point, #1251). */
 const TURN_PREFIX = [
     "session.configure:configured",
     "prompt:-",
-    "policy.decision:result",
     "policy.decision:result",
     "inbox.deliver:delivery",
     "turn:pending",
@@ -579,7 +578,6 @@ describe("session lifecycle conformance", () => {
             "session.configure",
             "prompt",
             "policy.decision",
-            "policy.decision",
             "inbox.deliver",
             "turn",
             "policy.decision",
@@ -587,7 +585,7 @@ describe("session lifecycle conformance", () => {
             "turn",
         ]);
         expect(done?.row).toMatchObject({
-            revision: 9,
+            revision: 8,
             state: "idle",
         });
         expect(done?.inbox.map((row: Inbox.Row) => row.status)).toEqual(["consumed"]);
@@ -613,7 +611,7 @@ describe("session lifecycle conformance", () => {
             ...WAVE.flatMap(() => ["policy.decision:result", "tool:result"]),
             ...TURN_SUFFIX,
         ]);
-        expect(approved?.row.revision).toBe(32);
+        expect(approved?.row.revision).toBe(31);
         expect(approved?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["resolved", "answered"],
         ]);
@@ -721,7 +719,7 @@ describe("session lifecycle conformance", () => {
                     : ["request:state", "request:state", "request:state"]),
                 ...blockedTail,
             ]);
-            expect(final?.row).toMatchObject({ revision: 30, state: "idle" });
+            expect(final?.row).toMatchObject({ revision: 29, state: "idle" });
             const blocked = final?.actions.find((action: LedgerAction.Node) => action.kind === "tool" && objectValue(action.effect.value)?.terminal === "blocked_pre");
             expect(blocked === undefined ? undefined : objectValue(blocked.effect.value)).toMatchObject({
                 callId: "B",
@@ -757,7 +755,7 @@ describe("session lifecycle conformance", () => {
             "inbox.deliver:delivery",
             "turn:terminal",
         ]);
-        expect(cancelled?.row).toMatchObject({ revision: 25, state: "interrupted" });
+        expect(cancelled?.row).toMatchObject({ revision: 24, state: "interrupted" });
         expect(cancelled?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["cancelled", "cancelled"],
         ]);

@@ -377,6 +377,31 @@ describe("the single L2 executor's four-kind verdict model", () => {
         ),
       ));
 
+  }
+
+  // Prompt has no registered post point (#1251): a prompt post row is never consulted.
+  it("prompt: a post deny row never blocks — the post point is not registered", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { actions, executor } = postDenyHarness("prompt");
+          const body = okBody();
+
+          const result = yield* runTestOperation(executor, "prompt", body);
+
+          expect(result).toMatchObject({ terminal: "executed", value: { ok: true } });
+          expect(body).toHaveBeenCalledTimes(1);
+          expect(
+            actions.filter(
+              (action: import("@openomni/protocol").LedgerAction.Append) =>
+                action.kind === "policy.decision",
+            ),
+          ).toHaveLength(1);
+        }),
+      ),
+    ));
+
+  for (const kind of ["turn", "llm", "tool"] as const) {
     it(`${kind}: post deny reverts when a reverter exists`, () =>
       isolated(
         Effect.scoped(

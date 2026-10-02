@@ -20,6 +20,7 @@ const expectedIds = [
   ...MESSAGE_POLICY_ROWS.map(identity),
   ...PROVISION_POLICY_ROWS.map(identity),
   budgetId,
+  identity(Kernel.POINT_GENERATION_ROW),
 ].sort();
 
 type CatalogStore = ReturnType<typeof openCatalogStore>;
@@ -93,5 +94,26 @@ test("budget presence alone does not complete a generation; preserve existing po
     const complete = policies.rows();
     expect(seedKernelPolicyRows(policies)).toBe(3);
     expect(policies.rows()).toEqual(complete);
+  });
+});
+
+test("a latest generation with an unmappable row rejects the boot conversion and keeps the catalog intact", () => {
+  withDatabase((open) => {
+    const policies = open().policies;
+    expect(seedKernelPolicyRows(policies)).toBe(1);
+    const budget = policies.rows(1).find((row) => identity(row) === budgetId);
+    if (budget === undefined) throw new Error("missing seeded budget");
+    expect(
+      policies.append({ ...budget, name: "orphan-checkpoint", kind: "fold.checkpoint", generation: 2 }),
+    ).toBe(true);
+    const before = policies.rows();
+    try {
+      seedKernelPolicyRows(policies);
+      throw new Error("expected unknown_point");
+    } catch (error) {
+      if (!Kernel.GateComposeError.isInstance(error)) throw error;
+      expect(error.data).toEqual({ code: "unknown_point", point: "fold.checkpoint.pre" });
+    }
+    expect(policies.rows()).toEqual(before);
   });
 });

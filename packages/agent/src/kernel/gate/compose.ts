@@ -284,6 +284,9 @@ const LEGACY_POINT_BY_KIND_PHASE: ReadonlyMap<string, PointId> = new Map([
   ["llm\u0000pre", "llm.pre"],
   ["llm\u0000post", "llm.post"],
   ["message\u0000pre", "message.pre"],
+  // Session configuration gating is consulted by the core's configure
+  // authority; its historical rows belong to the session-open point.
+  ["session.configure\u0000pre", "session.open"],
   ["tool\u0000pre", "tool.pre"],
   ["tool\u0000post", "tool.post"],
   ["compaction\u0000pre", "compaction.pre"],
