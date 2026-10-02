@@ -1,6 +1,42 @@
 # Implementation Status
 
-## #1249 observation bus on Effect PubSub/Stream (epic #1260, ⏳ pending merge)
+## #1251 fourteen-point gate registry (epic #1260, ⏳ pending merge)
+
+On `epic1260/1251-point-registry` (2026-10-03, base `d34218c6`). Unknown hooks
+no longer pass: `packages/protocol/src/policy/point.ts` defines fourteen
+`{id, owner, allowedDo, rewritableFields, whenFields}` point records — eight
+core (`ingress.pre`, `session.open`, `prompt.pre`, `turn.pre`, `turn.post`,
+`llm.pre`, `llm.post`, `message.pre`) and six capability points present only
+while their owning builtin is composed (`tool.pre/post`, `compaction.pre/post`,
+`alarm.fired`, `action.pre`) — plus the emit allowed set
+`message | alarm.arm | compaction`. `row.ts` is the single gate-row contract
+(`{id, on, when, do, how, order, generation}`), the decision/consulted/fact
+records, the `emittedRowKey` idempotency digest, and the #1255 compose
+rejection codes. `packages/agent/src/kernel/points.ts` composes the merged
+core+capability table (`composePointTable`; duplicate registration and core
+removal are typed `GateComposeError`s) and `executionPoint` is the one lookup
+executor and monitor consult — the issue's `core/…` paths map to the #1247
+kernel shape (`core/points.ts` → `kernel/points.ts`, `core/gate/compile.ts` →
+`kernel/gate/compose.ts` beside the existing row compiler). `compose.ts`
+compiles rows fail-closed (`unknown_point` including off-capability points,
+`unknown_handler`, `duplicate`, `bad_action`/`bad_field`, `post_end_emit`),
+folds deny > require_approval > allow recording every matched row id, applies
+rewrites only through declared fields in row order, guards handler service
+requirements (an escape records a `requirement_escape` fact and denies), keeps
+unrecorded responses observe-only, and replays an identical decision from a
+recorded inputHash. Boot derives the latest catalog generation once
+(`assertPointGenerationRows` inside the policy-seed derive): historical bytes
+are untouched and an unmappable row rejects boot transactionally. The
+executor fails closed (`unknown_point`) on unregistered points, prompt and
+message have no post consultation, compaction consults `compaction.pre/post`
+(the seeded mandatory row moved there), and `policyPoint(`/`row-compiler`
+grep to zero; the kernel ledger/llm/timers import baseline shrank from
+20 lines/11 files to 1 comment line (#1255 deletes it). Suites:
+point-registry, gate-fold, requirement-guard, builtin-seal, decision-replay,
+permission-row-migration (byte-preservation over a real SQLite catalog), plus
+the apps boot-rejection test.
+
+## #1249 observation bus on Effect PubSub/Stream (epic #1260, merged as `4978236b`, PR #1268)
 
 On `epic1260/1249-bus-pubsub` (2026-10-02, base `d34218c6`, #1248's merge).
 The manual-subscriber observation bus is replaced by an app-owned Effect

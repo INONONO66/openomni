@@ -1,5 +1,7 @@
 # packages/protocol
 
+2026-10-03, #1251 point registry: `src/policy/point.ts` carries the fourteen `{id, owner, allowedDo, rewritableFields, whenFields}` point records (eight core, six capability) and the emit allowed set `message | alarm.arm | compaction`; `src/policy/row.ts` the single gate-row contract, decision/consulted/fact records, `emittedRowKey`, and the #1255 compose rejection codes (`unknown_point`, `unknown_handler`, `duplicate`, `bad_action`, `bad_field`, `post_end_emit`). New points require a record; agent composes the merged registration table.
+
 2026-09-07, #969 Owner-answer ingress: `Gateway.RequestAnswer` carries a stable inputId, exact request binding, explicit approve/refuse decision, and transient credential. Authenticated principal and receipt time are gateway outputs, not caller-supplied wire fields.
 
 2026-09-07, #969 request cutover: `ledger/session-transition.ts` owns the original-action request schemas. Gateway and ingress use `requestId`, `requestSpec`, `requestContext`, and `request_correlation`. The old independent lifecycle schema/fold modules and gateway lifecycle control contract are removed. Physical matching lives in channels; durable transition decisions live in agent.
