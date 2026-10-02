@@ -1,12 +1,12 @@
 import { Effect } from "effect";
 import type { Machine } from "@openomni/protocol";
-import { createCodemode as create } from "../../src/index";
-import { PythonKernel as NativeKernel } from "../../src/kernel";
-import { decodeCodeFailure } from "../../src/failure";
-import type { CodeError } from "../../src/errors";
-import { type CodeRunner, type MachineHost, foreign } from "../../../machines/test/helpers/native";
-import { acquireSync, run } from "../../../ipc/test/helpers/effects";
-export * from "../../src/errors";
+import { createCodemode as create } from "../../../src/codemode/index";
+import { PythonKernel as NativeKernel } from "../../../src/codemode/kernel";
+import { decodeCodeFailure } from "../../../src/failure";
+import type { CodeError } from "../../../src/codemode/errors";
+import { type CodeRunner, type MachineHost, foreign } from "../../helpers/native";
+import { acquireSync, run } from "../../ipc/helpers/effects";
+export * from "../../../src/codemode/errors";
 
 type Caller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
 type Boundary = (call: Machine.ToolCall, body: () => Promise<Machine.ToolCallResult>) => Promise<Machine.ToolCallResult>;

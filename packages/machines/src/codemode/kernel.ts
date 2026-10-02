@@ -4,7 +4,7 @@ import { Machine } from "@openomni/protocol";
 import { type MachineError, onAbort } from "..";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
-import { decodeCodeFailure } from "./failure";
+import { decodeCodeFailure } from "../failure";
 import { z } from "zod";
 
 const PYTHON_DRIVER = String.raw`

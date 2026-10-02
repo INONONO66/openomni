@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import type { IdSource, Ipc } from "@openomni/protocol";
-import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../src/index";
-import { PeerRequestTable as NativeTable } from "../../src/peer-request-table";
-import { decodeIpcFailure } from "../../src/failure";
+import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../../src/index";
+import { PeerRequestTable as NativeTable } from "../../../src/ipc/peer-request-table";
+import { decodeIpcFailure } from "../../../src/failure";
 import { acquire, run, sync } from "./effects";
-export * from "../../src/errors";
-export { classifyIpcMessage } from "../../src/peer-request-table";
+export * from "../../../src/ipc/errors";
+export { classifyIpcMessage } from "../../../src/ipc/peer-request-table";
 
 export function sequentialIds(prefix: string): IdSource {
   let n = 0;

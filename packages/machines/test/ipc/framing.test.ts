@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
-import { LineDecoder } from "../src/framing";
-import { IpcProtocolError } from "../src/errors";
+import { LineDecoder } from "../../src/ipc/framing";
+import { IpcProtocolError } from "../../src/ipc/errors";
 
 const FRAME_LIMIT_BYTES = 16 * 1024 * 1024;
 

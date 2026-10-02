@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { FrameSchema } from "../src/frame-schema";
-import { IpcProtocolError } from "../src/errors";
-import { LineDecoder } from "../src/framing";
+import { FrameSchema } from "../../src/ipc/frame-schema";
+import { IpcProtocolError } from "../../src/ipc/errors";
+import { LineDecoder } from "../../src/ipc/framing";
 
 test("IPC protocol error is a runtime contract", () => {
   expect(new IpcProtocolError({ message: "bad frame" })._tag).toBe("IpcProtocolError");

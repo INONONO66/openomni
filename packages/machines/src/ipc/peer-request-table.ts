@@ -1,7 +1,7 @@
 import { Ipc, type IdSource, type PlainValue } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Option } from "effect";
 import { IpcRemoteError, IpcTimeoutError, type IpcError } from "./errors";
-import { decodeIpcFailure } from "./failure";
+import { decodeIpcFailure } from "../failure";
 
 /** One inbound frame after schema classification; the only place the three wire schemas are tried. */
 type IpcMessage =
@@ -98,7 +98,7 @@ export class PeerRequestTable<TPeer = undefined> {
       const failure = Cause.findErrorOption(cause);
       if (Option.isNone(failure)) return Effect.failCause(cause);
       const error = failure.value;
-      const message = error._tag === "IpcFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
+      const message = error._tag === "MachinesFailure" ? error.cause.replace(/^\w*Error: /, "") : error.message;
       return send(Ipc.createErrorResponse(request.id, 1000, message));
     }));
   }

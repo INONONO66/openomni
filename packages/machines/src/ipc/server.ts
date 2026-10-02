@@ -4,7 +4,7 @@ import { type IdSource, Ipc, type PlainValue } from "@openomni/protocol";
 
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, type IpcError } from "./errors";
-import { decodeIpcFailure } from "./failure";
+import { decodeIpcFailure } from "../failure";
 import { makeDispatcher } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";

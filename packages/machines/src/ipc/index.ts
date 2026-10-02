@@ -4,4 +4,3 @@ export type { IpcClient } from "./client";
 export * from "./errors";
 export { createIpcServer } from "./server";
 export type { IpcServer } from "./server";
-export { typedCall } from "./typed-call";

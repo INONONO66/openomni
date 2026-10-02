@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import { typedCall, type IpcClient, type IpcError } from "../../src/index.js";
+import { typedCall, type IpcClient, type IpcError } from "../../../src/index.js";
 
 declare const client: IpcClient;
 

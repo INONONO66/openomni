@@ -2,7 +2,7 @@ import net from "node:net";
 import type { IdSource, Ipc } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, IpcProtocolError, type IpcError } from "./errors";
-import { decodeIpcFailure } from "./failure";
+import { decodeIpcFailure } from "../failure";
 import { makeDispatcher } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";

@@ -1,12 +1,5 @@
 import { Data } from "effect";
-
-/** Ipc-owned failure for a Cause without a typed error (temporary until #1246 folds ipc into machines). */
-export class IpcFailure extends Data.TaggedError("IpcFailure")<{
-  readonly operation: string;
-  readonly cause: string;
-}> {
-  override get message(): string { return this.cause; }
-}
+import type { MachinesFailure } from "../errors";
 
 export class IpcConnectionError extends Data.TaggedError("IpcConnectionError")<{
   readonly message: string;
@@ -30,4 +23,4 @@ export class IpcRemoteError extends Data.TaggedError("IpcRemoteError")<{
   readonly code: number;
 }> {}
 
-export type IpcError = IpcFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;
+export type IpcError = MachinesFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;

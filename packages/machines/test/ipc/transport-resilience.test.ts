@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
 import { Effect, Logger } from "effect";
-import { connectIpcClient as connectNative, createIpcServer as listenNative } from "../src/index";
+import { connectIpcClient as connectNative, createIpcServer as listenNative } from "../../src/ipc/index";
 
 function resilienceIds(prefix: string): () => string {
   let n = 0;
@@ -10,7 +10,7 @@ function resilienceIds(prefix: string): () => string {
 }
 import { acquire } from "./helpers/effects";
 import { connectIpcClient } from "./helpers/native";
-import { IpcConnectionError, IpcRemoteError } from "../src/errors";
+import { IpcConnectionError, IpcRemoteError } from "../../src/ipc/errors";
 import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";

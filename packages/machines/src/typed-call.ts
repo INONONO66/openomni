@@ -1,7 +1,7 @@
 import type { Ipc } from "@openomni/protocol";
 import type { Effect } from "effect";
-import type { IpcError } from "./errors";
-import type { IpcClient } from "./client";
+import type { IpcError } from "./ipc/errors";
+import type { IpcClient } from "./ipc/client";
 
 type MethodTable = typeof Ipc.Methods;
 type MethodName = keyof MethodTable;
@@ -11,8 +11,10 @@ type MethodResult<Method extends MethodName> = MethodTable[Method]["result"]["_o
 type GenericIpcCaller = Pick<IpcClient, "call">;
 
 /**
- * Schema-derived facade for same-version methods. The caller's generic call
- * remains available for unknown methods used by mixed-version peers.
+ * Schema-derived facade for same-version machine wire methods. Lives beside
+ * its callers (host/daemon) so the generic ipc layer carries no machine
+ * vocabulary; the caller's generic call remains available for unknown methods
+ * used by mixed-version peers.
  */
 export function typedCall<Method extends MethodName>(
   caller: GenericIpcCaller,

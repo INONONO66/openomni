@@ -1,10 +1,12 @@
-import { type CodeRunner, type MachineHandle, type MachineHost, type MachineInfo, type MachineError, MachinesFailure } from "..";
+import type { CodeRunner } from "../daemon";
+import type { MachineHandle, MachineHost, MachineInfo } from "../host";
+import { MachinesFailure, type MachineError } from "../errors";
 import { listenForAbort, Machine } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { z } from "zod";
 import { PythonKernel } from "./kernel";
 import { CodemodeError, type CodeError } from "./errors";
-import { decodeCodeFailure } from "./failure";
+import { decodeCodeFailure } from "../failure";
 export * from "./errors";
 
 type Failure = CodeError | MachineError;

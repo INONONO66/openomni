@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Ipc } from "@openomni/protocol";
 
-import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../src/errors";
+import { IpcConnectionError, IpcRemoteError, IpcTimeoutError } from "../../src/ipc/errors";
 import { classifyIpcMessage, PeerRequestTable } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 

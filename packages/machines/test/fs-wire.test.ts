@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createIpcServer, typedCall } from "../../ipc/test/helpers/native";
+import { createIpcServer, typedCall } from "./ipc/helpers/native";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, createMachineHost, MachineRefusalError } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";

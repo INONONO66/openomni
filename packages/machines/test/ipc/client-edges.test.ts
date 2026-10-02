@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import net from "node:net";
 import { connectIpcClient } from "./helpers/native";
-import { IpcConnectionError, IpcProtocolError } from "../src/errors";
+import { IpcConnectionError, IpcProtocolError } from "../../src/ipc/errors";
 import { deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 

@@ -3,7 +3,7 @@ import type { Machine } from "@openomni/protocol";
 import * as Native from "../../src/index";
 import { createFsDriver as fsDriver } from "../../src/fs";
 import { decodeMachineFailure } from "../../src/failure";
-import { acquire, run, sync } from "../../../ipc/test/helpers/effects";
+import { acquire, run, sync } from "../ipc/helpers/effects";
 export * from "../../src/errors";
 
 function sequentialIds(prefix: string): () => string {
