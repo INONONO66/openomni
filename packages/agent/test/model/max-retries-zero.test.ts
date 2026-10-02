@@ -20,9 +20,13 @@ const model: Provider.Model = {
 };
 
 /**
- * Retry ownership stays with the executor's journal alarms: the SDK is handed
- * `maxRetries: 0` and a failed attempt must not trigger a second SDK call —
- * the typed failure propagates with the provider facts for classification.
+ * Retry ownership stays with the executor's journal alarms. This test pins the
+ * boundary `run()` controls: `streamText` is handed `maxRetries: 0`, the
+ * processor invokes it once per attempt, and the failed attempt propagates as
+ * a typed failure carrying the provider facts for classification. The mock
+ * replaces `streamText` itself, so it cannot observe retries the SDK would
+ * perform inside a real `streamText`; that behavior is the SDK's documented
+ * `maxRetries` contract, not something this suite re-proves.
  */
 describe("maxRetries: 0 under ai 7", () => {
   let calls = 0;
@@ -50,7 +54,7 @@ describe("maxRetries: 0 under ai 7", () => {
     });
   });
 
-  test("one failed attempt means exactly one SDK call and a typed failure", async () => {
+  test("one failed attempt means one streamText call with maxRetries 0 and a typed failure", async () => {
     const outcome = await run(
       {
         trace: { traceId: newTraceId(), sessionId: "session-max-retries", runId: "run-max-retries" },
