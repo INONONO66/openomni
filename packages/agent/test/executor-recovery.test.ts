@@ -253,6 +253,95 @@ test.each([
   expect(actions).toEqual(before);
 });
 
+describe("recovered gate evidence (#1251 r4)", () => {
+  /** A committed pre-decision for `toolRequest`, optionally carrying gate evidence. */
+  function commitDecision(
+    options: ResolvedExecutorOptions,
+    gate: PlainValue | undefined,
+  ) {
+    const evaluation = options.policy.evaluate({
+      kind: "tool", phase: "pre", op: toolRequest.op, role: "resident",
+      sessionId: "session", value: toolRequest.intent,
+    });
+    return isolated(
+      options.ledger.commit({
+        ...openIntent("decision", "policy.decision", "turn", {}),
+        intent: { encodingVersion: 1, value: {
+          hook: "tool.pre", op: toolRequest.op, generation: evaluation.generation,
+          matchedRuleIds: [...evaluation.matchedRuleIds], verdict: evaluation.verdict,
+          inputHash: evaluation.inputHash, transforms: [],
+          ...(gate === undefined ? {} : { gate }),
+        } },
+        effect: { encodingVersion: 1, value: { reason: null } },
+      }),
+    );
+  }
+
+  async function recoveredRun(options: ResolvedExecutorOptions, decisionId: string) {
+    const original = await isolated(
+      options.ledger.commit(
+        openIntent("original", "tool", "turn", {
+          op: toolRequest.op, policyDecisionId: decisionId, value: toolRequest.intent,
+        }),
+      ),
+    );
+    let bodies = 0;
+    const outcome = await isolated(
+      Effect.result(
+        testExecutor(options).run({ ...toolRequest, originalAction: original.action }, () =>
+          Effect.sync(() => {
+            bodies++;
+            return { status: "recovered" };
+          }),
+        ),
+      ),
+    );
+    return { outcome, bodies: () => bodies };
+  }
+
+  test("absent evidence is a pre-contract record: the recorded bytes admit", async () => {
+    const { options } = harness();
+    const decision = await commitDecision(options, undefined);
+    const { outcome, bodies } = await recoveredRun(options, decision.action.id);
+    expect(outcome).toMatchObject({
+      success: { terminal: "executed", value: { status: "recovered" } },
+    });
+    expect(bodies()).toBe(1);
+  });
+
+  test("well-formed evidence replays and admits", async () => {
+    const { options } = harness();
+    const recorded = options.policy.evaluate({
+      kind: "tool", phase: "pre", op: toolRequest.op, role: "resident",
+      sessionId: "session", value: toolRequest.intent,
+    }).gate;
+    if (recorded === undefined) throw new Error("gate evidence missing");
+    const decision = await commitDecision(options, recorded);
+    const { outcome, bodies } = await recoveredRun(options, decision.action.id);
+    expect(outcome).toMatchObject({
+      success: { terminal: "executed", value: { status: "recovered" } },
+    });
+    expect(bodies()).toBe(1);
+  });
+
+  test("present but malformed evidence is refused, never routed to byte admission", async () => {
+    const { options } = harness();
+    const recorded = options.policy.evaluate({
+      kind: "tool", phase: "pre", op: toolRequest.op, role: "resident",
+      sessionId: "session", value: toolRequest.intent,
+    }).gate;
+    if (recorded === undefined) throw new Error("gate evidence missing");
+    // Strip the required output: the record is present yet no longer a decision.
+    const { output: _output, ...malformed } = recorded;
+    const decision = await commitDecision(options, malformed);
+    const { outcome, bodies } = await recoveredRun(options, decision.action.id);
+    expect(outcome).toMatchObject({
+      failure: { _tag: "ExecutionApprovalError", code: "stale_approval" },
+    });
+    expect(bodies()).toBe(0);
+  });
+});
+
 describe("completion recovery", () => {
   for (const site of ["before_persist", "after_persist"] as const) {
     test(`a result commit throwing ${site} keeps one terminal and never replays the body`, async () => {

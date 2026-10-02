@@ -1635,14 +1635,20 @@ function recoverAdmission(
       recorded.hook !== `${request.kind}.pre` || recorded.op !== request.op)
     throw new ExecutionApprovalError({ code: "stale_approval" });
   // Re-admission replays the committed gate decision (#1251 r3): the
-  // recorded responses are the evidence, so no handler ever re-runs. A
-  // decision recorded before this contract carries no gate evidence and
-  // keeps admitting its recorded bytes.
-  const evidence = GateDecision.safeParse(gate);
-  const value = evidence.success ? replayRecordedValue(options.policy, request, options.identity, evidence.data) : intent.value;
+  // recorded responses are the evidence, so no handler ever re-runs. Byte
+  // admission exists ONLY for truly absent pre-contract evidence; a present
+  // record that no longer parses is a corrupt decision and refuses (r4).
+  const value = gate === undefined ? intent.value : replayRecordedValue(options.policy, request, options.identity, parseGateEvidence(gate));
   return { generation: recorded.generation, verdict, transforms: recorded.transforms,
     value, ...(recorded.reason === null ? {} : { reason: recorded.reason }),
     receipt: { action, revision: action.ordinal } };
+}
+
+/** Present evidence must be a well-formed decision; a malformed record refuses instead of degrading to byte admission. */
+function parseGateEvidence(gate: PlainValue): GateDecision {
+  const evidence = GateDecision.safeParse(gate);
+  if (!evidence.success) throw new ExecutionApprovalError({ code: "stale_approval" });
+  return evidence.data;
 }
 
 /** Replays the committed gate decision through the pinned snapshot; anything but a verbatim replay is a stale approval. */
