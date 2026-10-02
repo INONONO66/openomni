@@ -48,17 +48,25 @@ it("publishes no lifecycle event when pre policy blocks before tool intent", asy
     clock: () => 10,
   });
   let bodyCalls = 0;
-  const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
-      echoTool(async (text) => {
-        bodyCalls += 1;
-        return text;
-      }),
-    ]))));
+  const dispatcher = runAgentSync(
+    createDispatcher({ executor: recording.executor }).pipe(
+      Effect.provide(
+        catalogLayer([
+          echoTool(async (text) => {
+            bodyCalls += 1;
+            return text;
+          }),
+        ]),
+      ),
+    ),
+  );
 
-  const result = await isolated(dispatcher.execute(
-    { id: "call-1", tool: "echo", input: { text: "blocked" } },
-    { sessionId: "session-1", turnId: "turn-1" },
-  ));
+  const result = await isolated(
+    dispatcher.execute(
+      { id: "call-1", tool: "echo", input: { text: "blocked" } },
+      { sessionId: "session-1", turnId: "turn-1" },
+    ),
+  );
 
   expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
   expect(bodyCalls).toBe(0);
@@ -83,14 +91,18 @@ it("publishes Started after intent commit and Completed after result commit", as
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = runAgentSync(createDispatcher({
-    executor: recording.executor,
-  }).pipe(Effect.provide(catalogLayer([echoTool(async (text) => text)]))));
+  const dispatcher = runAgentSync(
+    createDispatcher({
+      executor: recording.executor,
+    }).pipe(Effect.provide(catalogLayer([echoTool(async (text) => text)]))),
+  );
 
-  const running = isolated(dispatcher.execute(
-    { id: "call-1", tool: "echo", input: { text: "ok" } },
-    { sessionId: "session-1", turnId: "turn-1" },
-  ));
+  const running = isolated(
+    dispatcher.execute(
+      { id: "call-1", tool: "echo", input: { text: "ok" } },
+      { sessionId: "session-1", turnId: "turn-1" },
+    ),
+  );
   await intentCommit.reached;
   expect(observations.names).toEqual([]);
 
@@ -111,9 +123,13 @@ it("publishes one error completion after a failed tool result commits", async ()
     onObservation: observations.observe,
     clock: () => 10,
   });
-  const dispatcher = runAgentSync(createDispatcher({
-    executor: recording.executor,
-  }).pipe(Effect.provide(catalogLayer([echoTool(() => Promise.reject(new TypeError("failed")))]))));
+  const dispatcher = runAgentSync(
+    createDispatcher({
+      executor: recording.executor,
+    }).pipe(
+      Effect.provide(catalogLayer([echoTool(() => Promise.reject(new TypeError("failed")))])),
+    ),
+  );
 
   const result = await isolated(dispatchEcho(dispatcher, "fail"));
 
@@ -121,33 +137,49 @@ it("publishes one error completion after a failed tool result commits", async ()
   expect(observations.names).toEqual([Tool.Events.Started.name, Tool.Events.Completed.name]);
 });
 
-it("publishes TimedOut and Completed exactly once after the timeout result commits", () => isolated(
-  Effect.gen(function* () {
-    const resultCommit = actionCommitGate("echo:result");
-    const bodyEntered = Promise.withResolvers<void>();
-    const observations = recordingToolObservations();
-    const recording = recordingExecutor({
-      onCommit: resultCommit.onCommit,
-      onObservation: observations.observe,
-      clock: () => 10,
-    });
-    const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor, timeoutMs: 50 }).pipe(Effect.provide(catalogLayer([echoTool((_text, signal) => new Promise<string>((_resolve, reject) => {
-      signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
-      bodyEntered.resolve();
-    }))]))));
-    const control = Effect.gen(function* () {
-      yield* Effect.promise(() => bodyEntered.promise).pipe(Effect.timeout("5 seconds"));
-      yield* TestClock.adjust(50);
-      yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
-      expect(observations.names).toEqual([Tool.Events.Started.name]);
-      resultCommit.release();
-    });
-    const [result] = yield* Effect.all([dispatchEcho(dispatcher, "stall"), control], { concurrency: "unbounded" });
-    expectFailedToolCommit(result, recording.committed);
-    expect(observations.names).toEqual([
-      Tool.Events.Started.name,
-      Tool.Events.TimedOut.name,
-      Tool.Events.Completed.name,
-    ]);
-  }).pipe(Effect.provide(TestClock.layer())),
-));
+it("publishes TimedOut and Completed exactly once after the timeout result commits", () =>
+  isolated(
+    Effect.gen(function* () {
+      const resultCommit = actionCommitGate("echo:result");
+      const bodyEntered = Promise.withResolvers<void>();
+      const observations = recordingToolObservations();
+      const recording = recordingExecutor({
+        onCommit: resultCommit.onCommit,
+        onObservation: observations.observe,
+        clock: () => 10,
+      });
+      const dispatcher = runAgentSync(
+        createDispatcher({ executor: recording.executor, timeoutMs: 50 }).pipe(
+          Effect.provide(
+            catalogLayer([
+              echoTool(
+                (_text, signal) =>
+                  new Promise<string>((_resolve, reject) => {
+                    signal.addEventListener("abort", () => reject(new Error("aborted")), {
+                      once: true,
+                    });
+                    bodyEntered.resolve();
+                  }),
+              ),
+            ]),
+          ),
+        ),
+      );
+      const control = Effect.gen(function* () {
+        yield* Effect.promise(() => bodyEntered.promise).pipe(Effect.timeout("5 seconds"));
+        yield* TestClock.adjust(50);
+        yield* Effect.promise(() => resultCommit.reached).pipe(Effect.timeout("5 seconds"));
+        expect(observations.names).toEqual([Tool.Events.Started.name]);
+        resultCommit.release();
+      });
+      const [result] = yield* Effect.all([dispatchEcho(dispatcher, "stall"), control], {
+        concurrency: "unbounded",
+      });
+      expectFailedToolCommit(result, recording.committed);
+      expect(observations.names).toEqual([
+        Tool.Events.Started.name,
+        Tool.Events.TimedOut.name,
+        Tool.Events.Completed.name,
+      ]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  ));

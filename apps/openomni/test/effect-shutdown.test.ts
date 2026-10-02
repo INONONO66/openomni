@@ -1,7 +1,7 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
-import { Kernel, Session, Testing } from "@openomni/agent";
+import { Kernel, type Session, Testing } from "@openomni/agent";
 const session = Testing.session;
 const createTurnDispatcher = Kernel.createTurnDispatcher;
 const defineTool = Kernel.defineTool;
@@ -19,7 +19,6 @@ import { bootResource } from "../src/composition/boot";
 import { acquireAppResource, gatewayRuntime, runAppBoot, runAppEffect } from "../src/gateway";
 import { installShutdownHandlers } from "../src/index";
 const GenerationLayers = Kernel.GenerationLayers;
-type GenerationLayers = Kernel.GenerationLayers;
 import { AppLifecycleFailure } from "../src/runtime";
 import { allowConfigure } from "./helpers/generation-services";
 import { Bus } from "./helpers/bus";
@@ -104,77 +103,123 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
 });
 
 for (const settleAfterTurn of [false, true]) {
-test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
-  const runtime = gatewayRuntime({ observations: Bus, now: () => 1000 });
-  await runAppBoot(runtime, Effect.void);
-  const plane = await planeOf(runtime);
-  seedKernelPolicyRows(plane.catalog.policies);
-  const entered = eventSignal<void>("raw tool entered");
-  const interrupted = eventSignal<void>("raw tool interrupted");
-  const raw = Promise.withResolvers<string>();
-  const released = eventSignal<void>("raw lease released");
-  const order: string[] = [];
-  const tool = eraseTool(defineTool({
-    name: "hold_raw", category: "query", description: "Hold a raw tool body",
-    input: z.object({}), output: z.string(), visibility: { model: ["resident"], cell: [] },
-    execute: (_args, { signal }) => {
-      signal.addEventListener("abort", () => { order.push("interrupt"); interrupted.resolve(); }, { once: true });
-      entered.resolve();
-      return raw.promise;
-    },
-    render: (_args, output) => output,
-  }));
-  const sessionRuntime: SessionRuntime = {
-    authorizeConfigure: allowConfigure,
-    openKernel: plane.openKernel,
-    listSessions: plane.listSessions,
-    closeGraceMs: 0,
-    onHibernate: () => Effect.sync(() => { order.push("lease.released"); released.resolve(); }),
-  };
-  const resident = createResident({
-    model: { provider: "test", id: "test" },
-    apiKey: "test",
-    tools: { ...testToolPorts },
-    toolDefinitions: [tool],
-    sessionRuntime,
-    policyGeneration: () => plane.openKernel("shutdown-raw").currentPolicyGeneration(),
+  test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
+    const runtime = gatewayRuntime({ observations: Bus, now: () => 1000 });
+    await runAppBoot(runtime, Effect.void);
+    const plane = await planeOf(runtime);
+    seedKernelPolicyRows(plane.catalog.policies);
+    const entered = eventSignal<void>("raw tool entered");
+    const interrupted = eventSignal<void>("raw tool interrupted");
+    const raw = Promise.withResolvers<string>();
+    const released = eventSignal<void>("raw lease released");
+    const order: string[] = [];
+    const tool = eraseTool(
+      defineTool({
+        name: "hold_raw",
+        category: "query",
+        description: "Hold a raw tool body",
+        input: z.object({}),
+        output: z.string(),
+        visibility: { model: ["resident"], cell: [] },
+        execute: (_args, { signal }) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              order.push("interrupt");
+              interrupted.resolve();
+            },
+            { once: true },
+          );
+          entered.resolve();
+          return raw.promise;
+        },
+        render: (_args, output) => output,
+      }),
+    );
+    const sessionRuntime: SessionRuntime = {
+      authorizeConfigure: allowConfigure,
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
+      closeGraceMs: 0,
+      onHibernate: () =>
+        Effect.sync(() => {
+          order.push("lease.released");
+          released.resolve();
+        }),
+    };
+    const resident = createResident({
+      model: { provider: "test", id: "test" },
+      apiKey: "test",
+      tools: { ...testToolPorts },
+      toolDefinitions: [tool],
+      sessionRuntime,
+      policyGeneration: () => plane.openKernel("shutdown-raw").currentPolicyGeneration(),
+    });
+    await runAppEffect(
+      runtime,
+      Effect.flatMap(GenerationLayers, (generations) =>
+        generations.initialize(resident.definitions),
+      ),
+    );
+    const handle = await acquireAppResource(
+      runtime,
+      session(
+        {
+          id: "shutdown-raw",
+          role: "resident",
+          tools: [sessionTool(tool)],
+          runner: (input) =>
+            Effect.flatMap(createTurnDispatcher(input, sessionRuntime), (dispatcher) =>
+              dispatcher.execute(
+                { id: "hold-call", tool: tool.name, input: {} },
+                { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
+              ),
+            ).pipe(Effect.as({ kind: "result" as const, text: "settled" })),
+        },
+        sessionRuntime,
+      ),
+    );
+    const turn = runAppEffect(runtime, handle.prompt("hold raw tool"));
+    try {
+      await entered.promise;
+      const kernel = plane.openKernel(handle.id);
+      const lease = kernel.row(handle.id);
+      expect(lease.fenceOwner).not.toBeNull();
+      await runAppEffect(runtime, shutdownSessions(sessionRuntime, Promise.resolve()));
+      order.push("close.returned");
+      await interrupted.promise;
+      expect(kernel.row(handle.id)).toMatchObject({
+        fenceOwner: lease.fenceOwner,
+        fence: lease.fence,
+      });
+      expect(
+        sessionTree(handle.id, plane.sessionStore(handle.id).actions).some((action) => {
+          const value = action.effect.value;
+          return (
+            value !== null &&
+            typeof value === "object" &&
+            !Array.isArray(value) &&
+            value.terminal === "outcome_unknown"
+          );
+        }),
+      ).toBe(true);
+      await expect(runtime.dispose()).rejects.toMatchObject({
+        _tag: "AppLifecycleFailure",
+        operation: "shutdown.raw_unsettled",
+      });
+      expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
+      if (settleAfterTurn) await turn;
+      raw.resolve("late raw settlement");
+      await turn;
+      await released.promise;
+      expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
+      // W5.2: hibernation commits nothing and the durable owner survives —
+      // release is the onHibernate signal above, not a lease-null write.
+      expect(kernel.row(handle.id).fenceOwner).not.toBeNull();
+    } finally {
+      raw.resolve("late raw settlement");
+      await turn;
+      await runtime.dispose();
+    }
   });
-  await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.initialize(resident.definitions)));
-  const handle = await acquireAppResource(runtime, session({
-    id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],
-    runner: (input) => Effect.flatMap(createTurnDispatcher(input, sessionRuntime), (dispatcher) => dispatcher.execute(
-      { id: "hold-call", tool: tool.name, input: {} },
-      { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
-    )).pipe(Effect.as({ kind: "result" as const, text: "settled" })),
-  }, sessionRuntime));
-  const turn = runAppEffect(runtime, handle.prompt("hold raw tool"));
-  try {
-    await entered.promise;
-    const kernel = plane.openKernel(handle.id);
-    const lease = kernel.row(handle.id);
-    expect(lease.fenceOwner).not.toBeNull();
-    await runAppEffect(runtime, shutdownSessions(sessionRuntime, Promise.resolve()));
-    order.push("close.returned");
-    await interrupted.promise;
-    expect(kernel.row(handle.id)).toMatchObject({ fenceOwner: lease.fenceOwner, fence: lease.fence });
-    expect(sessionTree(handle.id, plane.sessionStore(handle.id).actions).some((action) => {
-      const value = action.effect.value;
-      return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
-    })).toBe(true);
-    await expect(runtime.dispose()).rejects.toMatchObject({ _tag: "AppLifecycleFailure", operation: "shutdown.raw_unsettled" });
-    expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
-    if (settleAfterTurn) await turn;
-    raw.resolve("late raw settlement");
-    await turn;
-    await released.promise;
-    expect(order.indexOf("lease.released")).toBeGreaterThan(order.indexOf("close.returned"));
-    // W5.2: hibernation commits nothing and the durable owner survives —
-    // release is the onHibernate signal above, not a lease-null write.
-    expect(kernel.row(handle.id).fenceOwner).not.toBeNull();
-  } finally {
-    raw.resolve("late raw settlement");
-    await turn;
-    await runtime.dispose();
-  }
-});
 }

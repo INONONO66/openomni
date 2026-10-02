@@ -299,8 +299,10 @@ function handleStepFinish(
   };
   state.usageProvenance =
     state.usageProvenance === "estimated" ||
-    provider.inputTokens === undefined || provider.outputTokens === undefined
-      ? "estimated" : "reported";
+    provider.inputTokens === undefined ||
+    provider.outputTokens === undefined
+      ? "estimated"
+      : "reported";
 
   state.finishReason = finishReason;
   state.stepEmittedAssistant = "";

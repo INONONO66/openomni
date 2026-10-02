@@ -168,12 +168,21 @@ interface ProcessToolFailures {
 function closeUnderFailingProcessTools(failing: ProcessToolFailures) {
   const failures: Error[] = [];
   const reported = Promise.withResolvers<Error>();
-  const source = commandSource("read hold", () => undefined, () => undefined, (error) => {
-    failures.push(error);
-    reported.resolve(error);
-  });
+  const source = commandSource(
+    "read hold",
+    () => undefined,
+    () => undefined,
+    (error) => {
+      failures.push(error);
+      reported.resolve(error);
+    },
+  );
   const spawn = Bun.spawn;
-  const failing_ = (stderr: string, before = "") => ["/bin/sh", "-c", `${before}printf '${stderr}\\n' >&2; exit 1`];
+  const failing_ = (stderr: string, before = "") => [
+    "/bin/sh",
+    "-c",
+    `${before}printf '${stderr}\\n' >&2; exit 1`,
+  ];
   const failingSpawn = new Proxy(spawn, {
     apply(
       target,
@@ -183,7 +192,10 @@ function closeUnderFailingProcessTools(failing: ProcessToolFailures) {
       const [command, options] = args;
       if (!Array.isArray(command)) return Reflect.apply(target, thisArg, args);
       if (command[0] === "/bin/kill")
-        return Reflect.apply(target, thisArg, [failing_(failing.kill, `/bin/kill -KILL -- ${command.at(-1)}; `), options]);
+        return Reflect.apply(target, thisArg, [
+          failing_(failing.kill, `/bin/kill -KILL -- ${command.at(-1)}; `),
+          options,
+        ]);
       if (command[0] === "ps" && failing.ps !== undefined)
         return Reflect.apply(target, thisArg, [failing_(failing.ps), options]);
       return Reflect.apply(target, thisArg, args);
@@ -214,9 +226,18 @@ test.each([
 ])("command close reports %s as a named process-group failure", async (_case, failing, message) => {
   const { closed, reported } = closeUnderFailingProcessTools(failing);
   // Both the caller's close and the source's failure port receive the one typed error.
-  const [rejection, failure] = await Promise.all([closed.then(() => undefined, (error: Error) => error), reported]);
+  const [rejection, failure] = await Promise.all([
+    closed.then(
+      () => undefined,
+      (error: Error) => error,
+    ),
+    reported,
+  ]);
   expect(rejection).toBe(failure);
-  expect(failure).toMatchObject({ name: "AlarmProcessGroupError", message: expect.stringMatching(message) });
+  expect(failure).toMatchObject({
+    name: "AlarmProcessGroupError",
+    message: expect.stringMatching(message),
+  });
 });
 
 test("a faulting path source sends a terminal source_error summary and the typed failure", async () => {

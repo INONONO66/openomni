@@ -34,9 +34,7 @@ test("startOpenOmni reports pre-denied socket admission as an error, not accepte
   const response = nextFrame(socket, (frame) => frame.type === "receipt" || frame.type === "error");
   socket.send(JSON.stringify({ eventId: newTraceId(), text: "DENIED_INPUT" }));
   expect(await response).toMatchObject({ type: "error" });
-  expect(
-    plane.listSessions().flatMap((row) => receivedMessages(plane, row.id)),
-  ).toEqual([]);
+  expect(plane.listSessions().flatMap((row) => receivedMessages(plane, row.id))).toEqual([]);
 });
 
 for (const kind of ["result", "error", "interrupted"] as const) {
@@ -71,29 +69,33 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       sessionRuntime: { clock: () => 100 },
       llm: {
         resolveModel: fakeProviderModel,
-        run: (input, sink) => Effect.gen(function* () {
-          const runPlane = planeRef.current;
-          if (runPlane === undefined) throw new Error("plane not resolved before model run");
-          if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
-            entered.resolve(input.trace.sessionId);
-            if (kind === "interrupted") yield* Effect.promise(() => release.promise);
-            if (kind === "error") throw new Error("CHILD_ERROR");
-            sink.onMessage(assistantMessage(input, { text: "CHILD_RESULT" }));
-            return { type: "stop" };
-          }
-          if (!commissioned) {
-            const output = requestToolStep(input, sink, {
-              id: "commission",
-              tool: "send_message",
-              input: commissionInput({ message: "work", deadline_ms: 900, reply_to: "ORIGINAL" }),
-            });
-            if (output === undefined) return { type: "stop" };
-            expect(output.isError).not.toBe(true);
-            commissioned = true;
-          }
-          sink.onMessage(assistantMessage(input, { text: "PARENT" }));
-          return { type: "stop" as const };
-        }),
+        run: (input, sink) =>
+          Effect.gen(function* () {
+            const runPlane = planeRef.current;
+            if (runPlane === undefined) throw new Error("plane not resolved before model run");
+            if (
+              runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role ===
+              "worker"
+            ) {
+              entered.resolve(input.trace.sessionId);
+              if (kind === "interrupted") yield* Effect.promise(() => release.promise);
+              if (kind === "error") throw new Error("CHILD_ERROR");
+              sink.onMessage(assistantMessage(input, { text: "CHILD_RESULT" }));
+              return { type: "stop" };
+            }
+            if (!commissioned) {
+              const output = requestToolStep(input, sink, {
+                id: "commission",
+                tool: "send_message",
+                input: commissionInput({ message: "work", deadline_ms: 900, reply_to: "ORIGINAL" }),
+              });
+              if (output === undefined) return { type: "stop" };
+              expect(output.isError).not.toBe(true);
+              commissioned = true;
+            }
+            sink.onMessage(assistantMessage(input, { text: "PARENT" }));
+            return { type: "stop" as const };
+          }),
       },
     });
     planeRef.current = await planeOf(app.runtime);
@@ -110,10 +112,12 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(await delivery).toEqual({ ok: true });
     const child = plane.listSessions().find((row) => row.role === "worker");
     if (child === undefined || child.parentId === null) throw new Error("missing child");
-    const terminals = sessionTree(child.id, plane.sessionStore(child.id).actions).flatMap((action) => {
-      const terminal = Journal.SessionHandleStore.turnTerminal(action);
-      return terminal === undefined ? [] : [terminal];
-    });
+    const terminals = sessionTree(child.id, plane.sessionStore(child.id).actions).flatMap(
+      (action) => {
+        const terminal = Journal.SessionHandleStore.turnTerminal(action);
+        return terminal === undefined ? [] : [terminal];
+      },
+    );
     expect(terminals.map((terminal) => terminal.kind)).toEqual([kind]);
     const letters = receivedMessages(plane, child.parentId).filter(
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
@@ -127,7 +131,9 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(letters[0]?.content).toBe(terminals[0]?.text);
     // No child-owned request/alarm is opened by the terminal reply.
     expect(
-      sessionTree(child.id, plane.sessionStore(child.id).actions).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id, plane.sessionStore(child.id).actions).filter(
+        (action) => action.kind === "alarm.arm",
+      ),
     ).toEqual([]);
     const parentKernel = plane.openKernel(child.parentId);
     expect(parentKernel.requestRows(child.parentId)).toHaveLength(1);

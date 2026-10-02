@@ -8,9 +8,13 @@ describe("Provisioning ids", () => {
     expect(Provisioning.Person.shape.id.safeParse("person:ino").success).toBe(true);
     expect(Provisioning.Person.shape.id.safeParse("ino").success).toBe(false);
     expect(Provisioning.Person.shape.id.safeParse("person:Ino").success).toBe(false);
-    expect(Provisioning.ChannelInstance.shape.id.safeParse("channel:telegram:main").success).toBe(true);
+    expect(Provisioning.ChannelInstance.shape.id.safeParse("channel:telegram:main").success).toBe(
+      true,
+    );
     expect(Provisioning.ChannelInstance.shape.id.safeParse("channel:main").success).toBe(false);
-    expect(Provisioning.Secret.shape.id.safeParse("secret:channel-telegram-main").success).toBe(true);
+    expect(Provisioning.Secret.shape.id.safeParse("secret:channel-telegram-main").success).toBe(
+      true,
+    );
     expect(Provisioning.Secret.shape.id.safeParse("secret:").success).toBe(false);
   });
 });
@@ -34,7 +38,8 @@ describe("Provisioning.Person", () => {
 
   test("endpoints reject blank ids and unknown fields", () => {
     expect(
-      Provisioning.Person.shape.endpoints.element.safeParse({ channel: "telegram", externalId: "" }).success,
+      Provisioning.Person.shape.endpoints.element.safeParse({ channel: "telegram", externalId: "" })
+        .success,
     ).toBe(false);
     expect(
       Provisioning.Person.shape.endpoints.element.safeParse({

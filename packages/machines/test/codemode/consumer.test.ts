@@ -105,19 +105,24 @@ test("running nested cells retain generation ownership until terminal completion
   const settled = Promise.withResolvers<void>();
   let owners = 0;
   let acquired = 0;
-  const ownership = { retain() {
-    owners += 1;
-    acquired += 1;
-    let released = false;
-    return () => {
-      if (released) throw new Error("duplicate generation release");
-      released = true;
-      owners -= 1;
-      if (owners === 0) settled.resolve();
-    };
-  } };
+  const ownership = {
+    retain() {
+      owners += 1;
+      acquired += 1;
+      let released = false;
+      return () => {
+        if (released) throw new Error("duplicate generation release");
+        released = true;
+        owners -= 1;
+        if (owners === 0) settled.resolve();
+      };
+    },
+  };
   await pair(async ({ mode }) => {
-    const running = mode.cell.run(`codemode.getMachine('B').eval('tool.hold()')`, "owned", { waitMs: 0, ownership });
+    const running = mode.cell.run(`codemode.getMachine('B').eval('tool.hold()')`, "owned", {
+      waitMs: 0,
+      ownership,
+    });
     await gate.entered.promise;
     const result = await running;
     expect(result.status).toBe("running");
@@ -126,7 +131,8 @@ test("running nested cells retain generation ownership until terminal completion
     gate.release.resolve();
     await settled.promise;
     expect(owners).toBe(0);
-    if (result.status === "running") expect((await mode.cell.peek(result.cellId, "owned")).status).toBe("completed");
+    if (result.status === "running")
+      expect((await mode.cell.peek(result.cellId, "owned")).status).toBe("completed");
   }, gate.tools);
 }, 15000);
 
@@ -273,9 +279,7 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
   );
   await mode.close();
   const runner = createCodemode();
-  expect((await codemodeFailure(() => runner.listMachines())).reason).toBe(
-    "machines_not_bound",
-  );
+  expect((await codemodeFailure(() => runner.listMachines())).reason).toBe("machines_not_bound");
   await expect(
     runner.callTool({ cellId: "ghost", name: "x", arguments: {} }),
   ).resolves.toMatchObject({ status: "failed" });

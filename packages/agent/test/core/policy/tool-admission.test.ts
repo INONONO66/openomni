@@ -45,21 +45,27 @@ describe("tool calls reach the executor without target gating", () => {
           },
         ]),
       });
-      const dispatcher = runAgentSync(createDispatcher({ executor: recording.executor }).pipe(Effect.provide(catalogLayer([
-          defineTool({
-            name: "screen.capture",
-            description: "Capture screen",
-            category: "query",
-            input: z.object({}),
-            output: z.string(),
-            visibility: { model: ["resident"], cell: [] },
-            execute: async () => {
-              executed.push("screen.capture");
-              return "image";
-            },
-            render: (_input, output) => output,
-          }),
-        ]))));
+      const dispatcher = runAgentSync(
+        createDispatcher({ executor: recording.executor }).pipe(
+          Effect.provide(
+            catalogLayer([
+              defineTool({
+                name: "screen.capture",
+                description: "Capture screen",
+                category: "query",
+                input: z.object({}),
+                output: z.string(),
+                visibility: { model: ["resident"], cell: [] },
+                execute: async () => {
+                  executed.push("screen.capture");
+                  return "image";
+                },
+                render: (_input, output) => output,
+              }),
+            ]),
+          ),
+        ),
+      );
       const context = { sessionId: "session-tools", turnId: "turn-tools" };
       const execute = (call: Tool.Call) => dispatcher.execute(call, context);
       const config: ChatAgentConfig = {
@@ -72,37 +78,49 @@ describe("tool calls reach the executor without target gating", () => {
           : {}),
         llm: {
           resolveModel: () => Effect.succeed({ id: "model", name: "model", providerID: "test" }),
-          run: (input, sink) => Effect.sync(() => {
-            catalogs.push(input.tools.map((tool) => tool.name));
-            const message = createAssistantMessage("completed", "", "session-tools", messageSource);
-            if (!requested) {
-              requested = true;
-              message.parts.push({
-                id: "part",
-                messageID: message.info.id,
-                sessionID: "session-tools",
-                type: "tool",
-                callID: "call",
-                tool: "screen.capture",
-                state: { status: "pending", input: {} },
-              });
-            }
-            sink.onMessage(message);
-            return { type: "stop" as const };
-          }),
+          run: (input, sink) =>
+            Effect.sync(() => {
+              catalogs.push(input.tools.map((tool) => tool.name));
+              const message = createAssistantMessage(
+                "completed",
+                "",
+                "session-tools",
+                messageSource,
+              );
+              if (!requested) {
+                requested = true;
+                message.parts.push({
+                  id: "part",
+                  messageID: message.info.id,
+                  sessionID: "session-tools",
+                  type: "tool",
+                  callID: "call",
+                  tool: "screen.capture",
+                  state: { status: "pending", input: {} },
+                });
+              }
+              sink.onMessage(message);
+              return { type: "stop" as const };
+            }),
         },
       };
-      await isolated(createTestAgent(config).run(
-        {
-          messages: [{ role: "user", content: "inspect" }],
-          traceContext: { traceId: "trace-tools", sessionId: "session-tools", runId: "run-tools" },
-        },
-        {
-          onMessage: () => undefined,
-          onToolCall: () => undefined,
-          onToolResult: (result) => results.push(result),
-        },
-      ));
+      await isolated(
+        createTestAgent(config).run(
+          {
+            messages: [{ role: "user", content: "inspect" }],
+            traceContext: {
+              traceId: "trace-tools",
+              sessionId: "session-tools",
+              runId: "run-tools",
+            },
+          },
+          {
+            onMessage: () => undefined,
+            onToolCall: () => undefined,
+            onToolResult: (result) => results.push(result),
+          },
+        ),
+      );
       expect(catalogs.length).toBeGreaterThan(0);
       expect(
         catalogs.every((catalog) => catalog.join(",") === "screen.capture,network.fetch"),

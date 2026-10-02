@@ -12,7 +12,13 @@ import { join } from "node:path";
 import { Session } from "@openomni/agent";
 const decideRequestTransition = Session.decideRequestTransition;
 const requestBindingDigest = Session.requestBindingDigest;
-import { Gateway, PlainValueSchema, canonicalDigest, type Channel, type SessionTransition, } from "@openomni/protocol";
+import {
+  Gateway,
+  PlainValueSchema,
+  canonicalDigest,
+  type Channel,
+  type SessionTransition,
+} from "@openomni/protocol";
 import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";
 import { originalAction, requestPort } from "./helpers/requests";
@@ -76,18 +82,24 @@ async function approval() {
       authority: { owner: "fixture", fence },
       payload: { kind: "request.open", request },
     },
-    { row: ledger().kernel.row(row.id), invocation: ledger().kernel.actionById(request.requestId), inputRecord: ledger().kernel.requestInputById(row.id, "open") },
+    {
+      row: ledger().kernel.row(row.id),
+      invocation: ledger().kernel.actionById(request.requestId),
+      inputRecord: ledger().kernel.requestInputById(row.id, "open"),
+    },
   );
   expect(decision.resolution).toBe("opened");
-  await runEffect(ledger().kernel.commit({
-    sessionId: row.id,
-    owner: "fixture",
-    fence,
-    now: 2,
-    expectedRevision: row.revision,
-    actions: [...decision.actions],
-    state: row.state,
-  }));
+  await runEffect(
+    ledger().kernel.commit({
+      sessionId: row.id,
+      owner: "fixture",
+      fence,
+      now: 2,
+      expectedRevision: row.revision,
+      actions: [...decision.actions],
+      state: row.state,
+    }),
+  );
   return request;
 }
 
@@ -111,17 +123,24 @@ function router(
 ) {
   return makeRouter({
     now: () => at,
-    requests: channelRequests(requestPort(() => at, undefined, {
-      requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
-    })),
-    authenticateAnswer: (who: Gateway.IngestSender & { kind: "external" }, proof: string, requestId: string) => Effect.try({
-      try: () => {
-        options.authenticated?.(who, proof, requestId);
-        if (proof !== credential) throw new Error(`invalid secret: ${proof}`);
-        return options.principal ?? principal;
-      },
-      catch: decodeChannelFailure("fixture.authenticate_answer"),
-    }),
+    requests: channelRequests(
+      requestPort(() => at, undefined, {
+        requestDomainRevisions: () => ({ persons: options.domainRevision ?? 1 }),
+      }),
+    ),
+    authenticateAnswer: (
+      who: Gateway.IngestSender & { kind: "external" },
+      proof: string,
+      requestId: string,
+    ) =>
+      Effect.try({
+        try: () => {
+          options.authenticated?.(who, proof, requestId);
+          if (proof !== credential) throw new Error(`invalid secret: ${proof}`);
+          return options.principal ?? principal;
+        },
+        catch: decodeChannelFailure("fixture.authenticate_answer"),
+      }),
     prepare() {
       throw new Error("typed answer reached message preparation");
     },
@@ -148,9 +167,10 @@ async function connect(
   logs: string[] = [],
 ) {
   const handler = new WebSocketHandler(
-    (message: Channel.InboundMessage) => Effect.sync(() => {
-      messages.push(message);
-    }),
+    (message: Channel.InboundMessage) =>
+      Effect.sync(() => {
+        messages.push(message);
+      }),
     <T>(_event: import("@openomni/protocol").BusEvent.Descriptor<T>, data: T) => {
       logs.push(JSON.stringify(data));
     },
@@ -158,13 +178,15 @@ async function connect(
       token: "upgrade-secret",
       now: () => at,
       id: testWebSocketId(),
-      onRequestAnswer: (who: Gateway.IngestSender, answer: Gateway.RequestAnswer) => gateway.ingest(who, answer),
+      onRequestAnswer: (who: Gateway.IngestSender, answer: Gateway.RequestAnswer) =>
+        gateway.ingest(who, answer),
     },
   );
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch: (request: Request, instance: Bun.Server<import("../src/websocket").WsConnectionData>) => handler.handleUpgrade(request, instance),
+    fetch: (request: Request, instance: Bun.Server<import("../src/websocket").WsConnectionData>) =>
+      handler.handleUpgrade(request, instance),
     websocket: websocketCallbacks(handler),
   });
   stops.push(() => server.stop(true));
@@ -192,11 +214,19 @@ async function frame(socket: WebSocket, value: object) {
 test.each([
   "approve",
   "refuse",
-] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision: "approve" | "refuse") => {
+] as const)("real authenticated WebSocket %s reaches only canonical request actions", async (decision:
+  | "approve"
+  | "refuse") => {
   const request = await approval();
   const authenticated: object[] = [];
   const gateway = router({
-    authenticated: (who: { kind: "external"; surface: string; externalId: string; } | { kind: "session"; id: string; }, proof: string, requestId: string) => {
+    authenticated: (
+      who:
+        | { kind: "external"; surface: string; externalId: string }
+        | { kind: "session"; id: string },
+      proof: string,
+      requestId: string,
+    ) => {
       authenticated.push({ who, proof, requestId });
     },
   });
@@ -218,7 +248,11 @@ test.each([
     decision === "approve" ? "resolved" : "refused",
   );
   const actions = sessionTree(request.sessionId, ledger().sessions.actions);
-  expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply")?.effect.value).toMatchObject({
+  expect(
+    actions.find(
+      (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply",
+    )?.effect.value,
+  ).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
   expect(JSON.stringify(actions)).not.toContain(credential);
@@ -243,7 +277,8 @@ test("same typed answer survives SQLite and gateway restart with a fresh owner c
   expect(sessionTree(request.sessionId, ledger().sessions.actions)).toEqual(before);
   expect(
     sessionTree(request.sessionId, ledger().sessions.actions).filter(
-      (action: import("@openomni/protocol").LedgerAction.Node) => action.id === `${request.requestId}:resolution`,
+      (action: import("@openomni/protocol").LedgerAction.Node) =>
+        action.id === `${request.requestId}:resolution`,
     ),
   ).toHaveLength(1);
 });
@@ -289,7 +324,9 @@ test("session sender, malformed input, missing authenticator, and non-Owner evid
     reasonCode: "request_answer.unauthenticated",
   });
   expect(
-    await runEffect(router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request))),
+    await runEffect(
+      router({ principal: { ...principal, kind: "actor" } }).ingest(sender, envelope(request)),
+    ),
   ).toEqual({
     status: "blocked_pre",
     reasonCode: "request_answer.unauthenticated",
@@ -302,7 +339,11 @@ test.each([
   "bindingDigest",
   "generation",
   "domainRevisions",
-] as const)("canonical kernel rejects altered %s", async (field: "inputHash" | "generation" | "domainRevisions" | "bindingDigest") => {
+] as const)("canonical kernel rejects altered %s", async (field:
+  | "inputHash"
+  | "generation"
+  | "domainRevisions"
+  | "bindingDigest") => {
   const request = await approval();
   const altered = {
     ...request,
@@ -321,12 +362,16 @@ test.each([
 
 test("current domain revision and captured owner receipt time remain kernel gates", async () => {
   const request = await approval();
-  expect(await runEffect(router({ domainRevision: 2 }).ingest(sender, envelope(request)))).toMatchObject({
+  expect(
+    await runEffect(router({ domainRevision: 2 }).ingest(sender, envelope(request))),
+  ).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.rejected",
   });
   at = request.deadline;
-  expect(await runEffect(router().ingest(sender, { ...envelope(request), inputId: "late" }))).toMatchObject({
+  expect(
+    await runEffect(router().ingest(sender, { ...envelope(request), inputId: "late" })),
+  ).toMatchObject({
     status: "blocked_pre",
     reasonCode: "request_answer.late_unknown",
   });
@@ -349,7 +394,12 @@ test("Owner authentication finishing at the deadline cannot approve into the pas
 
 test("an authenticated Owner answer cannot bypass the absolute blacklist", async () => {
   const request = await approval();
-  ledger().stores.blacklist.put({ id: "blocked-surface", kind: "channel", value: "ws", createdBy: "owner" });
+  ledger().stores.blacklist.put({
+    id: "blocked-surface",
+    kind: "channel",
+    value: "ws",
+    createdBy: "owner",
+  });
   const before = sessionTree(request.sessionId, ledger().sessions.actions);
   expect(await runEffect(router().ingest(sender, envelope(request)))).toMatchObject({
     status: "blocked_pre",

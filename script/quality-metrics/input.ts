@@ -46,8 +46,11 @@ export function hash(value: Json | undefined): string {
   return result;
 }
 export function decode(input: string): Json {
-  try { return decodeJson(input); }
-  catch { return fail("input", "", "malformed JSON"); }
+  try {
+    return decodeJson(input);
+  } catch {
+    return fail("input", "", "malformed JSON");
+  }
 }
 export function readJson(path: string): Json {
   return decode(readFileSync(path, "utf8"));
@@ -72,8 +75,11 @@ export type Entry = {
 };
 export type Source = Entry & { text: string; hostPath?: string; hostOffset?: number };
 function entry(value: Json): Entry {
-  try { return parseEntry(value); }
-  catch { return fail("inventory", "", "invalid source entry"); }
+  try {
+    return parseEntry(value);
+  } catch {
+    return fail("inventory", "", "invalid source entry");
+  }
 }
 export function content(root: string, path: string): Buffer {
   const absolute = realpathSync(resolve(root, path));

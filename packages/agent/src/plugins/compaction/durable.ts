@@ -48,7 +48,9 @@ export function createCompactionPlan(
   const firstRemoved = removedEntries[0];
   const lastRemoved = removedEntries.at(-1);
   if (firstRemoved === undefined || lastRemoved === undefined) {
-    throw new AgentInvariantViolation("compaction projection must discard at least one prior entry");
+    throw new AgentInvariantViolation(
+      "compaction projection must discard at least one prior entry",
+    );
   }
 
   return {

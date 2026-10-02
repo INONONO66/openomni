@@ -23,10 +23,7 @@ export interface CiPlan {
   readonly reason: string;
 }
 
-function finishPlan(
-  plan: Selection,
-  changeClass: CiPlan["class"],
-): CiPlan {
+function finishPlan(plan: Selection, changeClass: CiPlan["class"]): CiPlan {
   const whole = changeClass === "tooling" || changeClass === "global";
   const matrix = {
     include: [
@@ -49,32 +46,37 @@ function finishPlan(
 }
 
 type ChangeSelection = {
-	selected: Set<string>;
-	changeClass: CiPlan["class"];
-	globalReason?: string;
+  selected: Set<string>;
+  changeClass: CiPlan["class"];
+  globalReason?: string;
 };
-function selectChanges(paths: readonly string[], topology: readonly WorkspaceTopology[]): ChangeSelection {
-	const selected = new Set<string>();
-	let changeClass: CiPlan["class"] = "docs";
-	for (const path of paths) {
-		const unsafe = path.split("/").some((part) => part === ".." || part === "." || part === "") || path.includes("\\");
-		if (unsafe) return { selected, changeClass, globalReason: "global-or-unowned-path" };
-		if (/^(?:[^/]+\.md|docs\/.*)$/.test(path)) continue;
-		if (/(^|\/)(package\.json|bun\.lockb?)$/.test(path))
-			return { selected, changeClass, globalReason: "dependency-manifest-change" };
-		if (path.startsWith("script/") && !path.startsWith("script/conformance/")) {
-			changeClass = "tooling";
-			continue;
-		}
-		const owner = topology.find((workspace) => path.startsWith(`${workspace.dir}/`));
-		if (!owner) return { selected, changeClass, globalReason: "global-or-unowned-path" };
-		if (owner.packageName === "@openomni/protocol")
-			return { selected, changeClass, globalReason: "shared-contract-change" };
-		const next = owner.dir === "apps/desktop" || owner.dir === "packages/ui" ? "desktop" : "kernel";
-		if (changeClasses.indexOf(next) > changeClasses.indexOf(changeClass)) changeClass = next;
-		selected.add(owner.packageName);
-	}
-	return { selected, changeClass };
+function selectChanges(
+  paths: readonly string[],
+  topology: readonly WorkspaceTopology[],
+): ChangeSelection {
+  const selected = new Set<string>();
+  let changeClass: CiPlan["class"] = "docs";
+  for (const path of paths) {
+    const unsafe =
+      path.split("/").some((part) => part === ".." || part === "." || part === "") ||
+      path.includes("\\");
+    if (unsafe) return { selected, changeClass, globalReason: "global-or-unowned-path" };
+    if (/^(?:[^/]+\.md|docs\/.*)$/.test(path)) continue;
+    if (/(^|\/)(package\.json|bun\.lockb?)$/.test(path))
+      return { selected, changeClass, globalReason: "dependency-manifest-change" };
+    if (path.startsWith("script/") && !path.startsWith("script/conformance/")) {
+      changeClass = "tooling";
+      continue;
+    }
+    const owner = topology.find((workspace) => path.startsWith(`${workspace.dir}/`));
+    if (!owner) return { selected, changeClass, globalReason: "global-or-unowned-path" };
+    if (owner.packageName === "@openomni/protocol")
+      return { selected, changeClass, globalReason: "shared-contract-change" };
+    const next = owner.dir === "apps/desktop" || owner.dir === "packages/ui" ? "desktop" : "kernel";
+    if (changeClasses.indexOf(next) > changeClasses.indexOf(changeClass)) changeClass = next;
+    selected.add(owner.packageName);
+  }
+  return { selected, changeClass };
 }
 
 export function planChanges(
@@ -102,17 +104,20 @@ export function planChanges(
   }
   const workspaces = topology.filter((workspace) => selected.has(workspace.packageName));
   const verify = workspaces.length > 0 || changeClass === "tooling";
-  return finishPlan({
-    full: false,
-    verify,
-    dependencyReview: false,
-    matrix: { include: verify ? rows(workspaces) : [] },
-    reason: verify
-      ? "workspace-impact"
-      : paths.length === 0
-        ? "empty-diff"
-        : "root-documentation-only",
-  }, changeClass);
+  return finishPlan(
+    {
+      full: false,
+      verify,
+      dependencyReview: false,
+      matrix: { include: verify ? rows(workspaces) : [] },
+      reason: verify
+        ? "workspace-impact"
+        : paths.length === 0
+          ? "empty-diff"
+          : "root-documentation-only",
+    },
+    changeClass,
+  );
 }
 
 function rows(topology: readonly WorkspaceTopology[]) {

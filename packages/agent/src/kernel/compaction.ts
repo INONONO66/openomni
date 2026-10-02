@@ -1,10 +1,11 @@
+import type { Message } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import type { ExecutionError } from "./failure";
 import { Compaction, type CompactionSession } from "../plugins/compaction";
 import { executeCompaction } from "../plugins/compaction/execute-cut";
 import { resolveCompactionGeometry } from "../plugins/compaction/geometry";
 import type { ObservedChatAgentConfig as ChatAgentConfig } from "./types";
-import { applyCompactionMessages, type AgentRunBase, type RunState } from "./turn";
+import type { AgentRunBase, RunState } from "./turn";
 import type { Entropy } from "./ports";
 
 type CompactionApplyResult = "compacted" | "deferred" | "none";
@@ -25,16 +26,17 @@ export function prepareCompactionAfterContinue(
   compaction: CompactionSession | undefined,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.suspend(() => {
-  const options = resolvedCompaction(state, config);
-  const measuredTokens = state.lastCallContextTokens;
-  if (options === undefined || measuredTokens === undefined || compaction === undefined) return Effect.void;
-  const geometry = compactionGeometry(state, options);
-  return compaction.prepare(
-    state.messages,
-    measuredTokens,
-    geometry.prepareTokens,
-    options.contextWindowTokens,
-  );
+    const options = resolvedCompaction(state, config);
+    const measuredTokens = state.lastCallContextTokens;
+    if (options === undefined || measuredTokens === undefined || compaction === undefined)
+      return Effect.void;
+    const geometry = compactionGeometry(state, options);
+    return compaction.prepare(
+      state.messages,
+      measuredTokens,
+      geometry.prepareTokens,
+      options.contextWindowTokens,
+    );
   });
 }
 
@@ -51,8 +53,14 @@ function compactionGeometry(
   });
 }
 
-function deferCompaction(measuredTokens: number | undefined, compaction: CompactionSession | undefined, graceTokens: number): boolean {
-  return measuredTokens !== undefined && compaction?.inFlight() === true && measuredTokens < graceTokens;
+function deferCompaction(
+  measuredTokens: number | undefined,
+  compaction: CompactionSession | undefined,
+  graceTokens: number,
+): boolean {
+  return (
+    measuredTokens !== undefined && compaction?.inFlight() === true && measuredTokens < graceTokens
+  );
 }
 
 export function applyCompaction(
@@ -63,38 +71,53 @@ export function applyCompaction(
   trigger: "threshold" | "yield",
 ): Effect.Effect<CompactionApplyResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
-  const options = resolvedCompaction(state, config);
-  if (options === undefined) return "none";
-  const measuredTokens = state.lastCallContextTokens;
-  const geometry = compactionGeometry(state, options);
-  if (
-    trigger === "threshold" &&
-    (measuredTokens === undefined ||
-      !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
-  )
-    return "none";
-  if (deferCompaction(measuredTokens, compaction, geometry.graceTokens)) return "deferred";
+    const options = resolvedCompaction(state, config);
+    if (options === undefined) return "none";
+    const measuredTokens = state.lastCallContextTokens;
+    const geometry = compactionGeometry(state, options);
+    if (
+      trigger === "threshold" &&
+      (measuredTokens === undefined ||
+        !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
+    )
+      return "none";
+    if (deferCompaction(measuredTokens, compaction, geometry.graceTokens)) return "deferred";
 
-  const candidate = compaction?.candidate();
-  const result = yield* executeCompaction({
-    history: state.messages,
-    options,
-    identity: agentBase,
-    events: config.events,
-    executor: config.executor,
-    signal: config.signal,
-    dispatch: {
-      trigger,
-      ...(measuredTokens === undefined ? {} : { measuredTokens }),
-      ...(candidate === undefined ? {} : { candidate }),
-    },
+    const candidate = compaction?.candidate();
+    const result = yield* executeCompaction({
+      history: state.messages,
+      options,
+      identity: agentBase,
+      events: config.events,
+      executor: config.executor,
+      signal: config.signal,
+      dispatch: {
+        trigger,
+        ...(measuredTokens === undefined ? {} : { measuredTokens }),
+        ...(candidate === undefined ? {} : { candidate }),
+      },
+    });
+    if (candidate !== undefined) compaction?.consume();
+    state.lastCompactionIneffective = result.ineffective;
+    if (result.yield !== undefined) state.lastCompactionYield = result.yield;
+    if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
+    if (!result.compacted) return "none";
+    applyCompactionMessages(state, result.messages);
+    return "compacted";
   });
-  if (candidate !== undefined) compaction?.consume();
-  state.lastCompactionIneffective = result.ineffective;
-  if (result.yield !== undefined) state.lastCompactionYield = result.yield;
-  if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
-  if (!result.compacted) return "none";
-  applyCompactionMessages(state, result.messages);
-  return "compacted";
-  });
+}
+
+function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
+  state.messages = messages;
+  // The measurement described the window this rewrite just changed. Clearing
+  // it makes the next completion check skip-and-record rather than re-fire
+  // compaction on a number about history that no longer exists.
+  state.lastCallContextTokens = undefined;
+}
+
+function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
+  const messagesBefore = state.messages.length;
+  replaceRunMessages(state, messages);
+  state.compactionCount += 1;
+  return messagesBefore;
 }

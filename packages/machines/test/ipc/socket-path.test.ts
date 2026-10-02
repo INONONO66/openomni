@@ -9,9 +9,9 @@ const FixtureModule = z.object({
 });
 
 test("fresh IPC fixture scopes cannot reuse a stale process-id socket path", async () => {
-  const first = await import(
-    new URL("./helpers/socket-path.ts?first", import.meta.url).href
-  ).then(FixtureModule.parse);
+  const first = await import(new URL("./helpers/socket-path.ts?first", import.meta.url).href).then(
+    FixtureModule.parse,
+  );
   const restarted = await import(
     new URL("./helpers/socket-path.ts?restarted", import.meta.url).href
   ).then(FixtureModule.parse);

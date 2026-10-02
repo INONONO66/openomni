@@ -9,9 +9,7 @@ export function awaitSignal<A, E = never, R = never>(
   return Effect.promise(() => value);
 }
 
-export function failure<A, E, R>(
-  program: Effect.Effect<A, E, R>,
-) {
+export function failure<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const exit = yield* Effect.exit(program);
     if (Exit.isSuccess(exit)) return yield* Effect.die(new Error("Expected a failed Effect"));
@@ -27,6 +25,9 @@ export function boundedSignal<A, E = never, R = never>(
   label: string,
 ) {
   return awaitSignal(value).pipe(
-    Effect.timeoutOrElse({ duration: 1000, orElse: () => Effect.fail(new Error(`Timed out: ${label}`))}),
+    Effect.timeoutOrElse({
+      duration: 1000,
+      orElse: () => Effect.fail(new Error(`Timed out: ${label}`)),
+    }),
   );
 }

@@ -184,7 +184,9 @@ describe("real machine consumer surface", () => {
           signal: "SIGTERM",
         });
         await expect(target.exec("true", join(root, "absent"))).rejects.toMatchObject({
-          _tag: "TransportFailure", operation: "exec.call", cause: expect.stringContaining("ENOENT"),
+          _tag: "TransportFailure",
+          operation: "exec.call",
+          cause: expect.stringContaining("ENOENT"),
         });
         symlinkSync("/tmp", join(root, "outside"));
         await expect(target.exec("true", join(root, "outside"))).resolves.toEqual({

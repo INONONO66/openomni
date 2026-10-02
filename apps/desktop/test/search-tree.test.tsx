@@ -143,9 +143,7 @@ describe("the tree still reads as a tree under the search field", () => {
 
     expect(levels).toHaveLength(projects + sessions.length);
     expect(levels.every((level) => level === 0)).toBe(true);
-    expect(html.match(/aria-expanded="(true|false)"[^>]*role="treeitem"/g)).toHaveLength(
-      projects,
-    );
+    expect(html.match(/aria-expanded="(true|false)"[^>]*role="treeitem"/g)).toHaveLength(projects);
   });
 
   test("Given a selection, When rendered, Then exactly one row is current", () => {

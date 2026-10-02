@@ -146,16 +146,18 @@ const STATUS: Readonly<Record<ToolPart["state"], LoudStatus | undefined>> = {
   "output-available": undefined,
 };
 
-const targetSchema = z.union([
-  z.string(),
-  z.object({
-    command: z.string().optional().catch(undefined),
-    path: z.string().optional().catch(undefined),
-    pattern: z.string().optional().catch(undefined),
-    query: z.string().optional().catch(undefined),
-    target: z.string().optional().catch(undefined),
-  }),
-]).catch("");
+const targetSchema = z
+  .union([
+    z.string(),
+    z.object({
+      command: z.string().optional().catch(undefined),
+      path: z.string().optional().catch(undefined),
+      pattern: z.string().optional().catch(undefined),
+      query: z.string().optional().catch(undefined),
+      target: z.string().optional().catch(undefined),
+    }),
+  ])
+  .catch("");
 
 function targetOf(input: z.infer<typeof targetSchema>): string {
   if (typeof input === "string") return input;
@@ -170,4 +172,3 @@ function textOf(message: OpenOmniUIMessage): string {
     .join("\n")
     .trim();
 }
-

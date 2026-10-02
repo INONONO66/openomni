@@ -26,16 +26,61 @@ export function runEffectExit<A, E>(effect: Effect.Effect<A, E>): Promise<Exit.E
 export namespace Processor {
   type StreamInput = Parameters<NativeProcessor.ProcessorOptions["createStream"]>[0];
   type Stream = Effect.Success<ReturnType<NativeProcessor.ProcessorOptions["createStream"]>>;
-  export type ProcessorOptions = Omit<NativeProcessor.ProcessorOptions, "createStream"> & { createStream: (input: StreamInput) => Promise<Stream> };
+  export type ProcessorOptions = Omit<NativeProcessor.ProcessorOptions, "createStream"> & {
+    createStream: (input: StreamInput) => Promise<Stream>;
+  };
   export function create(options: ProcessorOptions) {
-    const value = NativeProcessor.create({ ...options, createStream: (input) => Effect.tryPromise({ try: () => options.createStream(input), catch: decodeLlmFailure("test.provider") }) });
-    return { get message() { return value.message; }, get usageTotals() { return value.usageTotals; }, get visibleOutput() { return value.visibleOutput; }, process: (streamInput: { system: string; promptText: string }) => runEffect(value.process(streamInput)) };
+    const value = NativeProcessor.create({
+      ...options,
+      createStream: (input) =>
+        Effect.tryPromise({
+          try: () => options.createStream(input),
+          catch: decodeLlmFailure("test.provider"),
+        }),
+    });
+    return {
+      get message() {
+        return value.message;
+      },
+      get usageTotals() {
+        return value.usageTotals;
+      },
+      get visibleOutput() {
+        return value.visibleOutput;
+      },
+      process: (streamInput: { system: string; promptText: string }) =>
+        runEffect(value.process(streamInput)),
+    };
   }
 }
 type NativeInput = Parameters<typeof nativeRun>[0];
 /** Fixed `now`/`id` stubs by default (#1245); a test overrides them to assert exact values. */
-export type TestRunInput = Omit<NativeInput, "now" | "id" | "authFilePath"> & Partial<Pick<NativeInput, "now" | "id" | "authFilePath">>;
-export function run(input: TestRunInput, sink: Parameters<typeof nativeRun>[1], dependencies: { createStream?: Processor.ProcessorOptions["createStream"] } = {}) {
+export type TestRunInput = Omit<NativeInput, "now" | "id" | "authFilePath"> &
+  Partial<Pick<NativeInput, "now" | "id" | "authFilePath">>;
+export function run(
+  input: TestRunInput,
+  sink: Parameters<typeof nativeRun>[1],
+  dependencies: { createStream?: Processor.ProcessorOptions["createStream"] } = {},
+) {
   const createStream = dependencies.createStream;
-  return runEffect(nativeRun({ now: fixedNow, id: sequentialIds(), authFilePath: "/nonexistent/openomni-llm-test/auth.json", ...input }, sink, createStream ? { createStream: (request) => Effect.tryPromise({ try: () => createStream(request), catch: decodeLlmFailure("test.provider") }) } : {}));
+  return runEffect(
+    nativeRun(
+      {
+        now: fixedNow,
+        id: sequentialIds(),
+        authFilePath: "/nonexistent/openomni-llm-test/auth.json",
+        ...input,
+      },
+      sink,
+      createStream
+        ? {
+            createStream: (request) =>
+              Effect.tryPromise({
+                try: () => createStream(request),
+                catch: decodeLlmFailure("test.provider"),
+              }),
+          }
+        : {},
+    ),
+  );
 }

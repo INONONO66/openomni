@@ -17,16 +17,18 @@ afterEach(() => {
 
 function materialize(id: string) {
   const kernel = plane.openKernel(id);
-  runSyncEffect(kernel.materialize({
-    id,
-    parentId: null,
-    role: "resident",
-    tools: [],
-    system: { preset: "", blocks: [] },
-    policyGeneration: kernel.currentPolicyGeneration(),
-    actionId: `${id}:config`,
-    at: 100,
-  }));
+  runSyncEffect(
+    kernel.materialize({
+      id,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${id}:config`,
+      at: 100,
+    }),
+  );
 }
 
 const message: SessionTransition.OutboundMessage = {
@@ -47,7 +49,11 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   const dispatch = dispatchOutboundMessage(
     () =>
       Effect.gen(function* () {
-        yield* localInbox(plane, "binding-test", () => 100)({
+        yield* localInbox(
+          plane,
+          "binding-test",
+          () => 100,
+        )({
           id: "different-letter",
           sessionId: message.destinationSessionId,
           kind: "prompt",
@@ -81,7 +87,5 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   // (entity delivery); this harness commits through a raw test inbox, so the
   // dispatch-side receipt check is the invariant under test: no receipt for
   // the real letter means the outbound send fails as a whole.
-  expect(
-    plane.openKernel("parent").outboundReceipt("parent", message.messageId),
-  ).toBeUndefined();
+  expect(plane.openKernel("parent").outboundReceipt("parent", message.messageId)).toBeUndefined();
 });

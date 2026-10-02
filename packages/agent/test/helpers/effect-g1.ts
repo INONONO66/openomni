@@ -1,7 +1,11 @@
 import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { testExecutor } from "./executor";
-import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime, } from "./session-services";
+import {
+  allowConfigure,
+  kernelRuntime,
+  type SessionFixture as SessionRuntime,
+} from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
 import { Cause, Effect, Exit } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";

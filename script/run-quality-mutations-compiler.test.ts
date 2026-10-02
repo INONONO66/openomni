@@ -1,12 +1,35 @@
 import { expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { MessageChannel } from "node:worker_threads";
 import { buildInventory, readContract } from "./quality-inventory";
-import { analyze, programs, diagnostics, executionTreeHash, main, pythonExecutable, sha256 } from "./run-quality-mutations";
-import { COMPILER_BATCH_SIZE, FrozenMutationCompiler, MutationCompilerWorker, serveCompiler, stdioCompilerPort } from "./quality-mutation-compiler";
+import {
+  analyze,
+  programs,
+  diagnostics,
+  executionTreeHash,
+  main,
+  pythonExecutable,
+  sha256,
+} from "./run-quality-mutations";
+import {
+  COMPILER_BATCH_SIZE,
+  FrozenMutationCompiler,
+  MutationCompilerWorker,
+  serveCompiler,
+  stdioCompilerPort,
+} from "./quality-mutation-compiler";
 
 type CompilerResponse = Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0];
 const parseResponse = (line: string): CompilerResponse => JSON.parse(line) as CompilerResponse;
@@ -30,23 +53,34 @@ test("fallback compiler ignores untyped JavaScript inventory sources", () => {
   try {
     writeFileSync(join(root, "tool.cjs"), "module.exports = missingName;");
     writeFileSync(join(root, "tool.mjs"), "export const value = missingName;");
-    const contract: { version: 1; typescript: "5.9.2"; roots: string[]; projects: string[]; topology: false } = { version: 1, typescript: "5.9.2", roots: ["."], projects: [], topology: false };
+    const contract: {
+      version: 1;
+      typescript: "5.9.2";
+      roots: string[];
+      projects: string[];
+      topology: false;
+    } = { version: 1, typescript: "5.9.2", roots: ["."], projects: [], topology: false };
     const inventory = buildInventory(root, contract);
     expect(diagnostics(programs(root, contract, inventory))).toEqual([]);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("typecheck CLI reports native valid and invalid source outcomes in process", async () => {
   const input = compilerFixture();
   try {
-    const contract = join(input.root, "contract.json"), inventory = join(input.root, "inventory.json");
+    const contract = join(input.root, "contract.json"),
+      inventory = join(input.root, "inventory.json");
     writeFileSync(contract, JSON.stringify(input.contract));
     writeFileSync(inventory, JSON.stringify(input.inventory));
     const args = ["--typecheck-root", input.root, "--contract", contract, "--inventory", inventory];
     expect(await main(args)).toBe(0);
     writeFileSync(join(input.root, "a/value.ts"), 'export const value = "wrong";');
     expect(await main(args)).toBe(1);
-  } finally { rmSync(input.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(input.root, { recursive: true, force: true });
+  }
 }, 120000);
 
 function compilerFixture() {
@@ -54,23 +88,55 @@ function compilerFixture() {
   const files = {
     "a/value.ts": "export const value = 1;",
     "a/global.ts": "interface CampaignGlobal { value: number }",
-    "b/consumer.ts": 'import { value } from "../a/value"; export const result: number = value; const global: CampaignGlobal = { value: 1 };',
+    "b/consumer.ts":
+      'import { value } from "../a/value"; export const result: number = value; const global: CampaignGlobal = { value: 1 };',
     "c/independent.ts": "export const independent = true;",
     "fallback.ts": 'import { value } from "./a/value"; export const fallback: number = value;',
     "ignored.cjs": "module.exports = missingName;",
   };
   for (const directory of ["a", "b", "c"]) mkdirSync(join(root, directory));
   for (const [path, content] of Object.entries(files)) writeFileSync(join(root, path), content);
-  for (const [directory, include] of [["a", ["."]], ["b", [".", "../a/global.ts"]], ["c", ["."]]] as const)
-    writeFileSync(join(root, directory, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler", types: [], skipLibCheck: true }, include }));
-  const contract = { version: 1 as const, typescript: "5.9.2" as const, roots: ["."], projects: ["a/tsconfig.json", "b/tsconfig.json", "c/tsconfig.json"], topology: false as const };
+  for (const [directory, include] of [
+    ["a", ["."]],
+    ["b", [".", "../a/global.ts"]],
+    ["c", ["."]],
+  ] as const)
+    writeFileSync(
+      join(root, directory, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          types: [],
+          skipLibCheck: true,
+        },
+        include,
+      }),
+    );
+  const contract = {
+    version: 1 as const,
+    typescript: "5.9.2" as const,
+    roots: ["."],
+    projects: ["a/tsconfig.json", "b/tsconfig.json", "c/tsconfig.json"],
+    topology: false as const,
+  };
   const inventory = buildInventory(root, contract);
   const identity = executionTreeHash(root);
   return { root, files, contract, inventory, identity };
 }
 
 function compilerRequest(root: string, identity: string, path: string, content: string) {
-  return { executionTreeSha256: identity, candidateId: sha256(`${path}\0${content}`), path, originalSha256: sha256(readFileSync(join(root, path))), sourceSha256: sha256(content), content };
+  return {
+    executionTreeSha256: identity,
+    candidateId: sha256(`${path}\0${content}`),
+    path,
+    originalSha256: sha256(readFileSync(join(root, path))),
+    sourceSha256: sha256(content),
+    content,
+  };
 }
 
 function expectFallbackCandidateDiagnostics(
@@ -82,7 +148,9 @@ function expectFallbackCandidateDiagnostics(
   const invalid = compiler.check(compilerRequest(root, identity, "b/value.ts", invalidSource));
   expect(invalid.valid).toBe(false);
   expect(invalid.diagnostics.some((diagnostic) => diagnostic.includes("b/value.ts"))).toBe(true);
-  const consumer = compiler.check(compilerRequest(root, identity, "b/value.ts", "export const value = 1;"));
+  const consumer = compiler.check(
+    compilerRequest(root, identity, "b/value.ts", "export const value = 1;"),
+  );
   expect(consumer.valid).toBe(false);
   expect(consumer.diagnostics.some((diagnostic) => diagnostic.includes("a/index.ts"))).toBe(true);
 }
@@ -100,7 +168,12 @@ function expectUnchangedFallbackCandidate(
 test("incremental compiler matches the cold oracle through stale-state, consumer, global and fallback changes", () => {
   const input = compilerFixture();
   try {
-    const compiler = new FrozenMutationCompiler(input.root, input.contract, input.inventory, input.identity);
+    const compiler = new FrozenMutationCompiler(
+      input.root,
+      input.contract,
+      input.inventory,
+      input.identity,
+    );
     const cases = [
       ["a/value.ts", "export const value = 2;"],
       ["a/value.ts", 'export const value = "wrong";'],
@@ -128,62 +201,119 @@ test("incremental compiler matches the cold oracle through stale-state, consumer
       try {
         writeFileSync(join(input.root, path), content);
         cold = diagnostics(programs(input.root, input.contract, input.inventory));
-      } finally { writeFileSync(join(input.root, path), original); }
+      } finally {
+        writeFileSync(join(input.root, path), original);
+      }
       expect(checked.diagnostics).toEqual(cold);
       expect(checked.valid).toBe(cold.length === 0);
       expect(checked.diagnosticsSha256).toBe(sha256(JSON.stringify(cold)));
       expect(checked.candidateId).toBe(request.candidateId);
       expect(checked.sourceSha256).toBe(request.sourceSha256);
       expect(checked.executionTreeSha256).toBe(input.identity);
-      expect(checked.projects.map((project) => project.project)).toEqual([...input.contract.projects, "inventory-fallback"]);
+      expect(checked.projects.map((project) => project.project)).toEqual([
+        ...input.contract.projects,
+        "inventory-fallback",
+      ]);
       if (content.startsWith("export const independent: number"))
-        expect(checked.projects.find((project) => project.project === "c/tsconfig.json")?.mode).toBe("incremental");
+        expect(
+          checked.projects.find((project) => project.project === "c/tsconfig.json")?.mode,
+        ).toBe("incremental");
       if (path === "a/value.ts") {
-        expect(checked.projects.filter((project) => project.mode !== "frozen").map((project) => project.project)).toEqual(["a/tsconfig.json", "b/tsconfig.json", "inventory-fallback"]);
+        expect(
+          checked.projects
+            .filter((project) => project.mode !== "frozen")
+            .map((project) => project.project),
+        ).toEqual(["a/tsconfig.json", "b/tsconfig.json", "inventory-fallback"]);
         if (content.includes("wrong")) {
           expect(cold.some((diagnostic) => diagnostic.includes("consumer.ts"))).toBe(true);
           expect(cold.some((diagnostic) => diagnostic.includes("fallback.ts"))).toBe(true);
         }
       }
     }
-    const first = compiler.check(compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;"));
-    const second = compiler.check(compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = true;"));
-    expect(first.projects.find((project) => project.project === "c/tsconfig.json")?.mode).toBe("incremental");
-    expect(second.projects.find((project) => project.project === "c/tsconfig.json")?.mode).toBe("incremental");
+    const first = compiler.check(
+      compilerRequest(
+        input.root,
+        input.identity,
+        "c/independent.ts",
+        "export const independent = false;",
+      ),
+    );
+    const second = compiler.check(
+      compilerRequest(
+        input.root,
+        input.identity,
+        "c/independent.ts",
+        "export const independent = true;",
+      ),
+    );
+    expect(first.projects.find((project) => project.project === "c/tsconfig.json")?.mode).toBe(
+      "incremental",
+    );
+    expect(second.projects.find((project) => project.project === "c/tsconfig.json")?.mode).toBe(
+      "incremental",
+    );
     expect(executionTreeHash(input.root)).toBe(input.identity);
-  } finally { rmSync(input.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(input.root, { recursive: true, force: true });
+  }
 }, 120000);
 
 test("batched compiler checks preserve cold diagnostics and reuse affected projects", () => {
   const input = compilerFixture();
   try {
-    const compiler = new FrozenMutationCompiler(input.root, input.contract, input.inventory, input.identity);
-    const sources = ["export const value = 2;", 'export const value = "wrong";', "export const value = false;", input.files["a/value.ts"]];
-    const requests = sources.map((source) => compilerRequest(input.root, input.identity, "a/value.ts", source));
+    const compiler = new FrozenMutationCompiler(
+      input.root,
+      input.contract,
+      input.inventory,
+      input.identity,
+    );
+    const sources = [
+      "export const value = 2;",
+      'export const value = "wrong";',
+      "export const value = false;",
+      input.files["a/value.ts"],
+    ];
+    const requests = sources.map((source) =>
+      compilerRequest(input.root, input.identity, "a/value.ts", source),
+    );
     const results = compiler.checkBatch(requests);
     expect(results).toHaveLength(requests.length);
     expect(() => compiler.checkBatch([])).toThrow("Invalid compiler batch size");
-    expect(() => compiler.checkBatch(Array.from({ length: COMPILER_BATCH_SIZE + 1 },
-      () => compilerRequest(input.root, input.identity, "a/value.ts", input.files["a/value.ts"])))).toThrow("Invalid compiler batch size");
+    expect(() =>
+      compiler.checkBatch(
+        Array.from({ length: COMPILER_BATCH_SIZE + 1 }, () =>
+          compilerRequest(input.root, input.identity, "a/value.ts", input.files["a/value.ts"]),
+        ),
+      ),
+    ).toThrow("Invalid compiler batch size");
     for (const [index, result] of results.entries()) {
       const request = requests[index];
       if (!request) throw new Error("Missing batch request");
       writeFileSync(join(input.root, request.path), request.content);
       let cold: string[];
-      try { cold = diagnostics(programs(input.root, input.contract, input.inventory)); }
-      finally { writeFileSync(join(input.root, request.path), input.files["a/value.ts"]); }
+      try {
+        cold = diagnostics(programs(input.root, input.contract, input.inventory));
+      } finally {
+        writeFileSync(join(input.root, request.path), input.files["a/value.ts"]);
+      }
       expect(result.diagnostics).toEqual(cold);
       expect(result.valid).toBe(cold.length === 0);
       expect(result.candidateId).toBe(request.candidateId);
       expect(result.sourceSha256).toBe(request.sourceSha256);
-      expect(result.projects.filter((project) => project.mode !== "frozen").map((project) => [project.project, project.mode])).toEqual([
+      expect(
+        result.projects
+          .filter((project) => project.mode !== "frozen")
+          .map((project) => [project.project, project.mode]),
+      ).toEqual([
         ["a/tsconfig.json", index === 0 ? "cold" : "incremental"],
         ["b/tsconfig.json", index === 0 ? "cold" : "incremental"],
         ["inventory-fallback", index === 0 ? "cold" : "incremental"],
       ]);
     }
     expect(executionTreeHash(input.root)).toBe(input.identity);
-  } finally { rmSync(input.root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(input.root, { recursive: true, force: true });
+  }
 }, 120000);
 
 test("compiler overlays workspace package consumers through an aliased execution root", () => {
@@ -191,25 +321,36 @@ test("compiler overlays workspace package consumers through an aliased execution
   const alias = `${input.root}-alias`;
   try {
     mkdirSync(join(input.root, "b/node_modules/@fixture"), { recursive: true });
-    writeFileSync(join(input.root, "a/package.json"), JSON.stringify({ name: "@fixture/value", exports: "./value.ts" }));
+    writeFileSync(
+      join(input.root, "a/package.json"),
+      JSON.stringify({ name: "@fixture/value", exports: "./value.ts" }),
+    );
     symlinkSync("../../../a", join(input.root, "b/node_modules/@fixture/value"));
-    writeFileSync(join(input.root, "b/consumer.ts"), 'import { value } from "@fixture/value"; export const result: number = value;');
+    writeFileSync(
+      join(input.root, "b/consumer.ts"),
+      'import { value } from "@fixture/value"; export const result: number = value;',
+    );
     symlinkSync(input.root, alias);
     const inventory = buildInventory(alias, input.contract);
     const identity = executionTreeHash(alias);
     const compiler = new FrozenMutationCompiler(alias, input.contract, inventory, identity);
-    const requests = ['export const value = "wrong";', input.files["a/value.ts"]]
-      .map((content) => compilerRequest(alias, identity, "a/value.ts", content));
+    const requests = ['export const value = "wrong";', input.files["a/value.ts"]].map((content) =>
+      compilerRequest(alias, identity, "a/value.ts", content),
+    );
     const results = compiler.checkBatch(requests);
     for (const [index, result] of results.entries()) {
       const request = requests[index];
       if (!request) throw new Error("Missing aliased compiler request");
       writeFileSync(join(alias, request.path), request.content);
-      try { expect(result.diagnostics).toEqual(diagnostics(programs(alias, input.contract, inventory))); }
-      finally { writeFileSync(join(alias, request.path), input.files["a/value.ts"]); }
+      try {
+        expect(result.diagnostics).toEqual(diagnostics(programs(alias, input.contract, inventory)));
+      } finally {
+        writeFileSync(join(alias, request.path), input.files["a/value.ts"]);
+      }
       expect(result.valid).toBe(index === 1);
-      expect(result.projects.find((project) => project.project === "b/tsconfig.json")?.mode)
-        .toBe(index === 0 ? "cold" : "incremental");
+      expect(result.projects.find((project) => project.project === "b/tsconfig.json")?.mode).toBe(
+        index === 0 ? "cold" : "incremental",
+      );
     }
     expect(executionTreeHash(alias)).toBe(identity);
   } finally {
@@ -222,9 +363,22 @@ test("compiler refuses wrong frozen/source identities and recreated roots cannot
   const input = compilerFixture();
   const copy = `${input.root}-copy`;
   try {
-    expect(() => new FrozenMutationCompiler(input.root, input.contract, input.inventory, sha256("wrong"))).toThrow();
-    const compiler = new FrozenMutationCompiler(input.root, input.contract, input.inventory, input.identity);
-    const request = compilerRequest(input.root, input.identity, "a/value.ts", "export const value = false;");
+    expect(
+      () =>
+        new FrozenMutationCompiler(input.root, input.contract, input.inventory, sha256("wrong")),
+    ).toThrow();
+    const compiler = new FrozenMutationCompiler(
+      input.root,
+      input.contract,
+      input.inventory,
+      input.identity,
+    );
+    const request = compilerRequest(
+      input.root,
+      input.identity,
+      "a/value.ts",
+      "export const value = false;",
+    );
     expect(() => compiler.check({ ...request, executionTreeSha256: sha256("wrong") })).toThrow();
     expect(() => compiler.check({ ...request, originalSha256: sha256("wrong") })).toThrow();
     expect(() => compiler.check({ ...request, sourceSha256: sha256("wrong") })).toThrow();
@@ -232,12 +386,22 @@ test("compiler refuses wrong frozen/source identities and recreated roots cannot
       cpSync(input.root, copy, { recursive: true });
       writeFileSync(join(copy, "a/value.ts"), content);
       const inventory = buildInventory(copy, input.contract);
-      const fresh = new FrozenMutationCompiler(copy, input.contract, inventory, executionTreeHash(copy));
-      const result = fresh.check(compilerRequest(copy, executionTreeHash(copy), "a/value.ts", content));
+      const fresh = new FrozenMutationCompiler(
+        copy,
+        input.contract,
+        inventory,
+        executionTreeHash(copy),
+      );
+      const result = fresh.check(
+        compilerRequest(copy, executionTreeHash(copy), "a/value.ts", content),
+      );
       expect(result.diagnostics).toEqual(diagnostics(programs(copy, input.contract, inventory)));
       rmSync(copy, { recursive: true, force: true });
     }
-  } finally { rmSync(input.root, { recursive: true, force: true }); rmSync(copy, { recursive: true, force: true }); }
+  } finally {
+    rmSync(input.root, { recursive: true, force: true });
+    rmSync(copy, { recursive: true, force: true });
+  }
 }, 120000);
 
 test("compiler worker closes after an unexpected child exit and preserves its receipt", async () => {
@@ -256,7 +420,14 @@ test("compiler worker closes after an unexpected child exit and preserves its re
     },
   );
   try {
-    await worker.check(compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;"));
+    await worker.check(
+      compilerRequest(
+        input.root,
+        input.identity,
+        "c/independent.ts",
+        "export const independent = false;",
+      ),
+    );
     if (child === undefined) throw new Error("compiler child was not captured");
     expect(child.kill("SIGKILL")).toBe(true);
     expect(await bounded(exited.promise)).toEqual([null, "SIGKILL"]);
@@ -281,9 +452,20 @@ test("compiler worker closes after an unexpected child exit and preserves its re
 
 test("compiler worker returns actual compiler proof and fails closed on initialization error and disposal", async () => {
   const input = compilerFixture();
-  const worker = new MutationCompilerWorker(input.root, input.contract, input.inventory, input.identity, 120000);
+  const worker = new MutationCompilerWorker(
+    input.root,
+    input.contract,
+    input.inventory,
+    input.identity,
+    120000,
+  );
   try {
-    const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;");
+    const request = compilerRequest(
+      input.root,
+      input.identity,
+      "c/independent.ts",
+      "export const independent = false;",
+    );
     const result = await worker.check(request);
     expect(result.kind).toBe("persistent-compiler");
     expect(result.valid).toBe(true);
@@ -302,27 +484,49 @@ test("compiler worker returns actual compiler proof and fails closed on initiali
     expect(receipt.cleanupExit).toBe(null);
     expect(receipt.stderr).toContain("compiler project");
     await expect(worker.check(request)).rejects.toThrow();
-    const failed = new MutationCompilerWorker(input.root, input.contract, input.inventory, sha256("wrong"), 120000);
+    const failed = new MutationCompilerWorker(
+      input.root,
+      input.contract,
+      input.inventory,
+      sha256("wrong"),
+      120000,
+    );
     try {
       await expect(failed.check(request)).rejects.toThrow();
       expect(failed.closed).toBe(true);
-    } finally { await failed.close(); }
-  } finally { await worker.close(); rmSync(input.root, { recursive: true, force: true }); }
+    } finally {
+      await failed.close();
+    }
+  } finally {
+    await worker.close();
+    rmSync(input.root, { recursive: true, force: true });
+  }
 }, 120000);
 
 test("compiler message server returns initialization errors and real diagnostics over message ports", async () => {
   const input = compilerFixture();
   const { port1, port2 } = new MessageChannel();
   serveCompiler(port2);
-  const next = () => new Promise<Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0]>((resolveResponse) => port1.once("message", resolveResponse));
+  const next = () =>
+    new Promise<Parameters<Parameters<typeof serveCompiler>[0]["postMessage"]>[0]>(
+      (resolveResponse) => port1.once("message", resolveResponse),
+    );
   try {
-    const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent: number = false;");
+    const request = compilerRequest(
+      input.root,
+      input.identity,
+      "c/independent.ts",
+      "export const independent: number = false;",
+    );
     let response = next();
     port1.postMessage({ kind: "check", requests: [request] });
     expect(await response).toEqual({ kind: "error", message: "Compiler worker not initialized" });
     response = next();
     port1.postMessage({ kind: "initialize", ...input, identity: sha256("wrong") });
-    expect(await response).toEqual({ kind: "error", message: "Compiler frozen execution identity mismatch" });
+    expect(await response).toEqual({
+      kind: "error",
+      message: "Compiler frozen execution identity mismatch",
+    });
     response = next();
     port1.postMessage({ kind: "initialize", ...input });
     expect(await response).toEqual({ kind: "ready" });
@@ -358,22 +562,35 @@ test("stdio compiler port frames split newline-delimited requests and rejects ma
     lines.push(...parts);
     for (const wake of waiters.splice(0)) wake();
   });
-  const until = (count: number): Promise<void> => bounded(new Promise<void>((resolveCount) => {
-    const check = (): void => {
-      if (lines.length >= count) resolveCount();
-      else waiters.push(check);
-    };
-    check();
-  }));
+  const until = (count: number): Promise<void> =>
+    bounded(
+      new Promise<void>((resolveCount) => {
+        const check = (): void => {
+          if (lines.length >= count) resolveCount();
+          else waiters.push(check);
+        };
+        check();
+      }),
+    );
   try {
     serveCompiler(stdioCompilerPort(stdin, stdout));
     stdin.write("{not json\n");
     await until(1);
-    expect(parseResponse(lines[0] ?? "")).toEqual({ kind: "error", message: "Malformed compiler request" });
-    const request = compilerRequest(input.root, input.identity, "c/independent.ts", "export const independent = false;");
+    expect(parseResponse(lines[0] ?? "")).toEqual({
+      kind: "error",
+      message: "Malformed compiler request",
+    });
+    const request = compilerRequest(
+      input.root,
+      input.identity,
+      "c/independent.ts",
+      "export const independent = false;",
+    );
     const initialize = JSON.stringify({ kind: "initialize", ...input });
     stdin.write(initialize.slice(0, 16));
-    stdin.write(`${initialize.slice(16)}\n${JSON.stringify({ kind: "check", requests: [request] })}\n`);
+    stdin.write(
+      `${initialize.slice(16)}\n${JSON.stringify({ kind: "check", requests: [request] })}\n`,
+    );
     await until(3);
     expect(parseResponse(lines[1] ?? "")).toEqual({ kind: "ready" });
     const checked = parseResponse(lines[2] ?? "");
@@ -400,11 +617,26 @@ test("inventory fallback resolves ambient types from its root rather than the pr
     const inventory = buildInventory(input.root, input.contract);
     process.chdir(tmpdir());
     expect(diagnostics(programs(input.root, input.contract, inventory))).toEqual([]);
-    const compiler = new FrozenMutationCompiler(input.root, input.contract, inventory, executionTreeHash(input.root));
-    const checked = compiler.check(compilerRequest(input.root, compiler.identity, "fallback.ts", "export const fallback: string = campaignValue;"));
+    const compiler = new FrozenMutationCompiler(
+      input.root,
+      input.contract,
+      inventory,
+      executionTreeHash(input.root),
+    );
+    const checked = compiler.check(
+      compilerRequest(
+        input.root,
+        compiler.identity,
+        "fallback.ts",
+        "export const fallback: string = campaignValue;",
+      ),
+    );
     expect(checked.valid).toBe(false);
     expect(checked.diagnostics.some((value) => value.includes("Cannot find name"))).toBe(false);
-  } finally { process.chdir(cwd); rmSync(input.root, { recursive: true, force: true }); }
+  } finally {
+    process.chdir(cwd);
+    rmSync(input.root, { recursive: true, force: true });
+  }
 }, 120000);
 
 test("compiler fallback stays inside the frozen root and Python command names resolve", () => {
@@ -420,9 +652,9 @@ test("compiler fallback stays inside the frozen root and Python command names re
         { path: relative(input.root, config), sha256: sha256(readFileSync(config)) },
       ],
     };
-    expect(() => new FrozenMutationCompiler(input.root, input.contract, inventory, input.identity)).toThrow(
-      "Unsafe relative path",
-    );
+    expect(
+      () => new FrozenMutationCompiler(input.root, input.contract, inventory, input.identity),
+    ).toThrow("Unsafe relative path");
     expect(pythonExecutable("python3")).toBe(Bun.which("python3") ?? "python3");
   } finally {
     rmSync(outside, { recursive: true, force: true });
@@ -448,7 +680,10 @@ test("baseline diagnostics use project roots instead of transitive importer opti
         include: ["index.ts"],
       }),
     );
-    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
+    writeFileSync(
+      join(root, "a/index.ts"),
+      'import { value } from "b"; export const consumed: string = value;',
+    );
     writeFileSync(
       join(root, "b/tsconfig.json"),
       JSON.stringify({
@@ -473,7 +708,12 @@ test("baseline diagnostics use project roots instead of transitive importer opti
     expect(unchanged.diagnostics).toEqual([]);
     expect(unchanged.valid).toBe(true);
     // Errors attributed to a real consumer root file are preserved.
-    expectFallbackCandidateDiagnostics(compiler, root, identity, "export const value: number = document.title;");
+    expectFallbackCandidateDiagnostics(
+      compiler,
+      root,
+      identity,
+      "export const value: number = document.title;",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -488,32 +728,66 @@ test("transitive-only inventory files enter the fallback beside native roots and
     writeFileSync(
       join(root, "a/tsconfig.json"),
       JSON.stringify({
-        compilerOptions: { strict: true, noEmit: true, lib: ["ES2022"], baseUrl: ".", paths: { b: ["../b/value.ts"] } },
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          lib: ["ES2022"],
+          baseUrl: ".",
+          paths: { b: ["../b/value.ts"] },
+        },
         include: ["index.ts"],
       }),
     );
-    writeFileSync(join(root, "a/index.ts"), 'import { value } from "b"; export const consumed: string = value;');
+    writeFileSync(
+      join(root, "a/index.ts"),
+      'import { value } from "b"; export const consumed: string = value;',
+    );
     writeFileSync(join(root, "b/value.ts"), 'export const value = "shared";');
     writeFileSync(join(root, "c/orphan.ts"), "export const orphan = true;");
-    const contract = { version: 1 as const, typescript: "5.9.2" as const, roots: ["a", "b", "c"], projects: ["a/tsconfig.json"], topology: false };
+    const contract = {
+      version: 1 as const,
+      typescript: "5.9.2" as const,
+      roots: ["a", "b", "c"],
+      projects: ["a/tsconfig.json"],
+      topology: false,
+    };
     const inventory = buildInventory(root, contract);
     // Finding 6: b/value.ts is imported by project a but is no project's root,
     // so canonical ownership sends it to the fallback beside c/orphan.ts.
-    const owners = [...programs(root, contract, inventory)].map((program) => program.getRootFileNames().map((name) => relative(realpathSync(root), name)).sort());
+    const owners = [...programs(root, contract, inventory)].map((program) =>
+      program
+        .getRootFileNames()
+        .map((name) => relative(realpathSync(root), name))
+        .sort(),
+    );
     expect(owners).toEqual([["a/index.ts"], ["b/value.ts", "c/orphan.ts"]]);
     const analyzed = analyze(root, contract, inventory, []);
     expect(analyzed.enumerated.errors).toEqual([]);
     expect(analyzed.sourceDiagnostics).toEqual([]);
-    const census = analyzed.enumerated.census.filter((row) => row.path.endsWith(".ts")).map((row) => [row.path, row.syntax]);
-    expect(census).toEqual([["a/index.ts", "parsed"], ["b/value.ts", "parsed"], ["c/orphan.ts", "parsed"]]);
+    const census = analyzed.enumerated.census
+      .filter((row) => row.path.endsWith(".ts"))
+      .map((row) => [row.path, row.syntax]);
+    expect(census).toEqual([
+      ["a/index.ts", "parsed"],
+      ["b/value.ts", "parsed"],
+      ["c/orphan.ts", "parsed"],
+    ]);
     // The candidate compiler owns the same fallback set deterministically.
     const identity = executionTreeHash(root);
     const compiler = new FrozenMutationCompiler(root, contract, inventory, identity);
     const unchanged = expectUnchangedFallbackCandidate(compiler, root, identity);
     expect(unchanged.valid).toBe(true);
     expect(unchanged.diagnostics).toEqual([]);
-    expect(unchanged.projects.map((project) => project.project)).toEqual(["a/tsconfig.json", "inventory-fallback"]);
-    expectFallbackCandidateDiagnostics(compiler, root, identity, 'export const value: number = "shared";');
+    expect(unchanged.projects.map((project) => project.project)).toEqual([
+      "a/tsconfig.json",
+      "inventory-fallback",
+    ]);
+    expectFallbackCandidateDiagnostics(
+      compiler,
+      root,
+      identity,
+      'export const value: number = "shared";',
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

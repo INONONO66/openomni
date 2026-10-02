@@ -7,7 +7,6 @@ import { pendingRequest } from "./helpers/open-request";
 import type { SessionTransition } from "@openomni/protocol";
 import { commitSessionRequest } from "../src/session/mailbox";
 
-
 function pending(id: string) {
   return pendingRequest(id);
 }
@@ -53,9 +52,7 @@ test("admission carries its observed count into the real SQLite transaction", ()
         expect(kernel.row(first.sessionId)).toEqual(before);
         expect(sessionTree(kernel, first.sessionId)).toEqual(actions);
         expect(
-          kernel.requestRows().map(
-            (request: SessionTransition.Request) => request.requestId,
-          ),
+          kernel.requestRows().map((request: SessionTransition.Request) => request.requestId),
         ).toEqual([second.requestId]);
         expect(yield* open(first)).toMatchObject({
           resolution: "opened",

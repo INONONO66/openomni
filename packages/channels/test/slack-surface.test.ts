@@ -59,13 +59,23 @@ afterEach(() => {
 
 describe("SlackAdapter", () => {
   it("refuses to start without a handler", async () => {
-    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
+    const adapter = new SlackAdapter(
+      { botToken: "xoxb-1", appToken: "xapp-1" },
+      {},
+      noopPublish,
+      injectedOptions(),
+    );
     await expect(adapter.start("trace-1")).rejects.toBeInstanceOf(SlackHandlerMissingError);
   });
 
   it("delivers a channel event as ingress facts", async () => {
     const api = installSlackApi();
-    const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
+    const adapter = new SlackAdapter(
+      { botToken: "xoxb-1", appToken: "xapp-1" },
+      {},
+      noopPublish,
+      injectedOptions(),
+    );
     const facts = Promise.withResolvers<Channel.InboundMessage>();
     adapter.onMessage(async (message) => {
       facts.resolve(message);
@@ -153,7 +163,12 @@ describe("SlackAdapter", () => {
   it("reports a delivery receipt and rejects an unscoped endpoint", async () => {
     const api = installSlackApi();
     try {
-      const adapter = new SlackAdapter({ botToken: "xoxb-1", appToken: "xapp-1" }, {}, noopPublish, injectedOptions());
+      const adapter = new SlackAdapter(
+        { botToken: "xoxb-1", appToken: "xapp-1" },
+        {},
+        noopPublish,
+        injectedOptions(),
+      );
       const receipt = adapter.deliver("T9:U5", "direct note", "message-1");
       expect(await bounded(api.posts)).toEqual({ channel: "D-open", text: "direct note" });
       expect(api.calls.find((call) => call.method === "conversations.open")?.body).toEqual({

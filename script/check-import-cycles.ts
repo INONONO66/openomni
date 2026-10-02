@@ -50,9 +50,9 @@ function workspaceEntryPoints(): Map<string, string> {
     if (!existsSync(manifestPath)) {
       throw new Error(`topology workspace ${workspace.dir} has no package.json`);
     }
-    const manifest = z.object({ name: z.string(), main: z.string().min(1) }).safeParse(
-      decodeJson(readFileSync(manifestPath, "utf8")),
-    );
+    const manifest = z
+      .object({ name: z.string(), main: z.string().min(1) })
+      .safeParse(decodeJson(readFileSync(manifestPath, "utf8")));
     if (!manifest.success || manifest.data.name !== workspace.packageName) {
       throw new Error(
         `topology workspace ${workspace.dir} expected package ${workspace.packageName} with a main entry`,
@@ -219,4 +219,7 @@ export async function main(graph: Map<string, readonly string[]> = buildGraph())
   console.log(`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`);
 }
 
-if (import.meta.main) { if (process.argv.includes("--self-test")) selfTest(); else await runScriptMain(main); }
+if (import.meta.main) {
+  if (process.argv.includes("--self-test")) selfTest();
+  else await runScriptMain(main);
+}

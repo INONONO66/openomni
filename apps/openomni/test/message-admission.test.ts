@@ -49,7 +49,10 @@ test.each([
   expect(result.isError).not.toBe(true);
   const handle = Gateway.SendMessageHandle.parse(JSON.parse(result.output));
   expect(keys).toEqual([handle.messageId]);
-  const receipts = sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions).flatMap((action) => {
+  const receipts = sessionTree(
+    fixture.sessionId,
+    fixture.plane.sessionStore(fixture.sessionId).actions,
+  ).flatMap((action) => {
     const effect = action.effect.value;
     if (
       action.kind !== "message" ||
@@ -89,18 +92,20 @@ test("app ingress applies the channel default tier as policy facts, not top-leve
     createdBy: "owner",
   });
   expect(
-    await runEffect(fixture.gateway.ingest(
-      { kind: "external", surface: "discord", externalId: "guest" },
-      {
-        eventId: "guest",
-        surface: "discord",
-        channelId: "public",
-        addressees: [],
-        dm: false,
-        payload: "instruction",
-        render: "instruction",
-      },
-    )),
+    await runEffect(
+      fixture.gateway.ingest(
+        { kind: "external", surface: "discord", externalId: "guest" },
+        {
+          eventId: "guest",
+          surface: "discord",
+          channelId: "public",
+          addressees: [],
+          dm: false,
+          payload: "instruction",
+          render: "instruction",
+        },
+      ),
+    ),
   ).toEqual({ status: "blocked_pre", reasonCode: "message.external.grant_tier" });
   expect(
     fixture.plane

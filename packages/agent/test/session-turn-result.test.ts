@@ -24,6 +24,9 @@ test("missing runner output is distinguishable from a policy refusal, durably to
   expect(refusal.kind === "error" ? refusal.cause : undefined).toBeInstanceOf(SessionPolicyRefusal);
   // The durable value keeps the distinct text, so a sealed terminal never
   // reads as "session policy refused" when the runner simply produced nothing.
-  expect(sessionRunnerResultValue(missing)).toEqual({ kind: "error", text: "runner output missing: turn turn-7" });
+  expect(sessionRunnerResultValue(missing)).toEqual({
+    kind: "error",
+    text: "runner output missing: turn turn-7",
+  });
   expect(sessionRunnerResultValue(refusal)).not.toEqual(sessionRunnerResultValue(missing));
 });

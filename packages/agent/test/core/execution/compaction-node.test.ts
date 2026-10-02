@@ -11,7 +11,10 @@ import { recoveryRecording as recordingExecutor } from "../../helpers/effect-g3r
 import { runInput } from "../../helpers/run-input";
 import { RunEvents } from "../../../src/kernel/turn";
 import { executeCompaction } from "../../../src/plugins/compaction/execute-cut";
-import { createCompactionPlan, restoreCompactionProjection } from "../../../src/plugins/compaction/durable";
+import {
+  createCompactionPlan,
+  restoreCompactionProjection,
+} from "../../../src/plugins/compaction/durable";
 import { Compaction } from "../../../src/plugins/compaction/compact";
 
 function assistant(id: string): Message.WithParts {
@@ -54,17 +57,19 @@ it("retains an original atomic entry when the configured protected tail is zero"
   // Given: a full-rewrite candidate with real completed call/result pairs.
   const prior = [assistant("original-1"), assistant("original-2")];
   // When: the real compaction strategy summarizes the window.
-  const result = await isolated(Compaction.compact(
-    prior,
-    {
-      contextWindowTokens: 1000,
-      protectRecentMessages: 0,
-      onSummarize: () => Effect.promise(async () => "summary"),
-    },
-    { traceId: "trace-937", sessionId: "compaction-937" },
-    { publish: () => undefined },
-    { trigger: "yield" },
-  ));
+  const result = await isolated(
+    Compaction.compact(
+      prior,
+      {
+        contextWindowTokens: 1000,
+        protectRecentMessages: 0,
+        onSummarize: () => Effect.promise(async () => "summary"),
+      },
+      { traceId: "trace-937", sessionId: "compaction-937" },
+      { publish: () => undefined },
+      { trigger: "yield" },
+    ),
+  );
   // Then: the suffix boundary is original content, not a synthesized anchor.
   expect(result.compacted).toBe(true);
   expect(result.messages.at(-1)).toEqual(prior.at(-1));
@@ -146,42 +151,44 @@ it("commits a reversible compaction result before completion observations and th
   const committedRecord = () =>
     recording.committed.some((action) => action.kind === "compaction" && "revert" in action);
   // When: the production run loop recovers through its compaction path.
-  await isolated(runTestAgent(
-    runInput([
-      { role: "user", content: "goal" },
-      { role: "assistant", content: "prior evidence ".repeat(200) },
-      { role: "user", content: "continue" },
-    ]),
-    {
-      events: {
-        publish(event) {
-          if (event.name === RunEvents.CompactionCompleted.name)
-            durableAtObservation = committedRecord();
+  await isolated(
+    runTestAgent(
+      runInput([
+        { role: "user", content: "goal" },
+        { role: "assistant", content: "prior evidence ".repeat(200) },
+        { role: "user", content: "continue" },
+      ]),
+      {
+        events: {
+          publish(event) {
+            if (event.name === RunEvents.CompactionCompleted.name)
+              durableAtObservation = committedRecord();
+          },
         },
+        executor: recording.executor,
+        model: { provider: "provider", id: "model" },
+        compaction: {
+          contextWindowTokens: 1000,
+          protectRecentMessages: 1,
+          speculate: false,
+          onSummarize: () => Effect.promise(async () => "checkpoint"),
+        },
+        llm: windowedLlm(async (input, sink) => {
+          calls += 1;
+          if (calls === 1)
+            return {
+              type: "error",
+              error: providerFailure("prompt is too long", {
+                contextOverflow: true,
+                retryable: false,
+              }),
+            };
+          durableAtNextCall = committedRecord();
+          return completeModel(input, sink);
+        }),
       },
-      executor: recording.executor,
-      model: { provider: "provider", id: "model" },
-      compaction: {
-        contextWindowTokens: 1000,
-        protectRecentMessages: 1,
-        speculate: false,
-        onSummarize: () => Effect.promise(async () => "checkpoint"),
-      },
-      llm: windowedLlm(async (input, sink) => {
-        calls += 1;
-        if (calls === 1)
-          return {
-            type: "error",
-            error: providerFailure("prompt is too long", {
-              contextOverflow: true,
-              retryable: false,
-            }),
-          };
-        durableAtNextCall = committedRecord();
-        return completeModel(input, sink);
-      }),
-    },
-  ));
+    ),
+  );
   // Then: the durable reversible action precedes both consumers.
   expect(durableAtObservation).toBe(true);
   expect(durableAtNextCall).toBe(true);
@@ -213,38 +220,63 @@ function executionInput(
 }
 
 it("holds completion observation until the reversible commit resolves", () =>
-  isolated(Effect.scoped(Effect.gen(function* () {
-    const reached = yield* Deferred.make<void>();
-    const release = yield* Deferred.make<void>();
-    const recording = recordingExecutor({
-      beforeCommit: (action) => action.kind === "compaction" && "revert" in action
-        ? Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(release)))
-        : Effect.void,
-    });
-    const observed: string[] = [];
-    const pending = yield* Effect.forkScoped(executeCompaction(executionInput(recording.executor, observed)));
-    yield* Deferred.await(reached).pipe(Effect.timeout("5 seconds"));
-    expect(observed).toEqual([RunEvents.CompactionStarted.name]);
-    expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
-    yield* Deferred.succeed(release, undefined);
-    yield* Fiber.join(pending);
-    expect(observed).toEqual([RunEvents.CompactionStarted.name, RunEvents.CompactionCompleted.name]);
-  }))));
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const reached = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const recording = recordingExecutor({
+          beforeCommit: (action) =>
+            action.kind === "compaction" && "revert" in action
+              ? Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(release)))
+              : Effect.void,
+        });
+        const observed: string[] = [];
+        const pending = yield* Effect.forkScoped(
+          executeCompaction(executionInput(recording.executor, observed)),
+        );
+        yield* Deferred.await(reached).pipe(Effect.timeout("5 seconds"));
+        expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+        expect(
+          recording.committed.filter(
+            (action) => action.kind === "compaction" && "revert" in action,
+          ),
+        ).toHaveLength(0);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(pending);
+        expect(observed).toEqual([
+          RunEvents.CompactionStarted.name,
+          RunEvents.CompactionCompleted.name,
+        ]);
+      }),
+    ),
+  ));
 
 it("does not report completion or mutate history when the reversible commit fails", async () => {
   // Given: a fenced commit failure, not a mock compaction implementation.
-  const commitFailure = new CommitRefused({ sessionId: "session-1", reason: "fence", expectedRevision: 1, currentRevision: 1, fence: 1, currentFence: 2 });
+  const commitFailure = new CommitRefused({
+    sessionId: "session-1",
+    reason: "fence",
+    expectedRevision: 1,
+    currentRevision: 1,
+    fence: 1,
+    currentFence: 2,
+  });
   const recording = recordingExecutor({
-    beforeCommit: (action) => action.kind === "compaction" && "revert" in action
-      ? Effect.fail(commitFailure)
-      : Effect.void,
+    beforeCommit: (action) =>
+      action.kind === "compaction" && "revert" in action ? Effect.fail(commitFailure) : Effect.void,
   });
   const observed: string[] = [];
   const input = executionInput(recording.executor, observed);
   const original = structuredClone(input.history);
   // When: the real strategy succeeds but its durable result cannot commit.
-  expect(await isolated(failure(executeCompaction(input)))).toMatchObject({ _tag: "CommitFailed", error: commitFailure });
-  expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
+  expect(await isolated(failure(executeCompaction(input)))).toMatchObject({
+    _tag: "CommitFailed",
+    error: commitFailure,
+  });
+  expect(
+    recording.committed.filter((action) => action.kind === "compaction" && "revert" in action),
+  ).toHaveLength(0);
   // Then: the active history and success observation remain untouched.
   expect(input.history).toEqual(original);
   expect(observed).toEqual([RunEvents.CompactionStarted.name]);
@@ -267,50 +299,75 @@ it("refuses compaction before the summarizer when compiled pre policy denies it"
   });
   const observed: string[] = [];
   // When: the projection is submitted through the executor.
-  expect(await isolated(failure(executeCompaction(executionInput(recording.executor, observed))))).toMatchObject({ _tag: "CompactionExecutionError", reason: "hold" });
+  expect(
+    await isolated(failure(executeCompaction(executionInput(recording.executor, observed)))),
+  ).toMatchObject({ _tag: "CompactionExecutionError", reason: "hold" });
   // Then: neither compaction work nor observations ran.
   expect(observed).toEqual([]);
   expect(recording.committed.every((action) => action.kind === "policy.decision")).toBe(true);
 });
 
 it("forwards session cancellation into an in-flight compaction summarizer", () =>
-  isolated(Effect.scoped(Effect.gen(function* () {
-    const controller = new AbortController();
-    const started = yield* Deferred.make<AbortSignal>();
-    const recording = recordingExecutor();
-    const observed: string[] = [];
-    const base = executionInput(recording.executor, observed);
-    const original = structuredClone(base.history);
-    const pending = yield* Effect.forkScoped(Effect.exit(executeCompaction({
-      ...base,
-      signal: controller.signal,
-      options: {
-        ...base.options,
-        onSummarize: (_messages, _anchor, _budget, signal) => Effect.gen(function* () {
-          if (signal === undefined) return yield* Effect.die("missing summary signal");
-          return yield* Effect.callback<string>((resume) => {
-            const abort = () => resume(Effect.interrupt);
-            signal.addEventListener("abort", abort, { once: true });
-            Deferred.doneUnsafe(started, Effect.succeed(signal));
-            return Effect.sync(() => signal.removeEventListener("abort", abort));
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const controller = new AbortController();
+        const started = yield* Deferred.make<AbortSignal>();
+        const recording = recordingExecutor();
+        const observed: string[] = [];
+        const base = executionInput(recording.executor, observed);
+        const original = structuredClone(base.history);
+        const pending = yield* Effect.forkScoped(
+          Effect.exit(
+            executeCompaction({
+              ...base,
+              signal: controller.signal,
+              options: {
+                ...base.options,
+                onSummarize: (_messages, _anchor, _budget, signal) =>
+                  Effect.gen(function* () {
+                    if (signal === undefined) return yield* Effect.die("missing summary signal");
+                    return yield* Effect.callback<string>((resume) => {
+                      const abort = () => resume(Effect.interrupt);
+                      signal.addEventListener("abort", abort, { once: true });
+                      Deferred.doneUnsafe(started, Effect.succeed(signal));
+                      return Effect.sync(() => signal.removeEventListener("abort", abort));
+                    });
+                  }),
+              },
+            }),
+          ),
+        );
+        const summarySignal = yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"));
+        controller.abort();
+        expect(summarySignal.aborted).toBe(true);
+        const exit = yield* Fiber.join(pending).pipe(Effect.timeout("5 seconds"));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.squash(exit.cause)).toMatchObject({
+            _tag: "CompactionExecutionError",
+            reason: "fiber_interrupted",
           });
-        }),
-      },
-    })));
-    const summarySignal = yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"));
-    controller.abort();
-    expect(summarySignal.aborted).toBe(true);
-    const exit = yield* Fiber.join(pending).pipe(Effect.timeout("5 seconds"));
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toMatchObject({
-      _tag: "CompactionExecutionError", reason: "fiber_interrupted",
-    });
-    expect(recording.committed.filter((action) => action.kind === "compaction" && "revert" in action)).toHaveLength(0);
-    const terminals = recording.committed.filter((action) => action.kind === "compaction" && typeof action.effect.value === "object" && action.effect.value !== null && "terminal" in action.effect.value);
-    expect(terminals).toHaveLength(1);
-    expect(terminals[0]?.effect.value).toMatchObject({
-      terminal: "interrupted", reason: "fiber_interrupted", evidence: { failures: [], defects: [], interrupted: true },
-    });
-    expect(base.history).toEqual(original);
-    expect(observed).toEqual([RunEvents.CompactionStarted.name]);
-  }))));
+        expect(
+          recording.committed.filter(
+            (action) => action.kind === "compaction" && "revert" in action,
+          ),
+        ).toHaveLength(0);
+        const terminals = recording.committed.filter(
+          (action) =>
+            action.kind === "compaction" &&
+            typeof action.effect.value === "object" &&
+            action.effect.value !== null &&
+            "terminal" in action.effect.value,
+        );
+        expect(terminals).toHaveLength(1);
+        expect(terminals[0]?.effect.value).toMatchObject({
+          terminal: "interrupted",
+          reason: "fiber_interrupted",
+          evidence: { failures: [], defects: [], interrupted: true },
+        });
+        expect(base.history).toEqual(original);
+        expect(observed).toEqual([RunEvents.CompactionStarted.name]);
+      }),
+    ),
+  ));

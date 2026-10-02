@@ -31,20 +31,50 @@ const result = Effect.runPromise(Effect.all([A,B]).pipe(Effect.provide(complete)
 const negatives = [
   ["output mismatch", `bundle({name:"a",requires:[],provides:[B],layer:ALive});`, 2554],
   ["input mismatch", `bundle({name:"b",requires:[],provides:[B],layer:BLive});`, 2554],
-  ["identity-only forged Tag", `bundle({name:"a",requires:[],provides:[{key:A.key,_op:"Tag"}],layer:ALive});`, 2554],
+  [
+    "identity-only forged Tag",
+    `bundle({name:"a",requires:[],provides:[{key:A.key,_op:"Tag"}],layer:ALive});`,
+    2554,
+  ],
   ["later provider", `compose(seed,[b,a]);`, 2554],
   ["missing provider", `compose(seed,[b]);`, 2554],
   ["wrong service value", `Layer.succeed(A,"wrong");`, 2345],
   ["unprovided Effect", `Effect.runPromise(A);`, 2345],
-  ["dropped seed environment", `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/kernel/failure").BundleError> = live;`, 2322],
-  ["reserved policy shape", `class InvalidPolicy extends Context.Service<InvalidPolicy, number>()("@openomni/bundle/b/Policy") {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`, 2554],
+  [
+    "dropped seed environment",
+    `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/kernel/failure").BundleError> = live;`,
+    2322,
+  ],
+  [
+    "reserved policy shape",
+    `class InvalidPolicy extends Context.Service<InvalidPolicy, number>()("@openomni/bundle/b/Policy") {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`,
+    2554,
+  ],
   ["seed output mismatch", `compose({requires:[],provides:[B],layer:ALive},[]);`, 2554],
   ["seed input mismatch", `compose({requires:[],provides:[B],layer:BLive},[]);`, 2554],
 ] as const;
 
 test("bundle compiler contract retains exact types and rejects metadata and environment mismatches", () => {
-  const fixtures = new Map<string, string>([[resolve(root, "script/bundle-positive.fixture.ts"), positive], ...negatives.map(([name, code]) => [resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`), `${header}${code}`] as const)]);
-  const options: ts.CompilerOptions = { strict: true, noUncheckedIndexedAccess: true, noEmit: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, skipLibCheck: true, types: ["bun"] };
+  const fixtures = new Map<string, string>([
+    [resolve(root, "script/bundle-positive.fixture.ts"), positive],
+    ...negatives.map(
+      ([name, code]) =>
+        [
+          resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`),
+          `${header}${code}`,
+        ] as const,
+    ),
+  ]);
+  const options: ts.CompilerOptions = {
+    strict: true,
+    noUncheckedIndexedAccess: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    skipLibCheck: true,
+    types: ["bun"],
+  };
   const host = ts.createCompilerHost(options);
   const read = host.readFile.bind(host);
   const exists = host.fileExists.bind(host);
@@ -52,13 +82,23 @@ test("bundle compiler contract retains exact types and rejects metadata and envi
   host.fileExists = (file) => fixtures.has(file) || exists(file);
   const program = ts.createProgram([...fixtures.keys()], options, host);
   const diagnostics = ts.getPreEmitDiagnostics(program);
-  const owned = diagnostics.filter((item) => item.file?.fileName === resolve(root, "packages/agent/src/kernel/bundle.ts") || item.file?.fileName.endsWith("bundle-positive.fixture.ts"));
+  const owned = diagnostics.filter(
+    (item) =>
+      item.file?.fileName === resolve(root, "packages/agent/src/kernel/bundle.ts") ||
+      item.file?.fileName.endsWith("bundle-positive.fixture.ts"),
+  );
   expect(owned.map((item) => ts.flattenDiagnosticMessageText(item.messageText, "\n"))).toEqual([]);
   for (const [name, , code] of negatives) {
     const path = resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`);
     const failures = diagnostics.filter((item) => item.file?.fileName === path);
-    expect(failures.map((item) => item.code), name).toEqual([code]);
-    expect(failures.every((item) => item.start !== undefined && item.start >= header.length), name).toBe(true);
+    expect(
+      failures.map((item) => item.code),
+      name,
+    ).toEqual([code]);
+    expect(
+      failures.every((item) => item.start !== undefined && item.start >= header.length),
+      name,
+    ).toBe(true);
   }
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(resolve(root, "script/bundle-positive.fixture.ts"));

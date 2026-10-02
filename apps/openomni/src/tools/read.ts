@@ -1,7 +1,6 @@
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 import { fileOperation, filesystem, text, type FilePorts } from "./core/filesystem";
 
@@ -37,7 +36,8 @@ export function createReadTool(ports: FilePorts) {
           throw new ToolRefused("read", "offset and limit apply to utf8 reads only");
         const bytes = await filesystem(args.path, ports).read();
         return {
-          content: args.encoding === "base64" ? bytes.toString("base64") : window(text(bytes), args),
+          content:
+            args.encoding === "base64" ? bytes.toString("base64") : window(text(bytes), args),
           bytes: bytes.length,
         };
       }),

@@ -1,9 +1,18 @@
 import { runAgentSync } from "../test/helpers/executor";
 import { chatServices } from "../test/helpers/chat-services";
-import { allowConfigure, kernelRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
+import {
+  allowConfigure,
+  kernelRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "../test/helpers/session-services";
 import { catalogLayer, executorLayer } from "../test/helpers/service-layers";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
-import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
+import {
+  compilePolicySnapshot,
+  KERNEL_POLICY_REGISTRY,
+  SEEDED_POLICY_ROWS,
+} from "../src/kernel/gate/compile";
 import { openCatalogStore } from "../src/store/catalog";
 import { openSessionStore } from "../src/store/session-file";
 import * as SessionHandleStore from "../src/store/fence";
@@ -79,7 +88,9 @@ export function runBenchEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 export async function firstDelta(now: () => number) {
   const first = Promise.withResolvers<number>();
   const record = recordingLedger();
-  const services = firstDeltaServices.pipe(Context.add(Entropy, { id: record.entropy, random: () => 0 }));
+  const services = firstDeltaServices.pipe(
+    Context.add(Entropy, { id: record.entropy, random: () => 0 }),
+  );
   const input = runInput([{ role: "user", content: "hello" }]);
   const sink = {
     onMessage: () => first.resolve(now() - start),
@@ -116,7 +127,11 @@ export function toolDispatch() {
         identity: { sessionId: "session-1", role: "resident", parentActionId: null },
       });
       return yield* createDispatcher({ executor });
-    }).pipe(Effect.provide(dispatchServices.pipe(Context.add(Entropy, { id: record.entropy, random: () => 0 })))),
+    }).pipe(
+      Effect.provide(
+        dispatchServices.pipe(Context.add(Entropy, { id: record.entropy, random: () => 0 })),
+      ),
+    ),
   );
   return {
     committed: record.committed,
@@ -137,8 +152,10 @@ export async function roundTrip() {
   const storeOptions = { now: () => (tick += 1), observationSink: events };
   const sessionStore = openSessionStore(":memory:", storeOptions);
   const catalog = openCatalogStore(":memory:", storeOptions);
-  const kernel: SessionHandleStore.SessionKernel =
-    SessionHandleStore.createSessionKernel(sessionStore, catalog);
+  const kernel: SessionHandleStore.SessionKernel = SessionHandleStore.createSessionKernel(
+    sessionStore,
+    catalog,
+  );
   seedPolicy([], catalog.policies);
   const runtime: SessionFixture = {
     observations: events,

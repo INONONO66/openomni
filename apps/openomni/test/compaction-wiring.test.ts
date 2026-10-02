@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { Kernel, Model } from "@openomni/agent";
 const LlmLive = Model.LlmLive;
 const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
 import { Bus, newTraceId } from "./helpers/bus";
 import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -43,12 +42,24 @@ afterEach(() => {
 
 describe("compaction composition configuration", () => {
   it("wires a run-scoped summarizer by default", () => {
-    expect(runSyncEffect(configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus))).onSummarize).toBeFunction();
+    expect(
+      runSyncEffect(
+        configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(
+          Effect.provide(LlmLive),
+          Effect.provideService(ObservationSink, Bus),
+        ),
+      ).onSummarize,
+    ).toBeFunction();
   });
 
   it("omits the summarizer when explicitly off while preserving deterministic reduction", () => {
     process.env.OPENOMNI_COMPACTION_SUMMARIZER = "off";
-    const compaction = runSyncEffect(configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(Effect.provide(LlmLive), Effect.provideService(ObservationSink, Bus)));
+    const compaction = runSyncEffect(
+      configuredCompaction(loadConfig(), { now: () => 1000, id: testIds("compaction") }).pipe(
+        Effect.provide(LlmLive),
+        Effect.provideService(ObservationSink, Bus),
+      ),
+    );
     expect(compaction.onSummarize).toBeUndefined();
     expect(compaction.elideToolOutputs).toEqual({ minOutputChars: 4000, keepHeadChars: 500 });
   });
@@ -63,25 +74,29 @@ describe("compaction composition configuration", () => {
     const app = await suite.boot({
       config,
       llm: {
-        resolveModel: (model) => fakeProviderModel(model).pipe(Effect.map((resolved) => ({
-          ...resolved,
-          limit: { context: constrained ? 700 : 100_000 },
-        }))),
-        run: (input: RunInput, sink: Sink) => Effect.sync(() => {
-          calls += 1;
-          if (constrained) messageCounts.push(input.messages.length);
-          sink.onMessage(
-            assistantMessage(input, {
-              call: calls,
-              reason: constrained && messageCounts.length === 1 ? "tool-calls" : "stop",
-              text: `answer ${calls} ${"filler ".repeat(30)}`,
-              tokens: constrained
-                ? { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
-                : undefined,
-            }),
-          );
-          return { type: "stop" as const };
-        }),
+        resolveModel: (model) =>
+          fakeProviderModel(model).pipe(
+            Effect.map((resolved) => ({
+              ...resolved,
+              limit: { context: constrained ? 700 : 100_000 },
+            })),
+          ),
+        run: (input: RunInput, sink: Sink) =>
+          Effect.sync(() => {
+            calls += 1;
+            if (constrained) messageCounts.push(input.messages.length);
+            sink.onMessage(
+              assistantMessage(input, {
+                call: calls,
+                reason: constrained && messageCounts.length === 1 ? "tool-calls" : "stop",
+                text: `answer ${calls} ${"filler ".repeat(30)}`,
+                tokens: constrained
+                  ? { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+                  : undefined,
+              }),
+            );
+            return { type: "stop" as const };
+          }),
       },
     });
     const plane = await planeOf(app.runtime);
@@ -91,7 +106,13 @@ describe("compaction composition configuration", () => {
     ]);
     for (let index = 0; index < 6; index += 1) {
       const reply = nextResidentTurn(plane);
-      ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: `seed ${index} ${"filler ".repeat(30)}` }));
+      ws.send(
+        JSON.stringify({
+          type: "message",
+          eventId: newTraceId(),
+          text: `seed ${index} ${"filler ".repeat(30)}`,
+        }),
+      );
       await reply;
     }
     constrained = true;

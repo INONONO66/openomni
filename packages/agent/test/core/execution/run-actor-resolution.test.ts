@@ -15,17 +15,19 @@ async function observedActorId(trace: RunTrace): Promise<string> {
     if (actorId !== undefined) actorIds.push(actorId);
   });
   try {
-    await isolated(runTestAgent(
-      {
-        messages: [{ role: "user", content: "hi" }],
-        traceContext: trace,
-      },
-      {
-        events: Bus,
-        model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
-        llm: mockLlm(completeModel),
-      },
-    ));
+    await isolated(
+      runTestAgent(
+        {
+          messages: [{ role: "user", content: "hi" }],
+          traceContext: trace,
+        },
+        {
+          events: Bus,
+          model: { provider: "anthropic", id: "claude-3-haiku-20240307" },
+          llm: mockLlm(completeModel),
+        },
+      ),
+    );
   } finally {
     stop();
   }

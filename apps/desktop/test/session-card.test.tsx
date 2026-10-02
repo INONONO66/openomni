@@ -71,7 +71,11 @@ test("a session is listed on both surfaces once its first prompt earned a title"
   document.body.innerHTML =
     renderShell() +
     renderToStaticMarkup(
-      <SessionList sessions={listedSessions([unprompted, prompted])} now={now} onSelect={() => undefined} />,
+      <SessionList
+        sessions={listedSessions([unprompted, prompted])}
+        now={now}
+        onSelect={() => undefined}
+      />,
     );
   const glyphs = document.querySelectorAll('[data-ui="TreeRow"] [data-ui="StatusGlyph"]');
   expect(glyphs).toHaveLength(2);

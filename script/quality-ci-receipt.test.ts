@@ -2,59 +2,91 @@ import { expect, test } from "bun:test";
 import { normalizeTypes, normalizeCensus, mergeMeasurements } from "./quality-ci-receipt";
 
 const identity = {
-	inventoryHash: "a".repeat(64),
-	contractHash: "b".repeat(64),
-	paths: ["script/example.ts"],
-	typescript: ["script/example.ts"],
+  inventoryHash: "a".repeat(64),
+  contractHash: "b".repeat(64),
+  paths: ["script/example.ts"],
+  typescript: ["script/example.ts"],
 };
 const types = {
-	version: 1, complete: true, tool: "typescript@5.9.2",
-	inventoryHash: identity.inventoryHash,
-	measured: identity.paths, semanticMeasured: identity.paths,
-	errors: [], violations: [],
+  version: 1,
+  complete: true,
+  tool: "typescript@5.9.2",
+  inventoryHash: identity.inventoryHash,
+  measured: identity.paths,
+  semanticMeasured: identity.paths,
+  errors: [],
+  violations: [],
 };
 
 test("complete native types yield a genuinely clean normalized receipt", () => {
-	const receipt = mergeMeasurements(identity.paths, [normalizeTypes(types, identity)]);
-	expect(receipt.complete).toBe(true);
-	expect(receipt.analyzed).toEqual(["type"]);
-	expect(receipt.findings).toEqual([]);
+  const receipt = mergeMeasurements(identity.paths, [normalizeTypes(types, identity)]);
+  expect(receipt.complete).toBe(true);
+  expect(receipt.analyzed).toEqual(["type"]);
+  expect(receipt.findings).toEqual([]);
 });
 
 test("missing incomplete and stale native type receipts never normalize to zero", () => {
-	for (const changed of [
-		{}, { ...types, complete: false }, { ...types, inventoryHash: "c".repeat(64) },
-		{ ...types, measured: [] }, { ...types, semanticMeasured: [] },
-		{ ...types, errors: [{ code: "resolution" }] },
-	]) expect(() => normalizeTypes(changed, identity)).toThrow();
+  for (const changed of [
+    {},
+    { ...types, complete: false },
+    { ...types, inventoryHash: "c".repeat(64) },
+    { ...types, measured: [] },
+    { ...types, semanticMeasured: [] },
+    { ...types, errors: [{ code: "resolution" }] },
+  ])
+    expect(() => normalizeTypes(changed, identity)).toThrow();
 });
 
 test("native type findings retain identity and reject unlabelled or unknown origins", () => {
-	const violation = { path: "script/example.ts", line: 4, kind: "implicitAny", symbol: "value", offset: 10, origin: "owned" };
-	const native = { ...types, violations: [violation] };
-	const base = mergeMeasurements(identity.paths, [normalizeTypes(native, identity)]);
-	expect(base.findings[0]?.origin).toBe("owned");
-	const unlabelled = Object.fromEntries(Object.entries(violation).filter(([key]) => key !== "origin"));
-	expect(() => normalizeTypes({ ...types, violations: [unlabelled] }, identity)).toThrow();
-	expect(() => normalizeTypes({ ...types, violations: [{ ...violation, origin: "guessed" }] }, identity)).toThrow();
-	const doubled = mergeMeasurements(identity.paths, [normalizeTypes({ ...native, violations: [violation, violation] }, identity)]);
-	expect(doubled.findings).toHaveLength(2);
+  const violation = {
+    path: "script/example.ts",
+    line: 4,
+    kind: "implicitAny",
+    symbol: "value",
+    offset: 10,
+    origin: "owned",
+  };
+  const native = { ...types, violations: [violation] };
+  const base = mergeMeasurements(identity.paths, [normalizeTypes(native, identity)]);
+  expect(base.findings[0]?.origin).toBe("owned");
+  const unlabelled = Object.fromEntries(
+    Object.entries(violation).filter(([key]) => key !== "origin"),
+  );
+  expect(() => normalizeTypes({ ...types, violations: [unlabelled] }, identity)).toThrow();
+  expect(() =>
+    normalizeTypes({ ...types, violations: [{ ...violation, origin: "guessed" }] }, identity),
+  ).toThrow();
+  const doubled = mergeMeasurements(identity.paths, [
+    normalizeTypes({ ...native, violations: [violation, violation] }, identity),
+  ]);
+  expect(doubled.findings).toHaveLength(2);
 });
 
 test("census normalizer rejects wrong class counts and incomplete provenance", () => {
-	const census = {
-		version: 1, complete: true, class: "publisher", analyzedClasses: ["publisher"],
-		inventoryHash: identity.inventoryHash, contractHash: identity.contractHash,
-		counts: { publisher: 0, export: 0, store: 0 }, errors: [], findings: [],
-	};
-	expect(normalizeCensus(census, identity, "publisher").findings).toEqual([]);
-	for (const changed of [
-		{ ...census, complete: false }, { ...census, class: "export" },
-		{ ...census, counts: { publisher: 1, export: 0, store: 0 } },
-		{ ...census, contractHash: "d".repeat(64) }, { ...census, analyzedClasses: [] },
-	]) expect(() => normalizeCensus(changed, identity, "publisher")).toThrow();
-	expect(() => mergeMeasurements(identity.paths, [
-		normalizeCensus(census, identity, "publisher"),
-		normalizeCensus(census, identity, "publisher"),
-	])).toThrow();
+  const census = {
+    version: 1,
+    complete: true,
+    class: "publisher",
+    analyzedClasses: ["publisher"],
+    inventoryHash: identity.inventoryHash,
+    contractHash: identity.contractHash,
+    counts: { publisher: 0, export: 0, store: 0 },
+    errors: [],
+    findings: [],
+  };
+  expect(normalizeCensus(census, identity, "publisher").findings).toEqual([]);
+  for (const changed of [
+    { ...census, complete: false },
+    { ...census, class: "export" },
+    { ...census, counts: { publisher: 1, export: 0, store: 0 } },
+    { ...census, contractHash: "d".repeat(64) },
+    { ...census, analyzedClasses: [] },
+  ])
+    expect(() => normalizeCensus(changed, identity, "publisher")).toThrow();
+  expect(() =>
+    mergeMeasurements(identity.paths, [
+      normalizeCensus(census, identity, "publisher"),
+      normalizeCensus(census, identity, "publisher"),
+    ]),
+  ).toThrow();
 });

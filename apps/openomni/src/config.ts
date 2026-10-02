@@ -1,6 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Gateway, Machine, NamedError, type Model, type PlainValue } from "@openomni/protocol";
+import {
+  Actor,
+  Gateway,
+  Machine,
+  NamedError,
+  type Model,
+  type PlainValue,
+} from "@openomni/protocol";
 import { type KekResolution, resolveKek } from "./provisioning/vault-key";
 import { Result } from "effect";
 import { z } from "zod";
@@ -19,7 +26,9 @@ export const ConfigurationError = NamedError.create(
       "ws_token_required",
     ]),
     message: z.string(),
-    replacement: z.object({ tool: z.literal("provision"), op: z.literal("channel_add") }).optional(),
+    replacement: z
+      .object({ tool: z.literal("provision"), op: z.literal("channel_add") })
+      .optional(),
   }),
 );
 export type ConfigurationError = InstanceType<typeof ConfigurationError>;
@@ -245,7 +254,9 @@ const ModelHeaders = z.record(
 // failure until a live turn reaches it.
 const CATALOG_PROVIDER_IDS = new Set(["anthropic", "openai"]);
 
-function modelFallbacksFromEnv(env: Record<string, string | undefined>): readonly Model.Ref[] | undefined {
+function modelFallbacksFromEnv(
+  env: Record<string, string | undefined>,
+): readonly Model.Ref[] | undefined {
   const raw = env.OPENOMNI_MODEL_FALLBACKS?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   return raw.split(",").map((entry) => {
@@ -297,11 +308,17 @@ function parseEnvJson<T>(
   if (raw === undefined || raw.length === 0) return undefined;
   const json = Result.try({ try: (): PlainValue => JSON.parse(raw), catch: String });
   if (Result.isFailure(json)) {
-    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid JSON: ${json.failure}` });
+    throw new ConfigurationError({
+      code: "invalid_env_json",
+      message: `${name} is invalid JSON: ${json.failure}`,
+    });
   }
   const parsed = schema.safeParse(json.success);
   if (!parsed.success) {
-    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid: ${parsed.error.issues[0]?.message}` });
+    throw new ConfigurationError({
+      code: "invalid_env_json",
+      message: `${name} is invalid: ${parsed.error.issues[0]?.message}`,
+    });
   }
   return parsed.data;
 }
@@ -326,8 +343,9 @@ function channelAllowedSendersFromEnv(
 export function assertDeclaredChannelConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
-  const legacy = ["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"]
-    .filter((key) => (env[key]?.trim().length ?? 0) > 0);
+  const legacy = ["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"].filter(
+    (key) => (env[key]?.trim().length ?? 0) > 0,
+  );
   if (legacy.length > 0) {
     throw new ConfigurationError({
       code: "legacy_channel_credentials",
@@ -337,7 +355,9 @@ export function assertDeclaredChannelConfig(
   }
 }
 
-function socialBudgetsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["socialBudgets"] {
+function socialBudgetsFromEnv(
+  env: Record<string, string | undefined>,
+): OpenOmniConfig["socialBudgets"] {
   return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets, env);
 }
 

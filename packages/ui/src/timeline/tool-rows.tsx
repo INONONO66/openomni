@@ -170,7 +170,9 @@ export function ToolRow({
           {call.tool}
           {"  "}
           <span className="text-voice-secondary">{call.target}</span>
-          {call.duration !== undefined && <span className="text-voice-ambient"> · {call.duration}</span>}
+          {call.duration !== undefined && (
+            <span className="text-voice-ambient"> · {call.duration}</span>
+          )}
           {status !== undefined && (
             <>
               {" · "}

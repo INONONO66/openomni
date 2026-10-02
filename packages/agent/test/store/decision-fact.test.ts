@@ -94,7 +94,13 @@ test("decision_fact rows round-trip through Effect SqlClient in both directions"
     if (recorded.kind !== "recorded") throw new Error("expected recorded outcome");
     store.close();
 
-    type SqlRow = { key: string; type: string; data: string; row_hash: string; time_created: number };
+    type SqlRow = {
+      key: string;
+      type: string;
+      data: string;
+      row_hash: string;
+      time_created: number;
+    };
     const sqlLayer = SqliteClient.layer({ filename: path });
     const rows = await runTestPromise(
       Effect.gen(function* () {
@@ -126,7 +132,12 @@ test("decision_fact rows round-trip through Effect SqlClient in both directions"
           key: "route:sql",
           type: "route.decided",
           data: { via: "sql" },
-          rowHash: computeDecisionFactHash({ key: "route:sql", type: "route.decided", data: '{"via":"sql"}', timeCreated: 20 }),
+          rowHash: computeDecisionFactHash({
+            key: "route:sql",
+            type: "route.decided",
+            data: '{"via":"sql"}',
+            timeCreated: 20,
+          }),
           timeCreated: 20,
         }),
       );

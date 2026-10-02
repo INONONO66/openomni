@@ -1,13 +1,15 @@
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { Gateway } from "@openomni/protocol";
 import { z } from "zod";
 
 /** The tool needs exactly the router's ingest door; composition supplies the router itself. */
 export interface MessagePort {
-  ingest(sender: Gateway.IngestSender, message: Gateway.SendMessage | Gateway.IngressFacts | Gateway.RequestAnswer): Promise<Gateway.IngestResult>;
+  ingest(
+    sender: Gateway.IngestSender,
+    message: Gateway.SendMessage | Gateway.IngressFacts | Gateway.RequestAnswer,
+  ): Promise<Gateway.IngestResult>;
 }
 
 const Id = z.string().min(1);

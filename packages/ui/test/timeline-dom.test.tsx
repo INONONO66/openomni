@@ -26,7 +26,13 @@ test("scroll area pins content appended after opening to the end", async () => {
   };
   let height = 100;
   try {
-    await act(() => root.render(<ScrollArea pinToEnd><div>first line</div></ScrollArea>));
+    await act(() =>
+      root.render(
+        <ScrollArea pinToEnd>
+          <div>first line</div>
+        </ScrollArea>,
+      ),
+    );
     const viewport = host.querySelector<HTMLElement>(".overscroll-contain");
     if (!viewport) throw new Error("Missing scroll viewport");
     Object.defineProperties(viewport, {
@@ -36,7 +42,14 @@ test("scroll area pins content appended after opening to the end", async () => {
     });
     await act(() => viewport.dispatchEvent(new Event("scroll")));
     height = 160;
-    await act(() => root.render(<ScrollArea pinToEnd><div>first line</div><div>appended line</div></ScrollArea>));
+    await act(() =>
+      root.render(
+        <ScrollArea pinToEnd>
+          <div>first line</div>
+          <div>appended line</div>
+        </ScrollArea>,
+      ),
+    );
     await act(() => resize?.());
     expect(viewport.scrollTop).toBe(viewport.scrollHeight);
   } finally {
@@ -51,7 +64,13 @@ test("an unpinned scroll area ignores appended content", async () => {
   document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(() => root.render(<ScrollArea><div>line</div></ScrollArea>));
+    await act(() =>
+      root.render(
+        <ScrollArea>
+          <div>line</div>
+        </ScrollArea>,
+      ),
+    );
     const viewport = host.querySelector<HTMLElement>(".overscroll-contain");
     if (!viewport) throw new Error("Missing scroll viewport");
     await act(() => viewport.dispatchEvent(new Event("scroll")));
@@ -73,14 +92,16 @@ test("timeline disclosure keeps expansion scoped to its session", async () => {
   ] as const;
   try {
     await act(() => root.render(<Timeline nodes={nodes} sessionId="session-a" />));
-    const toggle = host.querySelector<HTMLButtonElement>('[data-tool-row] button');
+    const toggle = host.querySelector<HTMLButtonElement>("[data-tool-row] button");
     if (!toggle) throw new Error("Missing tool disclosure");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     await act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(host.textContent).toContain("payload");
     await act(() => root.render(<Timeline nodes={nodes} sessionId="session-b" />));
-    expect(host.querySelector('[data-tool-row] button')?.getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelector("[data-tool-row] button")?.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
   } finally {
     await act(() => root.unmount());
     host.remove();

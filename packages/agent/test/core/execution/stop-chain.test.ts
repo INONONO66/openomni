@@ -9,7 +9,8 @@ import { recordingLedger } from "../../helpers/g0-effect";
 
 function harness(limit = 3) {
   const record = recordingLedger();
-  const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+  const policy = compilePolicySnapshot({
+    registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
     rows: SEEDED_POLICY_ROWS.map((row: (typeof SEEDED_POLICY_ROWS)[number]) => ({
       ...row,

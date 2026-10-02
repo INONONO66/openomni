@@ -16,7 +16,11 @@ const Job = z.object({
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   steps: z.array(Step),
 });
-const WorkflowInput = z.object({ description: z.string(), required: z.boolean(), default: z.string() });
+const WorkflowInput = z.object({
+  description: z.string(),
+  required: z.boolean(),
+  default: z.string(),
+});
 const Workflow = z.object({
   permissions: z.object({ contents: z.string() }),
   on: z.object({
@@ -36,16 +40,26 @@ test("benchmark PRs select benchmark inputs while main stays full", () => {
   expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.on.schedule.length).toBeGreaterThan(0);
   expect(workflow.on.pull_request.paths).toEqual([
-    ".github/workflows/benchmark.yml", "script/benchmark-workflow.test.ts",
-    "packages/agent/**", "packages/protocol/**",
-    "script/summarize-benchmark-runs.ts", "script/check-benchmark-regression.ts",
-    "script/conformance/summarize-benchmark-runs.test.ts", "script/check-benchmark-regression.test.ts",
-    "package.json", "bun.lock", "bunfig.toml", "turbo.json", "tsconfig.base.json",
+    ".github/workflows/benchmark.yml",
+    "script/benchmark-workflow.test.ts",
+    "packages/agent/**",
+    "packages/protocol/**",
+    "script/summarize-benchmark-runs.ts",
+    "script/check-benchmark-regression.ts",
+    "script/conformance/summarize-benchmark-runs.test.ts",
+    "script/check-benchmark-regression.test.ts",
+    "package.json",
+    "bun.lock",
+    "bunfig.toml",
+    "turbo.json",
+    "tsconfig.base.json",
   ]);
 });
 
 test("benchmark history is never cancelled on main pushes", () => {
-  expect(workflow.concurrency["cancel-in-progress"]).toBe(["$", "{{ github.event_name == 'pull_request' }}"].join(""));
+  expect(workflow.concurrency["cancel-in-progress"]).toBe(
+    ["$", "{{ github.event_name == 'pull_request' }}"].join(""),
+  );
 });
 
 test("benchmark input is validated before collection starts", () => {
@@ -68,7 +82,9 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
     expect(steps[comparison]?.with?.[key]).toBeUndefined();
   }
   expect(steps.some((step) => step.run?.includes("--orphan"))).toBe(false);
-  expect(workflow.jobs.publish.if).toBe("(github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')");
+  expect(workflow.jobs.publish.if).toBe(
+    "(github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
+  );
   const publication = steps.findIndex((step) =>
     step.run?.includes("git push origin gh-pages:gh-pages"),
   );
@@ -78,33 +94,54 @@ test("failed benchmark comparisons cannot publish a new reference", () => {
 
 test("all events collect the accepted SHA and head on one runner before the sole paired gate", () => {
   const steps = workflow.jobs.benchmark.steps;
-  const reference = steps.findIndex((step) => step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"));
+  const reference = steps.findIndex((step) =>
+    step.run?.includes("git show FETCH_HEAD:dev/bench/data.js"),
+  );
   const collection = steps.findIndex((step) => step.run?.includes("seq 1"));
-  const summary = steps.findIndex((step) => step.run?.includes("summarize-benchmark-runs.ts --reference bench-results/reference/runs"));
+  const summary = steps.findIndex((step) =>
+    step.run?.includes("summarize-benchmark-runs.ts --reference bench-results/reference/runs"),
+  );
   const gate = steps.findIndex((step) => step.run?.includes("--prepare-reference"));
   expect(reference).toBeGreaterThanOrEqual(0);
   expect(collection).toBeGreaterThan(reference);
   expect(summary).toBeGreaterThan(collection);
   expect(gate).toBeGreaterThan(summary);
   expect(steps[reference]?.run).toContain("git fetch --no-tags origin gh-pages");
-  expect(steps[reference]?.run).toContain("reference_commit=$(bun run script/check-benchmark-regression.ts --accepted-commit bench-results/accepted.js)");
+  expect(steps[reference]?.run).toContain(
+    "reference_commit=$(bun run script/check-benchmark-regression.ts --accepted-commit bench-results/accepted.js)",
+  );
   expect(steps[reference]?.run).toContain('git fetch --no-tags origin "$reference_commit"');
-  expect(steps[reference]?.run).toContain('git worktree add --detach "$REFERENCE_WORKTREE" "$reference_commit"');
+  expect(steps[reference]?.run).toContain(
+    'git worktree add --detach "$REFERENCE_WORKTREE" "$reference_commit"',
+  );
   expect(steps[reference]?.run).toContain('cd "$REFERENCE_WORKTREE"');
   expect(steps[reference]?.run).toContain("bun install --frozen-lockfile");
   expect(steps[reference]?.run).toContain("bunx turbo run build --filter=@openomni/protocol");
-  expect(steps[collection]?.run).toContain("if (( run % 2 )); then revisions=(reference head); else revisions=(head reference); fi");
-  expect(steps[collection]?.run).toContain('measure reference "$REFERENCE_WORKTREE" "$GITHUB_WORKSPACE/bench-results/reference/runs/$run"');
-  expect(steps[collection]?.run).toContain('measure head "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/bench-results/runs/$run"');
+  expect(steps[collection]?.run).toContain(
+    "if (( run % 2 )); then revisions=(reference head); else revisions=(head reference); fi",
+  );
+  expect(steps[collection]?.run).toContain(
+    'measure reference "$REFERENCE_WORKTREE" "$GITHUB_WORKSPACE/bench-results/reference/runs/$run"',
+  );
+  expect(steps[collection]?.run).toContain(
+    'measure head "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/bench-results/runs/$run"',
+  );
   expect(steps[collection]?.run).toContain("bun run --cwd packages/agent bench/store.ts");
-  expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/session.json "$output/session.json"');
-  expect(steps[collection]?.run).toContain('cp packages/agent/bench-results/agent.json "$output/agent.json"');
+  expect(steps[collection]?.run).toContain(
+    'cp packages/agent/bench-results/session.json "$output/session.json"',
+  );
+  expect(steps[collection]?.run).toContain(
+    'cp packages/agent/bench-results/agent.json "$output/agent.json"',
+  );
   expect(steps[summary]?.run).toContain("bun run script/summarize-benchmark-runs.ts\n");
   expect(steps[summary]?.run).toContain(
     "bun run script/summarize-benchmark-runs.ts --reference bench-results/reference/runs bench-results/reference/combined.json bench-results/reference/statistics.json bench-results/reference/summary.md",
   );
-  expect(steps[gate]?.run).toContain('--prepare-reference bench-results/reference/statistics.json bench-results/accepted.js "$(git -C "$REFERENCE_WORKTREE" rev-parse HEAD)" "$(git rev-parse HEAD)"');
-  const decision = "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
+  expect(steps[gate]?.run).toContain(
+    '--prepare-reference bench-results/reference/statistics.json bench-results/accepted.js "$(git -C "$REFERENCE_WORKTREE" rev-parse HEAD)" "$(git rev-parse HEAD)"',
+  );
+  const decision =
+    "bun run script/check-benchmark-regression.ts bench-results/statistics.json bench-results/reference.json";
   expect(steps[gate]?.run).toContain(decision);
   expect(steps.filter((step) => step.run?.includes(decision))).toHaveLength(1);
   expect(workflow.jobs.benchmark.env).toEqual({
@@ -115,9 +152,12 @@ test("all events collect the accepted SHA and head on one runner before the sole
     ].join(""),
   });
   expect(steps[reference]?.run).toContain('REFERENCE_WORKTREE="$RUNNER_TEMP/benchmark-reference"');
-  expect(steps[reference]?.run).toContain('printf \'REFERENCE_WORKTREE=%s\\n\' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"');
+  expect(steps[reference]?.run).toContain(
+    'printf \'REFERENCE_WORKTREE=%s\\n\' "$REFERENCE_WORKTREE" >> "$GITHUB_ENV"',
+  );
   expect(workflow.on.workflow_dispatch.inputs.accept_baseline).toEqual({
-    description: "Owner-approved baseline reset: accept regressions above the limit and publish the new reference",
+    description:
+      "Owner-approved baseline reset: accept regressions above the limit and publish the new reference",
     required: false,
     default: "false",
   });

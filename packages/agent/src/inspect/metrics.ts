@@ -43,7 +43,9 @@ export function attemptUsage(actions: readonly LedgerAction.Node[]): AttemptUsag
 }
 
 /** The union of parallel tool intervals is wall time, not the sum of tool times. */
-export function toolWallMs(intervals: readonly { readonly start: number; readonly end: number }[]): number {
+export function toolWallMs(
+  intervals: readonly { readonly start: number; readonly end: number }[],
+): number {
   const sorted = [...intervals].sort((a, b) => a.start - b.start);
   let wall = 0;
   let start = 0;

@@ -14,7 +14,6 @@ export function Spinner({
   word,
   className = "",
 }: {
-  
   readonly word?: string;
   readonly className?: string;
 }) {
@@ -41,7 +40,7 @@ export function Spinner({
           />
         ))}
       </svg>
-      
+
       {word !== undefined && (
         <span className="spinner-word font-mono text-fg-faint text-micro">{word}</span>
       )}

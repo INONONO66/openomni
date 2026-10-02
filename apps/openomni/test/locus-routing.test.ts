@@ -9,7 +9,6 @@ import { Effect } from "effect";
 import { acquireEffect } from "./helpers/effect";
 import { Kernel } from "@openomni/agent";
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { attachMachineDaemon, createMachineHost, type MachineHandle } from "@openomni/machines";
 import { Machine, type PlainValue } from "@openomni/protocol";
 import { catalogDefinitions } from "../src/tools/core/catalog";
@@ -71,38 +70,42 @@ async function fixture(
 ) {
   const root = await mkdtemp(join(tmpdir(), "locus-"));
   const socket = socketPath();
-  const host = await acquireEffect(createMachineHost({
-    socketPath: socket,
-    id: testIds("locus-host"),
-    enrollment: () => ({
-      machineId: "c",
-      name: "test",
-      allowedCapabilities: capabilities,
-      allowedExports: ["data", "shell"],
-      enrolledAt: 1,
+  const host = await acquireEffect(
+    createMachineHost({
+      socketPath: socket,
+      id: testIds("locus-host"),
+      enrollment: () => ({
+        machineId: "c",
+        name: "test",
+        allowedCapabilities: capabilities,
+        allowedExports: ["data", "shell"],
+        enrolledAt: 1,
+      }),
+      events: { publish: () => undefined },
+      now: () => 1,
     }),
-    events: { publish: () => undefined },
-    now: () => 1,
-  }));
-  const daemon = await acquireEffect(attachMachineDaemon({
-    socketPath: socket,
-    id: testIds("locus-daemon"),
-    offer: {
-      machineId: "c",
-      daemonVersion: "test",
-      platform: "darwin-arm64",
-      offeredAt: 1,
-      offeredCapabilities: ["fs.read", "fs.write", "shell.exec"],
-      exports: [
-        { name: "data", path: root },
-        { name: "shell", path: "/" },
-      ],
-    },
-    fsExports: new Map([
-      ["data", root],
-      ["shell", "/"],
-    ]),
-  }));
+  );
+  const daemon = await acquireEffect(
+    attachMachineDaemon({
+      socketPath: socket,
+      id: testIds("locus-daemon"),
+      offer: {
+        machineId: "c",
+        daemonVersion: "test",
+        platform: "darwin-arm64",
+        offeredAt: 1,
+        offeredCapabilities: ["fs.read", "fs.write", "shell.exec"],
+        exports: [
+          { name: "data", path: root },
+          { name: "shell", path: "/" },
+        ],
+      },
+      fsExports: new Map([
+        ["data", root],
+        ["shell", "/"],
+      ]),
+    }),
+  );
   const handle = host.get("c");
   const spies = {
     get: spyOn(host, "get"),
@@ -139,7 +142,10 @@ async function fixture(
     return result;
   }
   try {
-    const dispatcher = dispatcherFixture(catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host) }), { executor });
+    const dispatcher = dispatcherFixture(
+      catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host) }),
+      { executor },
+    );
     let call = 0;
     await run({
       root,
@@ -151,9 +157,13 @@ async function fixture(
       }),
       path: (name) => `${remote ? "c:" : ""}${join(root, name)}`,
       cell: (tool, input) =>
-        observe(tool, () => runEffect(dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context))),
+        observe(tool, () =>
+          runEffect(dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context)),
+        ),
       model: (tool, input) =>
-        observe(tool, () => runEffect(dispatcher.execute({ id: `model-${++call}`, tool, input }, context))),
+        observe(tool, () =>
+          runEffect(dispatcher.execute({ id: `model-${++call}`, tool, input }, context)),
+        ),
     });
   } finally {
     for (const spy of Object.values(spies)) spy.mockRestore();
@@ -408,13 +418,15 @@ test("a real daemon read assembles successive bounded chunks without dropping th
 
 test("a truncated remote read without progress is refused instead of looping", async () => {
   await fixture(true, async ({ machine, path, model }) => {
-    const read = spyOn(machine.fs, "read").mockReturnValue(Effect.succeed({
-      op: "read",
-      data: new Uint8Array(),
-      bytesRead: 0,
-      size: 1,
-      truncated: true,
-    }));
+    const read = spyOn(machine.fs, "read").mockReturnValue(
+      Effect.succeed({
+        op: "read",
+        data: new Uint8Array(),
+        bytesRead: 0,
+        size: 1,
+        truncated: true,
+      }),
+    );
     try {
       const result = await model("read", { path: path("stalled") });
       expect(result.isError).toBe(true);
@@ -428,11 +440,13 @@ test("a truncated remote read without progress is refused instead of looping", a
 
 test("a truncated remote listing is refused rather than presented as complete", async () => {
   await fixture(true, async ({ machine, path, model }) => {
-    const list = spyOn(machine.fs, "list").mockReturnValue(Effect.succeed({
-      op: "list",
-      entries: [{ name: "first", kind: "file" }],
-      truncated: true,
-    }));
+    const list = spyOn(machine.fs, "list").mockReturnValue(
+      Effect.succeed({
+        op: "list",
+        entries: [{ name: "first", kind: "file" }],
+        truncated: true,
+      }),
+    );
     try {
       const result = await model("ls", { path: path(".") });
       expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });

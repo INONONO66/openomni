@@ -91,7 +91,12 @@ test("malformed commands are ignored without blocking valid delivery", () => {
 });
 
 test("bridge exposes only versions, gateway, closeWindow, and value-only command subscription", async () => {
-  expect(Object.keys(api()).sort()).toEqual(["closeWindow", "gateway", "onShellCommand", "versions"]);
+  expect(Object.keys(api()).sort()).toEqual([
+    "closeWindow",
+    "gateway",
+    "onShellCommand",
+    "versions",
+  ]);
   expect(await api().gateway()).toEqual({ url: "ws://localhost:3000/ws" });
   expect(invoked).toEqual([GATEWAY_CHANNEL]);
   const received: ShellCommand[][] = [];

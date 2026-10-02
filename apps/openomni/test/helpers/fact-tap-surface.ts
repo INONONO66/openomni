@@ -137,20 +137,23 @@ try {
     llm: {
       resolveModel: () => Effect.succeed(model),
       run: (input, sink) =>
-        run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, {
-          onMessage(message) {
-            messages.push(message);
-            sink.onMessage(message);
+        run(
+          { ...input, authFilePath: "/nonexistent/openomni-test/auth.json" },
+          {
+            onMessage(message) {
+              messages.push(message);
+              sink.onMessage(message);
+            },
+            onToolCall(call) {
+              calls.push(call);
+              sink.onToolCall(call);
+            },
+            onToolResult(result) {
+              results.push(result);
+              sink.onToolResult(result);
+            },
           },
-          onToolCall(call) {
-            calls.push(call);
-            sink.onToolCall(call);
-          },
-          onToolResult(result) {
-            results.push(result);
-            sink.onToolResult(result);
-          },
-        }),
+        ),
     },
   });
   stopApp = app.stop;

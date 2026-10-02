@@ -1,7 +1,7 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { Model } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
 import { modelTransport, type OpenOmniConfig } from "../src/config";
 import { ProcessSessionRequest } from "../src/process-entry";
@@ -15,11 +15,12 @@ const OPERATOR_TRANSPORT = {
   headers: { "x-tenant": "acme" },
 } as const;
 
-const resolveModel = (model: { provider: string; id: string }) => Effect.succeed({
-  id: model.id,
-  name: model.id,
-  providerID: model.provider,
-});
+const resolveModel = (model: { provider: string; id: string }) =>
+  Effect.succeed({
+    id: model.id,
+    name: model.id,
+    providerID: model.provider,
+  });
 
 function createSession(): string {
   // The real Resident materializes this gateway-minted identity on delivery.
@@ -60,14 +61,15 @@ describe("operator transport reaches every model caller", () => {
       model: { provider: "fake", id: "resident-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
-      tools: { ...testToolPorts,},
+      tools: { ...testToolPorts },
       llm: {
         resolveModel,
-        run: (input, sink) => Effect.sync(() => {
-          seen = input;
-          sink.onMessage(assistantMessage(input, { call: 1 }));
-          return { type: "stop" as const };
-        }),
+        run: (input, sink) =>
+          Effect.sync(() => {
+            seen = input;
+            sink.onMessage(assistantMessage(input, { call: 1 }));
+            return { type: "stop" as const };
+          }),
       },
     });
 
@@ -82,11 +84,12 @@ describe("operator transport reaches every model caller", () => {
       { provider: "fake", id: "port-test", apiKey: "port-key", transport: OPERATOR_TRANSPORT },
       {
         resolveModel,
-        run: (input, sink) => Effect.sync(() => {
-          seen = input;
-          sink.onMessage(assistantMessage(input, { call: 1, text: "answered" }));
-          return { type: "stop" as const };
-        }),
+        run: (input, sink) =>
+          Effect.sync(() => {
+            seen = input;
+            sink.onMessage(assistantMessage(input, { call: 1, text: "answered" }));
+            return { type: "stop" as const };
+          }),
       },
     );
 

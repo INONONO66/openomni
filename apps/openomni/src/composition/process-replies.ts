@@ -54,7 +54,8 @@ export function createProcessReplyChannel(input: Readable, write: (line: string)
     first: first.promise,
     async answer(answer: SessionTransition.Answer): Promise<SessionTransition.Resolution> {
       const response = Promise.withResolvers<SessionTransition.Resolution>();
-      if (pending.has(answer.inputId)) throw new AppInvariantError("process reply is already in flight");
+      if (pending.has(answer.inputId))
+        throw new AppInvariantError("process reply is already in flight");
       pending.set(answer.inputId, response);
       const timer = setTimeout(
         () => response.reject(new Error("process receiving receipt timed out")),

@@ -9,18 +9,20 @@ async function runTyped<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 }
 
 export function testMachinePorts(host: MachineHost): NonNullable<ToolPorts["machines"]> {
-  return { get: (id) => {
-    const handle = host.get(id);
-    return {
-      fs: {
-        read: (path, window) => runTyped(handle.fs.read(path, window)),
-        write: (path, data) => runTyped(handle.fs.write(path, data)),
-        list: (path) => runTyped(handle.fs.list(path)),
-        stat: (path) => runTyped(handle.fs.stat(path)),
-      },
-      exec: (command, cwd) => runTyped(handle.exec(command, cwd)),
-    };
-  } };
+  return {
+    get: (id) => {
+      const handle = host.get(id);
+      return {
+        fs: {
+          read: (path, window) => runTyped(handle.fs.read(path, window)),
+          write: (path, data) => runTyped(handle.fs.write(path, data)),
+          list: (path) => runTyped(handle.fs.list(path)),
+          stat: (path) => runTyped(handle.fs.stat(path)),
+        },
+        exec: (command, cwd) => runTyped(handle.exec(command, cwd)),
+      };
+    },
+  };
 }
 
 export function testCellPorts(cells: ComposedCodemode): NonNullable<ToolPorts["cells"]> {

@@ -9,7 +9,6 @@ import { apiError, sdkError } from "../helpers/retry";
 import { useProcessor, capturingSink, failingStream, statusStates } from "../helpers/processor";
 import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
-
 describe("Processor failures", () => {
   test("settles an interrupted attempt and publishes an aborted finish", async () => {
     const entered = Promise.withResolvers<void>();
@@ -22,11 +21,14 @@ describe("Processor failures", () => {
       now: fixedNow,
       id: sequentialIds(),
       trace: { traceId: "interrupt", sessionId: "session-456" },
-      createStream: () => Effect.sync(() => {
-        entered.resolve();
-      }).pipe(Effect.andThen(Effect.never)),
+      createStream: () =>
+        Effect.sync(() => {
+          entered.resolve();
+        }).pipe(Effect.andThen(Effect.never)),
     });
-    const fiber = await runEffect(Effect.forkDetach(processor.process({ system: "", promptText: "" })));
+    const fiber = await runEffect(
+      Effect.forkDetach(processor.process({ system: "", promptText: "" })),
+    );
     await runEffect(Effect.promise(() => entered.promise).pipe(Effect.timeout("5 seconds")));
     await runEffect(Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds")));
     expect(processor.message.finish).toBe("aborted");
@@ -68,7 +70,8 @@ describe("Processor failures", () => {
     const processor = createProcessor();
     fixture.abortController.abort();
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      _tag: "TransportFailure", providerErrorName: "AbortError",
+      _tag: "TransportFailure",
+      providerErrorName: "AbortError",
     });
   });
 
@@ -85,7 +88,10 @@ describe("Processor failures", () => {
         })(),
       }),
     });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "TransportFailure", cause: String(reason) });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
+      _tag: "TransportFailure",
+      cause: String(reason),
+    });
     expect(processor.message.finish).toBe("aborted");
     expect(capture.finalParts()).toMatchObject([
       { type: "tool", state: { status: "error", error: "interrupted" } },
@@ -119,7 +125,11 @@ describe("Processor failures", () => {
   ])("propagates %s after exactly one attempt", async (error) => {
     const stream = failingStream(error);
     const processor = createProcessor({ createStream: stream });
-    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({ _tag: "APIError", message: error.message, cause: { isRetryable: true } });
+    await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
+      _tag: "APIError",
+      message: error.message,
+      cause: { isRetryable: true },
+    });
     expect(stream).toHaveBeenCalledTimes(1);
   });
 

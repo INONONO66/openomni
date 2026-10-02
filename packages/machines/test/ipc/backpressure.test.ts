@@ -16,10 +16,13 @@ describe("server write backpressure", () => {
 
   async function slowReader() {
     const issued = deferred();
-    const server = await createIpcServer(socketPath("backpressure"), (_method, _params, respond) => {
-      respond({ data: BIG_PAYLOAD });
-      issued.resolve();
-    });
+    const server = await createIpcServer(
+      socketPath("backpressure"),
+      (_method, _params, respond) => {
+        respond({ data: BIG_PAYLOAD });
+        issued.resolve();
+      },
+    );
     servers.push(server);
     const socket = await connectRaw(server.socketPath);
     rawSockets.push(socket);
@@ -64,7 +67,9 @@ describe("server write backpressure", () => {
     expect(server.notify("after.big", { marker: true })).toBe(true);
     socket.resume();
     const [first, second] = await within(
-      Promise.all([response.promise, notification.promise]), "ordered frames", 10_000,
+      Promise.all([response.promise, notification.promise]),
+      "ordered frames",
+      10_000,
     );
     expect(order).toEqual(["response", "notification"]);
     expect(first.id).toBe("request-big-2");

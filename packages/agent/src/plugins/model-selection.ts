@@ -16,8 +16,13 @@ export function attemptRouteChange(
   if (previous === undefined) return null;
   const from = record(record(previous.action.intent.value).value);
   const to = record(next);
-  if (typeof from.provider !== "string" || typeof from.model !== "string" ||
-      typeof to.provider !== "string" || typeof to.model !== "string") return null;
+  if (
+    typeof from.provider !== "string" ||
+    typeof from.model !== "string" ||
+    typeof to.provider !== "string" ||
+    typeof to.model !== "string"
+  )
+    return null;
   if (from.provider === to.provider && from.model === to.model) return null;
   return {
     kind: "route.changed",
@@ -40,7 +45,9 @@ export function pinnedModelSelection(
 ): Model.Ref | undefined {
   const action = kernel.priorModelAttempt(sessionId, turnId);
   const { provider, model } = record(record(action?.intent.value).value);
-  return typeof provider === "string" && typeof model === "string" ? { provider, id: model } : undefined;
+  return typeof provider === "string" && typeof model === "string"
+    ? { provider, id: model }
+    : undefined;
 }
 
 /**
@@ -56,24 +63,26 @@ export function restoreModelSelection(
   chain: readonly Model.Ref[],
 ): Effect.Effect<number, ExecutionError> {
   return Effect.suspend(() => {
-  const primary = chain[0];
-  if (pinned === undefined || primary === undefined) return Effect.succeed(0);
-  const index = chain.findIndex(
-    (model) => model.provider === pinned.provider && model.id === pinned.id,
-  );
-  if (index <= 0) return Effect.succeed(0);
-  return executor.run(
-    {
-      kind: "llm",
-      op: "restore_model_selection",
-      intent: {
-        from: { provider: pinned.provider, id: pinned.id },
-        to: { provider: primary.provider, id: primary.id },
-      },
-      effect: { model: { provider: primary.provider, id: primary.id } },
-      recovery: "local_transactional",
-    },
-    () => Effect.succeed({ restored: true }),
-  ).pipe(Effect.map((outcome) => outcome.terminal === "executed" ? 0 : index));
+    const primary = chain[0];
+    if (pinned === undefined || primary === undefined) return Effect.succeed(0);
+    const index = chain.findIndex(
+      (model) => model.provider === pinned.provider && model.id === pinned.id,
+    );
+    if (index <= 0) return Effect.succeed(0);
+    return executor
+      .run(
+        {
+          kind: "llm",
+          op: "restore_model_selection",
+          intent: {
+            from: { provider: pinned.provider, id: pinned.id },
+            to: { provider: primary.provider, id: primary.id },
+          },
+          effect: { model: { provider: primary.provider, id: primary.id } },
+          recovery: "local_transactional",
+        },
+        () => Effect.succeed({ restored: true }),
+      )
+      .pipe(Effect.map((outcome) => (outcome.terminal === "executed" ? 0 : index)));
   });
 }

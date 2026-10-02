@@ -10,7 +10,10 @@ type Frame = Ipc.Request | Ipc.Response | Ipc.Notification;
 /** Deterministic injected id entropy (#1245): no table is constructed without one. */
 function sequentialIds(prefix: string): () => string {
   let n = 0;
-  return () => { n += 1; return `${prefix}-${n}`; };
+  return () => {
+    n += 1;
+    return `${prefix}-${n}`;
+  };
 }
 
 function requestFrom(frames: Frame[], index = 0): Ipc.Request {
@@ -24,7 +27,10 @@ describe("PeerRequestTable", () => {
     const sent: Frame[] = [];
     const issued = deferred();
     const table = new PeerRequestTable<string>({
-      send: (_peer, frame) => { sent.push(frame); issued.resolve(); },
+      send: (_peer, frame) => {
+        sent.push(frame);
+        issued.resolve();
+      },
       idSource: () => "request-injected",
     });
 
@@ -40,7 +46,13 @@ describe("PeerRequestTable", () => {
   test("a correlated error response rejects as IpcRemoteError", async () => {
     const sent: Frame[] = [];
     const issued = deferred();
-    const table = new PeerRequestTable<string>({ send: (_peer, frame) => { sent.push(frame); issued.resolve(); }, idSource: sequentialIds("remote") });
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => {
+        sent.push(frame);
+        issued.resolve();
+      },
+      idSource: sequentialIds("remote"),
+    });
 
     const call = captureError(table.call("peer-a", "refuse", undefined, 1_000));
     await within(issued.promise, "request sent");
@@ -55,7 +67,13 @@ describe("PeerRequestTable", () => {
   test("response correlation and disconnect rejection are scoped to the owning peer", async () => {
     const sent: Frame[] = [];
     const issued = deferred();
-    const table = new PeerRequestTable<string>({ send: (_peer, frame) => { sent.push(frame); if (sent.length === 2) issued.resolve(); }, idSource: sequentialIds("scoped") });
+    const table = new PeerRequestTable<string>({
+      send: (_peer, frame) => {
+        sent.push(frame);
+        if (sent.length === 2) issued.resolve();
+      },
+      idSource: sequentialIds("scoped"),
+    });
     const callA = table.call("peer-a", "a", undefined, 1_000);
     const callB = table.call("peer-b", "b", undefined, 1_000);
     await within(issued.promise, "both peer requests sent");
@@ -83,7 +101,10 @@ describe("PeerRequestTable", () => {
   });
 
   test("call timeout rejects with IpcTimeoutError", async () => {
-    const table = new PeerRequestTable({ send: () => undefined, idSource: sequentialIds("timeout") });
+    const table = new PeerRequestTable({
+      send: () => undefined,
+      idSource: sequentialIds("timeout"),
+    });
     const call = table.call(undefined, "slow", undefined, 10);
     const error = await captureError(call);
     expect(error).toBeInstanceOf(IpcTimeoutError);
@@ -93,7 +114,12 @@ describe("PeerRequestTable", () => {
   test("disconnectAll rejects calls across peers", async () => {
     const issued = deferred();
     let count = 0;
-    const table = new PeerRequestTable<string>({ send: () => { if (++count === 2) issued.resolve(); }, idSource: sequentialIds("all") });
+    const table = new PeerRequestTable<string>({
+      send: () => {
+        if (++count === 2) issued.resolve();
+      },
+      idSource: sequentialIds("all"),
+    });
     const first = captureError(table.call("peer-a", "a", undefined, 1_000));
     const second = captureError(table.call("peer-b", "b", undefined, 1_000));
     const error = new IpcConnectionError({ message: "endpoint closed" });

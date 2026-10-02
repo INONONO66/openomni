@@ -96,7 +96,7 @@ test("activation, auxiliary close and close-button actions remain distinct", asy
           (id) => activated.push(id),
           (id) => closed.push(id),
           () => {
-          created += 1;
+            created += 1;
           },
         )}
       />,

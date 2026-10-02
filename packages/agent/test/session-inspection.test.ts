@@ -2,7 +2,13 @@ import { APICallError } from "ai";
 import { sessionTree } from "./helpers/session-tree";
 import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { describe, expect, spyOn, test } from "bun:test";
@@ -30,16 +36,25 @@ const SECRET = "sk-live-credential-never-shown";
  * isolation's kernel driving its reconcile.
  */
 function wake(id: string, runner: SessionRunner, fixture: SessionFixture) {
-  return withSessionServices(Effect.gen(function* () {
-    const resolved = yield* resolveSessionRuntime(fixture);
-    const wakeScope = yield* Effect.scope;
-    const controller = yield* createController(
-      isolatedLedger().kernel, id, runner, resolved,
-      { reactivate: () => Effect.die(new Error("no reactivation in inspection tests")), release: () => undefined },
-      wakeScope,
-    );
-    yield* controller.reconcile();
-  }), fixture);
+  return withSessionServices(
+    Effect.gen(function* () {
+      const resolved = yield* resolveSessionRuntime(fixture);
+      const wakeScope = yield* Effect.scope;
+      const controller = yield* createController(
+        isolatedLedger().kernel,
+        id,
+        runner,
+        resolved,
+        {
+          reactivate: () => Effect.die(new Error("no reactivation in inspection tests")),
+          release: () => undefined,
+        },
+        wakeScope,
+      );
+      yield* controller.reconcile();
+    }),
+    fixture,
+  );
 }
 let nextId = 0;
 let bodies = 0;
@@ -106,8 +121,12 @@ function providerFailure(): Run.Failure {
       cacheWriteTokens: 0,
     },
     cause: new APICallError({
-      message: "overloaded", url: "https://provider.test/v1/messages", requestBodyValues: {},
-      statusCode: 529, responseHeaders: { "retry-after-ms": "0" }, isRetryable: true,
+      message: "overloaded",
+      url: "https://provider.test/v1/messages",
+      requestBodyValues: {},
+      statusCode: 529,
+      responseHeaders: { "retry-after-ms": "0" },
+      isRetryable: true,
     }),
   });
 }
@@ -135,7 +154,17 @@ const parentRunner: SessionRunner = (input: import("../src/session/run").Session
   Effect.scoped(
     Effect.gen(function* () {
       if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };
-      const { executor } = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+      const { executor } = yield* Effect.gen(function* () {
+        const turnInput: Parameters<typeof createTurnDispatcher>[0] & {
+          readonly policy?: ResolvedExecutorOptions["policy"];
+        } = input;
+        const turnRuntime: Parameters<typeof createTurnDispatcher>[1] &
+          Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime;
+        return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(
+          Effect.provide(catalogLayer([])),
+          Effect.provide(turnTestLayer(turnInput, turnRuntime)),
+        );
+      });
       let calls = 0;
       yield* runChatAttempts(executor, () =>
         Effect.gen(function* () {
@@ -224,8 +253,12 @@ function monitorCommit(
   action: Parameters<typeof kernel.commit>[0]["actions"][number],
 ) {
   return kernel.commit({
-    sessionId: "parent", owner: "monitor-writer", fence, now: 1_000,
-    expectedRevision: kernel.row("parent").revision, state: kernel.row("parent").state,
+    sessionId: "parent",
+    owner: "monitor-writer",
+    fence,
+    now: 1_000,
+    expectedRevision: kernel.row("parent").revision,
+    state: kernel.row("parent").state,
     actions: [action],
   });
 }
@@ -233,18 +266,29 @@ function monitorCommit(
 /** A 300-link message chain rooted at `rootParent`, committed in one batch. */
 function commitLongChain(
   kernel: ReturnType<typeof isolatedLedger>["kernel"],
-  input: { readonly sessionId: string; readonly owner: string; readonly fence: number; readonly rootParent: string },
+  input: {
+    readonly sessionId: string;
+    readonly owner: string;
+    readonly fence: number;
+    readonly rootParent: string;
+  },
 ) {
   return kernel.commit({
-    sessionId: input.sessionId, owner: input.owner, fence: input.fence, now: 1_000,
-    expectedRevision: kernel.row(input.sessionId).revision, state: kernel.row(input.sessionId).state,
+    sessionId: input.sessionId,
+    owner: input.owner,
+    fence: input.fence,
+    now: 1_000,
+    expectedRevision: kernel.row(input.sessionId).revision,
+    state: kernel.row(input.sessionId).state,
     actions: Array.from({ length: 300 }, (_, index) => ({
-      id: `link-${index}`, sessionId: input.sessionId,
+      id: `link-${index}`,
+      sessionId: input.sessionId,
       parentId: index === 0 ? input.rootParent : `link-${index - 1}`,
       kind: "message" as const,
       intent: { encodingVersion: 1 as const, value: {} },
       effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
-      ts: 1_000, irreversible: true,
+      ts: 1_000,
+      irreversible: true,
     })),
   });
 }
@@ -279,17 +323,32 @@ function lifecycle() {
     seedPolicy(rows);
     scope = yield* Effect.scope;
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    const parent = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: "parent", role: "resident", runner: parentRunner }, fixture), fixture); });
+    const parent = yield* Effect.gen(function* () {
+      const fixture: SessionFixture = runtime;
+      return yield* withSessionServices(
+        session({ id: "parent", role: "resident", runner: parentRunner }, fixture),
+        fixture,
+      );
+    });
     yield* parent.prompt("hello");
-    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
-        id: "child",
-        parentId: "parent",
-        role: "worker",
-        runner: () =>
-          Effect.sync(() => {
-            return { kind: "result", text: "child answer" };
-          }),
-      }, fixture), fixture); });
+    const child = yield* Effect.gen(function* () {
+      const fixture: SessionFixture = runtime;
+      return yield* withSessionServices(
+        session(
+          {
+            id: "child",
+            parentId: "parent",
+            role: "worker",
+            runner: () =>
+              Effect.sync(() => {
+                return { kind: "result", text: "child answer" };
+              }),
+          },
+          fixture,
+        ),
+        fixture,
+      );
+    });
     const commission = sessionTree(isolatedLedger().kernel, "parent").find(
       (action: import("@openomni/protocol").LedgerAction.Node) =>
         SessionHandleStore.turnTerminal(action) !== undefined,
@@ -309,26 +368,43 @@ function lifecycle() {
     // wake is the fired occurrence's received message plus a fresh activation.
     const kernel = isolatedLedger().kernel;
     const monitorWriter = yield* kernel.adoptFence({
-      sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").fence + 1,
+      sessionId: "parent",
+      owner: "monitor-writer",
+      fence: kernel.row("parent").fence + 1,
     });
     yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
+      id: "monitor",
+      sessionId: "parent",
+      parentId: null,
+      kind: "alarm.arm",
       intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
       effect: { encodingVersion: 1, value: { phase: "pending" } },
-      ts: 1_000, irreversible: true,
+      ts: 1_000,
+      irreversible: true,
     });
     const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
     const woke = committed("parent", "turn");
     yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm.fired",
-      intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
+      id: monitorFire,
+      sessionId: "parent",
+      parentId: "monitor",
+      kind: "alarm.fired",
+      intent: {
+        encodingVersion: 1,
+        value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true },
+      },
       effect: { encodingVersion: 1, value: { terminal: "executed" } },
-      ts: 1_000, irreversible: true,
+      ts: 1_000,
+      irreversible: true,
     });
     yield* commitReceivedMessage(kernel, {
-      id: "monitor-woke", sessionId: "parent", kind: "prompt", content: "monitor woke",
+      id: "monitor-woke",
+      sessionId: "parent",
+      kind: "prompt",
+      content: "monitor woke",
       origin: { encodingVersion: 1, value: { kind: "alarm", alarmId: "monitor" } },
-      createdAt: 1_000, parentActionId: monitorFire,
+      createdAt: 1_000,
+      parentActionId: monitorFire,
     });
     yield* wake("parent", parentRunner, runtime);
     yield* Effect.promise(() => woke).pipe(Effect.timeout("5 seconds"));
@@ -345,17 +421,26 @@ describe("action-based history and diagnostic projections", () => {
           const kernel = isolatedLedger().kernel;
           const firstRevision = kernel.row("parent").revision;
           const adopted = yield* kernel.adoptFence({
-            sessionId: "parent", owner: "inspection-page", fence: kernel.row("parent").fence + 1,
+            sessionId: "parent",
+            owner: "inspection-page",
+            fence: kernel.row("parent").fence + 1,
           });
           yield* kernel.commit({
-            sessionId: "parent", owner: "inspection-page", fence: adopted.fence, now: 1_000,
-            expectedRevision: firstRevision, state: kernel.row("parent").state,
+            sessionId: "parent",
+            owner: "inspection-page",
+            fence: adopted.fence,
+            now: 1_000,
+            expectedRevision: firstRevision,
+            state: kernel.row("parent").state,
             actions: Array.from({ length: 300 }, (_, index) => ({
-              id: `inspection-page-${index}`, sessionId: "parent", parentId: null,
+              id: `inspection-page-${index}`,
+              sessionId: "parent",
+              parentId: null,
               kind: "alarm.arm" as const,
               intent: { encodingVersion: 1 as const, value: { alarmId: `inspect-${index}` } },
               effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
-              ts: 1_000, irreversible: true,
+              ts: 1_000,
+              irreversible: true,
             })),
           });
           const listRows = spyOn(kernel, "listRows");
@@ -407,7 +492,10 @@ describe("action-based history and diagnostic projections", () => {
           // (kind "prompt") are the inbox rows.
           const inbox = new Set(
             tree
-              .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "prompt")
+              .filter(
+                (action: import("@openomni/protocol").LedgerAction.Node) =>
+                  action.kind === "prompt",
+              )
               .map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
           );
           for (const transition of inspection.transitions) {
@@ -646,8 +734,14 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         const kernel = isolatedLedger().kernel;
         const materialize = (id: string, parentId: string | null) =>
           kernel.materialize({
-            id, parentId, role: "resident", tools: [], system: { preset: "", blocks: [] },
-            policyGeneration: 1, actionId: `${id}:configure`, at: 1_000,
+            id,
+            parentId,
+            role: "resident",
+            tools: [],
+            system: { preset: "", blocks: [] },
+            policyGeneration: 1,
+            actionId: `${id}:configure`,
+            at: 1_000,
           });
         yield* materialize("root", null);
         yield* materialize("child-a", "root");
@@ -663,12 +757,18 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         ]);
         expect(first.nextChildrenCursor).toBe("child-a");
         const second = inspectSession(kernel, "root", {
-          depth: 1, cursor: head, limit: 1, childrenCursor: first.nextChildrenCursor ?? "",
+          depth: 1,
+          cursor: head,
+          limit: 1,
+          childrenCursor: first.nextChildrenCursor ?? "",
         });
         expect(second.children.map((child) => child.sessionId)).toEqual(["child-b"]);
         expect(second.nextChildrenCursor).toBe("child-b");
         const third = inspectSession(kernel, "root", {
-          depth: 1, cursor: head, limit: 1, childrenCursor: second.nextChildrenCursor ?? "",
+          depth: 1,
+          cursor: head,
+          limit: 1,
+          childrenCursor: second.nextChildrenCursor ?? "",
         });
         expect(third.children).toEqual([]);
         expect(third.nextChildrenCursor).toBeNull();
@@ -677,7 +777,10 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
         expect(wide.children.map((child) => child.sessionId)).toEqual(["child-a", "child-b"]);
         expect(wide.nextChildrenCursor).toBe("child-b");
         const done = inspectSession(kernel, "root", {
-          depth: 1, cursor: head, limit: 2, childrenCursor: wide.nextChildrenCursor ?? "",
+          depth: 1,
+          cursor: head,
+          limit: 2,
+          childrenCursor: wide.nextChildrenCursor ?? "",
         });
         expect(done.children).toEqual([]);
         expect(done.nextChildrenCursor).toBeNull();
@@ -689,20 +792,32 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
       Effect.gen(function* () {
         const kernel = isolatedLedger().kernel;
         const fixture = yield* fencedTurnFixture(kernel, {
-          id: "attribution", clock: () => 1_000, turnId: "turn-1",
+          id: "attribution",
+          clock: () => 1_000,
+          turnId: "turn-1",
         });
         yield* kernel.commit({
-          sessionId: "attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
-          expectedRevision: kernel.row("attribution").revision, state: kernel.row("attribution").state,
-          actions: [{
-            id: "tool-1", sessionId: "attribution", parentId: "turn-1", kind: "tool",
-            intent: {
-              encodingVersion: 1,
-              value: { phase: "intent", op: "write", value: { path: "approved.txt" } },
+          sessionId: "attribution",
+          owner: fixture.owner,
+          fence: fixture.fence,
+          now: 1_000,
+          expectedRevision: kernel.row("attribution").revision,
+          state: kernel.row("attribution").state,
+          actions: [
+            {
+              id: "tool-1",
+              sessionId: "attribution",
+              parentId: "turn-1",
+              kind: "tool",
+              intent: {
+                encodingVersion: 1,
+                value: { phase: "intent", op: "write", value: { path: "approved.txt" } },
+              },
+              effect: { encodingVersion: 1, value: { phase: "pending" } },
+              ts: 1_000,
+              irreversible: true,
             },
-            effect: { encodingVersion: 1, value: { phase: "pending" } },
-            ts: 1_000, irreversible: true,
-          }],
+          ],
         });
         const complete = inspectSession(kernel, "attribution");
         const full = complete.transitions.find((entry) => entry.actionId === "tool-1");
@@ -725,24 +840,36 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
       Effect.gen(function* () {
         const kernel = isolatedLedger().kernel;
         const fixture = yield* fencedTurnFixture(kernel, {
-          id: "deep-attribution", clock: () => 1_000, turnId: "turn-1",
+          id: "deep-attribution",
+          clock: () => 1_000,
+          turnId: "turn-1",
         });
         const commitTool = (id: string, parentId: string, phase: "intent" | "result") =>
           kernel.commit({
-            sessionId: "deep-attribution", owner: fixture.owner, fence: fixture.fence, now: 1_000,
+            sessionId: "deep-attribution",
+            owner: fixture.owner,
+            fence: fixture.fence,
+            now: 1_000,
             expectedRevision: kernel.row("deep-attribution").revision,
             state: kernel.row("deep-attribution").state,
-            actions: [{
-              id, sessionId: "deep-attribution", parentId, kind: "tool",
-              intent: { encodingVersion: 1, value: { phase, op: "write" } },
-              effect: {
-                encodingVersion: 1,
-                value: phase === "intent"
-                  ? { phase: "pending" }
-                  : { phase: "result", terminal: "executed" },
+            actions: [
+              {
+                id,
+                sessionId: "deep-attribution",
+                parentId,
+                kind: "tool",
+                intent: { encodingVersion: 1, value: { phase, op: "write" } },
+                effect: {
+                  encodingVersion: 1,
+                  value:
+                    phase === "intent"
+                      ? { phase: "pending" }
+                      : { phase: "result", terminal: "executed" },
+                },
+                ts: 1_000,
+                irreversible: true,
               },
-              ts: 1_000, irreversible: true,
-            }],
+            ],
           });
         yield* commitTool("tool-1", "turn-1", "intent");
         yield* commitTool("tool-1:result", "tool-1", "result");
@@ -765,16 +892,24 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
       Effect.gen(function* () {
         const kernel = isolatedLedger().kernel;
         yield* kernel.materialize({
-          id: "long-chain", parentId: null, role: "resident", tools: [],
-          system: { preset: "", blocks: [] }, policyGeneration: 1,
-          actionId: "long-chain:configure", at: 1_000,
+          id: "long-chain",
+          parentId: null,
+          role: "resident",
+          tools: [],
+          system: { preset: "", blocks: [] },
+          policyGeneration: 1,
+          actionId: "long-chain:configure",
+          at: 1_000,
         });
         const adopted = yield* kernel.adoptFence({
-          sessionId: "long-chain", owner: "chain-writer",
+          sessionId: "long-chain",
+          owner: "chain-writer",
           fence: kernel.row("long-chain").fence + 1,
         });
         yield* commitLongChain(kernel, {
-          sessionId: "long-chain", owner: "chain-writer", fence: adopted.fence,
+          sessionId: "long-chain",
+          owner: "chain-writer",
+          fence: adopted.fence,
           rootParent: "long-chain:configure",
         });
         expectBoundedTailPage(kernel, "long-chain", null);
@@ -789,10 +924,14 @@ describe("bounded inspection pages keep advancing and keep causal attribution (r
       Effect.gen(function* () {
         const kernel = isolatedLedger().kernel;
         const fixture = yield* fencedTurnFixture(kernel, {
-          id: "long-turn-chain", clock: () => 1_000, turnId: "turn-1",
+          id: "long-turn-chain",
+          clock: () => 1_000,
+          turnId: "turn-1",
         });
         yield* commitLongChain(kernel, {
-          sessionId: "long-turn-chain", owner: fixture.owner, fence: fixture.fence,
+          sessionId: "long-turn-chain",
+          owner: fixture.owner,
+          fence: fixture.fence,
           rootParent: "turn-1",
         });
         expectBoundedTailPage(kernel, "long-turn-chain", "turn-1");

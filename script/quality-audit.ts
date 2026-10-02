@@ -33,7 +33,13 @@ export const findingKinds = [
  * declarations outside the campaign (zod internals, lib.d.ts) and is not our
  * debt. Identical (path, line, kind, symbol) rows collapse into one count. */
 export function typeFindings(
-  violations: readonly { path: string; line: number; kind: string; symbol: string; origin: string }[],
+  violations: readonly {
+    path: string;
+    line: number;
+    kind: string;
+    symbol: string;
+    origin: string;
+  }[],
 ): Finding[] {
   const merged = new Map<string, Finding>();
   for (const row of violations) {

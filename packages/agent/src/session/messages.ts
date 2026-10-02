@@ -146,3 +146,15 @@ export const WatchTimeoutRpc = Rpc.make("WatchTimeout", {
   payload: WatchTimeoutPayload,
   success: TimerReceipt,
 }).annotate(ClusterSchema.Persisted, true);
+
+/** A policy refusal is ordinary session data, not an exception: the turn settled as refused. */
+export class SessionPolicyRefusal {
+  readonly _tag = "SessionPolicyRefusal";
+  readonly code = "session_policy_refused";
+
+  constructor(readonly reason: string) {}
+
+  get message(): string {
+    return "session policy refused";
+  }
+}

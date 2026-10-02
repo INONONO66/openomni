@@ -8,11 +8,16 @@ const createTurnDispatcher = Kernel.createTurnDispatcher;
 const failureFacts = Kernel.failureFacts;
 const sessionTool = Kernel.sessionTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 type ChatAgentConfig = Kernel.ChatAgentConfig;
 type SessionRunner = Session.SessionRunner;
 type SessionRuntime = Session.SessionRuntime;
-import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
+import {
+  traceIdFromUuid,
+  type AnyToolDefinition,
+  type LedgerSession,
+  type Model,
+  type Tool,
+} from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
@@ -22,7 +27,9 @@ import { RESIDENT_PRESET, WORKER_PRESET } from "./prompt/roles";
 import { toolCatalogLayer, type GenerationDefinitions } from "./composition/generation-layers";
 import { catalogDefinitions, type ToolPorts } from "./tools/core/catalog";
 
-export function refuseEvidenceOnly(call: Tool.Call): Tool.Result & { readonly errorKind: "precondition_failed" } {
+export function refuseEvidenceOnly(
+  call: Tool.Call,
+): Tool.Result & { readonly errorKind: "precondition_failed" } {
   const refusal = new ToolRefused(call.tool, "evidence-only message");
   return {
     id: call.id,
@@ -41,7 +48,11 @@ export interface ResidentOptions {
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
   readonly bundles?: readonly string[];
-  readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>,  never, import("@openomni/agent").Model.Llm | ObservationSink>;
+  readonly compaction?: Effect.Effect<
+    NonNullable<ChatAgentConfig["compaction"]>,
+    never,
+    import("@openomni/agent").Model.Llm | ObservationSink
+  >;
   readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;
@@ -54,69 +65,82 @@ export function createResident(options: ResidentOptions) {
   const ports = options.tools;
   const catalog = catalogDefinitions(ports);
   const definitionsFor = (role: LedgerSession.Role) => [
-    ...catalog.filter((tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
+    ...catalog.filter(
+      (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
+    ),
     ...(options.toolDefinitions ?? []),
   ];
   const definitions: GenerationDefinitions = {
     resident: definitionsFor("resident"),
     worker: definitionsFor("worker"),
-    catalogLayer: (select) => toolCatalogLayer(ports, (tools) => select([...tools, ...(options.toolDefinitions ?? [])])),
+    catalogLayer: (select) =>
+      toolCatalogLayer(ports, (tools) => select([...tools, ...(options.toolDefinitions ?? [])])),
   };
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
-    (input) => Effect.gen(function* () {
-      const dispatcher = yield* createTurnDispatcher(input, options.sessionRuntime);
-      const observations = yield* ObservationSink;
-      const compaction = options.compaction === undefined ? undefined : yield* options.compaction;
-      const traceId = traceIdFromUuid(ports.id());
-      const observation = observeComponent({
-        traceId,
-        sessionId: input.sessionId,
-        runId: input.resultId,
-        actorId: row.role,
-        agentName: row.role,
-        componentId: `${row.role}.agent`,
-        componentGeneration: input.resumeCount + 1,
-        pluginName: `builtin.${row.role}`,
-      }, observations);
-      const evidenceOnly = input.authority === "evidence_only";
-      const offered = new Set(input.tools.map((tool) => tool.name));
-      const tools = evidenceOnly ? [] : dispatcher.specs.filter((tool) => offered.has(tool.name));
-      const runner = createSessionChatRunner({
-        prepare: () => Effect.succeed({
-          config: {
-            executor: dispatcher.executor,
-            systemPrompt: input.system,
-            tools,
-            toolChoice: tools.length === 0 ? "none" : "auto",
-            toolWave: (calls, signal) =>
-              evidenceOnly
-                ? Effect.succeed(calls.map(refuseEvidenceOnly))
-                : dispatcher.executeWave(calls, {
-                    sessionId: input.sessionId,
-                    turnId: input.turnId,
-                    signal,
-                  }),
-            model: options.model,
-            ...(options.modelFallbacks === undefined
-              ? {}
-              : { modelFallbacks: [...options.modelFallbacks] }),
-            ...(compaction === undefined ? {} : { compaction }),
-            ...chatProviderConfig(options),
-          },
-          traceContext: {
+    (input) =>
+      Effect.gen(function* () {
+        const dispatcher = yield* createTurnDispatcher(input, options.sessionRuntime);
+        const observations = yield* ObservationSink;
+        const compaction = options.compaction === undefined ? undefined : yield* options.compaction;
+        const traceId = traceIdFromUuid(ports.id());
+        const observation = observeComponent(
+          {
             traceId,
             sessionId: input.sessionId,
             runId: input.resultId,
+            actorId: row.role,
             agentName: row.role,
+            componentId: `${row.role}.agent`,
+            componentGeneration: input.resumeCount + 1,
+            pluginName: `builtin.${row.role}`,
           },
-          around: (operation) => observation.run(operation),
-        }),
-        reportError: (error) =>
-          failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
+          observations,
+        );
+        const evidenceOnly = input.authority === "evidence_only";
+        const offered = new Set(input.tools.map((tool) => tool.name));
+        const tools = evidenceOnly ? [] : dispatcher.specs.filter((tool) => offered.has(tool.name));
+        const runner = createSessionChatRunner({
+          prepare: () =>
+            Effect.succeed({
+              config: {
+                executor: dispatcher.executor,
+                systemPrompt: input.system,
+                tools,
+                toolChoice: tools.length === 0 ? "none" : "auto",
+                toolWave: (calls, signal) =>
+                  evidenceOnly
+                    ? Effect.succeed(calls.map(refuseEvidenceOnly))
+                    : dispatcher.executeWave(calls, {
+                        sessionId: input.sessionId,
+                        turnId: input.turnId,
+                        signal,
+                      }),
+                model: options.model,
+                ...(options.modelFallbacks === undefined
+                  ? {}
+                  : { modelFallbacks: [...options.modelFallbacks] }),
+                ...(compaction === undefined ? {} : { compaction }),
+                ...chatProviderConfig(options),
+              },
+              traceContext: {
+                traceId,
+                sessionId: input.sessionId,
+                runId: input.resultId,
+                agentName: row.role,
+              },
+              around: (operation) => observation.run(operation),
+            }),
+          reportError: (error) =>
+            failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
+        });
+        return yield* runner(input).pipe(
+          Effect.provideService(ObservationSink, {
+            ...observations,
+            publish: observation.events.publish,
+          }),
+        );
       });
-      return yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
-    });
   return {
     runnerFor,
     definitions,
@@ -124,7 +148,10 @@ export function createResident(options: ResidentOptions) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new AppInvariantError(`runner is not registered: ${runner}`);
       }
-      return messageMaterialization(options.policyGeneration, ports.id)({
+      return messageMaterialization(
+        options.policyGeneration,
+        ports.id,
+      )({
         id,
         parentId,
         role,

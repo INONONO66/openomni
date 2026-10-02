@@ -70,16 +70,25 @@ describe("TelegramClient send result normalization", () => {
     globalThis.fetch = Object.assign(async () => jsonResponse({ message_id: 42 }), {
       preconnect: realFetch.preconnect,
     });
-    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
+    const client = new TelegramClient(
+      "token",
+      () => undefined,
+      () => FIXED_NOW,
+    );
     expect(await client.send("chat-1", "hi", "trace-1")).toBe("42");
   });
 
   it("wraps a malformed envelope in the telegram typed error", async () => {
     globalThis.fetch = Object.assign(
-      async () => new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
+      async () =>
+        new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
       { preconnect: realFetch.preconnect },
     );
-    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
+    const client = new TelegramClient(
+      "token",
+      () => undefined,
+      () => FIXED_NOW,
+    );
     await expect(client.send("chat-1", "hi", "trace-1")).rejects.toMatchObject({
       _tag: "TelegramApiError",
     });
@@ -94,7 +103,11 @@ describe("TelegramClient send result normalization", () => {
         }),
       { preconnect: realFetch.preconnect },
     );
-    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
+    const client = new TelegramClient(
+      "token",
+      () => undefined,
+      () => FIXED_NOW,
+    );
     await expect(client.send("chat-1", "hi", "trace-1")).rejects.toMatchObject({
       _tag: "TelegramApiError",
     });
@@ -104,7 +117,11 @@ describe("TelegramClient send result normalization", () => {
     globalThis.fetch = Object.assign(async () => jsonResponse({}), {
       preconnect: realFetch.preconnect,
     });
-    const client = new TelegramClient("token", () => undefined, () => FIXED_NOW);
+    const client = new TelegramClient(
+      "token",
+      () => undefined,
+      () => FIXED_NOW,
+    );
     expect(await client.send("chat-1", "hi", "trace-1")).toBeUndefined();
   });
 });

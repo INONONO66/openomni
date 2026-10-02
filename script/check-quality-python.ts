@@ -11,7 +11,10 @@ export function checkPython(argv = process.argv.slice(2)): number {
   });
   const checker = process.env.BASEDPYRIGHT ?? "basedpyright";
   const version = Bun.spawnSync([checker, "--version"], { timeout: 30_000 });
-  if (version.exitCode !== 0 || version.stdout.toString().split("\n")[0] !== "basedpyright 1.39.10") {
+  if (
+    version.exitCode !== 0 ||
+    version.stdout.toString().split("\n")[0] !== "basedpyright 1.39.10"
+  ) {
     console.error("basedpyright 1.39.10 is required");
     return 2;
   }

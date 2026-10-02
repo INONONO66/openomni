@@ -2,7 +2,14 @@ import { sessionTree } from "../helpers/session-tree";
 import { runLedgerSync } from "../helpers/effect";
 import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type BusEvent, type LedgerAction, type LedgerSession, L0Observation, type SessionGeneration, SessionTurn, } from "@openomni/protocol";
+import {
+  type BusEvent,
+  type LedgerAction,
+  type LedgerSession,
+  L0Observation,
+  type SessionGeneration,
+  SessionTurn,
+} from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
 import * as SessionHandleStore from "../../../src/store/fence";
 import type { ObservationSink } from "@openomni/protocol";
@@ -311,7 +318,11 @@ function commitOne(
   );
 }
 
-function commitWithDroppedMiddle(authority: { sessionId: string; owner: string; fence: number }): void {
+function commitWithDroppedMiddle(authority: {
+  sessionId: string;
+  owner: string;
+  fence: number;
+}): void {
   const { sessionId } = authority;
   commitOne(authority, prompt(`${sessionId}-1`, sessionId, "one", `${sessionId}:configure`));
   sink.dropNextCommit = true;

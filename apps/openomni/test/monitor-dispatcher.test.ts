@@ -1,12 +1,10 @@
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
-import { Kernel, Session } from "@openomni/agent";
+import { Kernel, type Session } from "@openomni/agent";
 const eraseTool = Kernel.eraseTool;
 const ExecutorContextError = Kernel.ExecutorContextError;
-type ExecutorContextError = Kernel.ExecutorContextError;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 type SessionEntityTimerContext = Session.SessionEntityTimerContext;
 import { Effect, Exit, Cause } from "effect";
 import { createMonitorTool } from "../src/tools/monitor";
@@ -61,17 +59,21 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   const dispatcher = dispatcherFixture([eraseTool(monitorTool)]);
   const context = { sessionId: "session", turnId: "turn" };
   expect(
-    await runEffect(dispatcher.execute({ id: "bad", tool: "monitor", input: { op: "cancel" } }, context)),
+    await runEffect(
+      dispatcher.execute({ id: "bad", tool: "monitor", input: { op: "cancel" } }, context),
+    ),
   ).toMatchObject({ errorKind: "invalid_input" });
   expect(
     await runEffect(dispatcher.execute({ id: "missing", tool: "not_monitor", input: {} }, context)),
   ).toMatchObject({ errorKind: "unregistered_tool" });
-  const missingContext = await runEffect(Effect.exit(
-    dispatcher.execute(
-      { id: "context", tool: "monitor", input: { operation: { op: "cancel", id: "watch" } } },
-      context,
+  const missingContext = await runEffect(
+    Effect.exit(
+      dispatcher.execute(
+        { id: "context", tool: "monitor", input: { operation: { op: "cancel", id: "watch" } } },
+        context,
+      ),
     ),
-  ));
+  );
   expect(Exit.isFailure(missingContext)).toBe(true);
   if (Exit.isFailure(missingContext)) {
     expect(

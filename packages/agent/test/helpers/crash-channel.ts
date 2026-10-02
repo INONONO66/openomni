@@ -17,7 +17,10 @@ export function holdCrashBarrier(value: string): never {
 }
 
 async function line(reader: {
-  read(): Promise<{ done: false; value: Uint8Array<ArrayBuffer> } | { done: true; value?: Uint8Array<ArrayBuffer> }>;
+  read(): Promise<
+    | { done: false; value: Uint8Array<ArrayBuffer> }
+    | { done: true; value?: Uint8Array<ArrayBuffer> }
+  >;
 }): Promise<string> {
   const decoder = new TextDecoder();
   let output = "";
@@ -31,7 +34,9 @@ async function line(reader: {
 
 export async function killAtCrashBarrier(worker: string, args: string[]): Promise<string> {
   const child = Bun.spawn([process.execPath, worker, ...args], {
-    stdin: "pipe", stdout: "pipe", stderr: "pipe",
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
   });
   const exit = child.exited;
   const errors = new Response(child.stderr).text();

@@ -60,7 +60,10 @@ describe("ModelsDev", () => {
   it("coalesces concurrent catalog loads", async () => {
     const load = mock(() => Promise.resolve(fixture));
     resetCatalog(load);
-    const [first, second] = await Promise.all([runEffect(ModelsDev.get()), runEffect(ModelsDev.get())]);
+    const [first, second] = await Promise.all([
+      runEffect(ModelsDev.get()),
+      runEffect(ModelsDev.get()),
+    ]);
     expect(first).toBe(second);
     expect(first).toBe(fixture);
     expect(load).toHaveBeenCalledTimes(1);
@@ -115,7 +118,10 @@ describe("ModelsDev", () => {
   it("propagates an unavailable snapshot instead of fabricating an empty catalog", async () => {
     const error = new Error("snapshot unavailable");
     resetCatalog(() => Promise.reject(error));
-    await expect(runEffect(ModelsDev.get())).rejects.toMatchObject({ _tag: "TransportFailure", cause: String(error) });
+    await expect(runEffect(ModelsDev.get())).rejects.toMatchObject({
+      _tag: "TransportFailure",
+      cause: String(error),
+    });
     expect(network).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,9 @@
 import { testToolPorts } from "./helpers/tool-ports";
-import { executorLayer, runnerTestLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
+import {
+  executorLayer,
+  runnerTestLayer,
+  catalogLayer,
+} from "../../../packages/agent/test/helpers/service-layers";
 import { Effect, Layer } from "effect";
 import { acquireEffect, runEffect, acquireSyncEffect } from "./helpers/scoped-effect";
 import { expect, test } from "bun:test";
@@ -36,65 +40,100 @@ for (const stop of [false, true]) {
     const origin = { role: "resident", sessionId: `completion-${stop}` } as const;
     // Only storage IO is replaced: real policy, record construction and settlement execute.
     const ledger: Parameters<typeof createTurnDispatcher>[0]["ledger"] = {
-        commit(append: LedgerAction.Append) {
-          const ordinal = actions.length + 1;
-          const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
-          actions.push(action);
-          return Effect.succeed({ action, revision: action.ordinal });
-        },
-      };
+      commit(append: LedgerAction.Append) {
+        const ordinal = actions.length + 1;
+        const action = LedgerAction.Node.parse({ ...append, ordinal, ...fixtureHashes(ordinal) });
+        actions.push(action);
+        return Effect.succeed({ action, revision: action.ordinal });
+      },
+    };
     const path = socketPath();
     let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
-    const host = await acquireEffect(createMachineHost({
-      socketPath: path,
-      id: testIds("lifetime-host"),
-      enrollment: (machineId: string) => ({
-        machineId,
-        name: "completion-test",
-        allowedCapabilities: ["kernel.py"],
-        enrolledAt: 0,
+    const host = await acquireEffect(
+      createMachineHost({
+        socketPath: path,
+        id: testIds("lifetime-host"),
+        enrollment: (machineId: string) => ({
+          machineId,
+          name: "completion-test",
+          allowedCapabilities: ["kernel.py"],
+          enrolledAt: 0,
+        }),
+        events: { publish: () => undefined },
+        now: () => 1,
+        // callTool already surfaces a MachinesFailure({ operation: "code.tool" }).
+        callTool: (call: Machine.ToolCall) =>
+          cells.callTool(call).pipe(
+            Effect.tap((result: Machine.ToolCallResult) =>
+              Effect.sync(() => completed.resolve({ result })),
+            ),
+            Effect.tapError((error: MachinesFailure) =>
+              Effect.sync(() => completed.resolve({ error })),
+            ),
+          ),
       }),
-      events: { publish: () => undefined },
-      now: () => 1,
-      // callTool already surfaces a MachinesFailure({ operation: "code.tool" }).
-      callTool: (call: Machine.ToolCall) => cells.callTool(call).pipe(
-        Effect.tap((result: Machine.ToolCallResult) => Effect.sync(() => completed.resolve({ result }))),
-        Effect.tapError((error: MachinesFailure) => Effect.sync(() => completed.resolve({ error }))),
-      ),
-    }));
-    suite.defer(async () => { await runEffect(host.close()); });
-    const daemon = await acquireEffect(attachMachineDaemon({
-      ...cellDaemonOptions(path, "completion-test"),
-      runner: acquireSyncEffect(createCodemode({ id: testIds("lifetime-cell") })).runner,
-    }));
-    suite.defer(async () => { await runEffect(daemon.close()); });
+    );
+    suite.defer(async () => {
+      await runEffect(host.close());
+    });
+    const daemon = await acquireEffect(
+      attachMachineDaemon({
+        ...cellDaemonOptions(path, "completion-test"),
+        runner: acquireSyncEffect(createCodemode({ id: testIds("lifetime-cell") })).runner,
+      }),
+    );
+    suite.defer(async () => {
+      await runEffect(daemon.close());
+    });
     expect(daemon.attachment.status).toBe("attached");
     cells = acquireSyncEffect(composeCodemode(host, { id: testIds("lifetime-compose") }));
-    suite.defer(async () => { await runEffect(cells.close()); });
+    suite.defer(async () => {
+      await runEffect(cells.close());
+    });
     let calls = 0;
-    const definitions = catalogDefinitions(
-      { ...testToolPorts,
-        cells: cellPorts(cells),
-        llm: async () => {
-          expect(currentInvocation().policy).toBe(seededPolicy);
-          calls += 1;
-          entered.resolve();
-          await release.promise;
-          return "late";
-        },
+    const definitions = catalogDefinitions({
+      ...testToolPorts,
+      cells: cellPorts(cells),
+      llm: async () => {
+        expect(currentInvocation().policy).toBe(seededPolicy);
+        calls += 1;
+        entered.resolve();
+        await release.promise;
+        return "late";
       },
-    );
+    });
     const runnerServices = acquireSyncEffect(Layer.build(runnerTestLayer));
-    const dispatcher = acquireSyncEffect(createTurnDispatcher({
-      sessionId: origin.sessionId, role: origin.role, actionId: "completion-turn", ledger,
-    }, {}).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerServices)));
+    const dispatcher = acquireSyncEffect(
+      createTurnDispatcher(
+        {
+          sessionId: origin.sessionId,
+          role: origin.role,
+          actionId: "completion-turn",
+          ledger,
+        },
+        {},
+      ).pipe(
+        Effect.provide(catalogLayer(definitions)),
+        Effect.provide(
+          executorLayer({
+            policy: seededPolicy,
+            observations: { publish: () => undefined },
+            clock: () => 1,
+            entropy: () => `${origin.sessionId}-${++nextId}`,
+          }),
+        ),
+        Effect.provide(runnerServices),
+      ),
+    );
     let nextCall = 0;
     const execute = (operation: PlainObject) =>
       bounded(
-        runEffect(dispatcher.execute(
-          { id: `eval-${++nextCall}`, tool: "eval", input: { operation } },
-          { sessionId: origin.sessionId, turnId: "completion-turn" },
-        )),
+        runEffect(
+          dispatcher.execute(
+            { id: `eval-${++nextCall}`, tool: "eval", input: { operation } },
+            { sessionId: origin.sessionId, turnId: "completion-turn" },
+          ),
+        ),
       );
     const toolActions = (op: string, phase: string) =>
       actions.filter((action: LedgerAction.Node) => {
@@ -136,7 +175,9 @@ for (const stop of [false, true]) {
       release.resolve();
       const completion = await bounded(completed.promise);
       if (stop) {
-        expect(completion).toMatchObject({ error: { _tag: "MachinesFailure", operation: "code.tool" } });
+        expect(completion).toMatchObject({
+          error: { _tag: "MachinesFailure", operation: "code.tool" },
+        });
       } else {
         expect(completion).toEqual({ result: { status: "completed", value: "late" } });
       }
@@ -158,9 +199,11 @@ for (const stop of [false, true]) {
       expect(results[0]).toMatchObject({
         parentId: intents[0]?.id,
         sessionId: origin.sessionId,
-        effect: { value: stop
-          ? { terminal: "interrupted", reason: "fiber_interrupted" }
-          : { terminal: "executed", result: { status: "success", output: "late" } } },
+        effect: {
+          value: stop
+            ? { terminal: "interrupted", reason: "fiber_interrupted" }
+            : { terminal: "executed", result: { status: "success", output: "late" } },
+        },
       });
       expect(
         actions
@@ -169,9 +212,14 @@ for (const stop of [false, true]) {
               action.kind === "policy.decision" &&
               z.object({ op: z.literal("completion") }).safeParse(action.intent.value).success,
           )
-          .map((action: LedgerAction.Node) => z.object({ hook: z.string() }).parse(action.intent.value).hook),
+          .map(
+            (action: LedgerAction.Node) =>
+              z.object({ hook: z.string() }).parse(action.intent.value).hook,
+          ),
       ).toEqual(stop ? ["tool.pre"] : ["tool.pre", "tool.post"]);
-      expect(actions.every((action: LedgerAction.Node) => action.sessionId === origin.sessionId)).toBe(true);
+      expect(
+        actions.every((action: LedgerAction.Node) => action.sessionId === origin.sessionId),
+      ).toBe(true);
       expect(calls).toBe(1);
     } finally {
       release.resolve();

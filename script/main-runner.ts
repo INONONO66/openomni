@@ -19,7 +19,9 @@ export async function runScriptMain(
 ): Promise<void> {
   // `.then(run)` absorbs synchronous throws; `causeText.parse` by reference
   // keeps the rejection seam schema-typed instead of an owned `catch` binding.
-  const failure = await Promise.resolve().then(run).then(() => null, causeText.parse);
+  const failure = await Promise.resolve()
+    .then(run)
+    .then(() => null, causeText.parse);
   if (failure !== null) {
     process.stderr.write(`ERROR: ${failure}\n`);
     exit(1);

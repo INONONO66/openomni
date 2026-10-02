@@ -1,5 +1,10 @@
 import { Effect, Cause } from "effect";
-import { type BusEvent, Component, type ObservationSink, type TraceContext } from "@openomni/protocol";
+import {
+  type BusEvent,
+  Component,
+  type ObservationSink,
+  type TraceContext,
+} from "@openomni/protocol";
 
 export interface ObservedComponent {
   readonly events: BusEvent.Sink;
@@ -18,7 +23,10 @@ interface ComponentIdentity extends TraceContext.Type {
 }
 
 /** App-owned component observation sink behind the protocol port. */
-export function observeComponent(trace: ComponentIdentity, sink: ObservationSink): ObservedComponent {
+export function observeComponent(
+  trace: ComponentIdentity,
+  sink: ObservationSink,
+): ObservedComponent {
   const events =
     sink.scope?.({
       traceId: trace.traceId,
@@ -38,13 +46,21 @@ export function observeComponent(trace: ComponentIdentity, sink: ObservationSink
     run(operation) {
       return Effect.suspend(() => {
         events.publish(Component.Events.Active, componentPayload(trace));
-        return operation.pipe(Effect.onExit((exit) => Effect.sync(() => {
-          if (exit._tag === "Failure")
-            events.publish(Component.Events.Failed, { ...componentPayload(trace), error: Cause.pretty(exit.cause) });
-          events.publish(Component.Events.Disposed, {
-            ...componentPayload(trace), outcome: exit._tag === "Success" ? "completed" : "failed",
-          });
-        })));
+        return operation.pipe(
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              if (exit._tag === "Failure")
+                events.publish(Component.Events.Failed, {
+                  ...componentPayload(trace),
+                  error: Cause.pretty(exit.cause),
+                });
+              events.publish(Component.Events.Disposed, {
+                ...componentPayload(trace),
+                outcome: exit._tag === "Success" ? "completed" : "failed",
+              });
+            }),
+          ),
+        );
       });
     },
   };

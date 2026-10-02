@@ -25,17 +25,21 @@ for (const value of ["accepted", "rejected", "unknown"] as const) {
     const messaging = createExistingAgentMessaging({
       requests: channelRequests(seededRequests()),
       stores: ledger().stores,
-    transaction: channelTransaction,
+      transaction: channelTransaction,
       grants: () => [buildGrant("grant:sender->target")],
       publish: () => undefined,
-      deliver: async (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
+      deliver: async (
+        message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0],
+      ) => {
         keys.push(message.idempotencyKey);
         return { value };
       },
     });
     const input = buildSendInput();
     // When the same delivery is retried.
-    const receipts = await runEffect(Effect.all([messaging.send(input), messaging.send(input)], { concurrency: 2 }));
+    const receipts = await runEffect(
+      Effect.all([messaging.send(input), messaging.send(input)], { concurrency: 2 }),
+    );
     // Then actor classification is preserved, not collapsed to success/failure.
     expect(keys).toEqual([input.messageId, input.messageId]);
     for (const receipt of receipts) {

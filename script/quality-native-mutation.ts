@@ -111,10 +111,15 @@ export function recordMutationMeasurement(context: {
 }): number {
   const { document, identity, root, contract, directory, driftMessage } = context;
   const measurement = normalizeMutation(document, identity, root);
-  requireMeasurement(fingerprint(root, contract).inventoryHash === identity.inventoryHash, driftMessage);
+  requireMeasurement(
+    fingerprint(root, contract).inventoryHash === identity.inventoryHash,
+    driftMessage,
+  );
   const merged = mergeMeasurements(identity.paths, [measurement]);
   writeFileSync(resolve(directory, "current.json"), JSON.stringify(merged), { flag: "wx" });
-  console.error(`[mutation] campaign complete: ${merged.findings.length} surviving mutants recorded`);
+  console.error(
+    `[mutation] campaign complete: ${merged.findings.length} surviving mutants recorded`,
+  );
   return merged.findings.length > 0 ? 1 : 0;
 }
 function mutationArguments(values: {
@@ -126,7 +131,10 @@ function mutationArguments(values: {
   progress?: string;
   "budget-minutes"?: string;
 }): { shardMode: boolean; budgetMinutes: number | null } {
-  requireMeasurement(!(values.limit || values.target) || values.pilot, "--limit/--target require --pilot");
+  requireMeasurement(
+    !(values.limit || values.target) || values.pilot,
+    "--limit/--target require --pilot",
+  );
   const shardValues = [values.shard, values["shard-count"], values.progress];
   const shardMode = shardValues.some((value) => value !== undefined);
   requireMeasurement(
@@ -134,9 +142,11 @@ function mutationArguments(values: {
     "sharded execution requires --shard, --shard-count and --progress",
   );
   requireMeasurement(!(shardMode && values.pilot), "--shard is incompatible with --pilot");
-  const budgetMinutes = values["budget-minutes"] === undefined ? null : Number(values["budget-minutes"]);
+  const budgetMinutes =
+    values["budget-minutes"] === undefined ? null : Number(values["budget-minutes"]);
   requireMeasurement(
-    budgetMinutes === null || (Number.isSafeInteger(budgetMinutes) && budgetMinutes >= 1 && budgetMinutes <= 10_000),
+    budgetMinutes === null ||
+      (Number.isSafeInteger(budgetMinutes) && budgetMinutes >= 1 && budgetMinutes <= 10_000),
     "invalid --budget-minutes",
   );
   return { shardMode, budgetMinutes };
@@ -175,7 +185,9 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
     cwd: root,
     receipt: resolve(directory, "process.json"),
     timeout: 21_000_000,
-    onStderr: (chunk) => { process.stderr.write(chunk); },
+    onStderr: (chunk) => {
+      process.stderr.write(chunk);
+    },
     command: [
       process.execPath,
       "--smol",
@@ -213,7 +225,14 @@ export async function mutationMain(argv = Bun.argv.slice(2)): Promise<number> {
       ...(values.pilot ? ["--pilot", "--limit", values.limit ?? "5"] : []),
       ...(values.target ? ["--target", values.target] : []),
       ...(shardMode
-        ? ["--shard", values.shard ?? "", "--shard-count", values["shard-count"] ?? "", "--progress", resolve(values.progress ?? "")]
+        ? [
+            "--shard",
+            values.shard ?? "",
+            "--shard-count",
+            values["shard-count"] ?? "",
+            "--progress",
+            resolve(values.progress ?? ""),
+          ]
         : []),
       "--failure-output",
       resolve(directory, "reach-failure.json"),

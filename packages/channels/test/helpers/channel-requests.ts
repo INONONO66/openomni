@@ -1,4 +1,4 @@
-import { Session } from "@openomni/agent";
+import type { Session } from "@openomni/agent";
 import { Effect } from "effect";
 
 type SessionRequests = Effect.Success<ReturnType<typeof Session.createSessionRequests>>;

@@ -61,7 +61,10 @@ describe("the strip's tokens", () => {
     expect(CSS).not.toContain("data-collapsed");
     expect(CSS).not.toContain("@starting-style");
     const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
-    const trio = strip.slice(strip.indexOf("data-ui={UI_NAMES.TabStripTrio}") - 200, strip.indexOf("<HistoryMenu"));
+    const trio = strip.slice(
+      strip.indexOf("data-ui={UI_NAMES.TabStripTrio}") - 200,
+      strip.indexOf("<HistoryMenu"),
+    );
     const className = trio.match(/className="([^"]+)"/)?.[1] ?? "";
     expect(className).toBe("ml-auto flex items-center gap-1");
     expect(className).not.toMatch(/opacity|visible|invisible|transition/);
@@ -70,7 +73,10 @@ describe("the strip's tokens", () => {
 
   test("Given the strip's source, When read, Then the trio carries no key: one node in both states", async () => {
     const strip = await Bun.file(join(SRC, "tab-strip.tsx")).text();
-    const trio = strip.slice(strip.indexOf('className="ml-auto flex'), strip.indexOf("<HistoryMenu"));
+    const trio = strip.slice(
+      strip.indexOf('className="ml-auto flex'),
+      strip.indexOf("<HistoryMenu"),
+    );
     expect(trio).toContain("data-ui={UI_NAMES.TabStripTrio}");
     expect(trio).not.toContain("key=");
     expect(strip).not.toContain("key={open");
@@ -86,7 +92,9 @@ describe("the strip's glyphs", () => {
     expect(block).toContain("vector-effect: non-scaling-stroke;");
     const button = await Bun.file(join(SRC, "primitives", "button.tsx")).text();
     const sizes: Record<string, string | undefined> = Object.fromEntries(
-      [...button.matchAll(/^\s+(sm|base|md): "([^"]+)",$/gm)].map((hit): [string, string | undefined] => [hit[1] ?? "", hit[2]]),
+      [...button.matchAll(/^\s+(sm|base|md): "([^"]+)",$/gm)].map(
+        (hit): [string, string | undefined] => [hit[1] ?? "", hit[2]],
+      ),
     );
     expect(sizes.base).toContain("[&_svg]:glyph-stroke");
     expect(sizes.sm).not.toContain("glyph-stroke");

@@ -54,7 +54,9 @@ describe("proxy-models", () => {
           headers: { "Content-Type": "application/json" },
         });
       });
-      const result = await runEffect(fetchProxyModels(`http://localhost:${port}/v1`, fixedNow, apiKey));
+      const result = await runEffect(
+        fetchProxyModels(`http://localhost:${port}/v1`, fixedNow, apiKey),
+      );
       expect(result).toEqual(["test-model"]);
       expect(capturedHeaders?.get("Authorization")).toBe(expected);
     });
@@ -77,10 +79,9 @@ describe("proxy-models", () => {
         }),
       );
 
-      expect(await runEffect(fetchProxyModels("https://mixed-entries-proxy.example/v1", fixedNow))).toEqual([
-        "first",
-        "second",
-      ]);
+      expect(
+        await runEffect(fetchProxyModels("https://mixed-entries-proxy.example/v1", fixedNow)),
+      ).toEqual(["first", "second"]);
     });
 
     it("does not share cached model lists between credentials at the same URL", async () => {
@@ -95,19 +96,23 @@ describe("proxy-models", () => {
         });
       });
 
-      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-a"))).toEqual([
-        "model-a",
-      ]);
-      expect(await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-b"))).toEqual([
-        "model-b",
-      ]);
+      expect(
+        await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-a")),
+      ).toEqual(["model-a"]);
+      expect(
+        await runEffect(fetchProxyModels("http://localhost:3110/v1", fixedNow, "credential-b")),
+      ).toEqual(["model-b"]);
       expect(authorizationHeaders).toEqual(["Bearer credential-a", "Bearer credential-b"]);
     });
 
     it("throws a typed error on auth failure (401) instead of returning []", async () => {
       stubFetch(() => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }));
-      await expect(runEffect(fetchProxyModels("http://localhost:3102/v1", fixedNow))).rejects.toMatchObject({
-        _tag: "ProxyModelsError", status: 401, url: "http://localhost:3102/v1/models",
+      await expect(
+        runEffect(fetchProxyModels("http://localhost:3102/v1", fixedNow)),
+      ).rejects.toMatchObject({
+        _tag: "ProxyModelsError",
+        status: 401,
+        url: "http://localhost:3102/v1/models",
       });
     });
 
@@ -128,7 +133,9 @@ describe("proxy-models", () => {
       },
     ])("$name", async ({ port, response, message }) => {
       stubFetch(response);
-      await expect(runEffect(fetchProxyModels(`http://localhost:${port}/v1`, fixedNow))).rejects.toThrow(message);
+      await expect(
+        runEffect(fetchProxyModels(`http://localhost:${port}/v1`, fixedNow)),
+      ).rejects.toThrow(message);
     });
   });
 
@@ -170,12 +177,25 @@ describe("proxy-models", () => {
       try {
         resetCatalog();
         await runEffect(ModelsDev.get());
-        await runEffect(Auth.set("openai", {
-          type: "proxy",
-          baseURL: "http://localhost:3199/v1",
-          apiKey: "proxy-key",
-        }, { id: () => "tmp-proxy-models", authFilePath }));
-        const model = await runEffect(Provider.resolveModel({ authFilePath, provider: "openai", id: "proxy-only-model", now: fixedNow }));
+        await runEffect(
+          Auth.set(
+            "openai",
+            {
+              type: "proxy",
+              baseURL: "http://localhost:3199/v1",
+              apiKey: "proxy-key",
+            },
+            { id: () => "tmp-proxy-models", authFilePath },
+          ),
+        );
+        const model = await runEffect(
+          Provider.resolveModel({
+            authFilePath,
+            provider: "openai",
+            id: "proxy-only-model",
+            now: fixedNow,
+          }),
+        );
 
         expect(model).toMatchObject({ id: "proxy-only-model", providerID: "openai" });
       } finally {

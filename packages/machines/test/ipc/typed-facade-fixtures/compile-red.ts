@@ -22,7 +22,9 @@ const validResult: ReturnType<typeof typedCall<"machine.run_code">> = typedCall(
 );
 
 // The original generic surface intentionally supports unknown mixed-version methods.
-const mixedVersionResult: ReturnType<IpcClient["call"]> = client.call("future.peer_method", { future: true });
+const mixedVersionResult: ReturnType<IpcClient["call"]> = client.call("future.peer_method", {
+  future: true,
+});
 
 void wrongResult;
 void validResult;

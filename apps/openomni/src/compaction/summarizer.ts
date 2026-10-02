@@ -1,7 +1,6 @@
-import { Kernel, Model } from "@openomni/agent";
+import { Kernel, type Model } from "@openomni/agent";
 type ObservationSink = Kernel.ObservationSink;
 const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
 type CompactionOptions = Kernel.CompactionOptions;
 type Llm = Model.Llm;
 type RunInput = Model.RunInput;
@@ -60,9 +59,7 @@ function messageWithText(
         agent: "compaction",
         model: { providerID: "", modelID: "" },
       },
-      parts: [
-        { id: sources.id(), sessionID: "compaction", messageID: id, type: "text", text },
-      ],
+      parts: [{ id: sources.id(), sessionID: "compaction", messageID: id, type: "text", text }],
     },
     ...input,
   ];
@@ -78,36 +75,43 @@ export function createCompactionSummarizer(
   config: SummarizerConfig,
 ): Effect.Effect<NonNullable<CompactionOptions["onSummarize"]>, never, Llm | ObservationSink> {
   return Effect.gen(function* () {
-  const services = yield* Effect.context<Llm | ObservationSink>();
-  const summarize: NonNullable<CompactionOptions["onSummarize"]> = (messages, previousAnchor, budget, signal) => Effect.gen(function* () {
-    const anchor = previousAnchor ?? "(none)";
-    const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
-    let working = messages;
-    for (let attempt = 0; ; attempt += 1) {
-      const answer = yield* Effect.result(runResolvedText(
-          {
-            model: config.model,
-            now: config.now,
-            id: config.id,
-            messages: messageWithText(working, prompt, config),
-            sessionId: "compaction",
-            signal,
-            maxTokens: Math.min(
-              32_768,
-              Math.floor(budget.contextWindowTokens * 0.5),
-              budget.maxOutputTokens,
-            ),
-            providerOptions: reasoningOptions(config.model.provider),
-          },
-        ).pipe(Effect.provide(services)));
-      if (Result.isSuccess(answer)) return yield* nonemptySummary(answer.success);
-      const error = answer.failure;
-      if (error._tag !== "LlmRunFailure" || !error.contextOverflow) return yield* Effect.fail(error);
-      if (attempt >= 2)
-        return yield* new SummarizerError("overflow", "compaction summarizer context overflow");
-      working = working.slice(1);
-    }
-  });
-  return summarize;
+    const services = yield* Effect.context<Llm | ObservationSink>();
+    const summarize: NonNullable<CompactionOptions["onSummarize"]> = (
+      messages,
+      previousAnchor,
+      budget,
+      signal,
+    ) =>
+      Effect.gen(function* () {
+        const anchor = previousAnchor ?? "(none)";
+        const prompt = `${INSTRUCTION}\n\nPrevious anchor:\n${anchor}`;
+        let working = messages;
+        for (let attempt = 0; ; attempt += 1) {
+          const answer = yield* Effect.result(
+            runResolvedText({
+              model: config.model,
+              now: config.now,
+              id: config.id,
+              messages: messageWithText(working, prompt, config),
+              sessionId: "compaction",
+              signal,
+              maxTokens: Math.min(
+                32_768,
+                Math.floor(budget.contextWindowTokens * 0.5),
+                budget.maxOutputTokens,
+              ),
+              providerOptions: reasoningOptions(config.model.provider),
+            }).pipe(Effect.provide(services)),
+          );
+          if (Result.isSuccess(answer)) return yield* nonemptySummary(answer.success);
+          const error = answer.failure;
+          if (error._tag !== "LlmRunFailure" || !error.contextOverflow)
+            return yield* Effect.fail(error);
+          if (attempt >= 2)
+            return yield* new SummarizerError("overflow", "compaction summarizer context overflow");
+          working = working.slice(1);
+        }
+      });
+    return summarize;
   });
 }

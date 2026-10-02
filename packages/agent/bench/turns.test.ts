@@ -5,16 +5,23 @@ import { z } from "zod";
 import { bounded } from "../test/helpers/bounded";
 import { firstDelta, roundTrip, tokenAccounting, toolDispatch } from "./turns";
 
-const resultSchema = z.array(z.object({
-  name: z.string(),
-  unit: z.literal("ns/op"),
-  value: z.number().positive(),
-}).strict());
+const resultSchema = z.array(
+  z
+    .object({
+      name: z.string(),
+      unit: z.literal("ns/op"),
+      value: z.number().positive(),
+    })
+    .strict(),
+);
 
 describe("turn benchmarks", () => {
   test("first delta reports sink latency rather than the drained turn duration", async () => {
     let tick = 0;
-    const result = await bounded(firstDelta(() => (tick += 7)), "first assistant snapshot");
+    const result = await bounded(
+      firstDelta(() => (tick += 7)),
+      "first assistant snapshot",
+    );
     expect(result).toEqual({ overriddenDuration: 7 });
     expect(tick).toBe(14);
   });
@@ -35,18 +42,21 @@ describe("turn benchmarks", () => {
     const turn = await roundTrip();
     try {
       expect(await bounded(turn.run(), "durable turn")).toMatchObject({
-        kind: "result", finishReason: "stop",
+        kind: "result",
+        finishReason: "stop",
       });
       const snapshot = turn.handle.get();
       expect(snapshot.state).toBe("idle");
       expect(snapshot.turns).toHaveLength(1);
       expect(snapshot.turns[0]?.messages.map((message) => message.role)).toEqual([
-        "user", "assistant",
+        "user",
+        "assistant",
       ]);
       const actions = sessionTree(turn.kernel, turn.handle.id);
       expect(actions.filter((action) => action.kind === "message")).toHaveLength(2);
-      const terminals = actions.filter((action) =>
-        action.kind === "turn" && SessionTurn.Terminal.safeParse(action.effect.value).success,
+      const terminals = actions.filter(
+        (action) =>
+          action.kind === "turn" && SessionTurn.Terminal.safeParse(action.effect.value).success,
       );
       expect(terminals).toHaveLength(1);
       expect(SessionTurn.Terminal.parse(terminals[0]?.effect.value).kind).toBe("result");
@@ -57,8 +67,12 @@ describe("turn benchmarks", () => {
 
   test("token accounting folds one message without accumulating across samples", () => {
     const expected = {
-      inputTokens: 512, outputTokens: 128, totalTokens: 640,
-      reasoningTokens: 32, cacheReadTokens: 64, cacheWriteTokens: 16,
+      inputTokens: 512,
+      outputTokens: 128,
+      totalTokens: 640,
+      reasoningTokens: 32,
+      cacheReadTokens: 64,
+      cacheWriteTokens: 16,
     };
     expect(tokenAccounting()).toEqual(expected);
     expect(tokenAccounting()).toEqual(expected);

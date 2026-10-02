@@ -55,12 +55,16 @@ describe("GatewayRouter kernel routing", () => {
     createMappedOwnerSession();
     const publish = Bus.publish;
     const publicationFault = new Error("routing publish failed");
-    const spy = spyOn(Bus, "publish").mockImplementation(<T>(event: BusEvent.Descriptor<T>, data: T) => {
-      if (event === Ingress.Events.RoutingDecision) throw publicationFault;
-      publish(event, data);
-    });
+    const spy = spyOn(Bus, "publish").mockImplementation(
+      <T>(event: BusEvent.Descriptor<T>, data: T) => {
+        if (event === Ingress.Events.RoutingDecision) throw publicationFault;
+        publish(event, data);
+      },
+    );
     try {
-      expect(await effectFailure(kernelRouter().ingest(ownerSender, ownerFacts))).toBe(publicationFault);
+      expect(await effectFailure(kernelRouter().ingest(ownerSender, ownerFacts))).toBe(
+        publicationFault,
+      );
       expect(commits).toHaveLength(0);
     } finally {
       spy.mockRestore();

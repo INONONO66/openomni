@@ -38,7 +38,8 @@ for (const visible of ["none", "text", "tool"] as const) {
     expect(outcome).toMatchObject({
       type: "error",
       error: {
-        visibleOutput: visible !== "none", usage: { inputTokens: 17, outputTokens: 2 },
+        visibleOutput: visible !== "none",
+        usage: { inputTokens: 17, outputTokens: 2 },
       },
     });
   });

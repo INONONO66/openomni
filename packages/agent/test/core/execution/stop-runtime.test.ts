@@ -1,7 +1,13 @@
 import { sessionTree } from "../../helpers/session-tree";
 import { dispatcherToolPorts, testTurnDispatcher } from "../../helpers/service-layers";
 import { prepareChatFixture } from "../../helpers/chat-services";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "../../helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "../../helpers/session-services";
 import { Effect, Queue } from "effect";
 import { expect, test } from "bun:test";
 import { SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
@@ -9,7 +15,7 @@ import { z } from "zod";
 import type { PolicyRow } from "@openomni/protocol";
 import { closeSessions } from "../../../src/session/run";
 import { session } from "../../../src/testing/registry";
-import { defineTool, eraseTool, sessionTool, } from "../../../src/kernel/tool";
+import { defineTool, eraseTool, sessionTool } from "../../../src/kernel/tool";
 import { createSessionChatRunner } from "../../../src/session/run";
 import { assistantStep } from "../../helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "../../helpers/isolated";

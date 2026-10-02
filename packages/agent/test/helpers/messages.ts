@@ -2,7 +2,11 @@ import { messageSource } from "./message-source";
 import type { Message, PlainObject } from "@openomni/protocol";
 import { createAssistantMessage } from "../../src/kernel/message-factory";
 
-export function assistantTextSnapshot(text: string, input: number, output: number): Message.WithParts {
+export function assistantTextSnapshot(
+  text: string,
+  input: number,
+  output: number,
+): Message.WithParts {
   const message = createAssistantMessage(text, "", "session", messageSource);
   if (message.info.role !== "assistant") throw new Error("expected assistant message");
   return {
@@ -14,14 +18,30 @@ export function assistantTextSnapshot(text: string, input: number, output: numbe
   };
 }
 
-export function stepFinish(id: string, reason: string, input = 0, output = 0): Message.StepFinishPart {
+export function stepFinish(
+  id: string,
+  reason: string,
+  input = 0,
+  output = 0,
+): Message.StepFinishPart {
   return {
-    id: `${id}-step`, sessionID: "session", messageID: id, type: "step-finish", reason, cost: 0,
+    id: `${id}-step`,
+    sessionID: "session",
+    messageID: id,
+    type: "step-finish",
+    reason,
+    cost: 0,
     tokens: { input, output, reasoning: 0, cache: { read: 0, write: 0 } },
   };
 }
 
-export function stepSnapshot(id: string, text: string, reason: string, input = 0, output = 0): Message.WithParts {
+export function stepSnapshot(
+  id: string,
+  text: string,
+  reason: string,
+  input = 0,
+  output = 0,
+): Message.WithParts {
   const message = createAssistantMessage(text, "", "session", messageSource);
   return {
     ...message,

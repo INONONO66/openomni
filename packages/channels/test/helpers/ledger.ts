@@ -20,9 +20,7 @@ export interface TestLedger {
   readonly kernel: Journal.SessionHandleStore.SessionKernel;
   readonly stores: ChannelStores;
   /** Swaps only the decision-fact seam, live, for routers already built over this plane. */
-  readonly setDecisionFacts: (
-    facts: ProtocolStorage.DecisionFactSubAdapter | undefined,
-  ) => void;
+  readonly setDecisionFacts: (facts: ProtocolStorage.DecisionFactSubAdapter | undefined) => void;
 }
 
 export interface TestLedgerPaths {

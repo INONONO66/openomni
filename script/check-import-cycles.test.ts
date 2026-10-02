@@ -1,6 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
 import { captureConsole } from "./capture-output.test-helper";
-import { buildGraph, findCycles, main, selfTest, valueImportSpecifiers } from "./check-import-cycles";
+import {
+  buildGraph,
+  findCycles,
+  main,
+  selfTest,
+  valueImportSpecifiers,
+} from "./check-import-cycles";
 import { TOPOLOGY } from "./topology";
 
 test("the shipped tree has one module per topology source file and no value-import cycle", async () => {
@@ -15,7 +21,9 @@ test("the shipped tree has one module per topology source file and no value-impo
   const console_ = captureConsole();
   try {
     await main();
-    expect(console_.messages).toEqual([`OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`]);
+    expect(console_.messages).toEqual([
+      `OK: import-cycle check — ${graph.size} modules, 0 value-import cycles`,
+    ]);
   } finally {
     console_.restore();
   }
@@ -55,7 +63,9 @@ test("main prints every planted cycle and exits 1", async () => {
 
 test("value-edge extraction keeps default bindings beside type-only braces", () => {
   expect(
-    valueImportSpecifiers('import Foo, { type A } from "./foo.js";\nimport { type B } from "./b.js";'),
+    valueImportSpecifiers(
+      'import Foo, { type A } from "./foo.js";\nimport { type B } from "./b.js";',
+    ),
   ).toEqual(["./foo.js"]);
 });
 

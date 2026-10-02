@@ -143,7 +143,10 @@ test("external ingress retry after inbox fault commits once despite a recorded r
 test("conversation correlation cannot select the physical default session", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  createSurfaceKeyStore(fixture.plane.catalog).claim("ws:unrelated-conversation", fixture.sessionId);
+  createSurfaceKeyStore(fixture.plane.catalog).claim(
+    "ws:unrelated-conversation",
+    fixture.sessionId,
+  );
   const result = await runEffect(
     fixture.gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
@@ -226,9 +229,7 @@ test("message observations carry the committed compiled policy rule identity", a
       matchedRuleIds: ["message.worker.actor"],
     });
     expect(
-      tree(fixture.plane, fixture.sessionId).some(
-        (action) => action.kind === "policy.decision",
-      ),
+      tree(fixture.plane, fixture.sessionId).some((action) => action.kind === "policy.decision"),
     ).toBe(true);
   } finally {
     unsubscribe();
@@ -427,7 +428,10 @@ test("an external reply to an awaited message admits with the correlated reply o
   if (correlated === null) throw new Error("missing correlatable message action");
   const messageId = correlated.messageId;
   const prepare = prepareMessage(fixture.plane, (id, parentId, childRole, runner) =>
-    messageMaterialization(() => fixture.plane.openKernel(id).currentPolicyGeneration(), testIds("mutation-materialize"))({
+    messageMaterialization(
+      () => fixture.plane.openKernel(id).currentPolicyGeneration(),
+      testIds("mutation-materialize"),
+    )({
       id,
       parentId,
       role: childRole,

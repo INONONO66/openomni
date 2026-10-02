@@ -8,7 +8,9 @@ const dist = join(import.meta.dir, "../dist");
 function required(path: string): string {
   const file = join(dist, path);
   if (!existsSync(file))
-    throw new Error(`Built desktop output is missing at ${file}; run bun run --cwd apps/desktop build first.`);
+    throw new Error(
+      `Built desktop output is missing at ${file}; run bun run --cwd apps/desktop build first.`,
+    );
   return readFileSync(file, "utf8");
 }
 

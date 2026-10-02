@@ -1,4 +1,4 @@
-import { Session, Kernel } from "@openomni/agent";
+import { Session, type Kernel } from "@openomni/agent";
 const closeSessions = Session.closeSessions;
 type SessionError = Kernel.SessionError;
 type SessionRuntime = Session.SessionRuntime;
@@ -14,6 +14,9 @@ export function shutdownSessions(runtime: SessionRuntime, recovery: Promise<void
       Effect.tryPromise({ try: () => recovery, catch: lifecycleFailure("sessions.recovery") }),
     ],
     { concurrency: 2, mode: "result" },
-  ).pipe(Effect.flatMap((results: readonly Result.Result<void, SessionError | AppLifecycleFailure>[]) =>
-    results.some(Result.isFailure) ? Effect.fail(results.map(Result.getFailure)) : Effect.void));
+  ).pipe(
+    Effect.flatMap((results: readonly Result.Result<void, SessionError | AppLifecycleFailure>[]) =>
+      results.some(Result.isFailure) ? Effect.fail(results.map(Result.getFailure)) : Effect.void,
+    ),
+  );
 }

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { anthropicModel as model, assistantMessage as buildAssistantMessage, fixedNow, sequentialIds, } from "../helpers/fixtures";
+import {
+  anthropicModel as model,
+  assistantMessage as buildAssistantMessage,
+  fixedNow,
+  sequentialIds,
+} from "../helpers/fixtures";
 import type { Message } from "@openomni/protocol";
 import type { Sink } from "../../../src/model/sink";
 import { Processor } from "../helpers/native";

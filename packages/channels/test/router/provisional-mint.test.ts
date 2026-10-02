@@ -44,9 +44,9 @@ describe("provisional contact mint", () => {
   test("redelivery resolves the same contact without a second mint", () => {
     putMintGrant();
     resolveIngressActor(ledger().stores, whatsappEvent("stranger-1"), 1);
-    expect(resolveIngressActor(ledger().stores, whatsappEvent("stranger-1"), 1).meta?.actor?.actorId).toBe(
-      "contact:whatsapp:guild:stranger-1",
-    );
+    expect(
+      resolveIngressActor(ledger().stores, whatsappEvent("stranger-1"), 1).meta?.actor?.actorId,
+    ).toBe("contact:whatsapp:guild:stranger-1");
     expect(ledger().stores.actors.countProvisionalMints("whatsapp", "guild", 0)).toBe(1);
   });
   test("no policy means no mint", () => {
@@ -59,12 +59,19 @@ describe("provisional contact mint", () => {
   test("window bound leaves additional senders without a canonical actor", () => {
     putMintGrant(1);
     resolveIngressActor(ledger().stores, whatsappEvent("stranger-1"), 1);
-    expect(resolveIngressActor(ledger().stores, whatsappEvent("stranger-2"), 1).meta?.actor?.actorId).toBeUndefined();
+    expect(
+      resolveIngressActor(ledger().stores, whatsappEvent("stranger-2"), 1).meta?.actor?.actorId,
+    ).toBeUndefined();
     expect(ledger().stores.actors.countProvisionalMints("whatsapp", "guild", 0)).toBe(1);
   });
   test("blacklisted channel cannot mint", () => {
     putMintGrant();
-    ledger().stores.blacklist.put({ id: "blocked", kind: "channel", value: "whatsapp", createdBy: "owner" });
+    ledger().stores.blacklist.put({
+      id: "blocked",
+      kind: "channel",
+      value: "whatsapp",
+      createdBy: "owner",
+    });
     resolveIngressActor(ledger().stores, whatsappEvent("stranger-1"), 1);
     expect(ledger().stores.actors.countProvisionalMints("whatsapp", "guild", 0)).toBe(0);
   });

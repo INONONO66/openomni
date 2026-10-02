@@ -3,9 +3,7 @@ const ObservationSink = Kernel.ObservationSink;
 type ObservationSink = Kernel.ObservationSink;
 const executorContext = Kernel.executorContext;
 const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
 const Interrupted = Kernel.Interrupted;
-type Interrupted = Kernel.Interrupted;
 type ExecutionError = Kernel.ExecutionError;
 const Llm = Model.Llm;
 type Llm = Model.Llm;
@@ -40,7 +38,9 @@ function textCapture(): { readonly sink: Sink; readonly text: () => string } {
     sink: {
       onMessage: (message) => {
         if (message.info.role === "assistant")
-          answer = message.parts.flatMap((part) => part.type === "text" ? [part.text] : []).join("");
+          answer = message.parts
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
+            .join("");
       },
       onToolCall: () => undefined,
       onToolResult: () => undefined,
@@ -49,53 +49,94 @@ function textCapture(): { readonly sink: Sink; readonly text: () => string } {
   };
 }
 
-function textOutcome(outcome: Model.Run.Outcome, text: string): Effect.Effect<{ readonly text: string }, ExecutionError> {
+function textOutcome(
+  outcome: Model.Run.Outcome,
+  text: string,
+): Effect.Effect<{ readonly text: string }, ExecutionError> {
   if (outcome.type === "stop") return Effect.succeed({ text });
   if (outcome.type === "error") return Effect.fail(outcome.error);
   if (outcome.type === "aborted") return Effect.fail(new Interrupted());
-  return Effect.fail(new AgentFailure({ operation: "completion", cause: "sub-model returned continue" }));
+  return Effect.fail(
+    new AgentFailure({ operation: "completion", cause: "sub-model returned continue" }),
+  );
 }
 
 /** The app composes the native attempt; only the tool adapter at the gateway runs it. */
-export function runResolvedText(call: ResolvedTextCall): Effect.Effect<string, ExecutionError, Llm | ObservationSink> {
+export function runResolvedText(
+  call: ResolvedTextCall,
+): Effect.Effect<string, ExecutionError, Llm | ObservationSink> {
   return Effect.gen(function* () {
     const capture = textCapture();
     const llm = yield* Llm;
     const events = yield* ObservationSink;
-    const resolved = yield* llm.resolveModel({ provider: call.model.provider, id: call.model.id, now: call.now })
-      .pipe(Effect.mapError((error) => new AgentFailure({ operation: "completion.resolve", cause: String(error) })));
+    const resolved = yield* llm
+      .resolveModel({ provider: call.model.provider, id: call.model.id, now: call.now })
+      .pipe(
+        Effect.mapError(
+          (error) => new AgentFailure({ operation: "completion.resolve", cause: String(error) }),
+        ),
+      );
     const input: RunInput = {
-      messages: call.messages, tools: [], toolChoice: "none", model: resolved,
-      auth: { type: "api", key: call.model.apiKey }, authProvider: call.model.provider,
+      messages: call.messages,
+      tools: [],
+      toolChoice: "none",
+      model: resolved,
+      auth: { type: "api", key: call.model.apiKey },
+      authProvider: call.model.provider,
       ...(call.system === undefined ? {} : { system: call.system }),
       ...(call.model.transport === undefined ? {} : { transport: call.model.transport }),
       ...(call.signal === undefined ? {} : { signal: call.signal }),
       ...(call.maxTokens === undefined ? {} : { maxTokens: call.maxTokens }),
       ...(call.providerOptions === undefined ? {} : { providerOptions: call.providerOptions }),
-      now: call.now, id: call.id,
-      trace: { traceId: traceIdFromUuid(call.id()), sessionId: call.sessionId, runId: call.id() }, events,
+      now: call.now,
+      id: call.id,
+      trace: { traceId: traceIdFromUuid(call.id()), sessionId: call.sessionId, runId: call.id() },
+      events,
     };
     const executor = yield* executorContext;
     const runAttempts = executor.runAttempts;
     if (runAttempts === undefined)
-      return yield* new AgentFailure({ operation: "completion", cause: "sub-model requires session attempt authority" });
+      return yield* new AgentFailure({
+        operation: "completion",
+        cause: "sub-model requires session attempt authority",
+      });
     const intent = { provider: resolved.providerID, model: resolved.id };
-    const result = yield* executor.run({ kind: "llm", op: "text", intent, effect: {} }, (parent) => runAttempts(parent, {
-      prepare: (attempt) => Effect.succeed({
-        request: { op: "text", intent: { attempt, ...intent }, effect: {} },
-        admit: () => call.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.void,
-        body: () => llm.run(input, capture.sink).pipe(
-          Effect.mapError((error): ExecutionError => error._tag === "LlmRunFailure" ? error : new AgentFailure({ operation: "completion.run", cause: String(error) })),
-          Effect.flatMap((outcome) => textOutcome(outcome, capture.text())),
-        ),
+    const result = yield* executor.run({ kind: "llm", op: "text", intent, effect: {} }, (parent) =>
+      runAttempts(parent, {
+        prepare: (attempt) =>
+          Effect.succeed({
+            request: { op: "text", intent: { attempt, ...intent }, effect: {} },
+            admit: () => (call.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.void),
+            body: () =>
+              llm.run(input, capture.sink).pipe(
+                Effect.mapError(
+                  (error): ExecutionError =>
+                    error._tag === "LlmRunFailure"
+                      ? error
+                      : new AgentFailure({ operation: "completion.run", cause: String(error) }),
+                ),
+                Effect.flatMap((outcome) => textOutcome(outcome, capture.text())),
+              ),
+          }),
       }),
-    }));
+    );
     if (result.terminal === "interrupted") return yield* new Interrupted();
     if (result.terminal !== "executed")
-      return yield* new AgentFailure({ operation: "completion", cause: `sub-model refused: ${result.reason}` });
+      return yield* new AgentFailure({
+        operation: "completion",
+        cause: `sub-model refused: ${result.reason}`,
+      });
     const value = result.value;
-    if (value === null || typeof value !== "object" || Array.isArray(value) || typeof value.text !== "string")
-      return yield* new AgentFailure({ operation: "completion", cause: "invalid sub-model result" });
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      typeof value.text !== "string"
+    )
+      return yield* new AgentFailure({
+        operation: "completion",
+        cause: "invalid sub-model result",
+      });
     return value.text;
   });
 }
@@ -112,10 +153,27 @@ export function createCompletionPort(
       model: target,
       now: sources.now,
       id: sources.id,
-      messages: [{
-        info: { id: messageId, sessionID: sessionId, role: "user", time: { created: sources.now() }, agent: "completion", model: { providerID: target.provider, modelID: target.id } },
-        parts: [{ id: sources.id(), sessionID: sessionId, messageID: messageId, type: "text", text: call.prompt }],
-      }],
+      messages: [
+        {
+          info: {
+            id: messageId,
+            sessionID: sessionId,
+            role: "user",
+            time: { created: sources.now() },
+            agent: "completion",
+            model: { providerID: target.provider, modelID: target.id },
+          },
+          parts: [
+            {
+              id: sources.id(),
+              sessionID: sessionId,
+              messageID: messageId,
+              type: "text",
+              text: call.prompt,
+            },
+          ],
+        },
+      ],
       sessionId,
       ...(call.system === undefined ? {} : { system: call.system }),
     });

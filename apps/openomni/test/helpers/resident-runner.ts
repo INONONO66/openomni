@@ -2,7 +2,6 @@ import { testToolPorts } from "./tool-ports";
 import { Context, Effect, Layer, Scope } from "effect";
 import { Session, Model } from "@openomni/agent";
 const Llm = Model.Llm;
-type Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
@@ -58,12 +57,20 @@ export function residentRunner(
   });
   const fixture = options.sessionRuntime;
   const liveLlm = Context.get(runSyncEffect(Scope.provide(Layer.build(LlmLive), scope.scope)), Llm);
-  const context = runSyncEffect(Scope.provide(generationServices({
-    clock: fixture?.clock, entropy: fixture?.entropy,
-    observations: fixture?.observations === undefined ? Bus : observationService(fixture.observations),
-    definitions: resident.definitions, llm: { ...liveLlm, ...options.llm },
-    plane,
-  }), scope.scope));
+  const context = runSyncEffect(
+    Scope.provide(
+      generationServices({
+        clock: fixture?.clock,
+        entropy: fixture?.entropy,
+        observations:
+          fixture?.observations === undefined ? Bus : observationService(fixture.observations),
+        definitions: resident.definitions,
+        llm: { ...liveLlm, ...options.llm },
+        plane,
+      }),
+      scope.scope,
+    ),
+  );
   cleanups.push(async () => {
     await runEffect(closeSessions(runtime).pipe(Effect.provide(context)));
     await scope.close();
@@ -71,13 +78,15 @@ export function residentRunner(
   });
   const resolved = resolvedRuntimeFor(runtime, context);
   const drain = (sessionId: string) =>
-    scope.run(drainSession({
-      plane,
-      sessionId,
-      runner: resident.runnerFor(plane.openKernel(sessionId).row(sessionId)),
-      runtime: resolved,
-      scope: scope.scope,
-    }).pipe(Effect.provide(context)));
+    scope.run(
+      drainSession({
+        plane,
+        sessionId,
+        runner: resident.runnerFor(plane.openKernel(sessionId).row(sessionId)),
+        runtime: resolved,
+        scope: scope.scope,
+      }).pipe(Effect.provide(context)),
+    );
   return {
     ...resident,
     services: context,
@@ -86,20 +95,29 @@ export function residentRunner(
     drain,
     async prompt(sessionId: string, content: string) {
       const exists = plane.listSessions().some((row) => row.id === sessionId);
-      await runEffect(localInbox(plane, "resident-runner", fixture?.clock ?? Date.now)({
-        id: crypto.randomUUID(),
-        sessionId,
-        kind: "prompt",
-        content,
-        // Owner prompts enter with the perimeter's recorded full-access treatment (#1245:
-        // unknown provenance is evidence-only, so a fixture prompt must declare its authority).
-        origin: { encodingVersion: 1, value: { kind: "external", inboundTreatment: "full_access" } },
-        createdAt: (fixture?.clock ?? Date.now)(),
-        parentActionId: null,
-        ...(exists
-          ? {}
-          : { createSession: resident.materialize(sessionId, null, "resident", "resident") }),
-      }));
+      await runEffect(
+        localInbox(
+          plane,
+          "resident-runner",
+          fixture?.clock ?? Date.now,
+        )({
+          id: crypto.randomUUID(),
+          sessionId,
+          kind: "prompt",
+          content,
+          // Owner prompts enter with the perimeter's recorded full-access treatment (#1245:
+          // unknown provenance is evidence-only, so a fixture prompt must declare its authority).
+          origin: {
+            encodingVersion: 1,
+            value: { kind: "external", inboundTreatment: "full_access" },
+          },
+          createdAt: (fixture?.clock ?? Date.now)(),
+          parentActionId: null,
+          ...(exists
+            ? {}
+            : { createSession: resident.materialize(sessionId, null, "resident", "resident") }),
+        }),
+      );
       const result = await drain(sessionId);
       if (result === undefined) throw new Error("resident turn returned no result");
       return result;

@@ -10,21 +10,25 @@ export function bridgeHost(
   options: { callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> } = {},
 ) {
   const callTool = options.callTool;
-  return acquireEffect(createMachineHost({
-    socketPath,
-    id: testIds("bridge-host"),
-    enrollment: () => ({
-      name: "workstation",
-      machineId: "m-1",
-      allowedCapabilities: ["kernel.py"],
-      enrolledAt: 1000,
+  return acquireEffect(
+    createMachineHost({
+      socketPath,
+      id: testIds("bridge-host"),
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["kernel.py"],
+        enrolledAt: 1000,
+      }),
+      events: { publish: () => undefined },
+      now: () => 5000,
+      ...(callTool === undefined
+        ? {}
+        : {
+            callTool: (call: Machine.ToolCall) => Effect.promise(() => callTool(call)),
+          }),
     }),
-    events: { publish: () => undefined },
-    now: () => 5000,
-    ...(callTool === undefined ? {} : {
-      callTool: (call: Machine.ToolCall) => Effect.promise(() => callTool(call)),
-    }),
-  }));
+  );
 }
 
 export async function bridgeProbe(socketPath: string) {
@@ -49,5 +53,12 @@ export function bridgeOffer(): Machine.Offer {
 }
 
 export function bridgeDaemon(socketPath: string) {
-  return acquireEffect(attachMachineDaemon({ id: testIds("bridge-daemon"), runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-cell") })).runner, socketPath, offer: bridgeOffer() }));
+  return acquireEffect(
+    attachMachineDaemon({
+      id: testIds("bridge-daemon"),
+      runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-cell") })).runner,
+      socketPath,
+      offer: bridgeOffer(),
+    }),
+  );
 }

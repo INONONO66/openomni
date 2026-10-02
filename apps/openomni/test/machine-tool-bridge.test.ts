@@ -63,11 +63,13 @@ describe("code-mode tool bridge", () => {
   test("a cell reaches host tools repeatedly within one eval", async () => {
     await withBridge(async ({ host, calls }) => {
       // The whole point of code mode: two tool calls, one round trip.
-      const result = await runEffect(host.get("m-1").runCode({
-        cellId: "batch",
-        code: "first = tool.add(a=1, b=2)\nsecond = tool.add(a=first, b=10)\nsecond",
-        timeoutMs: 15_000,
-      }));
+      const result = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "batch",
+          code: "first = tool.add(a=1, b=2)\nsecond = tool.add(a=first, b=10)\nsecond",
+          timeoutMs: 15_000,
+        }),
+      );
 
       expect(result).toMatchObject({ status: "completed", value: "13" });
       expect(calls.map((call) => call.name)).toEqual(["add", "add"]);
@@ -80,16 +82,18 @@ describe("code-mode tool bridge", () => {
     let arrivals = 0;
     await withBridge(
       async ({ host }) => {
-        const result = await runEffect(host.get("m-1").runCode({
-          cellId: "parallel-routing",
-          code: [
-            "parallel([",
-            "    lambda: tool.echo(value='left'),",
-            "    lambda: tool.echo(value='right'),",
-            "])",
-          ].join("\n"),
-          timeoutMs: 15_000,
-        }));
+        const result = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "parallel-routing",
+            code: [
+              "parallel([",
+              "    lambda: tool.echo(value='left'),",
+              "    lambda: tool.echo(value='right'),",
+              "])",
+            ].join("\n"),
+            timeoutMs: 15_000,
+          }),
+        );
 
         expect(result).toMatchObject({
           status: "completed",
@@ -112,11 +116,13 @@ describe("code-mode tool bridge", () => {
   test("completion calls the cell-only tool with one prompt and returns its value unchanged", async () => {
     await withBridge(
       async ({ host, calls }) => {
-        const result = await runEffect(host.get("m-1").runCode({
-          cellId: "completion-sugar",
-          code: "completion('summarize this')",
-          timeoutMs: 15_000,
-        }));
+        const result = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "completion-sugar",
+            code: "completion('summarize this')",
+            timeoutMs: 15_000,
+          }),
+        );
 
         expect(result).toMatchObject({ status: "completed", value: "'summary'" });
         expect(calls).toEqual([
@@ -134,11 +140,13 @@ describe("code-mode tool bridge", () => {
   test("parallel batches completion calls and returns results in input order", async () => {
     await withBridge(
       async ({ host, calls }) => {
-        const result = await runEffect(host.get("m-1").runCode({
-          cellId: "completion-parallel",
-          code: "parallel([lambda: completion('first'), lambda: completion('second')])",
-          timeoutMs: 15_000,
-        }));
+        const result = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "completion-parallel",
+            code: "parallel([lambda: completion('first'), lambda: completion('second')])",
+            timeoutMs: 15_000,
+          }),
+        );
 
         expect(result).toMatchObject({
           status: "completed",
@@ -156,15 +164,17 @@ describe("code-mode tool bridge", () => {
     const completed = deferred<void>();
     await withBridge(
       async ({ host, calls }) => {
-        const result = await runEffect(host.get("m-1").runCode({
-          cellId: "parallel-error",
-          code: [
-            "def fail():",
-            "    raise ValueError('parallel boom')",
-            "parallel([fail, lambda: tool.complete()])",
-          ].join("\n"),
-          timeoutMs: 15_000,
-        }));
+        const result = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "parallel-error",
+            code: [
+              "def fail():",
+              "    raise ValueError('parallel boom')",
+              "parallel([fail, lambda: tool.complete()])",
+            ].join("\n"),
+            timeoutMs: 15_000,
+          }),
+        );
 
         expect(result.status).toBe("raised");
         expect(result.status === "raised" && result.error).toContain("ValueError: parallel boom");
@@ -180,18 +190,20 @@ describe("code-mode tool bridge", () => {
 
   test("a tool the host refuses raises a catchable error and does not run", async () => {
     await withBridge(async ({ host, calls }) => {
-      const result = await runEffect(host.get("m-1").runCode({
-        cellId: "refused",
-        code: [
-          "try:",
-          "    tool.not_offerable(x=1)",
-          "    outcome = 'tool ran'",
-          "except ToolError as error:",
-          "    outcome = 'refused: ' + str(error)",
-          "outcome",
-        ].join("\n"),
-        timeoutMs: 15_000,
-      }));
+      const result = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "refused",
+          code: [
+            "try:",
+            "    tool.not_offerable(x=1)",
+            "    outcome = 'tool ran'",
+            "except ToolError as error:",
+            "    outcome = 'refused: ' + str(error)",
+            "outcome",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        }),
+      );
 
       expect(result).toMatchObject({
         status: "completed",
@@ -204,11 +216,13 @@ describe("code-mode tool bridge", () => {
 
   test("a dotted tool name reaches the host under its canonical spelling", async () => {
     await withBridge(async ({ host, calls }) => {
-      await runEffect(host.get("m-1").runCode({
-        cellId: "dotted",
-        code: "try:\n    tool['screen.capture'](region='full')\nexcept ToolError:\n    pass",
-        timeoutMs: 15_000,
-      }));
+      await runEffect(
+        host.get("m-1").runCode({
+          cellId: "dotted",
+          code: "try:\n    tool['screen.capture'](region='full')\nexcept ToolError:\n    pass",
+          timeoutMs: 15_000,
+        }),
+      );
 
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({
@@ -221,11 +235,13 @@ describe("code-mode tool bridge", () => {
   test("a tool that fails on the host surfaces the failure inside the cell", async () => {
     await withBridge(
       async ({ host }) => {
-        const result = await runEffect(host.get("m-1").runCode({
-          cellId: "failing",
-          code: "tool.add(a=1, b=2)",
-          timeoutMs: 15_000,
-        }));
+        const result = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "failing",
+            code: "tool.add(a=1, b=2)",
+            timeoutMs: 15_000,
+          }),
+        );
 
         expect(result).toMatchObject({ status: "raised" });
         expect(result.status === "raised" && result.error).toContain("disk on fire");
@@ -237,20 +253,24 @@ describe("code-mode tool bridge", () => {
   test("a cell blocked on a slow tool still honours its deadline and recovers", async () => {
     await withBridge(
       async ({ host }) => {
-        const blocked = await runEffect(host.get("m-1").runCode({
-          cellId: "blocked",
-          code: "tool.add(a=1, b=2)",
-          timeoutMs: 800,
-        }));
+        const blocked = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "blocked",
+            code: "tool.add(a=1, b=2)",
+            timeoutMs: 800,
+          }),
+        );
         expect(blocked).toMatchObject({ status: "timed_out", cellId: "blocked" });
 
         // The interpreter was replaced while it sat inside a tool call; the
         // next cell must still get a working one.
-        const next = await runEffect(host.get("m-1").runCode({
-          cellId: "after",
-          code: "'alive'",
-          timeoutMs: 15_000,
-        }));
+        const next = await runEffect(
+          host.get("m-1").runCode({
+            cellId: "after",
+            code: "'alive'",
+            timeoutMs: 15_000,
+          }),
+        );
         expect(next).toMatchObject({ status: "completed", value: "'alive'" });
       },
       () => new Promise<Machine.ToolCallResult>(() => undefined),
@@ -269,35 +289,44 @@ describe("code-mode tool bridge", () => {
       releaseFirst = resolve;
     });
     let runCellRequests = 0;
-    const daemon = await acquireEffect(connectIpcClient(path, {
-      idSource: testIds("ipc"),
-      onRequest: (method, params, respond) => Effect.promise(async () => {
-        if (method !== Machine.WireMethod.RunCode) return;
-        runCellRequests += 1;
-        const request = Machine.CellRequest.parse(params);
-        announceFirst();
-        await firstBlocked;
-        respond({
-          status: "completed",
-          cellId: request.cellId,
-          output: { stdout: "", stderr: "" },
-        });
+    const daemon = await acquireEffect(
+      connectIpcClient(path, {
+        idSource: testIds("ipc"),
+        onRequest: (method, params, respond) =>
+          Effect.promise(async () => {
+            if (method !== Machine.WireMethod.RunCode) return;
+            runCellRequests += 1;
+            const request = Machine.CellRequest.parse(params);
+            announceFirst();
+            await firstBlocked;
+            respond({
+              status: "completed",
+              cellId: request.cellId,
+              output: { stdout: "", stderr: "" },
+            });
+          }),
       }),
-    }));
+    );
     try {
       await attachAsBridgeMachine(daemon);
-      const first = runEffect(host.get("m-1").runCode({
-        cellId: "duplicate",
-        code: "'first'",
-        timeoutMs: 15_000,
-      }));
+      const first = runEffect(
+        host.get("m-1").runCode({
+          cellId: "duplicate",
+          code: "'first'",
+          timeoutMs: 15_000,
+        }),
+      );
       await firstReceived;
 
-      const duplicateError = await runEffect(Effect.flip(host.get("m-1").runCode({
-        cellId: "duplicate",
-        code: "'second'",
-        timeoutMs: 15_000,
-      })));
+      const duplicateError = await runEffect(
+        Effect.flip(
+          host.get("m-1").runCode({
+            cellId: "duplicate",
+            code: "'second'",
+            timeoutMs: 15_000,
+          }),
+        ),
+      );
       expect(duplicateError).toBeInstanceOf(MachineCellError);
       if (!(duplicateError instanceof MachineCellError)) {
         throw new Error("expected a typed duplicate-cell refusal");
@@ -325,12 +354,14 @@ describe("code-mode tool bridge", () => {
     const intruder = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc") }));
     try {
       await expect(
-        runEffect(typedCall(
-          intruder,
-          Machine.WireMethod.CallTool,
-          { cellId: "c", name: "add", arguments: {} },
-          5000,
-        )),
+        runEffect(
+          typedCall(
+            intruder,
+            Machine.WireMethod.CallTool,
+            { cellId: "c", name: "add", arguments: {} },
+            5000,
+          ),
+        ),
       ).rejects.toThrow("no cell in flight: c");
       expect(reached()).toBe(false);
     } finally {
@@ -348,12 +379,14 @@ describe("code-mode tool bridge", () => {
       // Attached, but this host never dispatched a cell called "ghost".
       // (See the sibling test for a cellId that WAS dispatched and settled.)
       await expect(
-        runEffect(typedCall(
-          client,
-          Machine.WireMethod.CallTool,
-          { cellId: "ghost", name: "add", arguments: {} },
-          5000,
-        )),
+        runEffect(
+          typedCall(
+            client,
+            Machine.WireMethod.CallTool,
+            { cellId: "ghost", name: "add", arguments: {} },
+            5000,
+          ),
+        ),
       ).rejects.toThrow("no cell in flight: ghost");
       expect(reached()).toBe(false);
     } finally {
@@ -368,37 +401,44 @@ describe("code-mode tool bridge", () => {
     // A stand-in daemon: it answers RunCell itself, so the replay below comes
     // from the very connection the cell ran on — the only way to prove the
     // cell is retired rather than merely unknown to some other connection.
-    const daemon = await acquireEffect(connectIpcClient(path, {
-      idSource: testIds("ipc"),
-      onRequest: (method, _params, respond) => Effect.sync(() => {
-        if (method === Machine.WireMethod.RunCode) {
-          respond({
-            status: "completed",
-            cellId: "spent",
-            output: { stdout: "", stderr: "" },
-          });
-        }
+    const daemon = await acquireEffect(
+      connectIpcClient(path, {
+        idSource: testIds("ipc"),
+        onRequest: (method, _params, respond) =>
+          Effect.sync(() => {
+            if (method === Machine.WireMethod.RunCode) {
+              respond({
+                status: "completed",
+                cellId: "spent",
+                output: { stdout: "", stderr: "" },
+              });
+            }
+          }),
       }),
-    }));
+    );
     try {
       await attachAsBridgeMachine(daemon);
-      const cell = await runEffect(host.get("m-1").runCode({
-        cellId: "spent",
-        code: "'done'",
-        timeoutMs: 15_000,
-      }));
+      const cell = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "spent",
+          code: "'done'",
+          timeoutMs: 15_000,
+        }),
+      );
       expect(cell).toMatchObject({ status: "completed" });
 
       // Same connection, same cellId — but the cell is over, so its name
       // buys nothing. This is what a background thread leaking a call after
       // its cell returned looks like from the host's side.
       await expect(
-        runEffect(typedCall(
-          daemon,
-          Machine.WireMethod.CallTool,
-          { cellId: "spent", name: "add", arguments: {} },
-          5000,
-        )),
+        runEffect(
+          typedCall(
+            daemon,
+            Machine.WireMethod.CallTool,
+            { cellId: "spent", name: "add", arguments: {} },
+            5000,
+          ),
+        ),
       ).rejects.toThrow("no cell in flight: spent");
       expect(reached()).toBe(false);
     } finally {
@@ -433,35 +473,41 @@ describe("code-mode tool bridge", () => {
       },
     });
     const offer = bridgeOffer();
-    const first = await acquireEffect(attachMachineDaemon({
-      id: testIds("bridge-first"),
-      runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-first-cell") })).runner,
-      socketPath: path,
-      offer,
-    }));
+    const first = await acquireEffect(
+      attachMachineDaemon({
+        id: testIds("bridge-first"),
+        runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-first-cell") })).runner,
+        socketPath: path,
+        offer,
+      }),
+    );
     let second: Effect.Success<ReturnType<typeof attachMachineDaemon>> | undefined;
     try {
-      const cell = runEffect(host.get("m-1").runCode({
-        cellId: "live",
-        code: [
-          "a = tool.t()",
-          "try:",
-          "    b = tool.t()",
-          "except ToolError as error:",
-          "    b = 'lost'",
-          "(a, b)",
-        ].join("\n"),
-        timeoutMs: 15_000,
-      }));
+      const cell = runEffect(
+        host.get("m-1").runCode({
+          cellId: "live",
+          code: [
+            "a = tool.t()",
+            "try:",
+            "    b = tool.t()",
+            "except ToolError as error:",
+            "    b = 'lost'",
+            "(a, b)",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        }),
+      );
 
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
-      second = await acquireEffect(attachMachineDaemon({
-        id: testIds("bridge-second"),
-        runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-second-cell") })).runner,
-        socketPath: path,
-        offer,
-      }));
+      second = await acquireEffect(
+        attachMachineDaemon({
+          id: testIds("bridge-second"),
+          runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-second-cell") })).runner,
+          socketPath: path,
+          offer,
+        }),
+      );
       release();
 
       // Being superseded revokes tools, but the cell still finishes on its
@@ -480,32 +526,36 @@ describe("code-mode tool bridge", () => {
       // The reviewer's exploit: cell one leaves a thread behind, cell two
       // wakes it, and the call — if allowed — would run under cell two's
       // identity, catalog, and budget. join() makes the ordering exact.
-      const armed = await runEffect(host.get("m-1").runCode({
-        cellId: "cell-one",
-        code: [
-          "import threading",
-          "evt = threading.Event()",
-          "box = []",
-          "def late():",
-          "    evt.wait()",
-          "    try:",
-          "        tool.add(a=1, b=2)",
-          "        box.append('ran')",
-          "    except ToolError as error:",
-          "        box.append('refused: ' + str(error))",
-          "leak = threading.Thread(target=late)",
-          "leak.start()",
-          "'armed'",
-        ].join("\n"),
-        timeoutMs: 15_000,
-      }));
+      const armed = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "cell-one",
+          code: [
+            "import threading",
+            "evt = threading.Event()",
+            "box = []",
+            "def late():",
+            "    evt.wait()",
+            "    try:",
+            "        tool.add(a=1, b=2)",
+            "        box.append('ran')",
+            "    except ToolError as error:",
+            "        box.append('refused: ' + str(error))",
+            "leak = threading.Thread(target=late)",
+            "leak.start()",
+            "'armed'",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        }),
+      );
       expect(armed).toMatchObject({ status: "completed", value: "'armed'" });
 
-      const outcome = await runEffect(host.get("m-1").runCode({
-        cellId: "cell-two",
-        code: "evt.set()\nleak.join()\nbox[0]",
-        timeoutMs: 15_000,
-      }));
+      const outcome = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "cell-two",
+          code: "evt.set()\nleak.join()\nbox[0]",
+          timeoutMs: 15_000,
+        }),
+      );
       expect(outcome.status).toBe("completed");
       expect(outcome.status === "completed" && outcome.value).toContain("tool call refused");
       expect(calls).toEqual([]);
@@ -517,19 +567,21 @@ describe("code-mode tool bridge", () => {
       // Cell code can write raw frames to the driver's real stdout. A frame
       // stamped with a different cellId must never become a host call; the
       // legit call after it proves the kernel kept serving this cell.
-      const result = await runEffect(host.get("m-1").runCode({
-        cellId: "honest",
-        code: [
-          "import json, sys",
-          "sys.__stdout__.write(json.dumps({",
-          "    'kind': 'tool_call', 'callId': 'forged', 'cellId': 'someone-else',",
-          "    'name': 'add', 'arguments': {'a': 1, 'b': 2},",
-          "}) + '\\n')",
-          "sys.__stdout__.flush()",
-          "tool.add(a=2, b=3)",
-        ].join("\n"),
-        timeoutMs: 15_000,
-      }));
+      const result = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "honest",
+          code: [
+            "import json, sys",
+            "sys.__stdout__.write(json.dumps({",
+            "    'kind': 'tool_call', 'callId': 'forged', 'cellId': 'someone-else',",
+            "    'name': 'add', 'arguments': {'a': 1, 'b': 2},",
+            "}) + '\\n')",
+            "sys.__stdout__.flush()",
+            "tool.add(a=2, b=3)",
+          ].join("\n"),
+          timeoutMs: 15_000,
+        }),
+      );
 
       expect(result).toMatchObject({ status: "completed", value: "5" });
       expect(calls.map((call) => call.name)).toEqual(["add"]);
@@ -539,37 +591,43 @@ describe("code-mode tool bridge", () => {
 
   test("each tenant gets its own interpreter: state persists within, never across", async () => {
     await withBridge(async ({ host }) => {
-      const set = await runEffect(host.get("m-1").runCode({
-        cellId: "a-1",
-        code: "x = 41\n'set'",
-        timeoutMs: 15_000,
-        tenant: "session-a",
-      }));
+      const set = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "a-1",
+          code: "x = 41\n'set'",
+          timeoutMs: 15_000,
+          tenant: "session-a",
+        }),
+      );
       expect(set).toMatchObject({ status: "completed" });
 
-      const sameTenant = await runEffect(host.get("m-1").runCode({
-        cellId: "a-2",
-        code: "x + 1",
-        timeoutMs: 15_000,
-        tenant: "session-a",
-      }));
+      const sameTenant = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "a-2",
+          code: "x + 1",
+          timeoutMs: 15_000,
+          tenant: "session-a",
+        }),
+      );
       expect(sameTenant).toMatchObject({ status: "completed", value: "42" });
 
-      const otherTenant = await runEffect(host.get("m-1").runCode({
-        cellId: "b-1",
-        code: "x",
-        timeoutMs: 15_000,
-        tenant: "session-b",
-      }));
+      const otherTenant = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "b-1",
+          code: "x",
+          timeoutMs: 15_000,
+          tenant: "session-b",
+        }),
+      );
       expect(otherTenant.status).toBe("raised");
       expect(otherTenant.status === "raised" && otherTenant.error).toContain("NameError");
 
       // Back-compat: a tenantless request reads as the "default" tenant and
       // shares one interpreter with other tenantless requests.
       await runEffect(host.get("m-1").runCode({ cellId: "d-1", code: "y = 7", timeoutMs: 15_000 }));
-      const defaulted = await runEffect(host
-        .get("m-1")
-        .runCode({ cellId: "d-2", code: "y", timeoutMs: 15_000 }));
+      const defaulted = await runEffect(
+        host.get("m-1").runCode({ cellId: "d-2", code: "y", timeoutMs: 15_000 }),
+      );
       expect(defaulted).toMatchObject({ status: "completed", value: "7" });
     });
   });
@@ -579,11 +637,13 @@ describe("code-mode tool bridge", () => {
     const host = await bridgeHost(path);
     const daemon = await bridgeDaemon(path);
     try {
-      const result = await runEffect(host.get("m-1").runCode({
-        cellId: "no-tools",
-        code: "tool.add(a=1, b=2)",
-        timeoutMs: 15_000,
-      }));
+      const result = await runEffect(
+        host.get("m-1").runCode({
+          cellId: "no-tools",
+          code: "tool.add(a=1, b=2)",
+          timeoutMs: 15_000,
+        }),
+      );
 
       expect(result).toMatchObject({ status: "raised" });
       expect(result.status === "raised" && result.error).toContain("this host exposes no tools");

@@ -1,5 +1,11 @@
 import { sessionTree } from "./helpers/session-tree";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -120,7 +126,12 @@ function commissionedChild(runtime: SessionRuntime) {
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
     yield* openSession(runtime, { id: "parent", role: "resident", runner: parentRunner });
     appendCommission();
-    const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "worker", runner: childRunner });
+    const child = yield* openSession(runtime, {
+      id: "child",
+      parentId: "parent",
+      role: "worker",
+      runner: childRunner,
+    });
     return yield* child.prompt("work", origin);
   });
 }
@@ -133,7 +144,12 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
         seedPolicy();
         yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
         yield* openSession(runtime, { id: "parent", role: "resident", runner: parentRunner });
-        const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "worker", runner: childRunner });
+        const child = yield* openSession(runtime, {
+          id: "child",
+          parentId: "parent",
+          role: "worker",
+          runner: childRunner,
+        });
         const kernel = isolatedLedger().kernel;
         const before = sessionTree(kernel, "parent");
         expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({
@@ -250,15 +266,17 @@ test("a destination receipt for different bytes is refused and the obligation st
   isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        const prompted = commissionedChild(dispatchRuntime(({
-            message,
-          }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
-            receiveOutbound({ ...message, content: "tampered answer" }, 100).pipe(
-              Effect.map(
-                (received: Effect.Success<ReturnType<typeof receiveOutbound>>) => received.receipt,
+        const prompted = commissionedChild(
+          dispatchRuntime(
+            ({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+              receiveOutbound({ ...message, content: "tampered answer" }, 100).pipe(
+                Effect.map(
+                  (received: Effect.Success<ReturnType<typeof receiveOutbound>>) =>
+                    received.receipt,
+                ),
               ),
-            ),
-        ));
+          ),
+        );
         expect(yield* failure(prompted)).toBeInstanceOf(Error);
         const kernel = isolatedLedger().kernel;
         expect(kernel.outboundRows("child")).toMatchObject([{ state: "pending" }]);
@@ -277,23 +295,24 @@ test("a fence stolen during dispatch surfaces the ack refusal and never marks de
   isolated(
     Effect.scoped(
       Effect.gen(function* () {
-        const prompted = commissionedChild(dispatchRuntime(({
-            message,
-          }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
-            Effect.gen(function* () {
-              // W5.2: the lease-TTL plane is gone; a foreign adoption of a
-              // strictly newer fence is the steal.
-              const kernel = isolatedLedger().kernel;
-              yield* kernel
-                .adoptFence({
-                  sessionId: message.sourceSessionId,
-                  owner: "other-runtime",
-                  fence: kernel.row(message.sourceSessionId).fence + 1,
-                })
-                .pipe(Effect.orDie);
-              return (yield* receiveOutbound(message, 100)).receipt;
-            }),
-        ));
+        const prompted = commissionedChild(
+          dispatchRuntime(
+            ({ message }: Parameters<NonNullable<SessionRuntime["dispatchOutbound"]>>[0]) =>
+              Effect.gen(function* () {
+                // W5.2: the lease-TTL plane is gone; a foreign adoption of a
+                // strictly newer fence is the steal.
+                const kernel = isolatedLedger().kernel;
+                yield* kernel
+                  .adoptFence({
+                    sessionId: message.sourceSessionId,
+                    owner: "other-runtime",
+                    fence: kernel.row(message.sourceSessionId).fence + 1,
+                  })
+                  .pipe(Effect.orDie);
+                return (yield* receiveOutbound(message, 100)).receipt;
+              }),
+          ),
+        );
         const exit = yield* Effect.exit(prompted);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isSuccess(exit)) throw new Error("expected lost-fence failures");

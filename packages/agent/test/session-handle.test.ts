@@ -1,6 +1,11 @@
 import { testBus } from "./helpers/bus";
 import { sessionTree } from "./helpers/session-tree";
-import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import type { Inbox, PolicyRow } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
@@ -11,13 +16,28 @@ import { openRequest } from "./helpers/open-request";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/kernel/gate/decide";
-import { closeSessions, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session/run";
+import {
+  closeSessions,
+  type SessionCreateOptions,
+  type SessionHandle,
+  type SessionRunner,
+  type SessionRunnerInput,
+} from "../src/session/run";
 import { session } from "../src/testing/registry";
 import { AgentFailure, type LedgerError } from "../src/store/errors";
 import { openCatalogStore } from "../src/store/catalog";
 import { openSessionStore } from "../src/store/session-file";
 import * as SessionHandleStore from "../src/store/fence";
-import { type BusEvent, type LedgerAction, L0Observation, PlainValueSchema, type ObservationSink, type SessionGeneration, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
+import {
+  type BusEvent,
+  type LedgerAction,
+  L0Observation,
+  PlainValueSchema,
+  type ObservationSink,
+  type SessionGeneration,
+  type SessionTransition,
+  type SessionTurn,
+} from "@openomni/protocol";
 import { CommitFailed } from "../src/kernel/failure";
 import { GenerationOwnership } from "../src/kernel/ports";
 import { GenerationRawSlots } from "../src/session/run";
@@ -1637,9 +1657,7 @@ describe("durable session handle", () => {
         const successor = yield* declare(options);
         expect(successor).not.toBe(first);
 
-        expect(
-          yield* Effect.flip(first.restoreContext("missing-compaction")),
-        ).toMatchObject({
+        expect(yield* Effect.flip(first.restoreContext("missing-compaction"))).toMatchObject({
           _tag: "ContextRestoreError",
           reason: "unknown_compaction",
         });
@@ -1741,106 +1759,110 @@ describe("durable session handle", () => {
       }),
     ));
 
-  test.each(["result", "error", "interrupted"] as const)(
-    "child %s terminal offers the original parent letter to the atomic commit port",
-    (kind: "interrupted" | "error" | "result") =>
-      testProgram(
-        Effect.gen(function* () {
-          const parent = yield* declare(
-            residentOptions("request-parent", () =>
-              Effect.sync(() => {
-                return { kind: "result", text: "parent" };
-              }),
-            ),
-          );
-          // The parent's original letter, appended under its live activation's authority.
-          const parentRow = kernel().row(parent.id);
-          if (parentRow.fenceOwner === null) throw new Error("parent activation owns no fence");
-          yield* kernel().commit({
-            sessionId: parent.id,
-            owner: parentRow.fenceOwner,
-            fence: parentRow.fence,
-            now,
-            expectedRevision: parentRow.revision,
-            state: parentRow.state,
-            actions: [
-              {
-                id: "original-send",
-                sessionId: parent.id,
-                parentId: tree(parent.id).at(-1)?.id ?? null,
-                kind: "message",
-                intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
-                effect: { encodingVersion: 1, value: { phase: "pending" } },
-                irreversible: true,
-                ts: now,
-              },
-            ],
-          });
-          let commits = 0;
-          const workerRuntime = track({
-            ...runtime,
-            dispatchOutbound: ({
-              message,
-            }: Parameters<NonNullable<SessionFixture["dispatchOutbound"]>>[0]) =>
-              Effect.gen(function* () {
-                commits += 1;
-                expect(
-                  tree(message.sourceSessionId).some(
-                    (action) => SessionHandleStore.turnTerminal(action) !== undefined,
-                  ),
-                ).toBe(true);
-                expect(kernel().outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
-                expect(inboxRows(parent.id)).toEqual([]);
-                expect(message).toMatchObject({
-                  requestId: "original-send",
-                  replyTo: "original-binding",
-                  sourceSessionId: "reply-child",
-                  terminal: kind === "result" ? "completed" : kind,
-                });
-                return (yield* commitInbox({
-                  id: message.messageId,
-                  sessionId: message.destinationSessionId,
-                  kind: "prompt",
-                  content: message.content,
-                  createdAt: now,
-                  parentActionId: tree(message.destinationSessionId).at(-1)?.id ?? null,
-                  origin: { encodingVersion: 1, value: PlainValueSchema.parse(message) },
-                })).receipt;
-              }),
-          });
-          const worker = yield* declare(
-            {
-              id: "reply-child",
-              parentId: parent.id,
-              role: "worker",
-              tools: [],
-              system,
-              runner: () =>
-                Effect.sync(() => {
-                  return { kind, text: "terminal-text" };
-                }),
-            },
-            workerRuntime,
-          );
-          yield* awaitSignal(
-            worker.prompt("work", {
-              encodingVersion: 1,
-              value: {
-                kind: "message",
-                messageId: "request",
-                senderSessionId: parent.id,
-                sourceActionId: "original-send",
-                replyTo: "original-binding",
-                deadline: now + 1000,
-              },
+  test.each([
+    "result",
+    "error",
+    "interrupted",
+  ] as const)("child %s terminal offers the original parent letter to the atomic commit port", (kind:
+    | "interrupted"
+    | "error"
+    | "result") =>
+    testProgram(
+      Effect.gen(function* () {
+        const parent = yield* declare(
+          residentOptions("request-parent", () =>
+            Effect.sync(() => {
+              return { kind: "result", text: "parent" };
             }),
-          );
-          expect(commits).toBe(1);
-          expect(inboxRows(parent.id).map((row) => row.content)).toEqual(["terminal-text"]);
-          expect(terminals(worker.id).map((terminal) => terminal.kind)).toEqual([kind]);
-        }),
-      ),
-  );
+          ),
+        );
+        // The parent's original letter, appended under its live activation's authority.
+        const parentRow = kernel().row(parent.id);
+        if (parentRow.fenceOwner === null) throw new Error("parent activation owns no fence");
+        yield* kernel().commit({
+          sessionId: parent.id,
+          owner: parentRow.fenceOwner,
+          fence: parentRow.fence,
+          now,
+          expectedRevision: parentRow.revision,
+          state: parentRow.state,
+          actions: [
+            {
+              id: "original-send",
+              sessionId: parent.id,
+              parentId: tree(parent.id).at(-1)?.id ?? null,
+              kind: "message",
+              intent: { encodingVersion: 1, value: { phase: "intent", messageId: "request" } },
+              effect: { encodingVersion: 1, value: { phase: "pending" } },
+              irreversible: true,
+              ts: now,
+            },
+          ],
+        });
+        let commits = 0;
+        const workerRuntime = track({
+          ...runtime,
+          dispatchOutbound: ({
+            message,
+          }: Parameters<NonNullable<SessionFixture["dispatchOutbound"]>>[0]) =>
+            Effect.gen(function* () {
+              commits += 1;
+              expect(
+                tree(message.sourceSessionId).some(
+                  (action) => SessionHandleStore.turnTerminal(action) !== undefined,
+                ),
+              ).toBe(true);
+              expect(kernel().outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
+              expect(inboxRows(parent.id)).toEqual([]);
+              expect(message).toMatchObject({
+                requestId: "original-send",
+                replyTo: "original-binding",
+                sourceSessionId: "reply-child",
+                terminal: kind === "result" ? "completed" : kind,
+              });
+              return (yield* commitInbox({
+                id: message.messageId,
+                sessionId: message.destinationSessionId,
+                kind: "prompt",
+                content: message.content,
+                createdAt: now,
+                parentActionId: tree(message.destinationSessionId).at(-1)?.id ?? null,
+                origin: { encodingVersion: 1, value: PlainValueSchema.parse(message) },
+              })).receipt;
+            }),
+        });
+        const worker = yield* declare(
+          {
+            id: "reply-child",
+            parentId: parent.id,
+            role: "worker",
+            tools: [],
+            system,
+            runner: () =>
+              Effect.sync(() => {
+                return { kind, text: "terminal-text" };
+              }),
+          },
+          workerRuntime,
+        );
+        yield* awaitSignal(
+          worker.prompt("work", {
+            encodingVersion: 1,
+            value: {
+              kind: "message",
+              messageId: "request",
+              senderSessionId: parent.id,
+              sourceActionId: "original-send",
+              replyTo: "original-binding",
+              deadline: now + 1000,
+            },
+          }),
+        );
+        expect(commits).toBe(1);
+        expect(inboxRows(parent.id).map((row) => row.content)).toEqual(["terminal-text"]);
+        expect(terminals(worker.id).map((terminal) => terminal.kind)).toEqual([kind]);
+      }),
+    ));
 
   test("materializes a worker as a parent-linked session with an independent fence", () =>
     testProgram(
@@ -2053,9 +2075,7 @@ describe("session crash recovery and observation", () => {
         yield* awaitSignal(bounded(reactivate("poison-turn", runner), "resume budget terminal"));
 
         expect(runnerEntries).toBe(0);
-        const terminalAction = tree("poison-turn").find(
-          (action) => action.id === "poison-result",
-        );
+        const terminalAction = tree("poison-turn").find((action) => action.id === "poison-result");
         expect(SessionHandleStore.turnTerminal(terminalAction)).toMatchObject({
           kind: "error",
           resumeCount: 10,

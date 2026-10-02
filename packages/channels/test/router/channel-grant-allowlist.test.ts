@@ -17,12 +17,14 @@ describe("channel-grant sender allowlist", () => {
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "111" })?.grant.id).toBe(
-      "grant-telegram",
-    );
+    expect(
+      resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "111" })?.grant.id,
+    ).toBe("grant-telegram");
     // A stranger and an anonymous sender both find NO grant — the perimeter
     // blocks fail-closed on the miss.
-    expect(resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "999" })).toBeUndefined();
+    expect(
+      resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "999" }),
+    ).toBeUndefined();
     expect(resolveChannelGrant(ledger().stores, { surface: "telegram" })).toBeUndefined();
   });
 
@@ -35,7 +37,9 @@ describe("channel-grant sender allowlist", () => {
       createdBy: "act_owner",
     });
 
-    expect(resolveChannelGrant(ledger().stores, { surface: "ws", sender: "anyone" })?.grant.id).toBe("grant-ws");
+    expect(
+      resolveChannelGrant(ledger().stores, { surface: "ws", sender: "anyone" })?.grant.id,
+    ).toBe("grant-ws");
     expect(resolveChannelGrant(ledger().stores, { surface: "ws" })?.grant.id).toBe("grant-ws");
   });
 
@@ -61,11 +65,11 @@ describe("channel-grant sender allowlist", () => {
     // wins) resolves the broadcast grant for them too — an Owner who wants
     // the owner tier for themselves simply does not stack a public grant on
     // the same surface.
-    expect(resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "999" })?.grant.id).toBe(
-      "grant-public",
-    );
-    expect(resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "111" })?.grant.id).toBe(
-      "grant-public",
-    );
+    expect(
+      resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "999" })?.grant.id,
+    ).toBe("grant-public");
+    expect(
+      resolveChannelGrant(ledger().stores, { surface: "telegram", sender: "111" })?.grant.id,
+    ).toBe("grant-public");
   });
 });

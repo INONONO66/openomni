@@ -56,7 +56,7 @@ for (const at of [1, 1.5]) {
     const messaging = createExistingAgentMessaging({
       requests: channelRequests(seededRequests()),
       stores: ledger().stores,
-    transaction: channelTransaction,
+      transaction: channelTransaction,
       grants: () => [grant],
       deliver: () => {
         deliveries += 1;

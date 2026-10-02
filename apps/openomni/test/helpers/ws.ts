@@ -66,7 +66,6 @@ export function closeSocket(ws: WebSocket, timeoutMs = 2000): Promise<void> {
   });
 }
 
-
 /** The next JSON frame the predicate accepts; earlier frames are skipped. */
 export function nextFrame(
   ws: WebSocket,

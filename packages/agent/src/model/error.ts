@@ -1,6 +1,17 @@
 import { APICallError } from "ai";
 import z from "zod";
-import { APIError, AuthInvalidFileError, AuthResolutionError, InvalidProviderData, AgentFailure, LlmRunFailure, ModelResolutionError, ProxyModelsError, TransportFailure, type LlmError } from "./errors";
+import {
+  APIError,
+  AuthInvalidFileError,
+  AuthResolutionError,
+  InvalidProviderData,
+  AgentFailure,
+  LlmRunFailure,
+  ModelResolutionError,
+  ProxyModelsError,
+  TransportFailure,
+  type LlmError,
+} from "./errors";
 
 export { APIError } from "./errors";
 const ErrorFacts = z.object({
@@ -22,15 +33,34 @@ export function coerceApiError<E>(error: E): ApiFailure | undefined {
 }
 
 const KnownFailure = z.union([
-  z.instanceof(APIError), z.instanceof(AuthInvalidFileError), z.instanceof(AuthResolutionError),
-  z.instanceof(AgentFailure), z.instanceof(InvalidProviderData), z.instanceof(LlmRunFailure),
-  z.instanceof(ModelResolutionError), z.instanceof(ProxyModelsError), z.instanceof(TransportFailure),
+  z.instanceof(APIError),
+  z.instanceof(AuthInvalidFileError),
+  z.instanceof(AuthResolutionError),
+  z.instanceof(AgentFailure),
+  z.instanceof(InvalidProviderData),
+  z.instanceof(LlmRunFailure),
+  z.instanceof(ModelResolutionError),
+  z.instanceof(ProxyModelsError),
+  z.instanceof(TransportFailure),
 ]);
 export function decodeLlmFailure(operation: string) {
-  return z.union([
-    KnownFailure,
-    z.custom<APICallError>((value) => APICallError.isInstance(value)).transform((cause) => new APIError({ cause })),
-    z.instanceof(Error).transform((error) => new TransportFailure({ operation, message: error.message, providerErrorName: error.name, aborted: error.name === "AbortError", cause: String(error) })),
-    z.preprocess(String, z.string()).transform((cause) => new AgentFailure({ operation, cause })),
-  ]).transform((failure): LlmError => failure).parse;
+  return z
+    .union([
+      KnownFailure,
+      z
+        .custom<APICallError>((value) => APICallError.isInstance(value))
+        .transform((cause) => new APIError({ cause })),
+      z.instanceof(Error).transform(
+        (error) =>
+          new TransportFailure({
+            operation,
+            message: error.message,
+            providerErrorName: error.name,
+            aborted: error.name === "AbortError",
+            cause: String(error),
+          }),
+      ),
+      z.preprocess(String, z.string()).transform((cause) => new AgentFailure({ operation, cause })),
+    ])
+    .transform((failure): LlmError => failure).parse;
 }

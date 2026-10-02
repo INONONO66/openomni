@@ -225,7 +225,12 @@ describe("run", () => {
     const authFile = join(mkdtempSync(join(tmpdir(), "openomni-run-auth-")), "auth.json");
 
     try {
-      await runEffect(Auth.set("stored-auth-provider", testAuth, { id: () => "tmp-stored", authFilePath: authFile }));
+      await runEffect(
+        Auth.set("stored-auth-provider", testAuth, {
+          id: () => "tmp-stored",
+          authFilePath: authFile,
+        }),
+      );
 
       const outcome = await run(
         {

@@ -1,4 +1,4 @@
-import { Kernel, Model } from "@openomni/agent";
+import type { Kernel, Model } from "@openomni/agent";
 type CompactionOptions = Kernel.CompactionOptions;
 type ObservationSink = Kernel.ObservationSink;
 type Llm = Model.Llm;
@@ -13,18 +13,18 @@ export function configuredCompaction(
   sources: { readonly now: () => number; readonly id: () => string },
 ): Effect.Effect<CompactionOptions, never, Llm | ObservationSink> {
   return Effect.gen(function* () {
-  const transport = modelTransport(config.model);
-  return {
-    elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
-    ...(config.compactionSummarizer === false
-      ? {}
-      : {
-          onSummarize: yield* createCompactionSummarizer({
-            now: sources.now,
-            id: sources.id,
-            model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
+    const transport = modelTransport(config.model);
+    return {
+      elideToolOutputs: { minOutputChars: 4000, keepHeadChars: 500 },
+      ...(config.compactionSummarizer === false
+        ? {}
+        : {
+            onSummarize: yield* createCompactionSummarizer({
+              now: sources.now,
+              id: sources.id,
+              model: { ...config.model, ...(transport === undefined ? {} : { transport }) },
+            }),
           }),
-        }),
-  };
+    };
   });
 }

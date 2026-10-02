@@ -4,7 +4,6 @@ import { z } from "zod";
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 
 /** What one sub-model call asks for: the prompt, and optionally a system text and model id. */
 export interface LlmCall {

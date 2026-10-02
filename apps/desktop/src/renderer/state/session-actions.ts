@@ -4,7 +4,8 @@ export function bindDurableSession(id: SessionId, durableSessionId: string): voi
   consoleStore.setState((state) => ({
     ...state,
     sessions: state.sessions.map((session) =>
-      session.id === id ? { ...session, durableSessionId } : session),
+      session.id === id ? { ...session, durableSessionId } : session,
+    ),
   }));
 }
 

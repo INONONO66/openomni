@@ -72,13 +72,19 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
           })
         ).isError,
       ).not.toBe(true);
-    const receipt = await runEffect(fixture.gateway.ingest(sender, {
-      ...facts,
-      reply: {
-        replyToMessageId: "unrelated-immediate",
-        chain: ["unrelated-immediate", ...(mode === "nearer" ? ["platform-2"] : []), "platform-1"],
-      },
-    }));
+    const receipt = await runEffect(
+      fixture.gateway.ingest(sender, {
+        ...facts,
+        reply: {
+          replyToMessageId: "unrelated-immediate",
+          chain: [
+            "unrelated-immediate",
+            ...(mode === "nearer" ? ["platform-2"] : []),
+            "platform-1",
+          ],
+        },
+      }),
+    );
     if (mode === "ambiguous") {
       expect(receipt.status).toBe("blocked_pre");
       expect(promptContents(fixture.plane, "sender").includes("ANSWER")).toBe(false);
@@ -86,9 +92,10 @@ for (const mode of ["ancestor", "nearer", "ambiguous"] as const) {
     }
     expect(receipt).toMatchObject({ status: "executed", handle: { target: "sender" } });
     expect(promptContents(fixture.plane, "sender").at(-1)).toBe("ANSWER");
-    const resolved = fixture.plane.openKernel("sender").requestRows("sender").filter(
-      (request) => request.state === "resolved",
-    );
+    const resolved = fixture.plane
+      .openKernel("sender")
+      .requestRows("sender")
+      .filter((request) => request.state === "resolved");
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.correlation.replyToMessageId).toBe(
       mode === "nearer" ? "platform-2" : "platform-1",
@@ -164,7 +171,9 @@ for (const refuse of [false, true]) {
     // W5.2 accepted seam: the egress debit is a catalog write on its own
     // connection, claimed before the admission fact, so a refused admission
     // leaves the (idempotent, messageId-keyed) debit behind.
-    expect(catalogDb.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n).toBe(1);
+    expect(
+      catalogDb.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM egress_debit").get()?.n,
+    ).toBe(1);
   });
 }
 
@@ -225,7 +234,9 @@ for (const restriction of ["dnc", "zero", "spent", "allowed"] as const) {
     const observations: Gateway.MessageObservation[] = [];
     const unsubscribe = Bus.subscribe(Gateway.MessageObserved, (event) => observations.push(event));
     try {
-      const initial = await runEffect(fixture.gateway.ingest(sender, { ...facts, eventId: "first" }));
+      const initial = await runEffect(
+        fixture.gateway.ingest(sender, { ...facts, eventId: "first" }),
+      );
       let receipt = initial;
       if (restriction === "spent") {
         if (initial.status !== "executed") throw new Error("initial admission refused");

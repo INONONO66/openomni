@@ -68,9 +68,11 @@ test("projects the bundled providers of the models.dev catalog into the snapshot
     }
     server.stop(true);
   }
-  const written = PlainValueSchema.parse(JSON.parse(
-    readFileSync(join(root, "packages/agent/src/model/model/models-snapshot.json"), "utf8"),
-  ));
+  const written = PlainValueSchema.parse(
+    JSON.parse(
+      readFileSync(join(root, "packages/agent/src/model/model/models-snapshot.json"), "utf8"),
+    ),
+  );
   expect(written).toEqual({
     anthropic: {
       id: "anthropic",
@@ -111,15 +113,23 @@ test.each([
   const root = mkdtempSync(join(tmpdir(), "models-snapshot-error-"));
   roots.push(root);
   try {
-    const result = Bun.spawn([process.execPath, join(import.meta.dir, "generate-models-snapshot.ts")], {
-      cwd: root,
-      env: { ...process.env, MODELS_DEV_URL: server.url.toString() },
-      stderr: "pipe",
-    });
-    const [exitCode, stderr] = await Promise.all([result.exited, new Response(result.stderr).text()]);
+    const result = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "generate-models-snapshot.ts")],
+      {
+        cwd: root,
+        env: { ...process.env, MODELS_DEV_URL: server.url.toString() },
+        stderr: "pipe",
+      },
+    );
+    const [exitCode, stderr] = await Promise.all([
+      result.exited,
+      new Response(result.stderr).text(),
+    ]);
     expect(exitCode).toBe(1);
     expect(stderr).toContain(message);
-    expect(await Bun.file(join(root, "packages/agent/src/model/model/models-snapshot.json")).exists()).toBe(false);
+    expect(
+      await Bun.file(join(root, "packages/agent/src/model/model/models-snapshot.json")).exists(),
+    ).toBe(false);
   } finally {
     server.stop(true);
   }
@@ -144,7 +154,9 @@ test.each([
     const { main } = await import("./generate-models-snapshot");
     expect(await main()).toBe(1);
     expect(errors.join("")).toContain(message);
-    expect(await Bun.file(join(root, "packages/agent/src/model/model/models-snapshot.json")).exists()).toBe(false);
+    expect(
+      await Bun.file(join(root, "packages/agent/src/model/model/models-snapshot.json")).exists(),
+    ).toBe(false);
   } finally {
     error.mockRestore();
     process.chdir(cwd);

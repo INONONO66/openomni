@@ -59,14 +59,23 @@ describe("scoped observations", () => {
       z.object({ component: z.string(), msg: z.string() }).strict(),
     );
     const received: Array<z.infer<typeof StrictEvent> & { extra: string }> = [];
-    const scoped = scopeObservation({
-      publish: (_event, data) => received.push(z.object({
-        component: z.string(),
-        msg: z.string(),
-        extra: z.string(),
-      }).parse(data)),
-      scope: () => scoped,
-    }, identity, { now: () => 42, id: () => "event-strict" });
+    const scoped = scopeObservation(
+      {
+        publish: (_event, data) =>
+          received.push(
+            z
+              .object({
+                component: z.string(),
+                msg: z.string(),
+                extra: z.string(),
+              })
+              .parse(data),
+          ),
+        scope: () => scoped,
+      },
+      identity,
+      { now: () => 42, id: () => "event-strict" },
+    );
     scoped.publish(StrictEvent, { component: "test", msg: "strict", extra: "kept" } as never);
     expect(received[0]).toMatchObject({ component: "test", msg: "strict", extra: "kept" });
   });
@@ -146,7 +155,10 @@ describe("scoped observations", () => {
       },
     };
 
-    scopeObservation(hostile, identity, stamps()).publish(TestEvent, { component: "test", msg: "default reporter" });
+    scopeObservation(hostile, identity, stamps()).publish(TestEvent, {
+      component: "test",
+      msg: "default reporter",
+    });
     expect(failures).toEqual([{ eventName: TestEvent.name, error: "Error: sink failed" }]);
     failures.length = 0;
 
@@ -156,7 +168,9 @@ describe("scoped observations", () => {
         throw reporterFailure;
       },
     });
-    expect(() => scoped.publish(TestEvent, { component: "test", msg: "custom reporter" })).not.toThrow();
+    expect(() =>
+      scoped.publish(TestEvent, { component: "test", msg: "custom reporter" }),
+    ).not.toThrow();
     expect(failures).toEqual([
       { eventName: TestEvent.name, error: "Error: sink failed", reporterError: expected },
     ]);
@@ -172,7 +186,10 @@ describe("scoped observations", () => {
       },
     };
     expect(() =>
-      scopeObservation(hostile, identity, stamps()).publish(TestEvent, { component: "test", msg: "dropped" }),
+      scopeObservation(hostile, identity, stamps()).publish(TestEvent, {
+        component: "test",
+        msg: "dropped",
+      }),
     ).not.toThrow();
   });
 

@@ -1,13 +1,9 @@
 import type { Readable } from "node:stream";
 import { Bundle, Kernel, Session } from "@openomni/agent";
 const BundleDefinitions = Bundle.BundleDefinitions;
-type BundleDefinitions = Bundle.BundleDefinitions;
 const Entropy = Kernel.Entropy;
-type Entropy = Kernel.Entropy;
 const GenerationLayers = Kernel.GenerationLayers;
-type GenerationLayers = Kernel.GenerationLayers;
 const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
 const closeSessions = Session.closeSessions;
 const createSessionRequests = Session.createSessionRequests;
 const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
@@ -38,7 +34,11 @@ import { configureAuthority } from "./composition/generation-layers";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createResident } from "./resident";
-import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
+import {
+  materializeInboxTarget,
+  pendingInboxRow,
+  prepareMessage,
+} from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
@@ -122,128 +122,154 @@ export function serveProcessSession(
   appRuntime: AppRuntime,
 ) {
   return Effect.gen(function* () {
-  const bundles = yield* BundleDefinitions;
-  const generations = yield* GenerationLayers;
-  const plane = yield* AppLedger;
-  const scope = yield* AppScope;
-  const now = yield* captureNow;
-  const entropy = yield* Entropy;
-  const observations = yield* ObservationSink;
-  const owner = `process:${process.pid}`;
-  seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows);
-  const runtime: SessionRuntime = {
-    openKernel: plane.openKernel,
-    listSessions: plane.listSessions,
-    processId: owner,
-    onInboxCommitted: committed,
-    dispatchOutbound: dispatchOutboundMessage(
-      (...args) => gateway.ingest(...args),
-      now,
-      plane.openKernel,
-    ),
-    authorizeConfigure: configureAuthority(generations, plane.openKernel),
-  };
-  const messages = {
-    ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>
-      gateway.ingest(...args),
-  };
-  // The process's one sub-model seam: the configured model's credential and transport, real I/O.
-  const llm = createCompletionPort(
-    {
-      ...request.model,
+    const bundles = yield* BundleDefinitions;
+    const generations = yield* GenerationLayers;
+    const plane = yield* AppLedger;
+    const scope = yield* AppScope;
+    const now = yield* captureNow;
+    const entropy = yield* Entropy;
+    const observations = yield* ObservationSink;
+    const owner = `process:${process.pid}`;
+    seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows);
+    const runtime: SessionRuntime = {
+      openKernel: plane.openKernel,
+      listSessions: plane.listSessions,
+      processId: owner,
+      onInboxCommitted: committed,
+      dispatchOutbound: dispatchOutboundMessage(
+        (...args) => gateway.ingest(...args),
+        now,
+        plane.openKernel,
+      ),
+      authorizeConfigure: configureAuthority(generations, plane.openKernel),
+    };
+    const messages = {
+      ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>
+        gateway.ingest(...args),
+    };
+    // The process's one sub-model seam: the configured model's credential and transport, real I/O.
+    const llm = createCompletionPort(
+      {
+        ...request.model,
+        apiKey: request.apiKey,
+        ...(request.transport === undefined ? {} : { transport: request.transport }),
+      },
+      { now, id: entropy.id },
+    );
+    const resident = createResident({
+      bundles: bundles.names,
+      model: request.model,
       apiKey: request.apiKey,
       ...(request.transport === undefined ? {} : { transport: request.transport }),
-    },
-    { now, id: entropy.id },
-  );
-  const resident = createResident({
-    bundles: bundles.names,
-    model: request.model,
-    apiKey: request.apiKey,
-    ...(request.transport === undefined ? {} : { transport: request.transport }),
-    sessionRuntime: runtime,
-    tools: toolPorts(appRuntime, { messages, completion: llm, now, id: entropy.id }),
-    policyGeneration: () =>
-      plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
-  });
-  yield* generations.initialize(resident.definitions);
-  const requests = yield* createSessionRequests(runtime);
-  const commitInbox = localInboxCommit(plane, owner, now);
-  const gateway = createGatewayRouter({
-    sink: observations.publish,
-    now,
-    id: entropy.id,
-    stores: createChannelStores(channelStoreSource(plane, now)),
-    transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
-    inbox: { commit: (input) => commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
-    prepare: prepareMessage(plane, resident.materialize),
-    run: (sender, execution, body) => Effect.gen(function* () {
-      const outbound = yield* outboundMessage;
-      const result = yield* (outbound?.executor ?? currentExecutor()).run(
-        execution,
-        (intent) => body(intent).pipe(Effect.mapError((error) => new AgentFailure({ operation: "message.body", cause: String(error) }))),
-      );
-      if (sender.kind !== "session") return yield* Effect.die(new Error("process gateway requires a session sender"));
-      return {
-        ...result,
-        matchedRuleIds: messageDecisionRules(plane.openKernel(sender.id), sender.id, execution),
-      };
-    }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
-    requests: { ...channelRequests(requests), ...(answer === undefined ? {} : { answer: (input: SessionTransition.Answer) => Effect.tryPromise({ try: () => answer(input), catch: decodeChannelFailure("process.answer") }) }) },
-    committed: (row) => committed([row.sessionId]),
-  });
-  // The child's one-shot drain (the entity's backlog loop, minus the mailbox):
-  // adopt the fence once, then run admitted decisions until the chain says stop.
-  const resolved: Parameters<typeof createSessionEntityRunTurn>[1] = {
-    ...runtime,
-    clock: now,
-    entropy: entropy.id,
-    observations,
-    generations,
-    services: yield* Effect.context<SessionEntryServices>(),
-  };
-  const kernel = plane.openKernel(request.sessionId);
-  const runTurn = createSessionEntityRunTurn(
-    resident.runnerFor(kernel.row(request.sessionId)),
-    resolved,
-    scope,
-  );
-  const drain = Effect.gen(function* () {
-    const fence = yield* adoptSessionAuthority(kernel, request.sessionId, owner).pipe(
-      Effect.mapError((error) => new AgentFailure({ operation: "process.adopt", cause: error._tag })),
+      sessionRuntime: runtime,
+      tools: toolPorts(appRuntime, { messages, completion: llm, now, id: entropy.id }),
+      policyGeneration: () => plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
+    });
+    yield* generations.initialize(resident.definitions);
+    const requests = yield* createSessionRequests(runtime);
+    const commitInbox = localInboxCommit(plane, owner, now);
+    const gateway = createGatewayRouter({
+      sink: observations.publish,
+      now,
+      id: entropy.id,
+      stores: createChannelStores(channelStoreSource(plane, now)),
+      transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
+      inbox: {
+        commit: (input) =>
+          commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))),
+      },
+      prepare: prepareMessage(plane, resident.materialize),
+      run: (sender, execution, body) =>
+        Effect.gen(function* () {
+          const outbound = yield* outboundMessage;
+          const result = yield* (outbound?.executor ?? currentExecutor()).run(execution, (intent) =>
+            body(intent).pipe(
+              Effect.mapError(
+                (error) => new AgentFailure({ operation: "message.body", cause: String(error) }),
+              ),
+            ),
+          );
+          if (sender.kind !== "session")
+            return yield* Effect.die(new Error("process gateway requires a session sender"));
+          return {
+            ...result,
+            matchedRuleIds: messageDecisionRules(plane.openKernel(sender.id), sender.id, execution),
+          };
+        }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
+      requests: {
+        ...channelRequests(requests),
+        ...(answer === undefined
+          ? {}
+          : {
+              answer: (input: SessionTransition.Answer) =>
+                Effect.tryPromise({
+                  try: () => answer(input),
+                  catch: decodeChannelFailure("process.answer"),
+                }),
+            }),
+      },
+      committed: (row) => committed([row.sessionId]),
+    });
+    // The child's one-shot drain (the entity's backlog loop, minus the mailbox):
+    // adopt the fence once, then run admitted decisions until the chain says stop.
+    const resolved: Parameters<typeof createSessionEntityRunTurn>[1] = {
+      ...runtime,
+      clock: now,
+      entropy: entropy.id,
+      observations,
+      generations,
+      services: yield* Effect.context<SessionEntryServices>(),
+    };
+    const kernel = plane.openKernel(request.sessionId);
+    const runTurn = createSessionEntityRunTurn(
+      resident.runnerFor(kernel.row(request.sessionId)),
+      resolved,
+      scope,
     );
-    const authority = { sessionId: request.sessionId, owner, fence };
-    for (;;) {
-      const row = kernel.row(request.sessionId);
-      const open = kernel.latestOpenTurn(request.sessionId);
-      const terminal = kernel.latestTurnTerminal(request.sessionId);
-      const snapshot = {
-        row,
-        pending: kernel.pendingMessages(request.sessionId),
-        ...(open === undefined ? {} : { open }),
-        ...(terminal === undefined ? {} : { terminal }),
-      };
-      const decision = decideSessionAdmission(snapshot);
-      switch (decision.kind) {
-        case "stop":
-        case "refused":
-          return;
-        case "consume":
-          // The consume fold (`<id>:delivery` records) is entity-owned; a child
-          // hitting it hands the backlog back to the parent's next activation.
-          console.error(`process drain deferred consume: ${request.sessionId}`);
-          return;
-        case "start":
-          // Inline detach: this drain owns the whole turn's lifetime itself.
-          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach: (body) => body });
-          continue;
-        default:
-          yield* runTurn({ authority, kernel, decision, snapshot, detach: (body) => body });
-          continue;
+    const drain = Effect.gen(function* () {
+      const fence = yield* adoptSessionAuthority(kernel, request.sessionId, owner).pipe(
+        Effect.mapError(
+          (error) => new AgentFailure({ operation: "process.adopt", cause: error._tag }),
+        ),
+      );
+      const authority = { sessionId: request.sessionId, owner, fence };
+      for (;;) {
+        const row = kernel.row(request.sessionId);
+        const open = kernel.latestOpenTurn(request.sessionId);
+        const terminal = kernel.latestTurnTerminal(request.sessionId);
+        const snapshot = {
+          row,
+          pending: kernel.pendingMessages(request.sessionId),
+          ...(open === undefined ? {} : { open }),
+          ...(terminal === undefined ? {} : { terminal }),
+        };
+        const decision = decideSessionAdmission(snapshot);
+        switch (decision.kind) {
+          case "stop":
+          case "refused":
+            return;
+          case "consume":
+            // The consume fold (`<id>:delivery` records) is entity-owned; a child
+            // hitting it hands the backlog back to the parent's next activation.
+            console.error(`process drain deferred consume: ${request.sessionId}`);
+            return;
+          case "start":
+            // Inline detach: this drain owns the whole turn's lifetime itself.
+            yield* runTurn({
+              authority,
+              kernel,
+              decision: { kind: "start" },
+              snapshot,
+              detach: (body) => body,
+            });
+            continue;
+          default:
+            yield* runTurn({ authority, kernel, decision, snapshot, detach: (body) => body });
+            continue;
+        }
       }
-    }
-  });
-  yield* drain.pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
+    });
+    yield* drain.pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
   });
 }
 
@@ -265,12 +291,15 @@ export async function runProcessEntry(io: {
       clusterStoragePath: ":memory:",
     });
     try {
-      await acquireAppResource(runtime, serveProcessSession(
-        request,
-        (sessionIds) => io.log(JSON.stringify({ sessionIds })),
-        replies.answer,
+      await acquireAppResource(
         runtime,
-      ));
+        serveProcessSession(
+          request,
+          (sessionIds) => io.log(JSON.stringify({ sessionIds })),
+          replies.answer,
+          runtime,
+        ),
+      );
     } finally {
       await runtime.dispose();
     }

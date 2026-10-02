@@ -98,7 +98,11 @@ export async function runDoctor(ports: DoctorPorts): Promise<DoctorReport> {
     catch: ConfigThrown.parse,
   });
   if (Result.isFailure(channelConfig)) {
-    checks.push({ name: "channel config", status: "fail", detail: channelConfig.failure.data.message });
+    checks.push({
+      name: "channel config",
+      status: "fail",
+      detail: channelConfig.failure.data.message,
+    });
   }
 
   if (ports.unitInstalled) {

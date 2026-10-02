@@ -1,15 +1,11 @@
-import { Kernel, Session, Journal } from "@openomni/agent";
+import { Kernel, Session, type Journal } from "@openomni/agent";
 const adoptSessionAuthority = Session.adoptSessionAuthority;
 const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
 const decideSessionAdmission = Session.decideSessionAdmission;
 const Entropy = Kernel.Entropy;
-type Entropy = Kernel.Entropy;
 const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
 const GenerationLayers = Kernel.GenerationLayers;
-type GenerationLayers = Kernel.GenerationLayers;
 const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
 type SessionEntryServices = Kernel.SessionEntryServices;
 type SessionError = Kernel.SessionError;
 type SessionRuntime = Session.SessionRuntime;
@@ -36,7 +32,10 @@ export function testPlane(
 
 /** The booted runtime's own plane — the one the entity and boot share. */
 export function planeOf(runtime: AppRuntime): Promise<AppLedgerPlane> {
-  return runRuntimeEffect(runtime, Effect.map(AppLedger, (plane) => plane));
+  return runRuntimeEffect(
+    runtime,
+    Effect.map(AppLedger, (plane) => plane),
+  );
 }
 
 /** Strictly-newer fence adoption on a fixture kernel (the entity's own CAS). */
@@ -111,14 +110,26 @@ export function drainSession(deps: {
         case "stop":
           return kernel.latestTurnTerminal(deps.sessionId)?.effect;
         case "refused":
-          return yield* new AgentFailure({ operation: "session.admission", cause: "invalid_state" });
+          return yield* new AgentFailure({
+            operation: "session.admission",
+            cause: "invalid_state",
+          });
         case "consume":
           // The consume fold is entity-owned; a fixture reaching it is a
           // wiring defect, not backlog to silently drop.
-          return yield* new AgentFailure({ operation: "session.admission", cause: "consume_in_fixture" });
+          return yield* new AgentFailure({
+            operation: "session.admission",
+            cause: "consume_in_fixture",
+          });
         case "start":
           // Inline detach: this drain owns the whole turn's lifetime itself.
-          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach: (body) => body });
+          yield* runTurn({
+            authority,
+            kernel,
+            decision: { kind: "start" },
+            snapshot,
+            detach: (body) => body,
+          });
           continue;
         default:
           yield* runTurn({ authority, kernel, decision, snapshot, detach: (body) => body });

@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { aggregateFiles, auditCommand, type Audit, findingKinds, totalsSchema } from "./quality-audit";
+import {
+  aggregateFiles,
+  auditCommand,
+  type Audit,
+  findingKinds,
+  totalsSchema,
+} from "./quality-audit";
 
 const issueSchema = z.object({
   number: z.number().int().positive(),

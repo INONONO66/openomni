@@ -2,7 +2,13 @@ import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
 import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { Cause, Effect, Exit } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -13,13 +19,20 @@ import { describe, expect, it } from "bun:test";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
 import { closeSessions, createSessionChatRunner } from "../src/session/run";
-import { type Executor } from "../src/kernel/gate/decide";
+import type { Executor } from "../src/kernel/gate/decide";
 import { Bus } from "./helpers/bus";
-import { type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
 import { session } from "../src/testing/registry";
 import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
 import { recordingChatRunner } from "./helpers/session-chat";
-import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";
+import {
+  completeModel,
+  createMockLlmConfig,
+  createStopOutcome,
+  type MockLlmFn,
+  mockProviderData,
+  mockProviderModel,
+} from "./helpers/mock-llm";
 
 const policy = compilePolicySnapshot({
   registry: KERNEL_POLICY_REGISTRY,
@@ -172,11 +185,7 @@ function runDurably(
       prepare: (input: import("../src/session/run").SessionRunnerInput) =>
         Effect.gen(function* () {
           return prepareChatFixture({
-            config: config(
-              run,
-              (yield* testTurnDispatcher(input, runtime)).executor,
-              fallbacks,
-            ),
+            config: config(run, (yield* testTurnDispatcher(input, runtime)).executor, fallbacks),
             traceContext,
           });
         }),

@@ -16,7 +16,8 @@ import { runInput } from "../../helpers/run-input";
 test("the final result consumes the executor-transformed canonical assistant rather than raw provider text", async () => {
   const recording = recordingLedger();
   const executor = testExecutor({
-    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+    policy: compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       kinds: LedgerAction.Kind.options,
       rows: [
@@ -59,20 +60,27 @@ test("the final result consumes the executor-transformed canonical assistant rat
     identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
   });
   const result = await isolated(
-    Effect.gen(function* () { const fixture: ChatFixture = {
-      events: { publish: () => undefined },
-      executor,
-      execution: executor,
-      model: { provider: "test", id: "test" },
-      llm: {
-        resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
-        run: (_input: RunInput, sink: Sink) =>
-          Effect.sync(() => {
-            sink.onMessage(createAssistantMessage("raw text", "", "session", messageSource));
-            return { type: "stop" as const };
-          }),
-      },
-    }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "question" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
+    Effect.gen(function* () {
+      const fixture: ChatFixture = {
+        events: { publish: () => undefined },
+        executor,
+        execution: executor,
+        model: { provider: "test", id: "test" },
+        llm: {
+          resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
+          run: (_input: RunInput, sink: Sink) =>
+            Effect.sync(() => {
+              sink.onMessage(createAssistantMessage("raw text", "", "session", messageSource));
+              return { type: "stop" as const };
+            }),
+        },
+      };
+      const { events: _events, llm: _llm, ...acquiredConfig } = fixture;
+      return yield* runAgent(
+        runInput([{ role: "user", content: "question" }]),
+        acquiredConfig,
+      ).pipe(Effect.provide(chatServices(fixture)));
+    }),
   );
   expect(result.text).toBe("redacted");
   expect(result.steps).toEqual([{ type: "text", content: "redacted" }]);

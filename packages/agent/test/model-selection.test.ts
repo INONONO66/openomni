@@ -5,18 +5,45 @@ import { pinnedModelSelection } from "../src/plugins/model-selection";
 import { isolated } from "./helpers/isolated";
 
 function selection(actions: readonly LedgerAction.Node[], turnId: string) {
-  return isolated((ledger) => Effect.gen(function* () {
-    yield* ledger.kernel.materialize({ id: "session", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1, actionId: "initial", at: 1 });
-    const adapter = ledger.session.actions;
-    for (const { ordinal, prevHash, actionHash, ...action } of actions) {
-      void ordinal; void prevHash; void actionHash;
-      if (action.parentId !== null && ledger.kernel.actionById(action.parentId) === undefined) {
-        expect(adapter.append({ id: action.parentId, sessionId: "session", parentId: null, kind: "turn", intent: { encodingVersion: 1, value: {} }, effect: { encodingVersion: 1, value: {} }, ts: 1, irreversible: true }, ledger.kernel.row("session").revision)).toBeDefined();
+  return isolated((ledger) =>
+    Effect.gen(function* () {
+      yield* ledger.kernel.materialize({
+        id: "session",
+        parentId: null,
+        role: "resident",
+        tools: [],
+        system: { preset: "", blocks: [] },
+        policyGeneration: 1,
+        actionId: "initial",
+        at: 1,
+      });
+      const adapter = ledger.session.actions;
+      for (const { ordinal, prevHash, actionHash, ...action } of actions) {
+        void ordinal;
+        void prevHash;
+        void actionHash;
+        if (action.parentId !== null && ledger.kernel.actionById(action.parentId) === undefined) {
+          expect(
+            adapter.append(
+              {
+                id: action.parentId,
+                sessionId: "session",
+                parentId: null,
+                kind: "turn",
+                intent: { encodingVersion: 1, value: {} },
+                effect: { encodingVersion: 1, value: {} },
+                ts: 1,
+                irreversible: true,
+              },
+              ledger.kernel.row("session").revision,
+            ),
+          ).toBeDefined();
+        }
+        expect(adapter.append(action, ledger.kernel.row("session").revision)).toBeDefined();
       }
-      expect(adapter.append(action, ledger.kernel.row("session").revision)).toBeDefined();
-    }
-    return pinnedModelSelection(ledger.kernel, "session", turnId);
-  }));
+      return pinnedModelSelection(ledger.kernel, "session", turnId);
+    }),
+  );
 }
 
 function action(

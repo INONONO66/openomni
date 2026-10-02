@@ -41,9 +41,17 @@ export function transientProvider(
     run: (input, sink) =>
       Effect.gen(function* () {
         if (auths !== undefined)
-          auths.push(yield* AgentModel.Auth.resolve(input.model.providerID, FIXTURE_AUTH_FILE, input.auth, input.authProvider));
+          auths.push(
+            yield* AgentModel.Auth.resolve(
+              input.model.providerID,
+              FIXTURE_AUTH_FILE,
+              input.auth,
+              input.authProvider,
+            ),
+          );
         calls += 1;
-        if (calls === 1) return { type: "error" as const, error: providerFailure("transient blip") };
+        if (calls === 1)
+          return { type: "error" as const, error: providerFailure("transient blip") };
         sink.onMessage(assistantMessage(input, { call: calls, text: "recovered" }));
         return { type: "stop" as const };
       }),

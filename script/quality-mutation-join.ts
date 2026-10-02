@@ -15,14 +15,24 @@ import { fingerprint } from "./quality-ci-input";
 import { requireMeasurement, type Identity } from "./quality-ci-receipt";
 import { recordMutationMeasurement } from "./quality-native-mutation";
 
-const outcomes = ["killed", "survived", "noCoverage", "invalid", "infrastructure", "uncompleted"] as const;
+const outcomes = [
+  "killed",
+  "survived",
+  "noCoverage",
+  "invalid",
+  "infrastructure",
+  "uncompleted",
+] as const;
 export type JoinOutcome =
   | { complete: false; summary: string }
   | { complete: true; summary: string; document: Json };
 
 function shardDocuments(directory: string): Json[] {
   const files = [...new Bun.Glob("**/native.json").scanSync({ cwd: directory })].sort();
-  return files.map((file) => jsonObject(decodeJson(readFileSync(resolve(directory, file), "utf8"))).document ?? null);
+  return files.map(
+    (file) =>
+      jsonObject(decodeJson(readFileSync(resolve(directory, file), "utf8"))).document ?? null,
+  );
 }
 
 /** Merge complete shard documents into the single full-campaign receipt shape.
@@ -33,7 +43,10 @@ export function joinShardDocuments(documents: Json[], identity: Identity): JoinO
   requireMeasurement(documents.length > 0, "no shard documents to join");
   const shards = documents.map((document) => {
     const row = jsonObject(document);
-    requireMeasurement(row.version === 1 && row.full === false, "join requires shard campaign documents");
+    requireMeasurement(
+      row.version === 1 && row.full === false,
+      "join requires shard campaign documents",
+    );
     requireMeasurement(row.inventorySha256 === identity.inventoryHash, "stale shard inventory");
     return { row, shard: jsonObject(row.shard) };
   });
@@ -43,26 +56,45 @@ export function joinShardDocuments(documents: Json[], identity: Identity): JoinO
   for (const entry of shards) {
     requireMeasurement(jsonNumber(entry.shard.count) === count, "shard count mismatch");
     const index = jsonNumber(entry.shard.index);
-    requireMeasurement(index >= 0 && index < count && !byIndex.has(index), "duplicate or out-of-range shard index");
+    requireMeasurement(
+      index >= 0 && index < count && !byIndex.has(index),
+      "duplicate or out-of-range shard index",
+    );
     byIndex.set(index, entry);
   }
   const complete = [...byIndex.values()].filter(
     (entry) => entry.row.complete === true && entry.shard.sliceComplete === true,
   );
   if (complete.length < count)
-    return { complete: false, summary: `campaign incomplete: shards ${complete.length}/${count} complete` };
+    return {
+      complete: false,
+      summary: `campaign incomplete: shards ${complete.length}/${count} complete`,
+    };
   const ordered = complete.sort((a, b) => jsonNumber(a.shard.index) - jsonNumber(b.shard.index));
   const censusSha256 = digest(JSON.stringify(ordered[0]?.row.census ?? null));
-  const counts = { killed: 0, survived: 0, noCoverage: 0, invalid: 0, infrastructure: 0, uncompleted: 0 };
+  const counts = {
+    killed: 0,
+    survived: 0,
+    noCoverage: 0,
+    invalid: 0,
+    infrastructure: 0,
+    uncompleted: 0,
+  };
   const results: Json[] = [];
   const seen = new Set<string>();
   for (const entry of ordered) {
-    requireMeasurement(digest(JSON.stringify(entry.row.census)) === censusSha256, "shard census mismatch");
+    requireMeasurement(
+      digest(JSON.stringify(entry.row.census)) === censusSha256,
+      "shard census mismatch",
+    );
     requireMeasurement(
       entry.row.originalHashesVerified === true && entry.row.cleanupVerified === true,
       "unverified shard restoration",
     );
-    requireMeasurement(jsonArray(entry.row.errors, (error) => error).length === 0, "shard campaign errors");
+    requireMeasurement(
+      jsonArray(entry.row.errors, (error) => error).length === 0,
+      "shard campaign errors",
+    );
     for (const result of jsonArray(entry.row.results, jsonObject)) {
       const id = jsonString(result.id);
       requireMeasurement(!seen.has(id), "overlapping shard slices");

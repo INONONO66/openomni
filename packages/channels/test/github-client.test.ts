@@ -28,7 +28,11 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
+      const client = new GitHubClient(
+        () => undefined,
+        () => FIXED_NOW,
+        "token",
+      );
       expect(await client.postComment("owner/repo", 1, "answer", "trace", "id:long")).toEqual({
         value: "sent",
         externalMessageId: "1",
@@ -56,9 +60,12 @@ describe("GitHubClient", () => {
       context: z.object({ repo: z.string(), issueNumber: z.number() }),
     });
     const published: Array<{ name: string; data: z.infer<typeof schema> }> = [];
-    const client = new GitHubClient((descriptor, data) => {
-      published.push({ name: descriptor.name, data: schema.parse(data) });
-    }, () => FIXED_NOW);
+    const client = new GitHubClient(
+      (descriptor, data) => {
+        published.push({ name: descriptor.name, data: schema.parse(data) });
+      },
+      () => FIXED_NOW,
+    );
 
     await client.postComment("openomni/project", 7, "the answer", "trace-github-test", "delivery");
 
@@ -81,8 +88,14 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
-      await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
+      const client = new GitHubClient(
+        () => undefined,
+        () => FIXED_NOW,
+        "token",
+      );
+      await expect(
+        client.postComment("owner/repo", 1, "answer", "trace", "id"),
+      ).rejects.toMatchObject({
         _tag: "DeliveryNotSent",
         operation: "github.listComments",
       });
@@ -99,8 +112,14 @@ describe("GitHubClient", () => {
       { preconnect: realFetch.preconnect },
     );
     try {
-      const client = new GitHubClient(() => undefined, () => FIXED_NOW, "token");
-      await expect(client.postComment("owner/repo", 1, "answer", "trace", "id")).rejects.toMatchObject({
+      const client = new GitHubClient(
+        () => undefined,
+        () => FIXED_NOW,
+        "token",
+      );
+      await expect(
+        client.postComment("owner/repo", 1, "answer", "trace", "id"),
+      ).rejects.toMatchObject({
         _tag: "DeliveryNotSent",
         operation: "github.listComments",
       });

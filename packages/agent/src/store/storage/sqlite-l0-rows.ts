@@ -72,7 +72,10 @@ export type PolicySqlRow = z.infer<typeof PolicySqlRow>;
 
 export function decodeSession(row: SessionSqlRow): LedgerSession.Row {
   if (row.role === null)
-    throw new LedgerInvariant({ operation: "session.decode", message: `session ${row.id} has no L0 role` });
+    throw new LedgerInvariant({
+      operation: "session.decode",
+      message: `session ${row.id} has no L0 role`,
+    });
   return LedgerSession.Row.parse({
     id: row.id,
     parentId: row.parent_id,

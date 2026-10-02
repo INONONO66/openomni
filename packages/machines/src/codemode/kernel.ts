@@ -272,7 +272,9 @@ const Frame = z.discriminatedUnion("kind", [
 ]);
 
 /** Answers a call made from inside a cell. */
-type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+type CellToolCaller = (
+  call: Machine.ToolCall,
+) => Effect.Effect<Machine.ToolCallResult, MachineError>;
 type PendingCell = {
   readonly cellId: string;
   readonly process: ChildProcessWithoutNullStreams;
@@ -289,19 +291,39 @@ export class PythonKernel {
   private readonly lock = Semaphore.makeUnsafe(1);
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
-  private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  private readonly processExits = new WeakMap<
+    ChildProcessWithoutNullStreams,
+    Deferred.Deferred<void>
+  >();
 
-  run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
+  run(
+    request: Machine.CellRequest,
+    callTool: CellToolCaller,
+    signal?: AbortSignal,
+  ): Effect.Effect<Machine.CellResult, CodeError> {
     return Effect.suspend(() => {
-      const cancellation = signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
+      const cancellation = signal
+        ? AbortSignal.any([signal, this.lifetime.signal])
+        : this.lifetime.signal;
       const output = { stdout: "", stderr: "" };
-      const cancelled = (): Machine.CellResult => ({ status: "cancelled", cellId: request.cellId, output: { ...output } });
+      const cancelled = (): Machine.CellResult => ({
+        status: "cancelled",
+        cellId: request.cellId,
+        output: { ...output },
+      });
       if (cancellation.aborted) return Effect.succeed(cancelled());
-      return this.lock.withPermits(1)(this.execute(request, callTool, output)).pipe(
-        Effect.raceFirst(onAbort(cancellation, Effect.sync(cancelled))),
-        Effect.timeoutOption(request.timeoutMs),
-        Effect.map((result): Machine.CellResult => result._tag === "Some" ? result.value : { status: "timed_out", cellId: request.cellId, output: { ...output } }),
-      );
+      return this.lock
+        .withPermits(1)(this.execute(request, callTool, output))
+        .pipe(
+          Effect.raceFirst(onAbort(cancellation, Effect.sync(cancelled))),
+          Effect.timeoutOption(request.timeoutMs),
+          Effect.map(
+            (result): Machine.CellResult =>
+              result._tag === "Some"
+                ? result.value
+                : { status: "timed_out", cellId: request.cellId, output: { ...output } },
+          ),
+        );
     });
   }
 
@@ -317,67 +339,140 @@ export class PythonKernel {
     });
   }
 
-  private execute(request: Machine.CellRequest, callTool: CellToolCaller, output: PendingCell["output"]): Effect.Effect<Machine.CellResult, CodeError> {
-    return Effect.scoped(Effect.gen({ self: this }, function* () {
-      const process = this.process ?? (yield* this.start());
-      const frames = yield* Queue.unbounded<string | DriverFailure>();
-      const pending: PendingCell = { cellId: request.cellId, process, frames, output, inFlight: new Set() };
-      this.pending = pending;
-      return yield* Effect.gen({ self: this }, function* () {
-        yield* this.write(process, request);
-        for (;;) {
-          const line = yield* Queue.take(frames);
-          if (line instanceof DriverFailure) return yield* line;
-          const frame = yield* Effect.try({ try: () => Frame.parse(JSON.parse(line)), catch: decodeCodeFailure("driver.frame") }).pipe(
-            Effect.mapError((error) => new DriverFailure({ operation: "driver.frame", message: "invalid driver frame", cause: String(error) })),
-          );
-          if (frame.kind === "tool_call") {
-            yield* this.answerToolCall(pending, frame, callTool);
-          } else if (frame.kind === "output") {
-            if (frame.cellId === pending.cellId) pending.output[frame.stream] += frame.text;
-          } else {
-            this.pending = undefined;
-            return frame.result;
+  private execute(
+    request: Machine.CellRequest,
+    callTool: CellToolCaller,
+    output: PendingCell["output"],
+  ): Effect.Effect<Machine.CellResult, CodeError> {
+    return Effect.scoped(
+      Effect.gen({ self: this }, function* () {
+        const process = this.process ?? (yield* this.start());
+        const frames = yield* Queue.unbounded<string | DriverFailure>();
+        const pending: PendingCell = {
+          cellId: request.cellId,
+          process,
+          frames,
+          output,
+          inFlight: new Set(),
+        };
+        this.pending = pending;
+        return yield* Effect.gen({ self: this }, function* () {
+          yield* this.write(process, request);
+          for (;;) {
+            const line = yield* Queue.take(frames);
+            if (line instanceof DriverFailure) return yield* line;
+            const frame = yield* Effect.try({
+              try: () => Frame.parse(JSON.parse(line)),
+              catch: decodeCodeFailure("driver.frame"),
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new DriverFailure({
+                    operation: "driver.frame",
+                    message: "invalid driver frame",
+                    cause: String(error),
+                  }),
+              ),
+            );
+            if (frame.kind === "tool_call") {
+              yield* this.answerToolCall(pending, frame, callTool);
+            } else if (frame.kind === "output") {
+              if (frame.cellId === pending.cellId) pending.output[frame.stream] += frame.text;
+            } else {
+              this.pending = undefined;
+              return frame.result;
+            }
           }
-        }
-      }).pipe(Effect.ensuring(Effect.gen({ self: this }, function* () {
-        if (this.pending === pending) {
-          this.pending = undefined;
-          yield* Effect.orDie(this.discard(process));
-        }
-        pending.inFlight.clear();
-        yield* Queue.shutdown(frames);
-      })));
-    }));
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen({ self: this }, function* () {
+              if (this.pending === pending) {
+                this.pending = undefined;
+                yield* Effect.orDie(this.discard(process));
+              }
+              pending.inFlight.clear();
+              yield* Queue.shutdown(frames);
+            }),
+          ),
+        );
+      }),
+    );
   }
 
-  private answerToolCall(pending: PendingCell, frame: ToolCallFrame, callTool: CellToolCaller): Effect.Effect<void, CodeError, Scope.Scope> {
+  private answerToolCall(
+    pending: PendingCell,
+    frame: ToolCallFrame,
+    callTool: CellToolCaller,
+  ): Effect.Effect<void, CodeError, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
       if (frame.cellId !== pending.cellId) {
-        return yield* this.write(pending.process, { status: "failed", error: `tool call refused: cell ${frame.cellId} is not the running cell`, callId: frame.callId });
+        return yield* this.write(pending.process, {
+          status: "failed",
+          error: `tool call refused: cell ${frame.cellId} is not the running cell`,
+          callId: frame.callId,
+        });
       }
       if (pending.inFlight.has(frame.callId)) return;
       pending.inFlight.add(frame.callId);
-      yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
-        Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
-        Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catch((error) => Effect.sync(() => { Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
-        Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
-      ));
+      yield* Effect.forkScoped(
+        Effect.suspend(() =>
+          callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments }),
+        ).pipe(
+          Effect.catchCause((cause) =>
+            Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const),
+          ),
+          Effect.flatMap((answer) =>
+            this.pending === pending
+              ? this.write(pending.process, { ...answer, callId: frame.callId })
+              : Effect.void,
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              Queue.offerUnsafe(
+                pending.frames,
+                new DriverFailure({
+                  operation: "driver.write",
+                  message: "driver write failed",
+                  cause: String(error),
+                }),
+              );
+            }),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              pending.inFlight.delete(frame.callId);
+            }),
+          ),
+        ),
+      );
     });
   }
 
-  private write(process: ChildProcessWithoutNullStreams, value: Machine.CellRequest | (Machine.ToolCallResult & { callId: string })): Effect.Effect<void, CodeError> {
-    return Effect.try({ try: () => { process.stdin.write(`${JSON.stringify(value)}\n`); }, catch: decodeCodeFailure("driver.write") });
+  private write(
+    process: ChildProcessWithoutNullStreams,
+    value: Machine.CellRequest | (Machine.ToolCallResult & { callId: string }),
+  ): Effect.Effect<void, CodeError> {
+    return Effect.try({
+      try: () => {
+        process.stdin.write(`${JSON.stringify(value)}\n`);
+      },
+      catch: decodeCodeFailure("driver.write"),
+    });
   }
 
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
     return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
-      const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
+      const process = yield* Effect.try({
+        try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]),
+        catch: decodeCodeFailure("driver.spawn"),
+      });
       this.exits.add(exited);
       this.processExits.set(process, exited);
-      process.once("close", () => { this.exits.delete(exited); Deferred.doneUnsafe(exited, Exit.void); });
+      process.once("close", () => {
+        this.exits.delete(exited);
+        Deferred.doneUnsafe(exited, Exit.void);
+      });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
       this.lines = lines;
@@ -385,24 +480,40 @@ export class PythonKernel {
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });
       const fail = (message: string) => {
-        if (this.process === process) { this.process = undefined; this.lines = undefined; }
-        if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, new DriverFailure({ operation: "driver.process", message, cause: message }));
+        if (this.process === process) {
+          this.process = undefined;
+          this.lines = undefined;
+        }
+        if (this.pending?.process === process)
+          Queue.offerUnsafe(
+            this.pending.frames,
+            new DriverFailure({ operation: "driver.process", message, cause: message }),
+          );
       };
       process.once("error", (error) => fail(error.message));
-      process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
+      process.once("exit", (code, signal) =>
+        fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`),
+      );
       return process;
     });
   }
 
   private discard(process: ChildProcessWithoutNullStreams): Effect.Effect<void, CodeError> {
     return Effect.gen({ self: this }, function* () {
-    const exited = this.processExits.get(process);
-    if (exited === undefined) return yield* Effect.die("missing process close witness");
-    yield* Effect.try({ try: () => {
-      if (this.process === process) { this.process = undefined; this.lines?.close(); this.lines = undefined; }
-      process.kill("SIGKILL");
-    }, catch: decodeCodeFailure("driver.kill") });
-    yield* Deferred.await(exited);
+      const exited = this.processExits.get(process);
+      if (exited === undefined) return yield* Effect.die("missing process close witness");
+      yield* Effect.try({
+        try: () => {
+          if (this.process === process) {
+            this.process = undefined;
+            this.lines?.close();
+            this.lines = undefined;
+          }
+          process.kill("SIGKILL");
+        },
+        catch: decodeCodeFailure("driver.kill"),
+      });
+      yield* Deferred.await(exited);
     });
   }
 }

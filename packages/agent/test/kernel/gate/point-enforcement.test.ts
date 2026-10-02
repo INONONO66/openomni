@@ -1,8 +1,21 @@
 import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { describe, expect, it, mock } from "bun:test";
-import { compilePolicySnapshot, createPolicyCompiler, PolicyCompileError, SEEDED_POLICY_ROWS, type PolicyEvaluationInput } from "../../../src/kernel/gate/compile";
+import {
+  compilePolicySnapshot,
+  createPolicyCompiler,
+  PolicyCompileError,
+  SEEDED_POLICY_ROWS,
+  type PolicyEvaluationInput,
+} from "../../../src/kernel/gate/compile";
 import type { PolicyRow, Storage } from "@openomni/protocol";
-import { atGeneration, compaction, draft, MemoryPolicyRows, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
+import {
+  atGeneration,
+  compaction,
+  draft,
+  MemoryPolicyRows,
+  withPolicyRows,
+  type PolicyRowDraft,
+} from "./row-fixtures";
 
 const input: PolicyEvaluationInput = {
   kind: "tool",
@@ -44,14 +57,16 @@ describe("policy row compiler enforcement", () => {
         rows: [],
         mandatory: [],
       }),
-    ).toThrow(expect.objectContaining({
-      data: expect.objectContaining({
-        code: "mandatory_rule_missing",
-        generation: 1,
-        ruleName: "compaction",
-        message: "policy generation 1 is missing mandatory rule compaction",
+    ).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          code: "mandatory_rule_missing",
+          generation: 1,
+          ruleName: "compaction",
+          message: "policy generation 1 is missing mandatory rule compaction",
+        }),
       }),
-    }));
+    );
   });
 
   it("turns storage load failure into a typed deny and never invokes a body", () => {
@@ -132,9 +147,11 @@ describe("policy row compiler enforcement", () => {
         rows: [atGeneration(compaction, 1), atGeneration(badRow, 1)],
         mandatory: ["compaction"],
       }),
-    ).toThrow(expect.objectContaining({
-      data: expect.objectContaining({ code, generation: 1, ruleName: badRow.name }),
-    }));
+    ).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({ code, generation: 1, ruleName: badRow.name }),
+      }),
+    );
   });
 
   it.each([
@@ -155,9 +172,11 @@ describe("policy row compiler enforcement", () => {
         rows: [atGeneration(compaction, 1), badRow],
         mandatory: ["compaction"],
       }),
-    ).toThrow(expect.objectContaining({
-      data: expect.objectContaining({ code }),
-    }));
+    ).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({ code }),
+      }),
+    );
   });
 
   it("requires approval before lower-priority rules can allow", () => {
@@ -217,26 +236,37 @@ describe("policy row compiler enforcement", () => {
     });
   });
 
-  it("rolls back the entire generation on a conflicting row with typed identity", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
-    source.appendGeneration(() => [compaction]);
-    const before = source.rows();
-    expect(() => source.appendGeneration(() => [compaction, compaction])).toThrow(expect.objectContaining({
-      _tag: "PolicyGenerationRefused", reason: "conflict", generation: 2, ruleName: "compaction",
+  it("rolls back the entire generation on a conflicting row with typed identity", () =>
+    withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+      source.appendGeneration(() => [compaction]);
+      const before = source.rows();
+      expect(() => source.appendGeneration(() => [compaction, compaction])).toThrow(
+        expect.objectContaining({
+          _tag: "PolicyGenerationRefused",
+          reason: "conflict",
+          generation: 2,
+          ruleName: "compaction",
+        }),
+      );
+      expect(source.rows()).toEqual(before);
+      expect(source.appendGeneration(() => [compaction])).toBe(2);
     }));
-    expect(source.rows()).toEqual(before);
-    expect(source.appendGeneration(() => [compaction])).toBe(2);
-  }));
 
-  it("refuses empty generations and leaves no durable or cached partial snapshot", () => withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
-    expect(() => source.appendGeneration(() => [])).toThrow(expect.objectContaining({
-      _tag: "PolicyGenerationRefused", reason: "empty", generation: 1,
+  it("refuses empty generations and leaves no durable or cached partial snapshot", () =>
+    withPolicyRows((source: Storage.PolicyRowSubAdapter) => {
+      expect(() => source.appendGeneration(() => [])).toThrow(
+        expect.objectContaining({
+          _tag: "PolicyGenerationRefused",
+          reason: "empty",
+          generation: 1,
+        }),
+      );
+      expect(source.rows()).toEqual([]);
+      expect(source.appendGeneration(() => [compaction])).toBe(1);
+      const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, source });
+      expect(compiler.pin(1).evaluate(input).verdict).toBe("allow");
+      expect(source.appendGeneration(() => undefined)).toBe(1);
     }));
-    expect(source.rows()).toEqual([]);
-    expect(source.appendGeneration(() => [compaction])).toBe(1);
-    const compiler = createPolicyCompiler({ registry: KERNEL_POLICY_REGISTRY, source });
-    expect(compiler.pin(1).evaluate(input).verdict).toBe("allow");
-    expect(source.appendGeneration(() => undefined)).toBe(1);
-  }));
 
   it("ships every kernel limit as seeded policy data", () => {
     const snapshot = compilePolicySnapshot({

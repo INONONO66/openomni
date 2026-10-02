@@ -145,9 +145,9 @@ export function topologyInventoryDrift(
   topology: readonly WorkspaceTopology[] = TOPOLOGY,
   root = REPO_ROOT,
 ): WorkspaceInventoryDrift {
-  const rootManifest = z.object({ workspaces: z.array(z.string()) }).safeParse(
-    JSON.parse(readFileSync(join(root, "package.json"), "utf8")),
-  );
+  const rootManifest = z
+    .object({ workspaces: z.array(z.string()) })
+    .safeParse(JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
   if (!rootManifest.success) {
     throw new Error("root package.json workspaces must be an array of glob strings");
   }

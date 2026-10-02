@@ -33,15 +33,21 @@ type AgentToolSpec = Tool.Spec & {
 };
 
 export interface ChatAgentConfig {
-  stopEvidence?: () => Effect.Effect<{
-    readonly progress: boolean;
-    readonly blocked: boolean;
-    readonly openIntent: readonly string[];
-    readonly alarmIds: readonly string[];
-  }, ExecutionError>;
+  stopEvidence?: () => Effect.Effect<
+    {
+      readonly progress: boolean;
+      readonly blocked: boolean;
+      readonly openIntent: readonly string[];
+      readonly alarmIds: readonly string[];
+    },
+    ExecutionError
+  >;
   /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
   boundary?: import("../session/run").SessionRunnerInput["boundary"];
-  toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Effect.Effect<readonly Tool.Result[], ExecutionError>;
+  toolWave?: (
+    calls: readonly Tool.Call[],
+    signal?: AbortSignal,
+  ) => Effect.Effect<readonly Tool.Result[], ExecutionError>;
   /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
   executor?: Executor;
   systemPrompt?: string;
@@ -73,7 +79,10 @@ export interface ChatAgentConfig {
   pinnedModel?: Model.Ref;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => Effect.Effect<void, ExecutionError>;
-  toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.Effect<Tool.Result, ExecutionError>;
+  toolExecutor?: (
+    call: Tool.Call,
+    context?: Tool.ExecutionContext,
+  ) => Effect.Effect<Tool.Result, ExecutionError>;
   signal?: AbortSignal;
   /**
    * Provider-SDK options, forwarded verbatim to the llm call. JSON-shaped

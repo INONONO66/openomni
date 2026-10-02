@@ -3,7 +3,6 @@ import { isAbsolute } from "node:path";
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 
 const lifetime = {

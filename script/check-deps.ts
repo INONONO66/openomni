@@ -45,12 +45,14 @@ const DEP_FIELDS = [
   "peerDependencies",
   "optionalDependencies",
 ] as const;
-const Manifest = z.object({
-  dependencies: z.record(z.string(), z.string()).optional(),
-  devDependencies: z.record(z.string(), z.string()).optional(),
-  peerDependencies: z.record(z.string(), z.string()).optional(),
-  optionalDependencies: z.record(z.string(), z.string()).optional(),
-}).catchall(PlainValueSchema);
+const Manifest = z
+  .object({
+    dependencies: z.record(z.string(), z.string()).optional(),
+    devDependencies: z.record(z.string(), z.string()).optional(),
+    peerDependencies: z.record(z.string(), z.string()).optional(),
+    optionalDependencies: z.record(z.string(), z.string()).optional(),
+  })
+  .catchall(PlainValueSchema);
 type Manifest = z.infer<typeof Manifest>;
 
 /** The layer check for `<pkg>/src/`, which may be stricter than the manifest's. */
@@ -168,7 +170,10 @@ type ScannedSource = { filePath: string; source: string };
  * rule, one read. Every validator below consumes this instead of repeating the
  * scan options.
  */
-async function* scanRepositorySources(pattern: string, root = "."): AsyncGenerator<ScannedSource, void, void> {
+async function* scanRepositorySources(
+  pattern: string,
+  root = ".",
+): AsyncGenerator<ScannedSource, void, void> {
   const sourceGlob = new Glob(pattern);
 
   for await (const filePath of sourceGlob.scan({
@@ -721,11 +726,14 @@ const AGENT_SRC_PREFIX = "packages/agent/src/";
  * pinned by AGENT_BAND_RATCHET below: the count per file may shrink, never
  * grow (#1255 turns the ratchet into a full ban).
  */
-const AGENT_BANDS: Record<string, {
-  readonly internal: ReadonlySet<string>;
-  readonly externalBans: readonly string[];
-  readonly tokenBans: readonly RegExp[];
-}> = {
+const AGENT_BANDS: Record<
+  string,
+  {
+    readonly internal: ReadonlySet<string>;
+    readonly externalBans: readonly string[];
+    readonly tokenBans: readonly RegExp[];
+  }
+> = {
   kernel: {
     internal: new Set(["kernel"]),
     externalBans: ["effect/cluster", "bun:sqlite", "ai", "@ai-sdk/"],
@@ -739,8 +747,16 @@ const AGENT_BANDS: Record<string, {
   store: { internal: new Set(["store"]), externalBans: [], tokenBans: [] },
   model: { internal: new Set(["model"]), externalBans: [], tokenBans: [] },
   plugins: { internal: new Set(["plugins", "kernel", "model"]), externalBans: [], tokenBans: [] },
-  inspect: { internal: new Set(["inspect", "kernel", "store", "session"]), externalBans: [], tokenBans: [] },
-  testing: { internal: new Set(["testing", "kernel", "session", "store", "model", "plugins", "inspect"]), externalBans: [], tokenBans: [] },
+  inspect: {
+    internal: new Set(["inspect", "kernel", "store", "session"]),
+    externalBans: [],
+    tokenBans: [],
+  },
+  testing: {
+    internal: new Set(["testing", "kernel", "session", "store", "model", "plugins", "inspect"]),
+    externalBans: [],
+    tokenBans: [],
+  },
 };
 
 /** inspect/ may import session reads but never the live bus (issue table 1). */
@@ -764,43 +780,56 @@ function resolveAgentRelative(filePath: string, importPath: string): string {
   return segments.join("/");
 }
 
+/** The band verdict for one relative import, or undefined when it is legal. */
+function agentRelativeImportViolation(
+  filePath: string,
+  band: string,
+  internal: ReadonlySet<string>,
+  spec: string,
+): string | undefined {
+  const resolved = resolveAgentRelative(filePath, spec);
+  if (!resolved.startsWith(AGENT_SRC_PREFIX)) return undefined;
+  const rest = resolved.slice(AGENT_SRC_PREFIX.length);
+  if (band === "inspect" && rest.startsWith(AGENT_INSPECT_BUS_BAN)) {
+    return "inspect/ folds the journal and may never touch the live bus";
+  }
+  const target = rest.includes("/") ? (rest.split("/")[0] ?? "") : "";
+  if (target !== "" && target in AGENT_BANDS && !internal.has(target)) {
+    return `${band}/ may not import ${target}/`;
+  }
+  return undefined;
+}
+
+/** The band verdict for one external specifier, or undefined when it is legal. */
+function agentExternalImportViolation(
+  band: string,
+  bans: readonly string[],
+  spec: string,
+): string | undefined {
+  for (const ban of bans) {
+    if (spec === ban || spec.startsWith(ban.endsWith("/") ? ban : `${ban}/`)) {
+      return `${band}/ may not depend on ${ban}`;
+    }
+  }
+  return undefined;
+}
+
 /** Pure per-file scan so the self-test and script tests can plant violations. */
 export function agentBandViolations(filePath: string, source: string): string[] {
   const band = agentBandOf(filePath);
-  if (band === undefined) return [];
-  const rules = AGENT_BANDS[band];
-  if (rules === undefined) return [];
+  const rules = band === undefined ? undefined : AGENT_BANDS[band];
+  if (band === undefined || rules === undefined) return [];
   const violations: string[] = [];
   const importPattern = /(?:from\s+|import\s+|import\s*\(\s*)["']([^"']+)["']/g;
   for (const match of source.matchAll(importPattern)) {
     const spec = match[1];
     if (spec === undefined) continue;
+    const reason = spec.startsWith(".")
+      ? agentRelativeImportViolation(filePath, band, rules.internal, spec)
+      : agentExternalImportViolation(band, rules.externalBans, spec);
+    if (reason === undefined) continue;
     const line = lineNumberForOffset(source, match.index);
-    if (spec.startsWith(".")) {
-      const resolved = resolveAgentRelative(filePath, spec);
-      if (!resolved.startsWith(AGENT_SRC_PREFIX)) continue;
-      const rest = resolved.slice(AGENT_SRC_PREFIX.length);
-      const target = rest.includes("/") ? (rest.split("/")[0] ?? "") : "";
-      if (band === "inspect" && rest.startsWith(AGENT_INSPECT_BUS_BAN)) {
-        violations.push(
-          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: inspect/ folds the journal and may never touch the live bus`,
-        );
-        continue;
-      }
-      if (target !== "" && target in AGENT_BANDS && !rules.internal.has(target)) {
-        violations.push(
-          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: ${band}/ may not import ${target}/`,
-        );
-      }
-      continue;
-    }
-    for (const ban of rules.externalBans) {
-      if (spec === ban || spec.startsWith(ban.endsWith("/") ? ban : `${ban}/`)) {
-        violations.push(
-          `VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: ${band}/ may not depend on ${ban}`,
-        );
-      }
-    }
+    violations.push(`VIOLATION: ${filePath}:${line} imports ${spec} — #1247 bands: ${reason}`);
   }
   for (const token of rules.tokenBans) {
     const global = new RegExp(token.source, "g");
@@ -822,7 +851,7 @@ export function agentBandViolations(filePath: string, source: string): string[] 
 const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
   ["packages/agent/src/kernel/compaction.ts", 3],
   ["packages/agent/src/kernel/failure.ts", 1],
-  ["packages/agent/src/kernel/gate/decide.ts", 7],
+  ["packages/agent/src/kernel/gate/decide.ts", 6],
   ["packages/agent/src/kernel/index.ts", 1],
   ["packages/agent/src/kernel/ports.ts", 2],
   ["packages/agent/src/kernel/turn.ts", 6],
@@ -878,11 +907,15 @@ async function validateDeepImports(): Promise<string[]> {
   return violations;
 }
 
-async function* scannedImports(pattern: RegExp): AsyncGenerator<{
-  filePath: string;
-  importPath: string;
-  line: number;
-}, void, void> {
+async function* scannedImports(pattern: RegExp): AsyncGenerator<
+  {
+    filePath: string;
+    importPath: string;
+    line: number;
+  },
+  void,
+  void
+> {
   for await (const { filePath, source } of scanRepositorySources("**/*.{ts,tsx}")) {
     for (const match of source.matchAll(pattern)) {
       const importPath = match[1];
@@ -1034,7 +1067,10 @@ function selfTest(): number {
   const anyExceptSelf: PackageRule = { ...twoTier, allowedDeps: "any-except-self" };
   const cases: Array<[string, boolean]> = [
     ["manifest permits what the manifest lists", isAllowedDep(twoTier, "@openomni/agent")],
-    ["open workspace band rejects its own package", !isAllowedDep(anyExceptSelf, "@openomni/self-test")],
+    [
+      "open workspace band rejects its own package",
+      !isAllowedDep(anyExceptSelf, "@openomni/self-test"),
+    ],
     ["open workspace band permits another package", isAllowedDep(anyExceptSelf, "@openomni/agent")],
     ["src refuses what only the manifest lists", !isAllowedSourceDep(twoTier, "@openomni/agent")],
     ["src permits its own narrower set", isAllowedSourceDep(twoTier, "@openomni/protocol")],

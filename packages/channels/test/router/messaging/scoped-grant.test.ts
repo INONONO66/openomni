@@ -9,11 +9,7 @@ import {
   resolveScopedSenderTargetGrant,
 } from "../../../src/router/messaging/grant.js";
 import { createExistingAgentMessaging } from "../../../src/router/messaging/send.js";
-import {
-  expectDenied,
-  buildSendInput,
-  messagingNow,
-} from "../../helpers/messaging.js";
+import { expectDenied, buildSendInput, messagingNow } from "../../helpers/messaging.js";
 import { resetStores } from "../_router-fixture";
 import { registerSenderAndTarget, sendPorts } from "./_send-fixture";
 
@@ -103,7 +99,9 @@ describe("send kernel over reply-scoped instances", () => {
   function messaging() {
     return createExistingAgentMessaging({
       ...sendPorts(),
-      deliver: (message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0]) => {
+      deliver: (
+        message: Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0],
+      ) => {
         delivered.push(message.target.endpointId);
         return { value: "accepted" as const };
       },
@@ -138,11 +136,13 @@ describe("send kernel over reply-scoped instances", () => {
       updatedAt: messagingNow,
     });
 
-    const receipt = await runEffect(messaging().send(
-      buildSendInput({
-        target: { actorId: "actor:target", endpointId: "endpoint:target-discord" },
-      }),
-    ));
+    const receipt = await runEffect(
+      messaging().send(
+        buildSendInput({
+          target: { actorId: "actor:target", endpointId: "endpoint:target-discord" },
+        }),
+      ),
+    );
 
     const denial = expectDenied(receipt, "ungranted");
     expect(denial.reason).toContain("replies stay inside the initiating container");
@@ -152,7 +152,9 @@ describe("send kernel over reply-scoped instances", () => {
   test("with only a scoped candidate, an unresolvable target still yields its typed target denial", async () => {
     grants = [scopedInstance({ targetActorId: "actor:ghost" })];
 
-    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
+    const receipt = await runEffect(
+      messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })),
+    );
 
     expectDenied(receipt, "target_missing");
   });
@@ -160,7 +162,9 @@ describe("send kernel over reply-scoped instances", () => {
   test("no candidate at all keeps the ungranted denial ahead of any registry lookup", async () => {
     grants = [];
 
-    const receipt = await runEffect(messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })));
+    const receipt = await runEffect(
+      messaging().send(buildSendInput({ target: { actorId: "actor:ghost" } })),
+    );
 
     expectDenied(receipt, "ungranted");
   });

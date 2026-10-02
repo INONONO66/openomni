@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { apiError } from "../helpers/retry";
-import { useProcessor, capturingSink, failingStream, streamOf, textEvents, } from "../helpers/processor";
+import {
+  useProcessor,
+  capturingSink,
+  failingStream,
+  streamOf,
+  textEvents,
+} from "../helpers/processor";
 import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
 describe("Processor fold emission", () => {

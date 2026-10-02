@@ -107,7 +107,7 @@ test("in-process findings and CLI shell agree on a violating root", () => {
 });
 
 test("in-process CLI shell passes a clean root and refuses a missing one", () => {
-  const root = fixture("packages/ipc/src/fixture.ts", "const value: string = \"clean\";\n");
+  const root = fixture("packages/ipc/src/fixture.ts", 'const value: string = "clean";\n');
 
   expect(runInProcess(root)).toEqual({
     code: 0,

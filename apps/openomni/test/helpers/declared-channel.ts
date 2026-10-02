@@ -21,8 +21,14 @@ export function declareChannel(
     const credentialRef = `secret:${provider}`;
     putChannelCredential(plane.stores.secrets, credentialRef, JSON.stringify(credentials), key, 1);
     plane.stores.instances.put({
-      id: `channel:${provider}:main`, provider, enabled: true, settings: {}, credentialRef,
-      revision: 0, createdBy: "owner", updatedAt: 1,
+      id: `channel:${provider}:main`,
+      provider,
+      enabled: true,
+      settings: {},
+      credentialRef,
+      revision: 0,
+      createdBy: "owner",
+      updatedAt: 1,
     });
   } finally {
     plane.close();

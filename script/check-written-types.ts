@@ -13,11 +13,7 @@ export interface WrittenTypeFinding {
 /** The PR gate counts syntax, not inferred types or words in comments and strings. */
 export function writtenTypes(root: string = ROOT): WrittenTypeFinding[] {
   const findings: WrittenTypeFinding[] = [];
-  const patterns = [
-    "packages/*/src/**/*.{ts,tsx}",
-    "apps/*/src/**/*.{ts,tsx}",
-    "script/*.ts",
-  ];
+  const patterns = ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}", "script/*.ts"];
   for (const pattern of patterns) {
     for (const path of new Bun.Glob(pattern).scanSync({ cwd: root, onlyFiles: true })) {
       if (/\.test\.tsx?$/.test(path)) continue;

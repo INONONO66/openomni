@@ -21,7 +21,11 @@ export interface FencedTurnFixture {
 export function fencedTurnIdentity(
   id: string,
   turnId: string,
-  generation: { readonly generation: number; readonly toolsHash: string; readonly systemHash: string },
+  generation: {
+    readonly generation: number;
+    readonly toolsHash: string;
+    readonly systemHash: string;
+  },
 ) {
   return {
     sessionId: id,

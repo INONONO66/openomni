@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { Model } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
 import { z } from "zod";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";

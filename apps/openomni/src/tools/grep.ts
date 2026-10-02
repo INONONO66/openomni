@@ -1,7 +1,6 @@
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 import { fileOperation, filesystem, text, walker, type FilePorts } from "./core/filesystem";
 

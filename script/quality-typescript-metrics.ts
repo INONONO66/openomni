@@ -34,14 +34,15 @@ type FunctionWithBody = (
 
 function functionWithBody(node: ts.Node): node is FunctionWithBody {
   return (
-    ts.isFunctionDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isConstructorDeclaration(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isArrowFunction(node)
-  ) && node.body !== undefined;
+    (ts.isFunctionDeclaration(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node)) &&
+    node.body !== undefined
+  );
 }
 
 const OPERATOR_TOKENS = new Set<ts.SyntaxKind>([

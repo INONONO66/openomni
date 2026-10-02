@@ -35,9 +35,7 @@ export function abortError(message = "aborted"): Error {
  */
 export function isAbort(error: Error, signal?: AbortSignal): boolean {
   return (
-    signal?.aborted === true ||
-    error.name === "AbortError" ||
-    asLlmFailure(error)?.aborted === true
+    signal?.aborted === true || error.name === "AbortError" || asLlmFailure(error)?.aborted === true
   );
 }
 

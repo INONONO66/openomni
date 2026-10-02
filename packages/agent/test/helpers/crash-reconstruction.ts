@@ -6,17 +6,28 @@ import { NamedPolicyRegistry } from "../../src/kernel/bundle";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/session/run";
 import * as SessionHandleStore from "../../src/store/fence";
-import { canonicalDigest, FoldCheckpoint, Message, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  FoldCheckpoint,
+  Message,
+  PlainObjectSchema,
+  PlainValueSchema,
+  type LedgerAction,
+} from "@openomni/protocol";
 import { z } from "zod";
 import { computeActionHash, GENESIS_PREV_HASH } from "../../src/store/session-file";
 import { ActionSqlRow } from "../../src/store/storage/sqlite-l0-rows";
-import { recordedCompaction, restoreContextRequest, restoredContextProjection, } from "../../src/plugins/compaction/restore";
+import {
+  recordedCompaction,
+  restoreContextRequest,
+  restoredContextProjection,
+} from "../../src/plugins/compaction/restore";
 import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
 import { GenerationUnavailable } from "../../src/kernel/failure";
 import { GenerationLayers, ObservationSink } from "../../src/kernel/ports";
 import { closeSessions } from "../../src/session/run";
 import { reactivateSession } from "./wake-session";
-import { FoldCheckpointIntegrityError, hydrateSessionHistory, } from "../../src/inspect/history";
+import { FoldCheckpointIntegrityError, hydrateSessionHistory } from "../../src/inspect/history";
 import { compiledPolicy } from "./compiled-policy";
 import { testExecutor } from "./executor";
 import { isolated, isolatedLedger } from "./isolated";
@@ -26,7 +37,12 @@ import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionSession as sessionId } from "./reconstruction-fixture";
 import { seedPolicy } from "./seed-policy";
 import { uniqueEntropy } from "./time";
-import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  withSessionServices,
+  type SessionFixture,
+} from "./session-services";
 import { foldProof, type foldCrashProof } from "./fold-crash";
 
 // R1 and R3 retain their imported draft IDs; no duplicate campaign rows.

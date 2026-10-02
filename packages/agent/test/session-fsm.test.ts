@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import * as SessionHandleStore from "../src/store/fence";
-import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  PlainObjectSchema,
+  type Inbox,
+  type LedgerAction,
+  type LedgerSession,
+  type SessionTransition,
+} from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { decideSessionAdmission } from "../src/session/mailbox";
 import { decideRequestTransition } from "../src/session/request";
@@ -18,10 +25,21 @@ import { assistantStep } from "./helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { nth } from "./helpers/nth";
-import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  withSessionServices,
+  type SessionFixture,
+} from "./helpers/session-services";
 import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
-import { fixtureGeneration, fixtureNode, fixtureTerminal, fixtureOpenTurn, fixtureTurn, } from "./helpers/open-turn-fixture";
+import {
+  fixtureGeneration,
+  fixtureNode,
+  fixtureTerminal,
+  fixtureOpenTurn,
+  fixtureTurn,
+} from "./helpers/open-turn-fixture";
 import { answerThenCompact } from "./helpers/effect-g2";
 
 const row: LedgerSession.Row = {
@@ -608,7 +626,10 @@ describe("T01-T15 real controller transition witnesses", () => {
             // Armed before this turn opened: an out-of-turn fence adoption commit,
             // before the handle activates (a live activation adopts strictly newer).
             yield* materializeS("prior-cfg");
-            yield* commitAsForeignOwner("prior-arm", { now: 20, actions: [alarmAction("alarm.arm", "alarm", null)] });
+            yield* commitAsForeignOwner("prior-arm", {
+              now: 20,
+              actions: [alarmAction("alarm.arm", "alarm", null)],
+            });
           }
           const handle = yield* declare(runtime, runner);
           const result = yield* handle.prompt("start");
@@ -635,7 +656,11 @@ describe("T01-T15 real controller transition witnesses", () => {
           const runtime = fixture();
           const kernel = isolatedLedger().kernel;
           yield* materializeS("cfg");
-          yield* commitAsForeignOwner("dead", { now: 1, expectedRevision: 1, state: "running", actions: [
+          yield* commitAsForeignOwner("dead", {
+            now: 1,
+            expectedRevision: 1,
+            state: "running",
+            actions: [
               turnIntentAction({
                 id: "T",
                 parentId: "cfg",

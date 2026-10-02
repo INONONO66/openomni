@@ -5,7 +5,7 @@ import {
   resolveChannelGrant,
 } from "@openomni/channels";
 import { Database } from "bun:sqlite";
-import { Model } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
 import type { Channel } from "@openomni/protocol";
@@ -39,11 +39,12 @@ describe("boot tool catalog", () => {
       config: suite.config("openomni-boot-catalog-", { wsToken: "boot-catalog-token" }),
       llm: {
         resolveModel: fakeProviderModel,
-        run: (input: RunInput, sink: Sink) => Effect.sync(() => {
-          resolveToolNames(input.tools.map((tool) => tool.name));
-          sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
-          return { type: "stop" as const };
-        }),
+        run: (input: RunInput, sink: Sink) =>
+          Effect.sync(() => {
+            resolveToolNames(input.tools.map((tool) => tool.name));
+            sink.onMessage(assistantMessage(input, { id: "boot-catalog-reply", text: "ready" }));
+            return { type: "stop" as const };
+          }),
       },
     });
 
@@ -148,7 +149,8 @@ describe("channel supervisor", () => {
     const supervisor = createChannelSupervisor({
       desired,
       build: (component) => component.build(async () => undefined),
-      grant: (surface, defaultTier) => registerTrustedChannelGrant(plane().stores.channelGrants, { surface, defaultTier }),
+      grant: (surface, defaultTier) =>
+        registerTrustedChannelGrant(plane().stores.channelGrants, { surface, defaultTier }),
       deliveryRoutes,
       webhookHandlers,
       traceId: () => "00-11111111111111111111111111111111-2222222222222222-01",
@@ -183,7 +185,9 @@ describe("channel supervisor", () => {
     // in the live webhook table the HTTP surface reads per request.
     expect(deliveryRoutes.has("github")).toBe(false);
     expect(webhookHandlers.has("github")).toBe(true);
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
     // #931: the mounted stage's grant carries the row's declared tier — a
     // named surface never materializes owner authority by mounting.
     expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.defaultTier).toBe(
@@ -217,7 +221,9 @@ describe("channel supervisor", () => {
 
     await supervisor.reconcile();
 
-    expect(resolveChannelGrant(channelStores(), { surface: "discord" })?.grant.defaultTier).toBe("observer");
+    expect(resolveChannelGrant(channelStores(), { surface: "discord" })?.grant.defaultTier).toBe(
+      "observer",
+    );
 
     await supervisor.stopAll();
 

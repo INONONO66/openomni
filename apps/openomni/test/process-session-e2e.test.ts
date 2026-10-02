@@ -15,7 +15,12 @@ import { join } from "node:path";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { receivedMessages } from "./helpers/received-messages";
 import { planeOf } from "./helpers/ledger";
-import { PROCESS_SESSION_NO_REQUEST_EXIT, runProcessEntry, serveProcessSession, type ProcessSessionRequest } from "../src/process-entry";
+import {
+  PROCESS_SESSION_NO_REQUEST_EXIT,
+  runProcessEntry,
+  serveProcessSession,
+  type ProcessSessionRequest,
+} from "../src/process-entry";
 import { bounded } from "./helpers/protected-dispatch";
 import { runEffect } from "./helpers/effect";
 import { z } from "zod";
@@ -40,7 +45,12 @@ function processPlane(fixture: { directory: string }): ProcessPlane {
   return {
     catalogPath,
     sessionsDir,
-    runtime: gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
+    runtime: gatewayRuntime({
+      observations: Bus,
+      catalogPath,
+      sessionsDir,
+      clusterStoragePath: ":memory:",
+    }),
   };
 }
 
@@ -172,7 +182,12 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const fixture = messageFixture(
     "resident",
     undefined,
-    catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool),
+    catalogDefinitions(testToolPorts)
+      .filter(
+        (tool: import("@openomni/protocol").AnyToolDefinition) =>
+          tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"),
+      )
+      .map(sessionTool),
   );
   const stdin = new PassThrough();
   let requests = 0;
@@ -192,7 +207,10 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     return runtime;
   });
   const answerRequested = Promise.withResolvers<SessionTransition.Answer>();
-  const answerFrame = z.object({ kind: z.literal("request_answer"), answer: SessionTransition.Answer });
+  const answerFrame = z.object({
+    kind: z.literal("request_answer"),
+    answer: SessionTransition.Answer,
+  });
   const log = mock((line: string) => {
     const frame = answerFrame.safeParse(JSON.parse(line));
     if (frame.success) answerRequested.resolve(frame.data.answer);
@@ -220,9 +238,9 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(stdin.isPaused()).toBe(true);
     expect(stdin.listenerCount("data")).toBe(0);
-    expect(receivedMessages(fixture.plane, "sender").some(
-      (row) => row.content === "PROCESS_SENTINEL",
-    )).toBe(true);
+    expect(
+      receivedMessages(fixture.plane, "sender").some((row) => row.content === "PROCESS_SENTINEL"),
+    ).toBe(true);
   } finally {
     dispose.mockRestore();
     stdin.destroy();
@@ -308,9 +326,7 @@ test("process session drain defers entity-owned resume consumption", async () =>
       ),
     );
 
-    expect(deferred).toHaveBeenCalledWith(
-      `process drain deferred consume: ${fixture.sessionId}`,
-    );
+    expect(deferred).toHaveBeenCalledWith(`process drain deferred consume: ${fixture.sessionId}`);
     expect(kernel.pendingMessages(fixture.sessionId).map((message) => message.id)).toEqual([
       "resume-pending",
     ]);
@@ -405,7 +421,14 @@ test.each([
   const fixture = messageFixture(
     "resident",
     undefined,
-    toolSend ? catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool) : [],
+    toolSend
+      ? catalogDefinitions(testToolPorts)
+          .filter(
+            (tool: import("@openomni/protocol").AnyToolDefinition) =>
+              tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"),
+          )
+          .map(sessionTool)
+      : [],
   );
   let requests = 0;
   const provider = Bun.serve({
@@ -426,12 +449,15 @@ test.each([
       ...(toolSend ? {} : { deadline }),
     });
     const notified: string[] = [];
-    await acquireAppResource(runtime, serveProcessSession(
-      processRequest(child.id, plane, provider),
-      (ids) => notified.push(...ids),
-      undefined,
+    await acquireAppResource(
       runtime,
-    ));
+      serveProcessSession(
+        processRequest(child.id, plane, provider),
+        (ids) => notified.push(...ids),
+        undefined,
+        runtime,
+      ),
+    );
     expect(requests).toBe(toolSend ? 2 : 1);
     expect(notified).toContain("sender");
     expect(
@@ -597,25 +623,26 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     }),
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) => Effect.sync(() => {
-        parentSessionId = input.trace.sessionId;
-        if (!commissioned) {
-          const output = requestToolStep(input, sink, {
-            id: "process-send",
-            tool: "send_message",
-            input: {
-              to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
-              message: "run process",
-              reply_to: "process-binding",
-            },
-          });
-          if (output === undefined) return { type: "stop" };
-          expect(output.isError).not.toBe(true);
-          commissioned = true;
-        }
-        sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
-        return { type: "stop" as const };
-      }),
+      run: (input, sink) =>
+        Effect.sync(() => {
+          parentSessionId = input.trace.sessionId;
+          if (!commissioned) {
+            const output = requestToolStep(input, sink, {
+              id: "process-send",
+              tool: "send_message",
+              input: {
+                to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+                message: "run process",
+                reply_to: "process-binding",
+              },
+            });
+            if (output === undefined) return { type: "stop" };
+            expect(output.isError).not.toBe(true);
+            commissioned = true;
+          }
+          sink.onMessage(assistantMessage(input, { text: "PARENT_SENTINEL" }));
+          return { type: "stop" as const };
+        }),
     },
   });
   await ownerStart(app, "initial-process");
@@ -629,9 +656,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   );
   expect(requests).toBe(2);
   expect(
-    receivedMessages(plane, child.parentId).some(
-      (row) => row.content === "PROCESS_TOOL_SENTINEL",
-    ),
+    receivedMessages(plane, child.parentId).some((row) => row.content === "PROCESS_TOOL_SENTINEL"),
   ).toBe(true);
   expect(replies).toHaveLength(1);
   expect(replies[0]?.content).toBe("PROCESS_SENTINEL");

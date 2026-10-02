@@ -123,7 +123,9 @@ for (const visible of ["none", "text", "tool"] as const) {
           .get(),
       ).toEqual({ count: visible === "none" ? 2 : 1 });
       if (visible !== "none")
-        expect(plane.openKernel(sessionId).getSnapshot(sessionId).turns[0]?.terminal?.kind).toBe("error");
+        expect(plane.openKernel(sessionId).getSnapshot(sessionId).turns[0]?.terminal?.kind).toBe(
+          "error",
+        );
       console.log(
         "937 SSE attempt",
         JSON.stringify({ visible, requests, retryAlarms, parents, attempts }),
@@ -220,7 +222,13 @@ test("real cross-provider fallback sends only the fallback's stored credential",
     if (old === undefined) delete process.env.OPENOMNI_AUTH_FILE;
     else process.env.OPENOMNI_AUTH_FILE = old;
   });
-  await runEffect(Model.Auth.set("openai", { type: "api", key: "fallback-key" }, { id: () => "tmp-fallback", authFilePath: join(catalogPath, "..", "auth.json") }));
+  await runEffect(
+    Model.Auth.set(
+      "openai",
+      { type: "api", key: "fallback-key" },
+      { id: () => "tmp-fallback", authFilePath: join(catalogPath, "..", "auth.json") },
+    ),
+  );
   const plane = await bootAndAwaitTurn(config, "fallback");
   expect(authorization.map((request) => request.key)).toEqual([
     "primary-key",

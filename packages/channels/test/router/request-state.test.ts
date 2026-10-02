@@ -14,9 +14,14 @@ test.each([
   "first",
   "quorum",
   "all",
-] as const)("%s resolves only at its distinct-responder threshold", async (resolution: "first" | "quorum" | "all") => {
+] as const)("%s resolves only at its distinct-responder threshold", async (resolution:
+  | "first"
+  | "quorum"
+  | "all") => {
   const threshold = resolution === "first" ? 1 : resolution === "quorum" ? 2 : 3;
-  await runEffect(await openRequest("original", { expectedResponders: ["a", "b", "c"], resolution, threshold }));
+  await runEffect(
+    await openRequest("original", { expectedResponders: ["a", "b", "c"], resolution, threshold }),
+  );
   for (const [index, responder] of ["a", "b", "c"].slice(0, threshold).entries()) {
     expect(await runEffect(answer("original", responder, `reply-${index}`, 2 + index))).toBe(
       index + 1 === threshold ? "resolved" : "attached",
@@ -33,11 +38,13 @@ test.each([
 });
 
 test("same reply and same responder never advance the request twice", async () => {
-  await runEffect(await openRequest("original", {
-    expectedResponders: ["a", "b"],
-    resolution: "all",
-    threshold: 2,
-  }));
+  await runEffect(
+    await openRequest("original", {
+      expectedResponders: ["a", "b"],
+      resolution: "all",
+      threshold: 2,
+    }),
+  );
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
   const before = sessionTree("request-owner", ledger().sessions.actions);
   expect(await runEffect(answer("original", "a", "reply-a", 2))).toBe("attached");
@@ -52,13 +59,17 @@ test("unknown responder is rejected without attaching", async () => {
   expect(ledger().kernel.requestById("original")?.replies).toEqual([]);
 });
 
-test.each([0, 1])("timeout keeps %s partial replies in original action history", async (count: number) => {
-  await runEffect(await openRequest("original", {
-    expectedResponders: ["a", "b"],
-    resolution: "all",
-    threshold: 2,
-    deadline: 10,
-  }));
+test.each([
+  0, 1,
+])("timeout keeps %s partial replies in original action history", async (count: number) => {
+  await runEffect(
+    await openRequest("original", {
+      expectedResponders: ["a", "b"],
+      resolution: "all",
+      threshold: 2,
+      deadline: 10,
+    }),
+  );
   if (count) await runEffect(answer("original", "a", "early", 2));
   expect(
     (await command("original", { kind: "request.timeout", requestId: "original" }, 9)).resolution,
@@ -74,33 +85,39 @@ test.each([0, 1])("timeout keeps %s partial replies in original action history",
 });
 
 test("cancellation preserves partial replies and cannot be reversed by late input", async () => {
-  await runEffect(await openRequest("original", {
-    expectedResponders: ["a", "b"],
-    resolution: "all",
-    threshold: 2,
-  }));
+  await runEffect(
+    await openRequest("original", {
+      expectedResponders: ["a", "b"],
+      resolution: "all",
+      threshold: 2,
+    }),
+  );
   await runEffect(answer("original", "a", "early", 2));
   expect(
-    (await command(
-      "original",
-      {
-        kind: "request.cancel",
-        requestId: "original",
-        principal: { kind: "actor", principalId: "a", evidenceId: "external" },
-      },
-      3,
-    )).resolution,
+    (
+      await command(
+        "original",
+        {
+          kind: "request.cancel",
+          requestId: "original",
+          principal: { kind: "actor", principalId: "a", evidenceId: "external" },
+        },
+        3,
+      )
+    ).resolution,
   ).toBe("rejected");
   expect(
-    (await command(
-      "original",
-      {
-        kind: "request.cancel",
-        requestId: "original",
-        principal: { kind: "session", principalId: "request-owner", evidenceId: "session" },
-      },
-      4,
-    )).resolution,
+    (
+      await command(
+        "original",
+        {
+          kind: "request.cancel",
+          requestId: "original",
+          principal: { kind: "session", principalId: "request-owner", evidenceId: "session" },
+        },
+        4,
+      )
+    ).resolution,
   ).toBe("cancelled");
   expect(await runEffect(answer("original", "b", "late", 5))).toBe("duplicate");
   expect(ledger().kernel.requestById("original")).toMatchObject({
@@ -111,7 +128,9 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
 
 test.each([10, 11])("answer at %s cannot cross the deadline", async (at: number) => {
   await runEffect(await openRequest("original", { deadline: 10 }));
-  expect(await runEffect(answer("original", "actor-external-worker", "late", at))).toBe("late_unknown");
+  expect(await runEffect(answer("original", "actor-external-worker", "late", at))).toBe(
+    "late_unknown",
+  );
   expect(ledger().kernel.requestById("original")?.replies).toEqual([]);
   expect(ledger().kernel.requestById("original")?.state).toBe("expired");
 });
@@ -119,7 +138,9 @@ test.each([10, 11])("answer at %s cannot cross the deadline", async (at: number)
 test("resolved request cannot reopen for supplementary replies", async () => {
   await runEffect(await openRequest("original"));
   expect(await runEffect(answer("original", "actor-external-worker", "first", 2))).toBe("resolved");
-  expect(await runEffect(answer("original", "actor-external-worker", "second", 3))).toBe("duplicate");
+  expect(await runEffect(answer("original", "actor-external-worker", "second", 3))).toBe(
+    "duplicate",
+  );
   expect(ledger().kernel.requestById("original")?.replies).toHaveLength(1);
 });
 
@@ -127,7 +148,10 @@ test.each([
   "accepted",
   "rejected",
   "unknown",
-] as const)("physical %s receipt preserves its value in request action history", async (value: "accepted" | "rejected" | "unknown") => {
+] as const)("physical %s receipt preserves its value in request action history", async (value:
+  | "accepted"
+  | "rejected"
+  | "unknown") => {
   await runEffect(await openRequest("original"));
   const port = requestPort();
   const receipt = {

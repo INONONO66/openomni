@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { setSessionTitleIfPlaceholder } from "../src/renderer/state/session-actions";
-import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab, openTab } from "../src/renderer/state/store";
+import {
+  consoleStore,
+  INITIAL_CLIENT_STATE,
+  newSessionTab,
+  openTab,
+} from "../src/renderer/state/store";
 import { renderShell } from "./helpers";
 
 /**

@@ -94,7 +94,12 @@ test("session index registers at fence 0, rotates monotonically and refuses unkn
 test("child session pages preserve id order and enforce a bounded page size", () => {
   const store = openCatalogStore(":memory:", { now: testNow });
   try {
-    for (const [id, parentId] of [["b", "root"], ["a", "root"], ["c", "root"], ["else", "other"]] as const) {
+    for (const [id, parentId] of [
+      ["b", "root"],
+      ["a", "root"],
+      ["c", "root"],
+      ["else", "other"],
+    ] as const) {
       store.indexSession({ id, parentId, role: "worker", createdAt: 1 });
     }
     expect(store.childSessionsPage("root", "", 2).map((row) => row.id)).toEqual(["a", "b"]);

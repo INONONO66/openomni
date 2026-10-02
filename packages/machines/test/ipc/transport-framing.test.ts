@@ -20,7 +20,9 @@ describe("transport framing lifecycle", () => {
     const rejected = captureError(pending);
     await within(requested.promise, "server receiving pending call");
     client.close();
-    expect(await within(rejected, "pending call closed")).toMatchObject({ message: "client closed" });
+    expect(await within(rejected, "pending call closed")).toMatchObject({
+      message: "client closed",
+    });
     expect(client.connected).toBe(false);
     await expect(client.call("after.close")).rejects.toThrow("not connected");
   });
@@ -50,7 +52,9 @@ describe("transport framing lifecycle", () => {
       const call = client.call("upload", { payload }, 30_000);
       const rejected = captureError(call);
       expect(await within(prefixReceived.promise, "request prefix")).toBeLessThan(payload.length);
-      expect(await within(rejected, "FIN rejection with queued bytes")).toBeInstanceOf(IpcConnectionError);
+      expect(await within(rejected, "FIN rejection with queued bytes")).toBeInstanceOf(
+        IpcConnectionError,
+      );
       await within(disconnected.promise, "client close after FIN");
       expect(client.connected).toBe(false);
     } finally {
@@ -74,7 +78,9 @@ describe("transport framing lifecycle", () => {
     servers.push(server);
     const raw = await connectRaw(server.socketPath);
     rawSockets.push(raw);
-    raw.write(`${JSON.stringify(Ipc.createNotification("prefix.barrier"))}\n{"v":2,"type":"request","id":"partial"`);
+    raw.write(
+      `${JSON.stringify(Ipc.createNotification("prefix.barrier"))}\n{"v":2,"type":"request","id":"partial"`,
+    );
     await within(processed.promise, "complete frame before partial request");
     raw.destroy();
     await within(disconnected.promise, "mid-frame disconnect");

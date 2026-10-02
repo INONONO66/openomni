@@ -52,13 +52,17 @@ describe("GatewayRouter access routing", () => {
   test.each([
     undefined,
     "full_access",
-  ] as const)("broadcast treatment %s remains evidence-only", async (inboundTreatment: "full_access" | undefined) => {
+  ] as const)("broadcast treatment %s remains evidence-only", async (inboundTreatment:
+    | "full_access"
+    | undefined) => {
     registerChannelGrant({
       kind: "broadcast_channel",
       defaultTier: "observer",
       ...(inboundTreatment === undefined ? {} : { inboundTreatment }),
     });
-    expect((await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).status).toBe("executed");
+    expect((await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).status).toBe(
+      "executed",
+    );
     expect(routingDecisions()[0]).toMatchObject({
       trustTier: "observer",
     });

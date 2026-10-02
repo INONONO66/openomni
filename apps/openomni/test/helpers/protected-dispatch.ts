@@ -15,7 +15,10 @@ import { createRequestDomainRevisions } from "../../src/tools/core/request-domai
 import type { AppLedgerPlane, SessionKernel } from "../../src/composition/cluster-runtime";
 import { testPlane } from "./ledger";
 import { PROVISION_POLICY_ROWS } from "../../src/tools/provision";
-import { executorLayer, catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
+import {
+  executorLayer,
+  catalogLayer,
+} from "../../../../packages/agent/test/helpers/service-layers";
 import { runEffect, runSyncEffect } from "./effect";
 
 export { bounded };
@@ -33,25 +36,40 @@ export function protectedDispatch(
   const plane = options.plane ?? testPlane();
   const sessionId = crypto.randomUUID();
   const kernel: SessionKernel = options.kernel ?? plane.openKernel(sessionId);
-  const recording = runSyncEffect(requestLedger({
-    id: sessionId,
-    clock: () => clockRef.now,
-    domainRevisions: createRequestDomainRevisions(plane.stores),
-    kernel,
-    onRequest(request) {
-      if (request.state === "open") opened.resolve(request);
-    },
-  }));
-  const controller = new AbortController();
-  const executor = runSyncEffect(createExecutor({
-    ...recording,
-    authorizeApproval: () => Effect.succeed({
-      kind: "owner" as const,
-      principalId: "owner",
-      evidenceId: "authenticated",
+  const recording = runSyncEffect(
+    requestLedger({
+      id: sessionId,
+      clock: () => clockRef.now,
+      domainRevisions: createRequestDomainRevisions(plane.stores),
+      kernel,
+      onRequest(request) {
+        if (request.state === "open") opened.resolve(request);
+      },
     }),
-  }).pipe(Effect.provide(executorLayer({ ...recording, observations, policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }))) }))));
-  const dispatcher = runSyncEffect(createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))));
+  );
+  const controller = new AbortController();
+  const executor = runSyncEffect(
+    createExecutor({
+      ...recording,
+      authorizeApproval: () =>
+        Effect.succeed({
+          kind: "owner" as const,
+          principalId: "owner",
+          evidenceId: "authenticated",
+        }),
+    }).pipe(
+      Effect.provide(
+        executorLayer({
+          ...recording,
+          observations,
+          policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row) => ({ ...row, generation: 1 }))),
+        }),
+      ),
+    ),
+  );
+  const dispatcher = runSyncEffect(
+    createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
+  );
   const execution = dispatcher.execute(
     { id: "original-call", tool: definition.name, input },
     { sessionId: recording.identity.sessionId, turnId: "turn", signal: controller.signal },
@@ -75,7 +93,11 @@ export function protectedDispatch(
       const pending = executor.approvals?.pending()[0];
       if (pending === undefined) throw new Error("missing protected invocation");
       if (executor.approvals === undefined) throw new Error("missing approval port");
-      const answer = await runEffect(Effect.result(executor.approvals.answer({ request: pending, decision, credential: "owner-token" })));
+      const answer = await runEffect(
+        Effect.result(
+          executor.approvals.answer({ request: pending, decision, credential: "owner-token" }),
+        ),
+      );
       if (answer._tag === "Failure") throw answer.failure;
       return bounded(running);
     },

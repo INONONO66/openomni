@@ -8,26 +8,37 @@ export * from "../../src/errors";
 
 function sequentialIds(prefix: string): () => string {
   let n = 0;
-  return () => { n += 1; return `${prefix}-${n}`; };
+  return () => {
+    n += 1;
+    return `${prefix}-${n}`;
+  };
 }
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });
 }
 export interface CodeRunner {
   readonly native?: Native.CodeRunner;
-  runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
+  runCode(
+    request: Machine.CellRequest,
+    call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
+    signal: AbortSignal,
+  ): Promise<Machine.CellResult>;
   peekCode(cellId: string): Machine.CellOutput | undefined;
   close(): Promise<void>;
 }
 function nativeRunner(runner: CodeRunner): Native.CodeRunner {
-  return runner.native ?? {
-    runCode: (request, call, signal) => foreign(() => runner.runCode(request, (request) => run(call(request)), signal)),
-    peekCode: runner.peekCode,
-    close: () => foreign(() => runner.close()),
-  };
+  return (
+    runner.native ?? {
+      runCode: (request, call, signal) =>
+        foreign(() => runner.runCode(request, (request) => run(call(request)), signal)),
+      peekCode: runner.peekCode,
+      close: () => foreign(() => runner.close()),
+    }
+  );
 }
 function machineHandle(native: Native.MachineHandle) {
-  return { native,
+  return {
+    native,
     fs: {
       read: (...args: Parameters<typeof native.fs.read>) => run(native.fs.read(...args)),
       write: (...args: Parameters<typeof native.fs.write>) => run(native.fs.write(...args)),
@@ -40,19 +51,63 @@ function machineHandle(native: Native.MachineHandle) {
   };
 }
 export type MachineHandle = ReturnType<typeof machineHandle>;
-export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id"> & { id?: () => string; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
+export async function createMachineHost(
+  options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id"> & {
+    id?: () => string;
+    callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
+  },
+) {
   const callTool = options.callTool;
-  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
+  const { value: native, close } = await acquire(
+    Native.createMachineHost({
+      ...options,
+      id: options.id ?? sequentialIds("host-req"),
+      callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined,
+    }),
+  );
   const handles = new Map<string, MachineHandle>();
-  return { native, list: native.list,
-    get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },
-    close: async () => { await run(native.close()); await close(); },
+  return {
+    native,
+    list: native.list,
+    get(id: string) {
+      let handle = handles.get(id);
+      if (!handle) {
+        handle = machineHandle(native.get(id));
+        handles.set(id, handle);
+      }
+      return handle;
+    },
+    close: async () => {
+      await run(native.close());
+      await close();
+    },
   };
 }
 export type MachineHost = Awaited<ReturnType<typeof createMachineHost>>;
-export async function attachMachineDaemon(options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner" | "id"> & { id?: () => string; runner?: CodeRunner }) {
-  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), runner: options.runner ? nativeRunner(options.runner) : undefined }));
-  return { native, attachment: native.attachment, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
+export async function attachMachineDaemon(
+  options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner" | "id"> & {
+    id?: () => string;
+    runner?: CodeRunner;
+  },
+) {
+  const { value: native, close } = await acquire(
+    Native.attachMachineDaemon({
+      ...options,
+      id: options.id ?? sequentialIds("daemon-req"),
+      runner: options.runner ? nativeRunner(options.runner) : undefined,
+    }),
+  );
+  return {
+    native,
+    attachment: native.attachment,
+    get closed() {
+      return run(native.closed);
+    },
+    close: async () => {
+      await run(native.close());
+      await close();
+    },
+  };
 }
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {
   const native = sync(fsDriver(...args));

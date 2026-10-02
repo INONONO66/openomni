@@ -23,4 +23,9 @@ export class IpcRemoteError extends Data.TaggedError("IpcRemoteError")<{
   readonly code: number;
 }> {}
 
-export type IpcError = MachinesFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError;
+export type IpcError =
+  | MachinesFailure
+  | IpcConnectionError
+  | IpcTimeoutError
+  | IpcProtocolError
+  | IpcRemoteError;

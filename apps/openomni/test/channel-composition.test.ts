@@ -11,19 +11,32 @@ const credentials = {
   discord: { token: "dc-token" },
 };
 const instances: Provisioning.ChannelInstance[] = Object.keys(credentials).map((provider) => ({
-  id: `channel:${provider}:main`, provider, enabled: true, settings: {},
-  credentialRef: provider, revision: 0, createdBy: "owner", updatedAt: 0,
+  id: `channel:${provider}:main`,
+  provider,
+  enabled: true,
+  settings: {},
+  credentialRef: provider,
+  revision: 0,
+  createdBy: "owner",
+  updatedAt: 0,
 }));
 
 function profile(rows = instances) {
   const fakes = fakeProviders();
-  const payloads = new Map(Object.entries(credentials).map(([key, value]) => [key, JSON.stringify(value)]));
-  const selected = declaredChannelProfile(rows, (ref) => {
-    const value = payloads.get(ref);
-    return value === undefined
-      ? { kind: "locked", reason: "missing" }
-      : { kind: "ok", plaintext: new TextEncoder().encode(value) };
-  }, testChannelDeps(), fakes.providers);
+  const payloads = new Map(
+    Object.entries(credentials).map(([key, value]) => [key, JSON.stringify(value)]),
+  );
+  const selected = declaredChannelProfile(
+    rows,
+    (ref) => {
+      const value = payloads.get(ref);
+      return value === undefined
+        ? { kind: "locked", reason: "missing" }
+        : { kind: "ok", plaintext: new TextEncoder().encode(value) };
+    },
+    testChannelDeps(),
+    fakes.providers,
+  );
   return { fakes, ...selected };
 }
 
@@ -38,7 +51,9 @@ describe("declared channel composition", () => {
     expect(statuses.every((status) => status.state === "ready")).toBe(true);
     const built = rows.map((row) => row.component.build(handler));
     expect(fakes.surfaces.map((surface) => surface.handler)).toEqual([handler, handler, handler]);
-    expect(fakes.surfaces.map((surface) => surface.credentials)).toEqual(Object.values(credentials));
+    expect(fakes.surfaces.map((surface) => surface.credentials)).toEqual(
+      Object.values(credentials),
+    );
     expect(fakes.surfaces.map((surface) => surface.config)).toEqual([{}, {}, {}]);
     const [telegram, github, discord] = built;
     expect(telegram?.deliveryRoute).toBeDefined();
@@ -49,7 +64,9 @@ describe("declared channel composition", () => {
     expect(github?.webhookHandler).toBeDefined();
     await telegram?.deliveryRoute?.("actor-1", "hello", "key-1");
     expect(fakes.delivered).toEqual([{ externalId: "actor-1", body: "hello" }]);
-    expect((await github?.webhookHandler?.(new Request("https://x.test/webhook")))?.status).toBe(200);
+    expect((await github?.webhookHandler?.(new Request("https://x.test/webhook")))?.status).toBe(
+      200,
+    );
     expect(fakes.webhookCalls).toHaveLength(1);
   });
 });

@@ -11,7 +11,12 @@ export type MockLlmFn = (input: RunInput, sink: Sink) => Promise<Run.Outcome>;
 // Explicit terminal provider behavior, never injected into another mock's output.
 export const completeModel: MockLlmFn = async (input, sink) => {
   sink.onMessage(
-    createAssistantMessage("done", input.messages.at(-1)?.info.id ?? "", input.trace.sessionId, messageSource),
+    createAssistantMessage(
+      "done",
+      input.messages.at(-1)?.info.id ?? "",
+      input.trace.sessionId,
+      messageSource,
+    ),
   );
   return { type: "stop" };
 };
@@ -23,7 +28,9 @@ export function createStopOutcome(): Run.Outcome {
 export function countingStopLlm() {
   let calls = 0;
   return {
-    get calls() { return calls; },
+    get calls() {
+      return calls;
+    },
     llm: mockLlm(async () => {
       calls += 1;
       return createStopOutcome();
@@ -49,19 +56,19 @@ export function providerFailure(
     isRetryable: options.retryable ?? true,
   });
   return new LlmRunFailure({
-      cause,
-      retryAfterMs: 0,
-      message,
-      aborted: options.aborted ?? false,
-      contextOverflow: options.contextOverflow ?? false,
-      visibleOutput: false,
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        reasoningTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
+    cause,
+    retryAfterMs: 0,
+    message,
+    aborted: options.aborted ?? false,
+    contextOverflow: options.contextOverflow ?? false,
+    visibleOutput: false,
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
   });
 }
 
@@ -109,22 +116,24 @@ export function createMockLlmConfig(options: {
 }): NonNullable<ChatAgentConfig["llm"]> {
   return {
     run: (input, sink) => Effect.promise(() => options.run(input, sink)),
-    resolveModel: () => Effect.promise(async () => {
-      await options.getModels();
-      return options.fromModelsDevModel();
-    }),
+    resolveModel: () =>
+      Effect.promise(async () => {
+        await options.getModels();
+        return options.fromModelsDevModel();
+      }),
   };
 }
 
 /** An llm config whose resolved "provider/model" advertises a `context`-token window. */
 export function windowedLlm(run: MockLlmFn, context = 1000): ChatAgentConfig["llm"] {
   return {
-    resolveModel: () => Effect.succeed({
-      id: "model",
-      name: "model",
-      providerID: "provider",
-      limit: { context, output: 100 },
-    }),
+    resolveModel: () =>
+      Effect.succeed({
+        id: "model",
+        name: "model",
+        providerID: "provider",
+        limit: { context, output: 100 },
+      }),
     run: (input, sink) => Effect.promise(() => run(input, sink)),
   };
 }

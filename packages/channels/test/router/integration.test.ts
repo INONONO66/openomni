@@ -32,7 +32,9 @@ describe("GatewayRouter conversation isolation", () => {
   test.each([
     "workspaceId",
     "channelId",
-  ] as const)("different %s isolates the target session", async (field: "channelId" | "workspaceId") => {
+  ] as const)("different %s isolates the target session", async (field:
+    | "channelId"
+    | "workspaceId") => {
     const [first, second] = await ownerMessageTargets({
       ...ownerFacts,
       eventId: "second",
@@ -50,15 +52,20 @@ describe("GatewayRouter conversation isolation", () => {
       createdBy: "owner",
     });
     expect(
-      await runEffect(kernelRouter().ingest({ ...ownerSender, externalId: "stranger" }, ownerFacts)),
+      await runEffect(
+        kernelRouter().ingest({ ...ownerSender, externalId: "stranger" }, ownerFacts),
+      ),
     ).toMatchObject({ status: "blocked_pre" });
     expect(
-      (await runEffect(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "allowed" }))).status,
+      (await runEffect(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "allowed" })))
+        .status,
     ).toBe("executed");
     expect(commits).toHaveLength(1);
   });
   test("invalid facts fail schema validation before routing", async () => {
-    expect(await effectFailure(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "" }))).toMatchObject({
+    expect(
+      await effectFailure(kernelRouter().ingest(ownerSender, { ...ownerFacts, eventId: "" })),
+    ).toMatchObject({
       issues: [expect.objectContaining({ code: "too_small", path: ["eventId"] })],
     });
     expect(commits).toEqual([]);

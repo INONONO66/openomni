@@ -9,23 +9,24 @@ import {
   type WebSocketHandler,
   type WsConnection,
 } from "@openomni/channels";
-import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
-import { Kernel, Session, Bundle, Journal, Inspect } from "@openomni/agent";
+import {
+  type ChannelError,
+  createChannelStores,
+  decodeChannelFailure,
+  type ChannelStoreSource,
+} from "@openomni/channels";
+import { Kernel, Session, type Bundle, type Journal, Inspect } from "@openomni/agent";
 import type { ChannelGrantStore } from "@openomni/channels";
 import type { Actor, Gateway } from "@openomni/protocol";
 const Entropy = Kernel.Entropy;
-type Entropy = Kernel.Entropy;
 const GenerationLayers = Kernel.GenerationLayers;
-type GenerationLayers = Kernel.GenerationLayers;
 const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
 const currentInvocation = Kernel.currentInvocation;
 type SessionEntryServices = Kernel.SessionEntryServices;
 type BundleDefinitions = Bundle.BundleDefinitions;
 const createSessionRequests = Session.createSessionRequests;
 const currentExecutor = Kernel.currentExecutor;
 const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
 const scopeObservation = Session.scopeObservation;
 const attemptUsage = Inspect.attemptUsage;
 const toolWallMs = Inspect.toolWallMs;
@@ -59,20 +60,40 @@ export function gatewayRuntime(options: AppRuntimeOptions): AppRuntime {
   let disposed = false;
   let disposal: Promise<void> | undefined;
   Object.assign(runtime, {
-    disposeEffect: disposeEffect.pipe(Effect.ensuring(Effect.sync(() => {
-      disposed = true;
-      if (processRuntime === runtime) processRuntime = undefined;
-    }))),
+    disposeEffect: disposeEffect.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          disposed = true;
+          if (processRuntime === runtime) processRuntime = undefined;
+        }),
+      ),
+    ),
     dispose: () => {
       if (disposed) {
         disposal ??= dispose();
         return disposal;
       }
-      disposal ??= runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
-        Effect.mapError((error) => new AppLifecycleFailure({ operation: "shutdown.raw_unsettled", cause: String(error) })),
-      )).catch((error: Error) => { disposal = undefined; throw error; }).then(() => dispose().finally(() => {
-        if (processRuntime === runtime) processRuntime = undefined;
-      }));
+      disposal ??= runAppEffect(
+        runtime,
+        Effect.flatMap(GenerationLayers, (generations) => generations.drain).pipe(
+          Effect.mapError(
+            (error) =>
+              new AppLifecycleFailure({
+                operation: "shutdown.raw_unsettled",
+                cause: String(error),
+              }),
+          ),
+        ),
+      )
+        .catch((error: Error) => {
+          disposal = undefined;
+          throw error;
+        })
+        .then(() =>
+          dispose().finally(() => {
+            if (processRuntime === runtime) processRuntime = undefined;
+          }),
+        );
       return disposal;
     },
   });
@@ -165,7 +186,8 @@ export function toolPorts(
               stop: (id, tenant) => runAppEffect(runtime, cells.cell.stop(id, tenant)),
             },
           },
-    llm: (call) => runAppEffect(runtime, currentInvocation().generation.provide(ports.completion(call))),
+    llm: (call) =>
+      runAppEffect(runtime, currentInvocation().generation.provide(ports.completion(call))),
     messages: { ingest: (...args) => runAppEffect(runtime, ports.messages.ingest(...args)) },
   };
 }
@@ -201,9 +223,14 @@ function phaseFacts(
     return { phase: state, phaseSince: sealed ?? sources.latest?.ts ?? 0 };
   }
   if (sources.terminal !== undefined) {
-    const phase = sources.terminal.effect.kind === "result" ? "completed"
-      : sources.terminal.effect.kind === "error" ? "failed"
-      : sources.terminal.effect.kind === "waiting" ? "waiting_input" : "idle";
+    const phase =
+      sources.terminal.effect.kind === "result"
+        ? "completed"
+        : sources.terminal.effect.kind === "error"
+          ? "failed"
+          : sources.terminal.effect.kind === "waiting"
+            ? "waiting_input"
+            : "idle";
     return { phase, phaseSince: sources.terminal.action.ts };
   }
   return { phase: "idle", phaseSince: sources.genesis?.ts ?? 0 };
@@ -221,8 +248,10 @@ export function readSessionCursor(
   const frame = SessionRead.Request.parse(input);
   const before = kernel.row(frame.sessionId);
   const afterRevision = frame.cursor?.revision ?? 0;
-  if (frame.cursor !== undefined &&
-      (frame.cursor.epoch !== before.fence || afterRevision > before.revision)) {
+  if (
+    frame.cursor !== undefined &&
+    (frame.cursor.epoch !== before.fence || afterRevision > before.revision)
+  ) {
     return {
       type: "session_gap" as const,
       sessionId: frame.sessionId,
@@ -242,9 +271,12 @@ export function readSessionCursor(
   const openTurnIntent = openTurn === undefined ? undefined : kernel.actionById(openTurn.turnId);
   const genesis = kernel.latestAction(frame.sessionId, 1);
   const after = kernel.row(frame.sessionId);
-  if (before.fence !== after.fence || before.revision !== page.headRevision ||
-      after.revision !== page.headRevision ||
-      (page.actions[0] !== undefined && page.actions[0].ordinal !== afterRevision + 1)) {
+  if (
+    before.fence !== after.fence ||
+    before.revision !== page.headRevision ||
+    after.revision !== page.headRevision ||
+    (page.actions[0] !== undefined && page.actions[0].ordinal !== afterRevision + 1)
+  ) {
     return {
       type: "session_gap" as const,
       sessionId: frame.sessionId,
@@ -253,9 +285,14 @@ export function readSessionCursor(
       oldestRevision: 0,
     };
   }
-  const { phase, phaseSince } = phaseFacts(after.state, { terminal, latest, openTurnIntent, genesis });
+  const { phase, phaseSince } = phaseFacts(after.state, {
+    terminal,
+    latest,
+    openTurnIntent,
+    genesis,
+  });
   return SessionRead.Page.parse({
-    type: frame.cursor === undefined ? "session_snapshot" as const : "session_page" as const,
+    type: frame.cursor === undefined ? ("session_snapshot" as const) : ("session_page" as const),
     sessionId: frame.sessionId,
     state: after.state,
     phase,
@@ -271,14 +308,21 @@ export function readSessionCursor(
       at: action.ts,
     })),
     usage: attemptUsage(page.actions),
-    toolWallMs: toolWallMs(page.actions.flatMap((action) => {
-      if (action.kind !== "tool" || action.parentId === null) return [];
-      const effect = action.effect.value;
-      if (effect === null || typeof effect !== "object" || Array.isArray(effect) ||
-          effect.phase !== "result") return [];
-      const intent = kernel.actionById(action.parentId);
-      return intent?.kind === "tool" ? [{ start: intent.ts, end: action.ts }] : [];
-    })),
+    toolWallMs: toolWallMs(
+      page.actions.flatMap((action) => {
+        if (action.kind !== "tool" || action.parentId === null) return [];
+        const effect = action.effect.value;
+        if (
+          effect === null ||
+          typeof effect !== "object" ||
+          Array.isArray(effect) ||
+          effect.phase !== "result"
+        )
+          return [];
+        const intent = kernel.actionById(action.parentId);
+        return intent?.kind === "tool" ? [{ start: intent.ts, end: action.ts }] : [];
+      }),
+    ),
   });
 }
 
@@ -300,7 +344,13 @@ export function webSocketCallbacks(
       try {
         const kernel = openSession?.(request.sessionId);
         if (kernel === undefined) {
-          ws.send(JSON.stringify({ type: "error", reason: "session_not_found", sessionId: request.sessionId }));
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              reason: "session_not_found",
+              sessionId: request.sessionId,
+            }),
+          );
           return;
         }
         const response = readSessionCursor(kernel, { ...request, cursor });
@@ -310,13 +360,26 @@ export function webSocketCallbacks(
         }
         ws.send(JSON.stringify(response));
       } catch {
-        ws.send(JSON.stringify({ type: "error", reason: "session_read_failed", sessionId: request.sessionId }));
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            reason: "session_read_failed",
+            sessionId: request.sessionId,
+          }),
+        );
       }
     };
     // Register before capture; notifications only hint at authoritative reads.
-    subscriptions.set(request.sessionId, sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-      if (event.revision > sentRevision) send();
-    }, { match: { sessionId: request.sessionId } }));
+    subscriptions.set(
+      request.sessionId,
+      sink.subscribe(
+        L0Observation.ActionCommittedEvent,
+        (event) => {
+          if (event.revision > sentRevision) send();
+        },
+        { match: { sessionId: request.sessionId } },
+      ),
+    );
     send();
   }
   return {
@@ -524,7 +587,11 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): Effect.Effect<GatewayRouter, Kernel.ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
+): Effect.Effect<
+  GatewayRouter,
+  Kernel.ExecutionError,
+  SessionEntryServices | BundleDefinitions | AppLedger
+> {
   return Effect.gen(function* () {
     const plane = yield* AppLedger;
     const observations = yield* ObservationSink;
@@ -534,7 +601,15 @@ export function createResidentGateway(
       defaultTier: LOOPBACK_BOOTSTRAP_TIER,
     });
     const externalRun = yield* createIngressExecutor(plane);
-    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel), openKernel: plane.openKernel, listSessions: plane.listSessions }));
+    const requests =
+      ports.requests ??
+      channelRequests(
+        yield* createSessionRequests({
+          authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel),
+          openKernel: plane.openKernel,
+          listSessions: plane.listSessions,
+        }),
+      );
     return createGatewayRouter({
       ...ports,
       stores: ports.stores ?? createChannelStores(channelStoreSource(plane, ports.now)),
@@ -558,9 +633,13 @@ export function createResidentGateway(
           };
         }).pipe(Effect.mapError(decodeChannelFailure("message.run"))),
       observe: (sender, observation) =>
-        scopeObservation(observations, {
-          sessionId: sender.kind === "session" ? sender.id : "gateway-ingress",
-        }, stamp).publish(GatewayProtocol.MessageObserved, observation),
+        scopeObservation(
+          observations,
+          {
+            sessionId: sender.kind === "session" ? sender.id : "gateway-ingress",
+          },
+          stamp,
+        ).publish(GatewayProtocol.MessageObserved, observation),
       ...(messaging === undefined
         ? {}
         : {

@@ -58,7 +58,8 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
   expect(Object.hasOwn(jsonObject(workflow.jobs), "plan")).toBe(true);
   const uploads = steps.filter(
     (step) =>
-      typeof step.name === "string" && jsonString(jsonObject(step.with ?? {}).name ?? "").includes("quality-mutation-progress-"),
+      typeof step.name === "string" &&
+      jsonString(jsonObject(step.with ?? {}).name ?? "").includes("quality-mutation-progress-"),
   );
   expect(uploads.length).toBe(1);
   // Join job merges shard receipts through the real join entry point.

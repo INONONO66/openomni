@@ -1,12 +1,54 @@
 import { Clock, Effect, Cause, Exit, Option } from "effect";
-import { AgentInvariantViolation, type ExecutionError, ToolBodyFailed, AgentFailure } from "./failure";
-import { type ChatAgentConfig } from "./types";
-import { type RunState, type TurnArtifacts } from "./turn";
+import {
+  AgentInvariantViolation,
+  type ExecutionError,
+  ToolBodyFailed,
+  AgentFailure,
+} from "./failure";
+import type { ChatAgentConfig } from "./types";
+import type { RunState, TurnArtifacts } from "./turn";
 import { recordToolCall } from "./budget";
-import { type Tool, type Message, type PlainValue, PlainValueSchema, type ToolDefinition, type ToolExecutionContext, listenForAbort, type AnyToolDefinition, type LedgerSession, type LedgerAction, canonicalDigest, SessionGeneration, type ToolCategory } from "@openomni/protocol";
-import { BOUNDED_CONCURRENCY, GenerationOwnership, ToolCatalog, type ProcessServices, SessionLayer } from "./ports";
+import {
+  type Tool,
+  type Message,
+  type PlainValue,
+  PlainValueSchema,
+  type ToolDefinition,
+  type ToolExecutionContext,
+  listenForAbort,
+  type AnyToolDefinition,
+  type LedgerSession,
+  type LedgerAction,
+  canonicalDigest,
+  SessionGeneration,
+  type ToolCategory,
+} from "@openomni/protocol";
+import {
+  BOUNDED_CONCURRENCY,
+  GenerationOwnership,
+  ToolCatalog,
+  type ProcessServices,
+  SessionLayer,
+} from "./ports";
 import { z } from "zod";
-import { RawToolSlots, openInvocation, withExecutor, withInvocation, type InvocationFrame, type Executor, activeInvocation, requireExecutor, createExecutor, immutableInput, type DurableExecutor, type ExecutionLedger, type ExecutionBatchResult, type ExecutionRequest, type ExecutionApprovals, type ExecutorOptions } from "./gate/decide";
+import {
+  RawToolSlots,
+  openInvocation,
+  withExecutor,
+  withInvocation,
+  type InvocationFrame,
+  type Executor,
+  activeInvocation,
+  requireExecutor,
+  createExecutor,
+  immutableInput,
+  type DurableExecutor,
+  type ExecutionLedger,
+  type ExecutionBatchResult,
+  type ExecutionRequest,
+  type ExecutionApprovals,
+  type ExecutorOptions,
+} from "./gate/decide";
 
 // ─── from core/execution/tools.ts (#1247) ───
 export function buildSystemPrompt(
@@ -90,13 +132,21 @@ export function prepareTurnTools(state: RunState, config: ChatAgentConfig): Prep
   const configuredExecutor = config.toolExecutor;
   const executor = configuredExecutor
     ? (call: Tool.Call, context?: Tool.ExecutionContext) =>
-        Clock.currentTimeMillis.pipe(Effect.flatMap((startedAt) =>
-          configuredExecutor(call, context).pipe(Effect.ensuring(
-            Clock.currentTimeMillis.pipe(Effect.flatMap((endedAt) => Effect.sync(() => {
-              state.budgetState = recordToolCall(state.budgetState, endedAt - startedAt);
-            }))),
-          )),
-        ))
+        Clock.currentTimeMillis.pipe(
+          Effect.flatMap((startedAt) =>
+            configuredExecutor(call, context).pipe(
+              Effect.ensuring(
+                Clock.currentTimeMillis.pipe(
+                  Effect.flatMap((endedAt) =>
+                    Effect.sync(() => {
+                      state.budgetState = recordToolCall(state.budgetState, endedAt - startedAt);
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
     : undefined;
   return { allTools, executor };
 }
@@ -107,7 +157,6 @@ export interface WaveControl {
   readonly retain?: (effect: Promise<void>) => void;
 }
 
-
 /** Assemble tool results on the original assistant slots, never completion order. */
 export function settleModelTools(
   turn: TurnArtifacts,
@@ -115,96 +164,117 @@ export function settleModelTools(
   state: RunState,
 ): Effect.Effect<number, ExecutionError> {
   return Effect.gen(function* () {
-  const assistant = turn.turnAssistant.message;
-  const pending =
-    assistant?.parts.filter(
-      (part: Message.Part): part is Message.ToolPart =>
-        part.type === "tool" &&
-        (part.state.status === "pending" || part.state.status === "running"),
-    ) ?? [];
-  if (assistant === undefined || pending.length === 0) return 0;
-  const calls = pending.map((part) => ({
-    id: part.callID,
-    tool: part.tool,
-    input: part.state.input,
-  }));
-  const execute = turn.toolExecutor;
-  const startedAt = yield* Clock.currentTimeMillis;
-  if (config.toolWave === undefined && execute === undefined)
-    return yield* Effect.die(new Error("tool wave executor is required"));
-  const executed =
-    config.toolWave !== undefined
-      ? yield* config.toolWave(calls, config.signal)
-      : yield* Effect.forEach(calls, (call) => {
-          if (execute === undefined) return Effect.die(new Error("tool executor missing"));
-          return Effect.exit(Effect.suspend(() => execute(call, { signal: config.signal }))).pipe(
-            Effect.flatMap((exit) => {
-              if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
-              if (Cause.hasInterrupts(exit.cause)) return Effect.failCause(exit.cause);
-              const output = Option.match(Cause.findErrorOption(exit.cause), {
-                onNone: () => Cause.pretty(exit.cause),
-                onSome: (error) => error.message,
-              });
-              return Effect.succeed({ id: call.id, toolCallId: call.id, toolName: call.tool, output, isError: true });
-            }),
+    const assistant = turn.turnAssistant.message;
+    const pending =
+      assistant?.parts.filter(
+        (part: Message.Part): part is Message.ToolPart =>
+          part.type === "tool" &&
+          (part.state.status === "pending" || part.state.status === "running"),
+      ) ?? [];
+    if (assistant === undefined || pending.length === 0) return 0;
+    const calls = pending.map((part) => ({
+      id: part.callID,
+      tool: part.tool,
+      input: part.state.input,
+    }));
+    const execute = turn.toolExecutor;
+    const startedAt = yield* Clock.currentTimeMillis;
+    if (config.toolWave === undefined && execute === undefined)
+      return yield* Effect.die(new Error("tool wave executor is required"));
+    const executed =
+      config.toolWave !== undefined
+        ? yield* config.toolWave(calls, config.signal)
+        : yield* Effect.forEach(
+            calls,
+            (call) => {
+              if (execute === undefined) return Effect.die(new Error("tool executor missing"));
+              return Effect.exit(
+                Effect.suspend(() => execute(call, { signal: config.signal })),
+              ).pipe(
+                Effect.flatMap((exit) => {
+                  if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
+                  if (Cause.hasInterrupts(exit.cause)) return Effect.failCause(exit.cause);
+                  const output = Option.match(Cause.findErrorOption(exit.cause), {
+                    onNone: () => Cause.pretty(exit.cause),
+                    onSome: (error) => error.message,
+                  });
+                  return Effect.succeed({
+                    id: call.id,
+                    toolCallId: call.id,
+                    toolName: call.tool,
+                    output,
+                    isError: true,
+                  });
+                }),
+              );
+            },
+            { concurrency: BOUNDED_CONCURRENCY },
           );
-        }, { concurrency: BOUNDED_CONCURRENCY });
-  const results = calls.map((call) => {
-    const result = executed.find((result) => result.toolCallId === call.id);
-    if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${call.id}`);
-    return result;
-  });
-  const byId = new Map(results.map((result) => [result.toolCallId, result]));
-  const settledAt = yield* Clock.currentTimeMillis;
-  // The out-of-process wave bills its real wall time once; the in-process
-  // executor path already billed per call inside prepareTurnTools.
-  if (config.toolWave !== undefined) {
-    const elapsedMs = settledAt - startedAt;
-    for (let index = 0; index < calls.length; index += 1) {
-      state.budgetState = recordToolCall(state.budgetState, index === 0 ? elapsedMs : 0);
+    const results = calls.map((call) => {
+      const result = executed.find((result) => result.toolCallId === call.id);
+      if (result === undefined)
+        throw new AgentInvariantViolation(`missing tool result: ${call.id}`);
+      return result;
+    });
+    const byId = new Map(results.map((result) => [result.toolCallId, result]));
+    const settledAt = yield* Clock.currentTimeMillis;
+    // The out-of-process wave bills its real wall time once; the in-process
+    // executor path already billed per call inside prepareTurnTools.
+    if (config.toolWave !== undefined) {
+      const elapsedMs = settledAt - startedAt;
+      for (let index = 0; index < calls.length; index += 1) {
+        state.budgetState = recordToolCall(state.budgetState, index === 0 ? elapsedMs : 0);
+      }
     }
-  }
-  const parts = assistant.parts.map((part): Message.Part => {
-    if (part.type !== "tool" || !pending.includes(part)) return part;
-    const result = byId.get(part.callID);
-    if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${part.callID}`);
-    return {
-      ...part,
-      state: result.isError
-        ? {
-            status: "error",
-            input: part.state.input,
-            error: result.output,
-            time: { start: startedAt, end: settledAt },
-          }
-        : {
-            status: "completed",
-            input: part.state.input,
-            output: result.output,
-            title: part.tool,
-            metadata: {},
-            time: { start: startedAt, end: settledAt },
-          },
-    };
-  });
-  turn.turnAssistant.message = { ...assistant, parts };
-  for (const result of results) turn.trackingSink.onToolResult(result);
-  turn.trackingSink.onMessage(turn.turnAssistant.message);
-  // Exhaustion is judged (and its telemetry published) once, in handleStop's
-  // stop judgment — an early fail here would terminate the run without the
-  // guaranteed "budget exceeded" operational record.
-  return calls.length;
+    const parts = assistant.parts.map((part): Message.Part => {
+      if (part.type !== "tool" || !pending.includes(part)) return part;
+      const result = byId.get(part.callID);
+      if (result === undefined)
+        throw new AgentInvariantViolation(`missing tool result: ${part.callID}`);
+      return {
+        ...part,
+        state: result.isError
+          ? {
+              status: "error",
+              input: part.state.input,
+              error: result.output,
+              time: { start: startedAt, end: settledAt },
+            }
+          : {
+              status: "completed",
+              input: part.state.input,
+              output: result.output,
+              title: part.tool,
+              metadata: {},
+              time: { start: startedAt, end: settledAt },
+            },
+      };
+    });
+    turn.turnAssistant.message = { ...assistant, parts };
+    for (const result of results) turn.trackingSink.onToolResult(result);
+    turn.trackingSink.onMessage(turn.turnAssistant.message);
+    // Exhaustion is judged (and its telemetry published) once, in handleStop's
+    // stop judgment — an early fail here would terminate the run without the
+    // guaranteed "budget exceeded" operational record.
+    return calls.length;
   });
 }
 
 // ─── from tool-body.ts (#1247) ───
 export const ToolBodyOutcome = z.discriminatedUnion("status", [
   z.object({ status: z.literal("timed_out") }).strict(),
-  z.object({
-    status: z.literal("error"),
-    message: z.string(),
-    errorKind: z.enum(["invalid_input", "precondition_failed", "execution_failed", "invalid_output"]),
-  }).strict(),
+  z
+    .object({
+      status: z.literal("error"),
+      message: z.string(),
+      errorKind: z.enum([
+        "invalid_input",
+        "precondition_failed",
+        "execution_failed",
+        "invalid_output",
+      ]),
+    })
+    .strict(),
   z.object({ status: z.literal("success"), output: PlainValueSchema }).strict(),
 ]);
 type ToolBodyOutcome = z.infer<typeof ToolBodyOutcome>;
@@ -227,7 +297,8 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
         ...context,
         signal: AbortSignal.any([context.signal, controller.signal]),
       };
-      const owned = invocation === undefined ? undefined : openInvocation(invocation, definition.name);
+      const owned =
+        invocation === undefined ? undefined : openInvocation(invocation, definition.name);
       const detach = listenForAbort(scopedContext.signal, () => owned?.close("interrupted"));
       const settle = (reason: "settled" | "failed") => {
         owned?.close(reason);
@@ -235,9 +306,13 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
         release();
       };
       const activeExecutor = owned?.frame.executor ?? executor;
-      const enter = () => activeExecutor === undefined ? definition.execute(input, scopedContext)
-        : withExecutor(activeExecutor, () => definition.execute(input, scopedContext));
-      const raw = Promise.resolve().then(() => owned === undefined ? enter() : withInvocation(owned.frame, enter));
+      const enter = () =>
+        activeExecutor === undefined
+          ? definition.execute(input, scopedContext)
+          : withExecutor(activeExecutor, () => definition.execute(input, scopedContext));
+      const raw = Promise.resolve().then(() =>
+        owned === undefined ? enter() : withInvocation(owned.frame, enter),
+      );
       raw.then(
         (value) => {
           settle("settled");
@@ -247,16 +322,26 @@ export function executeToolBody<In extends z.ZodType, Out extends z.ZodType>(
           settle("failed");
           // An explicit ToolRefused keeps its model-facing classification; every other
           // foreign rejection is a typed body failure the executor records as evidence.
-          resume(isToolRefusal(cause)
-            ? Effect.succeed<ToolBodyOutcome>({ status: "error", message: cause.message, errorKind: "precondition_failed" })
-            : Effect.fail(new ToolBodyFailed({ tool: definition.name, cause: String(cause) })));
+          resume(
+            isToolRefusal(cause)
+              ? Effect.succeed<ToolBodyOutcome>({
+                  status: "error",
+                  message: cause.message,
+                  errorKind: "precondition_failed",
+                })
+              : Effect.fail(new ToolBodyFailed({ tool: definition.name, cause: String(cause) })),
+          );
         },
       );
       return Effect.sync(() => controller.abort());
     });
     if (timeoutMs === undefined) return yield* execution;
-    return yield* execution.pipe(Effect.timeoutOption(timeoutMs), Effect.map((outcome: Option.Option<ToolBodyOutcome>) =>
-      Option.getOrElse(outcome, (): ToolBodyOutcome => ({ status: "timed_out" }))));
+    return yield* execution.pipe(
+      Effect.timeoutOption(timeoutMs),
+      Effect.map((outcome: Option.Option<ToolBodyOutcome>) =>
+        Option.getOrElse(outcome, (): ToolBodyOutcome => ({ status: "timed_out" })),
+      ),
+    );
   });
 }
 
@@ -287,7 +372,10 @@ const NEVER_ABORTED = new AbortController().signal;
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
 /** Executable catalog data copied into each captured generation's dispatch table. */
-export type ToolDispatchDefinition<In extends z.ZodType = z.ZodType, Out extends z.ZodType = z.ZodType> = ToolDefinition<In, Out> & {
+export type ToolDispatchDefinition<
+  In extends z.ZodType = z.ZodType,
+  Out extends z.ZodType = z.ZodType,
+> = ToolDefinition<In, Out> & {
   readonly approval?: (input: PlainValue) => NonNullable<ExecutionRequest["approval"]>;
 };
 
@@ -333,29 +421,42 @@ interface DispatchContext {
 export interface Dispatcher {
   readonly executor?: Executor;
   readonly specs: readonly Tool.Spec[];
-  execute(call: Tool.Call, context: DispatchContext): Effect.Effect<ToolDispatchResult, ExecutionError>;
+  execute(
+    call: Tool.Call,
+    context: DispatchContext,
+  ): Effect.Effect<ToolDispatchResult, ExecutionError>;
   executeWave(
     calls: readonly Tool.Call[],
     context: DispatchContext,
   ): Effect.Effect<readonly ToolDispatchResult[], ExecutionError>;
-  executeCell(call: Tool.Call, context: DispatchContext): Effect.Effect<CellToolDispatchResult, ExecutionError>;
-  recover(actions: readonly LedgerAction.Node[], context: DispatchContext): Effect.Effect<void, ExecutionError>;
+  executeCell(
+    call: Tool.Call,
+    context: DispatchContext,
+  ): Effect.Effect<CellToolDispatchResult, ExecutionError>;
+  recover(
+    actions: readonly LedgerAction.Node[],
+    context: DispatchContext,
+  ): Effect.Effect<void, ExecutionError>;
 }
 
 export function defineTool<In extends z.ZodType, Out extends z.ZodType>(
   definition: ToolDefinition<In, Out>,
   approval?: (input: z.output<In>) => NonNullable<ExecutionRequest["approval"]>,
 ): ToolDispatchDefinition<In, Out> {
-  if (definition.name.trim() === "") throw new AgentInvariantViolation("tool name must not be empty");
-  if (definition.description.trim() === "") throw new AgentInvariantViolation("tool description must not be empty");
+  if (definition.name.trim() === "")
+    throw new AgentInvariantViolation("tool name must not be empty");
+  if (definition.description.trim() === "")
+    throw new AgentInvariantViolation("tool description must not be empty");
   if (toolInputSchema(definition).type !== "object") {
     throw new AgentInvariantViolation(`${definition.name} input schema root must be an object`);
   }
   return {
     ...definition,
-    ...(approval === undefined ? {} : {
-      approval: (input: PlainValue) => approval(definition.input.parse(input)),
-    }),
+    ...(approval === undefined
+      ? {}
+      : {
+          approval: (input: PlainValue) => approval(definition.input.parse(input)),
+        }),
   };
 }
 
@@ -400,7 +501,9 @@ function finishResult(
   if (execution.terminal === "executed" && execution.failure !== undefined)
     return failed(
       call,
-      execution.failure._tag === "ToolBodyFailed" ? execution.failure.cause : execution.failure.message,
+      execution.failure._tag === "ToolBodyFailed"
+        ? execution.failure.cause
+        : execution.failure.message,
       "execution_failed",
     );
   if (execution.terminal !== "executed") {
@@ -432,8 +535,7 @@ function finishResult(
     toolCallId: call.id,
     id: call.id,
     toolName: call.tool,
-    output:
-      door === "cell" ? output.data : truncate(definition.render(inputData, output.data)),
+    output: door === "cell" ? output.data : truncate(definition.render(inputData, output.data)),
   } satisfies ToolDispatchResult | CellToolDispatchResult;
 }
 
@@ -459,12 +561,16 @@ export function createDispatcher(
   options?: DispatcherOptions,
 ): Effect.Effect<Dispatcher, ExecutionError, ToolCatalog> {
   return Effect.gen(function* () {
-  const { definitions } = yield* ToolCatalog;
-  return buildDispatcher(definitions, options);
+    const { definitions } = yield* ToolCatalog;
+    return buildDispatcher(definitions, options);
   });
 }
 
-function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options?: DispatcherOptions, invocation?: () => InvocationFrame): Dispatcher {
+function buildDispatcher(
+  definitions: readonly ToolDispatchDefinition[],
+  options?: DispatcherOptions,
+  invocation?: () => InvocationFrame,
+): Dispatcher {
   /**
    * The cell door builds its dispatcher at tool-definition time, well ahead of every
    * execution context exists, so the ambient executor is resolved per dispatch:
@@ -476,17 +582,22 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
    */
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeInvocation.getStore()?.executor;
-  const toolsGeneration = new Map(definitions.map((definition) => [
-    definition.name,
-    Object.freeze({ definition, approval: definition.approval }),
-  ]));
+  const toolsGeneration = new Map(
+    definitions.map((definition) => [
+      definition.name,
+      Object.freeze({ definition, approval: definition.approval }),
+    ]),
+  );
   type Prepared =
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
     | {
         readonly kind: "ready";
         readonly executor: Executor;
-         readonly request: ExecutionRequest;
-        readonly body: (receipt: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
+        readonly request: ExecutionRequest;
+        readonly body: (
+          receipt: LedgerAction.Receipt,
+          admittedInput: PlainValue,
+        ) => Effect.Effect<PlainValue, ExecutionError, RawToolSlots>;
         readonly sequential?: true;
         readonly finish: (
           result: ExecutionBatchResult,
@@ -538,25 +649,29 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
           }),
     };
     let admittedValue = parsedValue;
-    const body = (_receipt: LedgerAction.Receipt, admittedInput: PlainValue) => Effect.suspend(() => {
-      const admitted = definition.input.safeParse(admittedInput);
-      if (!admitted.success) return Effect.succeed({ status: "error" as const, errorKind: "invalid_input" as const, message: invalidInputReason(admitted.error) });
-      admittedValue = immutableInput(PlainValueSchema.parse(admitted.data));
-      return executeToolBody(
-      definition,
-      admittedValue,
-      {
-        ...context,
-        ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
-      },
-      options?.timeoutMs,
-      executor,
-      invocation?.(),
-      ).pipe(Effect.map(PlainValueSchema.parse));
-    });
-    const finish = (
-      execution: ExecutionBatchResult,
-    ): ToolDispatchResult | CellToolDispatchResult =>
+    const body = (_receipt: LedgerAction.Receipt, admittedInput: PlainValue) =>
+      Effect.suspend(() => {
+        const admitted = definition.input.safeParse(admittedInput);
+        if (!admitted.success)
+          return Effect.succeed({
+            status: "error" as const,
+            errorKind: "invalid_input" as const,
+            message: invalidInputReason(admitted.error),
+          });
+        admittedValue = immutableInput(PlainValueSchema.parse(admitted.data));
+        return executeToolBody(
+          definition,
+          admittedValue,
+          {
+            ...context,
+            ...(approval === undefined ? {} : { domainRevisions: approval.domainRevisions }),
+          },
+          options?.timeoutMs,
+          executor,
+          invocation?.(),
+        ).pipe(Effect.map(PlainValueSchema.parse));
+      });
+    const finish = (execution: ExecutionBatchResult): ToolDispatchResult | CellToolDispatchResult =>
       finishResult(call, definition, admittedValue, door, execution);
     let modelResult: ToolDispatchResult | undefined;
     return {
@@ -636,33 +751,33 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     executeWave,
     recover(actions, context) {
       return Effect.gen(function* () {
-      const groups = recoverableWaves(actions, context.turnId);
-      const approvalWaves = new Set<string>();
-      for (const action of actions) {
-        const intent = action.intent.value;
-        if (
-          intent !== null &&
-          typeof intent === "object" &&
-          !Array.isArray(intent) &&
-          typeof intent.waveId === "string" &&
-          intent.approvalRequired === true
-        ) {
-          approvalWaves.add(intent.waveId);
+        const groups = recoverableWaves(actions, context.turnId);
+        const approvalWaves = new Set<string>();
+        for (const action of actions) {
+          const intent = action.intent.value;
+          if (
+            intent !== null &&
+            typeof intent === "object" &&
+            !Array.isArray(intent) &&
+            typeof intent.waveId === "string" &&
+            intent.approvalRequired === true
+          ) {
+            approvalWaves.add(intent.waveId);
+          }
         }
-      }
-      for (const [waveId, group] of groups) {
-        if (!approvalWaves.has(waveId)) continue;
-        const prepared = group.map(({ action, call }) => prepare(call, context, "model", action));
-        if (prepared.some((item) => item.kind === "refused"))
-          return yield* Effect.die(new Error("captured invocation no longer parses"));
-        const ready = prepared.filter(
-          (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
-        );
-        const results = yield* runPreparedBatch(ready, context);
-        results.forEach((result, index) => {
-          ready[index]?.finish(result);
-        });
-      }
+        for (const [waveId, group] of groups) {
+          if (!approvalWaves.has(waveId)) continue;
+          const prepared = group.map(({ action, call }) => prepare(call, context, "model", action));
+          if (prepared.some((item) => item.kind === "refused"))
+            return yield* Effect.die(new Error("captured invocation no longer parses"));
+          const ready = prepared.filter(
+            (item: Prepared): item is Extract<Prepared, { kind: "ready" }> => item.kind === "ready",
+          );
+          const results = yield* runPreparedBatch(ready, context);
+          results.forEach((result, index) => {
+            ready[index]?.finish(result);
+          });
+        }
       });
     },
     execute(call, context) {
@@ -764,68 +879,81 @@ interface TurnDispatchRuntime {
 export function createTurnDispatcher(
   input: TurnDispatchInput,
   runtime: TurnDispatchRuntime,
-): Effect.Effect<Dispatcher & { readonly executor: DurableExecutor }, ExecutionError, ProcessServices | SessionLayer | ToolCatalog | GenerationOwnership> {
+): Effect.Effect<
+  Dispatcher & { readonly executor: DurableExecutor },
+  ExecutionError,
+  ProcessServices | SessionLayer | ToolCatalog | GenerationOwnership
+> {
   return Effect.gen(function* () {
-  const { definitions } = yield* ToolCatalog;
-  const generation = yield* GenerationOwnership;
-  const { policy } = yield* SessionLayer;
-  for (const captured of input.tools ?? []) {
-    const definition = definitions.find((candidate) => candidate.name === captured.name);
-    if (
-      definition === undefined ||
-      canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
-    ) {
-      return yield* new AgentFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
+    const { definitions } = yield* ToolCatalog;
+    const generation = yield* GenerationOwnership;
+    const { policy } = yield* SessionLayer;
+    for (const captured of input.tools ?? []) {
+      const definition = definitions.find((candidate) => candidate.name === captured.name);
+      if (
+        definition === undefined ||
+        canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
+      ) {
+        return yield* new AgentFailure({
+          operation: "dispatcher.acquire",
+          cause: `captured catalog mismatch: ${captured.name}`,
+        });
+      }
     }
-  }
-  const executor = yield* createExecutor({
-    retryAlarm: runtime.retryAlarm,
-    closeGraceMs: runtime.closeGraceMs,
-    signal: input.signal,
-    retainEffect: input.retainEffect,
-    authorizeApproval: runtime.authorizeApproval,
-    approvalTimeoutMs: runtime.approvalTimeoutMs,
-    ledger: input.ledger,
-    identity: {
-      sessionId: input.sessionId,
-      role: input.role,
-      parentActionId: input.turnId ?? input.actionId,
-      turnId: input.turnId,
-      toolsGeneration: input.toolsGeneration,
-      toolsHash: input.toolsHash,
-      systemHash: input.systemHash,
-    },
-  });
-  if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
-  const pinnedNames =
-    input.tools === undefined ? undefined : new Set(input.tools.map((tool) => tool.name));
-  const pinnedDefinitions =
-    pinnedNames === undefined
-      ? definitions
-      : definitions.filter((definition) => pinnedNames.has(definition.name));
-  const dispatcher = buildDispatcher(pinnedDefinitions, {
-    executor,
-    retainEffect: input.retainEffect,
-    trackWave: input.trackWave,
-  }, () => frame);
-  const frame: InvocationFrame = { executor, cell: dispatcher, policy, generation };
-  return {
-    ...dispatcher,
-    executor: {
-      ...executor,
-      recover() {
-        // Persisted evidence settles ordinary crash-open intents first; only
-        // request-bearing waves then re-admit their captured invocations.
-        return executor.recover().pipe(Effect.andThen(() =>
-          dispatcher.recover(guardedOperations(input.ledger, input.turnId ?? input.actionId), {
-            sessionId: input.sessionId,
-            turnId: input.turnId ?? input.actionId,
-            signal: input.signal,
-          }),
-        ));
+    const executor = yield* createExecutor({
+      retryAlarm: runtime.retryAlarm,
+      closeGraceMs: runtime.closeGraceMs,
+      signal: input.signal,
+      retainEffect: input.retainEffect,
+      authorizeApproval: runtime.authorizeApproval,
+      approvalTimeoutMs: runtime.approvalTimeoutMs,
+      ledger: input.ledger,
+      identity: {
+        sessionId: input.sessionId,
+        role: input.role,
+        parentActionId: input.turnId ?? input.actionId,
+        turnId: input.turnId,
+        toolsGeneration: input.toolsGeneration,
+        toolsHash: input.toolsHash,
+        systemHash: input.systemHash,
       },
-    },
-  };
+    });
+    if (executor.approvals !== undefined) input.bindApprovals?.(executor.approvals);
+    const pinnedNames =
+      input.tools === undefined ? undefined : new Set(input.tools.map((tool) => tool.name));
+    const pinnedDefinitions =
+      pinnedNames === undefined
+        ? definitions
+        : definitions.filter((definition) => pinnedNames.has(definition.name));
+    const dispatcher = buildDispatcher(
+      pinnedDefinitions,
+      {
+        executor,
+        retainEffect: input.retainEffect,
+        trackWave: input.trackWave,
+      },
+      () => frame,
+    );
+    const frame: InvocationFrame = { executor, cell: dispatcher, policy, generation };
+    return {
+      ...dispatcher,
+      executor: {
+        ...executor,
+        recover() {
+          // Persisted evidence settles ordinary crash-open intents first; only
+          // request-bearing waves then re-admit their captured invocations.
+          return executor.recover().pipe(
+            Effect.andThen(() =>
+              dispatcher.recover(guardedOperations(input.ledger, input.turnId ?? input.actionId), {
+                sessionId: input.sessionId,
+                turnId: input.turnId ?? input.actionId,
+                signal: input.signal,
+              }),
+            ),
+          );
+        },
+      },
+    };
   });
 }
 
@@ -858,7 +986,8 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
 }
 
 function renderedResult(result: ToolDispatchResult | CellToolDispatchResult): ToolDispatchResult {
-  if (typeof result.output !== "string") throw new AgentInvariantViolation("model tool output must be rendered text");
+  if (typeof result.output !== "string")
+    throw new AgentInvariantViolation("model tool output must be rendered text");
   return { ...result, output: result.output };
 }
 

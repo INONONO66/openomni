@@ -50,7 +50,9 @@ for (const finalOutcome of ["refused", "network", "server", "accepted"] as const
         expect(received.attempts).toBe(4);
         expect(received.status).toBe(429);
         expect(received.responseHeaders["retry-after"]).toBe("7");
-        expect(z.object({ code: z.string() }).parse(JSON.parse(received.responseBody))).toEqual({ code: "last_response" });
+        expect(z.object({ code: z.string() }).parse(JSON.parse(received.responseBody))).toEqual({
+          code: "last_response",
+        });
       } else {
         expect(received).toBe(finalOutcome === "network" ? networkError : response);
       }

@@ -1,4 +1,10 @@
-import { BusEvent, type ObservationSink, Gateway, type Inbox, type SessionTurn } from "@openomni/protocol";
+import {
+  BusEvent,
+  type ObservationSink,
+  Gateway,
+  type Inbox,
+  type SessionTurn,
+} from "@openomni/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 
@@ -123,10 +129,14 @@ export function createObservationBus(options: ObservationBusOptions): Observatio
       };
       const publishedData = toBusData(data);
       for (const observer of [...state.observers]) {
-        queueMicrotask(() => deliver(bus, () => observer(published, publishedData), event.name, onError));
+        queueMicrotask(() =>
+          deliver(bus, () => observer(published, publishedData), event.name, onError),
+        );
       }
       for (const subscription of [...(state.subscribers.get(event.name) ?? [])]) {
-        queueMicrotask(() => deliver(bus, () => subscription.handler(event, data), event.name, onError));
+        queueMicrotask(() =>
+          deliver(bus, () => subscription.handler(event, data), event.name, onError),
+        );
       }
     },
     scope(identity) {
@@ -282,4 +292,3 @@ export function observeDrained(
     });
   }
 }
-

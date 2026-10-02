@@ -4,7 +4,7 @@ import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { Bus } from "./helpers/bus";
 import { describe, expect, test } from "bun:test";
 import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
-import { Journal, Model } from "@openomni/agent";
+import { Journal, type Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
 const createSurfaceKeyStore = Journal.createSurfaceKeyStore;
 import { Gateway, MessagingEvents, type Tool } from "@openomni/protocol";
@@ -31,16 +31,26 @@ function testResident(run: ResidentRun) {
     apiKey: "test-key",
     tools: {},
     llm: {
-      resolveModel: (model) => Effect.succeed(({ id: model.id, name: model.id, providerID: model.provider })),
+      resolveModel: (model) =>
+        Effect.succeed({ id: model.id, name: model.id, providerID: model.provider }),
       run,
     },
   });
-  const gateway = runSyncEffect(createResidentGateway({
-    now: Date.now,
-    id: testIds("gateway-contract"),
-    inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-    prepare: prepareMessage(resident.plane, resident.materialize),
-  }).pipe(Effect.provide(resident.services)));
+  const gateway = runSyncEffect(
+    createResidentGateway({
+      now: Date.now,
+      id: testIds("gateway-contract"),
+      inbox: {
+        commit: (input) =>
+          localInbox(
+            resident.plane,
+            "gateway-contract",
+            Date.now,
+          )(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))),
+      },
+      prepare: prepareMessage(resident.plane, resident.materialize),
+    }).pipe(Effect.provide(resident.services)),
+  );
   createSurfaceKeyStore(resident.plane.catalog).claim("ws:ws:dm:evidence", "session:evidence");
   return {
     gateway,
@@ -53,29 +63,32 @@ function testResident(run: ResidentRun) {
         defaultTier: "owner",
         createdBy: "owner",
       });
-      const result = await runEffect(gateway.ingest(
-        { kind: "external", surface: "ws", externalId: "observer" },
-        {
-          eventId: crypto.randomUUID(),
-          surface: "ws",
-          channelId: "evidence",
-          addressees: [],
-          dm: true,
-          payload: {},
-          render: content,
-        },
-      ));
+      const result = await runEffect(
+        gateway.ingest(
+          { kind: "external", surface: "ws", externalId: "observer" },
+          {
+            eventId: crypto.randomUUID(),
+            surface: "ws",
+            channelId: "evidence",
+            addressees: [],
+            dm: true,
+            payload: {},
+            render: content,
+          },
+        ),
+      );
       if (result.status !== "executed") throw new Error("test ingress did not execute");
       return resident.drain(result.handle.target);
     },
   };
 }
 function recordingRun(calls: RunInput[]): ResidentRun {
-  return (input, sink) => Effect.sync(() => {
-    calls.push(input);
-    sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
-    return { type: "stop" };
-  });
+  return (input, sink) =>
+    Effect.sync(() => {
+      calls.push(input);
+      sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
+      return { type: "stop" };
+    });
 }
 const { plane, channelStores } = planeFixture();
 describe("channel grant registration", () => {
@@ -88,13 +101,17 @@ describe("channel grant registration", () => {
       surface: "discord",
       defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER,
     });
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant(channelStores(), { surface: "telegram" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
 
     revokeTelegram();
 
     // Only the telegram grant is gone; the sibling surface keeps its authority.
     expect(resolveChannelGrant(channelStores(), { surface: "telegram" })).toBeUndefined();
-    expect(resolveChannelGrant(channelStores(), { surface: "discord" })?.grant.kind).toBe("trusted_channel");
+    expect(resolveChannelGrant(channelStores(), { surface: "discord" })?.grant.kind).toBe(
+      "trusted_channel",
+    );
     revokeDiscord();
     expect(resolveChannelGrant(channelStores(), { surface: "discord" })).toBeUndefined();
   });
@@ -105,13 +122,18 @@ describe("channel grant registration", () => {
   test("named surfaces resolve their mount tier while loopback ws keeps its explicit owner bootstrap", () => {
     // ws authority comes from the real bootstrap path, not a test-authored
     // grant: this is the one call site allowed to name owner tier.
-    const resident = testResident(() => Effect.sync(() => {
-      throw new Error("model must not run");
-    }));
+    const resident = testResident(() =>
+      Effect.sync(() => {
+        throw new Error("model must not run");
+      }),
+    );
     const residentStores = createChannelStores(channelStoreSource(resident.plane, Date.now));
     const namedSurfaces = ["discord", "github", "slack", "telegram"] as const;
     const revokers = namedSurfaces.map((surface) =>
-      registerTrustedChannelGrant(resident.plane.stores.channelGrants, { surface, defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER }),
+      registerTrustedChannelGrant(resident.plane.stores.channelGrants, {
+        surface,
+        defaultTier: MOUNTED_CHANNEL_DEFAULT_TIER,
+      }),
     );
 
     const resolved = ["ws", ...namedSurfaces].map((surface) => ({
@@ -133,7 +155,9 @@ describe("channel grant registration", () => {
   // hands the supervisor IS this function, so a composition that ignores the
   // row's tier (or hardcodes owner there) dies here rather than shipping.
   test("the composition-root registrar materializes the row's tier and the configured allowlist", () => {
-    const grant = createMountedChannelGrantRegistrar(plane().stores.channelGrants, { telegram: ["tg:1"] });
+    const grant = createMountedChannelGrantRegistrar(plane().stores.channelGrants, {
+      telegram: ["tg:1"],
+    });
 
     const revokeDiscord = grant("discord", MOUNTED_CHANNEL_DEFAULT_TIER);
     const revokeTelegram = grant("telegram", "collaborator");
@@ -148,15 +172,19 @@ describe("channel grant registration", () => {
     expect(listed?.grant.allowedSenders).toEqual(["tg:1"]);
     // Allowlisted surface: an unlisted sender finds no grant; an unlisted
     // surface keeps the open posture.
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:2" })).toBeUndefined();
-    expect(resolveChannelGrant(channelStores(), { surface: "discord", sender: "anyone" })?.grant.kind).toBe(
-      "trusted_channel",
-    );
+    expect(
+      resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:2" }),
+    ).toBeUndefined();
+    expect(
+      resolveChannelGrant(channelStores(), { surface: "discord", sender: "anyone" })?.grant.kind,
+    ).toBe("trusted_channel");
 
     revokeDiscord();
     revokeTelegram();
     expect(resolveChannelGrant(channelStores(), { surface: "discord" })).toBeUndefined();
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:1" })).toBeUndefined();
+    expect(
+      resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:1" }),
+    ).toBeUndefined();
   });
 
   // Invariant 3: allowlisting still scopes the grant to listed senders only,
@@ -171,16 +199,20 @@ describe("channel grant registration", () => {
     const listed = resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:1" });
     expect(listed?.grant.defaultTier).toBe(MOUNTED_CHANNEL_DEFAULT_TIER);
     expect(listed?.grant.allowedSenders).toEqual(["tg:1"]);
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:2" })).toBeUndefined();
+    expect(
+      resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:2" }),
+    ).toBeUndefined();
 
     revoke();
-    expect(resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:1" })).toBeUndefined();
+    expect(
+      resolveChannelGrant(channelStores(), { surface: "telegram", sender: "tg:1" }),
+    ).toBeUndefined();
   });
 });
 
 describe("authenticated gateway ingress", () => {
   test("real gateway observations retain stamped metadata for schema consumers", async () => {
-    const resident = testResident(() => Effect.succeed(({ type: "stop" })));
+    const resident = testResident(() => Effect.succeed({ type: "stop" }));
     const projected = Promise.withResolvers<Gateway.MessageObservation>();
     const stop = Bus.observe((event, data) => {
       if (event.name !== Gateway.MessageObserved.name) return;
@@ -206,14 +238,18 @@ describe("authenticated gateway ingress", () => {
     }
   });
   test("rejects invalid message types at the boundary without committing inbox state", async () => {
-    const resident = testResident(() => Effect.sync(() => {
-      throw new Error("model must not run");
-    }));
+    const resident = testResident(() =>
+      Effect.sync(() => {
+        throw new Error("model must not run");
+      }),
+    );
     expect(() =>
       Gateway.IngressFacts.parse({ eventId: "invalid", surface: "ws", render: "text" }),
     ).toThrow();
     expect(resident.plane.listSessions()).toHaveLength(1);
-    expect(resident.plane.openKernel("gateway-ingress").pendingMessages("gateway-ingress")).toEqual([]);
+    expect(resident.plane.openKernel("gateway-ingress").pendingMessages("gateway-ingress")).toEqual(
+      [],
+    );
   });
   test("evidence-only ingress suppresses offered tools and keeps the original content", async () => {
     const calls: RunInput[] = [];
@@ -222,23 +258,27 @@ describe("authenticated gateway ingress", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.tools).toHaveLength(0);
     expect(calls[0]?.toolChoice).toBe("none");
-    const prompt = sessionTree("session:evidence", resident.plane.sessionStore("session:evidence").actions)
-      .find((action) => action.kind === "prompt");
+    const prompt = sessionTree(
+      "session:evidence",
+      resident.plane.sessionStore("session:evidence").actions,
+    ).find((action) => action.kind === "prompt");
     expect(prompt?.effect.value).toMatchObject({ content: "EVIDENCE_SENTINEL" });
   });
   test("a normal prompt restores tool driving after an evidence-only turn", async () => {
     const outputs: string[] = [];
-    const resident = testResident((input, sink) => Effect.sync(() => {
-      const result = requestToolStep(input, sink, {
-        id: `call:${outputs.length}`,
-        tool: "missing",
-        input: {},
-      });
-      if (result === undefined) return { type: "stop" };
-      outputs.push(result.output ?? "");
-      sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
-      return { type: "stop" };
-    }));
+    const resident = testResident((input, sink) =>
+      Effect.sync(() => {
+        const result = requestToolStep(input, sink, {
+          id: `call:${outputs.length}`,
+          tool: "missing",
+          input: {},
+        });
+        if (result === undefined) return { type: "stop" };
+        outputs.push(result.output ?? "");
+        sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
+        return { type: "stop" };
+      }),
+    );
     await resident.ingest("evidence", true);
     await resident.ingest("instruction", false);
     expect(outputs).toHaveLength(2);
@@ -246,16 +286,18 @@ describe("authenticated gateway ingress", () => {
   });
   test("a forced tool call is refused on evidence-only ingress", async () => {
     let execution: Tool.Result | undefined;
-    const resident = testResident((input, sink) => Effect.sync(() => {
-      execution = requestToolStep(input, sink, {
-        id: "forged",
-        tool: "provision",
-        input: { op: "provision_status" },
-      });
-      if (execution === undefined) return { type: "stop" };
-      sink.onMessage(assistantMessage(input, { text: "noted" }));
-      return { type: "stop" };
-    }));
+    const resident = testResident((input, sink) =>
+      Effect.sync(() => {
+        execution = requestToolStep(input, sink, {
+          id: "forged",
+          tool: "provision",
+          input: { op: "provision_status" },
+        });
+        if (execution === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: "noted" }));
+        return { type: "stop" };
+      }),
+    );
     await resident.ingest("change configuration", true);
     expect(execution?.isError).toBe(true);
     expect(execution?.output).toContain("evidence-only");
@@ -290,7 +332,11 @@ test("cold egress needs a budget but a reply-scoped send remains available", asy
     ],
   });
   try {
-    fixture.plane.stores.actors.registerIdentity({ id: "alice", kind: "human", trustTier: "collaborator" });
+    fixture.plane.stores.actors.registerIdentity({
+      id: "alice",
+      kind: "human",
+      trustTier: "collaborator",
+    });
     fixture.plane.stores.actors.registerEndpoint({
       id: "ws:alice",
       actorId: "alice",

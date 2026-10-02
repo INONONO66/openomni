@@ -7,8 +7,10 @@ import { effectValue } from "./native-executor";
 
 const worker = new URL("./fiber-outcome-process.ts", import.meta.url).pathname;
 const reopened = z.object({
-  before: z.array(LedgerAction.Node), after: z.array(LedgerAction.Node),
-  repeated: z.array(LedgerAction.Node), results: z.array(LedgerAction.Node),
+  before: z.array(LedgerAction.Node),
+  after: z.array(LedgerAction.Node),
+  repeated: z.array(LedgerAction.Node),
+  results: z.array(LedgerAction.Node),
 });
 
 async function barrier(reader: {
@@ -26,7 +28,9 @@ async function barrier(reader: {
 
 export async function fiberCrashCell(dbPath: string, receipt: "absent" | "present" = "absent") {
   const child = Bun.spawn([process.execPath, worker, "execute", dbPath, receipt], {
-    stdin: "ignore", stdout: "pipe", stderr: "pipe",
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
   });
   const stderr = new Response(child.stderr).text();
   const reader = child.stdout.getReader();
@@ -44,20 +48,29 @@ export async function fiberCrashCell(dbPath: string, receipt: "absent" | "presen
     child.kill("SIGKILL");
   }
   const recovery = Bun.spawn([process.execPath, worker, "recover", dbPath, receipt], {
-    stdin: "ignore", stdout: "pipe", stderr: "pipe",
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
   });
-  const [code, stdout, errors] = await bounded(Promise.all([
-    recovery.exited, new Response(recovery.stdout).text(), new Response(recovery.stderr).text(),
-  ]), "fresh process boot sweep");
+  const [code, stdout, errors] = await bounded(
+    Promise.all([
+      recovery.exited,
+      new Response(recovery.stdout).text(),
+      new Response(recovery.stderr).text(),
+    ]),
+    "fresh process boot sweep",
+  );
   expect({ code, errors }).toEqual({ code: 0, errors: "" });
   const witness = reopened.parse(JSON.parse(stdout));
   expect(witness.after.slice(0, witness.before.length)).toEqual(witness.before);
   expect(witness.repeated).toEqual(witness.after);
   expect(witness.results).toHaveLength(1);
-  expect(witness.results.map(effectValue)).toMatchObject([{
-    terminal: receipt === "absent" ? "outcome_unknown" : "executed",
-    recovery: { site: "crash", proof: receipt === "absent" ? "indeterminate" : "applied" },
-  }]);
+  expect(witness.results.map(effectValue)).toMatchObject([
+    {
+      terminal: receipt === "absent" ? "outcome_unknown" : "executed",
+      recovery: { site: "crash", proof: receipt === "absent" ? "indeterminate" : "applied" },
+    },
+  ]);
   expect(readFileSync(`${dbPath}.effect`, "utf8")).toBe("write-once\n");
   return receipt === "absent" ? "lost" : "resumed_without_reexecution";
 }

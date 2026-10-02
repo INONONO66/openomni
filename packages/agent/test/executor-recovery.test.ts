@@ -5,9 +5,18 @@ import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { describe, expect, test } from "bun:test";
 import { stringQueryTool } from "./helpers/query-tool";
 import { nth } from "./helpers/nth";
-import { canonicalDigest, LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  LedgerAction,
+  type PlainObject,
+  type PlainValue,
+} from "@openomni/protocol";
 import { createTurnDispatcher } from "../src/kernel/tool";
-import type { DurableExecutor, ExecutionBatchItem, ExecutionResult, } from "../src/kernel/gate/decide";
+import type {
+  DurableExecutor,
+  ExecutionBatchItem,
+  ExecutionResult,
+} from "../src/kernel/gate/decide";
 import type { WaveControl } from "../src/kernel/tool";
 import { CommitRefused, AgentFailure } from "../src/store/errors";
 import { failure } from "./helpers/effect-g1";
@@ -74,7 +83,8 @@ function harness() {
     identity: { sessionId: "session", role: "resident", parentActionId: "turn", turnId: "turn" },
     policy: compiledPolicy(),
     clock: () => 100,
-    entropy: () => `action:${++sequence}`, random: () => 0,
+    entropy: () => `action:${++sequence}`,
+    random: () => 0,
     observations: { publish: () => undefined },
     ledger: {
       ...memoryExecutionReads(() => actions),

@@ -61,7 +61,7 @@ test("committed scoped reply authority survives closing storage and constructing
         }),
       ).toBeUndefined();
     } finally {
-  resetLedger();
+      resetLedger();
       rmSync(directory, { recursive: true, force: true });
     }
   }

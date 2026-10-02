@@ -21,17 +21,17 @@ test.each([
   { senderTier: "owner" },
   { addressee: "bot" },
 ])("facts-only ingest rejects reserved fields: %j", async (reserved) => {
-  expect(await effectFailure(
-    kernelRouter().ingest(ownerSender, { ...ownerFacts, ...reserved }),
-  )).toMatchObject({
+  expect(
+    await effectFailure(kernelRouter().ingest(ownerSender, { ...ownerFacts, ...reserved })),
+  ).toMatchObject({
     issues: [expect.objectContaining({ code: "unrecognized_keys" })],
   });
   expect(commits).toEqual([]);
 });
 
 test("authenticated surface must match the facts surface", async () => {
-  expect(await effectFailure(
-    kernelRouter().ingest({ ...ownerSender, surface: "telegram" }, ownerFacts),
-  )).toMatchObject({ _tag: "ChannelsFailure", operation: "message.ingress" });
+  expect(
+    await effectFailure(kernelRouter().ingest({ ...ownerSender, surface: "telegram" }, ownerFacts)),
+  ).toMatchObject({ _tag: "ChannelsFailure", operation: "message.ingress" });
   expect(commits).toEqual([]);
 });

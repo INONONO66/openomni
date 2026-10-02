@@ -62,8 +62,7 @@ function commitRequest(
 function adoptFence(kernel: SessionKernel, sessionId: string, owner: string, fence: number): void {
   const current = kernel.row(sessionId);
   if (current.fence === fence && current.fenceOwner === owner) return;
-  if (current.fence >= fence)
-    throw new Error(`stale activation: ${current.fence} >= ${fence}`);
+  if (current.fence >= fence) throw new Error(`stale activation: ${current.fence} >= ${fence}`);
   runLedgerSync(kernel.adoptFence({ sessionId, owner, fence }));
 }
 

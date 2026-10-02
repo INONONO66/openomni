@@ -66,6 +66,8 @@ describe("ChannelGrantStore SQLite persistence", () => {
   });
 
   test("raw reads fail closed when the channelGrant sub-adapter is absent", () => {
-    expect(() => createChannelGrantStore({ now: testNow }).list()).toThrow("does not implement channel grants");
+    expect(() => createChannelGrantStore({ now: testNow }).list()).toThrow(
+      "does not implement channel grants",
+    );
   });
 });

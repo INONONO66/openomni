@@ -33,6 +33,9 @@ export function testClock(start = 1_000): () => number {
 const sharedIds = testIds("entropy");
 
 /** Injected entropy pair for fixtures whose ids come from `id`. */
-export function testEntropy(id: () => string = sharedIds): { readonly id: () => string; readonly random: () => number } {
+export function testEntropy(id: () => string = sharedIds): {
+  readonly id: () => string;
+  readonly random: () => number;
+} {
   return { id, random: () => 0.5 };
 }

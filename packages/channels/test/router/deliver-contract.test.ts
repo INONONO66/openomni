@@ -40,16 +40,20 @@ test("inbox receipt target equals the durable route decision", async () => {
 
 test("Request correlation selects the owner inbox instead of the default session", async () => {
   const mapped = createMappedOwnerSession();
-  await runEffect(await openRequest("request-contract", {
-    correlation: { tokenHash: "token", channelId: ownerFacts.channelId },
-    expectedResponders: ["actor-owner"],
-  }));
-  const result = await runEffect(kernelRouter().ingest(ownerSender, {
-    ...ownerFacts,
-    reply: { chain: [], tokenHash: "token" },
-    payload: { action: "report_result", output: "done" },
-    render: "done",
-  }));
+  await runEffect(
+    await openRequest("request-contract", {
+      correlation: { tokenHash: "token", channelId: ownerFacts.channelId },
+      expectedResponders: ["actor-owner"],
+    }),
+  );
+  const result = await runEffect(
+    kernelRouter().ingest(ownerSender, {
+      ...ownerFacts,
+      reply: { chain: [], tokenHash: "token" },
+      payload: { action: "report_result", output: "done" },
+      render: "done",
+    }),
+  );
   expect(result).toMatchObject({ status: "executed", handle: { target: "request-owner" } });
   expect(commits[0]?.sessionId).not.toBe(mapped.id);
   expect(routingDecisions()[0]).toMatchObject({

@@ -10,7 +10,9 @@ const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 // Cap each reported malformed line so error reporting stays bounded.
 const MALFORMED_REPORT_CHARS = 64;
 
-export function encode(msg: PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification): Uint8Array {
+export function encode(
+  msg: PlainValue | Ipc.Request | Ipc.Response | Ipc.Notification,
+): Uint8Array {
   return encoder.encode(`${JSON.stringify(msg)}\n`);
 }
 
@@ -65,7 +67,9 @@ export class LineDecoder {
 
     if (Buffer.byteLength(this.splitter.buffered, "utf-8") > MAX_FRAME_BYTES) {
       this.reset();
-      throw new IpcProtocolError({ message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes` });
+      throw new IpcProtocolError({
+        message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`,
+      });
     }
 
     const frames: PlainValue[] = [];
@@ -74,7 +78,9 @@ export class LineDecoder {
       if (!line.trim()) continue;
       if (Buffer.byteLength(line, "utf-8") > MAX_FRAME_BYTES) {
         this.reset();
-        throw new IpcProtocolError({ message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes` });
+        throw new IpcProtocolError({
+          message: `IPC frame exceeds maximum size of ${MAX_FRAME_BYTES} bytes`,
+        });
       }
       const frame = parseJson(FrameSchema, line);
       if (frame === undefined) malformed.push(line.slice(0, MALFORMED_REPORT_CHARS));

@@ -6,8 +6,16 @@ import { join } from "node:path";
 import { Kernel, Journal } from "@openomni/agent";
 const createTurnDispatcher = Kernel.createTurnDispatcher;
 import type { AnyToolDefinition, LedgerAction } from "@openomni/protocol";
-import { requestLedger, crashAfterRequestOpen, type RequestLedger } from "../../../packages/agent/test/helpers/effect-g1";
-import { catalogLayer, executorLayer, runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
+import {
+  requestLedger,
+  crashAfterRequestOpen,
+  type RequestLedger,
+} from "../../../packages/agent/test/helpers/effect-g1";
+import {
+  catalogLayer,
+  executorLayer,
+  runnerTestLayer,
+} from "../../../packages/agent/test/helpers/service-layers";
 import { compiledPolicy } from "../../../packages/agent/test/helpers/compiled-policy";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { createRequestDomainRevisions } from "../src/tools/core/request-domain-revisions";
@@ -81,16 +89,19 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
   for (const operation of forged) {
     expect(
       (
-        await runEffect(dispatcher.execute(
-          { id: "forged", tool: "provision", input: { operation } },
-          { sessionId: "test", turnId: "turn" },
-        ))
+        await runEffect(
+          dispatcher.execute(
+            { id: "forged", tool: "provision", input: { operation } },
+            { sessionId: "test", turnId: "turn" },
+          ),
+        )
       ).errorKind,
     ).toBe("invalid_input");
   }
   expect(
     catalogDefinitions({ ...testToolPorts, provisioning: provisionPort() }).some(
-      (tool: AnyToolDefinition) => tool.name === "provision" &&
+      (tool: AnyToolDefinition) =>
+        tool.name === "provision" &&
         (tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")),
     ),
   ).toBe(false);
@@ -152,9 +163,14 @@ for (const [name, operation] of [
   ],
 ] as const) {
   it(`consent to merge ${name} is refused by the act itself, never applied`, async () => {
-    const f = protectedDispatch(provision(), {
-      operation: { op: "contact_merge", args: operation },
-    }, undefined, { plane: plane() });
+    const f = protectedDispatch(
+      provision(),
+      {
+        operation: { op: "contact_merge", args: operation },
+      },
+      undefined,
+      { plane: plane() },
+    );
     try {
       const result = await f.answer();
       expect(result.isError).toBe(true);
@@ -179,13 +195,14 @@ it("invalidates a merge when the source identity changes without moving its endp
   }
 });
 it("refuses malformed output at the real dispatcher boundary", async () => {
-  const result = await runEffect(dispatcherFixture(
-    [{ ...provision(), execute: async () => ({ op: "contact_promote" }) }],
-    { executor },
-  ).execute(
-    { id: "bad-output", tool: "provision", input: { operation: PROMOTE } },
-    { sessionId: "test", turnId: "turn" },
-  ));
+  const result = await runEffect(
+    dispatcherFixture([{ ...provision(), execute: async () => ({ op: "contact_promote" }) }], {
+      executor,
+    }).execute(
+      { id: "bad-output", tool: "provision", input: { operation: PROMOTE } },
+      { sessionId: "test", turnId: "turn" },
+    ),
+  );
   expect(result.errorKind).toBe("invalid_output");
 });
 it("bounds pending Owner requests across sessions without applying a ninth act", async () => {
@@ -195,18 +212,27 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
   const budgetKernel = plane().openKernel("provision-budget");
   try {
     for (let index = 0; index < 8; index += 1) {
-      const f = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane(), kernel: budgetKernel });
+      const f = protectedDispatch(provision(), { operation: PROMOTE }, undefined, {
+        plane: plane(),
+        kernel: budgetKernel,
+      });
       pending.push(f);
       await bounded(f.opened);
     }
-    const ninth = protectedDispatch(provision(), { operation: PROMOTE }, undefined, { plane: plane(), kernel: budgetKernel });
+    const ninth = protectedDispatch(provision(), { operation: PROMOTE }, undefined, {
+      plane: plane(),
+      kernel: budgetKernel,
+    });
     pending.push(ninth);
     const ninthResult = await bounded(ninth.outcome);
     expect(ninthResult._tag).toBe("Failure");
-    expect(ninthResult._tag === "Failure" && ninthResult.failure).toMatchObject({ _tag: "ExecutionApprovalError", code: "stale_approval" });
-    expect(
-      budgetKernel.requestRows().filter((request) => request.state === "open"),
-    ).toHaveLength(8);
+    expect(ninthResult._tag === "Failure" && ninthResult.failure).toMatchObject({
+      _tag: "ExecutionApprovalError",
+      code: "stale_approval",
+    });
+    expect(budgetKernel.requestRows().filter((request) => request.state === "open")).toHaveLength(
+      8,
+    );
     expect(malloryStanding()).toBe("provisional");
   } finally {
     await Promise.all(pending.map((f) => f.close()));
@@ -215,24 +241,43 @@ it("bounds pending Owner requests across sessions without applying a ninth act",
 
 function restartDispatcher(recording: RequestLedger, ready?: () => void) {
   return Effect.gen(function* () {
-    const dispatcher: Effect.Success<ReturnType<typeof createTurnDispatcher>> = yield* createTurnDispatcher({
-      ...recording.identity, actionId: recording.identity.parentActionId,
-      ledger: {
-        ...recording.ledger,
-        requestById: (id: string) => {
-          if ((dispatcher.executor.approvals?.pending().length ?? 0) > 0) ready?.();
-          return recording.ledger.requestById?.(id);
+    const dispatcher: Effect.Success<ReturnType<typeof createTurnDispatcher>> =
+      yield* createTurnDispatcher(
+        {
+          ...recording.identity,
+          actionId: recording.identity.parentActionId,
+          ledger: {
+            ...recording.ledger,
+            requestById: (id: string) => {
+              if ((dispatcher.executor.approvals?.pending().length ?? 0) > 0) ready?.();
+              return recording.ledger.requestById?.(id);
+            },
+          },
         },
-      },
-    }, {
-      authorizeApproval: () => Effect.succeed({ kind: "owner" as const, principalId: "owner", evidenceId: "authenticated" }),
-    }).pipe(
-      Effect.provide(catalogLayer([provision()])),
-      Effect.provide(executorLayer({
-        clock: recording.clock, entropy: recording.entropy, observations: { publish: () => undefined },
-        policy: compiledPolicy(PROVISION_POLICY_ROWS.map((row: (typeof PROVISION_POLICY_ROWS)[number]) => ({ ...row, generation: 1 }))),
-      })),
-    );
+        {
+          authorizeApproval: () =>
+            Effect.succeed({
+              kind: "owner" as const,
+              principalId: "owner",
+              evidenceId: "authenticated",
+            }),
+        },
+      ).pipe(
+        Effect.provide(catalogLayer([provision()])),
+        Effect.provide(
+          executorLayer({
+            clock: recording.clock,
+            entropy: recording.entropy,
+            observations: { publish: () => undefined },
+            policy: compiledPolicy(
+              PROVISION_POLICY_ROWS.map((row: (typeof PROVISION_POLICY_ROWS)[number]) => ({
+                ...row,
+                generation: 1,
+              })),
+            ),
+          }),
+        ),
+      );
     return dispatcher;
   });
 }
@@ -258,61 +303,112 @@ for (const operation of [PROMOTE, MERGE]) {
       const first = open();
       const handleRef: { current: ReturnType<typeof open> } = { current: first };
       try {
-        await runEffect(Effect.scoped(Effect.gen(function* () {
-          const initial = yield* requestLedger({ kernel: first.kernel, domainRevisions: createRequestDomainRevisions(plane().stores) });
-          const crashed = yield* restartDispatcher(crashAfterRequestOpen(initial, "provision.crash"));
-          const call = { id: "original", tool: "provision", input: { operation } };
-          expect(yield* Effect.result(crashed.executeWave([call], {
-            sessionId: initial.identity.sessionId, turnId: initial.identity.turnId,
-          }))).toMatchObject({ _tag: "Failure", failure: { _tag: "AgentFailure", operation: "provision.crash" } });
-          const original = first.kernel.requestRows()[0];
-          if (original === undefined) throw new Error("missing Owner request");
-          expect(original).toMatchObject({ mode: "approval", state: "open", outcome: null,
-            expectedResponders: ["owner"], parsedInput: call.input });
-          expect(malloryStanding()).toBe("provisional");
-          expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
-          // The restart: close the sqlite handles and reopen the same files.
-          first.close();
-          const reopened = open();
-          handleRef.current = reopened;
-          expect(reopened.kernel.requestById(original.requestId)).toEqual(original);
-          const ready = Promise.withResolvers<void>();
-          const recovered = yield* restartDispatcher(yield* requestLedger({
-            id: initial.identity.sessionId,
-            kernel: reopened.kernel,
-            domainRevisions: createRequestDomainRevisions(plane().stores),
-          }), ready.resolve);
-          const recovery = recovered.executor.recover;
-          if (recovery === undefined) throw new Error("missing recovery");
-          const running = yield* Effect.forkScoped(recovery());
-          yield* Effect.promise(() => bounded(ready.promise));
-          const { approvals } = recovered.executor;
-          if (approvals === undefined) throw new Error("missing recovered approvals");
-          const pending = approvals.pending()[0];
-          if (pending === undefined) throw new Error("missing recovered approval");
-          expect(pending.durable).toEqual(original);
-          yield* approvals.answer({ request: pending, decision, credential: "owner" });
-          yield* Fiber.join(running);
-          expect(yield* Effect.result(approvals.answer({ request: pending, decision, credential: "owner" })))
-            .toMatchObject({ _tag: "Failure", failure: { _tag: "ExecutionApprovalError", code: "stale_approval" } });
-          expect(reopened.kernel.requestById(original.requestId)?.state).toBe(decision === "approve" ? "resolved" : "refused");
-          const settled = sessionTree(initial.identity.sessionId, reopened.actions);
-          expect(settled.filter((action: LedgerAction.Node) => action.id === `${original.requestId}:application`))
-            .toHaveLength(decision === "approve" ? 1 : 0);
-          const result = settled.find((action: LedgerAction.Node) => {
-            const value = action.effect.value;
-            return action.kind === "tool" && value !== null && typeof value === "object" && !Array.isArray(value)
-              && value.phase === "result" && value.callId === call.id;
-          });
-          expect(result?.effect.value).toMatchObject(decision === "approve"
-            ? { terminal: "executed", toolResult: { toolCallId: call.id } }
-            : { terminal: "blocked_pre", toolResult: { toolCallId: call.id, isError: true } });
-          expect(malloryStanding()).toBe(decision === "approve" && operation.op === "contact_promote" ? "registered" : "provisional");
-          expect(actors().getEndpoint("ep:mallory")?.actorId)
-            .toBe(decision === "approve" && operation.op === "contact_merge" ? "actor:alice" : "contact:mallory");
-          yield* recovery();
-          expect(sessionTree(initial.identity.sessionId, reopened.actions)).toEqual(settled);
-        })).pipe(Effect.provide(runnerTestLayer)));
+        await runEffect(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const initial = yield* requestLedger({
+                kernel: first.kernel,
+                domainRevisions: createRequestDomainRevisions(plane().stores),
+              });
+              const crashed = yield* restartDispatcher(
+                crashAfterRequestOpen(initial, "provision.crash"),
+              );
+              const call = { id: "original", tool: "provision", input: { operation } };
+              expect(
+                yield* Effect.result(
+                  crashed.executeWave([call], {
+                    sessionId: initial.identity.sessionId,
+                    turnId: initial.identity.turnId,
+                  }),
+                ),
+              ).toMatchObject({
+                _tag: "Failure",
+                failure: { _tag: "AgentFailure", operation: "provision.crash" },
+              });
+              const original = first.kernel.requestRows()[0];
+              if (original === undefined) throw new Error("missing Owner request");
+              expect(original).toMatchObject({
+                mode: "approval",
+                state: "open",
+                outcome: null,
+                expectedResponders: ["owner"],
+                parsedInput: call.input,
+              });
+              expect(malloryStanding()).toBe("provisional");
+              expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
+              // The restart: close the sqlite handles and reopen the same files.
+              first.close();
+              const reopened = open();
+              handleRef.current = reopened;
+              expect(reopened.kernel.requestById(original.requestId)).toEqual(original);
+              const ready = Promise.withResolvers<void>();
+              const recovered = yield* restartDispatcher(
+                yield* requestLedger({
+                  id: initial.identity.sessionId,
+                  kernel: reopened.kernel,
+                  domainRevisions: createRequestDomainRevisions(plane().stores),
+                }),
+                ready.resolve,
+              );
+              const recovery = recovered.executor.recover;
+              if (recovery === undefined) throw new Error("missing recovery");
+              const running = yield* Effect.forkScoped(recovery());
+              yield* Effect.promise(() => bounded(ready.promise));
+              const { approvals } = recovered.executor;
+              if (approvals === undefined) throw new Error("missing recovered approvals");
+              const pending = approvals.pending()[0];
+              if (pending === undefined) throw new Error("missing recovered approval");
+              expect(pending.durable).toEqual(original);
+              yield* approvals.answer({ request: pending, decision, credential: "owner" });
+              yield* Fiber.join(running);
+              expect(
+                yield* Effect.result(
+                  approvals.answer({ request: pending, decision, credential: "owner" }),
+                ),
+              ).toMatchObject({
+                _tag: "Failure",
+                failure: { _tag: "ExecutionApprovalError", code: "stale_approval" },
+              });
+              expect(reopened.kernel.requestById(original.requestId)?.state).toBe(
+                decision === "approve" ? "resolved" : "refused",
+              );
+              const settled = sessionTree(initial.identity.sessionId, reopened.actions);
+              expect(
+                settled.filter(
+                  (action: LedgerAction.Node) => action.id === `${original.requestId}:application`,
+                ),
+              ).toHaveLength(decision === "approve" ? 1 : 0);
+              const result = settled.find((action: LedgerAction.Node) => {
+                const value = action.effect.value;
+                return (
+                  action.kind === "tool" &&
+                  value !== null &&
+                  typeof value === "object" &&
+                  !Array.isArray(value) &&
+                  value.phase === "result" &&
+                  value.callId === call.id
+                );
+              });
+              expect(result?.effect.value).toMatchObject(
+                decision === "approve"
+                  ? { terminal: "executed", toolResult: { toolCallId: call.id } }
+                  : { terminal: "blocked_pre", toolResult: { toolCallId: call.id, isError: true } },
+              );
+              expect(malloryStanding()).toBe(
+                decision === "approve" && operation.op === "contact_promote"
+                  ? "registered"
+                  : "provisional",
+              );
+              expect(actors().getEndpoint("ep:mallory")?.actorId).toBe(
+                decision === "approve" && operation.op === "contact_merge"
+                  ? "actor:alice"
+                  : "contact:mallory",
+              );
+              yield* recovery();
+              expect(sessionTree(initial.identity.sessionId, reopened.actions)).toEqual(settled);
+            }),
+          ).pipe(Effect.provide(runnerTestLayer)),
+        );
       } finally {
         handleRef.current.close();
         rmSync(directory, { recursive: true, force: true });

@@ -14,10 +14,16 @@ describe("failure classes stay honest (#606 re-audit)", () => {
 
   test("public IPC errors use the shared serializable error contract", () => {
     const connection = new IpcConnectionError({ message: "closed" });
-    const remote = new IpcRemoteError({ code: 4000, message: "IPC error 4000: bad request", requestId: "fixture-request", method: "fixture.method" });
+    const remote = new IpcRemoteError({
+      code: 4000,
+      message: "IPC error 4000: bad request",
+      requestId: "fixture-request",
+      method: "fixture.method",
+    });
     expect(connection._tag).toBe("IpcConnectionError");
     expect(JSON.parse(JSON.stringify(connection))).toMatchObject({
-      _tag: "IpcConnectionError", message: "closed",
+      _tag: "IpcConnectionError",
+      message: "closed",
     });
     expect(remote._tag).toBe("IpcRemoteError");
     expect(remote.code).toBe(4000);
@@ -170,7 +176,9 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     // Observe rejection immediately: FIN must fail the request even with unsent bytes.
     const rejected = captureError(call);
     const [error] = await within(
-      Promise.all([rejected, disconnected.promise]), "oversize FIN and server disconnect", 12_000,
+      Promise.all([rejected, disconnected.promise]),
+      "oversize FIN and server disconnect",
+      12_000,
     );
     expect(error).toBeInstanceOf(IpcConnectionError);
   });

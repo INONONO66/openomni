@@ -47,30 +47,31 @@ test("real external WebSocket reply wakes its original idle request owner withou
     sessionRuntime: { clock: () => 100 },
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink) => Effect.sync(() => {
-        if (!sent) {
-          const result = requestToolStep(input, sink, {
-            id: "external-request",
-            tool: "send_message",
-            input: {
-              to: { kind: "contact", id: "peer" },
-              message: "QUESTION_SENTINEL",
-              deadline_ms: 900,
-            },
-          });
-          if (result === undefined) return { type: "stop" };
-          expect(result.isError).not.toBe(true);
-          sent = true;
-        }
-        const hasAnswer = JSON.stringify(input.messages).includes("EXTERNAL_ANSWER_SENTINEL");
-        if (hasAnswer) received += 1;
-        sink.onMessage(
-          assistantMessage(input, {
-            text: hasAnswer ? "DONE_EXTERNAL_SENTINEL" : "WAITING_EXTERNAL_SENTINEL",
-          }),
-        );
-        return { type: "stop" };
-      }),
+      run: (input, sink) =>
+        Effect.sync(() => {
+          if (!sent) {
+            const result = requestToolStep(input, sink, {
+              id: "external-request",
+              tool: "send_message",
+              input: {
+                to: { kind: "contact", id: "peer" },
+                message: "QUESTION_SENTINEL",
+                deadline_ms: 900,
+              },
+            });
+            if (result === undefined) return { type: "stop" };
+            expect(result.isError).not.toBe(true);
+            sent = true;
+          }
+          const hasAnswer = JSON.stringify(input.messages).includes("EXTERNAL_ANSWER_SENTINEL");
+          if (hasAnswer) received += 1;
+          sink.onMessage(
+            assistantMessage(input, {
+              text: hasAnswer ? "DONE_EXTERNAL_SENTINEL" : "WAITING_EXTERNAL_SENTINEL",
+            }),
+          );
+          return { type: "stop" };
+        }),
     },
   });
   planeRef.current = await planeOf(app.runtime);

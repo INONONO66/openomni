@@ -58,7 +58,12 @@ describe("Retry.decide with an instant-failure streak", () => {
   });
 
   test("at the limit: declines with a detail naming the transport streak", () => {
-    const decision = Retry.decide(3, transportError(), sources(), Retry.INSTANT_FAILURE_STREAK_LIMIT);
+    const decision = Retry.decide(
+      3,
+      transportError(),
+      sources(),
+      Retry.INSTANT_FAILURE_STREAK_LIMIT,
+    );
     expect(decision.retry).toBe(false);
     if (!decision.retry) {
       expect(decision.reason).toBe("server_error");
@@ -77,7 +82,12 @@ describe("Retry.decide with an instant-failure streak", () => {
   });
 
   test("the streak never overrides non_retryable classification", () => {
-    const decision = Retry.decide(1, new Error("not api"), sources(), Retry.INSTANT_FAILURE_STREAK_LIMIT);
+    const decision = Retry.decide(
+      1,
+      new Error("not api"),
+      sources(),
+      Retry.INSTANT_FAILURE_STREAK_LIMIT,
+    );
     expect(decision.retry).toBe(false);
     if (!decision.retry) {
       expect(decision.reason).toBe("non_retryable");

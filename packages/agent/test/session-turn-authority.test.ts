@@ -21,7 +21,13 @@ test("unknown provenance never acts: evidence authority plus a typed violation f
   expect(unknown.violation?.reason).toBe("unknown_origin");
   expect(unknown.violation?.message).toBe("inbound authority violation: unknown_origin");
 
-  const undeclared = inboundAuthority({ kind: "external", messageId: "m", surface: "ws", externalId: "e", actorId: "" });
+  const undeclared = inboundAuthority({
+    kind: "external",
+    messageId: "m",
+    surface: "ws",
+    externalId: "e",
+    actorId: "",
+  });
   expect(undeclared.authority).toBe("evidence_only");
   expect(undeclared.violation?.reason).toBe("undeclared_treatment");
   expect(undeclared.violation?.message).toBe("inbound authority violation: undeclared_treatment");
@@ -32,7 +38,14 @@ test("known trusted origins keep acting with no violation", () => {
     undefined,
     { kind: "session", id: "parent" },
     { kind: "message", messageId: "m1", senderSessionId: "parent", sourceActionId: "a1" },
-    { kind: "external", messageId: "m", surface: "ws", externalId: "e", actorId: "", inboundTreatment: "full_access" },
+    {
+      kind: "external",
+      messageId: "m",
+      surface: "ws",
+      externalId: "e",
+      actorId: "",
+      inboundTreatment: "full_access",
+    },
   ];
   for (const origin of origins) {
     expect(inboundAuthority(origin)).toEqual({ authority: "act" });
@@ -57,38 +70,49 @@ test("a turn over unknown-provenance mail runs as evidence and records the viola
       },
     },
     clock: () => 1_000,
-    entropy: (() => { let next = 0; return () => `authority-id-${++next}`; })(),
+    entropy: (() => {
+      let next = 0;
+      return () => `authority-id-${++next}`;
+    })(),
     ...isolatedRuntime(),
   };
-  return isolated(Effect.scoped(Effect.gen(function* () {
-    seedPolicy();
-    yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    const handle = yield* withSessionServices(
-      session({ id: "authority-session", role: "resident", runner }, runtime),
-      runtime,
-    );
+  return isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        seedPolicy();
+        yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
+        const handle = yield* withSessionServices(
+          session({ id: "authority-session", role: "resident", runner }, runtime),
+          runtime,
+        );
 
-    // Trusted provenance: acts, no violation observation.
-    yield* handle.prompt("hello", {
-      encodingVersion: 1,
-      value: { kind: "session", id: "authority-session" },
-    });
-    expect(authorities).toEqual(["act"]);
-    expect(published.filter((event) => event.name === InboundAuthorityViolated.name)).toEqual([]);
+        // Trusted provenance: acts, no violation observation.
+        yield* handle.prompt("hello", {
+          encodingVersion: 1,
+          value: { kind: "session", id: "authority-session" },
+        });
+        expect(authorities).toEqual(["act"]);
+        expect(published.filter((event) => event.name === InboundAuthorityViolated.name)).toEqual(
+          [],
+        );
 
-    // Unknown provenance: evidence authority plus the recorded violation fact.
-    yield* handle.prompt("who sent this?", {
-      encodingVersion: 1,
-      value: { kind: "spoofed", payload: "mystery" },
-    });
-    expect(authorities).toEqual(["act", "evidence_only"]);
-    const violations = published.filter((event) => event.name === InboundAuthorityViolated.name);
-    expect(violations).toHaveLength(1);
-    const fact = violations[0]?.data ?? {};
-    expect(fact.reason).toBe("unknown_origin");
-    expect(fact.sessionId).toBe("authority-session");
-    expect(typeof fact.turnId).toBe("string");
-    expect(typeof fact.messageId).toBe("string");
-    expect(fact.time).toBe(1_000);
-  })));
+        // Unknown provenance: evidence authority plus the recorded violation fact.
+        yield* handle.prompt("who sent this?", {
+          encodingVersion: 1,
+          value: { kind: "spoofed", payload: "mystery" },
+        });
+        expect(authorities).toEqual(["act", "evidence_only"]);
+        const violations = published.filter(
+          (event) => event.name === InboundAuthorityViolated.name,
+        );
+        expect(violations).toHaveLength(1);
+        const fact = violations[0]?.data ?? {};
+        expect(fact.reason).toBe("unknown_origin");
+        expect(fact.sessionId).toBe("authority-session");
+        expect(typeof fact.turnId).toBe("string");
+        expect(typeof fact.messageId).toBe("string");
+        expect(fact.time).toBe(1_000);
+      }),
+    ),
+  );
 });

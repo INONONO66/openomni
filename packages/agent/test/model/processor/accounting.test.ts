@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { apiError } from "../helpers/retry";
 import type { Provider } from "../../../src/model/provider";
 import type { EstimateUsage } from "../../../src/model/token";
-import { useProcessor, capturingSink, streamOf, failingStream, textEvents, } from "../helpers/processor";
+import {
+  useProcessor,
+  capturingSink,
+  streamOf,
+  failingStream,
+  textEvents,
+} from "../helpers/processor";
 
 describe("Processor accounting", () => {
   const fixture = useProcessor();

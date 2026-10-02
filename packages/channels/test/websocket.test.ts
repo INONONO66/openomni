@@ -104,9 +104,14 @@ describe("WebSocketHandler ingress and receipts", () => {
 
   it("passes a declared frame identifier through as the deduplication key", async () => {
     let inbound: Channel.InboundMessage | undefined;
-    const handler = new WebSocketHandler((message) => Effect.sync(() => {
-      inbound = message;
-    }), noopPublish, wsOptions());
+    const handler = new WebSocketHandler(
+      (message) =>
+        Effect.sync(() => {
+          inbound = message;
+        }),
+      noopPublish,
+      wsOptions(),
+    );
     const { ws, sent } = connection({
       surfaceKey: "ws::dm:c1",
       authenticated: true,
@@ -138,9 +143,14 @@ describe("WebSocketHandler ingress and receipts", () => {
     null,
   ])("refuses an unusable frame identifier %j instead of minting a key", async (identifier) => {
     let inbound: Channel.InboundMessage | undefined;
-    const handler = new WebSocketHandler((message) => Effect.sync(() => {
-      inbound = message;
-    }), noopPublish, wsOptions());
+    const handler = new WebSocketHandler(
+      (message) =>
+        Effect.sync(() => {
+          inbound = message;
+        }),
+      noopPublish,
+      wsOptions(),
+    );
     const { ws, sent } = connection({
       surfaceKey: "ws::dm:c1",
       authenticated: true,
@@ -163,25 +173,58 @@ describe("WebSocketHandler ingress and receipts", () => {
     ['{"type":"request_answer","text":"must not become a message"}', "invalid_request_answer"],
   ])("rejects malformed frame %s before entering the handler", async (raw, reason) => {
     let entries = 0;
-    const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish, wsOptions());
-    const result = await runEffect(Effect.result(handler.handleFrame({
-      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
-    }, raw)));
+    const handler = new WebSocketHandler(
+      () =>
+        Effect.sync(() => {
+          entries += 1;
+        }),
+      noopPublish,
+      wsOptions(),
+    );
+    const result = await runEffect(
+      Effect.result(
+        handler.handleFrame(
+          {
+            surfaceKey: "ws::dm:c1",
+            authenticated: true,
+            externalId: "alice",
+          },
+          raw,
+        ),
+      ),
+    );
     expect(result).toMatchObject({
-      _tag: "Failure", failure: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
+      _tag: "Failure",
+      failure: { _tag: "InvalidInbound", operation: "websocket.frame", reason },
     });
     expect(entries).toBe(0);
-    if (result._tag === "Failure" && result.failure._tag === "InvalidInbound" && reason === "invalid_json") {
+    if (
+      result._tag === "Failure" &&
+      result.failure._tag === "InvalidInbound" &&
+      reason === "invalid_json"
+    ) {
       expect(typeof result.failure.cause).toBe("string");
     }
   });
 
   it("defers ingress until execution and accepts binary frames exactly once", async () => {
     let entries = 0;
-    const handler = new WebSocketHandler(() => Effect.sync(() => { entries += 1; }), noopPublish, wsOptions());
-    const effect = handler.handleFrame({
-      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
-    }, Buffer.from(JSON.stringify({ text: "fixture", eventId: "event" })));
+    const handler = new WebSocketHandler(
+      () =>
+        Effect.sync(() => {
+          entries += 1;
+        }),
+      noopPublish,
+      wsOptions(),
+    );
+    const effect = handler.handleFrame(
+      {
+        surfaceKey: "ws::dm:c1",
+        authenticated: true,
+        externalId: "alice",
+      },
+      Buffer.from(JSON.stringify({ text: "fixture", eventId: "event" })),
+    );
     expect(entries).toBe(0);
     expect(await runEffect(effect)).toEqual({ type: "receipt", status: "accepted" });
     expect(entries).toBe(1);
@@ -195,11 +238,16 @@ describe("WebSocketHandler ingress and receipts", () => {
     } as const;
     const handler = new WebSocketHandler(() => Effect.succeed(result), noopPublish, wsOptions());
     const { ws, sent } = connection({
-      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
+      surfaceKey: "ws::dm:c1",
+      authenticated: true,
+      externalId: "alice",
     });
     handler.ws.open(ws);
 
-    await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "bind me", eventId: "bind-1" }));
+    await websocketCallbacks(handler).message(
+      ws,
+      JSON.stringify({ text: "bind me", eventId: "bind-1" }),
+    );
 
     expect(sent.map((frame) => JSON.parse(frame))).toEqual([
       { type: "receipt", status: "accepted" },
@@ -213,15 +261,25 @@ describe("WebSocketHandler ingress and receipts", () => {
   });
 
   it("sends only the typed failure tag and never a receipt or private cause on handler refusal", async () => {
-    const failure = new ChannelsFailure({ operation: "fixture.ingress", cause: "private credential" });
+    const failure = new ChannelsFailure({
+      operation: "fixture.ingress",
+      cause: "private credential",
+    });
     const handler = new WebSocketHandler(() => Effect.fail(failure), noopPublish, wsOptions());
     const { ws, sent } = connection({
-      surfaceKey: "ws::dm:c1", authenticated: true, externalId: "alice",
+      surfaceKey: "ws::dm:c1",
+      authenticated: true,
+      externalId: "alice",
     });
-    await websocketCallbacks(handler).message(ws, JSON.stringify({ text: "fixture", eventId: "fixture-1" }));
+    await websocketCallbacks(handler).message(
+      ws,
+      JSON.stringify({ text: "fixture", eventId: "fixture-1" }),
+    );
     expect(sent).toEqual([JSON.stringify({ type: "error", reason: "ChannelsFailure" })]);
     expect(
-      await runEffect(Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture","eventId":"fixture-2"}'))),
+      await runEffect(
+        Effect.flip(handler.handleFrame(ws.data, '{"text":"fixture","eventId":"fixture-2"}')),
+      ),
     ).toBe(failure);
   });
 

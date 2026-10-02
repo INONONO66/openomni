@@ -7,7 +7,7 @@ import { expect, it } from "bun:test";
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect, Fiber } from "effect";
 import { ExecutionApprovalError, AgentFailure } from "../src/kernel/failure";
-import { createExecutor, } from "../src/kernel/gate/decide";
+import { createExecutor } from "../src/kernel/gate/decide";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -46,34 +46,41 @@ function fixture(overrides: Partial<ResolvedExecutorOptions> = {}) {
     const executorIdentity = overrides.identity ?? recording.identity;
     const controller = new AbortController();
     const bodies: string[] = [];
-    const running = yield* Effect.forkScoped(executor.runBatch(
-      [
-        {
-          request: { ...request, op: "read" },
-          body: () => Effect.sync(() => {
-            bodies.push("read");
-            return {};
-          }),
-        },
-        {
-          request,
-          body: () => Effect.sync(() => {
-            expect(isolatedLedger().kernel.requestRows(executorIdentity.sessionId)[0]?.state).toBe("resolved");
-            bodies.push("write");
-            return { status: "success" };
-          }),
-        },
-        {
-          request: { ...request, op: "last" },
-          sequential: true,
-          body: () => Effect.sync(() => {
-            bodies.push("last");
-            return {};
-          }),
-        },
-      ],
-      { signal: controller.signal },
-    ));
+    const running = yield* Effect.forkScoped(
+      executor.runBatch(
+        [
+          {
+            request: { ...request, op: "read" },
+            body: () =>
+              Effect.sync(() => {
+                bodies.push("read");
+                return {};
+              }),
+          },
+          {
+            request,
+            body: () =>
+              Effect.sync(() => {
+                expect(
+                  isolatedLedger().kernel.requestRows(executorIdentity.sessionId)[0]?.state,
+                ).toBe("resolved");
+                bodies.push("write");
+                return { status: "success" };
+              }),
+          },
+          {
+            request: { ...request, op: "last" },
+            sequential: true,
+            body: () =>
+              Effect.sync(() => {
+                bodies.push("last");
+                return {};
+              }),
+          },
+        ],
+        { signal: controller.signal },
+      ),
+    );
     return {
       ...recording,
       ledger: overrides.ledger ?? recording.ledger,
@@ -87,126 +94,168 @@ function fixture(overrides: Partial<ResolvedExecutorOptions> = {}) {
   });
 }
 for (const decision of ["approve", "refuse"] as const) {
-  it(`commits authenticated ${decision} on the original invocation before opening the whole wave`, () => isolated(Effect.scoped(Effect.gen(function* () {
-    const f = yield* fixture();
-    const durable = yield* f.opened;
-    const pending = f.approvals.pending()[0];
-    if (pending === undefined) throw new Error("missing approval");
-    expect(durable.inputHash).toBe(canonicalDigest(request.intent));
-    expect(durable.parsedInput).toEqual(request.intent);
-    expect(
-      sessionTree(isolatedLedger().kernel, f.identity.sessionId).find(
-        (action) => action.id === durable.requestId,
-      )?.kind,
-    ).toBe("tool");
-    expect(f.bodies).toEqual([]);
-    yield* f.approvals.answer({ request: pending, credential: "owner-token", decision });
-    const results = yield* Fiber.join(f.running);
-    expect(results[1]).toEqual(
-      decision === "approve"
-        ? { terminal: "executed", value: { status: "success" } }
-        : { terminal: "blocked_pre", reason: "approval_refused" },
-    );
-    expect(f.bodies).toEqual(
-      decision === "approve" ? ["read", "write", "last"] : ["read", "last"],
-    );
-    expect(
-      sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
-        (action) => action.id === `${pending.id}:resolution`,
+  it(`commits authenticated ${decision} on the original invocation before opening the whole wave`, () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const f = yield* fixture();
+          const durable = yield* f.opened;
+          const pending = f.approvals.pending()[0];
+          if (pending === undefined) throw new Error("missing approval");
+          expect(durable.inputHash).toBe(canonicalDigest(request.intent));
+          expect(durable.parsedInput).toEqual(request.intent);
+          expect(
+            sessionTree(isolatedLedger().kernel, f.identity.sessionId).find(
+              (action) => action.id === durable.requestId,
+            )?.kind,
+          ).toBe("tool");
+          expect(f.bodies).toEqual([]);
+          yield* f.approvals.answer({ request: pending, credential: "owner-token", decision });
+          const results = yield* Fiber.join(f.running);
+          expect(results[1]).toEqual(
+            decision === "approve"
+              ? { terminal: "executed", value: { status: "success" } }
+              : { terminal: "blocked_pre", reason: "approval_refused" },
+          );
+          expect(f.bodies).toEqual(
+            decision === "approve" ? ["read", "write", "last"] : ["read", "last"],
+          );
+          expect(
+            sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
+              (action) => action.id === `${pending.id}:resolution`,
+            ),
+          ).toHaveLength(1);
+          expect(
+            yield* Effect.flip(
+              f.approvals.answer({ request: pending, credential: "owner-token", decision }),
+            ),
+          ).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
+        }),
       ),
-    ).toHaveLength(1);
-    expect(yield* Effect.flip(
-      f.approvals.answer({ request: pending, credential: "owner-token", decision }),
-    )).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
-  }))));
+    ));
 }
-it("rejects forged input, changed domain facts and unavailable Owner authority", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const f = yield* fixture({ authorizeApproval: undefined });
-  yield* f.opened;
-  const pending = f.approvals.pending()[0];
-  if (pending === undefined) throw new Error("missing approval");
-  expect(yield* Effect.flip(
-    f.approvals.answer({
-      request: { ...pending, toolsHash: "forged" },
-      credential: "x",
-      decision: "approve",
-    }),
-  )).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
-  expect(yield* Effect.flip(
-    f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
-  )).toEqual(new ExecutionApprovalError({ code: "approval_authority_unavailable" }));
-  expect(f.bodies).toEqual([]);
-  f.controller.abort();
-  expect(yield* Fiber.join(f.running)).toEqual([
-    { terminal: "interrupted", reason: "fiber_interrupted" },
-    { terminal: "blocked_pre", reason: "approval_refused" },
-    { terminal: "interrupted", reason: "fiber_interrupted" },
-  ]);
-  expect(f.bodies).toEqual([]);
-  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("cancelled");
-}))));
-it("rechecks cancellation after asynchronous authentication", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const authorizing = yield* Deferred.make<void>();
-  const authenticated = yield* Deferred.make<typeof evidence>();
-  const f = yield* fixture({
-    authorizeApproval: () => Deferred.succeed(authorizing, undefined).pipe(
-      Effect.andThen(Deferred.await(authenticated)),
+it("rejects forged input, changed domain facts and unavailable Owner authority", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture({ authorizeApproval: undefined });
+        yield* f.opened;
+        const pending = f.approvals.pending()[0];
+        if (pending === undefined) throw new Error("missing approval");
+        expect(
+          yield* Effect.flip(
+            f.approvals.answer({
+              request: { ...pending, toolsHash: "forged" },
+              credential: "x",
+              decision: "approve",
+            }),
+          ),
+        ).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
+        expect(
+          yield* Effect.flip(
+            f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
+          ),
+        ).toEqual(new ExecutionApprovalError({ code: "approval_authority_unavailable" }));
+        expect(f.bodies).toEqual([]);
+        f.controller.abort();
+        expect(yield* Fiber.join(f.running)).toEqual([
+          { terminal: "interrupted", reason: "fiber_interrupted" },
+          { terminal: "blocked_pre", reason: "approval_refused" },
+          { terminal: "interrupted", reason: "fiber_interrupted" },
+        ]);
+        expect(f.bodies).toEqual([]);
+        expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("cancelled");
+      }),
     ),
-  });
-  yield* f.opened;
-  const pending = f.approvals.pending()[0];
-  if (pending === undefined) throw new Error("missing approval");
-  const settled = yield* Effect.forkScoped(Effect.flip(
-    f.approvals.answer({ request: pending, decision: "approve", credential: "x" }),
   ));
-  yield* Deferred.await(authorizing).pipe(Effect.timeout("5 seconds"));
-  f.controller.abort();
-  yield* Fiber.join(f.running);
-  yield* Deferred.succeed(authenticated, evidence);
-  expect(yield* Fiber.join(settled)).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
-  expect(f.bodies).toEqual([]);
-}))));
-it("waits for the durable deadline owner instead of registering an executor timer", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const f = yield* fixture();
-  const request = yield* f.opened;
-  // W5.2: the alarms table is deleted; the durable deadline owner is the
-  // request row itself (the timer plane fires `request.timeout` from it).
-  expect(isolatedLedger().kernel.requestById(request.requestId)).toMatchObject({
-    state: "open",
-    deadline: request.deadline,
-  });
-  expect(f.approvals.pending()).toHaveLength(1);
-  expect(f.bodies).toEqual([]);
-  f.controller.abort();
-  yield* Fiber.join(f.running);
-}))));
-
-it("expires exactly once at the deadline, even with a delayed alarm", () => isolated(Effect.scoped(Effect.gen(function* () {
-  let now = 100;
-  const f = yield* fixture({ clock: () => now, approvalTimeoutMs: 25 });
-  const request = yield* f.opened;
-  expect(f.bodies).toEqual([]);
-  now = 125;
-  const pending = f.approvals.pending()[0];
-  if (pending === undefined) throw new Error("missing approval");
-  expect(yield* Effect.flip(
-    f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
-  )).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
-  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
-  yield* expireApproval(f, request.requestId, now);
-  expect((yield* Fiber.join(f.running))[1]).toEqual({
-    terminal: "blocked_pre",
-    reason: "approval_timeout",
-  });
-  yield* expireApproval(f, request.requestId, now);
-  expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
-  expect(
-    sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
-      (action) => action.id === `${pending.id}:resolution`,
+it("rechecks cancellation after asynchronous authentication", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const authorizing = yield* Deferred.make<void>();
+        const authenticated = yield* Deferred.make<typeof evidence>();
+        const f = yield* fixture({
+          authorizeApproval: () =>
+            Deferred.succeed(authorizing, undefined).pipe(
+              Effect.andThen(Deferred.await(authenticated)),
+            ),
+        });
+        yield* f.opened;
+        const pending = f.approvals.pending()[0];
+        if (pending === undefined) throw new Error("missing approval");
+        const settled = yield* Effect.forkScoped(
+          Effect.flip(
+            f.approvals.answer({ request: pending, decision: "approve", credential: "x" }),
+          ),
+        );
+        yield* Deferred.await(authorizing).pipe(Effect.timeout("5 seconds"));
+        f.controller.abort();
+        yield* Fiber.join(f.running);
+        yield* Deferred.succeed(authenticated, evidence);
+        expect(yield* Fiber.join(settled)).toEqual(
+          new ExecutionApprovalError({ code: "stale_approval" }),
+        );
+        expect(f.bodies).toEqual([]);
+      }),
     ),
-  ).toHaveLength(1);
-}))));
-function expireApproval(f: Effect.Success<ReturnType<typeof fixture>>, requestId: string, at: number) {
+  ));
+it("waits for the durable deadline owner instead of registering an executor timer", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        const request = yield* f.opened;
+        // W5.2: the alarms table is deleted; the durable deadline owner is the
+        // request row itself (the timer plane fires `request.timeout` from it).
+        expect(isolatedLedger().kernel.requestById(request.requestId)).toMatchObject({
+          state: "open",
+          deadline: request.deadline,
+        });
+        expect(f.approvals.pending()).toHaveLength(1);
+        expect(f.bodies).toEqual([]);
+        f.controller.abort();
+        yield* Fiber.join(f.running);
+      }),
+    ),
+  ));
+
+it("expires exactly once at the deadline, even with a delayed alarm", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        let now = 100;
+        const f = yield* fixture({ clock: () => now, approvalTimeoutMs: 25 });
+        const request = yield* f.opened;
+        expect(f.bodies).toEqual([]);
+        now = 125;
+        const pending = f.approvals.pending()[0];
+        if (pending === undefined) throw new Error("missing approval");
+        expect(
+          yield* Effect.flip(
+            f.approvals.answer({ request: pending, credential: "x", decision: "approve" }),
+          ),
+        ).toEqual(new ExecutionApprovalError({ code: "stale_approval" }));
+        expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
+        yield* expireApproval(f, request.requestId, now);
+        expect((yield* Fiber.join(f.running))[1]).toEqual({
+          terminal: "blocked_pre",
+          reason: "approval_timeout",
+        });
+        yield* expireApproval(f, request.requestId, now);
+        expect(isolatedLedger().kernel.requestById(pending.id)?.state).toBe("expired");
+        expect(
+          sessionTree(isolatedLedger().kernel, f.identity.sessionId).filter(
+            (action) => action.id === `${pending.id}:resolution`,
+          ),
+        ).toHaveLength(1);
+      }),
+    ),
+  ));
+function expireApproval(
+  f: Effect.Success<ReturnType<typeof fixture>>,
+  requestId: string,
+  at: number,
+) {
   return Effect.gen(function* () {
     const transition = f.ledger.transition;
     if (transition === undefined) throw new Error("missing transition");
@@ -219,97 +268,172 @@ function expireApproval(f: Effect.Success<ReturnType<typeof fixture>>, requestId
   });
 }
 
-it("handles immediate expiry through the durable alarm transition", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const f = yield* fixture({ approvalTimeoutMs: 0 });
-  const request = yield* f.opened;
-  yield* expireApproval(f, request.requestId, 100);
-  expect((yield* Fiber.join(f.running))[1]).toEqual({
-    terminal: "blocked_pre",
-    reason: "approval_timeout",
-  });
-  expect(f.bodies).toEqual(["read", "last"]);
-}))));
-it("rejects invalid deadlines before admitting execution", () => isolated(Effect.gen(function* () {
-  const recording = yield* requestLedger();
-  for (const approvalTimeoutMs of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-    expect(yield* Effect.flip(
-      createExecutor({ ...recording, approvalTimeoutMs }).pipe(
-        Effect.provide(executorLayer({
+it("handles immediate expiry through the durable alarm transition", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture({ approvalTimeoutMs: 0 });
+        const request = yield* f.opened;
+        yield* expireApproval(f, request.requestId, 100);
+        expect((yield* Fiber.join(f.running))[1]).toEqual({
+          terminal: "blocked_pre",
+          reason: "approval_timeout",
+        });
+        expect(f.bodies).toEqual(["read", "last"]);
+      }),
+    ),
+  ));
+it("rejects invalid deadlines before admitting execution", () =>
+  isolated(
+    Effect.gen(function* () {
+      const recording = yield* requestLedger();
+      for (const approvalTimeoutMs of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(
+          yield* Effect.flip(
+            createExecutor({ ...recording, approvalTimeoutMs }).pipe(
+              Effect.provide(
+                executorLayer({
+                  ...recording,
+                  policy,
+                  observations: { publish: () => undefined },
+                }),
+              ),
+            ),
+          ),
+        ).toMatchObject({
+          _tag: "AgentFailure",
+          operation: "executor.acquire",
+          cause: "invalid_approval_timeout",
+        });
+      }
+    }),
+  ));
+
+it("does not treat an uncommitted notification as approval authority", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        const request = yield* f.opened;
+        f.approvals.notify?.({ ...request, state: "resolved", outcome: "answered" });
+        expect(f.bodies).toEqual([]);
+        expect(f.approvals.pending()).toHaveLength(1);
+        expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("open");
+        f.controller.abort();
+        yield* Fiber.join(f.running);
+        expect(f.bodies).toEqual([]);
+      }),
+    ),
+  ));
+
+it("the captured table retains approval binding through catalog copying and later metadata changes", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const opened = Promise.withResolvers<SessionTransition.Request>();
+        const recording = yield* requestLedger({
+          onRequest: (request: SessionTransition.Request) => {
+            if (request.state === "open") opened.resolve(request);
+          },
+          domainRevisions: () => ({ domain: 7 }),
+        });
+        const executor = testExecutor({
           ...recording,
           policy,
+          authorizeApproval: () => Effect.succeed(evidence),
           observations: { publish: () => undefined },
-        })),
-      ),
-    )).toMatchObject({ _tag: "AgentFailure", operation: "executor.acquire", cause: "invalid_approval_timeout" });
-  }
-})));
-
-it("does not treat an uncommitted notification as approval authority", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const f = yield* fixture();
-  const request = yield* f.opened;
-  f.approvals.notify?.({ ...request, state: "resolved", outcome: "answered" });
-  expect(f.bodies).toEqual([]);
-  expect(f.approvals.pending()).toHaveLength(1);
-  expect(isolatedLedger().kernel.requestById(request.requestId)?.state).toBe("open");
-  f.controller.abort();
-  yield* Fiber.join(f.running);
-  expect(f.bodies).toEqual([]);
-}))));
-
-it("the captured table retains approval binding through catalog copying and later metadata changes", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const opened = Promise.withResolvers<SessionTransition.Request>();
-  const recording = yield* requestLedger({
-    onRequest: (request: SessionTransition.Request) => { if (request.state === "open") opened.resolve(request); },
-    domainRevisions: () => ({ domain: 7 }),
-  });
-  const executor = testExecutor({ ...recording, policy, authorizeApproval: () => Effect.succeed(evidence), observations: { publish: () => undefined } });
-  let bodies = 0;
-  const Input = z.object({ path: z.string() });
-  const copied = { ...defineTool({
-    name: "write", description: "write", category: "mutation", input: Input, output: z.string(),
-    visibility: { model: ["resident"], cell: [] },
-    execute: async () => { bodies += 1; return "done"; },
-    render: (_input: z.infer<typeof Input>, output: string) => output,
-  }, (_input: z.infer<typeof Input>) => ({ required: true, domainRevisions: { domain: 7 } })) };
-  const dispatcher = yield* createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([copied])));
-  // The table must own this binding, not re-read mutable metadata or object identity.
-  copied.approval = () => ({ required: false, domainRevisions: { domain: 99 } });
-  const running = yield* Effect.forkScoped(dispatcher.execute({ id: "copied-call", tool: "write", input: request.intent },
-    { sessionId: recording.identity.sessionId, turnId: recording.identity.turnId }));
-  const durable = yield* Effect.promise(() => bounded(opened.promise, "copied binding approval"));
-  expect(durable).toMatchObject({ parsedInput: request.intent, domainRevisions: { domain: 7 } });
-  expect(bodies).toBe(0);
-  const pending = executor.approvals?.pending()[0];
-  if (pending === undefined || executor.approvals === undefined) return yield* Effect.die("missing copied approval");
-  yield* executor.approvals.answer({ request: pending, credential: "owner-token", decision: "approve" });
-  expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "copied-call", output: "done" });
-  expect(bodies).toBe(1);
-}))));
-
-it("propagates a failed deadline commit without settling the live suspension", () => isolated(Effect.scoped(Effect.gen(function* () {
-  const recording = yield* requestLedger({ id: "deadline-failure" });
-  const transition = recording.ledger.transition;
-  if (transition === undefined) throw new Error("missing transition");
-  const failure = new AgentFailure({ operation: "request.timeout", cause: "deadline storage unavailable" });
-  const opened = Promise.withResolvers<SessionTransition.Request>();
-  const f = yield* fixture({
-    ...recording,
-    approvalTimeoutMs: 0,
-    ledger: {
-      ...recording.ledger,
-      transition: (payload, inputId, at) => Effect.gen(function* () {
-        if (payload.kind === "request.timeout") return yield* failure;
-        const result = yield* transition(payload, inputId, at);
-        if (payload.kind === "request.open") opened.resolve(payload.request);
-        return result;
+        });
+        let bodies = 0;
+        const Input = z.object({ path: z.string() });
+        const copied = {
+          ...defineTool(
+            {
+              name: "write",
+              description: "write",
+              category: "mutation",
+              input: Input,
+              output: z.string(),
+              visibility: { model: ["resident"], cell: [] },
+              execute: async () => {
+                bodies += 1;
+                return "done";
+              },
+              render: (_input: z.infer<typeof Input>, output: string) => output,
+            },
+            (_input: z.infer<typeof Input>) => ({ required: true, domainRevisions: { domain: 7 } }),
+          ),
+        };
+        const dispatcher = yield* createDispatcher({ executor }).pipe(
+          Effect.provide(catalogLayer([copied])),
+        );
+        // The table must own this binding, not re-read mutable metadata or object identity.
+        copied.approval = () => ({ required: false, domainRevisions: { domain: 99 } });
+        const running = yield* Effect.forkScoped(
+          dispatcher.execute(
+            { id: "copied-call", tool: "write", input: request.intent },
+            { sessionId: recording.identity.sessionId, turnId: recording.identity.turnId },
+          ),
+        );
+        const durable = yield* Effect.promise(() =>
+          bounded(opened.promise, "copied binding approval"),
+        );
+        expect(durable).toMatchObject({
+          parsedInput: request.intent,
+          domainRevisions: { domain: 7 },
+        });
+        expect(bodies).toBe(0);
+        const pending = executor.approvals?.pending()[0];
+        if (pending === undefined || executor.approvals === undefined)
+          return yield* Effect.die("missing copied approval");
+        yield* executor.approvals.answer({
+          request: pending,
+          credential: "owner-token",
+          decision: "approve",
+        });
+        expect(yield* Fiber.join(running)).toMatchObject({
+          toolCallId: "copied-call",
+          output: "done",
+        });
+        expect(bodies).toBe(1);
       }),
-    },
-  });
-  const request = yield* Effect.promise(() => bounded(opened.promise, "durable approval request"));
-  expect(yield* Effect.flip(expireApproval(f, request.requestId, 100))).toBe(failure);
-  expect(f.bodies).toEqual([]);
-  expect(f.approvals.pending()).toHaveLength(1);
-  expect(isolatedLedger().kernel.requestRows("deadline-failure")[0]?.state).toBe("open");
-  f.controller.abort();
-  yield* Fiber.join(f.running);
-}))));
+    ),
+  ));
+
+it("propagates a failed deadline commit without settling the live suspension", () =>
+  isolated(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const recording = yield* requestLedger({ id: "deadline-failure" });
+        const transition = recording.ledger.transition;
+        if (transition === undefined) throw new Error("missing transition");
+        const failure = new AgentFailure({
+          operation: "request.timeout",
+          cause: "deadline storage unavailable",
+        });
+        const opened = Promise.withResolvers<SessionTransition.Request>();
+        const f = yield* fixture({
+          ...recording,
+          approvalTimeoutMs: 0,
+          ledger: {
+            ...recording.ledger,
+            transition: (payload, inputId, at) =>
+              Effect.gen(function* () {
+                if (payload.kind === "request.timeout") return yield* failure;
+                const result = yield* transition(payload, inputId, at);
+                if (payload.kind === "request.open") opened.resolve(payload.request);
+                return result;
+              }),
+          },
+        });
+        const request = yield* Effect.promise(() =>
+          bounded(opened.promise, "durable approval request"),
+        );
+        expect(yield* Effect.flip(expireApproval(f, request.requestId, 100))).toBe(failure);
+        expect(f.bodies).toEqual([]);
+        expect(f.approvals.pending()).toHaveLength(1);
+        expect(isolatedLedger().kernel.requestRows("deadline-failure")[0]?.state).toBe("open");
+        f.controller.abort();
+        yield* Fiber.join(f.running);
+      }),
+    ),
+  ));

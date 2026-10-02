@@ -63,7 +63,10 @@ describe("observation bus delivery", () => {
     await bounded(delivered.promise);
     expect(seen).toEqual(["survived"]);
     // Without an injected reporter the failure is a fact on the bus itself, not a log line.
-    expect(await bounded(reported.promise)).toEqual({ eventName: event.name, error: "Error: subscriber failed" });
+    expect(await bounded(reported.promise)).toEqual({
+      eventName: event.name,
+      error: "Error: subscriber failed",
+    });
   });
 
   it("never reports a failing delivery of the failure report itself", async () => {
@@ -87,7 +90,10 @@ describe("observation bus delivery", () => {
   it("delivers the original handler failure to the injected error sink", async () => {
     const failure = new Error("subscriber failure");
     const reported = Promise.withResolvers<{ error: Error; event: string }>();
-    const observations = createObservationBus({ ...sourceOptions(), onError: (error, event) => reported.resolve({ error, event }) });
+    const observations = createObservationBus({
+      ...sourceOptions(),
+      onError: (error, event) => reported.resolve({ error, event }),
+    });
     const event = BusEvent.define("test.bus.error-sink", z.string());
     observations.subscribe(event, () => {
       throw failure;

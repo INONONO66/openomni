@@ -1,4 +1,3 @@
-
 import * as SessionHandleStore from "../store/fence";
 import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "../store/errors";
 import { PlainValueSchema, SessionTransition, type Inbox } from "@openomni/protocol";
@@ -6,11 +5,33 @@ import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "eff
 import { Entity } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "../kernel/failure";
 import { createSessionAdmission, decideSessionAdmission } from "./mailbox";
-import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type SessionEntityPorts, type SessionEntityTimerContext, type SessionTimerOutcome, type SessionControllerState, type ResolvedSessionRuntime, type SessionRunner, type SessionRunnerResult, createSessionTurn } from "./run";
+import {
+  type SessionAdmissionSnapshot,
+  type SessionEntityAuthority,
+  type SessionEntityPorts,
+  type SessionEntityTimerContext,
+  type SessionTimerOutcome,
+  type SessionControllerState,
+  type ResolvedSessionRuntime,
+  type SessionRunner,
+  type SessionRunnerResult,
+  createSessionTurn,
+} from "./run";
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
 import { createRawSlots } from "../kernel/gate/decide";
 import { decideRequestTransition } from "./request";
-import { DeadlineRpc, InterruptRpc, PromptRpc, RequestCancelRpc, RequestResolveRpc, ResumeRpc, RetryScheduledRpc, WatchFiredRpc, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
+import {
+  DeadlineRpc,
+  InterruptRpc,
+  PromptRpc,
+  RequestCancelRpc,
+  RequestResolveRpc,
+  ResumeRpc,
+  RetryScheduledRpc,
+  WatchFiredRpc,
+  WatchTimeoutRpc,
+  type ChainAppendReceipt,
+} from "./messages";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
 /**
@@ -73,13 +94,22 @@ interface ActivationHandle {
  * materialized session file self-heals into the catalog from its own row;
  * a session absent from both planes stays a typed refusal.
  */
-function rotateActivationFence(env: SessionEntityEnv, kernel: SessionKernel, sessionId: string): number {
+function rotateActivationFence(
+  env: SessionEntityEnv,
+  kernel: SessionKernel,
+  sessionId: string,
+): number {
   try {
     return env.catalog.rotateFence(sessionId);
   } catch (error) {
     if (!(error instanceof SessionNotFound)) throw error;
     const row = kernel.row(sessionId);
-    env.catalog.indexSession({ id: sessionId, parentId: row.parentId, role: row.role, createdAt: env.clock() });
+    env.catalog.indexSession({
+      id: sessionId,
+      parentId: row.parentId,
+      role: row.role,
+      createdAt: env.clock(),
+    });
     return env.catalog.rotateFence(sessionId);
   }
 }
@@ -89,25 +119,32 @@ function rotateActivationFence(env: SessionEntityEnv, kernel: SessionKernel, ses
  * accepts only a strictly newer fence. A file fence at or beyond the target
  * means a later activation won: this one is stale.
  */
-function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority): Effect.Effect<void, LedgerError> {
+function adoptFence(
+  kernel: SessionKernel,
+  authority: SessionEntityAuthority,
+): Effect.Effect<void, LedgerError> {
   const { sessionId, owner, fence } = authority;
   return Effect.suspend(() => {
     const current = kernel.row(sessionId);
     if (current.fence === fence && current.fenceOwner === owner) return Effect.void;
     if (current.fence >= fence)
-      return Effect.fail(new FenceRefused({
-        sessionId,
-        reason: "stale",
-        holder: current.fenceOwner,
-        fence: current.fence,
-        expiresAt: null,
-      }));
+      return Effect.fail(
+        new FenceRefused({
+          sessionId,
+          reason: "stale",
+          holder: current.fenceOwner,
+          fence: current.fence,
+          expiresAt: null,
+        }),
+      );
     return kernel.adoptFence({ sessionId, owner, fence }).pipe(Effect.asVoid);
   });
 }
 
 /** Re-read the session row after one competing writer wins the revision CAS. */
-function retryRevision<A, E extends LedgerError>(attempt: () => Effect.Effect<A, E>): Effect.Effect<A, E> {
+function retryRevision<A, E extends LedgerError>(
+  attempt: () => Effect.Effect<A, E>,
+): Effect.Effect<A, E> {
   return attempt().pipe(
     Effect.catchIf(
       (error) => error instanceof CommitRefused && error.reason === "revision",
@@ -122,36 +159,42 @@ function appendReceived(
   kind: Inbox.Kind,
   message: { readonly messageId: string; readonly content: string; readonly origin: string },
 ): Effect.Effect<Omit<ChainAppendReceipt, "admission">, LedgerError> {
-  return retryRevision(() => Effect.gen(function* () {
-    const { kernel, authority, env } = handle;
-    const existing = kernel.actionById(message.messageId);
-    if (existing !== undefined)
-      return { ordinal: existing.ordinal, actionHash: existing.actionHash, deduped: true };
-    const row = kernel.row(authority.sessionId);
-    const now = env.clock();
-    const action = receivedMessageAction({
-      id: message.messageId,
-      sessionId: authority.sessionId,
-      kind,
-      content: message.content,
-      origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(message.origin)) },
-      parentActionId: null,
-      at: now,
-    });
-    const committed = yield* kernel.commit({
-      sessionId: authority.sessionId,
-      owner: authority.owner,
-      fence: authority.fence,
-      now,
-      expectedRevision: row.revision,
-      actions: [action],
-      state: row.state,
-    });
-    const receipt = committed.receipts[0];
-    if (receipt === undefined)
-      return yield* Effect.die(new Error(`commit returned no receipt: ${message.messageId}`));
-    return { ordinal: receipt.action.ordinal, actionHash: receipt.action.actionHash, deduped: false };
-  }));
+  return retryRevision(() =>
+    Effect.gen(function* () {
+      const { kernel, authority, env } = handle;
+      const existing = kernel.actionById(message.messageId);
+      if (existing !== undefined)
+        return { ordinal: existing.ordinal, actionHash: existing.actionHash, deduped: true };
+      const row = kernel.row(authority.sessionId);
+      const now = env.clock();
+      const action = receivedMessageAction({
+        id: message.messageId,
+        sessionId: authority.sessionId,
+        kind,
+        content: message.content,
+        origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(message.origin)) },
+        parentActionId: null,
+        at: now,
+      });
+      const committed = yield* kernel.commit({
+        sessionId: authority.sessionId,
+        owner: authority.owner,
+        fence: authority.fence,
+        now,
+        expectedRevision: row.revision,
+        actions: [action],
+        state: row.state,
+      });
+      const receipt = committed.receipts[0];
+      if (receipt === undefined)
+        return yield* Effect.die(new Error(`commit returned no receipt: ${message.messageId}`));
+      return {
+        ordinal: receipt.action.ordinal,
+        actionHash: receipt.action.actionHash,
+        deduped: false,
+      };
+    }),
+  );
 }
 
 function admissionSnapshot(handle: ActivationHandle): SessionAdmissionSnapshot {
@@ -160,11 +203,19 @@ function admissionSnapshot(handle: ActivationHandle): SessionAdmissionSnapshot {
   const pending = pendingBacklog(kernel, authority.sessionId);
   const open = kernel.latestOpenTurn(authority.sessionId);
   const terminal = kernel.latestTurnTerminal(authority.sessionId);
-  return { row, pending, ...(open === undefined ? {} : { open }), ...(terminal === undefined ? {} : { terminal }) };
+  return {
+    row,
+    pending,
+    ...(open === undefined ? {} : { open }),
+    ...(terminal === undefined ? {} : { terminal }),
+  };
 }
 
 /** Commits `<id>:delivery` no-op records so consumed interrupts/resumes leave the fold. */
-function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): Effect.Effect<void, LedgerError> {
+function consumePending(
+  handle: ActivationHandle,
+  items: readonly Inbox.Row[],
+): Effect.Effect<void, LedgerError> {
   const { kernel, authority, env } = handle;
   const row = kernel.row(authority.sessionId);
   const parentId = kernel.latestAction(authority.sessionId)?.id ?? null;
@@ -187,15 +238,20 @@ function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): 
  * the durable boundary. The continuation re-enters the drain when the turn
  * ends, picking up backlog that arrived after the turn's last boundary.
  */
-function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionError>): Effect.Effect<void, SessionError> {
+function detachTurn(
+  handle: ActivationHandle,
+  body: Effect.Effect<void, SessionError>,
+): Effect.Effect<void, SessionError> {
   return Effect.gen(function* () {
     const token = {};
     handle.live.current = token;
     yield* Effect.forkIn(
       body.pipe(
-        Effect.ensuring(Effect.sync(() => {
-          if (handle.live.current === token) handle.live.current = undefined;
-        })),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (handle.live.current === token) handle.live.current = undefined;
+          }),
+        ),
         // A detached turn's failure has no awaiting RPC to surface through;
         // log it loud (a stale fence here means another authority took the
         // session over — the chain recovers on the next activation).
@@ -212,7 +268,8 @@ function detachTurn(handle: ActivationHandle, body: Effect.Effect<void, SessionE
               error instanceof LeaseLost ||
               (error instanceof FenceRefused && error.reason === "stale") ||
               (error instanceof CommitRefused && error.reason === "fence")
-            ) return Effect.void;
+            )
+              return Effect.void;
           }
           return Effect.suspend(() => drain(handle));
         }),
@@ -237,34 +294,44 @@ export type SessionDrainOutcome =
  * drain is a no-op — the turn's own boundaries consume fresh backlog and
  * its continuation re-drains at the end.
  */
-function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, LedgerError | SessionError> {
+function drain(
+  handle: ActivationHandle,
+): Effect.Effect<SessionDrainOutcome, LedgerError | SessionError> {
   const { authority, kernel, env } = handle;
   const detach = (body: Effect.Effect<void, SessionError>) => detachTurn(handle, body);
-  return handle.gate.withPermits(1)(Effect.gen(function* () {
-    for (;;) {
-      if (handle.live.current !== undefined) return { kind: "turn" as const };
-      const snapshot = admissionSnapshot(handle);
-      const decision = decideSessionAdmission(snapshot);
-      switch (decision.kind) {
-        case "stop":
-          return { kind: "stop" as const };
-        case "refused": {
-          const refusal = new SessionAdmissionRefused(authority.sessionId);
-          yield* Effect.logWarning(refusal.message);
-          return { kind: "refused" as const, refusal };
+  return handle.gate.withPermits(1)(
+    Effect.gen(function* () {
+      for (;;) {
+        if (handle.live.current !== undefined) return { kind: "turn" as const };
+        const snapshot = admissionSnapshot(handle);
+        const decision = decideSessionAdmission(snapshot);
+        switch (decision.kind) {
+          case "stop":
+            return { kind: "stop" as const };
+          case "refused": {
+            const refusal = new SessionAdmissionRefused(authority.sessionId);
+            yield* Effect.logWarning(refusal.message);
+            return { kind: "refused" as const, refusal };
+          }
+          case "consume":
+            yield* consumePending(handle, decision.items);
+            continue;
+          case "start":
+            yield* env.ports.runTurn({
+              authority,
+              kernel,
+              decision: { kind: "start" },
+              snapshot,
+              detach,
+            });
+            return { kind: "turn" as const };
+          default:
+            yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
+            return { kind: "turn" as const };
         }
-        case "consume":
-          yield* consumePending(handle, decision.items);
-          continue;
-        case "start":
-          yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
-          return { kind: "turn" as const };
-        default:
-          yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
-          return { kind: "turn" as const };
       }
-    }
-  }));
+    }),
+  );
 }
 
 function receive(
@@ -297,7 +364,9 @@ function requestSnapshot(
     ...(kernel.requestInputById(authority.sessionId, inputId) === undefined
       ? {}
       : { inputRecord: kernel.requestInputById(authority.sessionId, inputId) }),
-    ...(kernel.actionById(requestId) === undefined ? {} : { invocation: kernel.actionById(requestId) }),
+    ...(kernel.actionById(requestId) === undefined
+      ? {}
+      : { invocation: kernel.actionById(requestId) }),
     ...(request === undefined ? {} : { request }),
     requests: kernel.requestRows(authority.sessionId),
     ...(request === undefined || env.ports.requestDomainRevisions === undefined
@@ -312,39 +381,40 @@ function requestCommand(
   inputId: string,
   payload: SessionTransition.Payload,
 ): Effect.Effect<{ readonly resolution: string }> {
-  const attempt = () => Effect.gen(function* () {
-    const { kernel, authority, env } = handle;
-    const row = kernel.row(authority.sessionId);
-    const decision = decideRequestTransition(
-      {
-        version: 1,
-        sessionId: authority.sessionId,
-        inputId,
-        at: env.clock(),
-        expectedRevision: row.revision,
-        authority: { owner: authority.owner, fence: authority.fence },
-        payload,
-      },
-      requestSnapshot(handle, requestId, inputId, row),
-    );
-    const intake =
-      decision.receive === undefined
-        ? []
-        : [receivedMessageAction({ ...decision.receive, at: decision.receive.createdAt })];
-    if (decision.actions.length > 0) {
-      yield* kernel.commit({
-        sessionId: authority.sessionId,
-        owner: authority.owner,
-        fence: authority.fence,
-        now: env.clock(),
-        expectedRevision: row.revision,
-        actions: [...decision.actions, ...intake],
-        state: row.state,
-        ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
-      });
-    }
-    return { resolution: decision.resolution, committed: decision.actions.length > 0 };
-  });
+  const attempt = () =>
+    Effect.gen(function* () {
+      const { kernel, authority, env } = handle;
+      const row = kernel.row(authority.sessionId);
+      const decision = decideRequestTransition(
+        {
+          version: 1,
+          sessionId: authority.sessionId,
+          inputId,
+          at: env.clock(),
+          expectedRevision: row.revision,
+          authority: { owner: authority.owner, fence: authority.fence },
+          payload,
+        },
+        requestSnapshot(handle, requestId, inputId, row),
+      );
+      const intake =
+        decision.receive === undefined
+          ? []
+          : [receivedMessageAction({ ...decision.receive, at: decision.receive.createdAt })];
+      if (decision.actions.length > 0) {
+        yield* kernel.commit({
+          sessionId: authority.sessionId,
+          owner: authority.owner,
+          fence: authority.fence,
+          now: env.clock(),
+          expectedRevision: row.revision,
+          actions: [...decision.actions, ...intake],
+          state: row.state,
+          ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
+        });
+      }
+      return { resolution: decision.resolution, committed: decision.actions.length > 0 };
+    });
   return Effect.gen(function* () {
     const result = yield* retryRevision(attempt);
     if (result.committed) yield* drain(handle);
@@ -358,7 +428,11 @@ function timerWake(
   run: (context: SessionEntityTimerContext) => Effect.Effect<SessionTimerOutcome, SessionError>,
 ): Effect.Effect<{ readonly outcome: SessionTimerOutcome }> {
   return Effect.gen(function* () {
-    const outcome = yield* run({ authority: handle.authority, kernel: handle.kernel, now: handle.env.clock() });
+    const outcome = yield* run({
+      authority: handle.authority,
+      kernel: handle.kernel,
+      now: handle.env.clock(),
+    });
     if (outcome === "applied") yield* drain(handle);
     return { outcome };
   }).pipe(Effect.orDie);
@@ -386,13 +460,23 @@ export const SessionEntityLive = SessionEntity.toLayer(
     yield* adoptFence(kernel, authority).pipe(Effect.orDie);
     const scope = yield* Effect.scope;
     const gate = yield* Semaphore.make(1);
-    const handle: ActivationHandle = { env, kernel, authority, scope, gate, live: { current: undefined } };
+    const handle: ActivationHandle = {
+      env,
+      kernel,
+      authority,
+      scope,
+      gate,
+      live: { current: undefined },
+    };
     yield* drain(handle).pipe(Effect.orDie);
     const { timers } = env.ports;
     return {
-      Prompt: (envelope: Entity.Request<typeof PromptRpc>) => receive(handle, "prompt", envelope.payload),
-      Interrupt: (envelope: Entity.Request<typeof InterruptRpc>) => receive(handle, "interrupt", envelope.payload),
-      Resume: (envelope: Entity.Request<typeof ResumeRpc>) => receive(handle, "resume", envelope.payload),
+      Prompt: (envelope: Entity.Request<typeof PromptRpc>) =>
+        receive(handle, "prompt", envelope.payload),
+      Interrupt: (envelope: Entity.Request<typeof InterruptRpc>) =>
+        receive(handle, "interrupt", envelope.payload),
+      Resume: (envelope: Entity.Request<typeof ResumeRpc>) =>
+        receive(handle, "resume", envelope.payload),
       RequestResolve: (envelope: Entity.Request<typeof RequestResolveRpc>) =>
         requestCommand(
           handle,
@@ -434,31 +518,67 @@ export function createSessionEntityRunTurn(
   runtime: ResolvedSessionRuntime,
   scope: Scope.Scope,
 ): SessionEntityPorts["runTurn"] {
-  return (input) => Effect.gen(function* () {
-    const { kernel, authority, decision } = input;
-    const state: SessionControllerState = {
-      active: undefined, controller: undefined, fence: authority.fence,
-      closed: false, terminalFrozen: false, released: false, successor: undefined,
-      retainedRunner: undefined, retainedFailure: undefined,
-      rawSlots: createRawSlots(), activeApprovals: undefined,
-    };
-    const { runTurn, seal } = createSessionTurn(kernel, authority.sessionId, runner, runtime, state, authority.owner, runtime.clock, runtime.entropy, scope, {
-      createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
-      evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
-      consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
-      hibernate: () => Effect.void,
-    });
-    // The synthetic result never persists: seals ride the detached body, and
-    // every entity admission path returns the runner result to a void sink.
-    const detachedRunTurn: typeof runTurn = (turnInput) =>
-      input.detach(runTurn(turnInput).pipe(Effect.asVoid)).pipe(
-        Effect.as<SessionRunnerResult>({ kind: "waiting", reason: "live_wait", alarmIds: [], text: "" }),
+  return (input) =>
+    Effect.gen(function* () {
+      const { kernel, authority, decision } = input;
+      const state: SessionControllerState = {
+        active: undefined,
+        controller: undefined,
+        fence: authority.fence,
+        closed: false,
+        terminalFrozen: false,
+        released: false,
+        successor: undefined,
+        retainedRunner: undefined,
+        retainedFailure: undefined,
+        rawSlots: createRawSlots(),
+        activeApprovals: undefined,
+      };
+      const { runTurn, seal } = createSessionTurn(
+        kernel,
+        authority.sessionId,
+        runner,
+        runtime,
+        state,
+        authority.owner,
+        runtime.clock,
+        runtime.entropy,
+        scope,
+        {
+          createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
+          evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
+          consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
+          hibernate: () => Effect.void,
+        },
       );
-    const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal });
-    switch (decision.kind) {
-      case "start": return void (yield* admission.startTurn());
-      case "recover": return void (yield* admission.resumeTurn(decision.open));
-      case "resume": return void (yield* admission.resumeInterrupted(decision.item));
-    }
-  });
+      // The synthetic result never persists: seals ride the detached body, and
+      // every entity admission path returns the runner result to a void sink.
+      const detachedRunTurn: typeof runTurn = (turnInput) =>
+        input.detach(runTurn(turnInput).pipe(Effect.asVoid)).pipe(
+          Effect.as<SessionRunnerResult>({
+            kind: "waiting",
+            reason: "live_wait",
+            alarmIds: [],
+            text: "",
+          }),
+        );
+      const admission = createSessionAdmission(
+        kernel,
+        authority.sessionId,
+        runtime,
+        state,
+        authority.owner,
+        runtime.clock,
+        runtime.entropy,
+        { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal },
+      );
+      switch (decision.kind) {
+        case "start":
+          return void (yield* admission.startTurn());
+        case "recover":
+          return void (yield* admission.resumeTurn(decision.open));
+        case "resume":
+          return void (yield* admission.resumeInterrupted(decision.item));
+      }
+    });
 }

@@ -9,11 +9,7 @@ import type { Inbox, LedgerSession, SessionTransition } from "@openomni/protocol
 import { Deferred, Effect } from "effect";
 import { decideRequestTransition } from "../../src/session/request";
 import { decideSessionAdmission } from "../../src/session/mailbox";
-import {
-  fixtureOpenTurn,
-  fixtureTerminal,
-  fixtureTurn,
-} from "../helpers/open-turn-fixture";
+import { fixtureOpenTurn, fixtureTerminal, fixtureTurn } from "../helpers/open-turn-fixture";
 import { openRequest } from "../helpers/open-request";
 import { approvalAnswer, invocationNode } from "../helpers/request-fixtures";
 import {

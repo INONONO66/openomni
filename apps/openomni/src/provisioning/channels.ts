@@ -1,4 +1,9 @@
-import type { ActorRegistry, ChannelInstanceStore, PersonStore, SecretStore } from "@openomni/channels";
+import type {
+  ActorRegistry,
+  ChannelInstanceStore,
+  PersonStore,
+  SecretStore,
+} from "@openomni/channels";
 import { Vault } from "@openomni/channels";
 import type { Provisioning } from "@openomni/protocol";
 import { z } from "zod";

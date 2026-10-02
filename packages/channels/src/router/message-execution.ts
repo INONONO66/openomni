@@ -94,23 +94,25 @@ function inboxAdmission(
       encodingVersion: 1,
       value: {
         ...(prepared.origin ??
-        (sender.kind === "session"
-          ? Inbox.MessageOrigin.parse({
-              kind: "message",
-              messageId,
-              senderSessionId: sender.id,
-              sourceActionId: intent.action.id,
-              ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
-              ...(send.deadline === undefined ? {} : { deadline: send.deadline }),
-            })
-          : {
-              kind: "external",
-              messageId,
-              surface: sender.surface,
-              externalId: sender.externalId,
-              actorId: external?.event.meta?.actor?.actorId ?? "",
-            })),
-        ...(external === undefined ? {} : { inboundTreatment: external.route.decision.inboundTreatment ?? "full_access" }),
+          (sender.kind === "session"
+            ? Inbox.MessageOrigin.parse({
+                kind: "message",
+                messageId,
+                senderSessionId: sender.id,
+                sourceActionId: intent.action.id,
+                ...(send.replyTo === undefined ? {} : { replyTo: send.replyTo }),
+                ...(send.deadline === undefined ? {} : { deadline: send.deadline }),
+              })
+            : {
+                kind: "external",
+                messageId,
+                surface: sender.surface,
+                externalId: sender.externalId,
+                actorId: external?.event.meta?.actor?.actorId ?? "",
+              })),
+        ...(external === undefined
+          ? {}
+          : { inboundTreatment: external.route.decision.inboundTreatment ?? "full_access" }),
       },
     },
   };
@@ -118,11 +120,17 @@ function inboxAdmission(
 
 function requestSpec(send: MessageContext["send"], intent: LedgerAction.Receipt) {
   if (send.deadline === undefined) return {};
-  return { requestSpec: {
-    requestId: intent.action.id, sessionId: intent.action.sessionId, allowedActions: ["report_result" as const],
-    expectedResponders: send.to.kind === "actor" ? [send.to.actorId] : [],
-    resolution: "first" as const, threshold: 1, deadline: send.deadline,
-  } };
+  return {
+    requestSpec: {
+      requestId: intent.action.id,
+      sessionId: intent.action.sessionId,
+      allowedActions: ["report_result" as const],
+      expectedResponders: send.to.kind === "actor" ? [send.to.actorId] : [],
+      resolution: "first" as const,
+      threshold: 1,
+      deadline: send.deadline,
+    },
+  };
 }
 
 /** Executes an admitted message; progress survives a later grant/projection failure. */
@@ -132,68 +140,79 @@ export function executeMessage(
   intent: LedgerAction.Receipt,
 ): Effect.Effect<PlainValue, ChannelError> {
   return Effect.gen(function* () {
-  const {
-    sender,
-    send,
-    prepared,
-    external,
-    ports,
-    messaging,
-    messageId,
-    handle,
-    startedAt,
-    clock,
-  } = context;
-  const sessionResult: PlainValue = { status: "executed", handle, delivery: { kind: "session" } };
-  const content = transformedContent(intent, sender, send, messageId);
-  if (external !== undefined) {
-    const decision = requireRoutedDecision(external.route.decision);
-    yield* executeRequestRoute(context.stores, external.route, decision, ports.requests, content, clock());
-    context.stores.surfaceKeys.claim(external.surfaceKey, prepared.target);
-    if (external.route.requestExecution.kind === "request") return sessionResult;
-  }
-  if (send.to.kind === "actor") {
-    if (messaging === undefined)
-      return yield* Effect.die(
-        new ChannelsFailure({
-          operation: "message.actor_send",
-          cause: "actor messaging is not configured",
-        }),
-      );
-    const receipt = yield* messaging.send({
+    const {
+      sender,
+      send,
+      prepared,
+      external,
+      ports,
+      messaging,
       messageId,
-      traceId: intent.action.id,
-      senderId: sender.kind === "session" ? sender.id : sender.externalId,
-      target: { actorId: send.to.actorId },
-      body: content,
-      at: startedAt,
-      operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
-      ...requestSpec(send, intent),
-    });
-    if (receipt.kind === "denied")
-      return yield* Effect.fail(
-        new SendAdmissionConflict({ message: `actor send admission changed: ${receipt.code}` }),
+      handle,
+      startedAt,
+      clock,
+    } = context;
+    const sessionResult: PlainValue = { status: "executed", handle, delivery: { kind: "session" } };
+    const content = transformedContent(intent, sender, send, messageId);
+    if (external !== undefined) {
+      const decision = requireRoutedDecision(external.route.decision);
+      yield* executeRequestRoute(
+        context.stores,
+        external.route,
+        decision,
+        ports.requests,
+        content,
+        clock(),
       );
-    const actorResult: PlainValue = { status: "executed", handle, delivery: { kind: "actor", value: receipt.delivery } };
-    return actorResult;
-  }
-  if (yield* answerNativeRequest(ports.requests, sender, prepared.origin, content, clock()))
+      context.stores.surfaceKeys.claim(external.surfaceKey, prepared.target);
+      if (external.route.requestExecution.kind === "request") return sessionResult;
+    }
+    if (send.to.kind === "actor") {
+      if (messaging === undefined)
+        return yield* Effect.die(
+          new ChannelsFailure({
+            operation: "message.actor_send",
+            cause: "actor messaging is not configured",
+          }),
+        );
+      const receipt = yield* messaging.send({
+        messageId,
+        traceId: intent.action.id,
+        senderId: sender.kind === "session" ? sender.id : sender.externalId,
+        target: { actorId: send.to.actorId },
+        body: content,
+        at: startedAt,
+        operation: send.deadline === undefined ? "fire_and_forget" : "awaited",
+        ...requestSpec(send, intent),
+      });
+      if (receipt.kind === "denied")
+        return yield* Effect.fail(
+          new SendAdmissionConflict({ message: `actor send admission changed: ${receipt.code}` }),
+        );
+      const actorResult: PlainValue = {
+        status: "executed",
+        handle,
+        delivery: { kind: "actor", value: receipt.delivery },
+      };
+      return actorResult;
+    }
+    if (yield* answerNativeRequest(ports.requests, sender, prepared.origin, content, clock()))
+      return sessionResult;
+    const commitAt = clock();
+    const admission = inboxAdmission(context, intent, content, commitAt);
+    yield* openNativeRequest(
+      ports.requests,
+      intent,
+      sender,
+      send,
+      prepared.target,
+      startedAt,
+      admission,
+    );
+    const row = yield* ports.inbox.commit(admission);
+    progress.commitMs = clock() - commitAt;
+    progress.committed = row;
+    context.admitReplyGrant();
     return sessionResult;
-  const commitAt = clock();
-  const admission = inboxAdmission(context, intent, content, commitAt);
-  yield* openNativeRequest(
-    ports.requests,
-    intent,
-    sender,
-    send,
-    prepared.target,
-    startedAt,
-    admission,
-  );
-  const row = yield* ports.inbox.commit(admission);
-  progress.commitMs = clock() - commitAt;
-  progress.committed = row;
-  context.admitReplyGrant();
-  return sessionResult;
   });
 }

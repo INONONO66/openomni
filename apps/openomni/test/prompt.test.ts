@@ -9,7 +9,9 @@ const residentBase = [
   RESIDENT_PRESET.policies,
   RESIDENT_PRESET.style,
 ]
-  .filter((section: string | undefined): section is string => section !== undefined && section !== "")
+  .filter(
+    (section: string | undefined): section is string => section !== undefined && section !== "",
+  )
   .join("\n\n");
 
 describe("buildAgentPrompt", () => {
@@ -20,9 +22,12 @@ describe("buildAgentPrompt", () => {
   });
 
   test("includes the resident sections in preset order", () => {
-    const sections = [RESIDENT_PRESET.identity, RESIDENT_PRESET.mandate,
-      RESIDENT_PRESET.policies, RESIDENT_PRESET.style]
-      .filter((section: string | undefined): section is string => Boolean(section));
+    const sections = [
+      RESIDENT_PRESET.identity,
+      RESIDENT_PRESET.mandate,
+      RESIDENT_PRESET.policies,
+      RESIDENT_PRESET.style,
+    ].filter((section: string | undefined): section is string => Boolean(section));
     expect(buildAgentPrompt(RESIDENT_PRESET)).toBe(sections.join("\n\n"));
   });
 

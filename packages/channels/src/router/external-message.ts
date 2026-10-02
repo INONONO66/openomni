@@ -17,7 +17,8 @@ function admitWebSocketOwner(
   if (
     sender.surface !== "ws" ||
     stores.actors.resolveEndpoint("ws", sender.externalId) !== undefined ||
-    resolveChannelGrant(stores, { surface: "ws", sender: sender.externalId })?.grant.defaultTier !== "owner"
+    resolveChannelGrant(stores, { surface: "ws", sender: sender.externalId })?.grant.defaultTier !==
+      "owner"
   )
     return;
   const actorId = `ws:owner:${sender.externalId}`;
@@ -98,7 +99,16 @@ export function externalMessage(
     },
     at,
   );
-  const route = resolveAndRecordRoute(stores, event, surfaceKey, event.traceId, sink, requests, at, id);
+  const route = resolveAndRecordRoute(
+    stores,
+    event,
+    surfaceKey,
+    event.traceId,
+    sink,
+    requests,
+    at,
+    id,
+  );
   const addressee = resolveAddressee(stores, facts);
   const target = route.decision.sessionId ?? stores.surfaceKeys.lookup(surfaceKey) ?? id();
   const actorId = event.meta?.actor?.actorId;

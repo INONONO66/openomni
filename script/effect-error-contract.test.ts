@@ -12,16 +12,41 @@ import * as Machines from "../packages/machines/src/errors";
 import * as Ipc from "../packages/machines/src/ipc/errors";
 const diagnostic = { operation: "fixture", cause: "foreign diagnostic" };
 const message = { message: "fixture" };
-const usage = { inputTokens: 1, outputTokens: 2, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+const usage = {
+  inputTokens: 1,
+  outputTokens: 2,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
 const agentFailure = new Agent.AgentFailure(diagnostic);
 // #1246: llm folded into the agent model plane; AgentFailure is the one carrier.
 const model = {
   AgentFailure: agentFailure,
-  APIError: new Model.APIError({ cause: sdkError({ ...message, isRetryable: true, statusCode: 429 }), provider: "provider", model: "model" }),
-  LlmRunFailure: new Model.LlmRunFailure({ ...message, usage, aborted: false, contextOverflow: false, visibleOutput: true }),
-  ModelResolutionError: new Model.ModelResolutionError({ ...message, provider: "provider", model: "model", reason: "model_not_found" }),
+  APIError: new Model.APIError({
+    cause: sdkError({ ...message, isRetryable: true, statusCode: 429 }),
+    provider: "provider",
+    model: "model",
+  }),
+  LlmRunFailure: new Model.LlmRunFailure({
+    ...message,
+    usage,
+    aborted: false,
+    contextOverflow: false,
+    visibleOutput: true,
+  }),
+  ModelResolutionError: new Model.ModelResolutionError({
+    ...message,
+    provider: "provider",
+    model: "model",
+    reason: "model_not_found",
+  }),
   AuthInvalidFileError: new Model.AuthInvalidFileError({ ...message, path: "auth.json" }),
-  AuthResolutionError: new Model.AuthResolutionError({ ...message, provider: "provider", reason: "missing_auth" }),
+  AuthResolutionError: new Model.AuthResolutionError({
+    ...message,
+    provider: "provider",
+    reason: "missing_auth",
+  }),
   ProxyModelsError: new Model.ProxyModelsError({ ...message, url: "https://fixture.invalid" }),
   TransportFailure: new Model.TransportFailure({ ...diagnostic, ...message }),
   InvalidProviderData: new Model.InvalidProviderData({ ...diagnostic, ...message }),
@@ -32,11 +57,20 @@ const ipc = {
   IpcConnectionError: new Ipc.IpcConnectionError(message),
   IpcProtocolError: new Ipc.IpcProtocolError(message),
   IpcTimeoutError: new Ipc.IpcTimeoutError({ ...message, requestId: "request", method: "fixture" }),
-  IpcRemoteError: new Ipc.IpcRemoteError({ ...message, requestId: "request", method: "fixture", code: 1000 }),
+  IpcRemoteError: new Ipc.IpcRemoteError({
+    ...message,
+    requestId: "request",
+    method: "fixture",
+    code: 1000,
+  }),
 } satisfies { [K in Ipc.IpcError["_tag"]]: Extract<Ipc.IpcError, { _tag: K }> };
 const machines = {
   MachinesFailure: new Machines.MachinesFailure(diagnostic),
-  MachineCellError: new Machines.MachineCellError({ ...message, cellId: "cell", code: "unknown_cell_id" }),
+  MachineCellError: new Machines.MachineCellError({
+    ...message,
+    cellId: "cell",
+    code: "unknown_cell_id",
+  }),
   MachineRefusalError: new Machines.MachineRefusalError({ ...message, reason: "closed" }),
   SpawnFailure: new Machines.SpawnFailure({ ...diagnostic, ...message }),
   FilesystemFailure: new Machines.FilesystemFailure({ ...diagnostic, ...message }),
@@ -52,8 +86,21 @@ const store = {
   AgentFailure: agentFailure,
   SessionNotFound: new Store.SessionNotFound({ sessionId: "session" }),
   MaterializeRefused: new Store.MaterializeRefused({ sessionId: "session", reason: "input" }),
-  FenceRefused: new Store.FenceRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
-  CommitRefused: new Store.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
+  FenceRefused: new Store.FenceRefused({
+    sessionId: "session",
+    reason: "held",
+    holder: "holder",
+    fence: 1,
+    expiresAt: 1,
+  }),
+  CommitRefused: new Store.CommitRefused({
+    sessionId: "session",
+    reason: "fence",
+    fence: 1,
+    currentFence: 2,
+    expectedRevision: 0,
+    currentRevision: 1,
+  }),
   PolicyGenerationRefused: new Store.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
   StorageUnavailable: new Store.StorageUnavailable({ capability: "storage" }),
   CorruptRecord: new Store.CorruptRecord({ operation: "decode", id: "record" }),
@@ -75,7 +122,11 @@ const agent = {
   SessionMissing: new Agent.SessionMissing({ sessionId: "session" }),
   LeaseLost: new Agent.LeaseLost({ sessionId: "session", fence: 1 }),
   GenerationUnavailable: new Agent.GenerationUnavailable({ generation: 1 }),
-  GenerationUnsettled: new Agent.GenerationUnsettled({ sessionId: "session", generation: 1, owners: 1 }),
+  GenerationUnsettled: new Agent.GenerationUnsettled({
+    sessionId: "session",
+    generation: 1,
+    owners: 1,
+  }),
   BundleError: new Agent.BundleError({ code: "acquisition", bundle: "fixture", detail: "fixture" }),
   ExecutionApprovalError: new Agent.ExecutionApprovalError({ code: "stale_approval" }),
   AgentStopError: new Agent.AgentStopError({ reason: "budget" }),
@@ -91,9 +142,25 @@ const channels = {
   SlackHandlerMissingError: new Channels.SlackHandlerMissingError(message),
   SlackEndpointKeyError: new Channels.SlackEndpointKeyError(message),
   TelegramApiError: new Channels.TelegramApiError(message),
-  IngressRoutingError: new Channels.IngressRoutingError("route_blocked", "fixture", { traceId: "trace", time: 1, inboundId: "inbound", surface: "ws", mode: "direct", reason: "fixture", factsUsed: [], stage: "blacklist", outcome: "drop" }),
+  IngressRoutingError: new Channels.IngressRoutingError("route_blocked", "fixture", {
+    traceId: "trace",
+    time: 1,
+    inboundId: "inbound",
+    surface: "ws",
+    mode: "direct",
+    reason: "fixture",
+    factsUsed: [],
+    stage: "blacklist",
+    outcome: "drop",
+  }),
   SendAdmissionConflict: new Channels.SendAdmissionConflict(message),
-  RateLimited: new Channels.RateLimited({ ...message, status: 429, attempts: 1, responseHeaders: {}, responseBody: "" }),
+  RateLimited: new Channels.RateLimited({
+    ...message,
+    status: 429,
+    attempts: 1,
+    responseHeaders: {},
+    responseBody: "",
+  }),
 } satisfies { [K in Channels.ChannelError["_tag"]]: Extract<Channels.ChannelError, { _tag: K }> };
 type Failure =
   | Agent.SessionError
@@ -128,26 +195,93 @@ const carrierOwners: Readonly<Record<string, object>> = {
 };
 
 const packages: readonly PackageEntry[] = [
-  { name: "agent", path: "agent/src/errors", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/errors", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
-  { name: "agent store", path: "agent/src/store/errors", module: Store, union: "LedgerError", carrier: "AgentFailure", carrierPath: "agent/src/store/errors", failures: store, thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError] },
-  { name: "agent model", path: "agent/src/model/errors", module: Model, union: "LlmError", carrier: "AgentFailure", carrierPath: "agent/src/model/errors", failures: model, thrown: [] },
-  { name: "channels", path: "channels/src/errors", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", carrierPath: "channels/src/errors", failures: channels, thrown: [] },
-  { name: "machines", path: "machines/src/errors", module: Machines, union: "MachineError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: machines, thrown: [] },
-  { name: "machines ipc", path: "machines/src/ipc/errors", module: Ipc, union: "IpcError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: ipc, thrown: [] },
-  { name: "machines codemode", path: "machines/src/codemode/errors", module: Code, union: "CodeError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: code, thrown: [] },
+  {
+    name: "agent",
+    path: "agent/src/kernel/failure",
+    module: Agent,
+    union: "SessionError",
+    carrier: "AgentFailure",
+    carrierPath: "agent/src/kernel/failure",
+    failures: agent,
+    thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError],
+  },
+  {
+    name: "agent store",
+    path: "agent/src/store/errors",
+    module: Store,
+    union: "LedgerError",
+    carrier: "AgentFailure",
+    carrierPath: "agent/src/store/errors",
+    failures: store,
+    thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError],
+  },
+  {
+    name: "agent model",
+    path: "agent/src/model/errors",
+    module: Model,
+    union: "LlmError",
+    carrier: "AgentFailure",
+    carrierPath: "agent/src/model/errors",
+    failures: model,
+    thrown: [],
+  },
+  {
+    name: "channels",
+    path: "channels/src/errors",
+    module: Channels,
+    union: "ChannelError",
+    carrier: "ChannelsFailure",
+    carrierPath: "channels/src/errors",
+    failures: channels,
+    thrown: [],
+  },
+  {
+    name: "machines",
+    path: "machines/src/errors",
+    module: Machines,
+    union: "MachineError",
+    carrier: "MachinesFailure",
+    carrierPath: "machines/src/errors",
+    failures: machines,
+    thrown: [],
+  },
+  {
+    name: "machines ipc",
+    path: "machines/src/ipc/errors",
+    module: Ipc,
+    union: "IpcError",
+    carrier: "MachinesFailure",
+    carrierPath: "machines/src/errors",
+    failures: ipc,
+    thrown: [],
+  },
+  {
+    name: "machines codemode",
+    path: "machines/src/codemode/errors",
+    module: Code,
+    union: "CodeError",
+    carrier: "MachinesFailure",
+    carrierPath: "machines/src/errors",
+    failures: code,
+    thrown: [],
+  },
 ];
 for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {
     const constructors: ErrorClass[] = Object.values(entry.module).filter(isErrorClass);
     const failures: Failure[] = Object.values(entry.failures);
     const owned = new Set<ErrorClass>(failures.map((failure) => failure.constructor as ErrorClass));
-    for (const ctor of constructors) expect(owned.has(ctor) || entry.thrown.includes(ctor)).toBe(true);
+    for (const ctor of constructors)
+      expect(owned.has(ctor) || entry.thrown.includes(ctor)).toBe(true);
     for (const ctor of entry.thrown) {
       expect(constructors.includes(ctor)).toBe(true);
       expect(owned.has(ctor)).toBe(false);
     }
-    const foreign: object[] = packages.filter((other) => other !== entry).flatMap((other) => Object.values(other.module));
-    for (const ctor of owned) expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
+    const foreign: object[] = packages
+      .filter((other) => other !== entry)
+      .flatMap((other) => Object.values(other.module));
+    for (const ctor of owned)
+      expect(constructors.includes(ctor) || foreign.includes(ctor)).toBe(true);
     for (const failure of failures) {
       expect(Effect.isEffect(failure)).toBe(true);
       const caught = runSyncEffect(Effect.result(Effect.fail(failure)));
@@ -156,32 +290,58 @@ for (const entry of packages) {
     }
     const carrier = entry.failures[entry.carrier];
     expect(carrier).toBeDefined();
-    expect(carrier?.constructor === (entry.module[entry.carrier] ?? carrierOwners[entry.carrier])).toBe(true);
-    expect(carrier !== undefined && "cause" in carrier ? carrier.cause : undefined).toBe(diagnostic.cause);
-    expect(JSON.parse(JSON.stringify(carrier))).toMatchObject({ _tag: entry.carrier, ...diagnostic });
+    expect(
+      carrier?.constructor === (entry.module[entry.carrier] ?? carrierOwners[entry.carrier]),
+    ).toBe(true);
+    expect(carrier !== undefined && "cause" in carrier ? carrier.cause : undefined).toBe(
+      diagnostic.cause,
+    );
+    expect(JSON.parse(JSON.stringify(carrier))).toMatchObject({
+      _tag: entry.carrier,
+      ...diagnostic,
+    });
   });
 }
 
 test("every package union has a compiling exhaustive tag switch and a string carrier cause", () => {
   const fixturePath = new URL("./effect-error-exhaustiveness.fixture.ts", import.meta.url).pathname;
-  const fixture = packages.map((entry, index) => `
+  const fixture = packages
+    .map(
+      (entry, index) => `
     import type { ${entry.union} as Union${index} } from "../packages/${entry.path}";
     import type { ${entry.carrier} as Carrier${index} } from "../packages/${entry.carrierPath}";
     function exhaustive${index}(error: Union${index}): string {
       switch (error._tag) {
-        ${Object.keys(entry.failures).map((tag) => `case ${JSON.stringify(tag)}: return error._tag;`).join("\n")}
+        ${Object.keys(entry.failures)
+          .map((tag) => `case ${JSON.stringify(tag)}: return error._tag;`)
+          .join("\n")}
         default: { const absent: never = error; return absent; }
       }
     }
     const cause${index} = (error: Carrier${index}): string => error.cause;
-  `).join("\n");
-  const options: ts.CompilerOptions = { noEmit: true, strict: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, types: ["bun"] };
+  `,
+    )
+    .join("\n");
+  const options: ts.CompilerOptions = {
+    noEmit: true,
+    strict: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    types: ["bun"],
+  };
   const host = ts.createCompilerHost(options);
   const getSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (file, languageVersion, onError, shouldCreateNewSourceFile) => file === fixturePath
-    ? ts.createSourceFile(file, fixture, languageVersion, true)
-    : getSourceFile(file, languageVersion, onError, shouldCreateNewSourceFile);
+  host.getSourceFile = (file, languageVersion, onError, shouldCreateNewSourceFile) =>
+    file === fixturePath
+      ? ts.createSourceFile(file, fixture, languageVersion, true)
+      : getSourceFile(file, languageVersion, onError, shouldCreateNewSourceFile);
   const program = ts.createProgram([fixturePath], options, host);
-  const errors = ts.getPreEmitDiagnostics(program).filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-  expect(errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n"))).toEqual([]);
+  const errors = ts
+    .getPreEmitDiagnostics(program)
+    .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
+  expect(errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n"))).toEqual(
+    [],
+  );
 }, 15_000);

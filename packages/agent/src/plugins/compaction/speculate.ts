@@ -55,12 +55,18 @@ export class CompactionSession {
       const firstKept = messages[plan?.prefixIds.length ?? -1];
       if (plan === undefined || plan.summarizerInput.length === 0 || firstKept === undefined)
         return Effect.void;
-      const prepared = prepareSummarizerInput(plan.summarizerInput, contextWindowTokens, plan.previousAnchor);
+      const prepared = prepareSummarizerInput(
+        plan.summarizerInput,
+        contextWindowTokens,
+        plan.previousAnchor,
+      );
       if (prepared.messages.length === 0) return Effect.void;
       this.#inFlight = true;
       // A preparation aborted before its summarizer call leaves `#entered` unresolved; the waiters it
       // collected are owed the next entry, so a fresh Deferred is allotted only after the previous one resolved.
-      const entered = Deferred.isDoneUnsafe(this.#entered) ? Deferred.makeUnsafe<void>() : this.#entered;
+      const entered = Deferred.isDoneUnsafe(this.#entered)
+        ? Deferred.makeUnsafe<void>()
+        : this.#entered;
       this.#entered = entered;
       const generation = this.#generation;
       const work = Effect.suspend(() => {
@@ -71,13 +77,16 @@ export class CompactionSession {
           onSuccess: (summary) => {
             if (generation !== this.#generation) return;
             this.#failureStreak = 0;
-            this.#candidate = summary.trim().length === 0 ? undefined : {
-              prefixIds: plan.prefixIds,
-              prefixFingerprint: plan.prefixFingerprint,
-              firstKeptId: firstKept.info.id,
-              compactionAnchorId: latestCompactionAnchorId(messages),
-              anchorBody: summary,
-            };
+            this.#candidate =
+              summary.trim().length === 0
+                ? undefined
+                : {
+                    prefixIds: plan.prefixIds,
+                    prefixFingerprint: plan.prefixFingerprint,
+                    firstKeptId: firstKept.info.id,
+                    compactionAnchorId: latestCompactionAnchorId(messages),
+                    anchorBody: summary,
+                  };
           },
           onFailure: (error) => {
             if (generation !== this.#generation) return;
@@ -86,19 +95,32 @@ export class CompactionSession {
             onFailure?.(error, this.#failureStreak);
           },
         }),
-        Effect.ensuring(Effect.sync(() => {
-          if (generation === this.#generation) this.#inFlight = false;
-        })),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (generation === this.#generation) this.#inFlight = false;
+          }),
+        ),
       );
-      return Effect.forkScoped(work).pipe(Effect.tap((fiber) => Effect.sync(() => {
-        this.#preparation = fiber;
-      })), Effect.asVoid);
+      return Effect.forkScoped(work).pipe(
+        Effect.tap((fiber) =>
+          Effect.sync(() => {
+            this.#preparation = fiber;
+          }),
+        ),
+        Effect.asVoid,
+      );
     });
   }
 
-  candidate(): CompactionCandidate | undefined { return this.#candidate; }
-  inFlight(): boolean { return this.#inFlight; }
-  consume(): void { this.#candidate = undefined; }
+  candidate(): CompactionCandidate | undefined {
+    return this.#candidate;
+  }
+  inFlight(): boolean {
+    return this.#inFlight;
+  }
+  consume(): void {
+    this.#candidate = undefined;
+  }
 
   disable(): Effect.Effect<void> {
     return Effect.suspend(() => {
@@ -125,7 +147,9 @@ export class CompactionSession {
       this.#generation += 1;
       this.#candidate = undefined;
       this.#inFlight = false;
-      return this.#preparation === undefined ? Effect.void : Fiber.interrupt(this.#preparation).pipe(Effect.asVoid);
+      return this.#preparation === undefined
+        ? Effect.void
+        : Fiber.interrupt(this.#preparation).pipe(Effect.asVoid);
     });
   }
 
@@ -134,6 +158,8 @@ export class CompactionSession {
   }
 
   settled(): Effect.Effect<void> {
-    return Effect.suspend(() => this.#preparation === undefined ? Effect.void : Fiber.join(this.#preparation));
+    return Effect.suspend(() =>
+      this.#preparation === undefined ? Effect.void : Fiber.join(this.#preparation),
+    );
   }
 }

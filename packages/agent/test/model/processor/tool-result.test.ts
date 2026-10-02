@@ -292,7 +292,8 @@ describe("Processor abort settlement grace (#532 candidate 2)", () => {
       }),
     });
     await expect(processor.process({ system: "", promptText: "" })).rejects.toMatchObject({
-      _tag: "TransportFailure", providerErrorName: "AbortError",
+      _tag: "TransportFailure",
+      providerErrorName: "AbortError",
     });
     return messages;
   }

@@ -18,7 +18,12 @@ import { receiveOutbound } from "./effect-g2";
 import { seedPolicy } from "./seed-policy";
 import { reactivateSession } from "./wake-session";
 import { uniqueEntropy } from "./time";
-import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./session-services";
 
 export const messagePlanePoint = z.enum([
   "delivery_ack_committed_before_owner_cleanup",
@@ -28,14 +33,25 @@ export const messagePlanePoint = z.enum([
   "outbound_flood_deadline_before_timer_rearm",
   "watch_fired_committed_before_entity_wake",
 ]);
-export const messagePlaneProof = z.object({
-  before: z.array(LedgerAction.Node), after: z.array(LedgerAction.Node), repeated: z.array(LedgerAction.Node),
-  outboundBefore: z.array(SessionTransition.Outbound), outboundAfter: z.array(SessionTransition.Outbound),
-  inboxBefore: z.array(Inbox.Row), inboxAfter: z.array(Inbox.Row),
-  dispatches: z.number(), sourceRuns: z.number(), destinationRuns: z.number(),
-  externalBefore: z.array(z.string()), externalAfter: z.array(z.string()),
-  watch: z.object({ occurrenceId: z.string(), redelivery: z.string(), fired: z.number() }).nullable(),
-}).strict();
+export const messagePlaneProof = z
+  .object({
+    before: z.array(LedgerAction.Node),
+    after: z.array(LedgerAction.Node),
+    repeated: z.array(LedgerAction.Node),
+    outboundBefore: z.array(SessionTransition.Outbound),
+    outboundAfter: z.array(SessionTransition.Outbound),
+    inboxBefore: z.array(Inbox.Row),
+    inboxAfter: z.array(Inbox.Row),
+    dispatches: z.number(),
+    sourceRuns: z.number(),
+    destinationRuns: z.number(),
+    externalBefore: z.array(z.string()),
+    externalAfter: z.array(z.string()),
+    watch: z
+      .object({ occurrenceId: z.string(), redelivery: z.string(), fired: z.number() })
+      .nullable(),
+  })
+  .strict();
 const sessionId = "crash-session";
 const watchId = "doorbell";
 const occurrenceId = `${watchId}:fired:1`;
@@ -63,40 +79,75 @@ function watchCut() {
     let hibernated = 0;
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
-      authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => now,
+      authorizeConfigure: allowConfigure,
+      observations: { publish: () => undefined },
+      clock: () => now,
       entropy: uniqueEntropy("watch"),
-      onHibernate: () => Effect.sync(() => { hibernated += 1; }),
+      onHibernate: () =>
+        Effect.sync(() => {
+          hibernated += 1;
+        }),
     };
-    const handle = yield* withSessionServices(session({
-      id: sessionId, role: "resident", runner: () => Effect.succeed({ kind: "result", text: "idle" }),
-    }, runtime), runtime);
+    const handle = yield* withSessionServices(
+      session(
+        {
+          id: sessionId,
+          role: "resident",
+          runner: () => Effect.succeed({ kind: "result", text: "idle" }),
+        },
+        runtime,
+      ),
+      runtime,
+    );
     yield* handle.prompt("initialize");
     if (hibernated !== 1) throw new Error("session did not hibernate before the watch fired");
     if (watchFiredDelivery(timerReads(kernel), occurrenceId).op !== "run")
       throw new Error("fresh occurrence must be admitted");
     const row = kernel.row(sessionId);
     if (row.fenceOwner === null) throw new Error("hibernated session lost its pinned writer");
-    yield* kernel.commit({
-      sessionId, owner: row.fenceOwner, fence: row.fence, now,
-      expectedRevision: row.revision, state: row.state,
-      actions: [
-        {
-          id: occurrenceId, sessionId, parentId: null, kind: "alarm.fired",
-          intent: { encodingVersion: 1, value: { watchId, epoch: 1, sourceKey: `timer:${now}`, batch: "b1" } },
-          effect: { encodingVersion: 1, value: { phase: "fired", terminal: true } },
-          ts: now, irreversible: true,
-        },
-        receivedMessageAction({
-          id: `${occurrenceId}:prompt`, sessionId, kind: "prompt", content: "watch prompt",
-          origin: { encodingVersion: 1, value: { watchId } }, parentActionId: occurrenceId, at: now,
-        }),
-      ],
-    }).pipe(Effect.mapError((error: LedgerError) => new CommitFailed({ error })));
+    yield* kernel
+      .commit({
+        sessionId,
+        owner: row.fenceOwner,
+        fence: row.fence,
+        now,
+        expectedRevision: row.revision,
+        state: row.state,
+        actions: [
+          {
+            id: occurrenceId,
+            sessionId,
+            parentId: null,
+            kind: "alarm.fired",
+            intent: {
+              encodingVersion: 1,
+              value: { watchId, epoch: 1, sourceKey: `timer:${now}`, batch: "b1" },
+            },
+            effect: { encodingVersion: 1, value: { phase: "fired", terminal: true } },
+            ts: now,
+            irreversible: true,
+          },
+          receivedMessageAction({
+            id: `${occurrenceId}:prompt`,
+            sessionId,
+            kind: "prompt",
+            content: "watch prompt",
+            origin: { encodingVersion: 1, value: { watchId } },
+            parentActionId: occurrenceId,
+            at: now,
+          }),
+        ],
+      })
+      .pipe(Effect.mapError((error: LedgerError) => new CommitFailed({ error })));
     const after = kernel.row(sessionId);
-    return holdCrashBarrier(JSON.stringify({
-      crashPoint: "watch_fired_committed_before_entity_wake", bodies: [],
-      lease: { owner: after.fenceOwner, fence: after.fence }, openTurns: [],
-    }));
+    return holdCrashBarrier(
+      JSON.stringify({
+        crashPoint: "watch_fired_committed_before_entity_wake",
+        bodies: [],
+        lease: { owner: after.fenceOwner, fence: after.fence },
+        openTurns: [],
+      }),
+    );
   });
 }
 
@@ -120,26 +171,38 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     let destinationRuns = 0;
     const runtime: SessionFixture = {
       ...isolatedRuntime(),
-      authorizeConfigure: allowConfigure, observations: { publish: () => undefined }, clock: () => now,
+      authorizeConfigure: allowConfigure,
+      observations: { publish: () => undefined },
+      clock: () => now,
       entropy: uniqueEntropy("recover"),
-      dispatchOutbound: ({ message }) => Effect.gen(function* () {
-        dispatches += 1;
-        if (point === "platform_send_committed_before_local_ack_reconciled_sent" || point === "platform_send_ambiguous_without_reconciliation")
-          appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
-        return (yield* receiveOutbound(message, now)).receipt;
-      }),
+      dispatchOutbound: ({ message }) =>
+        Effect.gen(function* () {
+          dispatches += 1;
+          if (
+            point === "platform_send_committed_before_local_ack_reconciled_sent" ||
+            point === "platform_send_ambiguous_without_reconciliation"
+          )
+            appendFileSync(`${dbPath}.platform`, `${message.messageId}\n`);
+          return (yield* receiveOutbound(message, now)).receipt;
+        }),
     };
-    const runner = () => Effect.sync(() => {
-      sourceRuns += 1;
-      return { kind: "result" as const, text: "rehydrated" };
-    });
-    const receiver = () => Effect.sync(() => {
-      destinationRuns += 1;
-      return { kind: "result" as const, text: "received" };
-    });
+    const runner = () =>
+      Effect.sync(() => {
+        sourceRuns += 1;
+        return { kind: "result" as const, text: "rehydrated" };
+      });
+    const receiver = () =>
+      Effect.sync(() => {
+        destinationRuns += 1;
+        return { kind: "result" as const, text: "received" };
+      });
     // Zero re-fire: the committed occurrence makes every redelivery a chain-guarded no-op.
     const redelivery = watchFiredDelivery(timerReads(kernel), occurrenceId);
-    if (watch && JSON.stringify(watchFiredDelivery(timerReads(kernel), occurrenceId)) !== JSON.stringify(redelivery))
+    if (
+      watch &&
+      JSON.stringify(watchFiredDelivery(timerReads(kernel), occurrenceId)) !==
+        JSON.stringify(redelivery)
+    )
       throw new Error("watch redelivery must stay a stable no-op");
     yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
     if (!watch) yield* withSessionServices(reactivateSession("parent", receiver, runtime), runtime);
@@ -147,15 +210,24 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
     if (!watch) yield* withSessionServices(reactivateSession("parent", receiver, runtime), runtime);
     const proof = messagePlaneProof.parse({
-      before, after, repeated: sessionTree(kernel, sessionId), outboundBefore,
-      outboundAfter: kernel.outboundRows(sessionId), inboxBefore,
+      before,
+      after,
+      repeated: sessionTree(kernel, sessionId),
+      outboundBefore,
+      outboundAfter: kernel.outboundRows(sessionId),
+      inboxBefore,
       inboxAfter: receivedMessages(kernel, watch ? sessionId : "parent").rows,
-      dispatches, sourceRuns, destinationRuns, externalBefore, externalAfter: platformEntries(dbPath),
+      dispatches,
+      sourceRuns,
+      destinationRuns,
+      externalBefore,
+      externalAfter: platformEntries(dbPath),
       watch: watch
         ? {
             occurrenceId,
             redelivery: redelivery.op === "skip" ? redelivery.reason : redelivery.op,
-            fired: sessionTree(kernel, sessionId).filter((action) => action.kind === "alarm.fired").length,
+            fired: sessionTree(kernel, sessionId).filter((action) => action.kind === "alarm.fired")
+              .length,
           }
         : null,
     });
@@ -165,14 +237,19 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
 }
 
 if (import.meta.main) {
-  const [stage, point, dbPath] = z.tuple([z.enum(["crash", "recover"]), messagePlanePoint, z.string().min(1)]).parse(process.argv.slice(2));
+  const [stage, point, dbPath] = z
+    .tuple([z.enum(["crash", "recover"]), messagePlanePoint, z.string().min(1)])
+    .parse(process.argv.slice(2));
   awaitCrashStart();
-  const proof = await isolated(Effect.gen(function* () {
-    if (stage === "crash") {
-      seedPolicy();
-      return yield* watchCut();
-    }
-    return yield* recover(point, dbPath);
-  }).pipe(Effect.provide(TestClock.layer())), () => openCrashStores(dbPath));
+  const proof = await isolated(
+    Effect.gen(function* () {
+      if (stage === "crash") {
+        seedPolicy();
+        return yield* watchCut();
+      }
+      return yield* recover(point, dbPath);
+    }).pipe(Effect.provide(TestClock.layer())),
+    () => openCrashStores(dbPath),
+  );
   writeSync(1, `${JSON.stringify(proof)}\n`);
 }

@@ -1,7 +1,10 @@
 import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";
-import { compilePolicySnapshot, type PolicyEvaluationInput } from "../../../src/kernel/gate/compile";
+import {
+  compilePolicySnapshot,
+  type PolicyEvaluationInput,
+} from "../../../src/kernel/gate/compile";
 import { atGeneration, compaction, draft } from "./row-fixtures";
 
 function compiled(message: Gateway.RuleTableA | Gateway.RuleTableB) {

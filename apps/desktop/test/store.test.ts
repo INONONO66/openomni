@@ -264,8 +264,9 @@ describe("the sidebar's width and mode", () => {
  * fresh, unbound module instance without disturbing the cached bound one.
  */
 test("an unbound store refuses to mint instead of reaching for ambient entropy", async () => {
-  const unbound = (await import(`../src/renderer/state/store?${"unbound"}`)) as
-    typeof import("../src/renderer/state/store");
+  const unbound = (await import(
+    `../src/renderer/state/store?${"unbound"}`
+  )) as typeof import("../src/renderer/state/store");
   expect(() => unbound.createSession(1)).toThrow(RendererInvariantError);
   expect(() => unbound.openTab({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
   expect(() => unbound.navigate({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);

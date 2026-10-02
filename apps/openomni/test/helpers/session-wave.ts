@@ -146,7 +146,12 @@ export function commitInterrupt(plane: AppLedgerPlane, sessionId: string, id: st
   return runEffect(commitReceived(plane, sessionId, "interrupt", id, ""));
 }
 
-export function commitPrompt(plane: AppLedgerPlane, sessionId: string, id: string, content: string) {
+export function commitPrompt(
+  plane: AppLedgerPlane,
+  sessionId: string,
+  id: string,
+  content: string,
+) {
   return runEffect(commitReceived(plane, sessionId, "prompt", id, content));
 }
 

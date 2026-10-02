@@ -1,6 +1,12 @@
 import { sessionTree } from "./helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  type SessionFixture as SessionRuntime,
+  type SessionFixture,
+  withSessionServices,
+} from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
 import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
 import { isolated, isolatedLedger } from "./helpers/isolated";
@@ -12,7 +18,7 @@ import { session } from "../src/testing/registry";
 import { createTurnDispatcher, eraseTool, sessionTool } from "../src/kernel/tool";
 import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/session/request";
-import { suspendedRequest, } from "./helpers/effect-g2";
+import { suspendedRequest } from "./helpers/effect-g2";
 
 // W5.2: the TTL-expiry test ("does not reacquire an expired lease under a still-live
 // suspended runner") is deleted with the lease plane — takeover is a fence adoption now,
@@ -34,7 +40,11 @@ function setup() {
     };
     // The commit sink is the isolation bus now: watch it for the opened request row.
     ledger.bus.subscribe(L0Observation.ActionCommittedEvent, () => {
-      if (ledger.kernel.requestRows("controller").some((request: SessionTransition.Request) => request.state === "open"))
+      if (
+        ledger.kernel
+          .requestRows("controller")
+          .some((request: SessionTransition.Request) => request.state === "open")
+      )
         suspended.resolve();
     });
     const tool = eraseTool(
@@ -50,20 +60,40 @@ function setup() {
     );
     seedPolicy();
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
-    const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
-        id: "controller",
-        role: "resident",
-        tools: [sessionTool(tool)],
-        runner: (input: import("../src/session/run").SessionRunnerInput) =>
-          Effect.gen(function* () {
-            const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
-            yield* dispatcher.execute(
-              { id: "original", tool: tool.name, input: { value: "original" } },
-              { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
-            );
-            return { kind: "result", text: "done" };
-          }),
-      }, fixture), fixture); });
+    const handle = yield* Effect.gen(function* () {
+      const fixture: SessionFixture = runtime;
+      return yield* withSessionServices(
+        session(
+          {
+            id: "controller",
+            role: "resident",
+            tools: [sessionTool(tool)],
+            runner: (input: import("../src/session/run").SessionRunnerInput) =>
+              Effect.gen(function* () {
+                const dispatcher = yield* Effect.gen(function* () {
+                  const turnInput: Parameters<typeof createTurnDispatcher>[0] & {
+                    readonly policy?: ResolvedExecutorOptions["policy"];
+                  } = input;
+                  const turnRuntime: Parameters<typeof createTurnDispatcher>[1] &
+                    Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> =
+                    runtime;
+                  return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(
+                    Effect.provide(catalogLayer([tool])),
+                    Effect.provide(turnTestLayer(turnInput, turnRuntime)),
+                  );
+                });
+                yield* dispatcher.execute(
+                  { id: "original", tool: tool.name, input: { value: "original" } },
+                  { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },
+                );
+                return { kind: "result", text: "done" };
+              }),
+          },
+          fixture,
+        ),
+        fixture,
+      );
+    });
     return {
       handle,
       effects,
@@ -99,7 +129,12 @@ it("the injected gateway port uses the live controller's fence and releases the 
         const f = yield* setup();
         const { running, request, fence } = yield* suspendedRequest(f.handle, f.suspended);
         expect(f.effects).toEqual([]);
-        expect(yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))).toBe("resolved");
+        expect(
+          yield* (yield* Effect.gen(function* () {
+            const fixture: SessionFixture = runtime;
+            return yield* withSessionServices(createSessionRequests(fixture), fixture);
+          })).answer(answer(request)),
+        ).toBe("resolved");
         yield* Fiber.join(running);
         expect(f.effects).toEqual(["original"]);
         expect(isolatedLedger().kernel.row(f.handle.id).fence).toBe(fence);
@@ -114,7 +149,12 @@ it("configuration drift refuses consent while interruption cancels the whole sus
         const f = yield* setup();
         const { running, request } = yield* suspendedRequest(f.handle, f.suspended);
         yield* f.handle.system.blocks.set([{ id: "new", source: "owner", content: "changed" }]);
-        expect(yield* (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); })).answer(answer(request))).toBe("rejected");
+        expect(
+          yield* (yield* Effect.gen(function* () {
+            const fixture: SessionFixture = runtime;
+            return yield* withSessionServices(createSessionRequests(fixture), fixture);
+          })).answer(answer(request)),
+        ).toBe("rejected");
         expect(f.effects).toEqual([]);
         yield* f.handle.interrupt();
         yield* Fiber.join(running);

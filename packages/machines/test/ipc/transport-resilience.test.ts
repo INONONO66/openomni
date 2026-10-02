@@ -2,11 +2,17 @@ import { describe, test, expect } from "bun:test";
 import fs from "node:fs";
 import net from "node:net";
 import { Effect, Logger } from "effect";
-import { connectIpcClient as connectNative, createIpcServer as listenNative } from "../../src/ipc/index";
+import {
+  connectIpcClient as connectNative,
+  createIpcServer as listenNative,
+} from "../../src/ipc/index";
 
 function resilienceIds(prefix: string): () => string {
   let n = 0;
-  return () => { n += 1; return `${prefix}-${n}`; };
+  return () => {
+    n += 1;
+    return `${prefix}-${n}`;
+  };
 }
 import { acquire } from "./helpers/effects";
 import { connectIpcClient } from "./helpers/native";
@@ -19,7 +25,9 @@ import { transportFixture } from "./helpers/transport";
 /** Collects Effect log entries whose message mentions `marker` and reports the level. */
 function collectingLogger(marker: string, resolve: (logLevel: string) => void) {
   return Logger.make((options) => {
-    const text = (Array.isArray(options.message) ? options.message : [options.message]).map(String).join(" ");
+    const text = (Array.isArray(options.message) ? options.message : [options.message])
+      .map(String)
+      .join(" ");
     if (text.includes(marker)) resolve(options.logLevel);
   });
 }
@@ -132,7 +140,11 @@ describe("IPC transport resilience (#QB1)", () => {
 
     const logged = deferred<string>();
     const collector = collectingLogger("matched no message schema", logged.resolve);
-    const { value: client, close } = await acquire(connectNative(socketPath, { idSource: resilienceIds("warn-client") }).pipe(Effect.provide(Logger.layer([collector]))));
+    const { value: client, close } = await acquire(
+      connectNative(socketPath, { idSource: resilienceIds("warn-client") }).pipe(
+        Effect.provide(Logger.layer([collector])),
+      ),
+    );
     try {
       // The captured log entry carries the Warn level, not a console spy.
       expect(await within(logged.promise, "schema mismatch warning")).toBe("Warn");
@@ -149,10 +161,12 @@ describe("IPC transport resilience (#QB1)", () => {
     const logged = deferred<string>();
     const collector = collectingLogger("request handler defect", logged.resolve);
     const disconnected = deferred<string>();
-    const { close } = await acquire(listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
-      idSource: resilienceIds("defect-server"),
-      onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
-    }).pipe(Effect.provide(Logger.layer([collector]))));
+    const { close } = await acquire(
+      listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
+        idSource: resilienceIds("defect-server"),
+        onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
+      }).pipe(Effect.provide(Logger.layer([collector]))),
+    );
     try {
       const client = await connectIpcClient(socketPath);
       clients.push(client);

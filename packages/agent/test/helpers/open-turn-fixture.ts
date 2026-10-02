@@ -44,10 +44,18 @@ export const fixtureOpenTurn = {
 
 /** Terminal "R" for turn "T"; the parsed effect is required by construction. */
 export function fixtureTerminal(kind: "result" | "interrupted") {
-  const action = fixtureNode(turnTerminalAction({
-    id: "R", parentId: "T", sessionId: "S", turnId: "T", result: { kind, text: "" },
-    resumeCount: 0, boundaryActionId: null, at: 2,
-  }));
+  const action = fixtureNode(
+    turnTerminalAction({
+      id: "R",
+      parentId: "T",
+      sessionId: "S",
+      turnId: "T",
+      result: { kind, text: "" },
+      resumeCount: 0,
+      boundaryActionId: null,
+      at: 2,
+    }),
+  );
   const effect = SessionHandleStore.turnTerminal(action);
   if (effect === undefined) throw new Error("invalid terminal fixture");
   return { action, effect };

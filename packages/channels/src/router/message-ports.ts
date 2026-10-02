@@ -67,7 +67,9 @@ export interface GatewayRouterPorts {
    */
   readonly stores?: import("./stores.js").ChannelStores;
   /** The app edge executes this synchronous ledger unit without an asynchronous escape. */
-  readonly transaction: <A>(operation: Effect.Effect<A, ChannelError>) => Effect.Effect<A, ChannelError>;
+  readonly transaction: <A>(
+    operation: Effect.Effect<A, ChannelError>,
+  ) => Effect.Effect<A, ChannelError>;
   /** Authenticate explicit Owner evidence; never infer it from driver trust fields. */
   readonly authenticateAnswer?: (
     sender: Gateway.IngestSender & { kind: "external" },
@@ -77,15 +79,21 @@ export interface GatewayRouterPorts {
   readonly requests: {
     list(): readonly SessionTransition.Request[];
     open(input: RequestOpenInput): Effect.Effect<SessionTransition.Request, ChannelError>;
-    answer(input: SessionTransition.Answer): Effect.Effect<SessionTransition.Resolution, ChannelError>;
-    receipt(input: SessionTransition.DeliveryReceipt): Effect.Effect<SessionTransition.Request, ChannelError>;
+    answer(
+      input: SessionTransition.Answer,
+    ): Effect.Effect<SessionTransition.Resolution, ChannelError>;
+    receipt(
+      input: SessionTransition.DeliveryReceipt,
+    ): Effect.Effect<SessionTransition.Request, ChannelError>;
   };
   readonly sink: BusEvent.Sink["publish"];
   readonly observe?: (
     sender: Gateway.IngestSender,
     observation: Gateway.MessageObservation,
   ) => void;
-  readonly inbox: { readonly commit: (input: Inbox.Commit) => Effect.Effect<Inbox.Row, ChannelError> };
+  readonly inbox: {
+    readonly commit: (input: Inbox.Commit) => Effect.Effect<Inbox.Row, ChannelError>;
+  };
   /** L1 supplies authenticated facts; the gateway never reads session state. */
   readonly prepare: (
     sender: Gateway.IngestSender,

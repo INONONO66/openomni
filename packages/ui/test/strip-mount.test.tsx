@@ -33,7 +33,13 @@ function MountProbe() {
   return null;
 }
 
-function Frame({ open, floating = false }: { readonly open: boolean; readonly floating?: boolean }) {
+function Frame({
+  open,
+  floating = false,
+}: {
+  readonly open: boolean;
+  readonly floating?: boolean;
+}) {
   return (
     <SidebarFrame floating={floating} open={open}>
       <Sidebar.Container>

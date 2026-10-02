@@ -53,7 +53,6 @@ export function reduce(
 
     case "commit":
       return commit(state, sequence);
-
   }
 }
 

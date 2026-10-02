@@ -3,7 +3,6 @@ import { CodemodeError, type RunOptions } from "@openomni/machines";
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
 

@@ -1,7 +1,6 @@
 import { Kernel, Journal } from "@openomni/agent";
 const currentInvocation = Kernel.currentInvocation;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 type LedgerError = Journal.LedgerError;
 import { Alarm, EncodedPayload, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";

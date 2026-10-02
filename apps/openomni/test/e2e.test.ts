@@ -6,7 +6,7 @@ import { AssertionError } from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
-import { Journal, Model } from "@openomni/agent";
+import { Journal, type Model } from "@openomni/agent";
 type Sink = Model.Sink;
 const createSurfaceKeyStore = Journal.createSurfaceKeyStore;
 import { loadConfig, type OpenOmniConfig } from "../src/config";
@@ -79,10 +79,11 @@ async function bootWithConfig(config: OpenOmniConfig) {
     config,
     llm: {
       resolveModel: fakeProviderModel,
-      run: (input, sink: Sink) => Effect.sync(() => {
-        sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
-        return { type: "stop" };
-      }),
+      run: (input, sink: Sink) =>
+        Effect.sync(() => {
+          sink.onMessage(assistantMessage(input, { id: "fake-assistant-message", text: REPLY }));
+          return { type: "stop" };
+        }),
     },
   });
   return app;
@@ -155,11 +156,12 @@ describe("OpenOmni Resident WebSocket", () => {
       config,
       llm: {
         resolveModel: fakeProviderModel,
-        run: (input, sink: Sink) => Effect.sync(() => {
-          providerCalls += 1;
-          sink.onMessage(assistantMessage(input, { text: REPLY }));
-          return { type: "stop" };
-        }),
+        run: (input, sink: Sink) =>
+          Effect.sync(() => {
+            providerCalls += 1;
+            sink.onMessage(assistantMessage(input, { text: REPLY }));
+            return { type: "stop" };
+          }),
       },
     });
     const plane = await planeOf(app.runtime);
@@ -203,10 +205,9 @@ describe("OpenOmni Resident WebSocket", () => {
         { role: "user", text: "967-U1 input" },
         { role: "assistant", text: REPLY },
       ]);
-      using sessionDb = new Database(
-        sessionFilePath(statePath(config.sessionsDir), session.id),
-        { readonly: true },
-      );
+      using sessionDb = new Database(sessionFilePath(statePath(config.sessionsDir), session.id), {
+        readonly: true,
+      });
       const sessions = sessionDb
         .query<{ id: string; role: string; state: string; revision: number }, []>(
           "SELECT id, role, state, revision FROM session WHERE id != 'gateway-ingress'",
@@ -282,7 +283,9 @@ describe("OpenOmni Resident WebSocket", () => {
     const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
     expect(ws.protocol).toBe("auth");
     const reply = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "Help me judge this." }));
+    ws.send(
+      JSON.stringify({ type: "message", eventId: newTraceId(), text: "Help me judge this." }),
+    );
 
     expect(await reply).toMatchObject({ text: REPLY });
 
@@ -332,7 +335,9 @@ describe("OpenOmni Resident WebSocket", () => {
 
   it("mounts a declared GitHub driver on the existing HTTP server", async () => {
     const declared = suite.config("declared-github-", { wsToken: WS_TOKEN });
-    const kek = declareChannel(statePath(declared.catalogPath), "github", { secret: "github-webhook-secret" });
+    const kek = declareChannel(statePath(declared.catalogPath), "github", {
+      secret: "github-webhook-secret",
+    });
     const app = await bootWithConfig({ ...declared, kek });
 
     const response = await fetch(`http://127.0.0.1:${app.port}/github/webhook`, {
@@ -351,9 +356,7 @@ describe("OpenOmni Resident WebSocket", () => {
     await expect(
       suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "wrong-token"]),
     ).rejects.toThrow("WebSocket failed before opening");
-    expect(
-      plane.listSessions().filter((row) => row.id !== "gateway-ingress"),
-    ).toHaveLength(0);
+    expect(plane.listSessions().filter((row) => row.id !== "gateway-ingress")).toHaveLength(0);
   });
 
   it("rolls a failed boot back and leaves the next boot clean", async () => {

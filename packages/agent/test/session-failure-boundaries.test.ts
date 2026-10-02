@@ -8,7 +8,7 @@ import {
 import { expect, spyOn, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { PlainObjectSchema, type LedgerAction, type LedgerSession } from "@openomni/protocol";
-import { type SessionHandle, type SessionRunnerInput } from "../src/session/run";
+import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
 import { session } from "../src/testing/registry";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { openRequest } from "./helpers/open-request";
@@ -73,7 +73,10 @@ function promptUntilEntered(handle: SessionHandle, entered: Deferred.Deferred<Se
 }
 
 /** Zero-grace close fixture plus the runner-entry gate. */
-function zeroGraceFixture(): Effect.Effect<{ entered: Deferred.Deferred<SessionRunnerInput>; fixture: SessionFixture }> {
+function zeroGraceFixture(): Effect.Effect<{
+  entered: Deferred.Deferred<SessionRunnerInput>;
+  fixture: SessionFixture;
+}> {
   return Effect.gen(function* () {
     seedPolicy();
     const entered = yield* Deferred.make<SessionRunnerInput>();

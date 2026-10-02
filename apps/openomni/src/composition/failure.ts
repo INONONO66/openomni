@@ -9,7 +9,6 @@ export function foreignFailure<F>(
   construct: (fields: { readonly operation: string; readonly cause: string }) => F,
   operation: string,
 ) {
-  return z
-    .preprocess(String, z.string())
-    .transform((cause) => construct({ operation, cause })).parse;
+  return z.preprocess(String, z.string()).transform((cause) => construct({ operation, cause }))
+    .parse;
 }

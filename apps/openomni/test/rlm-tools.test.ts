@@ -77,7 +77,8 @@ describe("the completion tool", () => {
   });
 
   it("forwards system and model to the port and validates a schema-shaped answer", async () => {
-    const seen: Array<Parameters<NonNullable<Parameters<typeof catalogDefinitions>[0]["llm"]>>[0]> = [];
+    const seen: Array<Parameters<NonNullable<Parameters<typeof catalogDefinitions>[0]["llm"]>>[0]> =
+      [];
     const answers = ['```json\n{"n": 7}\n```', '{"n": "seven"}', "not json at all"];
     const run = dispatchModelTool(
       COMPLETION_TOOL_NAME,
@@ -125,14 +126,13 @@ describe("the completion tool", () => {
     // drew from ONE process-wide budget. The cell door dispatches with
     // turnId = cellId; the budget must be keyed by that identity.
     let invoked = 0;
-    const entries = catalogDefinitions(
-      { ...testToolPorts,
-        llm: async () => {
-          invoked += 1;
-          return `call ${invoked}`;
-        },
+    const entries = catalogDefinitions({
+      ...testToolPorts,
+      llm: async () => {
+        invoked += 1;
+        return `call ${invoked}`;
       },
-    );
+    });
     const dispatcher = dispatcherFixture(entries, { executor });
     let nextId = 0;
     const run = (cellId: string, prompt: string) =>
@@ -171,13 +171,12 @@ describe("the completion tool", () => {
     // The defect this pins: a failing llm call returned as a completed string
     // lets cell code store failure text as if it were model output. The
     // dispatcher must mark it isError so the cell door raises ToolError.
-    const entries = catalogDefinitions(
-      { ...testToolPorts,
-        llm: async () => {
-          throw new Error("llm failed: provider on fire");
-        },
+    const entries = catalogDefinitions({
+      ...testToolPorts,
+      llm: async () => {
+        throw new Error("llm failed: provider on fire");
       },
-    );
+    });
     const dispatcher = dispatcherFixture(entries, { executor });
 
     const result = await runEffect(
@@ -211,7 +210,14 @@ describe("the completion tool", () => {
     spyOn(AgentModel.Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const run = mock(() => Effect.succeed({ type: "stop" as const }));
     expect(
-      await runEffect(AgentModel.Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider: "anthropic", id: "listed", now: () => 0 })),
+      await runEffect(
+        AgentModel.Provider.resolveModel({
+          authFilePath: ABSENT_AUTH_FILE,
+          provider: "anthropic",
+          id: "listed",
+          now: () => 0,
+        }),
+      ),
     ).toMatchObject({
       id: "listed",
       providerID: "anthropic",
@@ -226,7 +232,18 @@ describe("the completion tool", () => {
       ).rejects.toMatchObject({
         _tag: "AgentFailure",
         operation: "completion.resolve",
-        cause: String(await runEffect(Effect.flip(AgentModel.Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider, id, now: () => 0 })))),
+        cause: String(
+          await runEffect(
+            Effect.flip(
+              AgentModel.Provider.resolveModel({
+                authFilePath: ABSENT_AUTH_FILE,
+                provider,
+                id,
+                now: () => 0,
+              }),
+            ),
+          ),
+        ),
       });
     }
     expect(run).not.toHaveBeenCalled();
@@ -407,7 +424,9 @@ describe("the completion port", () => {
 
 describe("catalog gating for the rlm tools", () => {
   it("lists the completion spec in the shippable surface the lint reads", () => {
-    const names = catalogDefinitions(testToolPorts).map(toolSpec).map((spec) => spec.name);
+    const names = catalogDefinitions(testToolPorts)
+      .map(toolSpec)
+      .map((spec) => spec.name);
     expect(names).toContain(COMPLETION_TOOL_NAME);
   });
 
@@ -425,7 +444,9 @@ describe("catalog gating for the rlm tools", () => {
   });
 
   it("projects completion without target metadata", () => {
-    const specs = catalogDefinitions({ ...testToolPorts, llm: async () => "" }).map((entry) => toolSpec(entry));
+    const specs = catalogDefinitions({ ...testToolPorts, llm: async () => "" }).map((entry) =>
+      toolSpec(entry),
+    );
     expect(specs.map((spec) => spec.name)).toContain(COMPLETION_TOOL_NAME);
   });
 });

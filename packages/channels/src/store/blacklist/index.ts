@@ -14,7 +14,9 @@ export function createBlacklistStore(source: {
   return {
     put(input: Actor.BlacklistEntry): Actor.BlacklistEntry {
       const store = requireAdapter();
-      const entry = Actor.BlacklistEntry.parse(withStoreTimestamps(input, store.get(input.id), source.now()));
+      const entry = Actor.BlacklistEntry.parse(
+        withStoreTimestamps(input, store.get(input.id), source.now()),
+      );
       store.set(entry);
       return entry;
     },

@@ -1,16 +1,71 @@
-import { canonicalDigest, BusEvent, Token, Message, type Policy, type TraceContext, Operational, PlainValueSchema, type PlainValue } from "@openomni/protocol";
-import { Data, Effect, Clock, Scope, Cause, Context } from "effect";
-import { z } from "zod";
-import { accumulateUsage, type RunInput, type Sink, type LlmError, Llm, Retry as LlmRetry, LlmRunFailure, observeRetry, selectModel } from "../model";
-import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState, effectiveMaxToolCalls, publishBudgetTelemetry, evaluateBudget } from "./budget";
-import { AgentStopError, AgentInvariantViolation, AgentFailure, type ExecutionError, Interrupted, ContextAdmissionError } from "./failure";
-import { type AgentResult, type AgentStep, type ChatAgentInput, type TokenUsage, type ChatAgentConfig, type ObservedChatAgentConfig } from "./types";
-import { createUserMessage, createAssistantMessage, withMessageId, type MessageSource } from "./message-factory";
+import {
+  type BusEvent,
+  Message,
+  type Policy,
+  type TraceContext,
+  Operational,
+  PlainValueSchema,
+  type PlainValue,
+} from "@openomni/protocol";
+import { Effect, Clock, Scope, Cause, Context } from "effect";
+import { stopState, type StopState, type StopVerdict } from "./stop";
+import { RunEvents } from "./run-events";
+export { stopState } from "./stop";
+export type { StopObservation, StopVerdict } from "./stop";
+export { RunEvents } from "./run-events";
+import {
+  accumulateUsage,
+  type RunInput,
+  type Sink,
+  type LlmError,
+  Llm,
+  Retry as LlmRetry,
+  LlmRunFailure,
+  observeRetry,
+  selectModel,
+} from "../model";
+import {
+  createBudgetState,
+  recordTokenUsage,
+  recordTurn,
+  type BudgetState,
+  effectiveMaxToolCalls,
+  publishBudgetTelemetry,
+  evaluateBudget,
+} from "./budget";
+import {
+  AgentStopError,
+  AgentInvariantViolation,
+  AgentFailure,
+  type ExecutionError,
+  Interrupted,
+  ContextAdmissionError,
+} from "./failure";
+import type {
+  AgentResult,
+  AgentStep,
+  ChatAgentInput,
+  TokenUsage,
+  ChatAgentConfig,
+  ObservedChatAgentConfig,
+} from "./types";
+import {
+  createUserMessage,
+  createAssistantMessage,
+  withMessageId,
+  type MessageSource,
+} from "./message-factory";
 import { type CompactionYield, resolveCompactionGeometry } from "../plugins/compaction/geometry";
 import * as Retry from "./retry";
 import { type RetryReason, type TerminalReason, failureFacts } from "./retry";
 import { measuredContextTokens } from "../plugins/compaction/measure";
-import { buildSystemPrompt, prepareTurnTools, settleModelTools, assertToolExecutor, assertUnambiguousToolMetadata } from "./tool";
+import {
+  buildSystemPrompt,
+  prepareTurnTools,
+  settleModelTools,
+  assertToolExecutor,
+  assertUnambiguousToolMetadata,
+} from "./tool";
 import { Entropy, ObservationSink } from "./ports";
 import { CompactionSession } from "../plugins/compaction";
 import { applyCompaction, prepareCompactionAfterContinue } from "./compaction";
@@ -18,192 +73,6 @@ import { DEFAULT_PROTECT_RECENT } from "../plugins/compaction/contract";
 import { estimateMessagesTokens } from "../plugins/compaction/estimate";
 import { ExecutorContext, type Executor } from "./gate/decide";
 import { restoreModelSelection } from "../plugins/model-selection";
-
-// ─── from core/execution/stop-chain.ts (#1247) ───
-export interface StopObservation {
-  readonly text: string;
-  readonly toolCalls: number;
-  readonly continueRequested?: boolean;
-  readonly interrupted: boolean;
-  readonly exhausted: boolean;
-  readonly progress: boolean;
-  readonly blocked: boolean;
-  readonly openIntent: readonly string[];
-  readonly alarmIds: readonly string[];
-}
-export interface StopState {
-  readonly outputHash?: string;
-  readonly repetition: number;
-  readonly stall: number;
-  readonly blocked: number;
-  readonly continuation: number;
-}
-export type StopMetric = "exact_repeat" | "toolless_stall" | "blocked_recurrence" | "continuation";
-export type StopVerdict =
-  | { readonly kind: "interrupted"; readonly reason: "abort" }
-  | { readonly kind: "result"; readonly reason: "completion" }
-  | { readonly kind: "waiting"; readonly reason: "live_wait"; readonly alarmIds: readonly string[] }
-  | { readonly kind: "continue"; readonly reason: "continue" }
-  | { readonly kind: "error"; readonly reason: "budget" | StopMetric };
-
-export function stopState(): StopState {
-  return { repetition: 0, stall: 0, blocked: 0, continuation: 0 };
-}
-
-function advanceStopState(previous: StopState, observation: StopObservation): StopState {
-  const outputHash = canonicalDigest(observation.text);
-  return {
-    outputHash,
-    repetition: observation.progress
-      ? 0
-      : outputHash === previous.outputHash ? previous.repetition + 1 : 1,
-    stall: observation.progress || observation.toolCalls > 0 ? 0 : previous.stall + 1,
-    blocked: observation.blocked && !observation.progress ? previous.blocked + 1 : 0,
-    continuation: previous.continuation + 1,
-  };
-}
-
-function completionEligible(observation: StopObservation): boolean {
-  return observation.text.length > 0 && observation.toolCalls === 0 && !observation.continueRequested;
-}
-
-/** Fixed precedence, including policy reads. Invocation is not effect/state progress. */
-export function judgeStop<E, R>(
-  previous: StopState,
-  observation: StopObservation,
-  limit: (metric: StopMetric) => Effect.Effect<number, E, R>,
-  completion: () => Effect.Effect<boolean, E, R>,
-): Effect.Effect<{ state: StopState; verdict: StopVerdict }, E, R> {
-  return Effect.gen(function* () {
-  const state = advanceStopState(previous, observation);
-  const done = (verdict: StopVerdict) => ({ state, verdict });
-  if (observation.interrupted) return done({ kind: "interrupted", reason: "abort" });
-  if (observation.exhausted) return done({ kind: "error", reason: "budget" });
-  if (completionEligible(observation)) {
-    const permitted = yield* completion();
-    if (permitted && observation.openIntent.length === 0 && !observation.blocked)
-      return done({ kind: "result", reason: "completion" });
-  }
-  if (state.repetition >= (yield* limit("exact_repeat")))
-    return done({ kind: "error", reason: "exact_repeat" });
-  if (state.stall >= (yield* limit("toolless_stall")))
-    return done({ kind: "error", reason: "toolless_stall" });
-  if (state.blocked >= (yield* limit("blocked_recurrence")))
-    return done({ kind: "error", reason: "blocked_recurrence" });
-  if (observation.alarmIds.length > 0)
-    return done({ kind: "waiting", reason: "live_wait", alarmIds: observation.alarmIds });
-  if (state.continuation >= (yield* limit("continuation")))
-    return done({ kind: "error", reason: "continuation" });
-  return done({ kind: "continue", reason: "continue" });
-  });
-}
-
-// ─── from core/execution/events.ts (#1247) ───
-const AgentBase = z.object({
-  traceId: z.string(),
-  sessionId: z.string(),
-  agentId: z.string().optional(),
-  runId: z.string().optional(),
-  /**
-   * The run's audit attribution (run.ts `agentBase.actorId` — today actor ≡
-   * runId until a validated principal lane exists, #606). Every publisher
-   * emits it; optional only so rows recorded before the field existed still
-   * parse (upcast-on-read, same precedent as `CompactionCompleted.anchored`).
-   */
-  actorId: z.string().optional(),
-  time: z.number(),
-});
-
-/**
- * #499 observation descriptors — loop-run events published via Bus.
- *
- * #500 C1: moved here from protocol's `Run.Events` — every publisher lives in
- * this package (run-events.ts, compaction/compact.ts), so the descriptors
- * live with them (precedent: openomni messaging defines its own descriptors).
- * The persisted event names stay the historical `agent.*` strings (frozen —
- * ledger rows and downstream category derivation key on them byte-for-byte).
- */
-export const RunEvents = {
-  TurnStart: BusEvent.define(
-    "agent.turn.start",
-    AgentBase.extend({
-      turnIndex: z.number(),
-    }),
-    { visibility: "ephemeral" },
-  ),
-  TurnComplete: BusEvent.define(
-    "agent.turn.complete",
-    AgentBase.extend({
-      turnIndex: z.number(),
-      usage: Token.AgentUsage,
-    }),
-    { visibility: "llm_reason" },
-  ),
-  /**
-   * The compaction lock bracket. `started` is published before any
-   * compaction work; `completed` is the operation's last record on every
-   * exit path, a summarizer throw included (`outcome: "failed"`). A started
-   * row without a completed row therefore diagnoses a run that died inside
-   * compaction — previously indistinguishable from an unexplained
-   * fail-closed deny.
-   */
-  CompactionStarted: BusEvent.define(
-    "agent.compaction.started",
-    AgentBase.extend({
-      messagesBefore: z.number(),
-      /** Provider-measured context of the last call; absent when unmeasured. */
-      contextTokens: z.number().optional(),
-      /** What fired the seam: the threshold gate or the loop's window yield. */
-      trigger: z.enum(["threshold", "yield"]),
-      /** Whether a summarizer is configured — the crash-risk half. */
-      summarizer: z.boolean(),
-    }),
-    { visibility: "internal" },
-  ),
-  CompactionCompleted: BusEvent.define(
-    "agent.compaction.completed",
-    AgentBase.extend({
-      outcome: z.enum(["cut", "reduced", "nothing_reclaimed", "no_user_boundary", "failed"]),
-      messagesBefore: z.number(),
-      messagesAfter: z.number(),
-      removedCount: z.number(),
-      elidedChars: z.number(),
-      /**
-       * Cut outcomes only: whether an anchor render heads the kept window.
-       * An unanchored cut drops assistant/tool context with no checkpoint —
-       * legal (preserved users still head the window) but a different loss
-       * class than an anchored cut, so it must not masquerade as one.
-       * Upcast-on-read: absent on rows recorded before the field existed.
-       */
-      anchored: z.boolean().optional(),
-      /** Estimated structural yield used by the next adaptive threshold. */
-      savedTokens: z.number().optional(),
-      tokensBefore: z.number().optional(),
-      ineffective: z.boolean().optional(),
-      error: z.string().optional(),
-    }),
-    { visibility: "internal" },
-  ),
-  ErrorRetry: BusEvent.define(
-    "agent.error.retry",
-    AgentBase.extend({
-      attempt: z.number(),
-      maxAttempts: z.number(),
-      error: z.string(),
-      /** Why the error was judged retryable — see the canonical LLM decision. */
-      reason: z.enum([
-        "timeout",
-        "tool_error",
-        "transient_error",
-        "validation_error",
-        "context_overflow",
-      ]),
-      /** How long the run waits before the next attempt. */
-      backoffMs: z.number(),
-    }),
-    { visibility: "llm_reason" },
-  ),
-};
 
 // ─── from core/execution/state.ts (#1247) ───
 function toMessagesWithParts(
@@ -218,7 +87,13 @@ function toMessagesWithParts(
     output.push(
       withMessageId(
         message.role === "user"
-          ? createUserMessage(message.content, sessionId, source, message.partMetadata, message.time)
+          ? createUserMessage(
+              message.content,
+              sessionId,
+              source,
+              message.partMetadata,
+              message.time,
+            )
           : createAssistantMessage(
               message.content,
               parentID,
@@ -259,10 +134,7 @@ export type RunTrace = TraceContext.Type & {
  * expressible as a W3C `traceparent` is enforced by the emitter that puts it
  * on the wire, which is the only place the format matters.
  */
-function requireTrace(
-  subject: string,
-  traceContext: TraceContext.Type | undefined,
-): RunTrace {
+function requireTrace(subject: string, traceContext: TraceContext.Type | undefined): RunTrace {
   const traceId = nonEmptyString(traceContext?.traceId);
   const sessionId = nonEmptyString(traceContext?.sessionId);
   const runId = nonEmptyString(traceContext?.runId);
@@ -272,7 +144,9 @@ function requireTrace(
       sessionId === undefined ? "sessionId" : undefined,
       runId === undefined ? "runId" : undefined,
     ].filter((field: string | undefined): field is string => field !== undefined);
-    throw new AgentInvariantViolation(`${subject} requires a trace context with ${missing.join(", ")}`);
+    throw new AgentInvariantViolation(
+      `${subject} requires a trace context with ${missing.join(", ")}`,
+    );
   }
   return { ...traceContext, traceId, sessionId, runId };
 }
@@ -478,21 +352,6 @@ function appendRunStep(state: RunState, step: AgentStep): void {
 
 function appendRunMessages(state: RunState, messages: readonly Message.WithParts[]): void {
   state.messages.push(...messages);
-}
-
-function replaceRunMessages(state: RunState, messages: Message.WithParts[]): void {
-  state.messages = messages;
-  // The measurement described the window this rewrite just changed. Clearing
-  // it makes the next completion check skip-and-record rather than re-fire
-  // compaction on a number about history that no longer exists.
-  state.lastCallContextTokens = undefined;
-}
-
-export function applyCompactionMessages(state: RunState, messages: Message.WithParts[]): number {
-  const messagesBefore = state.messages.length;
-  replaceRunMessages(state, messages);
-  state.compactionCount += 1;
-  return messagesBefore;
 }
 
 export function advanceRunTurn(state: RunState): void {
@@ -711,14 +570,18 @@ function recordAssistant(
   message: Message.WithParts,
 ): Effect.Effect<Message.WithParts, ExecutionError> {
   return Effect.gen(function* () {
-  if (config.executor === undefined) return yield* Effect.die(new Error("missing message authority"));
-  const result = yield* config.executor.run(
-    { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
-    () => Effect.sync(() => PlainValueSchema.parse(message)),
-  );
-  if (result.terminal !== "executed")
-    return yield* new AgentFailure({ operation: "message.assistant", cause: `refused:${result.reason}` });
-  return Message.WithParts.parse(result.value);
+    if (config.executor === undefined)
+      return yield* Effect.die(new Error("missing message authority"));
+    const result = yield* config.executor.run(
+      { kind: "message", op: "assistant", intent: { messageId: message.info.id }, effect: {} },
+      () => Effect.sync(() => PlainValueSchema.parse(message)),
+    );
+    if (result.terminal !== "executed")
+      return yield* new AgentFailure({
+        operation: "message.assistant",
+        cause: `refused:${result.reason}`,
+      });
+    return Message.WithParts.parse(result.value);
   });
 }
 
@@ -858,69 +721,77 @@ function handleStop(
   compaction: CompactionSession | undefined,
 ): Effect.Effect<StopOutcome, ExecutionError, Scope.Scope | Entropy> {
   return Effect.gen(function* () {
-  const now = yield* Clock.clockWith(Effect.succeed).pipe(
-    Effect.map((clock) => (): number => clock.currentTimeMillisUnsafe()),
-  );
-  const assistantIndex = state.messages.length;
-  const snapshot = turn.turnAssistant.message;
-  // The llm fold owns the turn snapshot; its absence is a wiring defect, not a recoverable state.
-  if (snapshot === undefined)
-    return yield* Effect.die(new AgentInvariantViolation("llm sink emitted no assistant snapshot"));
-  const initialAssistant = yield* recordAssistant(config, snapshot);
-  turn.turnAssistant.message = initialAssistant;
-  appendRunMessages(state, [initialAssistant]);
-  const afterModelPrompts = yield* drainStepBoundary(state, config, "after_llm");
-  const toolCalls = yield* settleModelTools(turn, config, state);
-  const afterWavePrompts = yield* drainStepBoundary(state, config, "after_tools");
-  if (toolCalls > 0)
-    turn.turnAssistant.message = yield* recordAssistant(
-      config,
-      turn.turnAssistant.message ?? initialAssistant,
+    const now = yield* Clock.clockWith(Effect.succeed).pipe(
+      Effect.map((clock) => (): number => clock.currentTimeMillisUnsafe()),
     );
-  emitTurnComplete(config.events, state, agentBase, turn.turnUsage, now);
-  const turnText = assistantTextOf(turn.turnAssistant.message);
-  const step = { type: "text" as const, content: turnText };
-  appendRunStep(state, step);
-  if (config.onStepFinish) yield* config.onStepFinish(step);
-  const assistantMessage = turn.turnAssistant.message ?? initialAssistant;
-  state.messages[assistantIndex] = assistantMessage;
-  yield* prepareCompactionAfterContinue(state, config, compaction);
+    const assistantIndex = state.messages.length;
+    const snapshot = turn.turnAssistant.message;
+    // The llm fold owns the turn snapshot; its absence is a wiring defect, not a recoverable state.
+    if (snapshot === undefined)
+      return yield* Effect.die(
+        new AgentInvariantViolation("llm sink emitted no assistant snapshot"),
+      );
+    const initialAssistant = yield* recordAssistant(config, snapshot);
+    turn.turnAssistant.message = initialAssistant;
+    appendRunMessages(state, [initialAssistant]);
+    const afterModelPrompts = yield* drainStepBoundary(state, config, "after_llm");
+    const toolCalls = yield* settleModelTools(turn, config, state);
+    const afterWavePrompts = yield* drainStepBoundary(state, config, "after_tools");
+    if (toolCalls > 0)
+      turn.turnAssistant.message = yield* recordAssistant(
+        config,
+        turn.turnAssistant.message ?? initialAssistant,
+      );
+    emitTurnComplete(config.events, state, agentBase, turn.turnUsage, now);
+    const turnText = assistantTextOf(turn.turnAssistant.message);
+    const step = { type: "text" as const, content: turnText };
+    appendRunStep(state, step);
+    if (config.onStepFinish) yield* config.onStepFinish(step);
+    const assistantMessage = turn.turnAssistant.message ?? initialAssistant;
+    state.messages[assistantIndex] = assistantMessage;
+    yield* prepareCompactionAfterContinue(state, config, compaction);
 
-  const yielded = toolCalls > 0 ? null : turnYield(turn, assistantMessage);
-  const compacted = yield* applyCompaction(
-    state,
-    config,
-    agentBase,
-    compaction,
-    yielded === "window" ? "yield" : "threshold",
-  );
-  if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
-    disarmWindowYield(state);
-  const evidence = yield* (config.stopEvidence?.() ?? Effect.succeed({
-    progress: false,
-    blocked: false,
-    openIntent: [],
-    alarmIds: [],
-  }));
-  if (config.execution === undefined) return yield* Effect.die(new Error("missing stop authority"));
-  const judgment = yield* config.execution.judgeStop(state.stop, {
-    ...evidence,
-    text: turnText,
-    toolCalls,
-    continueRequested:
-      yielded === "window" || yielded === "steer" || afterModelPrompts + afterWavePrompts > 0,
-    interrupted: config.signal?.aborted === true,
-    exhausted:
-      yielded === "steps" ||
-      publishBudgetTelemetry(state.budgetState, agentBase, config.events, now, config.budget) ===
-        "exceeded",
-  });
-  state.stop = judgment.state;
-  return yield* stopResult(state, turnText, judgment.verdict);
+    const yielded = toolCalls > 0 ? null : turnYield(turn, assistantMessage);
+    const compacted = yield* applyCompaction(
+      state,
+      config,
+      agentBase,
+      compaction,
+      yielded === "window" ? "yield" : "threshold",
+    );
+    if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
+      disarmWindowYield(state);
+    const evidence = yield* config.stopEvidence?.() ??
+      Effect.succeed({
+        progress: false,
+        blocked: false,
+        openIntent: [],
+        alarmIds: [],
+      });
+    if (config.execution === undefined)
+      return yield* Effect.die(new Error("missing stop authority"));
+    const judgment = yield* config.execution.judgeStop(state.stop, {
+      ...evidence,
+      text: turnText,
+      toolCalls,
+      continueRequested:
+        yielded === "window" || yielded === "steer" || afterModelPrompts + afterWavePrompts > 0,
+      interrupted: config.signal?.aborted === true,
+      exhausted:
+        yielded === "steps" ||
+        publishBudgetTelemetry(state.budgetState, agentBase, config.events, now, config.budget) ===
+          "exceeded",
+    });
+    state.stop = judgment.state;
+    return yield* stopResult(state, turnText, judgment.verdict);
   });
 }
 
-function stopResult(state: RunState, text: string, verdict: StopVerdict): Effect.Effect<StopOutcome, Interrupted | AgentStopError> {
+function stopResult(
+  state: RunState,
+  text: string,
+  verdict: StopVerdict,
+): Effect.Effect<StopOutcome, Interrupted | AgentStopError> {
   if (verdict.kind === "interrupted") return Effect.fail(new Interrupted());
   if (verdict.kind === "error") return Effect.fail(new AgentStopError({ reason: verdict.reason }));
   if (verdict.kind === "continue") {
@@ -928,9 +799,11 @@ function stopResult(state: RunState, text: string, verdict: StopVerdict): Effect
     return Effect.succeed("continue");
   }
   const result = runResult(state, { text });
-  return Effect.succeed(verdict.kind === "waiting"
-    ? { ...result, waiting: { reason: "live_wait", alarmIds: verdict.alarmIds } }
-    : result);
+  return Effect.succeed(
+    verdict.kind === "waiting"
+      ? { ...result, waiting: { reason: "live_wait", alarmIds: verdict.alarmIds } }
+      : result,
+  );
 }
 
 function handleContinue(
@@ -949,19 +822,25 @@ function drainStepBoundary(
   config: ObservedChatAgentConfig,
   boundary: "before_llm" | "after_llm" | "after_tools",
 ): Effect.Effect<number, ExecutionError, Entropy> {
-  if (config.boundary === undefined) return Effect.suspend(() =>
-    config.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.succeed(0));
+  if (config.boundary === undefined)
+    return Effect.suspend(() =>
+      config.signal?.aborted ? Effect.fail(new Interrupted()) : Effect.succeed(0),
+    );
   return Effect.gen(function* () {
-  const drained = yield* (config.boundary?.(boundary) ?? Effect.succeed(undefined));
-  if (drained?.interrupted || config.signal?.aborted) return yield* Effect.fail(new Interrupted());
-  const { id } = yield* Entropy;
-  const created = yield* Clock.currentTimeMillis;
-  for (const message of drained?.messages ?? []) {
-    appendRunMessages(state, [
-      withMessageId(createUserMessage(message.text, state.sessionId, { now: () => created, id }), message.id),
-    ]);
-  }
-  return drained?.messages.length ?? 0;
+    const drained = yield* config.boundary?.(boundary) ?? Effect.succeed(undefined);
+    if (drained?.interrupted || config.signal?.aborted)
+      return yield* Effect.fail(new Interrupted());
+    const { id } = yield* Entropy;
+    const created = yield* Clock.currentTimeMillis;
+    for (const message of drained?.messages ?? []) {
+      appendRunMessages(state, [
+        withMessageId(
+          createUserMessage(message.text, state.sessionId, { now: () => created, id }),
+          message.id,
+        ),
+      ]);
+    }
+    return drained?.messages.length ?? 0;
   });
 }
 
@@ -973,66 +852,98 @@ export function runAgent(
   sink?: Sink,
 ): Effect.Effect<AgentResult, ExecutionError, Llm | ObservationSink | Entropy> {
   return Effect.gen(function* () {
-  const llm = yield* Llm;
-  const events = yield* ObservationSink;
-  const clock = yield* Clock.clockWith(Effect.succeed);
-  const entropy = yield* Entropy;
-  const now = (): number => clock.currentTimeMillisUnsafe();
-  const source: MessageSource = { now, id: entropy.id };
-  const config = { ...options, events };
-  return yield* Effect.scopedWith((scope) => Effect.suspend(() => {
-  const trace = requireTrace("agent run", input.traceContext);
-  assertToolExecutor(config);
-  assertUnambiguousToolMetadata(config);
-  const durableExecutor = config.executor;
-  if (durableExecutor === undefined || config.execution === undefined)
-    return Effect.die(new Error("agent run requires session execution authority"));
-  const state = createRunState({ ...input, traceContext: trace }, source);
-  const base = {
-    traceId: trace.traceId,
-    sessionId: trace.sessionId,
-    runId: trace.runId,
-    actorId: nonEmptyString(trace.agentName) ?? trace.runId,
-  };
-  const compaction = createCompactionSession(config);
-  emitRunStarted(config.events, trace, config.model.id, now);
-  const needsExecutorContext = (config.tools?.length ?? 0) > 0 ||
-    config.toolExecutor !== undefined || config.toolWave !== undefined;
-  const runContext = needsExecutorContext
-    ? Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))
-    : Context.make(Scope.Scope, scope);
-  return Effect.gen(function* () {
-    state.modelChainStart = yield* restoreModelSelection(durableExecutor, config.pinnedModel, [
-      config.model,
-      ...(config.modelFallbacks ?? []),
-    ]);
-    for (;;) {
-      yield* drainStepBoundary(state, config, "before_llm");
-      if (
-        publishBudgetTelemetry(state.budgetState, base, config.events, now, config.budget) === "exceeded"
-      ) {
-        return yield* new AgentStopError({ reason: "budget" });
-      }
-      const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor, llm, source, entropy);
-      if (result !== undefined) return finish(result);
-    }
-  }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
-    const error = Cause.squash(cause);
-    const facts = failureFacts(error);
-    const interrupted = Cause.hasInterrupts(cause) || error instanceof Interrupted ||
-      (error instanceof LlmRunFailure && error.aborted);
-    emitRunFailed(config.events, base, String(error), {
-      reason: interrupted ? "aborted" : facts?.reason ?? "unclassified",
-      attempt: facts?.attempt ?? state.attempt,
-      maxAttempts: facts?.maxAttempts ?? LlmRetry.MAX_ATTEMPTS,
-    }, now);
-  })), (effect) => compaction === undefined ? effect : Effect.ensuring(effect, compaction.settleAbort()));
+    const llm = yield* Llm;
+    const events = yield* ObservationSink;
+    const clock = yield* Clock.clockWith(Effect.succeed);
+    const entropy = yield* Entropy;
+    const now = (): number => clock.currentTimeMillisUnsafe();
+    const source: MessageSource = { now, id: entropy.id };
+    const config = { ...options, events };
+    return yield* Effect.scopedWith((scope) =>
+      Effect.suspend(() => {
+        const trace = requireTrace("agent run", input.traceContext);
+        assertToolExecutor(config);
+        assertUnambiguousToolMetadata(config);
+        const durableExecutor = config.executor;
+        if (durableExecutor === undefined || config.execution === undefined)
+          return Effect.die(new Error("agent run requires session execution authority"));
+        const state = createRunState({ ...input, traceContext: trace }, source);
+        const base = {
+          traceId: trace.traceId,
+          sessionId: trace.sessionId,
+          runId: trace.runId,
+          actorId: nonEmptyString(trace.agentName) ?? trace.runId,
+        };
+        const compaction = createCompactionSession(config);
+        emitRunStarted(config.events, trace, config.model.id, now);
+        const needsExecutorContext =
+          (config.tools?.length ?? 0) > 0 ||
+          config.toolExecutor !== undefined ||
+          config.toolWave !== undefined;
+        const runContext = needsExecutorContext
+          ? Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))
+          : Context.make(Scope.Scope, scope);
+        return Effect.gen(function* () {
+          state.modelChainStart = yield* restoreModelSelection(
+            durableExecutor,
+            config.pinnedModel,
+            [config.model, ...(config.modelFallbacks ?? [])],
+          );
+          for (;;) {
+            yield* drainStepBoundary(state, config, "before_llm");
+            if (
+              publishBudgetTelemetry(state.budgetState, base, config.events, now, config.budget) ===
+              "exceeded"
+            ) {
+              return yield* new AgentStopError({ reason: "budget" });
+            }
+            const result = yield* runModelStep(
+              state,
+              config,
+              sink,
+              trace,
+              base,
+              compaction,
+              durableExecutor,
+              llm,
+              source,
+              entropy,
+            );
+            if (result !== undefined) return finish(result);
+          }
+        }).pipe(
+          Effect.provide(runContext),
+          Effect.onError((cause) =>
+            Effect.sync(() => {
+              const error = Cause.squash(cause);
+              const facts = failureFacts(error);
+              const interrupted =
+                Cause.hasInterrupts(cause) ||
+                error instanceof Interrupted ||
+                (error instanceof LlmRunFailure && error.aborted);
+              emitRunFailed(
+                config.events,
+                base,
+                String(error),
+                {
+                  reason: interrupted ? "aborted" : (facts?.reason ?? "unclassified"),
+                  attempt: facts?.attempt ?? state.attempt,
+                  maxAttempts: facts?.maxAttempts ?? LlmRetry.MAX_ATTEMPTS,
+                },
+                now,
+              );
+            }),
+          ),
+          (effect) =>
+            compaction === undefined ? effect : Effect.ensuring(effect, compaction.settleAbort()),
+        );
 
-  function finish(result: AgentResult): AgentResult {
-    emitRunCompleted(config.events, state, base, result.finishReason, now);
-    return result;
-  }
-  }));
+        function finish(result: AgentResult): AgentResult {
+          emitRunCompleted(config.events, state, base, result.finishReason, now);
+          return result;
+        }
+      }),
+    );
   });
 }
 
@@ -1049,136 +960,160 @@ function runModelStep(
   entropy: Context.Service.Shape<typeof Entropy>,
 ): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope | Entropy> {
   return Effect.gen(function* () {
-  const executor = durableExecutor;
-  const execution = config.execution;
-  if (execution === undefined) return yield* new AgentFailure({ operation: "agent.execution", cause: "missing" });
-  let turn: TurnArtifacts | undefined;
-  const priorFailures = [...state.modelFailureReasons];
-  let provider = config.model.provider;
-  const prepareAttempt = (attempt: number, failures: readonly string[]) => Effect.gen(function* () {
-    recordRunAttempt(state, attempt);
-    const chain = [config.model, ...(config.modelFallbacks ?? [])].slice(state.modelChainStart);
-    const selected = selectModel(chain, [...priorFailures, ...failures]);
-    const model = yield* llm.resolveModel({ ...selected.model, now: source.now }).pipe(Effect.mapError(modelFailure));
-    const modelKey = `${model.providerID}/${model.id}`;
-    if (state.modelKey !== undefined && state.modelKey !== modelKey) resetModelWindowGuards(state);
-    state.modelKey = modelKey;
-    provider = model.providerID;
-    recordRunWindow(state, model.limit?.context ?? 0);
-    if (
-      state.contextWindowTokens !== undefined &&
-      estimateMessagesTokens(state.messages) > state.contextWindowTokens
-    ) {
-      yield* applyCompaction(state, config, base, compaction, "yield");
-    }
-    emitTurnStart(config.events, state, base, source.now);
-    const built = buildTurn(state, config, model, config.toolChoice, trace, source, sink);
-    if (built.type !== "ready") return yield* new AgentFailure({ operation: "agent.turn", cause: "not_ready" });
-    turn = built.turn;
-    const prepared = turn;
-    return {
-      fallbackAvailable: selected.index < chain.length - 1,
-      request: {
-        op: "chat",
-        intent: {
-          attempt,
-          provider: model.providerID,
-          model: model.id,
-          messageIds: state.messages.map((m) => m.info.id),
-        },
-        effect: {},
-      },
-      admit: () => Effect.suspend<void, ExecutionError, never>(() => {
-        if (config.signal?.aborted) return Effect.fail(new Interrupted());
-        if (
-          evaluateBudget(
-            { ...state.budgetState, turns: Math.max(0, state.budgetState.turns - 1) },
-            source.now,
-            config.budget,
-          ).status === "exceeded"
-        )
-          return Effect.fail(new AgentStopError({ reason: "budget" }));
+    const executor = durableExecutor;
+    const execution = config.execution;
+    if (execution === undefined)
+      return yield* new AgentFailure({ operation: "agent.execution", cause: "missing" });
+    let turn: TurnArtifacts | undefined;
+    const priorFailures = [...state.modelFailureReasons];
+    let provider = config.model.provider;
+    const prepareAttempt = (attempt: number, failures: readonly string[]) =>
+      Effect.gen(function* () {
+        recordRunAttempt(state, attempt);
+        const chain = [config.model, ...(config.modelFallbacks ?? [])].slice(state.modelChainStart);
+        const selected = selectModel(chain, [...priorFailures, ...failures]);
+        const model = yield* llm
+          .resolveModel({ ...selected.model, now: source.now })
+          .pipe(Effect.mapError(modelFailure));
+        const modelKey = `${model.providerID}/${model.id}`;
+        if (state.modelKey !== undefined && state.modelKey !== modelKey)
+          resetModelWindowGuards(state);
+        state.modelKey = modelKey;
+        provider = model.providerID;
+        recordRunWindow(state, model.limit?.context ?? 0);
         if (
           state.contextWindowTokens !== undefined &&
           estimateMessagesTokens(state.messages) > state.contextWindowTokens
         ) {
-          return Effect.fail(new ContextAdmissionError());
+          yield* applyCompaction(state, config, base, compaction, "yield");
         }
-        return Effect.void;
-      }),
-      body: () => Effect.suspend(() => llm.run(prepared.runInput, prepared.trackingSink)).pipe(
-        Effect.mapError(modelFailure),
-        Effect.flatMap((result) => {
-          if (result.type === "aborted") return Effect.fail(result.error ?? new Interrupted());
-          if (result.type === "error") return Effect.fail(result.error);
-          return Effect.succeed({
-            type: successfulOutcome({ type: result.type }),
-            evidence: PlainValueSchema.parse(
-              result.type === "stop" ? (result.evidence ?? null) : null,
+        emitTurnStart(config.events, state, base, source.now);
+        const built = buildTurn(state, config, model, config.toolChoice, trace, source, sink);
+        if (built.type !== "ready")
+          return yield* new AgentFailure({ operation: "agent.turn", cause: "not_ready" });
+        turn = built.turn;
+        const prepared = turn;
+        return {
+          fallbackAvailable: selected.index < chain.length - 1,
+          request: {
+            op: "chat",
+            intent: {
+              attempt,
+              provider: model.providerID,
+              model: model.id,
+              messageIds: state.messages.map((m) => m.info.id),
+            },
+            effect: {},
+          },
+          admit: () =>
+            Effect.suspend<void, ExecutionError, never>(() => {
+              if (config.signal?.aborted) return Effect.fail(new Interrupted());
+              if (
+                evaluateBudget(
+                  { ...state.budgetState, turns: Math.max(0, state.budgetState.turns - 1) },
+                  source.now,
+                  config.budget,
+                ).status === "exceeded"
+              )
+                return Effect.fail(new AgentStopError({ reason: "budget" }));
+              if (
+                state.contextWindowTokens !== undefined &&
+                estimateMessagesTokens(state.messages) > state.contextWindowTokens
+              ) {
+                return Effect.fail(new ContextAdmissionError());
+              }
+              return Effect.void;
+            }),
+          body: () =>
+            Effect.suspend(() => llm.run(prepared.runInput, prepared.trackingSink)).pipe(
+              Effect.mapError(modelFailure),
+              Effect.flatMap((result) => {
+                if (result.type === "aborted")
+                  return Effect.fail(result.error ?? new Interrupted());
+                if (result.type === "error") return Effect.fail(result.error);
+                return Effect.succeed({
+                  type: successfulOutcome({ type: result.type }),
+                  evidence: PlainValueSchema.parse(
+                    result.type === "stop" ? (result.evidence ?? null) : null,
+                  ),
+                });
+              }),
             ),
-          });
+        };
+      }).pipe(Effect.provideService(Entropy, entropy));
+    const initial = yield* prepareAttempt(1, []);
+    const outcome = yield* executor.run(
+      {
+        kind: "llm",
+        op: "chat",
+        intent: initial.request.intent,
+        effect: {},
+      },
+      (parent: import("@openomni/protocol").LedgerAction.Receipt) =>
+        execution.runAttempts(parent, {
+          prepare: (attempt, failures) =>
+            attempt === 1 ? Effect.succeed(initial) : prepareAttempt(attempt, failures),
+          evidence: (result) => result.evidence,
+          recoverOverflow: () =>
+            Effect.gen(function* () {
+              if (state.overflowCompactionAttempted) return false;
+              state.overflowCompactionAttempted = true;
+              return (
+                (yield* applyCompaction(state, config, base, compaction, "yield")) === "compacted"
+              );
+            }).pipe(Effect.provideService(Entropy, entropy)),
+          onRetry: (decision) => {
+            state.modelFailureReasons.push(decision.reason);
+            emitErrorRetry(
+              config.events,
+              base,
+              {
+                attempt: decision.attempt,
+                maxAttempts: decision.maxAttempts,
+                error: decision.error.message,
+                reason: LlmRetry.attemptReason(decision.error),
+                backoffMs: decision.delayMs,
+              },
+              source.now,
+            );
+            if (decision.reason !== "context_overflow" && decision.decision.retry)
+              observeRetry(config.events, {
+                ...base,
+                now: source.now,
+                provider,
+                attempt: decision.attempt,
+                maxAttempts: decision.maxAttempts,
+                decision: decision.decision,
+              });
+          },
         }),
-      ),
-    };
-  }).pipe(Effect.provideService(Entropy, entropy));
-  const initial = yield* prepareAttempt(1, []);
-  const outcome = yield* executor.run(
-    {
-      kind: "llm",
-      op: "chat",
-      intent: initial.request.intent,
-      effect: {},
-    },
-    (parent: import("@openomni/protocol").LedgerAction.Receipt) =>
-      execution.runAttempts(parent, {
-        prepare: (attempt, failures) =>
-          attempt === 1 ? Effect.succeed(initial) : prepareAttempt(attempt, failures),
-        evidence: (result) => result.evidence,
-        recoverOverflow: () => Effect.gen(function* () {
-          if (state.overflowCompactionAttempted) return false;
-          state.overflowCompactionAttempted = true;
-          return (yield* applyCompaction(state, config, base, compaction, "yield")) === "compacted";
-        }).pipe(Effect.provideService(Entropy, entropy)),
-        onRetry: (decision) => {
-          state.modelFailureReasons.push(decision.reason);
-          emitErrorRetry(config.events, base, {
-            attempt: decision.attempt,
-            maxAttempts: decision.maxAttempts,
-            error: decision.error.message,
-            reason: LlmRetry.attemptReason(decision.error),
-            backoffMs: decision.delayMs,
-          }, source.now);
-          if (decision.reason !== "context_overflow" && decision.decision.retry)
-            observeRetry(config.events, {
-              ...base,
-              now: source.now,
-              provider,
-              attempt: decision.attempt,
-              maxAttempts: decision.maxAttempts,
-              decision: decision.decision,
-            });
-        },
-      }),
-  );
-  if (outcome.terminal === "interrupted") return yield* new Interrupted();
-  if (outcome.terminal !== "executed")
-    return yield* new AgentFailure({ operation: "agent.llm", cause: `execution_${outcome.terminal}` });
-  if (turn === undefined) return yield* new AgentFailure({ operation: "agent.llm", cause: "missing_turn" });
-  const type = successfulOutcome(outcome.value);
-  if (type === "continue") {
-    handleContinue(config.events, state, base, turn.turnUsage, source.now);
-    yield* prepareCompactionAfterContinue(state, config, compaction);
-    return undefined;
-  }
-  const result = yield* handleStop(state, config, base, turn, compaction);
-  return result === "continue" ? undefined : result;
+    );
+    if (outcome.terminal === "interrupted") return yield* new Interrupted();
+    if (outcome.terminal !== "executed")
+      return yield* new AgentFailure({
+        operation: "agent.llm",
+        cause: `execution_${outcome.terminal}`,
+      });
+    if (turn === undefined)
+      return yield* new AgentFailure({ operation: "agent.llm", cause: "missing_turn" });
+    const type = successfulOutcome(outcome.value);
+    if (type === "continue") {
+      handleContinue(config.events, state, base, turn.turnUsage, source.now);
+      yield* prepareCompactionAfterContinue(state, config, compaction);
+      return undefined;
+    }
+    const result = yield* handleStop(state, config, base, turn, compaction);
+    return result === "continue" ? undefined : result;
   });
 }
 
 function modelFailure(error: LlmError): ExecutionError {
-  return error instanceof LlmRunFailure ? error : new AgentFailure({
-    operation: "llm", cause: error.message,
-  });
+  return error instanceof LlmRunFailure
+    ? error
+    : new AgentFailure({
+        operation: "llm",
+        cause: error.message,
+      });
 }
 
 /** Only successful machine outcomes can cross the executor's encoded result boundary. */
@@ -1202,4 +1137,3 @@ function createCompactionSession(config: ChatAgentConfig): CompactionSession | u
     summarizerDeadlineMs: options.summarizerDeadlineMs,
   });
 }
-

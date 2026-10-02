@@ -2,12 +2,16 @@ import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { Clock, Effect } from "effect";
 import { Kernel, Session } from "@openomni/agent";
 const Entropy = Kernel.Entropy;
-type Entropy = Kernel.Entropy;
 const createSessionRequests = Session.createSessionRequests;
 const decideRequestTransition = Session.decideRequestTransition;
 type SessionRuntime = Session.SessionRuntime;
 import { runEffect } from "./effect";
-import { canonicalDigest, type Gateway, type PlainValue, type SessionTransition, } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  type Gateway,
+  type PlainValue,
+  type SessionTransition,
+} from "@openomni/protocol";
 import { adoptLedgerFence, ledger } from "./ledger";
 
 /** Channel tests exercise routing, not configure authority: the pinned pre-policy admits every configure. */
@@ -29,7 +33,10 @@ function fixedClock(clock: () => number): Clock.Clock {
 
 const entropyCounter = { value: 0 };
 const testEntropy = {
-  id: () => { entropyCounter.value += 1; return `entropy-${entropyCounter.value}`; },
+  id: () => {
+    entropyCounter.value += 1;
+    return `entropy-${entropyCounter.value}`;
+  },
   random: () => 0,
 };
 
@@ -37,7 +44,9 @@ const testEntropy = {
 export function requestPort(
   clock: () => number = () => 1,
   onInboxCommitted?: (sessionIds: readonly string[]) => void,
-  runtime: Partial<Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure">> = {},
+  runtime: Partial<
+    Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure">
+  > = {},
 ) {
   return runEffect(
     createSessionRequests({
@@ -78,29 +87,32 @@ export function originalAction(requestId: string, sessionId: string, value: Plai
   if (existing) return;
   const fence = adoptLedgerFence(sessionId, "fixture");
   const row = kernel.row(sessionId);
-  runEffect(kernel.commit({
-    sessionId,
-    owner: "fixture",
-    fence,
-    expectedRevision: row.revision,
-    now: 1,
-    actions: [
-      {
-        id: requestId,
-        sessionId,
-        parentId: null,
-        kind: "message",
-        intent: {
-          encodingVersion: 1,
-          value: { phase: "intent", value, effectHash: canonicalDigest({}) },
+  runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "fixture",
+      fence,
+      expectedRevision: row.revision,
+      now: 1,
+      actions: [
+        {
+          id: requestId,
+          sessionId,
+          parentId: null,
+          kind: "message",
+          intent: {
+            encodingVersion: 1,
+            value: { phase: "intent", value, effectHash: canonicalDigest({}) },
+          },
+          effect: { encodingVersion: 1, value: {} },
+          irreversible: true,
+          ts: 1,
         },
-        effect: { encodingVersion: 1, value: {} },
-        irreversible: true,
-        ts: 1,
-      },
-    ],
-    state: "idle",
-  }), "sync");
+      ],
+      state: "idle",
+    }),
+    "sync",
+  );
 }
 
 export async function openRequest(requestId: string, overrides: Partial<Gateway.RequestSpec> = {}) {
@@ -161,15 +173,17 @@ export async function command(
       request,
     },
   );
-  await runEffect(kernel.commit({
-    sessionId,
-    owner: "command",
-    fence,
-    now: at,
-    expectedRevision: current.revision,
-    actions: [...decision.actions],
-    state: current.state,
-  }));
+  await runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "command",
+      fence,
+      now: at,
+      expectedRevision: current.revision,
+      actions: [...decision.actions],
+      state: current.state,
+    }),
+  );
   return decision;
 }
 

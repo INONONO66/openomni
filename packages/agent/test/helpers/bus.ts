@@ -13,7 +13,10 @@ export function testBus(onError?: (error: Error, eventName: string) => void): Ob
   let id = 0;
   let time = 0;
   return createObservationBus({
-    id: () => { id += 1; return `event-${id}`; },
+    id: () => {
+      id += 1;
+      return `event-${id}`;
+    },
     now: () => (time += 1),
     ...(onError === undefined ? {} : { onError }),
   });

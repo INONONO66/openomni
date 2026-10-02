@@ -2,7 +2,7 @@ import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
-import { Model } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
 import { Tool, type BusEvent, type ObservationSink, type PlainValue } from "@openomni/protocol";
@@ -27,7 +27,8 @@ test("a resident tool call is executed and observed through the durable executor
   const resident = createResident({
     model: { provider: "fake", id: "resident-test" },
     apiKey: "test-key",
-    tools: { ...testToolPorts,
+    tools: {
+      ...testToolPorts,
       cells: {
         cell: {
           async run() {
@@ -54,21 +55,23 @@ test("a resident tool call is executed and observed through the durable executor
       })(),
     },
     llm: {
-      resolveModel: (model) => Effect.succeed({
-        id: model.id,
-        name: model.id,
-        providerID: model.provider,
-      }),
-      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
-        const result = requestToolStep(input, sink, {
-          id: "call-1",
-          tool: "eval",
-          input: { operation: { op: "run", code: "1", timeout: 1 } },
-        });
-        if (result === undefined) return { type: "stop" };
-        sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
-        return { type: "stop" as const };
-      }),
+      resolveModel: (model) =>
+        Effect.succeed({
+          id: model.id,
+          name: model.id,
+          providerID: model.provider,
+        }),
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          const result = requestToolStep(input, sink, {
+            id: "call-1",
+            tool: "eval",
+            input: { operation: { op: "run", code: "1", timeout: 1 } },
+          });
+          if (result === undefined) return { type: "stop" };
+          sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
+          return { type: "stop" as const };
+        }),
     },
   });
 

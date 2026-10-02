@@ -1,7 +1,6 @@
 import { Kernel } from "@openomni/agent";
 const defineTool = Kernel.defineTool;
 const ToolRefused = Kernel.ToolRefused;
-type ToolRefused = Kernel.ToolRefused;
 import { z } from "zod";
 import { parseLocus } from "./locus";
 import { fileOperation, type FilePorts } from "./core/filesystem";
@@ -14,7 +13,9 @@ const Input = z
       .int()
       .positive()
       .optional()
-      .describe("Seconds before the local command is killed. Remote commands are bounded by the daemon."),
+      .describe(
+        "Seconds before the local command is killed. Remote commands are bounded by the daemon.",
+      ),
     machine: z.string().min(1).optional(),
   })
   .strict();
@@ -34,7 +35,10 @@ async function remoteBash(args: z.output<typeof Input>, ports: FilePorts) {
   if (locus.kind !== "machine" || locus.machine !== machine || locus.path !== "/")
     throw new ToolRefused("bash", "invalid machine id");
   if (args.timeout !== undefined)
-    throw new ToolRefused("bash", "timeout applies to local commands; the daemon bounds remote ones");
+    throw new ToolRefused(
+      "bash",
+      "timeout applies to local commands; the daemon bounds remote ones",
+    );
   const target = ports.machines?.get(locus.machine);
   if (target === undefined) throw new ToolRefused("bash", "machine host is not configured");
   const result = await target.exec(args.command, "/");
@@ -51,7 +55,8 @@ async function remoteBash(args: z.output<typeof Input>, ports: FilePorts) {
 }
 
 async function localBash(args: z.output<typeof Input>, signal: AbortSignal) {
-  const deadline = args.timeout === undefined ? undefined : AbortSignal.timeout(args.timeout * 1000);
+  const deadline =
+    args.timeout === undefined ? undefined : AbortSignal.timeout(args.timeout * 1000);
   const child = Bun.spawn(["/bin/bash", "-c", args.command], {
     stdout: "pipe",
     stderr: "pipe",

@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export function deferred<T = void>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
   return { promise, resolve };
 }
 
@@ -16,8 +18,7 @@ export function within<T>(promise: Promise<T>, label: string, timeoutMs = 2_000)
 
 /** Subscribe before triggering failure; assertions run after the action, not inside Bun's matcher. */
 export function captureError<T>(promise: Promise<T>): Promise<Error> {
-  return promise.then(
-    () => { throw new Error("expected promise to reject"); },
-    z.instanceof(Error).parse,
-  );
+  return promise.then(() => {
+    throw new Error("expected promise to reject");
+  }, z.instanceof(Error).parse);
 }

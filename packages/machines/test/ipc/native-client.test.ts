@@ -15,23 +15,32 @@ async function rawServer() {
   const accepted = deferred<net.Socket>();
   const path = socketPath("native");
   const server = net.createServer((socket) => accepted.resolve(socket));
-  await within(new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, resolve);
-  }), "server listen");
+  await within(
+    new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(path, resolve);
+    }),
+    "server listen",
+  );
   return {
     path,
     accepted: accepted.promise,
-    close: () => within(new Promise<void>((resolve, reject) => {
-      server.close((error) => error ? reject(error) : resolve());
-    }), "server close"),
+    close: () =>
+      within(
+        new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+        "server close",
+      ),
   };
 }
 
 for (const failure of ["malformed", "disconnect"] as const) {
   test(`native socket ${failure} fails the pending RPC without replay`, async () => {
     const server = await rawServer();
-    const client = await acquire(connectIpcClient(server.path, { idSource: sequentialIds("native-client") }));
+    const client = await acquire(
+      connectIpcClient(server.path, { idSource: sequentialIds("native-client") }),
+    );
     const socket = await within(server.accepted, "server accept");
     const closed = deferred();
     socket.once("close", () => closed.resolve());
@@ -49,10 +58,14 @@ for (const failure of ["malformed", "disconnect"] as const) {
       else socket.end();
       const error = await within(failed, "pending RPC failure");
       expect(error).toBeInstanceOf(failure === "malformed" ? IpcProtocolError : IpcConnectionError);
-      expect(error).toMatchObject({ _tag: failure === "malformed" ? "IpcProtocolError" : "IpcConnectionError" });
+      expect(error).toMatchObject({
+        _tag: failure === "malformed" ? "IpcProtocolError" : "IpcConnectionError",
+      });
       await within(closed.promise, "peer socket close");
       expect(client.value.connected).toBe(false);
-      expect(await captureError(run(client.value.call("after-close")))).toBeInstanceOf(IpcConnectionError);
+      expect(await captureError(run(client.value.call("after-close")))).toBeInstanceOf(
+        IpcConnectionError,
+      );
       expect(requests.map((request) => request.method)).toEqual(["pending"]);
     } finally {
       await client.close();
@@ -65,10 +78,12 @@ for (const failure of ["malformed", "disconnect"] as const) {
 test("native scopes release the connection and permit immediate socket-path reuse", async () => {
   const disconnected = deferred();
   const path = socketPath("release");
-  const server = await acquire(createIpcServer(path, (_method, _params, respond) => Effect.sync(() => respond({ ok: true })), {
-    idSource: sequentialIds("native-server"),
-    onDisconnect: () => Effect.sync(() => disconnected.resolve()),
-  }));
+  const server = await acquire(
+    createIpcServer(path, (_method, _params, respond) => Effect.sync(() => respond({ ok: true })), {
+      idSource: sequentialIds("native-server"),
+      onDisconnect: () => Effect.sync(() => disconnected.resolve()),
+    }),
+  );
   const client = await acquire(connectIpcClient(path, { idSource: sequentialIds("native-reuse") }));
   try {
     expect(await run(client.value.call("ready"))).toEqual({ ok: true });
@@ -82,12 +97,20 @@ test("native scopes release the connection and permit immediate socket-path reus
   // Raw bind must succeed without the production server's stale-path unlink/probe.
   const rebound = net.createServer();
   try {
-    await within(new Promise<void>((resolve, reject) => {
-      rebound.once("error", reject);
-      rebound.listen(path, resolve);
-    }), "immediate raw rebind");
+    await within(
+      new Promise<void>((resolve, reject) => {
+        rebound.once("error", reject);
+        rebound.listen(path, resolve);
+      }),
+      "immediate raw rebind",
+    );
   } finally {
-    await within(new Promise<void>((resolve, reject) => rebound.close((error) => error ? reject(error) : resolve())), "rebound close");
+    await within(
+      new Promise<void>((resolve, reject) =>
+        rebound.close((error) => (error ? reject(error) : resolve())),
+      ),
+      "rebound close",
+    );
   }
 });
 
@@ -96,16 +119,20 @@ test("a retained response callback cannot write to a socket after scope close", 
   const entered = deferred<(result: Ipc.Response["result"]) => void>();
   const connecting = net.Socket.prototype.connect;
   let clientSocket: net.Socket | undefined;
-  const observation = spyOn(net.Socket.prototype, "connect").mockImplementation(new Proxy(connecting, {
-    apply(target: typeof connecting, receiver: net.Socket, args: Parameters<typeof connecting>) {
-      clientSocket = receiver;
-      return target.apply(receiver, args);
-    },
-  }));
-  const client = await acquire(connectIpcClient(server.path, {
-    idSource: sequentialIds("native-callback"),
-    onRequest: (_method, _params, respond) => Effect.sync(() => entered.resolve(respond)),
-  })).finally(() => observation.mockRestore());
+  const observation = spyOn(net.Socket.prototype, "connect").mockImplementation(
+    new Proxy(connecting, {
+      apply(target: typeof connecting, receiver: net.Socket, args: Parameters<typeof connecting>) {
+        clientSocket = receiver;
+        return target.apply(receiver, args);
+      },
+    }),
+  );
+  const client = await acquire(
+    connectIpcClient(server.path, {
+      idSource: sequentialIds("native-callback"),
+      onRequest: (_method, _params, respond) => Effect.sync(() => entered.resolve(respond)),
+    }),
+  ).finally(() => observation.mockRestore());
   const peer = await within(server.accepted, "callback peer accept");
   try {
     if (!clientSocket) throw new Error("client socket not observed");

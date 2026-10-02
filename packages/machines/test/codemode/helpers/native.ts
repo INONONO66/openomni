@@ -9,48 +9,82 @@ import { acquireSync, run } from "../../ipc/helpers/effects";
 export * from "../../../src/codemode/errors";
 
 type Caller = (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>;
-type Boundary = (call: Machine.ToolCall, body: () => Promise<Machine.ToolCallResult>) => Promise<Machine.ToolCallResult>;
+type Boundary = (
+  call: Machine.ToolCall,
+  body: () => Promise<Machine.ToolCallResult>,
+) => Promise<Machine.ToolCallResult>;
 function code<A>(body: () => Promise<A>): Effect.Effect<A, CodeError> {
   return Effect.tryPromise({ try: body, catch: decodeCodeFailure("test.code") });
 }
 export class PythonKernel {
   readonly native = new NativeKernel();
-  run(request: Machine.CellRequest, call: Caller, signal?: AbortSignal) { return run(this.native.run(request, (request) => foreign(() => call(request)), signal)); }
-  peek(cellId: string) { return this.native.peek(cellId); }
-  close() { return run(this.native.close()); }
+  run(request: Machine.CellRequest, call: Caller, signal?: AbortSignal) {
+    return run(this.native.run(request, (request) => foreign(() => call(request)), signal));
+  }
+  peek(cellId: string) {
+    return this.native.peek(cellId);
+  }
+  close() {
+    return run(this.native.close());
+  }
 }
 /** Deterministic injected cell-id entropy (#1245) for tests. */
 function sequentialCellIds(): () => string {
   let n = 0;
-  return () => { n += 1; return `cell-${n}`; };
+  return () => {
+    n += 1;
+    return `cell-${n}`;
+  };
 }
 
-export function createCodemode(options: {
-  id?: () => string;
-  machines?: Pick<MachineHost, "list" | "get">;
-  completion?: (request: Machine.CompletionRequest) => Promise<string>;
-  tools?: (tenant: string) => Caller;
-  boundary?: (tenant: string) => Boundary;
-} = {}) {
+export function createCodemode(
+  options: {
+    id?: () => string;
+    machines?: Pick<MachineHost, "list" | "get">;
+    completion?: (request: Machine.CompletionRequest) => Promise<string>;
+    tools?: (tenant: string) => Caller;
+    boundary?: (tenant: string) => Boundary;
+  } = {},
+) {
   const completion = options.completion;
   const tools = options.tools;
   const boundary = options.boundary;
   const machines = options.machines;
-  const { value: native, close } = acquireSync(create({
-    id: options.id ?? sequentialCellIds(),
-    machines: machines ? { list: machines.list, get: (id) => machines.get(id).native } : undefined,
-    completion: completion ? (request) => code(() => completion(request)) : undefined,
-    tools: tools ? (tenant) => { const call = tools(tenant); return (request) => code(() => call(request)); } : undefined,
-    boundary: boundary ? (tenant) => { const decide = boundary(tenant); return (call, body) => code(() => decide(call, () => run(body()))); } : undefined,
-  }));
-  const runner: CodeRunner = { native: native.runner,
-    runCode: (request, call, signal) => run(native.runner.runCode(request, (request) => foreign(() => call(request)), signal)),
+  const { value: native, close } = acquireSync(
+    create({
+      id: options.id ?? sequentialCellIds(),
+      machines: machines
+        ? { list: machines.list, get: (id) => machines.get(id).native }
+        : undefined,
+      completion: completion ? (request) => code(() => completion(request)) : undefined,
+      tools: tools
+        ? (tenant) => {
+            const call = tools(tenant);
+            return (request) => code(() => call(request));
+          }
+        : undefined,
+      boundary: boundary
+        ? (tenant) => {
+            const decide = boundary(tenant);
+            return (call, body) => code(() => decide(call, () => run(body())));
+          }
+        : undefined,
+    }),
+  );
+  const runner: CodeRunner = {
+    native: native.runner,
+    runCode: (request, call, signal) =>
+      run(native.runner.runCode(request, (request) => foreign(() => call(request)), signal)),
     peekCode: native.runner.peekCode,
-    close: async () => { await run(native.close()); await close(); },
+    close: async () => {
+      await run(native.close());
+      await close();
+    },
   };
   type Handle = ReturnType<typeof native.getMachine>;
   function wrapHandle(handle: Handle) {
-    return { read: (...args: Parameters<Handle["read"]>) => run(handle.read(...args)),
+    return {
+      read: (...args: Parameters<Handle["read"]>) => run(handle.read(...args)),
       write: (...args: Parameters<Handle["write"]>) => run(handle.write(...args)),
       ls: (...args: Parameters<Handle["ls"]>) => run(handle.ls(...args)),
       bash: (...args: Parameters<Handle["bash"]>) => run(handle.bash(...args)),
@@ -60,10 +94,17 @@ export function createCodemode(options: {
   const handles = new Map<Handle, ReturnType<typeof wrapHandle>>();
   function handle(value: Handle) {
     let found = handles.get(value);
-    if (!found) { found = wrapHandle(value); handles.set(value, found); }
+    if (!found) {
+      found = wrapHandle(value);
+      handles.set(value, found);
+    }
     return found;
   }
-  return { native, runner, close: runner.close, listMachines: native.listMachines,
+  return {
+    native,
+    runner,
+    close: runner.close,
+    listMachines: native.listMachines,
     getMachine: (id: string) => handle(native.getMachine(id)),
     findMachine: (query: { tag: string }) => handle(native.findMachine(query)),
     callTool: (...args: Parameters<typeof native.callTool>) => run(native.callTool(...args)),

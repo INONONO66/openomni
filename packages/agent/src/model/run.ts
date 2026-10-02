@@ -186,170 +186,193 @@ export function run(
   dependencies: RunDependencies = {},
 ): Effect.Effect<Run.Outcome, LlmError> {
   return Effect.suspend((): Effect.Effect<Run.Outcome, LlmError> => {
-  const { messages, system = "", signal, model } = input;
+    const { messages, system = "", signal, model } = input;
 
-  const controller = new AbortController();
-  const abortSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-  if (abortSignal.aborted) {
-    return Effect.succeed({ type: "aborted" } as const);
-  }
-
-  const { traceId, runId } = input.trace;
-  const sessionID = input.trace.sessionId;
-  if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
-    return new InvalidProviderData({ operation: "run.trace", cause: "empty trace identity", message: "llm run requires a non-empty traceId, sessionId, and runId" });
-  }
-  const messageID = `msg-${input.id()}`;
-  const parentID = messages[messages.length - 1]?.info.id || "";
-
-  // Wire names and history share the sanitizer; invocation identity stays dotted.
-  const { wireNames, originalByWire } = assignWireToolNames(input.tools);
-
-  const assistantMessage: Message.AssistantMessage = {
-    id: messageID,
-    sessionID,
-    role: "assistant",
-    time: { created: input.now() },
-    parentID,
-    modelID: model.id,
-    providerID: model.providerID,
-    agent: "default",
-    path: { cwd: process.cwd(), root: process.cwd() },
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-  };
-
-  let credential: ReturnType<typeof Auth.reference> | undefined;
-  const createStream: Processor.ProcessorOptions["createStream"] = (streamInput) => Effect.gen(function* () {
-    const ai = yield* Effect.tryPromise({ try: () => import("ai"), catch: decodeLlmFailure("provider.import") });
-    const auth = yield* Auth.resolve(
-      model.providerID,
-      input.authFilePath,
-      input.auth,
-      input.authProvider,
-      input.allowAuthFallback,
-    );
-    credential = Auth.reference(auth);
-
-    const streamResult = yield* Effect.try({
-      try: () => ai.streamText(streamArguments(input, streamInput.system, abortSignal, wireNames, getLanguage(model, auth, input.transport))),
-      catch: decodeLlmFailure("provider.stream"),
-    });
-    return { fullStream: adaptStream(streamResult.fullStream) };
-  });
-  const provider = model.providerID;
-  const modelId = model.id;
-
-  const processor = Processor.create({
-    // Call-local injection keeps test and embedding harnesses isolated from
-    // Bun's process-wide module mocks without changing production behavior.
-    createStream: dependencies.createStream ?? createStream,
-    events: input.events,
-    assistantMessage,
-    sessionID,
-    model,
-    abort: abortSignal,
-    now: input.now,
-    id: input.id,
-    sink,
-    toolNames: originalByWire,
-    externalTools: true,
-    trace: {
-      traceId,
-      sessionId: sessionID,
-      runId: input.trace.runId,
-      provider,
-    },
-  });
-
-  input.events.publish(LlmCall.Events.Started, {
-    traceId,
-    sessionId: sessionID,
-    runId: input.trace.runId,
-    provider,
-    model: modelId,
-    messageCount: messages.length,
-    toolCount: input.tools.length,
-    time: input.now(),
-  });
-
-  const startMs = input.now();
-
-  return processor.process({ system, promptText: serializePrompt(system, input, model) }).pipe(Effect.match({
-    onSuccess: (): Run.Outcome => {
-    const durationMs = input.now() - startMs;
-    // Usage belongs to this single provider attempt.
-    const finalTokens = processor.usageTotals;
-    const finishReason = processor.message.finish ?? "unknown";
-
-    input.events.publish(LlmCall.Events.Completed, {
-      traceId,
-      sessionId: sessionID,
-      runId: input.trace.runId,
-      provider,
-      model: modelId,
-      durationMs,
-      inputTokens: finalTokens.input,
-      outputTokens: finalTokens.output,
-      reasoningTokens: finalTokens.reasoning,
-      cacheReadTokens: finalTokens.cache.read,
-      cacheWriteTokens: finalTokens.cache.write,
-      finishReason,
-      time: input.now(),
-    });
-
-    return {
-      type: "stop",
-      evidence: {
-        usage: attemptUsage(finalTokens),
-        usageProvenance: processor.usageProvenance,
-        visibleOutput: processor.visibleOutput,
-        finishReason,
-        credential: credential ?? null,
-      },
-    };
-  }, onFailure: (err): Run.Outcome => {
-    const apiError = coerceApiError(err);
-    const source = apiError ?? err;
-    const sourceFacts = errorFacts(source);
-    const aborted = abortSignal.aborted || sourceFacts.aborted === true;
-    const retryAfterMs = Retry.retryAfterMs(source, input.now);
-    const failure = new LlmRunFailure({
-        message: err.message || String(err),
-        provider, model: modelId,
-        retryAfterMs,
-        usage: attemptUsage(processor.usageTotals),
-        usageProvenance: processor.usageProvenance,
-        aborted,
-        contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
-        visibleOutput: processor.visibleOutput,
-        // The SDK error itself is the provider-fact carrier for classification.
-        cause: apiError ?? err.cause ?? String(err),
-    });
-    if (err.stack !== undefined) failure.stack = err.stack;
-
-    input.events.publish(LlmCall.Events.Failed, {
-      traceId,
-      sessionId: sessionID,
-      runId: input.trace.runId,
-      provider,
-      model: modelId,
-      durationMs: input.now() - startMs,
-      error: err.message,
-      aborted,
-      time: input.now(),
-    });
-
-    if (aborted) {
-      return { type: "aborted", error: failure };
+    const controller = new AbortController();
+    const abortSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+    if (abortSignal.aborted) {
+      return Effect.succeed({ type: "aborted" } as const);
     }
 
-    return { type: "error", error: failure };
-  }}), Effect.onInterrupt(() => Effect.sync(() => controller.abort())));
+    const { traceId, runId } = input.trace;
+    const sessionID = input.trace.sessionId;
+    if (traceId.length === 0 || sessionID.length === 0 || runId.length === 0) {
+      return new InvalidProviderData({
+        operation: "run.trace",
+        cause: "empty trace identity",
+        message: "llm run requires a non-empty traceId, sessionId, and runId",
+      });
+    }
+    const messageID = `msg-${input.id()}`;
+    const parentID = messages[messages.length - 1]?.info.id || "";
+
+    // Wire names and history share the sanitizer; invocation identity stays dotted.
+    const { wireNames, originalByWire } = assignWireToolNames(input.tools);
+
+    const assistantMessage: Message.AssistantMessage = {
+      id: messageID,
+      sessionID,
+      role: "assistant",
+      time: { created: input.now() },
+      parentID,
+      modelID: model.id,
+      providerID: model.providerID,
+      agent: "default",
+      path: { cwd: process.cwd(), root: process.cwd() },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    };
+
+    let credential: ReturnType<typeof Auth.reference> | undefined;
+    const createStream: Processor.ProcessorOptions["createStream"] = (streamInput) =>
+      Effect.gen(function* () {
+        const ai = yield* Effect.tryPromise({
+          try: () => import("ai"),
+          catch: decodeLlmFailure("provider.import"),
+        });
+        const auth = yield* Auth.resolve(
+          model.providerID,
+          input.authFilePath,
+          input.auth,
+          input.authProvider,
+          input.allowAuthFallback,
+        );
+        credential = Auth.reference(auth);
+
+        const streamResult = yield* Effect.try({
+          try: () =>
+            ai.streamText(
+              streamArguments(
+                input,
+                streamInput.system,
+                abortSignal,
+                wireNames,
+                getLanguage(model, auth, input.transport),
+              ),
+            ),
+          catch: decodeLlmFailure("provider.stream"),
+        });
+        return { fullStream: adaptStream(streamResult.fullStream) };
+      });
+    const provider = model.providerID;
+    const modelId = model.id;
+
+    const processor = Processor.create({
+      // Call-local injection keeps test and embedding harnesses isolated from
+      // Bun's process-wide module mocks without changing production behavior.
+      createStream: dependencies.createStream ?? createStream,
+      events: input.events,
+      assistantMessage,
+      sessionID,
+      model,
+      abort: abortSignal,
+      now: input.now,
+      id: input.id,
+      sink,
+      toolNames: originalByWire,
+      externalTools: true,
+      trace: {
+        traceId,
+        sessionId: sessionID,
+        runId: input.trace.runId,
+        provider,
+      },
+    });
+
+    input.events.publish(LlmCall.Events.Started, {
+      traceId,
+      sessionId: sessionID,
+      runId: input.trace.runId,
+      provider,
+      model: modelId,
+      messageCount: messages.length,
+      toolCount: input.tools.length,
+      time: input.now(),
+    });
+
+    const startMs = input.now();
+
+    return processor.process({ system, promptText: serializePrompt(system, input, model) }).pipe(
+      Effect.match({
+        onSuccess: (): Run.Outcome => {
+          const durationMs = input.now() - startMs;
+          // Usage belongs to this single provider attempt.
+          const finalTokens = processor.usageTotals;
+          const finishReason = processor.message.finish ?? "unknown";
+
+          input.events.publish(LlmCall.Events.Completed, {
+            traceId,
+            sessionId: sessionID,
+            runId: input.trace.runId,
+            provider,
+            model: modelId,
+            durationMs,
+            inputTokens: finalTokens.input,
+            outputTokens: finalTokens.output,
+            reasoningTokens: finalTokens.reasoning,
+            cacheReadTokens: finalTokens.cache.read,
+            cacheWriteTokens: finalTokens.cache.write,
+            finishReason,
+            time: input.now(),
+          });
+
+          return {
+            type: "stop",
+            evidence: {
+              usage: attemptUsage(finalTokens),
+              usageProvenance: processor.usageProvenance,
+              visibleOutput: processor.visibleOutput,
+              finishReason,
+              credential: credential ?? null,
+            },
+          };
+        },
+        onFailure: (err): Run.Outcome => {
+          const apiError = coerceApiError(err);
+          const source = apiError ?? err;
+          const sourceFacts = errorFacts(source);
+          const aborted = abortSignal.aborted || sourceFacts.aborted === true;
+          const retryAfterMs = Retry.retryAfterMs(source, input.now);
+          const failure = new LlmRunFailure({
+            message: err.message || String(err),
+            provider,
+            model: modelId,
+            retryAfterMs,
+            usage: attemptUsage(processor.usageTotals),
+            usageProvenance: processor.usageProvenance,
+            aborted,
+            contextOverflow: sourceFacts.contextOverflow ?? Retry.isContextOverflow(err),
+            visibleOutput: processor.visibleOutput,
+            // The SDK error itself is the provider-fact carrier for classification.
+            cause: apiError ?? err.cause ?? String(err),
+          });
+          if (err.stack !== undefined) failure.stack = err.stack;
+
+          input.events.publish(LlmCall.Events.Failed, {
+            traceId,
+            sessionId: sessionID,
+            runId: input.trace.runId,
+            provider,
+            model: modelId,
+            durationMs: input.now() - startMs,
+            error: err.message,
+            aborted,
+            time: input.now(),
+          });
+
+          if (aborted) {
+            return { type: "aborted", error: failure };
+          }
+
+          return { type: "error", error: failure };
+        },
+      }),
+      Effect.onInterrupt(() => Effect.sync(() => controller.abort())),
+    );
   });
 }

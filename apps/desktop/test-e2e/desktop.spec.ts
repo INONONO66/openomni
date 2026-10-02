@@ -10,7 +10,9 @@ test("production desktop shell boots with its bridge and CSP", async () => {
   const profile = await mkdtemp(join(tmpdir(), "openomni-desktop-smoke-"));
   const errorsFile = join(profile, "startup-errors.jsonl");
   const environment = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
   );
   delete environment.ELECTRON_RENDERER_URL;
   environment.DESKTOP_SMOKE_PROFILE = profile;
@@ -37,7 +39,9 @@ test("production desktop shell boots with its bridge and CSP", async () => {
     expect(bounds).not.toBeNull();
     expect(bounds?.width).toBeGreaterThan(0);
     expect(bounds?.height).toBeGreaterThan(0);
-    const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
+    const csp = await page
+      .locator('meta[http-equiv="Content-Security-Policy"]')
+      .getAttribute("content");
     expect(csp).toContain("connect-src");
     expect(csp).toContain("font-src");
     const requireType = await page.evaluate("typeof require");
