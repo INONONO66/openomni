@@ -540,4 +540,3 @@ export function receivedMessages(
 export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
   return kernel.pendingMessages(sessionId);
 }
-

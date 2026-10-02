@@ -75,4 +75,3 @@ export class ToolCatalog extends Context.Service<
   ToolCatalog,
   { readonly definitions: readonly ToolDispatchDefinition[] }
 >()("@openomni/agent/ToolCatalog") {}
-

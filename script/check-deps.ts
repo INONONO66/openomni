@@ -872,6 +872,87 @@ export async function validateAgentBands(root = "."): Promise<string[]> {
   return violations;
 }
 
+/**
+ * #1247/#1248 S8 perimeter pin: `packages/agent/src/index.ts` exports exactly
+ * the seven namespaces plus at most these nine named exports consumed by
+ * `packages/channels`. Shrink-only: removals are fine, any new name or any
+ * other export form fails. #1248 owns retiring the named list.
+ */
+const AGENT_INDEX_NAMESPACES: ReadonlySet<string> = new Set([
+  "Kernel",
+  "Session",
+  "Bundle",
+  "Journal",
+  "Model",
+  "Inspect",
+  "Testing",
+]);
+
+const AGENT_INDEX_PINNED_NAMED_EXPORTS: ReadonlySet<string> = new Set([
+  "decisionFromEvaluation",
+  "evaluatePermission",
+  "PolicyEvaluationInput",
+  "requireSubAdapter",
+  "withStoreTimestamps",
+  "createDecisionFactPort",
+  "createSurfaceKeyStore",
+  "StoredEndpoint",
+  "StoredIdentity",
+]);
+
+const AGENT_INDEX_PATH = "packages/agent/src/index.ts";
+
+export function agentIndexPerimeterViolations(source: string): string[] {
+  const violations: string[] = [];
+  const namespaces = new Set<string>();
+  const named: string[] = [];
+  for (const match of source.matchAll(/^export\s[^;]*;/gms)) {
+    const statement = match[0];
+    const line = lineNumberForOffset(source, match.index);
+    const namespaceMatch = statement.match(/^export \* as (\w+) from/);
+    if (namespaceMatch?.[1]) {
+      namespaces.add(namespaceMatch[1]);
+      continue;
+    }
+    const namedMatch = statement.match(/^export (?:type )?\{([^}]*)\} from/s);
+    if (!namedMatch?.[1]) {
+      violations.push(
+        `VIOLATION: ${AGENT_INDEX_PATH}:${line} uses an export form outside the #1247 surface (seven namespaces + pinned S8 names only)`,
+      );
+      continue;
+    }
+    for (const entry of namedMatch[1].split(",")) {
+      const name = entry.trim().replace(/^type /, "").split(/\s+as\s+/)[0]?.trim();
+      if (name === undefined || name.length === 0) continue;
+      named.push(name);
+      if (!AGENT_INDEX_PINNED_NAMED_EXPORTS.has(name)) {
+        violations.push(
+          `VIOLATION: ${AGENT_INDEX_PATH}:${line} exports ${name} outside the pinned #1248 S8 perimeter — shrink only, never grow`,
+        );
+      }
+    }
+  }
+  for (const name of namespaces) {
+    if (!AGENT_INDEX_NAMESPACES.has(name)) {
+      violations.push(
+        `VIOLATION: ${AGENT_INDEX_PATH} exports namespace ${name} outside the seven #1247 namespaces`,
+      );
+    }
+  }
+  if (named.length > AGENT_INDEX_PINNED_NAMED_EXPORTS.size) {
+    violations.push(
+      `VIOLATION: ${AGENT_INDEX_PATH} has ${named.length} named exports over the pinned ${AGENT_INDEX_PINNED_NAMED_EXPORTS.size} — shrink only, never grow`,
+    );
+  }
+  return violations;
+}
+
+export async function validateAgentIndexPerimeter(root = "."): Promise<string[]> {
+  const file = Bun.file(`${root}/${AGENT_INDEX_PATH}`);
+  if (!(await file.exists())) return [];
+  return agentIndexPerimeterViolations(await file.text());
+}
+
 async function validateDeepImports(): Promise<string[]> {
   const violations: string[] = [];
   // Matches both `from "@openomni/.../src/..."` and side-effect `import "@openomni/.../src/..."`
@@ -1294,6 +1375,7 @@ export async function main(): Promise<void> {
   const sourceImportViolations = await validateSourceImportDirection();
   const channelsBandingViolations = await validateChannelsIntraPackageBanding();
   const agentBandViolationList = await validateAgentBands();
+  const agentIndexPerimeterViolationList = await validateAgentIndexPerimeter();
   const bundleViolations = await checkBundleImports();
   const deepImportViolations = await validateDeepImports();
   const deepRelativeImportViolations = await validateDeepRelativeImports();
@@ -1304,6 +1386,7 @@ export async function main(): Promise<void> {
     ...sourceImportViolations,
     ...channelsBandingViolations,
     ...agentBandViolationList,
+    ...agentIndexPerimeterViolationList,
     ...bundleViolations.map(
       (finding) => `VIOLATION: ${finding.code} ${finding.file}:${finding.line}`,
     ),

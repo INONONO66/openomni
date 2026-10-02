@@ -2,7 +2,15 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { agentBandViolations, checkBundleImports, checkDocFreshness, main, validateAgentBands } from "./check-deps";
+import {
+  agentBandViolations,
+  agentIndexPerimeterViolations,
+  checkBundleImports,
+  checkDocFreshness,
+  main,
+  validateAgentBands,
+  validateAgentIndexPerimeter,
+} from "./check-deps";
 import { checkPython } from "./check-quality-python";
 import { TOPOLOGY } from "./topology";
 
@@ -600,4 +608,37 @@ test("#1247 bands: external bans catch exact and prefixed specifiers, legal exte
   expect(
     agentBandViolations("packages/agent/src/kernel/planted.ts", 'import { Effect } from "effect";'),
   ).toEqual([]);
+});
+
+test("#1247 S8 pin: the real agent index passes, a grown name fails", async () => {
+  const real = await Bun.file("packages/agent/src/index.ts").text();
+  expect(agentIndexPerimeterViolations(real)).toEqual([]);
+
+  const grown = `${real}\nexport { somethingNew } from "./kernel/turn";\n`;
+  const violations = agentIndexPerimeterViolations(grown);
+  expect(violations.some((line) => line.includes("exports somethingNew outside the pinned #1248 S8 perimeter"))).toBe(true);
+});
+
+test("#1247 S8 pin: an eighth namespace and a non-barrel export form fail; shrink passes", () => {
+  const extraNamespace = agentIndexPerimeterViolations('export * as Extra from "./extra";\n');
+  expect(extraNamespace.some((line) => line.includes("namespace Extra outside the seven #1247 namespaces"))).toBe(true);
+
+  const declaration = agentIndexPerimeterViolations("export const leak = 1;\n");
+  expect(declaration.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+
+  const shrunk = agentIndexPerimeterViolations(
+    'export * as Kernel from "./kernel";\nexport { evaluatePermission } from "./kernel/gate/match";\n',
+  );
+  expect(shrunk).toEqual([]);
+});
+
+test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolerates its absence", async () => {
+  const clean = fixture({});
+  expect(await validateAgentIndexPerimeter(clean)).toEqual([]);
+
+  const planted = fixture({
+    "packages/agent/src/index.ts": 'export { rogue } from "./kernel/turn";\n',
+  });
+  const violations = await validateAgentIndexPerimeter(planted);
+  expect(violations.some((line) => line.includes("exports rogue outside the pinned #1248 S8 perimeter"))).toBe(true);
 });

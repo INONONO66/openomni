@@ -1006,4 +1006,3 @@ function createCompactionSession(config: ChatAgentConfig): CompactionSession | u
     summarizerDeadlineMs: options.summarizerDeadlineMs,
   });
 }
-

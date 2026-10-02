@@ -118,4 +118,3 @@ function assertDeclaration(kernel: SessionKernel, row: LedgerSession.Row, option
   });
   if (snapshot.toolsHash !== expected.toolsHash || snapshot.systemHash !== expected.systemHash) throw new AgentInvariantViolation(`session declaration conflicts with durable generation: ${row.id}`);
 }
-

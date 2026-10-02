@@ -87,7 +87,7 @@ subscribers and ordinary Effect callbacks are not banned by this rule.
 service APIs are not the floor. The executor consumes `Clock`, `Entropy`,
 `ObservationSink` and `SessionLayer`; the dispatcher consumes `ToolCatalog`
 (`packages/agent/src/executor.ts`, `packages/agent/src/tool-dispatcher.ts`).
-LLM work consumes `Llm` (`packages/agent/src/core/execution/run.ts`); app
+LLM work consumes `Llm` (`packages/agent/src/kernel/turn.ts`); app
 write consumers receive ledger handles explicitly from the composition plane
 (`apps/openomni/src/composition/cluster-runtime.ts`).
 
@@ -125,7 +125,7 @@ passing metadata checks beside sibling `mergeAll` inputs. An observer may have
 - Namespace: `[a-z][a-z0-9-]*`; tool: `<ns>__<tool>`; event: `<ns>.<kind>` with a positive version; provided Tag: `@openomni/bundle/<ns>/<Service>`; policy reference: `<ns>/<verb>`.
 - The acquisition seed is exactly Clock, Entropy, generation-local ObservationSink and immutable ToolCatalog. SessionLayer is assembled after policy contributions, not required during their acquisition.
 - `bundlePolicyTag(ns)` supplies the reserved `@openomni/bundle/<ns>/Policy` service containing immutable `transformers` and `obligations`. Pure transformer `apply(args, config)` implementations are named; rows store `ref` and optional JSON config (default `null`), never closures. There is no `registerTransformer(callback)`.
-- Missing transformer/obligation references fail compilation before execution. Decisions retain ordered `{ruleId, ref}` transforms and singular `ref` only for one transform. A pre-transform preserves `originalArgs` beside committed transformed arguments; dispatch validates and executes those admitted arguments. Approval retains original-input identity and recovery does not reapply a current transformer (`packages/agent/src/executor.ts`, `packages/agent/src/executor-record.ts`, `packages/agent/src/tool-dispatcher.ts`).
+- Missing transformer/obligation references fail compilation before execution. Decisions retain ordered `{ruleId, ref}` transforms and singular `ref` only for one transform. A pre-transform preserves `originalArgs` beside committed transformed arguments; dispatch validates and executes those admitted arguments. Approval retains original-input identity and recovery does not reapply a current transformer (`packages/agent/src/kernel/gate/decide.ts`, `packages/agent/src/kernel/tool.ts`).
 - Bundle modules may not import sibling bundle implementation modules; `script/check-deps.ts` guards that band. W0.5 adds no concrete production bundle.
 
 **Generation LayerMap.** `SessionGeneration.Id` is `{sessionId, generation}`

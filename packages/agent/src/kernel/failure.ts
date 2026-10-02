@@ -176,5 +176,3 @@ export function fromCause<E, F>(cause: Cause.Cause<E>, synthesize: (pretty: stri
 export function of<E>(cause: Cause.Cause<E>, operation: string): E | AgentFailure {
   return fromCause(cause, (pretty) => new AgentFailure({ operation, cause: pretty }));
 }
-
-
