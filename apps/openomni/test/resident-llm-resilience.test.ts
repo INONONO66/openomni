@@ -11,7 +11,7 @@ import { decodeChannelFailure as decodeInboxFailure } from "@openomni/channels";
 import { localInbox } from "./helpers/ledger";
 import { prepareMessage } from "../src/composition/message-session";
 import { residentRunner as createResident } from "./helpers/resident-runner";
-import { providerError, transientProvider } from "./helpers/sdk-provider";
+import { providerError, transientProvider, FIXTURE_AUTH_FILE } from "./helpers/sdk-provider";
 import { testIds } from "./helpers/test-entropy";
 
 afterEach(() => {
@@ -45,7 +45,7 @@ describe("Resident model fallback wiring", () => {
       { type: "api", key: "test-key" },
       { type: "api", key: "fallback-key" },
     ]);
-    expect(credentials.mock.calls).toEqual([[FALLBACK.provider]]);
+    expect(credentials.mock.calls).toEqual([[FALLBACK.provider, FIXTURE_AUTH_FILE]]);
     expect(result.kind).not.toBe("dropped");
   });
 

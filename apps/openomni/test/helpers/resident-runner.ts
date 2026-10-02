@@ -1,6 +1,6 @@
 import { testToolPorts } from "./tool-ports";
-import { Effect, Scope } from "effect";
-import { Provider, run } from "@openomni/llm";
+import { Context, Effect, Layer, Scope } from "effect";
+import { Llm, LlmLive } from "@openomni/llm";
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
 import type { ObservationSink } from "@openomni/protocol";
 import { allowConfigure, generationServices } from "./generation-services";
@@ -53,10 +53,11 @@ export function residentRunner(
     policyGeneration: () => plane.openKernel("policy-probe").currentPolicyGeneration(),
   });
   const fixture = options.sessionRuntime;
+  const liveLlm = Context.get(runSyncEffect(Scope.provide(Layer.build(LlmLive), scope.scope)), Llm);
   const context = runSyncEffect(Scope.provide(generationServices({
     clock: fixture?.clock, entropy: fixture?.entropy,
     observations: fixture?.observations === undefined ? Bus : observationService(fixture.observations),
-    definitions: resident.definitions, llm: { run, resolveModel: Provider.resolveModel, ...options.llm },
+    definitions: resident.definitions, llm: { ...liveLlm, ...options.llm },
     plane,
   }), scope.scope));
   cleanups.push(async () => {

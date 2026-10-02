@@ -67,7 +67,7 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
           resolved.push(model);
           return { id: model.id, name: model.id, providerID: model.provider };
         }),
-        run: (input: RunInput, sink) => runLlm(input, sink, {
+        run: (input: RunInput, sink) => runLlm({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, {
           createStream: () => Effect.sync(() => {
             providers.push(input.model.providerID);
             return { fullStream: stream(prefix, !veto && providers.length === 1, floor) };

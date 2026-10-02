@@ -66,6 +66,7 @@ export function useStreamCapture() {
     run(overrides: Partial<RunInput> = {}, output: Sink = capturingSink().sink) {
       return run(
         {
+          authFilePath: "/nonexistent/openomni-test/auth.json",
           trace: {
             traceId: "trace-stream-capture",
             sessionId: "session-stream-capture",

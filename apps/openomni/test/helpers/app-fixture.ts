@@ -1,5 +1,5 @@
-import { Llm, Provider, run } from "@openomni/llm";
-import { Layer, type Context } from "effect";
+import { Llm, LlmLive } from "@openomni/llm";
+import { Context, Effect, Layer } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
 import { startOpenOmni } from "../../src/index";
 import { testEntropy } from "./test-entropy";
@@ -23,7 +23,7 @@ export function appFixture(options: AppFixtureOptions) {
     ...(options.config.entityIdleMs === undefined ? {} : { entityIdleMs: options.config.entityIdleMs }),
     now: clock,
     entropy: entropy === undefined ? undefined : testEntropy(entropy),
-    llm: Layer.succeed(Llm, { run, resolveModel: Provider.resolveModel, ...llm }),
+    llm: Layer.unwrap(Effect.map(Layer.build(LlmLive), (live) => Layer.succeed(Llm, { ...Context.get(live, Llm), ...llm }))),
   });
   return startOpenOmni({ ...app, runtime, sessionRuntime: session });
 }

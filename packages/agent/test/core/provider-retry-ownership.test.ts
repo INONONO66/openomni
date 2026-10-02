@@ -59,7 +59,7 @@ function createAgent(signal?: AbortSignal) {
     signal,
     llm: {
       run: (input: import("@openomni/llm").RunInput, sink: import("@openomni/llm").Sink) =>
-        llmRun(input, sink, { createStream: createProviderStream }),
+        llmRun({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, { createStream: createProviderStream }),
       resolveModel: (model: Model.Ref) =>
         Effect.promise(async () => {
           attempt += 1;
@@ -124,6 +124,7 @@ describe("provider retry ownership", () => {
     const outcome = await isolated(
       llmRun(
         {
+          authFilePath: "/nonexistent/openomni-test/auth.json",
           events: Bus,
           messages: [],
           tools: [],

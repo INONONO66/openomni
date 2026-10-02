@@ -36,7 +36,7 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
   const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
     bundles: enabled ? BundlesLive([audit.definition]) : BundlesLive([]),
-    llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
+    llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
   const plane = await planeOf(app.runtime);
@@ -89,7 +89,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   const config = suite.config("app-bundle-swap-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
   const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, bundles: BundlesLive([audit.definition, definition]),
-    llm: Layer.succeed(Llm, { run, resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
+    llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
   const plane = await planeOf(app.runtime);

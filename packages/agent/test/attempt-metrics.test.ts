@@ -116,7 +116,7 @@ test.each(["reported", "estimated", "unknown"] as const)(
       execution: executor,
       llm: {
         resolveModel: () => Effect.succeed(mockProviderModel),
-        run: (input, sink) => run(input, sink, {
+        run: (input, sink) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, {
           createStream: () => Effect.succeed({
             fullStream: (async function* () {
               yield { type: "text-start", id: "text" };

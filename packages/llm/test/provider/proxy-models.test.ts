@@ -135,11 +135,10 @@ describe("proxy-models", () => {
   describe("Provider.resolveModel proxy discovery", () => {
     it("resolves a model advertised only by the configured proxy", async () => {
       const directory = mkdtempSync(join(tmpdir(), "openomni-proxy-registry-"));
-      const previousAuthFile = process.env.OPENOMNI_AUTH_FILE;
+      const authFilePath = join(directory, "auth.json");
       const previousModelsPath = process.env.OPENOMNI_MODELS_PATH;
       const previousModelsUrl = process.env.OPENOMNI_MODELS_URL;
       const previousDisableFetch = process.env.OPENOMNI_DISABLE_MODELS_FETCH;
-      process.env.OPENOMNI_AUTH_FILE = join(directory, "auth.json");
       process.env.OPENOMNI_MODELS_PATH = join(directory, "models.json");
       process.env.OPENOMNI_MODELS_URL = "https://models.dev";
       delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
@@ -175,13 +174,11 @@ describe("proxy-models", () => {
           type: "proxy",
           baseURL: "http://localhost:3199/v1",
           apiKey: "proxy-key",
-        }, { id: () => "tmp-proxy-models" }));
-        const model = await runEffect(Provider.resolveModel({ provider: "openai", id: "proxy-only-model", now: fixedNow }));
+        }, { id: () => "tmp-proxy-models", authFilePath }));
+        const model = await runEffect(Provider.resolveModel({ authFilePath, provider: "openai", id: "proxy-only-model", now: fixedNow }));
 
         expect(model).toMatchObject({ id: "proxy-only-model", providerID: "openai" });
       } finally {
-        if (previousAuthFile === undefined) delete process.env.OPENOMNI_AUTH_FILE;
-        else process.env.OPENOMNI_AUTH_FILE = previousAuthFile;
         if (previousModelsPath === undefined) delete process.env.OPENOMNI_MODELS_PATH;
         else process.env.OPENOMNI_MODELS_PATH = previousModelsPath;
         if (previousModelsUrl === undefined) delete process.env.OPENOMNI_MODELS_URL;

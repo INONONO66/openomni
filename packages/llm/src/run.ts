@@ -175,7 +175,13 @@ function attemptUsage(totals: Transcript.Usage): Run.AttemptEvidence["usage"] {
 }
 
 export function run(
-  input: RunInput,
+  input: RunInput & {
+    /**
+     * Credential file location, resolved once by the composition root
+     * (#1245): this function never reads the environment for it.
+     */
+    readonly authFilePath: string;
+  },
   sink: Sink,
   dependencies: RunDependencies = {},
 ): Effect.Effect<Run.Outcome, LlmError> {
@@ -223,6 +229,7 @@ export function run(
     const ai = yield* Effect.tryPromise({ try: () => import("ai"), catch: decodeLlmFailure("provider.import") });
     const auth = yield* Auth.resolve(
       model.providerID,
+      input.authFilePath,
       input.auth,
       input.authProvider,
       input.allowAuthFallback,

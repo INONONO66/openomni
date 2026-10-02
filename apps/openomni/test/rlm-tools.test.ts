@@ -13,6 +13,8 @@ import { providerFailure } from "./helpers/provider-failure";
 import { executor } from "./helpers/executor";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 
+const ABSENT_AUTH_FILE = "/nonexistent/openomni-rlm-tools/auth.json";
+
 afterEach(() => mock.restore());
 
 /** The sealed cell-only tool name and its per-cell call budget (KERNEL §3.4). */
@@ -207,7 +209,7 @@ describe("the completion tool", () => {
     spyOn(Auth, "get").mockReturnValue(Effect.succeed(undefined));
     const run = mock(() => Effect.succeed({ type: "stop" as const }));
     expect(
-      await runEffect(Provider.resolveModel({ provider: "anthropic", id: "listed", now: () => 0 })),
+      await runEffect(Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider: "anthropic", id: "listed", now: () => 0 })),
     ).toMatchObject({
       id: "listed",
       providerID: "anthropic",
@@ -222,7 +224,7 @@ describe("the completion tool", () => {
       ).rejects.toMatchObject({
         _tag: "AgentFailure",
         operation: "completion.resolve",
-        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ provider, id, now: () => 0 })))),
+        cause: String(await runEffect(Effect.flip(Provider.resolveModel({ authFilePath: ABSENT_AUTH_FILE, provider, id, now: () => 0 })))),
       });
     }
     expect(run).not.toHaveBeenCalled();

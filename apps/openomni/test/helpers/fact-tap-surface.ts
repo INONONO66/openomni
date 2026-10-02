@@ -135,7 +135,7 @@ try {
     llm: {
       resolveModel: () => Effect.succeed(model),
       run: (input, sink) =>
-        run(input, {
+        run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, {
           onMessage(message) {
             messages.push(message);
             sink.onMessage(message);
