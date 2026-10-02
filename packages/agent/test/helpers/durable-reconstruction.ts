@@ -12,7 +12,7 @@ import { Effect } from "effect";
 import { runAgent } from "./executor";
 import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
-import { runnerTestLayer } from "./service-layers";
+import { runnerTestLayer } from "./isolated";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
 import { createExecutor } from "../../src/kernel/gate/decide";
 import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session/run";

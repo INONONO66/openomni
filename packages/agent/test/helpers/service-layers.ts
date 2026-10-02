@@ -1,13 +1,10 @@
 import * as SessionHandleStore from "../../src/store/fence";
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { Clock, Context, Effect, Layer } from "effect";
-import { LlmLive } from "../../src/model";
-import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/kernel/gate/compile";
 import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
-import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices } from "../../src/kernel/ports";
-import { NamedPolicyRegistry } from "../../src/kernel/bundle";
-import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session/run";
-import { createObservationBus, scopeObservation } from "../../src/session/bus";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../../src/kernel/ports";
+import { scopeObservation } from "../../src/session/bus";
+import { testBusService } from "./isolated";
 import { entropySource, fixedClock } from "./time";
 import { createTurnDispatcher } from "../../src/kernel/tool";
 
@@ -55,7 +52,7 @@ export function turnTestLayer(input: Parameters<typeof createTurnDispatcher>[0] 
 export function observationService(sink: ResolvedExecutorOptions["observations"]) {
   let time = 0;
   const source = { id: entropySource("event").id, now: () => (time += 1) };
-  const bus = createObservationBus(source);
+  const bus = testBusService(source);
   const service = {
     publish: ((event, data) => { sink.publish(event, data); bus.publish(event, data); }) satisfies typeof bus.publish,
     subscribe: "subscribe" in sink && sink.subscribe !== undefined ? sink.subscribe.bind(sink) : bus.subscribe,
@@ -79,17 +76,3 @@ export function executorLayer(values: Pick<ResolvedExecutorOptions, "clock" | "e
 export function catalogLayer(definitions: readonly AnyToolDefinition[]) {
   return Layer.succeed(ToolCatalog, { definitions });
 }
-
-export const runnerTestLayer = Layer.mergeAll(
-  LlmLive, Layer.succeed(Entropy, entropySource("runner")),
-  Layer.effectContext(Effect.gen(function* () {
-    const snapshot = SessionHandleStore.generationSnapshot({ generation: 1, revertTo: 0, tools: [], system: { preset: "", blocks: [] }, policyGeneration: 1 });
-    const policy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) });
-    const owner = yield* makeSessionGenerations({ id: { sessionId: "fixture", generation: 1 }, snapshot, activate: Effect.void,
-      layer: Layer.mergeAll(Layer.succeed(SessionLayer, { snapshot, policy }), Layer.succeed(ToolCatalog, { definitions: [] }),
-        Layer.succeed(ObservationSink, createObservationBus({ id: entropySource("runner-event").id, now: () => 0 })), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY)) });
-    const captured = yield* owner.capture();
-    const context = yield* captured.provide(Effect.context<GenerationServices | GenerationOwnership | GenerationRawSlots>());
-    return Context.pick(SessionLayer, ToolCatalog, ObservationSink, NamedPolicyRegistry, GenerationOwnership)(context);
-  })),
-);

@@ -1,6 +1,42 @@
 # Implementation Status
 
-## #1248 channel timers on Effect Schedule/Fiber/Deferred (epic #1260, ⏳ pending merge)
+## #1249 observation bus on Effect PubSub/Stream (epic #1260, ⏳ pending merge)
+
+On `epic1260/1249-bus-pubsub` (2026-10-02, base `d34218c6`, #1248's merge).
+The manual-subscriber observation bus is replaced by an app-owned Effect
+PubSub: `packages/agent/src/session/bus.ts` builds one unbounded `PubSub` per
+owning Scope (`makeObservationBus`), publication is synchronous, nonblocking
+and lossy (`PubSub.publishUnsafe`; observations are never journal-durable),
+and subscribers are Streams (`bus.observations` / `bus.stream(event, match)`)
+or callback drains forked on a bus-scoped `FiberSet` — closing the owning
+Scope shuts the PubSub down and interrupts every drain, so overlapping
+generations unsubscribe independently at Scope closure. The kernel
+`ObservationSink` port is unchanged; `observationBusLayer` provides it as a
+Layer. The app mounts the root bus in the runtime's own Scope
+(`apps/openomni/src/runtime.ts`; injected fixture sinks mount as
+`Layer.succeed`) and builds one bus per generation inside the generation
+Layer's Scope with a finalizer that gates publishes off before shutdown
+(`apps/openomni/src/composition/generation-layers.ts`); root fan-out and
+`active` gating semantics are preserved. A throwing callback subscriber is
+caught per element, logged on the subscriber's own fiber as a typed
+`ObservationSubscriberFailure` via `Effect.logError`, and never blocks the
+publisher or ends the subscription; scoped-sink delivery failures keep the
+#1244 failure-as-data contract (`observation.delivery_failed`). No new Effect
+runner sites: the bus publishes with `publishUnsafe` and forks through
+`FiberSet.makeRuntime` inside its own Scope; test fixtures (agent `testBus`,
+app `Bus`, channels `Bus`) are PubSub-backed and constructed through each
+package's named runner owner. `createObservationBus`, `withIsolation`, the
+two `queueMicrotask` fan-outs and the `AsyncLocalStorage` isolation store are
+deleted to grep zero; `newTraceId` already rode injected entropy
+(`packages/channels/src/support/trace.ts`), unchanged. The deleted manual-bus
+suite (`packages/agent/test/observation/bus.test.ts`, 7 tests) is superseded
+by four Deferred/state-signal suites under `packages/agent/test/session/`
+(8 tests: PubSub delivery + Scope closure, Layer-provided sink, generation
+rotation, typed subscriber failure). Found en route: dropping the microtask
+hop makes interrupt commits durable one boundary earlier, so
+`session-wave-e2e` pins the `after_tools` drain boundary.
+
+## #1248 channel timers on Effect Schedule/Fiber/Deferred (epic #1260, merged as `d34218c6`, PR #1267)
 
 On `epic1260/1248-channels-effect` (2026-10-02, base `0ebef4b0`, rebased onto
 #1250's merge `9b4e4b8c`). Every channel-driver timer is an Effect program on

@@ -9,9 +9,9 @@ import { mockLlm, completeModel } from "../../helpers/mock-llm";
 // Actor attribution comes only from the validated trace.
 async function observedActorId(trace: RunTrace): Promise<string> {
   const actorIds: string[] = [];
-  const stop = Bus.observe((event, payload) => {
-    if (event.name !== RunEvents.TurnStart.name) return;
-    const { actorId } = RunEvents.TurnStart.schema.parse(payload);
+  const stop = Bus.observe((observation) => {
+    if (observation.name !== RunEvents.TurnStart.name) return;
+    const { actorId } = RunEvents.TurnStart.schema.parse(observation.data);
     if (actorId !== undefined) actorIds.push(actorId);
   });
   try {

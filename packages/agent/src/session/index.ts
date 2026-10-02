@@ -11,4 +11,4 @@ export { createSessionRequests, decideRequestTransition, requestBindingDigest } 
 export { receivedMessageAction } from "./commit";
 export { SessionEntity, SessionEntityContext, SessionEntityLive, createSessionEntityRunTurn, type SessionKernel } from "./entity";
 export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads } from "./alarm";
-export { createObservationBus, scopeObservation } from "./bus";
+export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";

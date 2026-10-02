@@ -4,6 +4,8 @@
 
 2026-10-02, #1246: the former policy, ledger, and llm packages fold in here. The policy gate lives in `src/kernel/gate/{compile,match}.ts`; the durable store plane in `src/store/` (`catalog.ts`, `session-file.ts`, `decision.ts`, `fence.ts`, `json.ts`, `atomic-file.ts`, with SQLite adapters under `store/storage/`); the LLM plane in `src/model/` (provider, processor, retry, token, auth, message, model subtrees). The channel-facing stores (actor, blacklist, channel-grant, reply-grant, egress, provisioning/vault) moved to `packages/channels/src/store/`. Everything external imports through the one root barrel `src/index.ts`; there is no second barrel and no re-export file at any old package path. `LedgerFailure`/`LlmFailure` are gone — `AgentFailure` is the single untyped-cause carrier.
 
+2026-10-02, #1249: `src/session/bus.ts` is an Effect PubSub bus. `makeObservationBus` acquires one unbounded `PubSub` in the caller's Scope; publish is synchronous, nonblocking and lossy (`PubSub.publishUnsafe`); subscribers are Streams (`observations`, `stream(event, match)`) or callback drains forked on a bus-scoped `FiberSet`, both ending when their Scope closes. `observationBusLayer` provides the kernel `ObservationSink`. A throwing callback subscriber logs a typed `ObservationSubscriberFailure` on its own fiber and keeps its subscription; `scopeObservation`/`observeDrained` and the #1244 scoped-sink failure-as-data contract are unchanged. There is no bus singleton, no isolation store, and no runner site here.
+
 2026-09-28, W5.2 #1197: `cluster/session-entity.ts` is the one
 `effect/cluster` `SingleRunner` handler per `sessionId`. Activation rotates the
 fence, opens the per-session store, drains mailbox FIFO through

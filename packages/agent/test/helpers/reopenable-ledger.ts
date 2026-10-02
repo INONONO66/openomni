@@ -50,6 +50,7 @@ export function reopenableLedger(
     close: () => {
       current.sessionStore.close();
       current.catalog.close();
+      bus.close();
       rmSync(directory, { recursive: true, force: true });
     },
   };

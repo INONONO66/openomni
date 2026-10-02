@@ -9,7 +9,7 @@ import {
   messageMaterialization,
 } from "../src/composition/message-session";
 import { outboundMessage } from "../src/composition/terminal-message";
-import { runnerTestLayer } from "../../../packages/agent/test/helpers/service-layers";
+import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
 import { runEffect } from "./helpers/effect";
 import { testPlane } from "./helpers/ledger";
 import { testIds } from "./helpers/test-entropy";

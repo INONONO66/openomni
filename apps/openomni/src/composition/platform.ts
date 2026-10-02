@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Clock, Effect, Layer } from "effect";
-import { type Kernel, Session } from "@openomni/agent";
+import type { Kernel } from "@openomni/agent";
 type EntropySource = Kernel.EntropySource;
-const createObservationBus = Session.createObservationBus;
 
 /**
  * The composition root's only ambient entropy (#1245): node's CSPRNG for ids,
@@ -28,16 +27,6 @@ export function platformEntropy(): EntropySource {
 export const captureNow: Effect.Effect<() => number> = Clock.clockWith((clock) =>
   Effect.succeed(() => clock.currentTimeMillisUnsafe()),
 );
-
-/**
- * The process default observation bus (replaces the deleted agent `Bus`
- * singleton): the supplied entropy mints event ids and the injected `now`
- * stamps their times. Compositions that need isolation pass their own bus
- * through `AppRuntimeOptions.observations`.
- */
-export function platformBus(entropy: EntropySource, now: () => number): ReturnType<typeof createObservationBus> {
-  return createObservationBus({ id: entropy.id, now });
-}
 
 /**
  * An Effect Clock whose wall-time reads come from the injected `now` while

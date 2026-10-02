@@ -1,4 +1,4 @@
-import { testBus } from "./helpers/bus";
+import { testBus, type TestObservationBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/store/fence";
 import type { LedgerError } from "../src/store/errors";
@@ -10,7 +10,6 @@ import { NamedPolicyRegistry } from "../src/kernel/bundle";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/kernel/failure";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/kernel/gate/decide";
 import type { ExecutionResult } from "../src/kernel/gate/decide";
-import type { createObservationBus } from "../src/session/bus";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/session/run";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/kernel/ports";
 import { createTurnDispatcher, sessionTool } from "../src/kernel/tool";
@@ -41,7 +40,7 @@ function tool(name: string, execute: (input: PlainValue, context: ToolExecutionC
     visibility: { model: ["resident"], cell: ["resident"] }, execute,
     render: (_input: PlainValue, output: PlainValue) => String(output) };
 }
-function bundle(generation: number, definitions: readonly AnyToolDefinition[], bus: ReturnType<typeof createObservationBus>): GenerationBundle {
+function bundle(generation: number, definitions: readonly AnyToolDefinition[], bus: TestObservationBus): GenerationBundle {
   const snapshot = SessionHandleStore.generationSnapshot({ generation, revertTo: generation - 1,
     tools: definitions.map((definition: AnyToolDefinition) => sessionTool(definition)),
     system: { preset: "bridge", blocks: [] }, policyGeneration: 1 });

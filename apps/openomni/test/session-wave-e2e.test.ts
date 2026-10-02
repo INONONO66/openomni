@@ -990,7 +990,10 @@ test("an interrupt after wave results drains before another provider step", asyn
   await response;
   expect(received).toHaveLength(1);
   expect(toolResults(activeRow().id)).toMatchObject([{ callId: "call-A", terminal: "executed" }]);
+  // PubSub drains run before the kernel reaches its after_tools boundary
+  // check (#1249 removed the manual bus's microtask hop), so the interrupt is
+  // durable by then and drains there — still before another provider step.
   expect(interruptDeliveries(plane(), activeRow().id)).toMatchObject([
-    { inboxId: "after-wave-interrupt", boundary: "before_llm" },
+    { inboxId: "after-wave-interrupt", boundary: "after_tools" },
   ]);
 });

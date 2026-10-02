@@ -1,29 +1,44 @@
 import type { BusEvent } from "@openomni/protocol";
-import { AsyncLocalStorage } from "node:async_hooks";
+import { Effect, FiberSet, PubSub, Scope, Stream } from "effect";
+import { runEffect } from "./effect";
 
 type Datum = object | string | number | boolean | bigint | symbol | null | undefined;
 type Watcher = (event: { readonly name: string }, data: Datum) => void;
-type State = { readonly watchers: Set<Watcher> };
+interface Published {
+  readonly name: string;
+  readonly data: Datum;
+}
 
-const root: State = { watchers: new Set() };
-const scope = new AsyncLocalStorage<State>();
-const state = () => scope.getStore() ?? root;
+/** Fixture plumbing outlives any one test; this process-lifetime Scope owns it. */
+const fixture = runEffect(
+  Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const pubsub = yield* PubSub.unbounded<Published>();
+    const taps = yield* FiberSet.make<void, never>().pipe(Scope.provide(scope));
+    const fork = yield* FiberSet.runtime(taps)<never>().pipe(Scope.provide(scope));
+    return { pubsub, taps, fork };
+  }),
+  "sync",
+);
 
+/**
+ * The channels-suite observation fixture (#1249): a PubSub-backed publish
+ * port with Stream-drained watchers. `reset()` interrupts every watcher so
+ * scenarios isolate without any ambient storage.
+ */
 export const Bus = {
   publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-    for (const watcher of [...state().watchers]) {
-      queueMicrotask(() => watcher(event, data as Datum));
-    }
+    PubSub.publishUnsafe(fixture.pubsub, { name: event.name, data: data as Datum });
   },
   observe(watcher: Watcher): () => void {
-    const captured = state();
-    captured.watchers.add(watcher);
-    return () => captured.watchers.delete(watcher);
+    const fiber = fixture.fork(
+      Effect.scoped(Effect.flatMap(PubSub.subscribe(fixture.pubsub), (subscription) =>
+        Stream.runForEach(Stream.fromSubscription(subscription), (published) =>
+          Effect.sync(() => watcher({ name: published.name }, published.data))))),
+    );
+    return () => fiber.interruptUnsafe();
   },
   reset(): void {
-    state().watchers.clear();
-  },
-  withIsolation<T>(operation: () => T): T {
-    return scope.run({ watchers: new Set() }, operation);
+    for (const fiber of fixture.taps) fiber.interruptUnsafe();
   },
 };

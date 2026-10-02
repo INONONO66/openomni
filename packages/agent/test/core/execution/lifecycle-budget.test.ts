@@ -125,9 +125,9 @@ describe("run budget terminal facts", () => {
   it("reports wall-time exhaustion through only the injected sink", async () => {
     const events = collector();
     const busEvents: string[] = [];
-    const unsubscribe = Bus.observe((event: Parameters<Parameters<typeof Bus.observe>[0]>[0]) =>
-      busEvents.push(event.name),
-    );
+    const unsubscribe = Bus.observe((observation) => {
+      busEvents.push(observation.name);
+    });
     const provider = countingStopLlm();
     try {
       const result = await isolated(
