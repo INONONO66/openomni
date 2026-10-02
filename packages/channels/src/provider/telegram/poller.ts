@@ -1,8 +1,9 @@
+import { Deferred, Effect, Exit } from "effect";
 import { newTraceId } from "../../support/trace";
 import { Operational } from "@openomni/protocol";
-import { calculateBackoff } from "../../support/reconnect-backoff";
-import { sleep } from "../../support/fetch-retry";
-import type { PublishPort } from "../../types";
+import { reconnectSchedule } from "../../support/schedule";
+import { ThrownError } from "../../support/thrown";
+import type { EffectRunner, PublishPort } from "../../types";
 import type { TelegramClient } from "./client";
 import type { TelegramMessage } from "./types";
 
@@ -10,10 +11,18 @@ interface PollerCallbacks {
   onMessage: (message: TelegramMessage) => void | Promise<void>;
 }
 
+/**
+ * Telegram long-poll loop on Effect (#1248): `Effect.forever` drives the
+ * cycles, poll errors retry under the shared jittered schedule (exponential
+ * from 1s, 60s cap) with a fresh schedule after every successful cycle, and
+ * every delay runs on the injected clock. `stop()` settles the halt Deferred
+ * — interrupting a sleeping loop through `Effect.raceFirst` — and aborts the
+ * in-flight request; a response that outlives its abort is dropped by the
+ * cycle's own AbortController custody, never checkpointed.
+ */
 export class TelegramPoller {
   private offset = 0;
-  private running = false;
-  private generation = 0;
+  private halt: Deferred.Deferred<void> | null = null;
   private pollController: AbortController | null = null;
 
   constructor(
@@ -23,63 +32,71 @@ export class TelegramPoller {
     private readonly options: {
       readonly now: () => number;
       readonly id: () => string;
-      readonly random: () => number;
+      readonly run: EffectRunner;
     },
-    private readonly delay: (ms: number) => Promise<void> = sleep,
+    /** Poll-error retry policy — the shared jittered schedule unless a test injects a faster one. */
+    private readonly schedule: typeof reconnectSchedule = reconnectSchedule,
   ) {}
 
   start(): Promise<void> {
     this.stop();
-    this.running = true;
-    return this.poll(this.generation);
-  }
-
-  stop(): void {
-    this.running = false;
-    this.generation++;
-    this.pollController?.abort();
-  }
-
-  async pollOnce(pollTraceId: string): Promise<void> {
-    const generation = this.generation;
-    const controller = new AbortController();
-    this.pollController = controller;
-    const updates = await this.client.getUpdates(this.offset, pollTraceId, controller.signal);
-
-    // Telegram returns updates in update_id order. Process the batch in that
-    // order and stop at the first failed handoff, leaving it and every later
-    // update eligible for the next request. Updates without a text message do
-    // not require a handoff and are checkpointed at their position in the batch.
-    for (const update of updates) {
-      if (generation !== this.generation || controller.signal.aborted) return;
-      if (update.message?.text) {
-        await this.callbacks.onMessage(update.message);
-      }
-      if (generation !== this.generation) return;
-      this.offset = update.update_id + 1;
-    }
-  }
-
-  private async poll(generation: number): Promise<void> {
-    let attempt = 0;
-    while (this.running && generation === this.generation) {
+    const halt = Deferred.makeUnsafe<void>();
+    this.halt = halt;
+    const cycle = Effect.suspend(() => {
       // Origin: one long-poll cycle is one logical request — its getUpdates
       // call (retries included) and any poll-error warn share this ONE id.
       const pollTraceId = newTraceId(this.options.id);
-      try {
-        await this.pollOnce(pollTraceId);
-        attempt = 0;
-      } catch (err) {
-        if (!this.running || generation !== this.generation) break;
-        this.publish(Operational.Events.Warn, {
-          traceId: pollTraceId,
-          time: this.options.now(),
-          component: "server",
-          msg: "telegram poll error",
-          context: { err: String(err) },
-        });
-        await this.delay(calculateBackoff(++attempt, this.options.random));
+      return Effect.tryPromise({
+        try: (signal) => this.pollOnce(pollTraceId, signal),
+        catch: (cause) => {
+          const error = ThrownError.parse(cause);
+          this.publish(Operational.Events.Warn, {
+            traceId: pollTraceId,
+            time: this.options.now(),
+            component: "server",
+            msg: "telegram poll error",
+            context: { err: String(error) },
+          });
+          return error;
+        },
+      });
+    });
+    const loop = cycle.pipe(Effect.retry({ schedule: this.schedule }), Effect.forever);
+    return this.options.run(Effect.raceFirst(loop, Deferred.await(halt)));
+  }
+
+  stop(): void {
+    if (this.halt !== null) {
+      Deferred.doneUnsafe(this.halt, Exit.void);
+      this.halt = null;
+    }
+    this.pollController?.abort();
+  }
+
+  async pollOnce(pollTraceId: string, signal?: AbortSignal): Promise<void> {
+    const controller = new AbortController();
+    this.pollController = controller;
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const updates = await this.client.getUpdates(this.offset, pollTraceId, controller.signal);
+
+      // Telegram returns updates in update_id order. Process the batch in that
+      // order and stop at the first failed handoff, leaving it and every later
+      // update eligible for the next request. Updates without a text message do
+      // not require a handoff and are checkpointed at their position in the batch.
+      // The controller, not a generation counter, owns custody: a response that
+      // arrives after stop()/interruption finds its own signal aborted.
+      for (const update of updates) {
+        if (controller.signal.aborted) return;
+        if (update.message?.text) {
+          await this.callbacks.onMessage(update.message);
+        }
+        if (controller.signal.aborted) return;
+        this.offset = update.update_id + 1;
       }
+    } finally {
+      signal?.removeEventListener("abort", abort);
     }
   }
 }

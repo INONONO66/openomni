@@ -1,16 +1,11 @@
 import { Clock, Data, Effect, Result } from "effect";
 import { RateLimited } from "../errors";
 import { Operational, parseJson } from "@openomni/protocol";
-import { z } from "zod";
+import type { z } from "zod";
+import { ThrownError } from "./thrown";
 import type { EffectRunner, PublishPort } from "../types";
 
 const MAX_API_RETRIES = 3;
-
-/** The thrown value as an Error: preserved when it already is one, wrapped otherwise. */
-const ThrownError = z.union([
-  z.instanceof(Error),
-  z.coerce.string().transform((text) => new Error(text)),
-]);
 
 /**
  * One failed step of the retry program. `limited` steps (429 with retries
@@ -95,9 +90,4 @@ export function fetchWithRetry(
     if (Result.isFailure(outcome)) throw outcome.failure.error;
     return outcome.success;
   });
-}
-
-/** Timer Promise for the legacy socket/poller paths; deleted with their Effect rewrite (#1248). */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

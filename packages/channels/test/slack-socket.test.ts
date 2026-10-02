@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { Schedule } from "effect";
 import { injectedOptions } from "./helpers/injected";
 import type { ServerWebSocket } from "bun";
 import { Operational } from "@openomni/protocol";
@@ -94,7 +95,8 @@ function collectPublishes() {
   return { logs, publish };
 }
 
-const immediateDelay = () => Promise.resolve();
+/** Zero-delay reconnect policy: the schedule seam the shell retries on. */
+const immediateSchedule = Schedule.exponential(0);
 
 function messageEnvelope(envelopeId: string, ts: string): SocketEnvelope {
   return {
@@ -137,7 +139,7 @@ describe("SlackSocket", () => {
       { onEvent: (envelope) => events.emit(envelope) },
       options?.publish ?? noopPublish,
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
     cleanups.push(() => {
       socket.stop();
@@ -220,7 +222,7 @@ describe("SlackSocket", () => {
       },
       publish,
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
     cleanups.push(() => {
       socket.stop();
@@ -242,7 +244,6 @@ describe("SlackSocket", () => {
   });
 
   it("stop() closes cleanly and never reconnects", async () => {
-    let delayCalls = 0;
     const fake = startFakeSlack();
     let fetches = 0;
     const socket = new SlackSocket(
@@ -253,10 +254,7 @@ describe("SlackSocket", () => {
       { onEvent: () => undefined },
       noopPublish,
       injectedOptions(),
-      () => {
-        delayCalls += 1;
-        return Promise.resolve();
-      },
+      immediateSchedule,
     );
     cleanups.push(() => fake.stop());
 
@@ -266,10 +264,9 @@ describe("SlackSocket", () => {
 
     socket.stop();
     expect(await fake.closes.next()).toBe(1000);
-    // The close handler runs before this microtask flush; a reconnect would
-    // have entered the backoff delay first.
+    // The close handler runs before this microtask flush; a reconnect (even
+    // under the zero-delay schedule) would have fetched a fresh URL first.
     await Promise.resolve();
-    expect(delayCalls).toBe(0);
     expect(fetches).toBe(1);
   });
 
@@ -298,7 +295,7 @@ describe("SlackSocket", () => {
       { onEvent: () => undefined },
       noopPublish,
       injectedOptions(),
-      immediateDelay,
+      immediateSchedule,
     );
     cleanups.push(() => {
       socket.stop();

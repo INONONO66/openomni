@@ -1,9 +1,11 @@
+import { Deferred, Effect, Exit, Result } from "effect";
 import { Operational } from "@openomni/protocol";
-import type { PublishPort } from "../types";
-import { calculateBackoff } from "./reconnect-backoff";
+import type { EffectRunner, PublishPort } from "../types";
+import { RECONNECT_ATTEMPT_BOUND, reconnectSchedule } from "./schedule";
+import { ThrownError } from "./thrown";
 import { newTraceId } from "./trace";
 
-/** Settle-once view of the open promise a surface wires its listeners against. */
+/** Settle-once view of the open Deferred a surface wires its listeners against. */
 export interface SocketSettle {
   readonly resolveOnce: () => void;
   readonly rejectOnce: (err: Error) => void;
@@ -13,11 +15,11 @@ export interface SocketSettle {
 
 /** The per-surface log lines the shell speaks with — pinned by the surface tests. */
 interface SocketShellMessages {
-  /** URL fetch rejected during a reconnect; retrying under backoff. */
+  /** A reconnect attempt failed (URL fetch or socket open); retrying under the schedule. */
   readonly urlFetchFailed: string;
-  /** Connection closed; a reconnect is scheduled. */
+  /** Connection closed; a reconnect streak starts. */
   readonly closed: string;
-  /** The reconnect chain itself rejected terminally. */
+  /** The reconnect streak exhausted its bound — the shell is dead. */
   readonly reconnectFailed: string;
   /** The transport reported a socket-level error. */
   readonly socketError: string;
@@ -25,193 +27,203 @@ interface SocketShellMessages {
 
 /**
  * Shared reconnect shell for the two socket surfaces (discord gateway, slack
- * Socket Mode). Owns the backoff attempt counter and the three moves both
- * protocols share: retrying the connect-URL fetch through transient outages
- * (#540 — a single rejection used to terminate the reconnect chain and leave
- * the bot silently offline until a process restart), scheduling the
- * close→backoff→reconnect chain under ONE trace id (D11: the close notice,
- * every url-fetch retry, and a terminal reconnect failure read back as a
- * single causal sequence), and reporting socket-level errors. Protocol
- * judgment (resume vs fresh URL, fatal close codes, ack duties, heartbeats)
- * stays in each surface.
+ * Socket Mode), rebuilt on Effect (#1248). One close starts ONE bounded
+ * reconnect streak: `Effect.retry` under the shared jittered schedule
+ * (exponential from 1s, 60s cap), at most `RECONNECT_ATTEMPT_BOUND` attempts,
+ * every delay on the injected clock. A ready connection completes the streak,
+ * so the next close starts a fresh schedule — no attempt counter to reset.
+ * `stop()` settles the halt Deferred, which interrupts a sleeping streak
+ * through `Effect.raceFirst` — no generation counters. An exhausted streak marks
+ * the shell dead: `sendJson` drops frames and no further attempt is scheduled;
+ * driver death is a published Error, never a silent retry loop (#540 stays
+ * covered: URL-fetch rejections are just failed attempts under the schedule).
+ * Protocol judgment (resume vs fresh URL, fatal close codes, ack duties,
+ * heartbeats) stays in each surface.
  */
 export class SocketReconnectShell {
-  private attempt = 0;
   private ws: WebSocket | null = null;
-  private active = false;
-  private generation = 0;
-  private cancelOpen: (() => void) | undefined;
+  private state: "idle" | "running" | "dead" = "idle";
+  private halt: Deferred.Deferred<void> | null = null;
+  private streakActive = false;
+  /** Settles the pending open when a newer socket replaces it. */
+  private settleOpen: (() => void) | null = null;
 
   constructor(
     private readonly publish: PublishPort,
     private readonly messages: SocketShellMessages,
-    private readonly delay: (ms: number) => Promise<void>,
     /** The surface's socket opener (its own listeners wired via openWebSocket). */
     private readonly open: (url: string) => Promise<void>,
-    /** Injected clock, UUID source, and jitter source — never ambient. */
+    /** Injected clock, UUID source, and Effect runner — never ambient. */
     private readonly options: {
       readonly now: () => number;
       readonly id: () => string;
-      readonly random: () => number;
+      readonly run: EffectRunner;
     },
+    /** Reconnect policy — the shared jittered schedule unless a test injects a faster one. */
+    private readonly schedule: typeof reconnectSchedule = reconnectSchedule,
   ) {}
 
-  /** The intent flag: true from begin() until end()/stop(); every retry loop is bounded by it. */
+  /** The intent flag: true from begin() until end()/stop() or streak exhaustion. */
   get running(): boolean {
-    return this.active;
+    return this.state === "running";
   }
 
   begin(): void {
     this.stop();
-    this.active = true;
+    this.state = "running";
+    this.halt = Deferred.makeUnsafe<void>();
   }
 
-  /** Mark stopped and retire every callback and pending reconnect. */
+  /** Terminal stop: the shell is dead — sendJson drops, nothing reconnects. */
   end(): void {
-    this.stop();
+    this.shutdown("dead");
   }
 
-  /** Intentional stop: invalidate before close, whose callback may be synchronous. */
+  /** Intentional stop: settle the halt (interrupting any streak), then close. */
   stop(): void {
-    this.active = false;
-    this.generation++;
+    this.shutdown("idle");
+  }
+
+  private shutdown(next: "idle" | "dead"): void {
+    this.state = next;
+    if (this.halt !== null) {
+      Deferred.doneUnsafe(this.halt, Exit.void);
+      this.halt = null;
+    }
     const ws = this.ws;
     this.ws = null;
-    this.cancelOpen?.();
-    this.cancelOpen = undefined;
     ws?.close(1000);
   }
 
-  /** Initial URL lookup has the same retirement boundary as reconnect. */
+  /** Initial connect: ONE url fetch and open — boot retry policy belongs to the caller. */
   async connect(fetchUrl: () => Promise<string>): Promise<void> {
-    const generation = this.generation;
+    if (this.state !== "running") return;
     const url = await fetchUrl();
-    if (this.active && generation === this.generation) await this.open(url);
-  }
-
-  /** The connection reached its ready state — backoff starts over. */
-  reset(): void {
-    this.attempt = 0;
+    if (this.state === "running") await this.open(url);
   }
 
   /**
-   * Fetch a connect URL, retrying under the shared backoff schedule while
-   * `isRunning()` holds. Returns undefined when stopped mid-retry so the
-   * caller ends cleanly — no socket, no schedule. Retries inherit the
-   * caller's trace: every retry of ONE reconnect is one causal chain.
+   * One bounded reconnect streak for one close. The close itself is the
+   * streak's first failure, so the first attempt already waits one schedule
+   * step. Every attempt (URL fetch or socket open) that rejects is published
+   * on the streak's ONE trace id (D11) and retried; `stop()` interrupts the
+   * streak mid-sleep via the halt race; exhaustion kills the shell loudly.
+   * Re-entrant calls (the failed attempt's own close event) are no-ops —
+   * the running streak already owns the retry.
    */
-  async fetchUrlUnderBackoff(
-    fetchUrl: () => Promise<string>,
-    traceId: string,
-  ): Promise<string | undefined> {
-    const generation = this.generation;
-    let url: string | undefined;
-    while (url === undefined && this.active && generation === this.generation) {
-      try {
-        url = await fetchUrl();
-      } catch (err) {
-        if (!this.active || generation !== this.generation) return undefined;
-        this.attempt++;
-        const backoffMs = calculateBackoff(this.attempt, this.options.random);
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: this.options.now(),
-          component: "server",
-          msg: this.messages.urlFetchFailed,
-          context: { err: String(err), backoffMs: Math.round(backoffMs) },
-        });
-        await this.delay(backoffMs);
-      }
-    }
-    return this.active && generation === this.generation ? url : undefined;
-  }
-
-  /** Fetch-under-backoff, then open: the shared tail of both surfaces' reconnect. */
-  async reconnectVia(fetchUrl: () => Promise<string>, traceId: string): Promise<void> {
-    const generation = this.generation;
-    const url = await this.fetchUrlUnderBackoff(fetchUrl, traceId);
-    if (url === undefined || !this.active || generation !== this.generation) return;
-    await this.open(url);
-  }
-
-  /** Backoff, then hand ONE trace id to the surface's reconnect; its terminal rejection is recorded, never thrown. */
   async scheduleReconnect(
     closeCode: number,
     reconnect: (traceId: string) => Promise<void>,
   ): Promise<void> {
-    const generation = this.generation;
-    this.attempt++;
-    const backoffMs = calculateBackoff(this.attempt, this.options.random);
+    const halt = this.halt;
+    if (this.state !== "running" || this.streakActive || halt === null) return;
+    this.streakActive = true;
     const traceId = newTraceId(this.options.id);
     this.publish(Operational.Events.Warn, {
       traceId,
       time: this.options.now(),
       component: "server",
       msg: this.messages.closed,
-      context: { code: closeCode, backoffMs: Math.round(backoffMs) },
+      context: { code: closeCode },
     });
-    await this.delay(backoffMs);
-    if (this.active && generation === this.generation) {
-      try {
-        await reconnect(traceId);
-      } catch (error) {
-        if (!this.active || generation !== this.generation) return;
-        this.publish(Operational.Events.Error, {
-          traceId,
-          time: this.options.now(),
-          component: "server",
-          msg: this.messages.reconnectFailed,
-          context: { err: String(error) },
-        });
+    let closed: Error | null = new Error(`socket closed (${closeCode})`);
+    const attempt = Effect.suspend(() => {
+      const first = closed;
+      if (first !== null) {
+        closed = null;
+        return Effect.fail(first);
       }
+      return Effect.tryPromise({
+        try: () => reconnect(traceId),
+        catch: (cause) => {
+          const error = ThrownError.parse(cause);
+          this.publish(Operational.Events.Error, {
+            traceId,
+            time: this.options.now(),
+            component: "server",
+            msg: this.messages.urlFetchFailed,
+            context: { err: String(error) },
+          });
+          return error;
+        },
+      });
+    });
+    const streak = attempt.pipe(
+      Effect.retry({
+        schedule: this.schedule,
+        times: RECONNECT_ATTEMPT_BOUND,
+        while: () => this.state === "running",
+      }),
+    );
+    const outcome = await this.options.run(
+      Effect.result(Effect.raceFirst(streak, Deferred.await(halt))),
+    );
+    this.streakActive = false;
+    if (Result.isFailure(outcome) && this.state === "running") {
+      this.publish(Operational.Events.Error, {
+        traceId,
+        time: this.options.now(),
+        component: "server",
+        msg: this.messages.reconnectFailed,
+        context: { err: String(outcome.failure), attempts: RECONNECT_ATTEMPT_BOUND },
+      });
+      this.shutdown("dead");
     }
   }
 
   /**
-   * Promise-adapted WebSocket open, shared by both sockets: the surface
+   * Deferred-adapted WebSocket open, shared by both sockets: the surface
    * wires its message/close listeners; the settle-once guard and the error
-   * listener live here. The promise resolves/rejects at most once — late
-   * closes after ready re-enter through the surface's reconnect handling.
+   * listener live here. The returned promise settles at most once — late
+   * closes after ready re-enter through the surface's reconnect handling —
+   * and a halt (stop/end) releases it without a socket.
    */
   openWebSocket(url: string, wire: (ws: WebSocket, settle: SocketSettle) => void): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const previous = this.ws;
-      this.ws = null;
-      this.cancelOpen?.();
-      previous?.close(1000);
-      this.generation++;
-      const ws = new WebSocket(url);
-      this.ws = ws;
-      let resolved = false;
-      const resolveOnce = () => {
+    const halt = this.halt;
+    if (this.state !== "running" || halt === null) return Promise.resolve();
+    const previous = this.ws;
+    this.ws = null;
+    this.settleOpen?.();
+    previous?.close(1000);
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    const ready = Deferred.makeUnsafe<void, Error>();
+    let resolved = false;
+    const resolveOnce = () => {
+      if (!resolved) {
+        resolved = true;
+        Deferred.doneUnsafe(ready, Exit.void);
+      }
+    };
+    this.settleOpen = resolveOnce;
+    const current = () => this.state === "running" && this.ws === ws;
+    wire(ws, {
+      resolveOnce,
+      rejectOnce: (err) => {
         if (!resolved) {
           resolved = true;
-          resolve();
+          Deferred.doneUnsafe(ready, Exit.fail(err));
         }
-      };
-      this.cancelOpen = resolveOnce;
-      const current = () => this.active && this.ws === ws;
-      wire(ws, {
-        resolveOnce,
-        rejectOnce: (err) => {
-          if (!resolved) {
-            resolved = true;
-            reject(err);
-          }
-        },
-        settled: () => resolved,
-        current,
-      });
-      const onError = this.socketErrorListener();
-      ws.addEventListener("error", (event) => {
-        if (current()) onError(event);
-      });
+      },
+      settled: () => resolved,
+      current,
     });
+    const onError = this.socketErrorListener();
+    ws.addEventListener("error", (event) => {
+      if (current()) onError(event);
+    });
+    return this.options
+      .run(Effect.result(Effect.raceFirst(Deferred.await(ready), Deferred.await(halt))))
+      .then((outcome) => {
+        if (Result.isFailure(outcome)) throw outcome.failure;
+      });
   }
 
-  /** Send one JSON frame when the current socket is open; a closed socket drops it (the protocol re-syncs on reconnect). */
+  /** Send one JSON frame when the current socket is open; a closed socket or a dead shell drops it. */
   sendJson(payload: object): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(payload));
+    if (this.state === "running" && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
+    }
   }
 
   /** Close the current socket with the given code; keeps custody so a reconnect can replace it. */

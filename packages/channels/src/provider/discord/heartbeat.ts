@@ -11,7 +11,7 @@ function intervalWithinBounds(intervalMs: number): number {
  * interval on the injected clock, a missed ACK closes the socket and ends the
  * loop; an ACKed interval sends the next beat. The gateway forwards every ACK
  * and stops the watchdog with its socket; `stop` settles the halt Deferred,
- * which interrupts the sleeping loop through `Effect.race` — no timer handles.
+ * which interrupts the sleeping loop through `Effect.raceFirst` — no timer handles.
  */
 export class GatewayHeartbeat {
   private halt: Deferred.Deferred<void> | null = null;
@@ -38,7 +38,7 @@ export class GatewayHeartbeat {
       return Effect.void;
     });
     const loop = beat.pipe(Effect.delay(intervalWithinBounds(intervalMs)), Effect.forever);
-    void this.run(Effect.race(loop, Deferred.await(halt)));
+    void this.run(Effect.raceFirst(loop, Deferred.await(halt)));
   }
 
   acknowledge(): void {
