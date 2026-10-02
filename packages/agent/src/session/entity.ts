@@ -439,7 +439,7 @@ export function createSessionEntityRunTurn(
     const state: SessionControllerState = {
       active: undefined, controller: undefined, fence: authority.fence,
       closed: false, terminalFrozen: false, released: false, successor: undefined,
-      retainedRunner: undefined, retainedFailure: undefined,
+      retainedRunner: undefined,
       rawSlots: createRawSlots(), activeApprovals: undefined,
     };
     const { runTurn, seal } = createSessionTurn(kernel, authority.sessionId, runner, runtime, state, authority.owner, runtime.clock, runtime.entropy, scope, {

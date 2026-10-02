@@ -329,7 +329,6 @@ export interface SessionControllerState {
   released: boolean;
   successor: SessionHandle | undefined;
   retainedRunner: Fiber.Fiber<void, SessionError> | undefined;
-  retainedFailure: SessionError | undefined;
   rawSlots: ReturnType<typeof createRawSlots>;
   activeApprovals: ExecutionApprovals | undefined;
 }
@@ -909,7 +908,6 @@ export function createSessionTurn(
       }
       if (retained) {
         state.retainedRunner = yield* Effect.forkIn(state.rawSlots.awaitSettled.pipe(
-          Effect.tapError((error) => Effect.sync(() => { state.retainedFailure = error; })),
           Effect.onExit(() => Effect.gen(function* () {
             state.retainedRunner = undefined;
             yield* ports.hibernate(kernel.row(sessionId)).pipe(Effect.orDie);

@@ -575,3 +575,29 @@ test("#1247 ratchet: growth over the pinned baseline fails, within-baseline pass
   });
   expect(await validateAgentBands(pinned)).toEqual([]);
 });
+
+test("#1247 bands: external bans catch exact and prefixed specifiers, legal externals pass", () => {
+  const exact = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { generateText } from "ai";',
+  );
+  expect(exact).toHaveLength(1);
+  expect(exact[0]).toContain("kernel/ may not depend on ai");
+
+  const prefixed = agentBandViolations(
+    "packages/agent/src/kernel/planted.ts",
+    'import { anthropic } from "@ai-sdk/anthropic";',
+  );
+  expect(prefixed).toHaveLength(1);
+  expect(prefixed[0]).toContain("kernel/ may not depend on @ai-sdk/");
+
+  // A sub-path of an exact ban is banned too; an unrelated external is legal.
+  const subPath = agentBandViolations(
+    "packages/agent/src/session/planted.ts",
+    'import { Database } from "bun:sqlite/thing";',
+  );
+  expect(subPath).toHaveLength(1);
+  expect(
+    agentBandViolations("packages/agent/src/kernel/planted.ts", 'import { Effect } from "effect";'),
+  ).toEqual([]);
+});

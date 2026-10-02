@@ -38,7 +38,7 @@ export function createController(
     const state: SessionControllerState = {
       active: undefined, controller: undefined, fence,
       closed: false, terminalFrozen: false, released: false, successor: undefined,
-      retainedRunner: undefined, retainedFailure: undefined,
+      retainedRunner: undefined,
       rawSlots: createRawSlots(), activeApprovals: undefined,
     };
     const { configure } = createSessionConfiguration(kernel, sessionId, runtime, state, owner, clock, entropy, { hibernate });
@@ -238,14 +238,9 @@ export function createController(
     }
 
     function awaitRetainedRunner(): Effect.Effect<void, SessionError> {
-      return Effect.gen(function* () {
-        if (state.retainedRunner !== undefined) yield* Fiber.join(state.retainedRunner);
-        if (state.retainedFailure !== undefined) {
-          const failure = state.retainedFailure;
-          state.retainedFailure = undefined;
-          return yield* Effect.fail(failure);
-        }
-      });
+      return Effect.suspend(() =>
+        state.retainedRunner === undefined ? Effect.void : Fiber.join(state.retainedRunner),
+      );
     }
 
     function hibernate(_current: LedgerSession.Row): Effect.Effect<void, SessionError> {
