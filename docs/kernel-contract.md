@@ -91,9 +91,9 @@ LLM work consumes `Llm` (`packages/agent/src/kernel/turn.ts`); app
 write consumers receive ledger handles explicitly from the composition plane
 (`apps/openomni/src/composition/cluster-runtime.ts`).
 
-Resource-owning Layers use scoped acquisition and release: `Layer.scoped` with
-`Effect.acquireRelease` for the generation observation bus and bundle-owned
-subscriptions/files. The composition root's `createAppLedger`
+Resource-owning Layers use scoped acquisition and release: the generation
+observation bus is an `Effect.acquireRelease`-scoped PubSub built inside its
+generation Layer (#1249), as are bundle-owned subscriptions/files. The composition root's `createAppLedger`
 (`apps/openomni/src/composition/cluster-runtime.ts`) owns the real storage
 open/close. Pure Clock/Entropy values, immutable session
 snapshots and definition-only catalogs may use `Layer.succeed`; a synthetic

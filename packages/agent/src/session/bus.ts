@@ -24,7 +24,7 @@ export const ObservationDeliveryFailed = BusEvent.define(
 type FailureReporter = (error: Error, eventName: string) => void;
 
 /** The payload plane of one observation: anything a descriptor schema can carry. */
-export type ObservationData = bigint | boolean | null | number | object | string | symbol | undefined;
+type ObservationData = bigint | boolean | null | number | object | string | symbol | undefined;
 
 /** One delivered observation: the event name, its declared visibility, and the payload untouched. */
 export interface PublishedObservation {

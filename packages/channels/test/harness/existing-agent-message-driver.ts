@@ -259,7 +259,7 @@ async function executeDriver(
         resultCode: "invalid_arguments",
       }),
     };
-  const receipt = await Bus.withIsolation(() => scenario(name));
+  const receipt = await scenario(name);
   return { exitCode: receipt.ok ? 0 : 1, stdout: JSON.stringify(receipt) };
 }
 

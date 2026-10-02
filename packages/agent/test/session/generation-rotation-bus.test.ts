@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
 import { Deferred, Effect, Exit, Scope, Stream } from "effect";
 import { z } from "zod";
-import { makeObservationBus } from "../../src/session/bus";
+import { makeObservationBus, type ObservationBus } from "../../src/session/bus";
 import { runTestPromise } from "../helpers/isolated";
 
 const TestEvent = BusEvent.define(
@@ -12,7 +12,7 @@ const TestEvent = BusEvent.define(
 
 /** A generation-shaped subscriber: a Stream drain owned by that generation's Scope. */
 const generationSubscriber = (
-  bus: Effect.Effect.Success<ReturnType<typeof makeObservationBus>>,
+  bus: ObservationBus,
   generationScope: Scope.Closeable,
   seen: number[],
   signal: (value: number) => Effect.Effect<boolean>,

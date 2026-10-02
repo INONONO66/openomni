@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Clock, Effect, Layer } from "effect";
-import { type Kernel } from "@openomni/agent";
+import type { Kernel } from "@openomni/agent";
 type EntropySource = Kernel.EntropySource;
 
 /**

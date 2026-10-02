@@ -1,4 +1,4 @@
-export { testBus, testBusService, type TestObservationBus } from "./isolated";
+export { testBus, type TestObservationBus } from "./isolated";
 import { testBus } from "./isolated";
 
 let traceCounter = 0;
