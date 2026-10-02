@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790935920190,
+  "lastUpdate": 1790947660027,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76553,6 +76553,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 172828,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d34218c65c6328d17879c5703e79740919e9c6f6",
+          "message": "#1248: channel timers on Effect Schedule/Fiber/Deferred — injected runner, one reconnect policy, raceFirst streaks (#1267)\n\n* channels: fetchWithRetry on Effect retry/sleep; inject run port through driver options (#1248)\n\n* discord: heartbeat watchdog as an Effect loop on the injected clock (#1248)\n\n* channels: socket shell, slack socket, discord gateway, telegram poller on Effect retry streaks\n\nOne close starts one bounded retry streak: Effect.retry over the shared\njittered schedule, raced (raceFirst) against a halt Deferred so stop()\ninterrupts mid-backoff. Exhaustion is a typed dead shell that publishes\nreconnectFailed and drops sends. The telegram poll loop is an Effect\nfiber whose cycle custody is AbortController identity, not generation\ncounters. Deletes reconnect-backoff.ts and the legacy sleep export.\n\nEffect.race waits for the first SUCCESS in v4; a failed socket open\nraced against halt therefore hung forever. raceFirst (first completion)\nis the correct combinator everywhere a failure must propagate.\n\n* app: process reply wait on Effect.timeoutOrElse over the injected runtime clock\n\nThe 30s receipt deadline is an Effect timeout on the app runtime (TestClock\nin tests), not a wall-clock setTimeout; pending answers are Deferreds the\ntransport settles. The channel takes the run port lazily from process-entry\nbecause it exists before the runtime's paths arrive in the first frame.\n\n* channels: uncertain delivery publishes an Owner-visible unknown notice\n\nAn unknown receipt is terminal (never resent); without a notice the message\nwould vanish silently. One Warn per physical attempt - replays under the\nsame idempotency key reuse the recorded receipt without re-warning.\n\n* docs: channel timing on Effect (#1248) stamps and status entry",
+          "timestamp": "2026-10-02T13:24:52Z",
+          "tree_id": "070c31ba9a2b1fb8945b989f501e5a32f0ed2bf6",
+          "url": "https://github.com/INONONO66/openomni/commit/d34218c65c6328d17879c5703e79740919e9c6f6"
+        },
+        "date": 1790947659696,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1936,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1504,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1457678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 438852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6978486,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 156,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 741,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 171423,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 859087,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 460354,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 13064433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1440558,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 177974,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 883756,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 242435,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14675007,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 152300,
             "unit": "ns/op"
           }
         ]
