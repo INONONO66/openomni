@@ -56,15 +56,21 @@ describe("session bus PubSub delivery", () => {
       yield* Fiber.interrupt(drainA);
     }))));
 
-  it("publish is synchronous and nonblocking with an undrained subscriber", () =>
+  it("publish is synchronous and nonblocking with an undrained subscriber; the queue survives to the drain", () =>
     runTestPromise(Effect.scoped(Effect.gen(function* () {
       const bus = yield* makeObservationBus(sources());
-      // Subscription exists but nothing ever takes from it: publishes must not suspend.
-      yield* bus.observations;
+      // The subscription exists but nothing takes from it until the batch is
+      // fully published: the synchronous loop below completes only if publish
+      // never suspends, and the drain afterwards proves no queued value was
+      // dropped while unconsumed.
+      const queued = yield* bus.stream(TestEvent);
       for (let value = 0; value < 1000; value += 1) {
         bus.sink.publish(TestEvent, { sessionId: "session-slow", value });
       }
-      expect(true).toBe(true);
+      const received = yield* Stream.runCollect(queued.pipe(Stream.take(1000)));
+      expect(received.map((data) => data.value)).toEqual(
+        Array.from({ length: 1000 }, (_, value) => value),
+      );
     }))));
 
   it("match-filtered Streams see only payloads whose fields all match", () =>
