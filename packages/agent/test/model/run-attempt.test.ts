@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { run } from "./helpers/native";
-import type { StreamEvent } from "../src/processor/stream-events";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
 
 for (const visible of ["none", "text", "tool"] as const) {
   test(`one provider attempt retains ${visible} visibility and billed failure`, async () => {

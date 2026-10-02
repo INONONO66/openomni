@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
 import { Effect, Fiber } from "effect";
 import { LlmCall } from "@openomni/protocol";
-import { Processor as NativeProcessor } from "../../src/processor";
+import { Processor as NativeProcessor } from "../../../src/model/processor";
 import { anthropicModel, fixedNow, sequentialIds } from "../helpers/fixtures";
 import { runEffect } from "../helpers/native";
 
 import { apiError, sdkError } from "../helpers/retry";
 import { useProcessor, capturingSink, failingStream, statusStates } from "../helpers/processor";
-import type { StreamEvent } from "../../src/processor/stream-events";
+import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
 
 describe("Processor failures", () => {

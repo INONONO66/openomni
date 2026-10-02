@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { LedgerInvariant } from "../errors";
-import { parseStoredJson, SqliteCount, SqliteEpochMs } from "./sqlite-json-data";
+import { parseStoredJson, SqliteCount, SqliteEpochMs } from "../json";
 import { LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
 const actionRowSchema = LedgerAction.Node;

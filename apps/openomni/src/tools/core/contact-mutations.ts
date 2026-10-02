@@ -1,4 +1,4 @@
-import type { ActorRegistry } from "@openomni/agent";
+import type { ActorRegistry } from "@openomni/channels";
 import { type Actor, canonicalDigest, PlainValueSchema } from "@openomni/protocol";
 import { z } from "zod";
 

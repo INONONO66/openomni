@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { resolveAuthFilePath } from "../src/model/loader";
+import { resolveAuthFilePath } from "../../src/model/model/loader";
 
 /**
  * #1245: the model loader is the llm package's one environment owner. The

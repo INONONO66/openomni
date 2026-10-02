@@ -1,5 +1,5 @@
-import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate";
-import { compilePolicySnapshot, type CompiledPolicySnapshot } from "../../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
+import { compilePolicySnapshot, type CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
 import type { LedgerAction, PolicyRow } from "@openomni/protocol";
 
 const mandatoryPolicyRow: PolicyRow.Row = {

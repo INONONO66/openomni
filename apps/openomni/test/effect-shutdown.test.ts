@@ -1,5 +1,5 @@
 import { testToolPorts } from "./helpers/tool-ports";
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
 import { session, createTurnDispatcher, defineTool, eraseTool, sessionTool, type SessionRuntime } from "@openomni/agent";
 import { planeOf } from "./helpers/ledger";

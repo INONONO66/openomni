@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { LlmCall, Operational } from "@openomni/protocol";
-import { Retry, observeRetry } from "../../src";
+import { Retry, observeRetry } from "../../../src/model";
 import { apiError, sdkError, sources, FIXED_RETRY_NOW } from "../helpers/retry";
 import { collector } from "../helpers/observation";
 

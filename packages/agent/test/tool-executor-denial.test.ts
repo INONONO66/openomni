@@ -1,10 +1,10 @@
 import { runAgent, runAgentSync } from "./helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { catalogLayer } from "./helpers/service-layers";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "bun:test";
 import { stringQueryTool, valueTool } from "./helpers/query-tool";
-import { compilePolicySnapshot, type CompiledPolicySnapshot } from "../src/kernel/gate";
+import { compilePolicySnapshot, type CompiledPolicySnapshot } from "../src/kernel/gate/compile";
 import type { LedgerAction } from "@openomni/protocol";
 import { createDispatcher } from "../src/index";
 import { allowAllPolicy as allowAll, opPhaseOf } from "./helpers/compiled-policy";

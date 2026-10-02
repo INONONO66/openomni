@@ -1,12 +1,12 @@
 import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommitRefused } from "../src/store";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate";
+import { CommitRefused } from "../src/store/errors";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
 import { ToolBodyFailed } from "../src/errors";

@@ -1,7 +1,7 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "../src/store";
-import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "../src/kernel/gate";
+import * as SessionHandleStore from "../src/store/fence";
+import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";

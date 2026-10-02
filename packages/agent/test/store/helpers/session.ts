@@ -1,5 +1,6 @@
 import { Effect, Result } from "effect";
-import type { SessionHandleStore, LedgerError } from "../../src/index";
+import type * as SessionHandleStore from "../../../src/store/fence";
+import type { LedgerError } from "../../../src/store/errors";
 import type { LedgerSession } from "@openomni/protocol";
 import { runLedgerSync } from "./effect";
 

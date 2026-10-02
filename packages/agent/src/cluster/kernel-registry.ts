@@ -1,4 +1,4 @@
-import type { SessionHandleStore } from "../store";
+import type * as SessionHandleStore from "../store/fence";
 
 /**
  * The handle-scoped kernel as a declaration-nameable interface: the ledger

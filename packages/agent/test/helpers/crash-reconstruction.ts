@@ -1,36 +1,22 @@
 import { Database } from "bun:sqlite";
 import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
-import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
 import { NamedPolicyRegistry } from "../../src/bundle";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/session-generations";
-import { SessionHandleStore } from "../../src/store";
-import {
-  canonicalDigest,
-  FoldCheckpoint,
-  Message,
-  PlainObjectSchema,
-  PlainValueSchema,
-  type LedgerAction,
-} from "@openomni/protocol";
+import * as SessionHandleStore from "../../src/store/fence";
+import { canonicalDigest, FoldCheckpoint, Message, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
 import { z } from "zod";
-import { computeActionHash, GENESIS_PREV_HASH } from "../../../ledger/src/storage/l0-hash";
-import { ActionSqlRow } from "../../../ledger/src/storage/sqlite-l0-rows";
-import {
-  recordedCompaction,
-  restoreContextRequest,
-  restoredContextProjection,
-} from "../../src/compaction/restore";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../src/store/session-file";
+import { ActionSqlRow } from "../../src/store/storage/sqlite-l0-rows";
+import { recordedCompaction, restoreContextRequest, restoredContextProjection, } from "../../src/compaction/restore";
 import { executeCompaction } from "../../src/compaction/execute-cut";
 import { GenerationUnavailable } from "../../src/errors";
 import { GenerationLayers, ObservationSink } from "../../src/services";
 import { closeSessions } from "../../src/session-handle";
 import { reactivateSession } from "./wake-session";
-import {
-  FoldCheckpointIntegrityError,
-  hydrateSessionHistory,
-} from "../../src/session-lifecycle/history";
+import { FoldCheckpointIntegrityError, hydrateSessionHistory, } from "../../src/session-lifecycle/history";
 import { compiledPolicy } from "./compiled-policy";
 import { testExecutor } from "./executor";
 import { isolated, isolatedLedger } from "./isolated";
@@ -40,12 +26,7 @@ import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionSession as sessionId } from "./reconstruction-fixture";
 import { seedPolicy } from "./seed-policy";
 import { uniqueEntropy } from "./time";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  withSessionServices,
-  type SessionFixture,
-} from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { foldProof, type foldCrashProof } from "./fold-crash";
 
 // R1 and R3 retain their imported draft IDs; no duplicate campaign rows.

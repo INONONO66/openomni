@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { runAgentSync } from "./helpers/executor";
 import { expect, spyOn, test } from "bun:test";
-import { SessionHandleStore } from "../src/store";
+import * as SessionHandleStore from "../src/store/fence";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
 import { foldHistoryState, hydrateSessionHistory } from "../src/session-lifecycle/history";
@@ -13,11 +13,7 @@ import { isolatedLedger, isolatedRun } from "./helpers/isolated";
 import { nth } from "./helpers/nth";
 import { requestLedger } from "./helpers/request-ledger";
 import { textMessage } from "./helpers/messages";
-import {
-  paddingActions,
-  reconstructionFixture,
-  reconstructionSession,
-} from "./helpers/reconstruction-fixture";
+import { paddingActions, reconstructionFixture, reconstructionSession, } from "./helpers/reconstruction-fixture";
 
 function expectReplay(sessionId: string) {
   const kernel = isolatedLedger().kernel;

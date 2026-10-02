@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { anthropicResponse, captureRequest } from "../helpers/provider-fetch";
-import type { Auth } from "../../src/auth";
-import { clientIdentity } from "../../src/provider/identity";
-import type { Provider } from "../../src/provider";
-import { getSDK, type Transport } from "../../src/provider/sdk";
+import type { Auth } from "../../../src/model/auth";
+import { clientIdentity } from "../../../src/model/provider/identity";
+import type { Provider } from "../../../src/model/provider";
+import { getSDK, type Transport } from "../../../src/model/provider/sdk";
 
 function anthropicModel(): Provider.Model {
   return {

@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/store";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import * as SessionHandleStore from "../../src/store/fence";
 import { testBus } from "./bus";
 import type { IsolatedLedgerHandle } from "./isolated";
 

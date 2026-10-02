@@ -1,11 +1,11 @@
 import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices } from "./chat-services";
-import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
 import { Effect, Cause, Exit } from "effect";
 
 import { runAgent } from "../../src/core/execution/run";
 import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "../../src/model";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/kernel/gate";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
 import type { PolicyRow } from "@openomni/protocol";
 import { recordingExecutor } from "./effect-g3-recording";
 export { recordingExecutor, recordingLedger } from "./effect-g3-recording";

@@ -1,14 +1,15 @@
 import { Cause, Effect, Exit, Option } from "effect";
-import { Processor as NativeProcessor } from "../../src/processor";
-import { run as nativeRun } from "../../src/run";
-import { decodeLlmFailure } from "../../src/error";
+import { runTestExit, runTestSync } from "../../helpers/isolated";
+import { Processor as NativeProcessor } from "../../../src/model/processor";
+import { run as nativeRun } from "../../../src/model/run";
+import { decodeLlmFailure } from "../../../src/model/error";
 import { fixedNow, sequentialIds } from "./fixtures";
-export type { Run, RunInput } from "../../src/run";
-export { LlmRunFailure } from "../../src/errors";
+export type { Run, RunInput } from "../../../src/model/run";
+export { LlmRunFailure } from "../../../src/model/errors";
 
 /** Only the test edge executes native effects; failures retain their tagged identity. */
 export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-  const exit = await Effect.runPromiseExit(effect);
+  const exit = await runTestExit(effect);
   if (Exit.isSuccess(exit)) return exit.value;
   const failure = Cause.findErrorOption(exit.cause);
   if (Option.isSome(failure)) throw failure.value;
@@ -16,11 +17,11 @@ export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
 }
 
 export function runSyncEffect<A, E>(effect: Effect.Effect<A, E>): A {
-  return Effect.runSync(effect);
+  return runTestSync(effect);
 }
 
 export function runEffectExit<A, E>(effect: Effect.Effect<A, E>): Promise<Exit.Exit<A, E>> {
-  return Effect.runPromiseExit(effect);
+  return runTestExit(effect);
 }
 export namespace Processor {
   type StreamInput = Parameters<NativeProcessor.ProcessorOptions["createStream"]>[0];

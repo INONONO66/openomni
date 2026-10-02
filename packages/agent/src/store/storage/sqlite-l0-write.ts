@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Database } from "bun:sqlite";
 import { LedgerAction, type LedgerSession } from "@openomni/protocol";
-import { computeActionHash, GENESIS_PREV_HASH } from "./l0-hash";
+import { computeActionHash, GENESIS_PREV_HASH } from "../session-file.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
 import { CorruptRecord } from "../errors";
 import type { RefuseWrite } from "./write-effect";

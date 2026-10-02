@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
-import { adoptWriter, materializeSession } from "../../../packages/ledger/test/helpers/session";
+import { adoptWriter, materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { readSessionCursor } from "../src/gateway";
 import { testPlane } from "./helpers/ledger";

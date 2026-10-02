@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../../packages/agent/test/store/helpers/session-tree";
 import { Effect, type Result } from "effect";
 import { defineTool, eraseTool } from "@openomni/agent";
 import { Bus } from "./bus";

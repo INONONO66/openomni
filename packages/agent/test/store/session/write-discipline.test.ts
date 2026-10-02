@@ -1,7 +1,7 @@
 import { Effect, Result } from "effect";
 import { describe, expect, test } from "bun:test";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
-import type { LedgerError } from "../../src";
+import type { LedgerError } from "../../../src/store/errors";
 import { runLedgerSync } from "../helpers/effect";
 import { useMemoryStores } from "../helpers/storage";
 

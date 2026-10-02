@@ -1,5 +1,5 @@
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { CommitRefused } from "../../../src/store";
+import { CommitRefused } from "../../../src/store/errors";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { completeModel, providerFailure, windowedLlm } from "../../helpers/mock-llm";

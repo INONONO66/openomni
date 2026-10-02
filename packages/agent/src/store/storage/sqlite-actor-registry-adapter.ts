@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
-import { StoredIdentity, StoredEndpoint } from "../actor/schema";
-import { sqliteJsonData, SqliteCountRow } from "./sqlite-json-data";
+import { StoredIdentity, StoredEndpoint } from "./actor-schema";
+import { sqliteJsonData, SqliteCountRow } from "../json";
 
 const IdentityRow = sqliteJsonData(StoredIdentity);
 const EndpointRow = sqliteJsonData(StoredEndpoint);

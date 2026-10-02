@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Retry } from "../../src/retry";
+import { Retry } from "../../../src/model/retry";
 
 import { apiError, rateLimitError, sources, type SdkErrorInput } from "../helpers/retry";
 

@@ -1,21 +1,12 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { rmSync } from "node:fs";
-import {
-  CommitRefused,
-  openCatalogStore,
-  openSessionStore,
-  SessionHandleStore,
-  StorageUnavailable,
-} from "../../src/store";
+import { CommitRefused, StorageUnavailable } from "../../src/store/errors";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import * as SessionHandleStore from "../../src/store/fence";
 import { Effect } from "effect";
 import { SessionEntity } from "../../src/cluster/session-entity";
-import {
-  clusterTempDir,
-  readChain,
-  runCluster,
-  sendPrompt,
-  sessionFileFor,
-} from "../helpers/cluster-runtime";
+import { clusterTempDir, readChain, runCluster, sendPrompt, sessionFileFor, } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-session-entity-coverage-");

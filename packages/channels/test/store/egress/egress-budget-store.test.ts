@@ -3,8 +3,9 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEgressBudgetStore, openCatalogStore } from "../../src/index";
-import { testNow, useMemoryStores } from "../helpers/storage";
+import { createEgressBudgetStore } from "../../../src/index.js";
+import { openCatalogStore } from "@openomni/agent";
+import { testNow, useMemoryStores } from "../../../../agent/test/store/helpers/storage";
 import type { Gateway } from "@openomni/protocol";
 
 /** #219 active-egress debit ledger: atomic, idempotent counted-window claims. */

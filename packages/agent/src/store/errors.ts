@@ -1,4 +1,7 @@
 import { Data } from "effect";
+import { AgentFailure } from "../errors";
+
+export { AgentFailure };
 
 export class SessionNotFound extends Data.TaggedError("SessionNotFound")<{
   readonly sessionId: string;
@@ -55,14 +58,6 @@ export class CorruptRecord extends Data.TaggedError("CorruptRecord")<{
   readonly id: string;
 }> {}
 
-/** Ledger-owned failure for a Cause without a typed error (temporary until #1246 folds ledger into agent). */
-export class LedgerFailure extends Data.TaggedError("LedgerFailure")<{
-  readonly operation: string;
-  readonly cause: string;
-}> {
-  override get message(): string { return `${this.operation}: ${this.cause}`; }
-}
-
 /**
  * A broken programmer invariant on a synchronous ledger path — corrupt or
  * missing stored facts, a capability gap, or caller misuse. Thrown, never
@@ -73,17 +68,6 @@ export class LedgerInvariant extends Data.TaggedError("LedgerInvariant")<{
   readonly operation: string;
   readonly message: string;
   readonly cause?: Error;
-}> {}
-
-/**
- * A synchronous actor-registry write the caller can handle: an unknown
- * identity or endpoint, an already-claimed address, or a wrong standing.
- * Thrown because the registry surface is not Effect code.
- */
-export class ActorRegistryRefused extends Data.TaggedError("ActorRegistryRefused")<{
-  readonly operation: "registerEndpoint" | "mintProvisional" | "promote" | "mergeEndpoint";
-  readonly reason: "identity" | "endpoint" | "address" | "standing";
-  readonly message: string;
 }> {}
 
 /** An incoherent reply-grant projection row observed by the SQLite adapter. */
@@ -104,4 +88,4 @@ export type LedgerError =
   | PolicyGenerationRefused
   | StorageUnavailable
   | CorruptRecord
-  | LedgerFailure;
+  | AgentFailure;

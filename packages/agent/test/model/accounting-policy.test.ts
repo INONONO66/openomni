@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Token } from "@openomni/protocol";
-import { accumulateUsage, Retry } from "../src";
+import { accumulateUsage, Retry } from "../../src/model";
 import { apiError } from "./helpers/retry";
 
 describe("public accounting and attempt classification", () => {

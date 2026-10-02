@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Auth } from "../../src/auth";
-import { ModelsDev } from "../../src/model";
+import { Auth } from "../../../src/model/auth";
+import { ModelsDev } from "../../../src/model/model";
 import { resetCatalog } from "../helpers/model-loader";
-import { Provider } from "../../src/provider/index";
-import { enrichWithCatalog, fetchProxyModels } from "../../src/provider/proxy-models";
+import { Provider } from "../../../src/model/provider";
+import { enrichWithCatalog, fetchProxyModels } from "../../../src/model/provider/proxy-models";
 import { fixedNow } from "../helpers/fixtures";
 
 type FetchArgs = Parameters<typeof fetch>;

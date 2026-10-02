@@ -1,12 +1,12 @@
 import { Database } from "bun:sqlite";
 import { L0Observation, type ObservationSink, type Storage } from "@openomni/protocol";
-import { bootstrapStoreDatabase } from "../../src/storage";
-import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
-import { SESSION_FILE_SCHEMA } from "../../src/storage/schema-session-file";
-import { createActions } from "../../src/storage/sqlite-l0-actions";
-import type { ObservationPublishFailure } from "../../src/storage/sqlite-l0-observation";
-import { createSessions } from "../../src/storage/sqlite-l0-sessions";
-import type { SessionWriteAdapter } from "../../src/services";
+import { bootstrapStoreDatabase } from "../../../src/store/session-file";
+import { CATALOG_SCHEMA } from "../../../src/store/catalog";
+import { SESSION_FILE_SCHEMA } from "../../../src/store/session-file";
+import { createActions } from "../../../src/store/session-file";
+import type { ObservationPublishFailure } from "../../../src/store/storage/sqlite-l0-observation";
+import { createSessions } from "../../../src/store/storage/sqlite-l0-sessions";
+import type { SessionWriteAdapter } from "../../../src/store/services";
 
 /** In-memory database on the fresh session-file schema. */
 export function openLedgerDatabase(): Database {

@@ -1,4 +1,4 @@
-import { createNamedPolicyRegistry, KERNEL_POLICY_REGISTRY, type NamedPolicyRegistry as PolicyRegistry } from "./kernel/gate";
+import { createNamedPolicyRegistry, KERNEL_POLICY_REGISTRY, type NamedPolicyRegistry as PolicyRegistry } from "./kernel/gate/compile";
 import { type AnyToolDefinition, type PlainValue, PlainValueSchema, PolicyRow } from "@openomni/protocol";
 import { Context, Effect, Layer, Option, type Scope } from "effect";
 import { BundleError } from "./errors";

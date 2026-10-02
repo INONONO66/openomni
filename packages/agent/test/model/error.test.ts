@@ -1,8 +1,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { Effect, Result } from "effect";
-import { coerceApiError, decodeLlmFailure } from "../src/error";
-import { LlmFailure } from "../src/errors";
+import { coerceApiError, decodeLlmFailure } from "../../src/model/error";
+import { AgentFailure } from "../../src/model/errors";
 import { apiError, sdkError } from "./helpers/retry";
 import { runSyncEffect } from "./helpers/native";
 
@@ -43,7 +43,7 @@ describe("provider failure decoder", () => {
   });
   test.each([null, false, 42, "diagnostic", { malformed: true }])("unrepresentable failures preserve a string cause: %j", (value) => {
     const error = decodeLlmFailure("provider.decode")(value);
-    expect(error).toBeInstanceOf(LlmFailure);
+    expect(error).toBeInstanceOf(AgentFailure);
     expect(error.cause).toBe(String(value));
   });
 });

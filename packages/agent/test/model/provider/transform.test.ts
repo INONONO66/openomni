@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ProviderTransform } from "../../src/provider/transform";
-import type { Provider } from "../../src/provider/index";
+import { ProviderTransform } from "../../../src/model/provider/transform";
+import type { Provider } from "../../../src/model/provider";
 type ModelMessage = Parameters<typeof ProviderTransform.normalizeMessages>[0][number];
 
 function makeModel(providerID: string, id: string): Provider.Model {

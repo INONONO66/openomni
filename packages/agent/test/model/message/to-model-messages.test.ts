@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "@openomni/protocol";
-import { stringifyToolOutput, toModelMessages } from "../../src/message";
-import type { Provider } from "../../src/provider";
+import { stringifyToolOutput, toModelMessages } from "../../../src/model/message";
+import type { Provider } from "../../../src/model/provider";
 
 const anthropicModel: Provider.Model = {
   id: "claude-3-5-sonnet",

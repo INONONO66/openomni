@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { allowConfigure, generationServices } from "./helpers/generation-services";
 import { observationService } from "../../../packages/agent/test/helpers/service-layers";

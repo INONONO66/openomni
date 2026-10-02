@@ -1,16 +1,8 @@
 import { z } from "zod";
 import { LedgerInvariant } from "../errors";
-import { parseStoredJson } from "./sqlite-json-data";
+import { parseStoredJson } from "../json";
 import type { Database } from "bun:sqlite";
-import {
-  Gateway,
-  Inbox,
-  type LedgerAction,
-  PlainValueSchema,
-  SessionTransition,
-  L0Observation,
-  type ObservationSink,
-} from "@openomni/protocol";
+import { Gateway, Inbox, type LedgerAction, PlainValueSchema, SessionTransition, L0Observation, type ObservationSink, } from "@openomni/protocol";
 
 /** A post-commit observation publish that failed without unwinding the committed write. */
 export interface ObservationPublishFailure {

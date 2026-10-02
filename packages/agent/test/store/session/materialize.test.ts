@@ -55,7 +55,7 @@ describe("L0 session materialization", () => {
         "CREATE TRIGGER refuse_configure BEFORE INSERT ON action BEGIN SELECT RAISE(ABORT, 'refuse configure'); END",
       );
       expect(() => materializeSession(stores.kernel, "refused")).toThrow(
-        expect.objectContaining({ _tag: "LedgerFailure" }),
+        expect.objectContaining({ _tag: "AgentFailure" }),
       );
       expect(raw.query("SELECT * FROM session").all()).toEqual([]);
       expect(sessionTree("refused", stores.session.actions)).toEqual([]);

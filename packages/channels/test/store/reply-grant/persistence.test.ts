@@ -5,12 +5,12 @@ import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createReplyGrantStore } from "../../src/reply-grant/index";
-import { openCatalogStore } from "../../src/storage/catalog-store";
-import { createSqliteReplyGrantAdapter } from "../../src/storage/sqlite-reply-grant-adapter";
-import { bootstrapStoreDatabase } from "../../src/storage/session-store";
-import { CATALOG_SCHEMA } from "../../src/storage/schema-catalog";
-import { testNow } from "../helpers/storage";
+import { createReplyGrantStore } from "../../../src/store/reply-grant/index.js";
+import { openCatalogStore } from "@openomni/agent";
+import { createSqliteReplyGrantAdapter } from "../../../../agent/src/store/storage/sqlite-reply-grant-adapter";
+import { bootstrapStoreDatabase } from "@openomni/agent";
+import { CATALOG_SCHEMA } from "@openomni/agent";
+import { testNow } from "../../../../agent/test/store/helpers/storage";
 import { z } from "zod";
 
 const ClosedMessage = z.tuple([
@@ -53,7 +53,7 @@ describe("durable reply-grant current projection", () => {
       // initialized database open and await each contender's exact ready signal.
       for (const id of ["guest-1", "guest-2"]) {
         const contender = fork(
-          new URL("../helpers/reply-grant-race-worker.ts", import.meta.url),
+          new URL("./race-worker.ts", import.meta.url),
           [path, id],
           { execPath: process.execPath, stdio: ["ignore", "inherit", "inherit", "ipc"] },
         );

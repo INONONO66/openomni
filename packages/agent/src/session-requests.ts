@@ -1,15 +1,8 @@
 import { Clock, Effect } from "effect";
 import { AgentFailure, CommitFailed, type ExecutionError } from "./errors";
-import { SessionHandleStore } from "./store";
+import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import {
-  canonicalDigest,
-  type Inbox,
-  type SessionGeneration,
-  type SessionTransition,
-  type PlainObject,
-  type PlainValue,
-} from "@openomni/protocol";
+import { canonicalDigest, type Inbox, type SessionGeneration, type SessionTransition, type PlainObject, type PlainValue, } from "@openomni/protocol";
 import type { SessionRuntime } from "./session-contract";
 import { Entropy } from "./services";
 import { getSessionHandle } from "./session-handle";

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { Auth } from "../../src/auth";
-import type { Provider } from "../../src/provider";
-import { getLanguage, getSDK } from "../../src/provider/sdk";
+import type { Auth } from "../../../src/model/auth";
+import type { Provider } from "../../../src/model/provider";
+import { getLanguage, getSDK } from "../../../src/model/provider/sdk";
 
 const originalFetch = globalThis.fetch;
 type OpenAIModelRef = { readonly config?: { readonly provider?: string } };

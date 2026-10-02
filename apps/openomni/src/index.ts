@@ -32,7 +32,7 @@ import {
   ChannelsFailure,
   WebSocketHandler,
 } from "@openomni/channels";
-import type { ActorRegistry } from "@openomni/agent";
+import type { ActorRegistry } from "@openomni/channels";
 
 import {
   createMachineHost,

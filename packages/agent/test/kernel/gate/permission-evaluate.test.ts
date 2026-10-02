@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Policy } from "@openomni/protocol";
-import { decisionFromEvaluation, evaluatePermission } from "../../../src/kernel/gate";
+import { decisionFromEvaluation, evaluatePermission } from "../../../src/kernel/gate/match";
 
 const it = test;
 
@@ -453,12 +453,6 @@ describe("decisionFromEvaluation", () => {
     expect(decision.effects).toEqual([
       { type: "tool.require_approval", reason: "require_approval" },
     ]);
-    expect(decision.obligations).toEqual([
-      {
-        obligationId: "guardrail.permission.approval",
-        type: "humanApproval",
-        description: "require_approval",
-      },
-    ]);
+    expect("obligations" in decision).toBe(false);
   });
 });

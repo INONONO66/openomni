@@ -54,7 +54,7 @@ export interface ChatAgentConfig {
   /**
    * Ordered fallback models AFTER `model` (#752). On a chain-advancing
    * failure (timeout / transient_error / validation_error) the next retry
-   * attempt resolves the next candidate via the pure `@openomni/llm`
+   * attempt resolves the next candidate via the pure model-layer
    * fold. Tool errors, context overflow (the compaction recovery retries the
    * SAME model), and aborts never advance the chain; when the chain is spent
    * the last candidate absorbs the remaining attempts — WHEN the run stops

@@ -4,12 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type LedgerAction, type SessionGeneration, SessionTurn } from "@openomni/protocol";
-import { createSessionKernel } from "../../src/session/kernel";
-import {
-  openCatalogStore,
-  openSessionStore,
-  SESSION_FILE_SCHEMA,
-} from "../../src/storage/index";
+import { createSessionKernel } from "../../../src/store/fence";
+import { openCatalogStore } from "../../../src/store/catalog";
+import { openSessionStore, SESSION_FILE_SCHEMA } from "../../../src/store/session-file";
 import { runLedgerSync } from "../helpers/effect";
 import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";

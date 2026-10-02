@@ -11,12 +11,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
-import { L0Write, type LedgerError } from "../../src/index";
-import { createSessionKernel, type SessionKernel } from "../../src/session/kernel";
-import type { CatalogStore } from "../../src/storage/catalog-store";
-import { openCatalogStore, openSessionStore } from "../../src/storage/index";
-import { runLedgerSync } from "../helpers/effect";
-import { TEST_NOW, testNow } from "../helpers/storage";
+import { L0Write } from "../../src/store/session-file";
+import { type LedgerError } from "../../src/store/errors";
+import { createSessionKernel, type SessionKernel } from "../../src/store/fence";
+import type { CatalogStore } from "../../src/store/catalog";
+import { openCatalogStore } from "../../src/store/catalog";
+import { openSessionStore } from "../../src/store/session-file";
+import { runLedgerSync } from "./helpers/effect";
+import { TEST_NOW, testNow } from "./helpers/storage";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
 
@@ -211,9 +213,10 @@ test("concurrent activations from two processes: one winner, stale loser refused
   try {
     const childSource = `
       import { Effect } from "effect";
-      import { createSessionKernel } from "./src/session/kernel.ts";
-      import { openCatalogStore, openSessionStore } from "./src/storage/index.ts";
-      import { runLedgerSync } from "./test/helpers/effect.ts";
+      import { createSessionKernel } from "./src/store/fence.ts";
+      import { openCatalogStore } from "./src/store/catalog.ts";
+      import { openSessionStore } from "./src/store/session-file.ts";
+      import { runLedgerSync } from "./test/store/helpers/effect.ts";
       const sessionId = String(process.env.FENCE_SESSION_ID);
       const owner = String(process.env.FENCE_OWNER);
       const catalog = openCatalogStore(String(process.env.FENCE_CATALOG_PATH), { now: () => 1_700_000_000_000 });
@@ -332,7 +335,7 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
     const row = kernel.row("s3");
     const childSource = `
       import { Database } from "bun:sqlite";
-      import { L0Write } from "./src/index.ts";
+      import { L0Write } from "./src/store/session-file.ts";
       const db = new Database(String(process.env.FENCE_SESSION_PATH));
       db.run("PRAGMA busy_timeout = 5000");
       db.run("BEGIN IMMEDIATE");

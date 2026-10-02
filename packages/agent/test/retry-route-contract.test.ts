@@ -3,9 +3,9 @@ import { expect, test } from "bun:test";
 import { APIError, Retry, run as runLlm, type RunInput } from "../src/model";
 import { PlainObjectSchema, type LedgerAction, type Model } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { StreamEvent } from "../../llm/src/processor/stream-events";
+import type { StreamEvent } from "../src/model/processor/stream-events";
 import { runAgent } from "../src/core/execution/run";
-import { LedgerFailure } from "../src/store";
+import { AgentFailure } from "../src/store/errors";
 import { isolated } from "./helpers/isolated";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";
@@ -48,7 +48,7 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
     const executor = testExecutor({
       ...recording, policy: compiledPolicy(), observations: { publish: () => undefined },
       ledger: { ...recording.ledger, commit: (action) => {
-        if (veto && action.kind === "message") return Effect.fail(new LedgerFailure({
+        if (veto && action.kind === "message") return Effect.fail(new AgentFailure({
           operation: "canonical.write", cause: "refused",
         }));
         return recording.ledger.commit(action).pipe(Effect.tap(() => Effect.sync(() => { committed.push(action); })));

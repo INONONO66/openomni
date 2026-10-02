@@ -1,19 +1,9 @@
-import type { CommitReceipt, LedgerError } from "./store";
+import type { CommitReceipt } from "./store/services";
+import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import {
-  canonicalDigest,
-  PlainValueSchema,
-  SessionTurn,
-  type FoldCheckpoint,
-  type LedgerAction,
-  type LedgerSession,
-} from "@openomni/protocol";
-import {
-  foldHistoryState,
-  foldSessionHistory,
-  readHistoryCheckpoint,
-} from "./session-lifecycle/history";
+import { canonicalDigest, PlainValueSchema, SessionTurn, type FoldCheckpoint, type LedgerAction, type LedgerSession, } from "@openomni/protocol";
+import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint, } from "./session-lifecycle/history";
 import { pinCompactionAction } from "./compaction/successor";
 import { foldCheckpointAction } from "./session-record";
 

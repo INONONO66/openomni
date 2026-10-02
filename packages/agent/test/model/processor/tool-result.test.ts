@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Message, Tool } from "@openomni/protocol";
-import type { Sink } from "../../src/sink";
+import type { Sink } from "../../../src/model/sink";
 import { Bus } from "../helpers/observation";
 import { useProcessor, capturingSink } from "../helpers/processor";
 const { createProcessor } = useProcessor();
-import type { StreamEvent } from "../../src/processor/stream-events";
+import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;

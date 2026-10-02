@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { LlmCall, type Message } from "@openomni/protocol";
-import type { StreamEvent } from "../src/processor/stream-events";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
 import { run } from "./helpers/native";
 import { collector } from "./helpers/observation";
 import { FIXED_NOW, fixedNow, sequentialIds } from "./helpers/fixtures";

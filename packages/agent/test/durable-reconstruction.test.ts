@@ -4,20 +4,12 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
-import { SessionHandleStore } from "../src/store";
+import * as SessionHandleStore from "../src/store/fence";
 import { isolatedRun } from "./helpers/isolated";
 import { openCrashStores } from "./helpers/crash-stores";
 import { sessionTree } from "./helpers/session-tree";
-import {
-  FoldCheckpointIntegrityError,
-  foldHistoryState,
-  hydrateSessionHistory,
-} from "../src/session-lifecycle/history";
-import {
-  reconstructionMain,
-  reconstructionProcessMain,
-  reconstructionWitness,
-} from "./helpers/durable-reconstruction";
+import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/session-lifecycle/history";
+import { reconstructionMain, reconstructionProcessMain, reconstructionWitness, } from "./helpers/durable-reconstruction";
 import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
 import { z } from "zod";

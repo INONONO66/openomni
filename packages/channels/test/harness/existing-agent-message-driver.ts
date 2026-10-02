@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import type { Auth } from "../../src/auth";
-import { Provider } from "../../src/provider";
-import { getLanguage, getSDK } from "../../src/provider/sdk";
+import type { Auth } from "../../../src/model/auth";
+import { Provider } from "../../../src/model/provider";
+import { getLanguage, getSDK } from "../../../src/model/provider/sdk";
 import { usePrivateCatalog } from "../helpers/catalog";
 import { captureRequest, openAIResponse } from "../helpers/provider-fetch";
 

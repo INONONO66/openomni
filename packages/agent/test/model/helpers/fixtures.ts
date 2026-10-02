@@ -1,5 +1,5 @@
 import type { Message } from "@openomni/protocol";
-import type { Provider } from "../../src/provider";
+import type { Provider } from "../../../src/model/provider";
 
 /** Fixed wall clock for injected `now` stubs (#1245): 2025-01-01T00:00:00Z. */
 export const FIXED_NOW = 1_735_689_600_000;

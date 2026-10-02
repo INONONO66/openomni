@@ -28,8 +28,8 @@ import { runEffect } from "./helpers/effect";
 import {
   requestFixture,
   requestStateAction,
-} from "../../../packages/ledger/test/helpers/request";
-import { materializeSession } from "../../../packages/ledger/test/helpers/session";
+} from "../../../packages/agent/test/store/helpers/request";
+import { materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import { testClock } from "./helpers/test-entropy";
 import { Bus } from "./helpers/bus";
 

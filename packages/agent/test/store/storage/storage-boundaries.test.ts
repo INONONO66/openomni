@@ -2,9 +2,8 @@ import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
 import type { LedgerAction } from "@openomni/protocol";
-import { createActorRegistry } from "../../src";
-import { createDecisionFactPort } from "../../src/storage/decision-fact-port";
-import { generationSnapshot, configureAction } from "../../src/session/kernel";
+import { createDecisionFactPort } from "../../../src/store/decision";
+import { generationSnapshot, configureAction } from "../../../src/store/fence";
 import { runLedgerSync } from "../helpers/effect";
 import { openLedgerDatabase, observedL0Adapters } from "../helpers/ledger";
 import { useSqliteStores } from "../helpers/storage";
@@ -31,22 +30,6 @@ test("decision fact port shares rollback and subsequent commit boundaries", () =
   const outcome = port.transaction(() => facts.record(input));
   expect(outcome.kind).toBe("recorded");
   expect(facts.head(input.key)).toEqual(outcome.fact);
-});
-
-test("removing an endpoint preserves its identity and removes address lookup", () => {
-  const registry = createActorRegistry(stores.catalog);
-  registry.registerIdentity({ id: "actor", kind: "human", trustTier: "observer" });
-  registry.registerEndpoint({
-    id: "endpoint",
-    actorId: "actor",
-    channel: "discord",
-    externalId: "external",
-  });
-  const adapter = stores.catalog.actorRegistry;
-  expect(adapter.removeEndpoint("endpoint")).toBe(true);
-  expect(registry.getIdentity("actor")?.id).toBe("actor");
-  expect(registry.resolveEndpoint("discord", "external")).toBeUndefined();
-  expect(adapter.removeEndpoint("endpoint")).toBe(false);
 });
 
 test("fence adoption reports a refused SQL compare-and-set without advancing its fence", () => {

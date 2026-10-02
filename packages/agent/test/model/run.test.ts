@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import type { jsonSchema, StepResult, streamText, ToolSet } from "ai";
-import type { StreamEvent } from "../src/processor/stream-events";
-import type { Sink } from "../src/sink";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
+import type { Sink } from "../../src/model/sink";
 import { Bus, collector } from "./helpers/observation";
-import { Auth } from "../src/auth";
-import type { Provider } from "../src/provider";
+import { Auth } from "../../src/model/auth";
+import type { Provider } from "../../src/model/provider";
 import { newTraceId } from "./helpers/observation";
 import { sdkError } from "./helpers/retry";
 

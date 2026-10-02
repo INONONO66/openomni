@@ -1,12 +1,12 @@
 import { messageSource } from "../../helpers/message-source";
 import { testExecutor } from "../../helpers/executor";
 import { type ChatFixture, chatServices } from "../../helpers/chat-services";
-import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import type { RunInput, Sink } from "../../../src/model";
 import { Effect } from "effect";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
 import { LedgerAction } from "@openomni/protocol";
 import { runAgent } from "../../../src/core/execution/run";
 import { createAssistantMessage } from "../../../src/core/message-factory";

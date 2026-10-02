@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
-import type { Sink } from "../src";
-import { Llm } from "../src/services";
-import { LlmFailure, InvalidProviderData } from "../src/errors";
+import type { Sink } from "../../src/model";
+import { Llm } from "../../src/model/services";
+import { AgentFailure, InvalidProviderData } from "../../src/model/errors";
 import { apiError } from "./helpers/retry";
 import { Context } from "effect";
 
 test("LLM service and error values retain their machine tags", () => {
   const service = { run: (): never => { throw new Error("fixture"); }, resolveModel: (): never => { throw new Error("fixture"); } };
-  expect(Llm.key).toBe("@openomni/llm/Llm");
+  expect(Llm.key).toBe("@openomni/agent/Llm");
   expect(Context.get(Context.make(Llm, service), Llm)).toBe(service);
   expect(apiError({ message: "bad", isRetryable: false })._tag).toBe("APIError");
-  expect(new LlmFailure({ operation: "run", cause: "bad" }).message).toBe("bad");
+  expect(new AgentFailure({ operation: "run", cause: "bad" }).message).toBe("run: bad");
   expect(
     new InvalidProviderData({
       operation: "provider.data",
@@ -21,7 +21,7 @@ test("LLM service and error values retain their machine tags", () => {
   ).toBe("InvalidProviderData");
 });
 
-describe("@openomni/llm root public surface", () => {
+describe("model barrel public surface", () => {
   test("967 public sink excludes fact tap", async () => {
     const callbacks = {
       onMessage: true,
@@ -30,7 +30,7 @@ describe("@openomni/llm root public surface", () => {
     } satisfies Record<keyof Sink, true>;
     const source = ts.createSourceFile(
       "sink.ts",
-      await Bun.file(new URL("../src/sink.ts", import.meta.url)).text(),
+      await Bun.file(new URL("../../src/model/sink.ts", import.meta.url)).text(),
       ts.ScriptTarget.Latest,
       true,
     );
@@ -48,7 +48,7 @@ describe("@openomni/llm root public surface", () => {
 
   test("exposes the package contract", async () => {
     // Given: a consumer imports the root package barrel.
-    const root = await import("../src");
+    const root = await import("../../src/model");
 
     // When: the consumer reads the public runtime contract.
     const publicKeys = Object.keys(root).sort();
@@ -57,12 +57,12 @@ describe("@openomni/llm root public surface", () => {
     // #500 C1: `Run` (Outcome vocabulary) moved here from protocol; `Sink` is type-only.
     expect(publicKeys).toEqual([
       "APIError",
+      "AgentFailure",
       "Auth",
       "AuthInvalidFileError",
       "AuthResolutionError",
       "InvalidProviderData",
       "Llm",
-      "LlmFailure",
       "LlmLive",
       "LlmRunFailure",
       "ModelResolutionError",
@@ -80,7 +80,7 @@ describe("@openomni/llm root public surface", () => {
 
   test("does not expose lower-level implementation helpers", async () => {
     // Given: a consumer imports the root package barrel.
-    const root = await import("../src");
+    const root = await import("../../src/model");
 
     // When: implementation helpers are checked on the root object.
     const removedExports = [

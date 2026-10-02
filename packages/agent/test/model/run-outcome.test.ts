@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { Policy, type Message } from "@openomni/protocol";
+import type { Message } from "@openomni/protocol";
 import { run, runEffect, LlmRunFailure } from "./helpers/native";
 import { fixedNow, sequentialIds } from "./helpers/fixtures";
-import { Auth } from "../src/auth";
-import type { StreamEvent } from "../src/processor/stream-events";
-import { streamArguments } from "../src/provider/stream";
-import { getLanguage } from "../src/provider/sdk";
+import { Auth } from "../../src/model/auth";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
+import { streamArguments } from "../../src/model/provider/stream";
+import { getLanguage } from "../../src/model/provider/sdk";
 
 const input = {
   messages: [],
@@ -143,16 +143,7 @@ test("reasoning-only failure retains billed usage without marking an assistant p
   } });
 });
 
-test("policy owns persisted lifecycle validation independently of the static provider outcome", async () => {
-  const schema = Policy.PolicyPoint.InputSchemas["run.lifecycle.post"];
-  const embed = (runOutcome: { type: string }) => ({
-    sessionId: "session",
-    runId: "run",
-    runOutcome,
-  });
-  expect(schema.safeParse(embed({ type: "stop" })).success).toBe(true);
-  expect(schema.safeParse(embed({ type: "max-steps" })).success).toBe(true);
-  expect(schema.safeParse(embed({ type: "invalid" })).success).toBe(false);
-  const root = await import("../src");
+test("the model barrel exposes no legacy FailureError shape", async () => {
+  const root = await import("../../src/model");
   expect("FailureError" in root).toBe(false);
 });

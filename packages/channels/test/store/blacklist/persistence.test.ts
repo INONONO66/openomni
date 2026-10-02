@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createBlacklistStore } from "../../src/index.js";
-import { testNow, useSqliteStores } from "../helpers/storage";
+import { createBlacklistStore } from "../../../src/index.js";
+import { testNow, useSqliteStores } from "../../../../agent/test/store/helpers/storage";
 
 describe("BlacklistStore SQLite persistence", () => {
   const stores = useSqliteStores("blacklist");

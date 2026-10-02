@@ -1,12 +1,9 @@
-import {
-  createActorRegistry,
-  createBlacklistStore,
-  createChannelGrantStore,
-  createDecisionFactPort,
-  createEgressBudgetStore,
-  createReplyGrantStore,
-  createSurfaceKeyStore,
-} from "@openomni/agent";
+import { createDecisionFactPort, createSurfaceKeyStore } from "@openomni/agent";
+import { createActorRegistry } from "../store/actor/index.js";
+import { createBlacklistStore } from "../store/blacklist/index.js";
+import { createChannelGrantStore } from "../store/channel-grant/index.js";
+import { createEgressBudgetStore } from "../store/egress/index.js";
+import { createReplyGrantStore } from "../store/reply-grant/index.js";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 /**

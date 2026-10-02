@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Auth } from "../../src/auth";
+import { Auth } from "../../../src/model/auth";
 
 const testAuthRoot = join(tmpdir(), "openomni-auth-storage-");
 

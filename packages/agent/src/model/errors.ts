@@ -1,13 +1,11 @@
 import { APICallError } from "ai";
+import { AgentFailure } from "../errors";
+
+export { AgentFailure };
 import { Data } from "effect";
 import { z } from "zod";
 
 type Diagnostic = { readonly operation: string; readonly cause: string };
-
-/** Llm-owned failure for a Cause without a typed error (temporary until #1246 folds llm into agent). */
-export class LlmFailure extends Data.TaggedError("LlmFailure")<Diagnostic> {
-  override get message(): string { return this.cause; }
-}
 
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
@@ -58,5 +56,5 @@ const BoundaryFields = Diagnostic.extend({ message: z.string(), aborted: z.boole
 export class TransportFailure extends Data.TaggedError("TransportFailure")<z.infer<typeof BoundaryFields>> {}
 export class InvalidProviderData extends Data.TaggedError("InvalidProviderData")<z.infer<typeof BoundaryFields>> {}
 
-export type LlmError = LlmFailure | APIError | LlmRunFailure | ModelResolutionError |
+export type LlmError = AgentFailure | APIError | LlmRunFailure | ModelResolutionError |
   AuthInvalidFileError | AuthResolutionError | ProxyModelsError | TransportFailure | InvalidProviderData;

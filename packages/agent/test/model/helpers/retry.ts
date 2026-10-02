@@ -1,5 +1,5 @@
 import { APICallError } from "ai";
-import { APIError } from "../../src/error";
+import { APIError } from "../../../src/model/error";
 
 export type SdkErrorInput = {
   readonly message: string;

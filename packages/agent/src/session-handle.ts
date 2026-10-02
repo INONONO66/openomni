@@ -1,5 +1,5 @@
 import { Effect, Scope } from "effect";
-import { SessionHandleStore } from "./store";
+import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./cluster/kernel-registry";
 import type { LedgerSession, SessionGeneration } from "@openomni/protocol";
 import type { SessionRuntime, SessionHandle, SessionCreateOptions, SessionRunner, RegistryEntry, SessionController, SessionControllerLifecycle, SessionSystem } from "./session-contract";

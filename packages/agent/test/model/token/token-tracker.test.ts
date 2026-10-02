@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { TokenTracker, estimateUsage } from "../../src/token/index";
+import { TokenTracker, estimateUsage } from "../../../src/model/token";
 
 /**
  * `expected` is `[inputTokens, outputTokens, reasoningTokens, cacheReadTokens,

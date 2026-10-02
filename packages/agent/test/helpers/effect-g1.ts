@@ -1,11 +1,7 @@
 import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { testExecutor } from "./executor";
-import {
-  allowConfigure,
-  kernelRuntime,
-  type SessionFixture as SessionRuntime,
-} from "./session-services";
+import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime, } from "./session-services";
 import type { ResolvedExecutorOptions } from "../../src/executor-contract";
 import { Cause, Effect, Exit } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
@@ -17,7 +13,7 @@ import { AgentFailure } from "../../src/errors";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger } from "./isolated";
-import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
 export { createTestAgent, runTestAgent, runChatAttempts } from "./effect-g2";
 export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = {
   arm: () => Effect.void,

@@ -1,5 +1,5 @@
 import { adoptLedgerFence, ledger, resetLedger } from "./helpers/ledger";
-import { sessionTree } from "../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../agent/test/store/helpers/session-tree";
 import { channelRequests } from "./helpers/channel-requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runEffect } from "./helpers/effect";
@@ -10,13 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decideRequestTransition, requestBindingDigest } from "@openomni/agent";
-import {
-  Gateway,
-  PlainValueSchema,
-  canonicalDigest,
-  type Channel,
-  type SessionTransition,
-} from "@openomni/protocol";
+import { Gateway, PlainValueSchema, canonicalDigest, type Channel, type SessionTransition, } from "@openomni/protocol";
 import { WebSocketHandler } from "../src/websocket";
 import { makeRouter } from "./router/_router-fixture";
 import { originalAction, requestPort } from "./helpers/requests";

@@ -1,0 +1,685 @@
+import { createHash } from "node:crypto";
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import {
+  LedgerAction,
+  SessionTransition,
+  type ObservationSink,
+  type Storage,
+  type Storage as ProtocolStorage,
+} from "@openomni/protocol";
+import { z } from "zod";
+import { LedgerInvariant } from "./errors";
+import type { SessionWriteAdapter } from "./services";
+import { createSqliteDecisionFacts } from "./decision.js";
+import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "./storage/sqlite-l0-rows.js";
+import { appendAction, commitSession, insertSession, selectSession } from "./storage/sqlite-l0-write.js";
+import { createSessions } from "./storage/sqlite-l0-sessions.js";
+import { reportCommitted, type ObservationFailurePort } from "./storage/sqlite-l0-observation.js";
+
+
+export const GENESIS_PREV_HASH = "openomni:l0:genesis:v1";
+
+export function computeActionHash(input: Omit<ActionSqlRow, "action_hash">): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        input.prev_hash,
+        input.id,
+        input.parent_id,
+        input.session_id,
+        input.kind,
+        input.intent,
+        input.effect,
+        input.revert,
+        input.irreversible,
+        input.encoding_version,
+        input.ts,
+        input.ordinal,
+      ]),
+    )
+    .digest("hex");
+}
+
+/**
+ * Fresh per-session ledger file DDL (W5.2 #1197) — the only session-file
+ * schema owner. One file per session holds exactly three tables: the single
+ * session row, the append-only action hash chain (0041 shape), and
+ * first-writer-wins decision facts (0040 shape). There is no migration plane:
+ * a session file is either fresh or already on this schema.
+ */
+export const SESSION_FILE_SCHEMA: readonly string[] = [
+  `CREATE TABLE IF NOT EXISTS session (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    role TEXT CHECK (role IN ('resident', 'worker')),
+    lease_owner TEXT,
+    lease_fence INTEGER NOT NULL DEFAULT 0 CHECK (lease_fence >= 0),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    state TEXT NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'running', 'interrupted')),
+    tools_generation INTEGER NOT NULL DEFAULT 0 CHECK (tools_generation >= 0),
+    system_hash TEXT NOT NULL DEFAULT '',
+    policy_generation INTEGER NOT NULL DEFAULT 0 CHECK (policy_generation >= 0)
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_session_role_not_null
+     ON session(id) WHERE role IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS action (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT REFERENCES action(id),
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN (
+      'prompt', 'turn', 'llm', 'attempt', 'tool', 'message', 'inbox.deliver',
+      'compaction', 'fold.checkpoint', 'alarm.arm', 'alarm.fired', 'alarm.paused',
+      'session.configure', 'policy.decision', 'request', 'reply', 'outbound'
+    )),
+    intent TEXT NOT NULL CHECK (json_valid(intent)),
+    effect TEXT NOT NULL CHECK (json_valid(effect)),
+    revert TEXT CHECK (revert IS NULL OR json_valid(revert)),
+    irreversible INTEGER NOT NULL CHECK (irreversible IN (0, 1)),
+    encoding_version INTEGER NOT NULL CHECK (encoding_version = 1),
+    ts INTEGER NOT NULL CHECK (ts >= 0),
+    ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+    prev_hash TEXT NOT NULL,
+    action_hash TEXT NOT NULL,
+    CHECK ((revert IS NOT NULL) <> (irreversible = 1)),
+    UNIQUE (session_id, ordinal)
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS action_hash_unique ON action(action_hash)",
+  `CREATE INDEX IF NOT EXISTS idx_action_generation
+     ON action(session_id, json_extract(effect, '$.snapshot.generation'), ordinal DESC)
+     WHERE kind = 'session.configure' AND json_valid(effect)`,
+  `CREATE INDEX IF NOT EXISTS idx_action_input
+     ON action(session_id, json_extract(intent, '$.inputId'), ordinal DESC)
+     WHERE kind IN ('request', 'reply')`,
+  "CREATE INDEX IF NOT EXISTS idx_action_kind_revision ON action(session_id, kind, ordinal DESC)",
+  `CREATE INDEX IF NOT EXISTS idx_action_outbound_state
+     ON action(session_id, json_extract(effect, '$.outbound.message.messageId'), ordinal DESC)
+     WHERE kind = 'outbound'`,
+  "CREATE INDEX IF NOT EXISTS idx_action_parent ON action(session_id, parent_id, ordinal)",
+  `CREATE INDEX IF NOT EXISTS idx_action_request_state
+     ON action(json_extract(effect, '$.request.requestId'))
+     WHERE kind IN ('request', 'reply') AND json_extract(effect, '$.phase') = 'state'`,
+  `CREATE INDEX IF NOT EXISTS idx_action_turn_effect
+     ON action(session_id, json_extract(effect, '$.turnId'), ordinal DESC)
+     WHERE kind IN ('turn', 'inbox.deliver')`,
+  `CREATE INDEX IF NOT EXISTS idx_action_turn_intent
+     ON action(session_id, json_extract(intent, '$.phase'), ordinal DESC)
+     WHERE kind = 'turn'`,
+  `CREATE INDEX IF NOT EXISTS idx_action_turn_resume
+     ON action(session_id, json_extract(intent, '$.turnId'), ordinal DESC)
+     WHERE kind = 'turn'`,
+  `CREATE INDEX IF NOT EXISTS idx_action_turn_terminal
+     ON action(session_id, json_extract(effect, '$.turnId'), ordinal DESC)
+     WHERE kind = 'turn' AND json_extract(effect, '$.phase') = 'terminal'`,
+  `CREATE INDEX IF NOT EXISTS idx_action_wave
+     ON action(session_id, json_extract(intent, '$.waveId'), ordinal)`,
+  `CREATE TABLE IF NOT EXISTS decision_fact (
+    key TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    data TEXT NOT NULL,
+    row_hash TEXT NOT NULL,
+    time_created INTEGER NOT NULL
+  )`,
+];
+
+
+const pageSize = z.number().int().positive().max(256);
+const windowCount = z.number().int().nonnegative();
+const OrdinalRow = z.object({ ordinal: z.number().int().positive() }).nullable();
+type Reads = Pick<
+  Storage.ActionSubAdapter,
+  | "priorModelAttempt"
+  | "generationFor"
+  | "turnTerminalFor"
+  | "latestTurnTerminal"
+  | "latestTurnUpdate"
+  | "turnIntentsPage"
+  | "turnWindowStart"
+  | "turnTailPage"
+  | "openTurnsPage"
+  | "resultFor"
+  | "requestInputById"
+  | "requestStateById"
+  | "guardedOperationsPage"
+  | "requestStatesPage"
+  | "outboundStatesPage"
+  | "openOperationsPage"
+  | "operationChildrenPage"
+  | "pendingMessages"
+>;
+
+function decodeOne(value: ActionSqlRow | null) {
+  const row = ActionSqlRow.nullable().parse(value);
+  return row === null ? undefined : decodeAction(row);
+}
+
+function decodeRows(values: ActionSqlRow[]) {
+  return ActionSqlRow.array().parse(values).map(decodeAction);
+}
+
+/** Each semantic port owns a literal statement and explicit bindings. */
+function createActionReads(db: Database): Reads {
+  return {
+    priorModelAttempt(sessionId, turnId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, string, string]>(`
+        SELECT a.* FROM action a JOIN action llm ON llm.id = a.parent_id
+        LEFT JOIN action turn ON turn.id = llm.parent_id
+        WHERE a.session_id = ? AND a.kind = 'attempt'
+          AND json_extract(a.intent, '$.phase') = 'intent'
+          AND json_extract(a.intent, '$.op') = 'chat' AND llm.parent_id != ?
+          AND coalesce(json_extract(turn.intent, '$.turnId'), '') != ?
+        ORDER BY a.ordinal DESC LIMIT 1`)
+          .get(sessionId, turnId, turnId),
+      );
+    },
+    generationFor(sessionId, generation) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, number]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'session.configure'
+          AND json_valid(effect) AND json_extract(effect, '$.snapshot.generation') = ?
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId, generation),
+      );
+    },
+    turnTerminalFor(sessionId, turnId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, string]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'turn'
+          AND json_extract(effect, '$.phase') = 'terminal'
+          AND json_extract(effect, '$.turnId') = ?
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId, turnId),
+      );
+    },
+    latestTurnTerminal(sessionId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'turn'
+          AND json_extract(effect, '$.phase') = 'terminal'
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId),
+      );
+    },
+    latestTurnUpdate(sessionId, turnId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, string, string]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'turn'
+          AND (json_extract(intent, '$.turnId') = ? OR json_extract(effect, '$.turnId') = ?)
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId, turnId, turnId),
+      );
+    },
+    turnIntentsPage(sessionId, beforeRevision, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, number, number]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'turn'
+          AND json_extract(intent, '$.phase') = 'intent' AND ordinal < ?
+        ORDER BY ordinal DESC LIMIT ?`)
+          .all(sessionId, beforeRevision, pageSize.parse(limit)),
+      );
+    },
+    turnWindowStart(sessionId, beforeRevision, count) {
+      const row = OrdinalRow.parse(
+        db
+          .query<{ ordinal: number }, [string, number, number]>(`
+        SELECT ordinal FROM action WHERE session_id = ? AND kind = 'turn'
+          AND json_extract(intent, '$.phase') = 'intent' AND ordinal < ?
+        ORDER BY ordinal DESC LIMIT 1 OFFSET ?`)
+          .get(sessionId, beforeRevision, windowCount.parse(count)),
+      );
+      return row === null ? 0 : row.ordinal;
+    },
+    turnTailPage(sessionId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, number, number]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'inbox.deliver')
+          AND ordinal > ?
+        ORDER BY ordinal LIMIT ?`)
+          .all(sessionId, cursor, pageSize.parse(limit)),
+      );
+    },
+    openTurnsPage(sessionId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, number, string, number]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'turn'
+          AND json_extract(a.intent, '$.phase') = 'intent' AND a.ordinal > ?
+          AND a.id NOT IN (SELECT json_extract(effect, '$.turnId') FROM action
+            WHERE session_id = ? AND kind = 'turn'
+            AND json_extract(effect, '$.phase') = 'terminal'
+            AND json_extract(effect, '$.turnId') IS NOT NULL)
+        ORDER BY a.ordinal LIMIT ?`)
+          .all(sessionId, cursor, sessionId, pageSize.parse(limit)),
+      );
+    },
+    resultFor(sessionId, parentId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, string]>(`
+        SELECT * FROM action WHERE session_id = ? AND parent_id = ? AND kind != 'fold.checkpoint'
+          AND json_extract(effect, '$.phase') = 'result'
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId, parentId),
+      );
+    },
+    requestInputById(sessionId, inputId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string, string]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind IN ('request', 'reply')
+          AND json_extract(intent, '$.inputId') = ?
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId, inputId),
+      );
+    },
+    requestStateById(id) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT * FROM action WHERE kind IN ('request', 'reply')
+          AND json_extract(effect, '$.phase') = 'state'
+          AND json_extract(effect, '$.request.requestId') = ?
+        ORDER BY rowid DESC LIMIT 1`)
+          .get(id),
+      );
+    },
+    requestStatesPage(sessionId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string | null, string | null, string, number]>(`
+        SELECT a.* FROM action a WHERE a.kind IN ('request', 'reply')
+          AND json_extract(a.effect, '$.phase') = 'state'
+          AND (? IS NULL OR a.session_id = ?) AND json_extract(a.effect, '$.request.requestId') > ?
+          AND a.rowid = (SELECT max(b.rowid) FROM action b WHERE b.kind IN ('request', 'reply')
+            AND json_extract(b.effect, '$.phase') = 'state'
+            AND json_extract(b.effect, '$.request.requestId') = json_extract(a.effect, '$.request.requestId'))
+        ORDER BY json_extract(a.effect, '$.request.requestId') LIMIT ?`)
+          .all(sessionId ?? null, sessionId ?? null, cursor, pageSize.parse(limit)),
+      );
+    },
+    outboundStatesPage(sessionId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, string, number]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'outbound'
+          AND coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) > ?
+          AND (json_extract(a.effect, '$.outbound.message.messageId') IS NULL
+            OR a.ordinal = (SELECT max(b.ordinal) FROM action b WHERE b.session_id = a.session_id
+              AND b.kind = 'outbound' AND json_extract(b.effect, '$.outbound.message.messageId') =
+                json_extract(a.effect, '$.outbound.message.messageId')))
+        ORDER BY coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) LIMIT ?`)
+          .all(sessionId, cursor, pageSize.parse(limit)),
+      );
+    },
+    guardedOperationsPage(sessionId, turnId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, number, string, number]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.ordinal > ?
+          AND EXISTS (SELECT 1 FROM action member WHERE member.session_id = a.session_id
+            AND member.kind = 'tool' AND json_extract(member.intent, '$.phase') = 'intent'
+            AND (a.id = member.id OR a.parent_id = member.id)
+            AND EXISTS (SELECT 1 FROM action guarded WHERE guarded.session_id = member.session_id
+              AND guarded.kind = 'tool' AND json_extract(guarded.intent, '$.turnId') = ?
+              AND json_extract(guarded.intent, '$.approvalRequired') = 1
+              AND json_extract(guarded.intent, '$.waveId') = json_extract(member.intent, '$.waveId'))
+            AND EXISTS (SELECT 1 FROM action unfinished WHERE unfinished.session_id = member.session_id
+              AND unfinished.kind = 'tool' AND json_extract(unfinished.intent, '$.phase') = 'intent'
+              AND json_extract(unfinished.intent, '$.waveId') = json_extract(member.intent, '$.waveId')
+              AND NOT EXISTS (SELECT 1 FROM action settled WHERE settled.session_id = unfinished.session_id
+                AND settled.parent_id = unfinished.id AND settled.kind != 'fold.checkpoint'
+                AND json_extract(settled.effect, '$.phase') = 'result')))
+        ORDER BY a.ordinal LIMIT ?`)
+          .all(sessionId, cursor, turnId, pageSize.parse(limit)),
+      );
+    },
+    openOperationsPage(sessionId, turnId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, number, string, string, string, number]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.ordinal > ?
+          AND a.kind IN ('llm', 'message', 'compaction', 'tool')
+          AND json_extract(a.intent, '$.phase') = 'intent'
+          AND (a.parent_id = ? OR json_extract(a.intent, '$.turnId') = ?
+            OR a.parent_id IN (SELECT id FROM action WHERE session_id = a.session_id AND kind = 'turn'
+              AND json_extract(intent, '$.phase') = 'resume' AND json_extract(intent, '$.turnId') = ?))
+          AND NOT EXISTS (SELECT 1 FROM action WHERE session_id = a.session_id AND parent_id = a.id
+            AND kind != 'fold.checkpoint' AND json_extract(effect, '$.phase') = 'result')
+          AND (a.kind != 'tool' OR NOT EXISTS (SELECT 1 FROM action guarded
+            WHERE guarded.session_id = a.session_id
+              AND json_extract(guarded.intent, '$.waveId') = json_extract(a.intent, '$.waveId')
+              AND json_extract(guarded.intent, '$.approvalRequired') = 1))
+        ORDER BY a.ordinal LIMIT ?`)
+          .all(sessionId, cursor, turnId, turnId, turnId, pageSize.parse(limit)),
+      );
+    },
+    operationChildrenPage(sessionId, parentId, cursor, limit) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string, string, number, number]>(`
+        SELECT * FROM action WHERE session_id = ? AND parent_id = ? AND ordinal > ?
+        ORDER BY ordinal LIMIT ?`)
+          .all(sessionId, parentId, cursor, pageSize.parse(limit)),
+      );
+    },
+    pendingMessages(sessionId) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'prompt'
+          AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
+            AND d.kind = 'inbox.deliver' AND json_extract(d.intent, '$.inboxId') = a.id)
+        ORDER BY a.ordinal`)
+          .all(sessionId),
+      );
+    },
+  };
+}
+
+
+export function createActions(
+  db: Database,
+  transaction: <T>(operation: () => T) => T,
+  observationSink: ObservationSink,
+  onObservationFailure: ObservationFailurePort,
+): ProtocolStorage.ActionSubAdapter {
+  return {
+    ...createActionReads(db),
+    append(input, expectedRevision) {
+      const parsed = LedgerAction.Append.parse(input);
+      const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
+      if (receipt !== undefined) reportCommitted(db, observationSink, onObservationFailure, receipt);
+      return receipt;
+    },
+    actionById(id) {
+      const row = ActionSqlRow.nullable().parse(
+        db.query("SELECT * FROM action WHERE id = ?").get(id),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    latestAction(sessionId, throughRevision) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND ordinal <= ? ORDER BY ordinal DESC LIMIT 1",
+          )
+          .get(sessionId, throughRevision),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    latestFoldCheckpoint(sessionId, throughRevision) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND kind = 'fold.checkpoint' AND ordinal <= ? ORDER BY ordinal DESC LIMIT 1",
+          )
+          .get(sessionId, throughRevision),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    configurationActions(sessionId, beforeRevision) {
+      const rows = ActionSqlRow.array().parse(
+        db
+          .query(
+            "SELECT * FROM action WHERE session_id = ? AND kind = 'session.configure' AND ordinal < ? ORDER BY ordinal DESC LIMIT 1",
+          )
+          .all(sessionId, beforeRevision),
+      );
+      return rows.map(decodeAction);
+    },
+    policyDecisionRuleIds(sessionId, inputHash) {
+      const row = z
+        .object({ intent: z.string() })
+        .nullable()
+        .parse(
+          db
+            .query(
+              `SELECT intent FROM action WHERE session_id = ? AND kind = 'policy.decision'
+           AND json_extract(intent, '$.inputHash') = ? ORDER BY ordinal DESC LIMIT 1`,
+            )
+            .get(sessionId, inputHash),
+        );
+      if (row === null) return undefined;
+      const parsed = z
+        .object({ matchedRuleIds: z.array(z.string()) })
+        .safeParse(JSON.parse(row.intent));
+      if (!parsed.success)
+        throw new LedgerInvariant({
+          operation: "policy.decision",
+          message: "invalid message decision rule identity",
+          cause: parsed.error,
+        });
+      return parsed.data.matchedRuleIds;
+    },
+    messageActionByPlatformId(sessionId, messageId) {
+      const row = ActionSqlRow.nullable().parse(
+        db
+          .query(
+            `SELECT * FROM action WHERE session_id = ? AND kind = 'message'
+           AND json_extract(intent, '$.value.messageId') = ? ORDER BY ordinal LIMIT 1`,
+          )
+          .get(sessionId, messageId),
+      );
+      return row === null ? undefined : decodeAction(row);
+    },
+    outboundReceipt(destinationSessionId, messageId) {
+      const rows = ActionSqlRow.array().parse(
+        db
+          .query(
+            `SELECT * FROM action WHERE session_id = ? AND kind = 'prompt' AND id = ?
+           UNION ALL
+           SELECT * FROM action WHERE session_id = ? AND kind = 'reply'
+           AND json_extract(effect, '$.answer.outbound.messageId') = ? ORDER BY ordinal`,
+          )
+          .all(destinationSessionId, messageId, destinationSessionId, messageId),
+      );
+      for (const row of rows) {
+        const action = decodeAction(row);
+        if (action.kind === "reply") {
+          const effect = action.effect.value;
+          if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
+          const answer = SessionTransition.Answer.safeParse(effect.answer);
+          if (!answer.success) continue;
+        }
+        return { action, revision: action.ordinal };
+      }
+      return undefined;
+    },
+    verifyChain(sessionId) {
+      return verifyChain(db, sessionId);
+    },
+    range(sessionId, afterRevision, limit) {
+      const pageLimit = z.number().int().positive().max(256).parse(limit);
+      const rows = ActionSqlRow.array().parse(
+        db
+          .query(
+            `SELECT id, parent_id, session_id, kind, intent, effect, revert,
+                  irreversible, encoding_version, ts, ordinal, prev_hash, action_hash
+           FROM action WHERE session_id = ? AND ordinal > ? ORDER BY ordinal LIMIT ?`,
+          )
+          .all(sessionId, afterRevision, pageLimit),
+      );
+      return rows.map(decodeAction);
+    },
+  };
+}
+
+/** Any stored representation SQLite admits into a TEXT hash column; only a string can verify. */
+const HashCell = z.union([z.string(), z.null(), z.number(), z.bigint(), z.instanceof(Uint8Array)]);
+
+function describeHashCell(cell: z.infer<typeof HashCell>): string {
+  if (cell instanceof Uint8Array) return `blob:${Buffer.from(cell).toString("hex")}`;
+  return String(cell);
+}
+
+const VerifyRow = ActionSqlRowSafeIntegers.extend({ prev_hash: HashCell, action_hash: HashCell });
+
+function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict {
+  const rows = VerifyRow.array().parse(
+    db.query("SELECT * FROM action WHERE session_id = ? ORDER BY ordinal").all(sessionId),
+  );
+  let prevHash = GENESIS_PREV_HASH;
+  for (const row of rows) {
+    if (row.prev_hash !== prevHash) {
+      return {
+        kind: "broken",
+        ordinal: row.ordinal,
+        expected: prevHash,
+        actual: describeHashCell(row.prev_hash),
+      };
+    }
+    const expected = computeActionHash({ ...row, prev_hash: prevHash });
+    if (row.action_hash !== expected) {
+      return {
+        kind: "broken",
+        ordinal: row.ordinal,
+        expected,
+        actual: describeHashCell(row.action_hash),
+      };
+    }
+    prevHash = expected;
+  }
+  return { kind: "intact", head: rows.length === 0 ? null : prevHash, length: rows.length };
+}
+
+
+// busy_timeout comes FIRST: the pragma is connection-local (it never touches
+// the database file), so applying it before any file-touching statement makes
+// a concurrent multi-process open wait for a busy writer instead of failing
+// its first read/write instantly with SQLITE_BUSY (W5.2 review F9).
+const OPEN_PRAGMAS = [
+  "PRAGMA busy_timeout = 5000",
+  "PRAGMA journal_mode = WAL",
+  // Decision-class writes survive power loss (#510 D1): committed appends are
+  // durable, which is what "no record, no action" means.
+  "PRAGMA synchronous = FULL",
+  "PRAGMA foreign_keys = ON",
+] as const;
+
+export const SILENT_OBSERVATION_SINK: ObservationSink = { publish: () => undefined };
+
+/** Applies the busy-first open pragmas, then bootstraps the fresh schema in
+ * one immediate transaction so concurrent openers serialize on the DDL. */
+export function bootstrapStoreDatabase(db: Database, schema: readonly string[]): void {
+  for (const pragma of OPEN_PRAGMAS) {
+    const statement = db.prepare(pragma);
+    try {
+      statement.all();
+    } finally {
+      statement.finalize();
+    }
+  }
+  db.transaction(() => {
+    for (const statement of schema) db.run(statement);
+  }).immediate();
+}
+
+export function openStoreDatabase(path: string, schema: readonly string[]): Database {
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  const db = new Database(path);
+  let bootstrapped = false;
+  try {
+    bootstrapStoreDatabase(db, schema);
+    bootstrapped = true;
+  } finally {
+    if (!bootstrapped) db.close();
+  }
+  return db;
+}
+
+/** Folds the WAL back into the main file so a cold start reads a clean
+ * baseline, then closes the connection. */
+function closeStoreDatabase(db: Database): void {
+  db.query("PRAGMA wal_checkpoint(TRUNCATE)").get();
+  db.close();
+}
+
+/** Shared transaction and idempotent close behavior for catalog and session files. */
+export class StoreHandle {
+  readonly observationSink: ObservationSink;
+  /** The injected wall clock this handle was opened with; every timestamp the handle writes comes from it. */
+  readonly now: () => number;
+  // Every transaction caller is a write unit: take the write lock up front
+  // (BEGIN IMMEDIATE) instead of upgrading mid-transaction.
+  readonly transaction = <T>(operation: () => T): T => this.db.transaction(operation).immediate();
+  protected readonly db: Database;
+  private closed = false;
+
+  constructor(db: Database, observationSink: ObservationSink, now: () => number) {
+    this.db = db;
+    this.observationSink = observationSink;
+    this.now = now;
+  }
+
+  /** Idempotent — explicit teardown and scope finalizers may both close. */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    closeStoreDatabase(this.db);
+  }
+}
+
+/**
+ * Handle-scoped per-session ledger file (W5.2 review F1): one open handle per
+ * `<sessionsDir>/<sessionId>.sqlite`, no process-global registration. Owns the
+ * session row, the action hash chain and decision facts of exactly one session.
+ */
+export class SessionStore extends StoreHandle {
+  readonly sessions: SessionWriteAdapter;
+  readonly actions: ProtocolStorage.ActionSubAdapter;
+  readonly decisionFacts: ProtocolStorage.DecisionFactSubAdapter;
+  constructor(
+    db: Database,
+    observationSink: ObservationSink,
+    now: () => number,
+    onObservationFailure: ObservationFailurePort,
+  ) {
+    super(db, observationSink, now);
+    this.sessions = createSessions(db, this.transaction, observationSink, onObservationFailure);
+    this.actions = createActions(db, this.transaction, observationSink, onObservationFailure);
+    this.decisionFacts = createSqliteDecisionFacts(db);
+  }
+}
+
+/**
+ * The default failure port is an explicit drop: with the default silent sink a
+ * publish cannot fail, and a host that injects an observing sink is expected
+ * to inject its own port (logging in its runtime) alongside it.
+ */
+const DROP_OBSERVATION_FAILURES: ObservationFailurePort = () => undefined;
+
+export interface OpenSessionStoreOptions {
+  /** Injected wall clock (#1245): the store never reads ambient time. */
+  readonly now: () => number;
+  readonly observationSink?: ObservationSink;
+  readonly onObservationFailure?: ObservationFailurePort;
+}
+
+export function openSessionStore(path: string, options: OpenSessionStoreOptions): SessionStore {
+  return new SessionStore(
+    openStoreDatabase(path, SESSION_FILE_SCHEMA),
+    options.observationSink ?? SILENT_OBSERVATION_SINK,
+    options.now,
+    options.onObservationFailure ?? DROP_OBSERVATION_FAILURES,
+  );
+}
+
+/** Narrow l0 write-kernel surface (W5.2 review F6): fenced chain commits plus
+ * the hash identity needed to verify them, without deep package imports. */
+export const L0Write = {
+  commitSession,
+  insertSession,
+  selectSession,
+  GENESIS_PREV_HASH,
+  computeActionHash,
+} as const;

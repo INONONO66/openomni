@@ -3,12 +3,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { SessionIndexInsert, SessionIndexRow } from "../../src/storage/catalog-store";
-import { CATALOG_SCHEMA, openCatalogStore } from "../../src/storage/index";
+import type { SessionIndexInsert, SessionIndexRow } from "../../../src/store/catalog";
+import { CATALOG_SCHEMA, openCatalogStore } from "../../../src/store/catalog";
 import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
-const PACKAGE_ROOT = resolve(import.meta.dir, "../..");
+const PACKAGE_ROOT = resolve(import.meta.dir, "../../..");
 
 test("openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog tables", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
@@ -116,7 +116,7 @@ test("concurrent rotateFence from two processes yields distinct consecutive fenc
   try {
     store.indexSession({ id: "s1", parentId: null, role: "resident", createdAt: 1 });
     const childSource = `
-      import { openCatalogStore } from "./src/storage/catalog-store.ts";
+      import { openCatalogStore } from "./src/store/catalog.ts";
       const store = openCatalogStore(String(process.env.CATALOG_PATH), { now: () => 1_700_000_000_000 });
       const fence = store.rotateFence("s1");
       store.close();

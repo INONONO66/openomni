@@ -1,4 +1,4 @@
-import { openCatalogStore } from "../../ledger/src/storage/catalog-store";
+import { openCatalogStore } from "../../../src/store/catalog";
 import type { PlainValue, PolicyRow, Storage } from "@openomni/protocol";
 
 export function withPolicyRows<A>(run: (source: Storage.PolicyRowSubAdapter) => A): A {

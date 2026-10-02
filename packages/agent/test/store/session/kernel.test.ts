@@ -2,16 +2,9 @@ import { sessionTree } from "../helpers/session-tree";
 import { runLedgerSync } from "../helpers/effect";
 import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  type BusEvent,
-  type LedgerAction,
-  type LedgerSession,
-  L0Observation,
-  type SessionGeneration,
-  SessionTurn,
-} from "@openomni/protocol";
+import { type BusEvent, type LedgerAction, type LedgerSession, L0Observation, type SessionGeneration, SessionTurn, } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
-import { SessionHandleStore } from "../../src/index";
+import * as SessionHandleStore from "../../../src/store/fence";
 import type { ObservationSink } from "@openomni/protocol";
 import { useMemoryStores } from "../helpers/storage";
 import { adoptWriter } from "../helpers/session";

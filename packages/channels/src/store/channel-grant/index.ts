@@ -1,5 +1,5 @@
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
+import { requireSubAdapter, withStoreTimestamps } from "@openomni/agent";
 
 export type ChannelGrantStore = ReturnType<typeof createChannelGrantStore>;
 

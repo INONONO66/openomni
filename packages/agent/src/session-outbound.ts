@@ -1,13 +1,8 @@
 import { Effect } from "effect";
 import { AgentInvariantViolation, CommitFailed } from "./errors";
-import { SessionHandleStore } from "./store";
+import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./cluster/kernel-registry";
-import {
-  canonicalDigest,
-  PlainValueSchema,
-  type LedgerAction,
-  SessionTransition,
-} from "@openomni/protocol";
+import { canonicalDigest, PlainValueSchema, type LedgerAction, SessionTransition, } from "@openomni/protocol";
 import type { ResolvedSessionRuntime } from "./session-contract";
 import type { SessionError } from "./errors";
 

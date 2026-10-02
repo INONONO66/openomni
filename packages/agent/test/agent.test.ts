@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
 import { createTestAgent, failure } from "./helpers/effect-g3";
 import { describe, expect, it, mock, spyOn, test } from "bun:test";
-import { Auth, LlmFailure } from "../src/model";
+import { Auth } from "../src/model";
 import type { Tool } from "@openomni/protocol";
 import { createAssistantMessage } from "../src/core/message-factory";
 import { RunEvents } from "../src/core/execution/events";
@@ -11,14 +11,8 @@ import { Bus } from "./helpers/bus";
 import { failureEvidence } from "../src/executor-outcome";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/services";
 import { PolicyDenied, ToolBodyFailed, AgentFailure, AgentInvariantViolation, AgentStopError, CommitFailed, CompactionExecutionError, ExecutionApprovalError, OutcomeUnknown, Interrupted, InvocationClosed, GenerationUnavailable } from "../src/errors";
-import type { LedgerError } from "../src/store";
-import {
-  completeModel,
-  mockLlm,
-  createStopOutcome,
-  mockProviderModel,
-  type MockLlmFn,
-} from "./helpers/mock-llm";
+import type { LedgerError } from "../src/store/errors";
+import { completeModel, mockLlm, createStopOutcome, mockProviderModel, type MockLlmFn, } from "./helpers/mock-llm";
 import { runInput } from "./helpers/run-input";
 import { assistantTextSnapshot } from "./helpers/messages";
 
@@ -39,7 +33,7 @@ test("agent foundation tags and failure evidence are runtime contracts", () => {
   expect(failureEvidence(new PolicyDenied({ phase: "pre", ruleIds: ["r"] }))).toEqual({ tag: "PolicyDenied", phase: "pre", ruleIds: ["r"] });
   expect(failureEvidence(new ToolBodyFailed({ tool: "x", cause: "bad" }))).toEqual({ tag: "ToolBodyFailed", tool: "x", cause: "bad" });
   expect(failureEvidence(new AgentFailure({ operation: "x", cause: "bad" }))).toEqual({ tag: "AgentFailure", operation: "x", cause: "bad" });
-  expect(failureEvidence(new LlmFailure({ operation: "complete", cause: "bad" }))).toEqual({ tag: "LlmFailure", operation: "complete", cause: "bad" });
+  expect(failureEvidence(new AgentFailure({ operation: "complete", cause: "bad" }))).toEqual({ tag: "AgentFailure", operation: "complete", cause: "bad" });
   expect(failureEvidence(new CompactionExecutionError({ reason: "invalid_output" }))).toEqual({ tag: "CompactionExecutionError", reason: "invalid_output" });
   expect(failureEvidence(new InvocationClosed({ tool: "x", reason: "failed" }))).toEqual({ tag: "InvocationClosed", tool: "x", reason: "failed" });
   expect(failureEvidence(new GenerationUnavailable({ generation: 2 }))).toEqual({ tag: "GenerationUnavailable", generation: 2 });
@@ -146,8 +140,6 @@ describe("ChatAgent public run contract", () => {
           description: "Lookup",
           inputSchema: { type: "object" },
           safe: true,
-          placement: "host",
-          requires: [],
         },
       ],
       toolExecutor: (call, context) => Effect.promise(async () => {
@@ -173,8 +165,6 @@ describe("ChatAgent public run contract", () => {
           description: "Lookup",
           inputSchema: { type: "object" },
           safe: true,
-          placement: "host",
-          requires: [],
         },
       ],
       llm: mockLlm(async () => {
@@ -244,7 +234,7 @@ describe("ChatAgent provider boundary failures", () => {
         events: Bus,
         model: { provider: "missing-provider", id: "missing-model" },
       }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
-      _tag: "LlmFailure", operation: "llm",
+      _tag: "AgentFailure", operation: "llm",
     });
   });
 
@@ -259,7 +249,7 @@ describe("ChatAgent provider boundary failures", () => {
           events: Bus,
           model: { provider: "anthropic", id: "missing-proxy-model" },
         }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({
-        _tag: "LlmFailure", operation: "llm",
+        _tag: "AgentFailure", operation: "llm",
       });
     } finally {
       listing.mockRestore();
@@ -271,7 +261,7 @@ describe("ChatAgent provider boundary failures", () => {
     expect(await isolated(Effect.flip(createTestAgent({
         events: Bus,
         model: { provider: "anthropic", id: "missing-model" },
-      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "LlmFailure", operation: "llm" });
+      }).run(runInput([{ role: "user", content: "lookup" }]))))).toMatchObject({ _tag: "AgentFailure", operation: "llm" });
   });
 
   it("resolves a known model through the default provider path", async () => {

@@ -1,4 +1,4 @@
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import { Gateway } from "@openomni/protocol";

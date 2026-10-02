@@ -1,8 +1,45 @@
+import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
-import { DecisionFact, type Storage } from "@openomni/protocol";
+import { DecisionFact, type Storage, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-import { computeDecisionFactHash } from "./l0-hash";
-import { parseStoredJson } from "./sqlite-json-data";
+import { parseStoredJson } from "./json";
+
+
+/** Narrow first-writer-wins port on one store handle's transaction boundary. */
+namespace DecisionFacts {
+  export type Port = ProtocolStorage.DecisionFactSubAdapter;
+
+  export interface Source {
+    readonly decisionFacts?: Port;
+    transaction<T>(operation: () => T): T;
+  }
+}
+
+/**
+ * Handle-scoped decision-fact port (W5.2 F1): the perimeter injects the store
+ * handle whose transaction boundary its admission unit runs in.
+ */
+export function createDecisionFactPort(source: DecisionFacts.Source): {
+  transaction<T>(operation: () => T): T;
+  port(): DecisionFacts.Port | undefined;
+} {
+  return {
+    transaction: (operation) => source.transaction(operation),
+    port: () => source.decisionFacts,
+  };
+}
+
+export function computeDecisionFactHash(input: {
+  key: string;
+  type: string;
+  data: string;
+  timeCreated: number;
+}): string {
+  return createHash("sha256")
+    .update(JSON.stringify([input.key, input.type, input.data, input.timeCreated]))
+    .digest("hex");
+}
+
 
 const SqliteRow = z.object({
   key: z.string(),

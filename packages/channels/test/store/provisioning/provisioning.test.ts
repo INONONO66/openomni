@@ -1,16 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createDecipheriv, type DecipherGCM } from "node:crypto";
-import { expectNamedFailure } from "../helpers/errors";
-import { useSqliteStores } from "../helpers/storage";
+import { expectNamedFailure } from "../../../../agent/test/store/helpers/errors";
+import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
-import {
-  createChannelInstanceStore,
-  createPersonStore,
-  createSecretStore,
-  Vault,
-} from "../../src/index.js";
+import { createChannelInstanceStore, createPersonStore, createSecretStore, Vault, } from "../../../src/index.js";
 
 const NOW = 1_756_000_000_000;
 

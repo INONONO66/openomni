@@ -3,8 +3,8 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { jsonSchema, streamText } from "ai";
 import { z } from "zod";
 import { Bus, newTraceId } from "./helpers/observation";
-import { clientIdentity } from "../src/provider/identity";
-import type { Sink } from "../src/sink";
+import { clientIdentity } from "../../src/model/provider/identity";
+import type { Sink } from "../../src/model/sink";
 
 const TEST_TRACE = {
   traceId: newTraceId(),

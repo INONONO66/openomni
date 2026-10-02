@@ -15,11 +15,35 @@ import {
 } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "../errors";
-import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "../services";
-import type { CatalogStore } from "../storage/catalog-store.js";
-import type { SessionStore } from "../storage/session-store.js";
-import { writeEffect } from "../storage/write-effect";
+import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
+import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
+import type { CatalogStore } from "./catalog.js";
+import type { SessionStore } from "./session-file.js";
+import { writeEffect } from "./storage/write-effect";
+
+/**
+ * Atomically claims one item against a counted window.
+ *
+ * The caller owns the persisted row and window projection; this primitive owns
+ * the indivisible read/decision/append sequence. `alreadyClaimed` makes retrying
+ * a deterministic claim idempotent without charging the window twice.
+ */
+export function claimWithinCountedWindow<State>(operations: {
+  transaction<T>(operation: () => T): T;
+  alreadyClaimed(): boolean;
+  readWindowState(): State;
+  canClaim(state: State): boolean;
+  append(): void;
+}): "claimed" | "refused" {
+  return operations.transaction(() => {
+    if (operations.alreadyClaimed()) return "claimed";
+    const state = operations.readWindowState();
+    if (!operations.canClaim(state)) return "refused";
+    operations.append();
+    return "claimed";
+  });
+}
+
 
 export const RESUME_BUDGET = 10;
 

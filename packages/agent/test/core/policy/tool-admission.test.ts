@@ -20,8 +20,6 @@ const tools: Tool.Spec[] = [
   {
     name: "screen.capture",
     inputSchema: { type: "object" },
-    placement: "machine",
-    requires: ["screen.read"],
   },
   { name: "network.fetch", inputSchema: { type: "object" } },
 ];

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Channel } from "@openomni/protocol";
-import { SessionNotFound, StorageUnavailable } from "../src/errors";
-import { createSurfaceKeyStore } from "../src/surface-key";
+import { SessionNotFound, StorageUnavailable } from "../../src/store/errors";
+import { createSurfaceKeyStore } from "../../src/store/surface-key";
 import { materializeSession } from "./helpers/session";
 import { useMemoryStores } from "./helpers/storage";
 

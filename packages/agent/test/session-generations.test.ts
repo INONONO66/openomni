@@ -1,7 +1,7 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
-import { SessionHandleStore } from "../src/store";
-import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate";
+import * as SessionHandleStore from "../src/store/fence";
+import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
 import { Effect, Fiber, Layer } from "effect";
 import { NamedPolicyRegistry } from "../src/bundle";
 import { AgentGenerationLive } from "./helpers/generation-layer";

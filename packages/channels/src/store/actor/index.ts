@@ -1,7 +1,19 @@
+import { Data } from "effect";
 import type { Actor, Storage as ProtocolStorage } from "@openomni/protocol";
-import { ActorRegistryRefused } from "../errors";
-import { requireSubAdapter, withStoreTimestamps } from "../storage/timestamped-store";
-import { StoredIdentity, StoredEndpoint } from "./schema";
+import { requireSubAdapter, withStoreTimestamps } from "@openomni/agent";
+import { StoredIdentity, StoredEndpoint } from "@openomni/agent";
+
+/**
+ * A synchronous actor-registry write the caller can handle: an unknown
+ * identity or endpoint, an already-claimed address, or a wrong standing.
+ * Thrown because the registry surface is not Effect code.
+ */
+class ActorRegistryRefused extends Data.TaggedError("ActorRegistryRefused")<{
+  readonly operation: "registerEndpoint" | "mintProvisional" | "promote" | "mergeEndpoint";
+  readonly reason: "identity" | "endpoint" | "address" | "standing";
+  readonly message: string;
+}> {}
+
 
 /** The catalog-handle slice the actor registry writes through (W5.2 F1). */
 export interface ActorRegistrySource {

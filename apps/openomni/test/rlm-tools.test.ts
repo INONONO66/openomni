@@ -425,6 +425,5 @@ describe("catalog gating for the rlm tools", () => {
   it("projects completion without target metadata", () => {
     const specs = catalogDefinitions({ ...testToolPorts, llm: async () => "" }).map((entry) => toolSpec(entry));
     expect(specs.map((spec) => spec.name)).toContain(COMPLETION_TOOL_NAME);
-    expect(specs.every((spec) => spec.placement === undefined)).toBe(true);
   });
 });

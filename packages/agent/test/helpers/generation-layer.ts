@@ -1,5 +1,5 @@
 import { Layer } from "effect";
-import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
 import type { AnyToolDefinition, SessionGeneration } from "@openomni/protocol";
 import { SessionLayer, ToolCatalog } from "../../src/services";
 

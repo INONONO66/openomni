@@ -3,12 +3,10 @@ import { chatServices } from "../test/helpers/chat-services";
 import { allowConfigure, kernelRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
 import { catalogLayer, executorLayer } from "../test/helpers/service-layers";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
-import {
-  compilePolicySnapshot,
-  KERNEL_POLICY_REGISTRY,
-  SEEDED_POLICY_ROWS,
-} from "../src/kernel/gate";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "../src/store";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
+import { openCatalogStore } from "../src/store/catalog";
+import { openSessionStore } from "../src/store/session-file";
+import * as SessionHandleStore from "../src/store/fence";
 import { accumulateUsage, Llm } from "../src/model";
 import type { Token } from "@openomni/protocol";
 import { Entropy, ObservationSink } from "../src/services";

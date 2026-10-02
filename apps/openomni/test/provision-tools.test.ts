@@ -3,7 +3,7 @@ import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Vault } from "@openomni/agent";
+import { Vault } from "@openomni/channels";
 import { testPlane } from "./helpers/ledger";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { type PlainObject, Provisioning } from "@openomni/protocol";

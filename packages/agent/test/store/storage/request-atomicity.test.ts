@@ -6,7 +6,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type BusEvent, L0Observation, type ObservationSink } from "@openomni/protocol";
-import { openCatalogStore, openSessionStore, SessionHandleStore } from "../../src/index";
+import { openCatalogStore } from "../../../src/store/catalog";
+import { openSessionStore } from "../../../src/store/session-file";
+import * as SessionHandleStore from "../../../src/store/fence";
 import { runLedgerSync } from "../helpers/effect";
 import { expectCommitted, requestFixture, requestStateAction } from "../helpers/request";
 import { testNow, useSqliteStores } from "../helpers/storage";
@@ -21,7 +23,7 @@ test("failed request insert rolls back original action, revision and observation
   const before = stores.kernel.row(request.sessionId);
   const tree = sessionTree(request.sessionId, stores.session.actions);
   expect(() => commit([original, requestStateAction(request)])).toThrow(
-    expect.objectContaining({ _tag: "LedgerFailure" }),
+    expect.objectContaining({ _tag: "AgentFailure" }),
   );
   expect(stores.kernel.row(request.sessionId)).toEqual(before);
   expect(sessionTree(request.sessionId, stores.session.actions)).toEqual(tree);

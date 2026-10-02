@@ -1,9 +1,9 @@
 import { testExecutor } from "../../helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { Effect, Fiber } from "effect";
 import { expect, it } from "bun:test";
 import type { ExecutionLedger } from "../../../src/executor";
-import { compilePolicySnapshot } from "../../../src/kernel/gate";
+import { compilePolicySnapshot } from "../../../src/kernel/gate/compile";
 import { L0Observation, type LedgerAction, type PolicyRow } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";
 

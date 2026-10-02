@@ -1,10 +1,6 @@
-import { KERNEL_POLICY_REGISTRY } from "../src/named-registry";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
 import { describe, expect, it } from "bun:test";
-import {
-  compilePolicySnapshot,
-  createPolicyCompiler,
-  type PolicyEvaluationInput,
-} from "../src/index";
+import { compilePolicySnapshot, createPolicyCompiler, type PolicyEvaluationInput } from "../../../src/kernel/gate/compile";
 import type { PolicyRow, Storage } from "@openomni/protocol";
 import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows, withPolicyRows } from "./row-fixtures";
 

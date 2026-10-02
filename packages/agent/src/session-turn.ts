@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, type Scope } from "effect";
 import { z } from "zod";
-import type { SessionHandleStore } from "./store";
+import type * as SessionHandleStore from "./store/fence";
 import { BusEvent, canonicalDigest, Inbox, type PlainValue, type SessionGeneration, type SessionTurn, type LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./executor";
 import * as Failure from "./failure";

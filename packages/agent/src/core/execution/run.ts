@@ -3,7 +3,6 @@ import { AgentFailure, AgentInvariantViolation, Interrupted, ContextAdmissionErr
 import type { LlmError } from "../../model";
 import {
   Llm,
-  LlmFailure,
   Retry as LlmRetry,
   LlmRunFailure,
   observeRetry,
@@ -256,7 +255,7 @@ function runModelStep(
 }
 
 function modelFailure(error: LlmError): ExecutionError {
-  return error instanceof LlmRunFailure ? error : new LlmFailure({
+  return error instanceof LlmRunFailure ? error : new AgentFailure({
     operation: "llm", cause: error.message,
   });
 }

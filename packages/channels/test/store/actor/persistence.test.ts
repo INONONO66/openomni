@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { createActorRegistry } from "../../src/index.js";
-import { useSqliteStores } from "../helpers/storage";
+import { createActorRegistry } from "../../../src/index.js";
+import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
 
 describe("ActorRegistry SQLite persistence", () => {
   const stores = useSqliteStores("actor-registry");
@@ -234,5 +234,21 @@ describe("ActorRegistry SQLite persistence", () => {
     // Then
     expect(registry().getEndpoint("ep_discord_user_1")).toBeUndefined();
     expect(registry().resolveEndpoint("discord", "user-1", "guild")).toBeUndefined();
+  });
+
+  test("removing an endpoint preserves its identity and removes address lookup", () => {
+    const registry = createActorRegistry(stores.catalog);
+    registry.registerIdentity({ id: "actor", kind: "human", trustTier: "observer" });
+    registry.registerEndpoint({
+      id: "endpoint",
+      actorId: "actor",
+      channel: "discord",
+      externalId: "external",
+    });
+    const adapter = stores.catalog.actorRegistry;
+    expect(adapter.removeEndpoint("endpoint")).toBe(true);
+    expect(registry.getIdentity("actor")?.id).toBe("actor");
+    expect(registry.resolveEndpoint("discord", "external")).toBeUndefined();
+    expect(adapter.removeEndpoint("endpoint")).toBe(false);
   });
 });

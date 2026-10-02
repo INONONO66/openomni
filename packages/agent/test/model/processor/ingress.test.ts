@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ProviderEvent } from "../../src/processor/event-schema";
+import { ProviderEvent } from "../../../src/model/processor/event-schema";
 import { useProcessor, capturingSink, processorInfo, streamOf } from "../helpers/processor";
-import type { StreamEvent } from "../../src/processor/stream-events";
+import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
 describe("processor ingress", () => {
   const { createProcessor, events } = useProcessor();

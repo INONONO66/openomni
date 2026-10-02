@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import * as llmPackage from "../src/index";
-import type { StreamEvent } from "../src/processor/stream-events";
+import * as llmPackage from "../../src/model";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
 import { usePrivateCatalog } from "./helpers/catalog";
 import { fixedNow, sequentialIds } from "./helpers/fixtures";
 import { runEffect } from "./helpers/native";

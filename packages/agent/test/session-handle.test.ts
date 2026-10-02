@@ -12,17 +12,11 @@ import { commitReceivedMessage } from "./helpers/ingress";
 import { reactivateSession } from "./helpers/wake-session";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/executor-contract";
 import { closeSessions, session, type SessionCreateOptions, type SessionHandle, type SessionRunner, type SessionRunnerInput } from "../src/session-handle";
-import { LedgerFailure, openCatalogStore, openSessionStore, SessionHandleStore, type LedgerError } from "../src/store";
-import {
-  type BusEvent,
-  type LedgerAction,
-  L0Observation,
-  PlainValueSchema,
-  type ObservationSink,
-  type SessionGeneration,
-  type SessionTransition,
-  type SessionTurn,
-} from "@openomni/protocol";
+import { AgentFailure, type LedgerError } from "../src/store/errors";
+import { openCatalogStore } from "../src/store/catalog";
+import { openSessionStore } from "../src/store/session-file";
+import * as SessionHandleStore from "../src/store/fence";
+import { type BusEvent, type LedgerAction, L0Observation, PlainValueSchema, type ObservationSink, type SessionGeneration, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { CommitFailed } from "../src/errors";
 import { GenerationOwnership } from "../src/services";
 import { GenerationRawSlots } from "../src/session-generations";
@@ -1020,7 +1014,7 @@ describe("durable session handle", () => {
             if (decision === undefined || policyHook(decision) !== "turn.pre") return commit(input);
             explode.mockRestore();
             return Effect.fail(
-              new LedgerFailure({ operation: "session.commit", cause: "admission fixture" }),
+              new AgentFailure({ operation: "session.commit", cause: "admission fixture" }),
             );
           },
         );
@@ -1032,7 +1026,7 @@ describe("durable session handle", () => {
           cause: {
             _tag: "CommitFailed",
             error: {
-              _tag: "LedgerFailure",
+              _tag: "AgentFailure",
               operation: "session.commit",
               cause: "admission fixture",
             },

@@ -14,19 +14,8 @@ import {
   type SessionEntityTimerContext,
   type TimerChainReads,
 } from "@openomni/agent";
-import {
-  createActorRegistry,
-  createChannelGrantStore,
-  createChannelInstanceStore,
-  createPersonStore,
-  createSecretStore,
-  openCatalogStore,
-  openSessionStore,
-  SessionHandleStore,
-  type LedgerHandles,
-  type ObservationFailurePort,
-  type ObservationPublishFailure,
-} from "@openomni/agent";
+import { openCatalogStore, openSessionStore, SessionHandleStore, type LedgerHandles, type ObservationFailurePort, type ObservationPublishFailure } from "@openomni/agent";
+import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
 import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";

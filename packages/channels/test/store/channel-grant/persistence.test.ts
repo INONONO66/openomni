@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { createChannelGrantStore } from "../../src/index.js";
-import { testNow, useSqliteStores } from "../helpers/storage";
+import { createChannelGrantStore } from "../../../src/index.js";
+import { testNow, useSqliteStores } from "../../../../agent/test/store/helpers/storage";
 import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { Result } from "effect";
 import { join } from "node:path";
-import { Vault } from "@openomni/agent";
+import { Vault } from "@openomni/channels";
 
 /**
  * KEK sourcing (docs/provisioning-and-providers.md §3.3): the key encryption

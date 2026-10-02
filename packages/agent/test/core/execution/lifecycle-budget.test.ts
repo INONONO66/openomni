@@ -62,8 +62,6 @@ describe("run budget terminal facts", () => {
                 description: "Lookup",
                 inputSchema: { type: "object" },
                 safe: true,
-                placement: "host",
-                requires: [],
               },
             ],
             toolExecutor,

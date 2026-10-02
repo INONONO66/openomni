@@ -1,13 +1,8 @@
 import { Effect } from "effect";
 import { AgentFailure, type ExecutionError } from "./errors";
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
-import type { PolicyEvaluation } from "./kernel/gate";
-import {
-  judgeStop,
-  type StopState,
-  type StopObservation,
-  type StopMetric,
-} from "./core/execution/stop-chain";
+import type { PolicyEvaluation } from "./kernel/gate/compile";
+import { judgeStop, type StopState, type StopObservation, type StopMetric, } from "./core/execution/stop-chain";
 import type { ResolvedExecutorOptions } from "./executor-contract";
 
 /** Projects limits from the captured compiler; never repeats policy row names or numeric limits. */

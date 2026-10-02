@@ -10,7 +10,8 @@ import {
   type WsConnection,
 } from "@openomni/channels";
 import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
-import type { ChannelGrantStore, SessionHandleStore } from "@openomni/agent";
+import type { SessionHandleStore } from "@openomni/agent";
+import type { ChannelGrantStore } from "@openomni/channels";
 import type { Actor, Gateway } from "@openomni/protocol";
 import {
   Entropy, GenerationLayers, ObservationSink, currentInvocation,

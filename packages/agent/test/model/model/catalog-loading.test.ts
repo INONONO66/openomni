@@ -5,8 +5,8 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlainObject } from "@openomni/protocol";
-import { ModelsDev } from "../../src/model";
-import { Catalog } from "../../src/model/schema";
+import { ModelsDev } from "../../../src/model/model";
+import { Catalog } from "../../../src/model/model/schema";
 import { resetCatalog } from "../helpers/model-loader";
 
 type RemoteCatalogCase<Selected> = {
@@ -174,7 +174,7 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      const snapshot = (await import("../../src/model/models-snapshot.json")).default;
+      const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
       await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
     });
 

@@ -2,7 +2,7 @@ import { sessionTree } from "../helpers/session-tree";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { LedgerSession } from "@openomni/protocol";
-import { SessionSqlRow } from "../../src/storage/sqlite-l0-rows";
+import { SessionSqlRow } from "../../../src/store/storage/sqlite-l0-rows";
 import { materializeSession } from "../helpers/session";
 import { useSqliteStores } from "../helpers/storage";
 

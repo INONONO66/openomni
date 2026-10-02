@@ -7,7 +7,7 @@
  */
 
 import type { Gateway, Storage as ProtocolStorage } from "@openomni/protocol";
-import { requireSubAdapter } from "../storage/timestamped-store";
+import { requireSubAdapter } from "@openomni/agent";
 
 type ClaimResult<Refusal> =
   | Readonly<{ kind: "claimed" }>

@@ -13,4 +13,4 @@ import type { Sink } from "./sink";
 export class Llm extends Context.Service<Llm, {
   readonly run: (input: RunInput, sink: Sink, dependencies?: Parameters<typeof run>[2]) => ReturnType<typeof run>;
   readonly resolveModel: (input: Omit<Parameters<typeof Provider.resolveModel>[0], "authFilePath">) => ReturnType<typeof Provider.resolveModel>;
-}>()("@openomni/llm/Llm") {}
+}>()("@openomni/agent/Llm") {}

@@ -1,9 +1,9 @@
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { LedgerInvariant } from "../errors";
 import type { Database } from "bun:sqlite";
-import { claimWithinCountedWindow } from "./counted-window-claim.js";
+import { claimWithinCountedWindow } from "../fence.js";
 import { z } from "zod";
-import { SqliteCount } from "./sqlite-json-data";
+import { SqliteCount } from "../json";
 
 const WindowRow = z.object({
   count_in_window: SqliteCount,

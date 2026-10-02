@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PlainValueSchema, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { run, type RunInput } from "./helpers/native";
-import type { StreamEvent } from "../src/processor/stream-events";
+import type { StreamEvent } from "../../src/model/processor/stream-events";
 
 async function returnedCalls(
   names: readonly string[],

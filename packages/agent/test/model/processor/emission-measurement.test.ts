@@ -1,15 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import {
-  anthropicModel as model,
-  assistantMessage as buildAssistantMessage,
-  fixedNow,
-  sequentialIds,
-} from "../helpers/fixtures";
+import { anthropicModel as model, assistantMessage as buildAssistantMessage, fixedNow, sequentialIds, } from "../helpers/fixtures";
 import type { Message } from "@openomni/protocol";
-import type { Sink } from "../../src/sink";
+import type { Sink } from "../../../src/model/sink";
 import { Processor } from "../helpers/native";
 import { Bus } from "../helpers/observation";
-import type { StreamEvent } from "../../src/processor/stream-events";
+import type { StreamEvent } from "../../../src/model/processor/stream-events";
 
 // Emission count depends on part boundaries, not token volume.
 

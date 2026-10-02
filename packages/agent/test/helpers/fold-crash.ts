@@ -1,31 +1,16 @@
-import { LedgerFailure } from "../../src/store";
-import {
-  canonicalDigest,
-  FoldCheckpoint,
-  PlainObjectSchema,
-  PlainValueSchema,
-  type LedgerAction,
-} from "@openomni/protocol";
+import { AgentFailure } from "../../src/store/errors";
+import { canonicalDigest, FoldCheckpoint, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
 import { z } from "zod";
 import { Effect } from "effect";
 import { runAgent } from "./executor";
-import {
-  allowConfigure,
-  isolatedRuntime,
-  withSessionServices,
-  type SessionFixture,
-} from "./session-services";
+import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/compaction/successor";
 import { closeSessions, session } from "../../src/session-handle";
 import { hydrateSessionHistory } from "../../src/session-lifecycle/history";
 import { foldCheckpointAction, requireCommit } from "../../src/session-record";
 import { requestLedger } from "./request-ledger";
-import {
-  paddingActions,
-  reconstructionFixture,
-  reconstructionSession,
-} from "./reconstruction-fixture";
+import { paddingActions, reconstructionFixture, reconstructionSession, } from "./reconstruction-fixture";
 
 export const foldCrashPoint = z.enum([
   "fold_checkpoint_committed_before_wake",
@@ -173,7 +158,7 @@ async function staleCut(stop: Stop) {
             yield* Effect.try({
               try: () => stop([...bodies], action, proof()),
               catch: (cause) =>
-                new LedgerFailure({ operation: "test.witness", cause: String(cause) }),
+                new AgentFailure({ operation: "test.witness", cause: String(cause) }),
             });
         }
         return yield* recording.ledger.commit(action);

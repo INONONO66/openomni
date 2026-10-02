@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LlmCall, Operational, type BusEvent, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
-import type { Sink } from "../../src/sink";
+import type { Sink } from "../../../src/model/sink";
 import { apiError } from "../helpers/retry";
 import { useProcessor, streamOf, statusStates, processorInfo } from "../helpers/processor";
 

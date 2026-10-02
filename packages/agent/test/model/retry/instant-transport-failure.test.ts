@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { apiError, sources } from "../helpers/retry";
-import { Retry } from "../../src/retry";
+import { Retry } from "../../../src/model/retry";
 
 function transportError(): ReturnType<typeof apiError> {
   // A connection-level failure: retryable, but no HTTP response ever arrived,

@@ -1,4 +1,4 @@
-import type { ActorRegistry } from "@openomni/agent";
+import type { ActorRegistry } from "@openomni/channels";
 import { type Actor, canonicalDigest, type Provisioning } from "@openomni/protocol";
 import { ToolRefused } from "@openomni/agent";
 import {

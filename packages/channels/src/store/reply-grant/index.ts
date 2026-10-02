@@ -1,5 +1,5 @@
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
-import { requireSubAdapter } from "../storage/timestamped-store";
+import { requireSubAdapter } from "@openomni/agent";
 
 /** Channels owns normalization; this store persists only the current projection. */
 export function createReplyGrantStore(source: {

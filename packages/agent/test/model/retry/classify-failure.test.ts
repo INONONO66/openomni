@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { coerceApiError } from "../../src/error";
+import { coerceApiError } from "../../../src/model/error";
 import { type Run, LlmRunFailure } from "../helpers/native";
-import { Retry } from "../../src/retry";
+import { Retry } from "../../../src/model/retry";
 
 import { apiError, sdkError, sources } from "../helpers/retry";
 

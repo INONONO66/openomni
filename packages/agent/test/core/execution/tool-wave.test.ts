@@ -19,7 +19,7 @@ import { GenerationRawSlots } from "../../../src/session-generations";
 import { createDispatcher } from "../../../src/tool-dispatcher";
 import { executeToolBody } from "../../../src/tool-body";
 import { AgentFailure } from "../../../src/errors";
-import { LedgerFailure } from "../../../src/store";
+
 import { allowAllPolicy } from "../../helpers/compiled-policy";
 import { recordingLedger } from "../../helpers/effect-g2";
 import { bounded } from "../../helpers/bounded";
@@ -390,7 +390,7 @@ it("dispatches zero tools when the canonical assistant call-block write fails", 
   const record = recording({ ledger: { commit: (action) => {
     if (action.kind === "message" && PlainObjectSchema.parse(action.effect.value).phase === "result") {
       failedWrites += 1;
-      return Effect.fail(new LedgerFailure({ operation: "canonical_assistant_write", cause: "injected_failure" }));
+      return Effect.fail(new AgentFailure({ operation: "canonical_assistant_write", cause: "injected_failure" }));
     }
     return ledger.ledger.commit(action);
   } } });

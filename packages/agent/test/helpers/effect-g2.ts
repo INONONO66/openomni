@@ -7,12 +7,7 @@ import { commitReceivedMessage } from "./ingress";
 import { isolatedLedger } from "./isolated";
 import { testExecutor } from "./executor";
 import { catalogLayer, dispatcherToolPorts } from "./service-layers";
-import {
-  type ChatFixture as ChatAgentConfig,
-  fixtureConfigHead,
-  fixtureTraceContext,
-  prepareChatFixture,
-} from "./chat-services";
+import { type ChatFixture as ChatAgentConfig, fixtureConfigHead, fixtureTraceContext, prepareChatFixture, } from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
 import { createSessionChatRunner } from "../../src/session-chat-runner";
 import { createTurnDispatcher } from "../../src/tool-dispatcher";
@@ -26,7 +21,7 @@ import { foldSessionHistory } from "../../src/session-lifecycle/history";
 import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session-contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import type { CompiledPolicySnapshot } from "../../src/kernel/gate";
+import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
 import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "../../src/model";
 import type { ExecutorOptions, DurableExecutor } from "../../src/executor-contract";
@@ -117,7 +112,7 @@ export function receiveOutbound(message: SessionTransition.OutboundMessage, crea
       parentActionId: null,
     }),
   ).pipe(
-    Effect.mapError((error: import("../../src/store").LedgerError) => new CommitFailed({ error })),
+    Effect.mapError((error: import("../../src/store/errors").LedgerError) => new CommitFailed({ error })),
   );
 }
 export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>) {

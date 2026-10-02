@@ -1,6 +1,7 @@
-import { Effect } from "effect";
+import type { Effect } from "effect";
+import { runTestSync } from "../../helpers/isolated";
 
-/** The only synchronous test-side runner for ledger programs; failures surface as thrown errors. */
+/** The only synchronous test-side runner for ledger programs; failures surface as thrown errors (delegates to the agent runner owner, #1246). */
 export function runLedgerSync<A, E>(program: Effect.Effect<A, E>): A {
-  return Effect.runSync(program);
+  return runTestSync(program);
 }

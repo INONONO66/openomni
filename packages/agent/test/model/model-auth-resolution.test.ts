@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { runEffect } from "./helpers/native";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { Auth, ModelResolutionError, Provider } from "../src";
-import { ModelsDev } from "../src/model";
+import { Auth, ModelResolutionError, Provider } from "../../src/model";
+import { ModelsDev } from "../../src/model/model";
 import { fixedNow } from "./helpers/fixtures";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

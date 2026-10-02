@@ -1,13 +1,13 @@
-import { sessionTree } from "../helpers/session-tree";
+import { sessionTree } from "./helpers/session-tree";
 import { Effect, Result } from "effect";
 import { expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { LedgerAction, LedgerSession } from "@openomni/protocol";
-import { computeActionHash, GENESIS_PREV_HASH } from "../../src/storage/l0-hash";
-import { ActionSqlRow } from "../../src/storage/sqlite-l0-rows";
-import { runLedgerSync } from "../helpers/effect";
-import { openLedgerDatabase, observedL0Adapters, type L0Adapters } from "../helpers/ledger";
+import { computeActionHash, GENESIS_PREV_HASH } from "../../src/store/session-file";
+import { ActionSqlRow } from "../../src/store/storage/sqlite-l0-rows";
+import { runLedgerSync } from "./helpers/effect";
+import { openLedgerDatabase, observedL0Adapters, type L0Adapters } from "./helpers/ledger";
 
 function append(id: string, sessionId = "chain"): LedgerAction.Append {
   return {

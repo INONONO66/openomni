@@ -8,8 +8,8 @@ const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
 // zod is pure schema validation — no I/O, no authority — and providers declare
 // their credential/settings schemas in-band (docs/provisioning-and-providers.md §4).
 const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol", "zod", "effect"]);
-const JUDGMENT_ALLOWED_PACKAGES = new Set(["@openomni/agent", "@openomni/agent"]);
-const JUDGMENT_DIRS = ["src/router/", "src/authn/"] as const;
+const JUDGMENT_ALLOWED_PACKAGES = new Set(["@openomni/agent"]);
+const JUDGMENT_DIRS = ["src/router/", "src/authn/", "src/store/"] as const;
 
 type ScannedSource = Readonly<{ path: string; text: string }>;
 
@@ -107,6 +107,6 @@ describe("channels band import boundary", () => {
           text: 'import Ledger = require("@openomni/agent");',
         },
       ]),
-    ).toEqual(["src/websocket.ts: imports @openomni/ledger"]);
+    ).toEqual(["src/websocket.ts: imports @openomni/agent"]);
   });
 });

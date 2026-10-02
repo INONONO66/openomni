@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { z } from "zod";
-import { openCatalogStore } from "../../src/storage/catalog-store";
+import { openCatalogStore } from "@openomni/agent";
 
 const [path, id] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
 if (!process.send) throw new Error("reply-grant contender requires IPC");

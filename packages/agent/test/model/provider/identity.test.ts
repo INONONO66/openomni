@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { anthropicResponse, captureRequest, openAIResponse } from "../helpers/provider-fetch";
 import { arch, platform, release } from "node:os";
-import type { Auth } from "../../src/auth";
-import { clientIdentity } from "../../src/provider/identity";
-import type { Provider } from "../../src/provider";
-import { getLanguage, getSDK } from "../../src/provider/sdk";
+import type { Auth } from "../../../src/model/auth";
+import { clientIdentity } from "../../../src/model/provider/identity";
+import type { Provider } from "../../../src/model/provider";
+import { getLanguage, getSDK } from "../../../src/model/provider/sdk";
 
 /** `pi/<version> (<platform> <kernelRelease>; <arch>)` — the whole contract. */
 const IDENTITY_PATTERN = /^pi\/\d+\.\d+\.\d+ \(.+; .+\)$/;
@@ -81,7 +81,7 @@ describe("clientIdentity", () => {
   test("reports the package manifest's version", async () => {
     const manifest = z
       .object({ version: z.string() })
-      .parse(await Bun.file(new URL("../../package.json", import.meta.url)).json());
+      .parse(await Bun.file(new URL("../../../package.json", import.meta.url)).json());
 
     expect(clientIdentity.version).toBe(manifest.version);
   });

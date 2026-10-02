@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createActorRegistry } from "../../src/index";
-import { useMemoryStores } from "../helpers/storage";
+import { createActorRegistry } from "../../../src/index.js";
+import { useMemoryStores } from "../../../../agent/test/store/helpers/storage";
 
 const stores = useMemoryStores();
 const registry = () => createActorRegistry(stores.catalog);

@@ -1,5 +1,5 @@
 import { ledger, resetLedger } from "../helpers/ledger";
-import { sessionTree } from "../../../ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
 import { channelTransaction } from "../helpers/channel-transaction";
 import { channelRequests } from "../helpers/channel-requests";

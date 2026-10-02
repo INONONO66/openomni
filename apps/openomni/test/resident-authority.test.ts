@@ -5,7 +5,7 @@ import { decodeChannelFailure } from "@openomni/channels";
 import type { RunInput, Sink } from "@openomni/agent";
 import { createSurfaceKeyStore } from "@openomni/agent";
 import type { Tool } from "@openomni/protocol";
-import { sessionTree } from "../../../packages/ledger/test/helpers/session-tree";
+import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { createResidentGateway } from "../src/gateway";
 import { refuseEvidenceOnly } from "../src/resident";
 import { prepareMessage } from "../src/composition/message-session";

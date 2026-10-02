@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { createActorRegistry } from "../../src";
-import { useSqliteStores } from "../helpers/storage";
+import { createActorRegistry } from "../../../src/index.js";
+import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
 
 const stores = useSqliteStores("actor-metadata");
 const registry = () => createActorRegistry(stores.catalog);
