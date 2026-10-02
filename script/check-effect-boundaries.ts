@@ -465,26 +465,28 @@ function appLiveProviders(sources: readonly ts.SourceFile[], worktree: string, p
   const visit = (node: ts.Node, bindings: ReadonlyMap<ts.Node, ts.Node> = new Map(), seen: ReadonlySet<ts.Node> = new Set()): void => {
     const done = finished.get(bindings) ?? new Set<ts.Node>();
     finished.set(bindings, done);
-    if (seen.has(node) || done.has(node) || nonExecutable(node)) return;
-    const next = new Set(seen).add(node);
-    const descend = (child: ts.Node): void => visit(child, bindings, next);
-    if (productionSource(relative(worktree, node.getSourceFile().fileName))) {
-      if (callable(node)) {
-        for (const returned of returnedExpressions(node)) descend(returned);
-      } else {
-        const callee = ts.isCallExpression(node) ? provenance.expression(node.expression)?.node : undefined;
-        if (ts.isCallExpression(node) && callee && callable(callee)) {
-          visit(callee, argumentBindings(callee, node, bindings), next);
-        } else {
-          const definition = provenance.expression(node)?.node;
-          if (definition && definition !== node) descend(bindings.get(definition) ?? definition);
-          const tag = providedTag(node, provenance);
-          if (tag) tags.add(tag);
-          ts.forEachChild(node, descend);
-        }
-      }
-    }
+    if (seen.has(node) || done.has(node)) return;
+    walk(node, bindings, new Set(seen).add(node));
     done.add(node);
+  };
+  const walk = (node: ts.Node, bindings: ReadonlyMap<ts.Node, ts.Node>, next: ReadonlySet<ts.Node>): void => {
+    if (nonExecutable(node)) return;
+    const descend = (child: ts.Node): void => visit(child, bindings, next);
+    if (!productionSource(relative(worktree, node.getSourceFile().fileName))) return;
+    if (callable(node)) {
+      for (const returned of returnedExpressions(node)) descend(returned);
+      return;
+    }
+    const callee = ts.isCallExpression(node) ? provenance.expression(node.expression)?.node : undefined;
+    if (ts.isCallExpression(node) && callee && callable(callee)) {
+      visit(callee, argumentBindings(callee, node, bindings), next);
+      return;
+    }
+    const definition = provenance.expression(node)?.node;
+    if (definition && definition !== node) descend(bindings.get(definition) ?? definition);
+    const tag = providedTag(node, provenance);
+    if (tag) tags.add(tag);
+    ts.forEachChild(node, descend);
   };
   for (const source of sources) {
     if (relative(worktree, source.fileName) !== "apps/openomni/src/runtime.ts") continue;
