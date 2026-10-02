@@ -45,7 +45,9 @@ Updated for #969 request convergence (2026-09-07): `session-request` owns pure r
 
 ## Model plane (formerly packages/llm — key patterns kept, 2026-10-02 #1246)
 
-- One attempt per invocation: `run()` performs exactly one Processor attempt (`maxRetries: 0`, `stepCountIs(1)`); the session executor owns attempt scheduling and durable failed-usage records.
+2026-10-02, #1250: the model plane runs on AI SDK 7 (`ai@7.0.93`, `@ai-sdk/anthropic@4.0.49`, `@ai-sdk/openai@4.0.60` — same major as the desktop console). Stop conditions use `isStepCount`, the system prompt crosses as `instructions` (a `SystemModelMessage` carrying the Anthropic cache breakpoint), and accounting reads the nested `inputTokenDetails`/`outputTokenDetails` counts. SDK retries, tool approval, runtime contexts, and default gateway routing stay off; the executor's journal owns retry.
+
+- One attempt per invocation: `run()` performs exactly one Processor attempt (`maxRetries: 0`, `isStepCount(1)`); the session executor owns attempt scheduling and durable failed-usage records.
 - `Llm` (`src/model/services.ts`, tag `@openomni/agent/Llm`) exposes `{ run, resolveModel }`; `LlmLive` is the app-composed Layer. Retry is classification, not scheduling (`Retry.decide`, caps: 60s explicit directive, 30s headerless with jitter; billing and content_policy are terminal).
 - Usage accounting is provider-plus-local with `reported | estimated | unknown` provenance; a reported numeric 0 is authoritative. Auth storage writes atomically at mode 0600 and never reads env — the credential path is injected (#1245).
 - Do NOT import `Bus` in model code (injected `events` sink only), add provider-specific logic at call sites, or reintroduce `Retry.sleep`/`maxSteps`/zero-defaulted usage counts.

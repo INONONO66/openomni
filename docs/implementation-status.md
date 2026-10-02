@@ -1,5 +1,24 @@
 # Implementation Status
 
+## #1250 model and desktop unified on AI SDK 7 (epic #1260, ⏳ pending merge)
+
+On `epic1260/1250-ai-7` (2026-10-02, base `0ebef4b0`). `packages/agent` and
+`apps/openomni` pin `ai@7.0.93` (the exact desktop version) with provider
+majors 4 (`@ai-sdk/anthropic@4.0.49`, `@ai-sdk/openai@4.0.60`, both resolving
+against the same `@ai-sdk/provider@4.0.10`); no ai 6 or provider-utils 4
+resolution remains in `bun.lock`. The model plane uses `isStepCount`, passes
+the system prompt as `instructions` (a `SystemModelMessage` carrying the
+Anthropic cache breakpoint), and reads the nested
+`inputTokenDetails`/`outputTokenDetails` accounting; the v6-only flat
+`cachedInputTokens` alias is gone. One shared 7-signature ai test mock
+(`packages/agent/test/model/helpers/ai-mock.ts`) replaces the three copies;
+`model-stream-v7`, `usage-v7`, and `max-retries-zero` pin stream-event order,
+nested token totals, and zero SDK recalls after one failure. `maxRetries: 0`
+is kept; SDK retries, tool approval, runtime contexts, and default AI Gateway
+routing stay off. Desktop pins (`ai@7.0.93`, `@ai-sdk/react@4.0.96`) are
+untouched; the desktop boundaries recompile and their transport/session tests
+pass unchanged.
+
 ## #1246 ten packages merged into five (epic #1260 P4 after #1245, ⏳ pending merge)
 
 On `epic1260/1246-packages-10-5` (2026-10-02). The repository has exactly five
