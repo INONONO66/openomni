@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
-import type { ChannelClient, PublishPort } from "../../types";
+import type { ChannelClient, EffectRunner, PublishPort } from "../../types";
 import { DiscordApiError, DiscordGatewayFetchError } from "../../errors";
 
 const BASE_URL = "https://discord.com/api/v10";
@@ -19,7 +19,7 @@ export class DiscordClient implements ChannelClient {
   constructor(
     private readonly token: string,
     private readonly publish: PublishPort,
-    private readonly now: () => number,
+    private readonly run: EffectRunner,
   ) {}
 
   async send(channelId: string, text: string, traceId: string): Promise<string | undefined> {
@@ -86,7 +86,7 @@ export class DiscordClient implements ChannelClient {
       },
       {
         traceId,
-        now: this.now,
+        run: this.run,
         publish: this.publish,
         retryAfterSchema: RetryAfterSchema.transform((hint) => hint.retry_after ?? 5),
         label: `discord${path}`,

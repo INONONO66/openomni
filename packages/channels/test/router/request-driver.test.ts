@@ -1,3 +1,4 @@
+import { testRun } from "../helpers/injected";
 import { ledger, resetLedger } from "../helpers/ledger";
 import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
 type OutboundMessage = Parameters<Parameters<typeof createExistingAgentMessaging>[0]["deliver"]>[0];
@@ -41,7 +42,7 @@ test("router opens the immutable original message action before real Telegram de
     observedRequestId = request?.requestId;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0, run: testRun });
   const router = makeRouter({
     now: () => 10,
     messaging: {
@@ -94,7 +95,7 @@ test.each([
     posted += 1;
     return Response.json({ ok: true, result: { message_id: 77 } });
   }) as typeof fetch;
-  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0 });
+  const driver = new TelegramAdapter("token", {}, () => undefined, { now: () => 10, id: () => "driver-id", random: () => 0, run: testRun });
   const requests = channelRequests(requestPort(() => 10));
   const messaging = createExistingAgentMessaging({
     stores: ledger().stores,

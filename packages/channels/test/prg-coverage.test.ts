@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { FIXED_NOW, injectedOptions } from "./helpers/injected";
+import { FIXED_NOW, injectedOptions, testRun } from "./helpers/injected";
 import { Operational } from "@openomni/protocol";
 import { DiscordClient } from "../src/provider/discord/client";
 import { DiscordAdapter } from "../src/provider/discord/surface";
@@ -12,7 +12,6 @@ import { SlackProvider } from "../src/provider/slack/provider";
 import { TelegramClient } from "../src/provider/telegram/client";
 import { TelegramProvider } from "../src/provider/telegram/provider";
 import type { PublishPort } from "../src/types";
-import { controlledTimeouts } from "./helpers/timeouts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -41,7 +40,7 @@ describe("provider retry and receipt paths", () => {
       success: { id: "m1" },
       address: "channel-1",
       id: "m1",
-      client: (publish: PublishPort) => new DiscordClient("token", publish, () => FIXED_NOW),
+      client: (publish: PublishPort) => new DiscordClient("token", publish, testRun),
     },
     {
       name: "Telegram",
@@ -49,11 +48,10 @@ describe("provider retry and receipt paths", () => {
       success: { ok: true, result: { message_id: 7 } },
       address: "chat-1",
       id: "7",
-      client: (publish: PublishPort) => new TelegramClient("token", publish, () => FIXED_NOW),
+      client: (publish: PublishPort) => new TelegramClient("token", publish, () => FIXED_NOW, testRun),
     },
   ])("retries $name rate limits and returns the platform id", async (scenario) => {
     const { published, publish } = collector();
-    const timer = controlledTimeouts();
     let calls = 0;
     globalThis.fetch = Object.assign(
       async () => {
@@ -64,18 +62,11 @@ describe("provider retry and receipt paths", () => {
       },
       { preconnect: realFetch.preconnect },
     );
-    try {
-      const [id] = await Promise.all([
-        scenario.client(publish).send(scenario.address, "hello", "trace-1"),
-        timer.fireNext(),
-      ]);
-      expect(id).toBe(scenario.id);
-      expect(calls).toBe(2);
-      expect(timer.delays).toEqual([0]);
-      expect(published).toContain(Operational.Events.Warn.name);
-    } finally {
-      timer.restore();
-    }
+    // retry_after 0 hint: the Effect retry sleeps zero — no clock control needed.
+    const id = await scenario.client(publish).send(scenario.address, "hello", "trace-1");
+    expect(id).toBe(scenario.id);
+    expect(calls).toBe(2);
+    expect(published).toContain(Operational.Events.Warn.name);
   });
 
   it("provider delivery routes return accepted receipts", async () => {

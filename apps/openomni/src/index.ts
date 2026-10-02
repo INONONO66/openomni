@@ -481,6 +481,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
             now: services.now,
             id: services.entropy.id,
             random: services.entropy.random,
+            run: (effect) => runAppEffect(runtime, effect),
           },
         ),
       build: (component) => component.build(routingHandler),

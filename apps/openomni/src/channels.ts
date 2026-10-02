@@ -12,7 +12,7 @@
  * and no default credential — absence of config is absence of the component.
  */
 
-import type { ChannelProvider, ProviderDeliveryRoute } from "@openomni/channels";
+import type { ChannelProvider, EffectRunner, ProviderDeliveryRoute } from "@openomni/channels";
 import { ChannelProviders } from "@openomni/channels";
 import type { BusEvent, Channel, PlainValue, Provisioning } from "@openomni/protocol";
 import { Result } from "effect";
@@ -27,6 +27,8 @@ export interface ChannelRuntimeDeps {
   readonly now: () => number;
   readonly id: () => string;
   readonly random: () => number;
+  /** Executes driver Effect programs (retry schedules, reconnect fibers, deadlines) on the app runtime. */
+  readonly run: EffectRunner;
 }
 
 export interface BuiltChannel {
@@ -61,6 +63,7 @@ function providerRow<TCredentials, TId extends keyof typeof ChannelProviders>(
         now: deps.now,
         id: deps.id,
         random: deps.random,
+        run: deps.run,
       });
       runtime.surface.onMessage(handler);
       return {

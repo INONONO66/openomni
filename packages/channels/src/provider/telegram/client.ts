@@ -2,7 +2,7 @@ import { TelegramApiError } from "../../errors";
 import { Operational } from "@openomni/protocol";
 import { z } from "zod";
 import { fetchWithRetry } from "../../support/fetch-retry";
-import type { ChannelClient, PublishPort } from "../../types";
+import type { ChannelClient, EffectRunner, PublishPort } from "../../types";
 import {
   type TelegramUpdate,
   type TelegramUser,
@@ -33,6 +33,7 @@ export class TelegramClient implements ChannelClient {
     token: string,
     private readonly publish: PublishPort,
     private readonly now: () => number,
+    private readonly run: EffectRunner,
   ) {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
@@ -123,7 +124,7 @@ export class TelegramClient implements ChannelClient {
       },
       {
         traceId,
-        now: this.now,
+        run: this.run,
         publish: this.publish,
         retryAfterSchema: RetryAfterSchema.transform((hint) => hint.parameters?.retry_after ?? 5),
         label: `telegram/${method}`,
