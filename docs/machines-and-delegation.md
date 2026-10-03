@@ -172,7 +172,34 @@ connection. A REFUSED reattach is terminal: the refusal surfaces, nothing is
 rescheduled, and the daemon closes (the CLI exits nonzero) until restart or
 config change.
 
-### 2.4 Code-mode ownership and lifecycle
+### 2.4 Self machine (#1271)
+
+The brain host is an ordinary attached machine. `machines.self` enrolls the
+application host itself: `{id?: "self", capabilities, exports[{name, path}]}`
+via `OPENOMNI_MACHINES_SELF` (JSON), with `OPENOMNI_MACHINES_DEFAULT` naming
+the machine a prefix-less path resolves to (default `self`). Self exports are
+mandatory and absolute — the Owner names the host roots the in-process daemon
+may expose; no host path outside them is readable, writable, listable,
+stat-able, or usable as a shell cwd. Duplicate self/enrolled ids, a default
+absent from effective enrollments, and empty or relative exports are typed
+configuration refusals BEFORE the listener starts.
+
+Boot order is fixed: validate the plane, start the listener set, start an
+in-process daemon with the self exports/capabilities, dial the host's own
+unix listener and complete `machine.attach`, and only then publish tool
+ports. Every failure in that chain is the one typed startup refusal
+`self_attach_failed { cause }`; there is no local execution fallback — ever.
+`apps/openomni/src/tools/` contains no `node:fs`, no `Bun.spawn`, and no
+local locus: `parseLocus(input, { defaultMachine })` maps `/absolute/path`
+to the configured default machine and preserves explicit
+`machineId:/absolute/path`; relative paths refuse (no process cwd exists).
+A self daemon that disconnects after boot closes the machine-backed tools
+and surfaces `self_attach_failed` for lifecycle handling. `openomni machine
+attach` is unchanged: a remote daemon attaches alongside `self` over the
+same protocol and negotiates capabilities through the same
+enrollment/offer intersection.
+
+### 2.5 Code-mode ownership and lifecycle
 
 `createCodemode({machines,completion,tools})` is a reusable facade over a
 structural machines port. It supplies

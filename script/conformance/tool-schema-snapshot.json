@@ -24,15 +24,10 @@
         "encoding": {
           "default": "utf8",
           "type": "string",
-          "enum": [
-            "utf8",
-            "base64"
-          ]
+          "enum": ["utf8", "base64"]
         }
       },
-      "required": [
-        "path"
-      ],
+      "required": ["path"],
       "additionalProperties": false
     },
     "safe": true
@@ -53,16 +48,10 @@
         "encoding": {
           "default": "utf8",
           "type": "string",
-          "enum": [
-            "utf8",
-            "base64"
-          ]
+          "enum": ["utf8", "base64"]
         }
       },
-      "required": [
-        "path",
-        "content"
-      ],
+      "required": ["path", "content"],
       "additionalProperties": false
     },
     "safe": false,
@@ -92,18 +81,12 @@
                 "type": "string"
               }
             },
-            "required": [
-              "oldText",
-              "newText"
-            ],
+            "required": ["oldText", "newText"],
             "additionalProperties": false
           }
         }
       },
-      "required": [
-        "path",
-        "edits"
-      ],
+      "required": ["path", "edits"],
       "additionalProperties": false
     },
     "safe": false,
@@ -125,9 +108,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "path"
-      ],
+      "required": ["path"],
       "additionalProperties": false
     },
     "safe": true
@@ -152,10 +133,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "pattern",
-        "path"
-      ],
+      "required": ["pattern", "path"],
       "additionalProperties": false
     },
     "safe": true
@@ -198,10 +176,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "pattern",
-        "path"
-      ],
+      "required": ["pattern", "path"],
       "additionalProperties": false
     },
     "safe": true
@@ -226,9 +201,7 @@
           "minLength": 1
         }
       },
-      "required": [
-        "command"
-      ],
+      "required": ["command"],
       "additionalProperties": false
     },
     "safe": false,
@@ -261,10 +234,7 @@
                   "maximum": 9007199254740991
                 }
               },
-              "required": [
-                "op",
-                "code"
-              ],
+              "required": ["op", "code"],
               "additionalProperties": false
             },
             {
@@ -280,10 +250,7 @@
                   "description": "The cell_id a run answered with while still running."
                 }
               },
-              "required": [
-                "op",
-                "cell_id"
-              ],
+              "required": ["op", "cell_id"],
               "additionalProperties": false
             },
             {
@@ -299,18 +266,13 @@
                   "description": "The cell_id a run answered with while still running."
                 }
               },
-              "required": [
-                "op",
-                "cell_id"
-              ],
+              "required": ["op", "cell_id"],
               "additionalProperties": false
             }
           ]
         }
       },
-      "required": [
-        "operation"
-      ],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false
@@ -360,10 +322,7 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": [
-                        "kind",
-                        "command"
-                      ],
+                      "required": ["kind", "command"],
                       "additionalProperties": false
                     },
                     {
@@ -379,10 +338,7 @@
                         },
                         "event": {
                           "type": "string",
-                          "enum": [
-                            "create",
-                            "modify"
-                          ]
+                          "enum": ["create", "modify"]
                         },
                         "persistent": {
                           "type": "boolean",
@@ -394,21 +350,13 @@
                           "maximum": 9007199254740991
                         }
                       },
-                      "required": [
-                        "kind",
-                        "path",
-                        "event"
-                      ],
+                      "required": ["kind", "path", "event"],
                       "additionalProperties": false
                     }
                   ]
                 }
               },
-              "required": [
-                "op",
-                "description",
-                "source"
-              ],
+              "required": ["op", "description", "source"],
               "additionalProperties": false
             },
             {
@@ -423,10 +371,7 @@
                   "minLength": 1
                 }
               },
-              "required": [
-                "op",
-                "id"
-              ],
+              "required": ["op", "id"],
               "additionalProperties": false
             },
             {
@@ -441,18 +386,13 @@
                   "minLength": 1
                 }
               },
-              "required": [
-                "op",
-                "id"
-              ],
+              "required": ["op", "id"],
               "additionalProperties": false
             }
           ]
         }
       },
-      "required": [
-        "operation"
-      ],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false,
@@ -478,10 +418,7 @@
                   "minLength": 1
                 }
               },
-              "required": [
-                "kind",
-                "id"
-              ],
+              "required": ["kind", "id"],
               "additionalProperties": false
             },
             {
@@ -493,10 +430,7 @@
                 },
                 "role": {
                   "type": "string",
-                  "enum": [
-                    "resident",
-                    "worker"
-                  ]
+                  "enum": ["resident", "worker"]
                 },
                 "runner": {
                   "type": "string",
@@ -507,12 +441,7 @@
                   "const": "me"
                 }
               },
-              "required": [
-                "kind",
-                "role",
-                "runner",
-                "parent"
-              ],
+              "required": ["kind", "role", "runner", "parent"],
               "additionalProperties": false
             },
             {
@@ -527,10 +456,7 @@
                   "minLength": 1
                 }
               },
-              "required": [
-                "kind",
-                "id"
-              ],
+              "required": ["kind", "id"],
               "additionalProperties": false
             }
           ]
@@ -542,11 +468,7 @@
           "default": "prompt",
           "description": "prompt is the default letter; interrupt and resume steer a running session.",
           "type": "string",
-          "enum": [
-            "prompt",
-            "interrupt",
-            "resume"
-          ]
+          "enum": ["prompt", "interrupt", "resume"]
         },
         "reply_to": {
           "type": "string",
@@ -559,10 +481,7 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "to",
-        "message"
-      ],
+      "required": ["to", "message"],
       "additionalProperties": false
     },
     "safe": false
@@ -599,11 +518,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "enum": [
-                            "human",
-                            "ai_agent",
-                            "service"
-                          ],
+                          "enum": ["human", "ai_agent", "service"],
                           "description": "What this Person is."
                         },
                         "trustTier": {
@@ -636,21 +551,13 @@
                                 "minLength": 1
                               }
                             },
-                            "required": [
-                              "channel",
-                              "externalId"
-                            ],
+                            "required": ["channel", "externalId"],
                             "additionalProperties": false
                           },
                           "description": "Platform identities this Person speaks through."
                         }
                       },
-                      "required": [
-                        "id",
-                        "kind",
-                        "trustTier",
-                        "endpoints"
-                      ],
+                      "required": ["id", "kind", "trustTier", "endpoints"],
                       "additionalProperties": false
                     },
                     "timeoutMs": {
@@ -660,16 +567,11 @@
                       "maximum": 9007199254740991
                     }
                   },
-                  "required": [
-                    "manifest"
-                  ],
+                  "required": ["manifest"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -687,16 +589,11 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "personId"
-                  ],
+                  "required": ["personId"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -714,16 +611,11 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "actorId"
-                  ],
+                  "required": ["actorId"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -745,17 +637,11 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "endpointId",
-                    "toActorId"
-                  ],
+                  "required": ["endpointId", "toActorId"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -788,11 +674,7 @@
                         "type": "string"
                       },
                       "additionalProperties": {
-                        "type": [
-                          "string",
-                          "number",
-                          "boolean"
-                        ]
+                        "type": ["string", "number", "boolean"]
                       }
                     },
                     "credential": {
@@ -806,17 +688,11 @@
                       }
                     }
                   },
-                  "required": [
-                    "id",
-                    "provider"
-                  ],
+                  "required": ["id", "provider"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -834,16 +710,11 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "instanceId"
-                  ],
+                  "required": ["instanceId"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -861,16 +732,11 @@
                       "minLength": 1
                     }
                   },
-                  "required": [
-                    "instanceId"
-                  ],
+                  "required": ["instanceId"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -898,17 +764,11 @@
                       "description": "Replacement plaintext payload."
                     }
                   },
-                  "required": [
-                    "secretId",
-                    "credential"
-                  ],
+                  "required": ["secretId", "credential"],
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             },
             {
@@ -924,18 +784,13 @@
                   "additionalProperties": false
                 }
               },
-              "required": [
-                "op",
-                "args"
-              ],
+              "required": ["op", "args"],
               "additionalProperties": false
             }
           ]
         }
       },
-      "required": [
-        "operation"
-      ],
+      "required": ["operation"],
       "additionalProperties": false
     },
     "safe": false
@@ -972,9 +827,7 @@
           }
         }
       },
-      "required": [
-        "prompt"
-      ],
+      "required": ["prompt"],
       "additionalProperties": false,
       "definitions": {
         "__schema0": {
