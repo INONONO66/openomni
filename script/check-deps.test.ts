@@ -554,59 +554,59 @@ test("in-process Python gate rejects checker version drift and invalid flags", (
   }
 });
 
-test("#1247 bands: a planted kernel->session import emits a VIOLATION line", () => {
+test("#1276 bands: a planted core->plugins import emits a VIOLATION line", () => {
   const found = agentBandViolations(
-    "packages/agent/src/kernel/planted.ts",
-    'import { runSession } from "../session/run";',
+    "packages/agent/src/core/planted.ts",
+    'import { restore } from "../plugins/compaction/restore";',
   );
   expect(found).toHaveLength(1);
-  expect(found[0]).toStartWith("VIOLATION: packages/agent/src/kernel/planted.ts:1");
+  expect(found[0]).toStartWith("VIOLATION: packages/agent/src/core/planted.ts:1");
 });
 
-test("#1247 ratchet: growth over the pinned baseline fails, within-baseline passes", async () => {
+test("#1276 ratchet: growth over the pinned baseline fails, within-baseline passes", async () => {
   const clean = fixture({
-    "packages/agent/src/kernel/pure.ts": 'import { ok } from "./other";',
+    "packages/agent/src/core/pure.ts": 'import { ok } from "./other";',
   });
   expect(await validateAgentBands(clean)).toEqual([]);
 
-  // kernel/failure.ts is pinned at 1; a second violation in it must fail.
+  // core/failure.ts is pinned at 1; a second violation in it must fail.
   const grown = fixture({
-    "packages/agent/src/kernel/failure.ts":
-      'import { a } from "../session/run";\nimport { b } from "../model/errors";',
+    "packages/agent/src/core/failure.ts":
+      'import { a } from "../plugins/compaction/restore";\nimport { b } from "../model/errors";',
   });
   const violations = await validateAgentBands(grown);
-  expect(violations.some((line) => line.includes("over the #1247 ratchet of 1"))).toBe(true);
+  expect(violations.some((line) => line.includes("over the #1276 ratchet of 1"))).toBe(true);
 
   // Exactly at the pinned count: the ratchet holds without failing.
   const pinned = fixture({
-    "packages/agent/src/kernel/failure.ts": 'import { a } from "../session/run";',
+    "packages/agent/src/core/failure.ts": 'import { a } from "../plugins/compaction/restore";',
   });
   expect(await validateAgentBands(pinned)).toEqual([]);
 });
 
-test("#1247 bands: external bans catch exact and prefixed specifiers, legal externals pass", () => {
+test("#1276 bands: external bans catch exact and prefixed specifiers, legal externals pass", () => {
   const exact = agentBandViolations(
-    "packages/agent/src/kernel/planted.ts",
+    "packages/agent/src/core/planted.ts",
     'import { generateText } from "ai";',
   );
   expect(exact).toHaveLength(1);
-  expect(exact[0]).toContain("kernel/ may not depend on ai");
+  expect(exact[0]).toContain("core/ may not depend on ai");
 
   const prefixed = agentBandViolations(
-    "packages/agent/src/kernel/planted.ts",
+    "packages/agent/src/core/planted.ts",
     'import { anthropic } from "@ai-sdk/anthropic";',
   );
   expect(prefixed).toHaveLength(1);
-  expect(prefixed[0]).toContain("kernel/ may not depend on @ai-sdk/");
+  expect(prefixed[0]).toContain("core/ may not depend on @ai-sdk/");
 
   // A sub-path of an exact ban is banned too; an unrelated external is legal.
   const subPath = agentBandViolations(
-    "packages/agent/src/session/planted.ts",
-    'import { Database } from "bun:sqlite/thing";',
+    "packages/agent/src/core/planted.ts",
+    'import { rsc } from "ai/rsc";',
   );
   expect(subPath).toHaveLength(1);
   expect(
-    agentBandViolations("packages/agent/src/kernel/planted.ts", 'import { Effect } from "effect";'),
+    agentBandViolations("packages/agent/src/core/planted.ts", 'import { Effect } from "effect";'),
   ).toEqual([]);
 });
 
@@ -621,13 +621,13 @@ test("#1247 S8 pin: the real agent index passes, a grown name fails", async () =
 
 test("#1247 S8 pin: an eighth namespace and a non-barrel export form fail; shrink passes", () => {
   const extraNamespace = agentIndexPerimeterViolations('export * as Extra from "./extra";\n');
-  expect(extraNamespace.some((line) => line.includes("namespace Extra outside the seven #1247 namespaces"))).toBe(true);
+  expect(extraNamespace.some((line) => line.includes("namespace Extra outside the five #1276 namespaces"))).toBe(true);
 
   const declaration = agentIndexPerimeterViolations("export const leak = 1;\n");
-  expect(declaration.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+  expect(declaration.some((line) => line.includes("export form outside the #1276 surface"))).toBe(true);
 
   const shrunk = agentIndexPerimeterViolations(
-    'export * as Kernel from "./kernel";\nexport { evaluatePermission } from "./kernel/gate/match";\n',
+    'export * as Core from "./core";\nexport { evaluatePermission } from "./core/gate/match";\n',
   );
   expect(shrunk).toEqual([]);
 });
@@ -654,10 +654,10 @@ test("#1247 S8 pin: alias, indentation, and missing semicolon cannot smuggle a n
 
 test("#1247 S8 pin: unaliased star export and default export are rejected forms", () => {
   const star = agentIndexPerimeterViolations('export * from "./kernel";\n');
-  expect(star.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+  expect(star.some((line) => line.includes("export form outside the #1276 surface"))).toBe(true);
 
   const defaulted = agentIndexPerimeterViolations("const x = 1;\nexport default x;\n");
-  expect(defaulted.some((line) => line.includes("export form outside the #1247 surface"))).toBe(true);
+  expect(defaulted.some((line) => line.includes("export form outside the #1276 surface"))).toBe(true);
 });
 
 test("#1247 S8 pin: a tenth named export trips the count diagnostic itself", () => {
