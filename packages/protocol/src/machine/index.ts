@@ -52,6 +52,22 @@ export namespace Machine {
   export type FsValue = Schema.FsValue;
   export const FsResult = Schema.FsResult;
   export type FsResult = Schema.FsResult;
+  export const ScreenRegion = Schema.ScreenRegion;
+  export type ScreenRegion = Schema.ScreenRegion;
+  export const ScreenReadRequest = Schema.ScreenReadRequest;
+  export type ScreenReadRequest = Schema.ScreenReadRequest;
+  export const ScreenReadResult = Schema.ScreenReadResult;
+  export type ScreenReadResult = Schema.ScreenReadResult;
+  export const InputAction = Schema.InputAction;
+  export type InputAction = Schema.InputAction;
+  export const InputWriteRequest = Schema.InputWriteRequest;
+  export type InputWriteRequest = Schema.InputWriteRequest;
+  export const InputWriteResult = Schema.InputWriteResult;
+  export type InputWriteResult = Schema.InputWriteResult;
+  export const SCREEN_PNG_MAX_BYTES = Schema.SCREEN_PNG_MAX_BYTES;
+  export const SCREEN_AX_MAX_BYTES = Schema.SCREEN_AX_MAX_BYTES;
+  export const INPUT_MAX_ACTIONS = Schema.INPUT_MAX_ACTIONS;
+  export const INPUT_MAX_TEXT_CHARS = Schema.INPUT_MAX_TEXT_CHARS;
   export const FS_READ_MAX_BYTES = Schema.FS_READ_MAX_BYTES;
   export const FS_LIST_MAX_ENTRIES = Schema.FS_LIST_MAX_ENTRIES;
 

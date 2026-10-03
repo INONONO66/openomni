@@ -79,6 +79,18 @@ const methods = {
     params: Machine.FsRequest,
     result: Machine.FsResult,
   },
+  /**
+   * Machine host → machine daemon (#1274): one bounded screen capture, and
+   * guarded input actions tied to the latest successful capture id.
+   */
+  [Machine.WireMethod.ScreenRead]: {
+    params: Machine.ScreenReadRequest,
+    result: Machine.ScreenReadResult,
+  },
+  [Machine.WireMethod.InputWrite]: {
+    params: Machine.InputWriteRequest,
+    result: Machine.InputWriteResult,
+  },
 };
 
 export namespace Ipc {
