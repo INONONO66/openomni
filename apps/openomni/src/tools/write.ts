@@ -8,7 +8,7 @@ export function createWriteTool(ports: FilePorts) {
   return defineTool({
     name: "write",
     description:
-      "Create or overwrite one local or machineId:/absolute/path file. Parent directories must exist.",
+      "Create or overwrite one /absolute (default machine) or machineId:/absolute/path file. Parent directories must exist.",
     category: "mutation",
     sequential: true,
     input: z

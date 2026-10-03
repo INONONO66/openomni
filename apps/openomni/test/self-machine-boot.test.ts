@@ -38,7 +38,7 @@ test("boot reaches the attached self state before any tool port exists", async (
   const original = Gateway.toolPorts;
   track(
     spyOn(Gateway, "toolPorts").mockImplementation((runtime, ports) => {
-      seen.push(ports.machines === undefined ? [] : ports.machines.list().map((m) => m.machineId));
+      seen.push(ports.machines === undefined ? [] : ports.machines.host.list().map((m) => m.machineId));
       return original(runtime, ports);
     }),
   );

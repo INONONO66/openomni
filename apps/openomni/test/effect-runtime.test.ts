@@ -39,7 +39,7 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
     exec: (): Effect.Effect<typeof exec> => Effect.succeed(exec),
   };
   const ports = toolPorts(runtime, {
-    machines: { get: (): typeof machine => machine } as never,
+    machines: { host: { get: (): typeof machine => machine }, defaultMachine: "self" } as never,
     completion: (() => Effect.succeed({})) as never,
     messages: { ingest: () => Effect.succeed({}) } as never,
     now: () => 0,

@@ -163,7 +163,7 @@ async function composeMachinePlane(
     readonly now: () => number;
     readonly callTool: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
   },
-): Promise<{ readonly host: MachineHost; readonly self: SelfMachine }> {
+): Promise<{ readonly host: MachineHost; readonly self: SelfMachine; readonly defaultMachine: string }> {
   const plane = Result.getOrThrowWith(
     Result.try({
       try: () => validateMachinePlane(machines),
@@ -197,7 +197,7 @@ async function composeMachinePlane(
       onClose: (error) => console.error("self machine detached", error),
     }),
   );
-  return { host, self };
+  return { host, self, defaultMachine: plane.defaultMachine };
 }
 
 /**
@@ -533,7 +533,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       bundles: services.bundles.names,
       tools: {
         ...toolPorts(runtime, {
-          machines: host, cells, completion: llmPort, messages,
+          ...(machinery === undefined
+            ? {}
+            : { machines: { host: machinery.host, defaultMachine: machinery.defaultMachine } }),
+          cells, completion: llmPort, messages,
           now: services.now, id: services.entropy.id,
         }),
         alarms: await createMonitorPorts(runtime, watchSources),
