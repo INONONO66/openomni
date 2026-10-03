@@ -12,10 +12,13 @@ import ast
 import base64
 import concurrent.futures
 import contextlib
+import hashlib
 import io
 import itertools
 import json
+import os
 import queue
+import re
 import sys
 import threading
 import traceback
@@ -249,6 +252,277 @@ class _Codemode:
     def findMachine(self, query):
         return _Machine(tool['codemode.findMachine'](query=query))
 
+# --- Browser recipe (#1275): Playwright over CDP; Chromium lives in a pty.session. ---
+BROWSER_DEFAULT_CDP_PORT = 9222
+_BROWSER_MARK = "[openomni-browser]"
+_BROWSER_INSTALL_HINT = "python -m playwright install chromium"
+_BROWSER_DEVTOOLS_LINE = "DevTools listening on ws://"
+_browser_clients = {}
+_browser_playwright = {"instance": None}
+
+_BROWSER_PORT_PROBE = base64.b64encode(
+    (
+        (
+        "import socket\n"
+        "_port = %d\n"
+        "while _port < %d:\n"
+        "    _sock = socket.socket()\n"
+        "    try:\n"
+        "        _sock.bind((\"127.0.0.1\", _port))\n"
+        "        break\n"
+        "    except OSError:\n"
+        "        _port += 1\n"
+        "    finally:\n"
+        "        _sock.close()\n"
+        "print(_port)\n"
+        )
+        % (BROWSER_DEFAULT_CDP_PORT, BROWSER_DEFAULT_CDP_PORT + 100)
+    ).encode("ascii")
+).decode("ascii")
+
+
+class BrowserLost(ToolError):
+    """Typed browser_lost refusal; terminal_output carries the tmux transcript."""
+
+    def __init__(self, message, terminal_output):
+        self.reason = "browser_lost"
+        self.terminal_output = terminal_output
+        super().__init__(
+            "browser_lost: " + message + "\n--- tmux session output ---\n" + terminal_output
+        )
+
+
+def _browser_playwright_instance():
+    if _browser_playwright["instance"] is None:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as error:
+            raise ToolError(
+                "browser() needs the playwright package in this interpreter: "
+                "pip install playwright && " + _BROWSER_INSTALL_HINT
+            ) from error
+        _browser_playwright["instance"] = sync_playwright().start()
+    return _browser_playwright["instance"]
+
+
+def _shell_quote(value):
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
+class BrowserClient:
+    """Thin handle over playwright.chromium.connect_over_cdp (#1275): browser,
+    context(s) and pages are the raw Playwright objects; the only added
+    behavior is liveness translation into the typed BrowserLost refusal."""
+
+    def __init__(self, machine_id, profile_dir, headless):
+        self.machine_id = machine_id
+        self.profile_dir = profile_dir
+        self.headless = headless
+        self.session = (
+            "openomni-browser-" + hashlib.sha256(profile_dir.encode("utf-8")).hexdigest()[:12]
+        )
+        self.port = None
+        self.endpoint = None
+        self._cursor = None
+        self._transcript = ""
+        self._browser = None
+
+    def _pty(self):
+        return _Machine(self.machine_id).pty(self.session)
+
+    def _drain(self, wait_ms=None):
+        """Pull terminal output onto the retained transcript; None = session gone."""
+        try:
+            view = self._pty().read(cursor=self._cursor, wait_ms=wait_ms)
+        except ToolError:
+            return None
+        if view.get("status") != "ok":
+            return None
+        self._cursor = view["cursor"]
+        text = view["data"].decode("utf-8", "replace")
+        self._transcript += text
+        return text
+
+    def _await_output(self, markers, rounds=240, wait_ms=1000):
+        """Block on pty_read long-polls until a marker line is retained: readiness
+        is decided by exact output, never by elapsed time; rounds only bound it."""
+        for _ in range(rounds):
+            for marker in markers:
+                if marker in self._transcript:
+                    return marker
+            if self._drain(wait_ms) is None:
+                return None
+        return None
+
+    def _fail_launch(self, message):
+        """Launch never reached readiness: refuse with the retained transcript."""
+        self._drain()
+        raise BrowserLost(message, self._transcript)
+
+    def _set_endpoint(self, port):
+        self.port = port
+        self.endpoint = "http://127.0.0.1:" + str(port)
+
+    def _launch(self, executable_path):
+        opened = self._pty().open(self.profile_dir)
+        if opened.get("status") != "ok":
+            raise ToolError(
+                str(opened.get("reason")) + ": profile_dir " + self.profile_dir
+                + " was refused by machine " + self.machine_id + " before Chromium started"
+            )
+        self._cursor = opened["cursor"]
+        self._transcript = ""
+        if executable_path is not None:
+            resolve = "OMO_EXE=" + _shell_quote(executable_path)
+        else:
+            resolve = (
+                'OMO_EXE="$(python3 -c "from playwright.sync_api import sync_playwright;'
+                '_p=sync_playwright().start();print(_p.chromium.executable_path);_p.stop()"'
+                ' 2>/dev/null)"'
+            )
+        self._pty().write(resolve + "\r")
+        mode_flags = "--headless " if self.headless else ""
+        self._pty().write(
+            "OMO_PORT=\"$(python3 -c \"import base64;exec(base64.b64decode('"
+            + _BROWSER_PORT_PROBE + "').decode())\")\""
+            + "; printf '%s %s %s\\n' '" + _BROWSER_MARK + "' cdp-port \"$OMO_PORT\""
+            + '; "$OMO_EXE" --remote-debugging-port="$OMO_PORT" --user-data-dir='
+            + _shell_quote(self.profile_dir)
+            + " " + mode_flags + "--no-first-run --no-default-browser-check about:blank"
+            + "; OMO_STATUS=$?"
+            + "; printf '%s %s %s\\n' '" + _BROWSER_MARK + "' chromium-exited \"$OMO_STATUS\""
+            + '; [ "$OMO_STATUS" = 0 ] && exit\r'
+        )
+        marker = self._await_output([_BROWSER_DEVTOOLS_LINE, _BROWSER_MARK + " chromium-exited"])
+        if marker != _BROWSER_DEVTOOLS_LINE:
+            self._fail_launch("chromium exited before the DevTools readiness line")
+        ports = re.findall(re.escape(_BROWSER_MARK) + r" cdp-port (\d+)", self._transcript)
+        if not ports:
+            self._fail_launch("the selected cdp port line is missing from the session output")
+        self._set_endpoint(int(ports[-1]))
+        self._connect()
+
+    def _attach(self, executable_path):
+        listed = _Machine(self.machine_id).ptyList()
+        names = (
+            [entry["name"] for entry in listed.get("sessions", [])]
+            if listed.get("status") == "ok"
+            else []
+        )
+        if self.session not in names:
+            self._launch(executable_path)
+            return
+        # The session already runs this profile's Chromium: reconnect to the port
+        # retained in its output instead of starting a competing process.
+        self._cursor = None
+        self._transcript = ""
+        self._drain()
+        ports = re.findall(re.escape(_BROWSER_MARK) + r" cdp-port (\d+)", self._transcript)
+        if not ports:
+            self._fail_launch("an existing browser session retains no cdp port line")
+        self._set_endpoint(int(ports[-1]))
+        self._connect()
+
+    def _connect(self):
+        chromium = _browser_playwright_instance().chromium
+        try:
+            self._browser = chromium.connect_over_cdp(self.endpoint)
+        except ToolError:
+            raise
+        except Exception as error:
+            self._drain()
+            raise BrowserLost(
+                "connect_over_cdp to " + str(self.endpoint) + " failed: " + str(error),
+                self._transcript,
+            )
+
+
+    @property
+    def browser(self):
+        return self._browser
+
+    @property
+    def contexts(self):
+        return self._browser.contexts
+
+    @property
+    def context(self):
+        contexts = self._browser.contexts
+        if not contexts:
+            raise ToolError("the connected chromium exposes no browser context")
+        return contexts[0]
+
+    @property
+    def pages(self):
+        return self.context.pages
+
+    def is_connected(self):
+        return self._browser is not None and self._browser.is_connected()
+
+    def _shutdown(self, kill):
+        browser = self._browser
+        self._browser = None
+        if browser is None:
+            return
+        if kill:
+            try:
+                # CDP Browser.close ends Chromium itself; a clean exit also ends
+                # the tmux session, whose launch line exits the shell on status 0.
+                browser.new_browser_cdp_session().send("Browser.close")
+            except Exception:
+                pass
+        try:
+            browser.close()
+        except Exception:
+            pass
+
+    def close(self):
+        """End Chromium and the owned tmux session; the profile dir is kept."""
+        _browser_clients.pop((self.machine_id, self.profile_dir), None)
+        self._shutdown(kill=True)
+        self._drain()
+        try:
+            self._pty().close()
+        except ToolError:
+            pass
+
+
+def browser(machine_id, *, headless=True, profile_dir=None, executable_path=None):
+    """#1275 recipe: Chromium in a cell-owned tmux session, driven over CDP."""
+    profile = (
+        profile_dir
+        if profile_dir is not None
+        else os.path.join(os.getcwd(), ".openomni", "browser-profile")
+    )
+    key = (machine_id, profile)
+    client = _browser_clients.get(key)
+    if client is not None:
+        if client.headless != bool(headless):
+            raise ToolError(
+                "a live browser client for this profile is "
+                + ("headless" if client.headless else "headed")
+                + "; close() it before switching display modes"
+            )
+        return client
+    client = BrowserClient(machine_id, profile, bool(headless))
+    client._attach(executable_path)
+    _browser_clients[key] = client
+    return client
+
+
+def _browser_close_all():
+    """Interpreter close: close client objects and their Chromiums (which ends
+    the owned tmux sessions); persistent profiles are never deleted."""
+    for _client in list(_browser_clients.values()):
+        _client._shutdown(kill=True)
+    _browser_clients.clear()
+    instance = _browser_playwright["instance"]
+    _browser_playwright["instance"] = None
+    if instance is not None:
+        try:
+            instance.stop()
+        except Exception:
+            pass
 
 tool = _Tools()
 _scope = {
@@ -258,6 +532,8 @@ _scope = {
     "parallel": parallel,
     "completion": completion,
     "codemode": _Codemode(),
+    "browser": browser,
+    "BrowserLost": BrowserLost,
 }
 threading.Thread(target=_read_stdin, name="driver-stdin", daemon=True).start()
 
@@ -305,6 +581,7 @@ while True:
         }
     _cell_context.cell_id = None
     _emit({"kind": "result", "result": _result})
+_browser_close_all()
 `;
 
 const ToolCallFrame = Machine.ToolCall.extend({
@@ -325,6 +602,9 @@ const Frame = z.discriminatedUnion("kind", [
   OutputFrame,
   z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
 ]);
+
+/** EOF-first close grace (#1275): time the driver gets to run its cleanup before SIGKILL. */
+const DRIVER_EXIT_GRACE_MS = 2_000;
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
@@ -367,7 +647,16 @@ export class PythonKernel {
   close(): Effect.Effect<void, CodeError> {
     return Effect.gen({ self: this }, function* () {
       this.lifetime.abort();
-      if (this.process) yield* this.discard(this.process);
+      const process = this.process;
+      if (process) {
+        // EOF-first close: the driver loop breaks on stdin EOF and runs its
+        // browser cleanup (#1275) before exiting; stdin.end on a torn-down pipe
+        // is ignored because the SIGKILL below is the authoritative teardown.
+        yield* Effect.try({ try: () => { process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
+        const exited = this.processExits.get(process);
+        if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+        yield* this.discard(process);
+      }
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
     });
   }
