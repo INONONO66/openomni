@@ -5,6 +5,8 @@
  * non-printable characters and backslashes use octal escapes. Everything here
  * is pure so framing and escape handling are unit-testable without a server.
  */
+import { Machine } from "@openomni/protocol";
+
 export type PtyControlEvent =
   | { readonly kind: "reply-begin" }
   | { readonly kind: "reply-body"; readonly line: string }
@@ -68,21 +70,57 @@ export interface PtyControlDecoder {
   feed(chunk: Buffer): PtyControlEvent[];
 }
 
+/**
+ * Partial-line cap: tmux frames every record with a newline, so a line past
+ * 16x the protocol read bound (4 MiB; %output octal escapes expand at most
+ * 4x) means a wedged or hostile server. The oversized line is dropped with
+ * one typed `malformed` event (the pane-poison pathway) instead of growing
+ * the buffer without bound.
+ */
+export const CONTROL_LINE_MAX_BYTES = 16 * Machine.PTY_READ_MAX_BYTES;
+
 /** Stateful splitter: buffers partial lines and tracks reply framing. */
 export function createControlDecoder(): PtyControlDecoder {
   // Byte-level buffering: a multibyte character split across chunks must not
   // corrupt, so text decoding happens only on complete lines.
   let pending: Buffer = Buffer.alloc(0);
   let insideReply = false;
+  let discarding = false;
+  /** Cap enforcement for a newline-less buffer: drop it, report ONCE. */
+  function overflowed(events: PtyControlEvent[]): PtyControlEvent[] {
+    if (pending.length > CONTROL_LINE_MAX_BYTES) {
+      pending = Buffer.alloc(0);
+      if (!discarding) {
+        discarding = true;
+        events.push({
+          kind: "malformed",
+          line: "",
+          reason: `control line exceeds ${CONTROL_LINE_MAX_BYTES} bytes`,
+          paneId: undefined,
+        });
+      }
+    }
+    return events;
+  }
+  /** Consume one framed line; the tail of a dropped oversized line yields nothing. */
+  function takeLine(edge: number): string | undefined {
+    const raw = pending.subarray(0, edge);
+    pending = pending.subarray(edge + 1);
+    if (discarding) {
+      discarding = false;
+      return undefined;
+    }
+    return raw.toString("utf8");
+  }
   return {
     feed(chunk) {
       pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
       const events: PtyControlEvent[] = [];
       for (;;) {
         const edge = pending.indexOf(0x0a);
-        if (edge === -1) return events;
-        const line = pending.subarray(0, edge).toString("utf8");
-        pending = pending.subarray(edge + 1);
+        if (edge === -1) return overflowed(events);
+        const line = takeLine(edge);
+        if (line === undefined) continue;
         const event = decodeRecord(line, insideReply);
         if (event.kind === "reply-begin") insideReply = true;
         if (event.kind === "reply-end") insideReply = false;

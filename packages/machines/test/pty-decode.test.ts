@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createControlDecoder, decodeOctalEscapes, type PtyControlEvent } from "../src/pty-decode";
+import { CONTROL_LINE_MAX_BYTES, createControlDecoder, decodeOctalEscapes, type PtyControlEvent } from "../src/pty-decode";
 
 const feed = (chunks: string[]): PtyControlEvent[] => {
   const decoder = createControlDecoder();
@@ -57,6 +57,21 @@ describe("pty control decoder", () => {
       { kind: "reply-body", line: "boom" },
       { kind: "reply-end", ok: false },
     ]);
+  });
+
+  test("an endless unterminated line is dropped at the cap with ONE typed malformed event, then framing resumes (#1273 r1 F3)", () => {
+    const decoder = createControlDecoder();
+    const flood = Buffer.alloc(CONTROL_LINE_MAX_BYTES + 1, 0x61);
+    const first = decoder.feed(flood);
+    expect(first).toEqual([
+      { kind: "malformed", line: "", reason: `control line exceeds ${CONTROL_LINE_MAX_BYTES} bytes`, paneId: undefined },
+    ]);
+    // The buffer was released and the event is not repeated per chunk.
+    expect(decoder.feed(Buffer.alloc(1024, 0x61))).toEqual([]);
+    // The dropped line's terminator is consumed silently; the next record decodes.
+    const resumed = decoder.feed(Buffer.from("tail-of-dropped-line\n%output %4 ok\n", "utf8"));
+    expect(resumed).toHaveLength(1);
+    expect(resumed[0]).toMatchObject({ kind: "output", paneId: "%4" });
   });
 
   test("%exit and unknown notifications keep framing for later records", () => {
