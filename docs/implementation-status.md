@@ -1,6 +1,20 @@
 # Implementation Status
 
-## #1253 four session entity RPCs (epic #1260, draft PR #1279)
+## #1254 alarm split: core timer, removable alarm capability (epic #1260, ⏳ in flight)
+
+On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`). Receipt lands
+with the PR: the core keeps the DeliverAt timer, the four loop-reserved
+purposes and the `alarm` kind's single writer; `plugins/alarm` becomes the
+removable capability owning the purpose registry, wake dispatch, watch
+handlers, the `alarm.fired` point and the `arm`/`watch` verbs; one
+occurrence-id minter, the `armed_alarms` session-file index with catalog
+`has_armed` and boot rescan, pure `Cron.next` in protocol, and the
+queue/replier single writer. Until the PR merges this section is a pointer
+only; the #1253 section below is the current shipped shape. Correction
+carried in the same PR: the #1253 squash left one stray diff3 marker line
+(`||||||| parent of fb19bf2c`) in this file; it is deleted here.
+
+## #1253 four session entity RPCs (epic #1260, merged as `4ecb41f3`, PR #1279)
 
 On `epic1260/1253-four-entity-rpcs` (2026-10-03, base `58b7f18d`). The session
 entity's outside surface is exactly four RPCs in
@@ -103,7 +117,6 @@ and model rendering stay in the app. `script/topology.ts` carries the
 `codemode` row (own CI test + coverage lane, knip workspace, tsconfig
 verification); the app allowlist gained `@openomni/codemode`.
 
-||||||| parent of fb19bf2c (docs: #1253 receipts — AGENTS stamp + implementation-status section)
 ## #1252 twelve journal kinds (epic #1260, draft PR #1278)
 
 On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal
