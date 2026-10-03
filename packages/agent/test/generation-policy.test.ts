@@ -89,6 +89,15 @@ test("captured bundle data resolves custom transforms and obligations alongside 
     .toEqual([{ ref: "kernel/budget-clamp", metric: "continuation", limit: 8 }]);
 }))));
 
+test("a transform's non-string declared field entry is skipped at projection; the string fields still rewrite (#1251 r5)", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const bodies: PlainValue[] = [];
+  const { result } = yield* dispatch([
+    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", 7], value: "bundle" } }, 300),
+  ], bodies);
+  expect(result).toMatchObject({ toolCallId: "call", output: "bundle" });
+  expect(bodies).toEqual([{ value: "bundle", secret: "secret" }]);
+}))));
+
 for (const type of ["transform", "obligation"] as const) {
   test(`unresolved bundle ${type} ref denies at pinned pre before a tool body runs`, () => isolated(Effect.scoped(Effect.gen(function* () {
     const bodies: PlainValue[] = [];

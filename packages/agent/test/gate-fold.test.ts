@@ -174,6 +174,54 @@ describe("gate decision fold (#1251)", () => {
     expect(outcome.decision.consulted).toEqual([]);
   });
 
+  it("an observe row whose handler is unavailable at decide time records a fact and the decision stands (#1251 r5)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#1", do: "observe", how: { ref: "audit/log" } }),
+      ],
+      handlers: ["audit/log"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: { op: "read" } },
+      { handlers: () => undefined },
+    );
+    expect(decision.verdict).toBe("allow");
+    expect(decision.annotations).toEqual([]);
+    expect(decision.facts).toEqual([
+      { rowId: "audit/tool.pre#1", ref: "audit/log", code: "handler_unavailable" },
+    ]);
+  });
+
+  it("an observe handler's unrecorded response becomes a fact, never an annotation (#1251 r5)", () => {
+    let calls = 0;
+    const silent: GateHandler = () => {
+      calls += 1;
+      return {};
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", { id: "audit/tool.pre#1", do: "observe", how: { ref: "audit/log" } }),
+      ],
+      handlers: ["audit/log"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: { op: "read" } },
+      { handlers: () => silent },
+    );
+    expect(calls).toBe(1);
+    expect(decision.verdict).toBe("allow");
+    expect(decision.annotations).toEqual([]);
+    expect(decision.facts).toEqual([
+      { rowId: "audit/tool.pre#1", ref: "audit/log", code: "unrecorded_response" },
+    ]);
+  });
+
   it("an observer's in-place mutation of the consulted value never reaches the decision (#1251 r2)", () => {
     const hostile: GateHandler = (input) => {
       const value = input.value;
