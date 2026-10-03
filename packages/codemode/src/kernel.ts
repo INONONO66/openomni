@@ -13,6 +13,8 @@ import base64
 import concurrent.futures
 import contextlib
 import hashlib
+import signal
+import urllib.request
 import io
 import itertools
 import json
@@ -326,6 +328,7 @@ class BrowserClient:
         self._cursor = None
         self._transcript = ""
         self._browser = None
+        self._cdp = None
 
     def _pty(self):
         return _Machine(self.machine_id).pty(self.session)
@@ -365,6 +368,7 @@ class BrowserClient:
         """Launch never reached readiness (4b): the owned tmux session is torn
         down so no dead session lingers, and the transcript rides the refusal."""
         self._drain()
+        self._stop_chromium()
         try:
             self._pty().close()
         except ToolError:
@@ -416,10 +420,16 @@ class BrowserClient:
             + "; printf '%s %s %s\\n' '" + _BROWSER_MARK + "' cdp-port \"$OMO_PORT\""
             + '; "$OMO_EXE" --remote-debugging-port="$OMO_PORT" --user-data-dir='
             + _shell_quote(self.profile_dir)
-            + " " + mode_flags + "--no-first-run --no-default-browser-check about:blank"
+            + " " + mode_flags + "--no-first-run --no-default-browser-check about:blank &"
+            + ' OMO_PID=$!'
+            + "; printf '%s %s %s\\n' '" + _BROWSER_MARK + "' chromium-pid \"$OMO_PID\""
+            + '; wait "$OMO_PID"'
             + "; OMO_STATUS=$?"
             + "; printf '%s %s %s\\n' '" + _BROWSER_MARK + "' chromium-exited \"$OMO_STATUS\""
-            + '; [ "$OMO_STATUS" = 0 ] && exit\r'
+            # A clean exit or a signal-range status (external stop, including our
+            # own cleanup) ends the session; a real error status keeps it so the
+            # failure output stays readable.
+            + '; { [ "$OMO_STATUS" = 0 ] || [ "$OMO_STATUS" -ge 128 ]; } && exit\r'
         )
         marker = self._await_output([_BROWSER_DEVTOOLS_LINE, _BROWSER_MARK + " chromium-exited"])
         if marker != _BROWSER_DEVTOOLS_LINE:
@@ -455,18 +465,36 @@ class BrowserClient:
         chromium = _browser_playwright_instance().chromium
         try:
             self._browser = chromium.connect_over_cdp(self.endpoint)
+            # One retained browser-level CDP session doubles as the liveness
+            # probe: sync playwright only pumps its loop inside a call, so a
+            # local is_connected flag goes stale and loss needs a round trip.
+            self._cdp = self._browser.new_browser_cdp_session()
         except ToolError:
             raise
         except Exception as error:
+            self._browser = None
+            self._cdp = None
             self._drain()
             raise BrowserLost(
                 "connect_over_cdp to " + str(self.endpoint) + " failed: " + str(error),
                 self._transcript,
             )
 
+    def _ping(self):
+        """Bounded liveness probe against the CDP http endpoint: sync playwright
+        pumps its loop only inside a call and a protocol send on a dead browser
+        blocks forever, so liveness must be decided outside the transport."""
+        if self._browser is None:
+            return False
+        try:
+            with urllib.request.urlopen(self.endpoint + "/json/version", timeout=5):
+                return True
+        except Exception:
+            return False
+
 
     def is_connected(self):
-        return self._browser is not None and self._browser.is_connected()
+        return self._ping()
 
     def _lost(self, message):
         """Loss detection (#1275 clause 6): drop the client, attach the transcript."""
@@ -476,7 +504,7 @@ class BrowserClient:
         return BrowserLost(message, self._transcript)
 
     def _alive(self):
-        if not self.is_connected():
+        if not self._ping():
             raise self._lost("chromium exited or its CDP connection is gone")
         return self._browser
 
@@ -510,22 +538,42 @@ class BrowserClient:
     def pages(self):
         return self.context.pages
 
+    def _chromium_pid(self):
+        """The launch line retains the browser pid in the session output; cells
+        run on the same machine as the session (the localhost CDP assumption)."""
+        found = re.findall(re.escape(_BROWSER_MARK) + r" chromium-pid (\d+)", self._transcript)
+        return int(found[-1]) if found else None
+
+    def _stop_chromium(self):
+        """Builds that honor CDP Browser.close exit on it; this is the fallback
+        that stops the browser process directly so nothing lingers."""
+        pid = self._chromium_pid()
+        if pid is None:
+            return
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
     def _shutdown(self, kill):
         browser = self._browser
+        cdp = self._cdp
         self._browser = None
-        if browser is None:
-            return
-        if kill:
+        self._cdp = None
+        if kill and browser is not None:
             try:
-                # CDP Browser.close ends Chromium itself; a clean exit also ends
-                # the tmux session, whose launch line exits the shell on status 0.
-                browser.new_browser_cdp_session().send("Browser.close")
+                # Best-effort graceful end first; the launch line then exits the
+                # shell and with it the owned tmux session.
+                (cdp or browser.new_browser_cdp_session()).send("Browser.close")
             except Exception:
                 pass
-        try:
-            browser.close()
-        except Exception:
-            pass
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if kill:
+            self._stop_chromium()
 
     def close(self):
         """End Chromium and the owned tmux session; the profile dir is kept."""
@@ -554,7 +602,7 @@ def browser(machine_id, *, headless=True, profile_dir=None, executable_path=None
                 + ("headless" if client.headless else "headed")
                 + "; close() it before switching display modes"
             )
-        if not client.is_connected():
+        if not client._ping():
             client._reconnect()
         return client
     client = BrowserClient(machine_id, profile, bool(headless))
@@ -564,10 +612,14 @@ def browser(machine_id, *, headless=True, profile_dir=None, executable_path=None
 
 
 def _browser_close_all():
-    """Interpreter close: close client objects and their Chromiums (which ends
-    the owned tmux sessions); persistent profiles are never deleted."""
+    """Interpreter close: stop each client's browser process directly (bounded,
+    cannot block) so the owned tmux sessions end within the driver's exit
+    grace; graceful CDP close belongs to client.close(). Persistent profiles
+    are never deleted."""
     for _client in list(_browser_clients.values()):
-        _client._shutdown(kill=True)
+        _client._stop_chromium()
+        _client._browser = None
+        _client._cdp = None
     _browser_clients.clear()
     instance = _browser_playwright["instance"]
     _browser_playwright["instance"] = None
