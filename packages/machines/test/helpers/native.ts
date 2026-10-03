@@ -52,7 +52,7 @@ export async function createMachineHost(options: Omit<Parameters<typeof Native.c
   };
 }
 export type MachineHost = Awaited<ReturnType<typeof createMachineHost>>;
-export async function attachMachineDaemon(options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner" | "id"> & { id?: () => string; runner?: CodeRunner }) {
+export async function attachMachineDaemon(options: Omit<Extract<Parameters<typeof Native.attachMachineDaemon>[0], { socketPath: string }>, "runner" | "id"> & { id?: () => string; runner?: CodeRunner }) {
   const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), runner: options.runner ? nativeRunner(options.runner) : undefined }));
   return { native, attachment: native.attachment, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }

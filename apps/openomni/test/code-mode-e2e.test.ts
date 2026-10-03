@@ -68,7 +68,7 @@ async function createMachineHost(options: Omit<Parameters<typeof createHost>[0],
 }
 
 async function attachMachineDaemon(
-  options: Omit<Parameters<typeof attachDaemon>[0], "id">,
+  options: Omit<Extract<Parameters<typeof attachDaemon>[0], { socketPath: string }>, "id">,
 ): Promise<MachineDaemon> {
   const daemon = await acquireEffect(attachDaemon({ id: testIds("e2e-daemon"), ...options, runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner }));
   suite.defer(() => runEffect(daemon.close()));
