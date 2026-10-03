@@ -100,6 +100,12 @@ describe("Ipc.Methods param schemas", () => {
         Machine.WireMethod.CallTool,
         Machine.WireMethod.ScreenRead,
         Machine.WireMethod.InputWrite,
+        Machine.WireMethod.PtyOpen,
+        Machine.WireMethod.PtyWrite,
+        Machine.WireMethod.PtyRead,
+        Machine.WireMethod.PtyResize,
+        Machine.WireMethod.PtyClose,
+        Machine.WireMethod.PtyList,
         Machine.WireMethod.FsOp,
       ].sort(),
     );
