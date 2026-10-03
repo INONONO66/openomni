@@ -236,22 +236,36 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     const establish: Effect.Effect<void, MachineError> = Effect.gen(function* () {
       const scope = yield* Scope.make();
       clientScope = scope;
-      client = yield* dialWith(scope).pipe(Scope.provide(scope), Effect.mapError(transportFailure("daemon.connect")));
+      client = yield* dialWith(scope).pipe(Scope.provide(scope), Effect.mapError((error) =>
+        // The HOST's presented key no longer matches the pinned hostPublicKey
+        // (#1270 F5): that is a revocation-class refusal, not a transport blip.
+        error._tag === "IpcPeerKeyMismatchError"
+          ? new MachineRefusalError({ reason: "peer_key_mismatch", message: error.message })
+          : transportFailure("daemon.connect")(error)));
       const raw = yield* typedCall(client, Machine.WireMethod.Attach, offer, options.attachTimeoutMs).pipe(Effect.mapError(transportFailure("daemon.attach")));
       attachment = yield* Effect.try({ try: () => Machine.AttachResult.parse(raw), catch: decodeMachineFailure("daemon.attach.response") });
     });
     /**
      * A scheduled reconnect attempt. Success resets the backoff counter; a
      * REFUSED reattach surfaces through `attachment` and closes the daemon —
-     * automatic reconnect stops until a restart or config change. A transport
-     * failure releases the half-made connection and backs off. The failed
-     * in-flight calls of the dropped connection are never replayed.
+     * automatic reconnect stops until a restart or config change. A host key
+     * that stopped matching the pin is equally terminal (#1270 F5): the pin
+     * refusal surfaces and the daemon closes — key rotation needs new config.
+     * Any other transport failure releases the half-made connection and backs
+     * off. The failed in-flight calls of the dropped connection are never
+     * replayed.
      */
     const attemptReattach: Effect.Effect<void> = Effect.suspend(() => {
       if (closing) return Effect.void;
       return establish.pipe(
         Effect.flatMap(() => attachment.status === "attached" ? Effect.sync(() => reconnector?.reset()) : Effect.orDie(close)),
-        Effect.catch(() => releaseClient.pipe(Effect.andThen(Effect.sync(() => { if (!closing) reconnector?.scheduleAttempt(); })))),
+        Effect.catch((error) => {
+          if (error._tag === "MachineRefusalError" && error.reason === "peer_key_mismatch") {
+            attachment = { status: "refused", reason: "peer_key_mismatch" };
+            return Effect.orDie(close);
+          }
+          return releaseClient.pipe(Effect.andThen(Effect.sync(() => { if (!closing) reconnector?.scheduleAttempt(); })));
+        }),
       );
     });
     return yield* Effect.gen(function* () {

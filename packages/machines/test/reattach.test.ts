@@ -7,6 +7,7 @@ import { captureError, within } from "./ipc/helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 import { eventCollector } from "./helpers/events";
 import { startProxy } from "./helpers/proxy";
+import { daemonFingerprint, daemonIdentity, hostFingerprint, hostIdentity, wrongIdentity } from "./ipc/helpers/tls-fixtures";
 
 /**
  * #1270 reconnect proof: time is driven ONLY through the injected scheduler
@@ -209,6 +210,57 @@ describe("daemon reattach over a dropped transport", () => {
       code.release();
       await daemon.close();
       await host.close();
+    }
+  });
+
+  test("a rotated host key during reconnect is terminal: the pin refusal surfaces, the daemon closes, nothing is rescheduled", async () => {
+    // Two REAL pinned-TLS hosts: the original and its "rotated" impostor —
+    // same machine enrollment, different host identity. The proxy retargets
+    // dials, standing in for the same address now presenting a new key.
+    const original = await createMachineHost({
+      listen: { tcp: { host: "127.0.0.1", port: 0 } },
+      tls: hostIdentity,
+      enrollment: () => ({ ...enrollment, publicKey: daemonFingerprint }),
+      events: { publish: () => undefined },
+      now: () => 7,
+    });
+    const rotated = await createMachineHost({
+      listen: { tcp: { host: "127.0.0.1", port: 0 } },
+      tls: wrongIdentity,
+      enrollment: () => ({ ...enrollment, publicKey: daemonFingerprint }),
+      events: { publish: () => undefined },
+      now: () => 7,
+    });
+    const target = { port: original.endpoints.tcp?.port ?? 0 };
+    const proxy = await startProxy({ port: 0 }, () => net.connect(target.port, "127.0.0.1"));
+    const clock = fakeScheduler();
+    const daemon = await attachMachineDaemon({
+      tcp: { host: "127.0.0.1", port: proxy.port },
+      hostPublicKey: hostFingerprint,
+      tlsCertificate: daemonIdentity.certificate,
+      tlsPrivateKey: daemonIdentity.privateKey,
+      offer: offer(),
+      reconnect: { scheduler: clock, random: () => 1 },
+    });
+    try {
+      expect(daemon.attachment.status).toBe("attached");
+
+      // The key rotates while the transport is down.
+      target.port = rotated.endpoints.tcp?.port ?? 0;
+      const scheduled = clock.nextScheduled();
+      proxy.sever();
+      const attempt = await within(scheduled, "reconnect scheduled after drop");
+      const settled = daemon.closed;
+      attempt.task();
+      await within(settled, "daemon closes on pin mismatch");
+      expect(daemon.attachment).toEqual({ status: "refused", reason: "peer_key_mismatch" });
+      // Terminal: the mismatch attempt scheduled nothing further.
+      expect(clock.entries).toHaveLength(1);
+    } finally {
+      await daemon.close();
+      await proxy.stop();
+      await rotated.close();
+      await original.close();
     }
   });
 
