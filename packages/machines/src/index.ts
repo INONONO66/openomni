@@ -1,5 +1,5 @@
 export { attachMachineDaemon, type MachineDaemon, type CodeRunner } from "./daemon";
-export type { ReconnectOptions, ReconnectScheduler } from "./reconnect";
+export type { ReconnectOptions } from "./reconnect";
 export * from "./errors";
 export { createMachineHost, type MachineHost, type MachineHandle, type MachineInfo } from "./host";
 export * from "./ipc";

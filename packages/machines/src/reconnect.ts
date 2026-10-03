@@ -5,7 +5,7 @@
  */
 
 /** Injected timer: schedule returns the cancellation for that one task. */
-export interface ReconnectScheduler {
+interface ReconnectScheduler {
   schedule(delayMs: number, task: () => void): () => void;
 }
 
@@ -16,8 +16,8 @@ export interface ReconnectOptions {
 }
 
 /** Full-jitter exponential backoff: base 250 ms doubling to a 30 s ceiling. */
-export const RECONNECT_BASE_DELAY_MS = 250;
-export const RECONNECT_CAP_DELAY_MS = 30_000;
+const RECONNECT_BASE_DELAY_MS = 250;
+const RECONNECT_CAP_DELAY_MS = 30_000;
 
 function fullJitterDelayMs(attempt: number, random: () => number): number {
   const ceiling = Math.min(RECONNECT_CAP_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** attempt);
