@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791055468214,
+  "lastUpdate": 1791061915192,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77357,6 +77357,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 188858,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a66dc3a7de1234f57d59fd70b28cbcc0350aec42",
+          "message": "#1271 brain host attaches as machine self; local execution path removed from tools (#1284)\n\n* chore(#1271): open branch for brain host as machine self\n\n* feat(openomni): machines.self and machines.default config with typed plane validation (#1271)\n\n* feat(openomni): boot attaches the host as machine self before tool ports publish (#1271)\n\n* feat(openomni): every tool routes through the self machine; local execution paths deleted (#1271)\n\nparseLocus takes the configured default machine; prefix-less paths are machine loci; relative paths and the virtual root refuse. filesystem/bash/find/grep lose node:fs, Bun.spawn and localBash; bash gains absolute cwd and drops timeout (the daemon bounds execution). Tool schema snapshot regenerated as the review surface.\n\n* test(openomni): a second daemon attaches alongside machine self via the CLI attach path and negotiates capabilities (#1271)\n\n* docs(#1271): self-machine section, shipped-state line, AGENTS stamp + tools ownership (no local fs/shell); format regenerated snapshots\n\n* fix(#1271): r1 M1 — self daemon detach surfaces through typed lifecycle (Detached event + Effect.logError), console.error removed\n\n* fix(#1271): r1 M2 — doc states the implemented post-boot disconnect behavior (per-call typed disconnected refusal, tools stay published)\n\n* fix(#1271): r1 M3 — host neverSupersede option: a live self attachment is never hijacked by reattach; AttachResult gains typed already_attached refusal\n\n* fix(#1271): r1 M4 — machine plane required: boot without a machines block refuses with typed machines_required before any listener; boot fixtures gain the self plane\n\n* fix(#1271): r1 L1 — self enrollment stamped once at composition, not per lookup\n\n* fix(#1271): r1 L3 — merge duplicate @openomni/protocol import statements\n\n* fix(#1271): r1 L4 — test helper cleans up its default self-export tmp dirs after the file's run\n\n* fix(#1271): r1 L4 — tmp-dir cleanup via process exit hook; the helper also serves plain child-process fixtures",
+          "timestamp": "2026-10-04T06:09:23+09:00",
+          "tree_id": "cdc04b540d2b1eac5d1e3e704309c1dea6ce385b",
+          "url": "https://github.com/INONONO66/openomni/commit/a66dc3a7de1234f57d59fd70b28cbcc0350aec42"
+        },
+        "date": 1791061914565,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 663,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 890,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 965545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 274566,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4721657,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 80,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 441,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 92034,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 530473,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 282015,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2166,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 8390109,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 810849,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12926,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 119912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 581646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 121578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 10413108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 60,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 86136,
             "unit": "ns/op"
           }
         ]
