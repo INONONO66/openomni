@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, test } from "bun:test";
 import { DecisionFact } from "../src/ledger/schema.js";
 import {
   Alarm,
+  Journal,
   canonicalDigest,
   Inbox,
   LedgerAction,
@@ -45,21 +46,7 @@ describe("L0 ledger protocol", () => {
   });
 
   test("parses every confirmed action kind and enforces terminal exclusivity", () => {
-    const kinds = [
-      "prompt",
-      "turn",
-      "llm",
-      "attempt",
-      "tool",
-      "message",
-      "inbox.deliver",
-      "compaction",
-      "alarm.arm",
-      "alarm.fired",
-      "alarm.paused",
-      "session.configure",
-      "policy.decision",
-    ] as const;
+    const kinds = [...Journal.KINDS, "fold.checkpoint"] as const;
 
     for (const kind of kinds) {
       expect(

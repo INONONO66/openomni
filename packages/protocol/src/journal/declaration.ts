@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { EncodedPayload } from "../ledger/l0.js";
+import { PlainValueSchema } from "../json.js";
+
+/** The one canonical payload envelope every journal row side carries. */
+export const EncodedPayload = z
+  .object({
+    encodingVersion: z.literal(1),
+    value: PlainValueSchema,
+  })
+  .strict();
+export type EncodedPayload = z.infer<typeof EncodedPayload>;
 
 /**
  * One closed journal kind (#1252): its name, payload version and body schema.

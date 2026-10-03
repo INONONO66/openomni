@@ -5,6 +5,7 @@ import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 import { Message as ModelMessage } from "../message/index.js";
 import { Journal } from "../journal/index.js";
+import { EncodedPayload } from "../journal/declaration.js";
 
 export { SessionTransition } from "./session-transition.js";
 
@@ -14,13 +15,7 @@ const Identifier = z.string().min(1);
 const InputKind = z.enum(["prompt", "interrupt", "resume"]);
 const NullableIdentifier = Identifier.nullable();
 
-export const EncodedPayload = z
-  .object({
-    encodingVersion: z.literal(1),
-    value: PlainValueSchema,
-  })
-  .strict();
-export type EncodedPayload = z.infer<typeof EncodedPayload>;
+export { EncodedPayload } from "../journal/declaration.js";
 
 export namespace LedgerAction {
   /** Canonical admitted args plus optional pre-transform provenance. */
