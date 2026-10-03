@@ -37,9 +37,10 @@ ring 1  @openomni/agent           generic durable-session mechanics and the stat
                                   #1276)
 
 lateral driver/gateway band:
-        @openomni/machines        raw machine WHERE endpoints, the thin transport
-                                  (src/ipc/), and the code facade with its injected
-                                  interpreter runner (src/codemode/)
+        @openomni/machines        raw machine WHERE endpoints and the thin transport
+                                  (src/ipc/)
+        @openomni/codemode        the code facade with its injected interpreter
+                                  runner, over protocol and the machines port (#1272)
         @openomni/channels        platform drivers, perimeter router, and the
                                   channel-facing stores (src/store/)
 

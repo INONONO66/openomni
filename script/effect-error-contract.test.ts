@@ -7,7 +7,7 @@ import * as Model from "../packages/agent/src/model/errors";
 import * as Store from "../packages/agent/src/core/store/errors";
 import { sdkError } from "../packages/agent/test/model/helpers/retry";
 import * as Channels from "../packages/channels/src/errors";
-import * as Code from "../packages/machines/src/codemode/errors";
+import * as Code from "../packages/codemode/src/errors";
 import * as Machines from "../packages/machines/src/errors";
 import * as Ipc from "../packages/machines/src/ipc/errors";
 const diagnostic = { operation: "fixture", cause: "foreign diagnostic" };
@@ -136,7 +136,7 @@ const packages: readonly PackageEntry[] = [
   { name: "channels", path: "channels/src/errors", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", carrierPath: "channels/src/errors", failures: channels, thrown: [] },
   { name: "machines", path: "machines/src/errors", module: Machines, union: "MachineError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: machines, thrown: [] },
   { name: "machines ipc", path: "machines/src/ipc/errors", module: Ipc, union: "IpcError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: ipc, thrown: [] },
-  { name: "machines codemode", path: "machines/src/codemode/errors", module: Code, union: "CodeError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: code, thrown: [] },
+  { name: "codemode", path: "codemode/src/errors", module: Code, union: "CodeError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: code, thrown: [] },
 ];
 for (const entry of packages) {
   test(`${entry.name}: every failure export is tagged, yieldable and covered by the package union`, () => {

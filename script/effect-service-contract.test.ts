@@ -26,8 +26,9 @@ test("store write receipts are the ok arms of the protocol results", () => {
   void serverKeys;
 });
 
-// Two full-program analyses (inventory + findings): ~11s on an M5, ~18s on the
-// ubuntu runner after W5.2; the ceiling is a crash guard, not a timing assertion.
+// Two full-program analyses (inventory + findings): ~18s on the ubuntu runner
+// after W5.2, ~36s in the coverage lane once #1272 adds the sixth workspace;
+// the ceiling is a crash guard, not a timing assertion.
 test("every production Tag is consumed or has an exact existing-debt receipt", () => {
   const inventory = effectServiceInventory();
   expect(inventory.map((service: ServiceUsage) => service.key)).toEqual(expect.arrayContaining([
@@ -45,4 +46,4 @@ test("every production Tag is consumed or has an exact existing-debt receipt", (
     if (service.reads > 0) continue;
     expect(debt).toContainEqual(expect.objectContaining({ file: service.file, line: service.line, failing: false }));
   }
-}, 30000);
+}, 60000);

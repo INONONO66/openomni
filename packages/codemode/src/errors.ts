@@ -1,6 +1,6 @@
 import { Data } from "effect";
 import { z } from "zod";
-import type { MachinesFailure } from "../errors";
+import type { MachinesFailure } from "@openomni/machines";
 
 const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
 const Fields = z.object({

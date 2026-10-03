@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type BusEvent, Machine } from "@openomni/protocol";
-import { attachMachineDaemon } from "../helpers/native";
-import { type MachineHost, createMachineHost } from "../helpers/native";
+import { attachMachineDaemon } from "../../../machines/test/helpers/native";
+import { type MachineHost, createMachineHost } from "../../../machines/test/helpers/native";
 import { PythonKernel } from "./helpers/native";
 import { createCodemode } from "./helpers/native";
 import { join } from "node:path";

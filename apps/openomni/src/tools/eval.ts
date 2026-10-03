@@ -1,5 +1,5 @@
 import { CELL_CEILING_MS, describe } from "./core/cell-output";
-import { CodemodeError, type RunOptions } from "@openomni/machines";
+import { CodemodeError, type RunOptions } from "@openomni/codemode";
 import { Core } from "@openomni/agent";
 const defineTool = Core.defineTool;
 const ToolRefused = Core.ToolRefused;

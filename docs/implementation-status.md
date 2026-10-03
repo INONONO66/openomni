@@ -1,5 +1,29 @@
 # Implementation Status
 
+## #1272 code mode extracted into packages/codemode (reverses part of #1246)
+
+On `machines/1272-codemode-package` (2026-10-03, base `58b7f18d`). The
+repository has six packages: `packages/codemode` (`@openomni/codemode`, deps
+`@openomni/protocol` + `@openomni/machines`) now owns the reusable
+Python-backed cell runtime shared by the application host and the machine
+daemon — `createCodemode`, machine object handles, one lazy `PythonKernel` per
+tenant, the cell registry and `cell.run/peek/stop`, the Python prelude
+(`parallel`, `completion`, `tool.<name>()` proxies),
+`listMachines`/`getMachine`/`findMachine`, `CodemodeError`/`DriverFailure` and
+`decodeCodeFailure`. The move is behavior-preserving: the public shape of
+`createCodemode` is unchanged and no configuration keys, capability ids, wire
+methods, or refusal reasons were added. `packages/machines` keeps transport
+and device access and exports the structural contracts code mode consumes
+(`CodeRunner`, `MachineHost`/`MachineHandle`/`MachineInfo`, `onAbort`,
+`machinesFallback`); its barrel no longer re-exports `./codemode` and
+`git ls-files packages/machines/src/codemode` is empty. The daemon CLI
+(`apps/openomni/src/cli/machine.ts`), app composition
+(`src/composition/codemode.ts`), eval tool and all code-mode tests import
+`@openomni/codemode` directly; application policy, completion budget, ledger
+and model rendering stay in the app. `script/topology.ts` carries the
+`codemode` row (own CI test + coverage lane, knip workspace, tsconfig
+verification); the app allowlist gained `@openomni/codemode`.
+
 ## #1252 twelve journal kinds (epic #1260, draft PR #1278)
 
 On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal
@@ -248,6 +272,8 @@ untouched; the desktop boundaries recompile and their transport/session tests
 pass unchanged.
 
 ## #1246 ten packages merged into five (epic #1260 P4 after #1245, merged as `0ebef4b0` (PR #1264))
+
+(Historical receipt; #1272 later re-extracted code mode into `packages/codemode`, making six packages.)
 
 On `epic1260/1246-packages-10-5` (2026-10-02). The repository has exactly five
 packages plus two apps; the retired directories and their package names grep to
@@ -774,8 +800,8 @@ WebSocket/path wake still commits one fired pair and reaches revision 59.
 | LLM | Canonical model/auth resolution, provider classification, retry-after/backoff, and corrected additive token accounting. The processor performs one attempt; session execution owns retry and re-admission. The unused public fact tap is removed (#976); ephemeral transcript folding and message/tool callbacks remain. | `packages/agent/src/model/`, `packages/agent/src/core/gate/decide.ts` |
 | Compaction | App-configured summarization and agent-owned speculative/synchronous compaction, with durable projection/range/hash/revert evidence and reconstruction from canonical actions. The summarizer is wired, not dormant. | `apps/openomni/src/compaction/`, `packages/agent/src/plugins/compaction/`, `packages/agent/src/inspect/history.ts` |
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/core/bus.ts`, `apps/openomni/src/observation/` |
-| Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; machines owns the injected interpreter runner under `src/codemode/` since #1246. Old app filesystem/list-machines tools remain absent. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/` |
-| Code mode | Public factory supplies machine object handles named after the tools (`read/write/ls/bash/eval`) and `cell.run/peek/stop`. The injected daemon runner owns lazy per-tenant Python processes, parallel/completion helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single `eval` tool delegates to codemode: `run` waits `timeout` seconds then answers `running` with a `cell_id`, `peek` reads the streamed partial output (`machine.peek_code`), `stop` interrupts and settles the cell as `cancelled` with its output, never re-running it; a ten-minute ceiling bounds background cells. Cell-only `completion({prompt, model?, system?, schema?})` has a 32-call per-catalog budget; a `schema` answer is validated host-side and returned as canonical JSON; batching is the cell's `parallel()`. | `packages/machines/src/codemode/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/eval.ts`, `apps/openomni/src/tools/completion.ts` |
+| Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; the injected interpreter runner lives in `packages/codemode` since #1272. Old app filesystem/list-machines tools remain absent. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/` |
+| Code mode | Public factory supplies machine object handles named after the tools (`read/write/ls/bash/eval`) and `cell.run/peek/stop`. The injected daemon runner owns lazy per-tenant Python processes, parallel/completion helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single `eval` tool delegates to codemode: `run` waits `timeout` seconds then answers `running` with a `cell_id`, `peek` reads the streamed partial output (`machine.peek_code`), `stop` interrupts and settles the cell as `cancelled` with its output, never re-running it; a ten-minute ceiling bounds background cells. Cell-only `completion({prompt, model?, system?, schema?})` has a 32-call per-catalog budget; a `schema` answer is validated host-side and returned as canonical JSON; batching is the cell's `parallel()`. | `packages/codemode/src/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/eval.ts`, `apps/openomni/src/tools/completion.ts` |
 | Tool catalog and prompts | The catalog is sealed (#949): eleven model-door tools `read`, `write`, `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`, `provision` plus the cell-only `completion`; snake_case names, one `op` discriminator under `operation` for eval/monitor/provision, flat `tools/<name>.ts` (`_` written `-` in file names; `lint:tools` `[tool-file-name]` pins the correspondence). There is no `approval` tool: `provision.contact_promote`/`contact_merge` carry `require_approval` policy rows resolved through the kernel request path. `lint:tools` and the catalog test pin the exact set and refuse retired names. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/core/tool.ts` |
 | CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
 
@@ -882,6 +908,6 @@ claim about it.
 ## Parked and otherwise unimplemented
 
 - [#950](https://github.com/INONONO66/openomni/issues/950) remains `icebox`, outside #930, superseding closed [#811](https://github.com/INONONO66/openomni/issues/811). It owns machine-offer isolation capability/fail-closed execution and the gateway egress secret gate. Kernel trust-boundary placement does not decide sandbox profiles or scanner semantics. Re-triage follows #938/#939 and #946; all three are open at verification. No sandbox/scanner implementation is included here.
-- #949 stays open after stage 3, which landed `eval.op = run | peek | stop` over a background cell registry, `completion` options, and tool-named codemode handle methods for the five operations the machine wire carries (`read/write/ls/bash/eval`). Not landed: the `edit`, `find` and `grep` handle methods from the Owner amendment. Those tools are compositions the app tool layer builds over `read/write/list/stat` (`apps/openomni/src/tools/{edit,find,grep}.ts` on `core/filesystem.ts`); the machines codemode plane (`packages/machines/src/codemode/`, #1246) sits below that layer and the wire has no such op, so offering them in the cell without duplicating the tools means hoisting that composition into a package both can import. Until then the handle set is the five above and a cell reaches the other three through `tool.edit/find/grep()` proxies. Continuous alarm scheduling stays #947; #969 acceptance uses the behavioral and deletion receipts above, not only its census; machine handles and codemode are described above.
+- #949 stays open after stage 3, which landed `eval.op = run | peek | stop` over a background cell registry, `completion` options, and tool-named codemode handle methods for the five operations the machine wire carries (`read/write/ls/bash/eval`). Not landed: the `edit`, `find` and `grep` handle methods from the Owner amendment. Those tools are compositions the app tool layer builds over `read/write/list/stat` (`apps/openomni/src/tools/{edit,find,grep}.ts` on `core/filesystem.ts`); the codemode plane (`packages/codemode/`, #1246 fold reversed by #1272) sits below that layer and the wire has no such op, so offering them in the cell without duplicating the tools means hoisting that composition into a package both can import. Until then the handle set is the five above and a cell reaches the other three through `tool.edit/find/grep()` proxies. Continuous alarm scheduling stays #947; #969 acceptance uses the behavioral and deletion receipts above, not only its census; machine handles and codemode are described above.
 - Connector definitions and installation schemas are not an installed connector execution host. The dormant installation store is deleted.
 - Governor/Jester/Voice, Stakes and effective-authority target consumers, dynamic reactive composition, and any later memory/search redesign are not promoted to shipped by retained design prose.

@@ -1,4 +1,5 @@
-import { createCodemode, MachinesFailure, type RunOptions } from "@openomni/machines";
+import { createCodemode, type RunOptions } from "@openomni/codemode";
+import { MachinesFailure } from "@openomni/machines";
 import { Core } from "@openomni/agent";
 const forkInvocation = Core.forkInvocation;
 const AgentFailure = Core.AgentFailure;
