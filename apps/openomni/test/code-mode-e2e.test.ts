@@ -171,7 +171,7 @@ test("a cell drives a named persistent terminal through m.pty (#1273)", async ()
   const config = suite.config("openomni-app-pty-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "app-pty-test", apiKey: "test-key" },
-    machines: { socketPath, enrolled: [appEnrollment] },
+    machines: { listen: { unix: socketPath }, enrolled: [appEnrollment] },
   });
   const code = [
     `m = codemode.getMachine('${MACHINE_ID}')`,

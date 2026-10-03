@@ -141,12 +141,13 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
       wsToken: "monitor-test",
       compactionSummarizer: false,
       machines: {
-        socketPath: machinesSocket,
+        listen: { unix: machinesSocket },
         enrolled: [{
           name: "workstation",
           machineId: "m-1",
           allowedCapabilities: ["pty.session"],
           allowedExports: ["shell"],
+          publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           enrolledAt: 1000,
         }],
       },

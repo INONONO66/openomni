@@ -620,13 +620,14 @@ describe("bash session door", () => {
   ) {
     const path = socketPath();
     const host = await acquireEffect(createMachineHost({
-      socketPath: path,
+      listen: { unix: path },
       id: testIds("pty-bridge-host"),
       enrollment: () => ({
         name: "workstation",
         machineId: "m-1",
         allowedCapabilities: ["pty.session"],
         allowedExports: ["shell"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 1000,
       }),
       events: { publish: () => undefined },
