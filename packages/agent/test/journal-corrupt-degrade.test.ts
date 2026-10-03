@@ -81,6 +81,14 @@ test("a corrupt row degrades to opaque with one journal.corrupt observation and 
     // Exactly one journal.corrupt observation names the row.
     expect(corrupt).toMatchObject([{ seq: 2, kind: "prompt" }]);
     expect(corrupt[0]?.reason.length).toBeGreaterThan(0);
+
+    // Projection read ports degrade too (#1252): the corrupt prompt row is
+    // the only pending message candidate, so the port answers the exact empty
+    // page instead of throwing, with exactly one more journal.corrupt.
+    corrupt.length = 0;
+    expect(session.actions.pendingMessages("s1")).toEqual([]);
+    expect(corrupt).toMatchObject([{ seq: 2, kind: "prompt" }]);
+    expect(corrupt[0]?.reason.length).toBeGreaterThan(0);
     // Verbatim on disk: the degraded read rewrote nothing.
     const after = new Database(path, { readonly: true });
     try {

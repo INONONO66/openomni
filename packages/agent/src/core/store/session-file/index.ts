@@ -136,6 +136,18 @@ type Reads = Pick<
  * that cannot even shape an opaque node is skipped; one bad row never blocks
  * session load.
  */
+function reportCorruptRow(row: ActionSqlRow, sink: ObservationSink, cause: unknown): void {
+  try {
+    sink.publish(Journal.CorruptEvent, {
+      seq: row.ordinal,
+      kind: row.kind,
+      reason: cause instanceof Error ? cause.message : String(cause),
+    });
+  } catch {
+    // Post-read observation must never block the degraded read itself.
+  }
+}
+
 function decodeActionDegraded(
   row: ActionSqlRow,
   sink: ObservationSink,
@@ -143,15 +155,7 @@ function decodeActionDegraded(
   try {
     return decodeAction(row);
   } catch (cause) {
-    try {
-      sink.publish(Journal.CorruptEvent, {
-        seq: row.ordinal,
-        kind: row.kind,
-        reason: cause instanceof Error ? cause.message : String(cause),
-      });
-    } catch {
-      // Post-read observation must never block the degraded read itself.
-    }
+    reportCorruptRow(row, sink, cause);
     try {
       return decodeAction({
         ...row,
@@ -165,17 +169,41 @@ function decodeActionDegraded(
   }
 }
 
-function decodeOne(value: ActionSqlRow | null) {
+/**
+ * Projection reads degrade by exclusion (#1252): a corrupt row emits the same
+ * single `journal.corrupt{seq, kind, reason}` observation as the fold path and
+ * is skipped — the port answers instead of throwing. The fold (`range`) keeps
+ * the opaque shape instead because the report view must show every row.
+ */
+function decodeOneDegraded(
+  value: ActionSqlRow | null,
+  sink: ObservationSink,
+): LedgerAction.Node | undefined {
   const row = ActionSqlRow.nullable().parse(value);
-  return row === null ? undefined : decodeAction(row);
+  if (row === null) return undefined;
+  try {
+    return decodeAction(row);
+  } catch (cause) {
+    reportCorruptRow(row, sink, cause);
+    return undefined;
+  }
 }
 
-function decodeRows(values: ActionSqlRow[]) {
-  return ActionSqlRow.array().parse(values).map(decodeAction);
+function decodeRowsDegraded(values: ActionSqlRow[], sink: ObservationSink): LedgerAction.Node[] {
+  return ActionSqlRow.array().parse(values).flatMap((row) => {
+    try {
+      return [decodeAction(row)];
+    } catch (cause) {
+      reportCorruptRow(row, sink, cause);
+      return [];
+    }
+  });
 }
 
 /** Each semantic port owns a literal statement and explicit bindings. */
-function createActionReads(db: Database): Reads {
+function createActionReads(db: Database, sink: ObservationSink): Reads {
+  const decodeOne = (value: ActionSqlRow | null) => decodeOneDegraded(value, sink);
+  const decodeRows = (values: ActionSqlRow[]) => decodeRowsDegraded(values, sink);
   return {
     priorModelAttempt(sessionId, turnId) {
       return decodeOne(
@@ -410,7 +438,7 @@ export function createActions(
   onObservationFailure: ObservationFailurePort,
 ): ProtocolStorage.ActionSubAdapter {
   return {
-    ...createActionReads(db),
+    ...createActionReads(db, observationSink),
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
