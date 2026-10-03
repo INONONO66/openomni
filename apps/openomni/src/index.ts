@@ -172,6 +172,9 @@ async function composeMachinePlane(
     }),
     (cause) => selfAttachFailure(`machine configuration invalid: ${cause}`),
   );
+  // r1 L1: the self enrollment is one record stamped at composition time,
+  // not re-stamped on every lookup.
+  const selfRecord = selfEnrollment(plane, deps.now());
   const host = await acquireAppResource(
     runtime,
     createMachineHost({
@@ -179,7 +182,7 @@ async function composeMachinePlane(
       ...(machines.tls === undefined ? {} : { tls: machines.tls }),
       enrollment: (machineId) =>
         machineId === plane.self.id
-          ? selfEnrollment(plane, deps.now())
+          ? selfRecord
           : machines.enrolled.find((e) => e.machineId === machineId),
       events: deps.events,
       id: deps.id,
