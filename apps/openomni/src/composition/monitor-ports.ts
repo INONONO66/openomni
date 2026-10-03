@@ -20,11 +20,11 @@ import type { WatchSources } from "./watch-sources";
  * schemas and ports interface stay in `src/tools/core/monitor-ports.ts`.
  *
  * Chain ids per (watchId, epoch):
- *   arm      `<watchId>:arm:<epoch>`        kind alarm.arm
- *   cancel   `<watchId>:cancel:<epoch>`     kind alarm.paused
- *   paused   `<watchId>:paused:<epoch>`     kind alarm.paused
- *   fired    the sender's occurrence key    kind alarm.fired (child of arm)
- *   timeout  `<watchId>:timeout:<epoch>`    kind alarm.fired (agent watchTimeoutKey)
+ *   arm      `<watchId>:arm:<epoch>`        alarm{op: arm}
+ *   cancel   `<watchId>:cancel:<epoch>`     alarm{op: fired, outcome: stale}
+ *   paused   `<watchId>:paused:<epoch>`     alarm{op: fired, outcome: exhausted}
+ *   fired    the sender's occurrence key    alarm{op: fired, outcome: delivered} (child of arm)
+ *   timeout  `<watchId>:timeout:<epoch>`    alarm{op: fired, outcome: delivered} (agent watchTimeoutKey)
  */
 
 /** The sealed spec an arm commits: source, pinned policy, wake budget. */
@@ -59,6 +59,13 @@ function armEffect(action: LedgerAction.Node): ArmEffectValue | undefined {
   return { status: "armed", fireAt: value.fireAt, spec: spec.data };
 }
 
+function deliveredFired(action: LedgerAction.Node): boolean {
+  if (action.kind !== "alarm") return false;
+  const value = action.intent.value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  return value.op === "fired" && value.outcome === "delivered";
+}
+
 interface WatchFold {
   readonly state: WatchState;
   readonly spec: WatchSpec;
@@ -75,7 +82,7 @@ function firedActions(
   let cursor = 0;
   for (;;) {
     const page = kernel.operationChildrenPage(sessionId, armId, cursor);
-    for (const child of page) if (child.kind === "alarm.fired") fired.push(child);
+    for (const child of page) if (deliveredFired(child)) fired.push(child);
     if (page.length < 256) return fired;
     cursor = page.at(-1)?.ordinal ?? cursor;
   }
@@ -163,7 +170,6 @@ function watchAction(input: {
   readonly id: string;
   readonly parentId: string | null;
   readonly sessionId: string;
-  readonly kind: "alarm.arm" | "alarm.fired" | "alarm.paused";
   readonly intent: PlainObject;
   readonly effect: PlainObject;
   readonly at: number;
@@ -172,7 +178,7 @@ function watchAction(input: {
     id: input.id,
     parentId: input.parentId,
     sessionId: input.sessionId,
-    kind: input.kind,
+    kind: "alarm",
     intent: EncodedPayload.parse({ encodingVersion: 1, value: input.intent }),
     effect: EncodedPayload.parse({ encodingVersion: 1, value: input.effect }),
     irreversible: true,
@@ -286,7 +292,6 @@ export function createWatchMonitorPorts(deps: WatchPlaneDeps): MonitorPorts {
       id: watchArmId(id, epoch),
       parentId: epoch > 1 ? watchArmId(id, epoch - 1) : null,
       sessionId,
-      kind: "alarm.arm",
       intent: { op: "arm", watchId: id, epoch },
       effect: { status: "armed", fireAt, spec },
       at,
@@ -312,8 +317,7 @@ export function createWatchMonitorPorts(deps: WatchPlaneDeps): MonitorPorts {
           id: watchCancelId(id, fold.state.epoch),
           parentId: fold.armId,
           sessionId,
-          kind: "alarm.paused",
-          intent: { op: "cancel", watchId: id, epoch: fold.state.epoch },
+          intent: { op: "fired", outcome: "stale", via: "cancel", watchId: id, epoch: fold.state.epoch },
           effect: { status: "cancelled" },
           at,
         });
@@ -403,8 +407,7 @@ export function watchFiredHook(deps: WatchHookDeps) {
           id: payload.sourceKey,
           parentId: fold.armId,
           sessionId: authority.sessionId,
-          kind: "alarm.fired",
-          intent: { op: "fired", watchId: payload.watchId, epoch: payload.epoch },
+          intent: { op: "fired", outcome: "delivered", watchId: payload.watchId, epoch: payload.epoch },
           effect: { status: "fired", content: batch.content, terminal: batch.terminal },
           at: context.now,
         }),
@@ -426,8 +429,7 @@ export function watchFiredHook(deps: WatchHookDeps) {
             id: watchPausedId(payload.watchId, payload.epoch),
             parentId: fold.armId,
             sessionId: authority.sessionId,
-            kind: "alarm.paused",
-            intent: { op: "paused", watchId: payload.watchId, epoch: payload.epoch },
+            intent: { op: "fired", outcome: "exhausted", via: "paused", watchId: payload.watchId, epoch: payload.epoch },
             effect: { status: "paused", reason: "notification_budget" },
             at: context.now,
           }),
@@ -459,8 +461,7 @@ export function watchTimeoutHook(deps: WatchHookDeps) {
           id,
           parentId: fold.armId,
           sessionId: authority.sessionId,
-          kind: "alarm.fired",
-          intent: { op: "timeout", watchId: payload.watchId, epoch: payload.epoch },
+          intent: { op: "fired", outcome: "delivered", via: "timeout", watchId: payload.watchId, epoch: payload.epoch },
           effect: { status: "fired", terminal: true, reason: "timeout", content },
           at: context.now,
         }),

@@ -81,7 +81,7 @@ function watchCut() {
       expectedRevision: row.revision, state: row.state,
       actions: [
         {
-          id: occurrenceId, sessionId, parentId: null, kind: "alarm.fired",
+          id: occurrenceId, sessionId, parentId: null, kind: "alarm",
           intent: { encodingVersion: 1, value: { watchId, epoch: 1, sourceKey: `timer:${now}`, batch: "b1" } },
           effect: { encodingVersion: 1, value: { phase: "fired", terminal: true } },
           ts: now, irreversible: true,
@@ -155,7 +155,7 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
         ? {
             occurrenceId,
             redelivery: redelivery.op === "skip" ? redelivery.reason : redelivery.op,
-            fired: sessionTree(kernel, sessionId).filter((action) => action.kind === "alarm.fired").length,
+            fired: sessionTree(kernel, sessionId).filter((action) => action.kind === "alarm").length,
           }
         : null,
     });

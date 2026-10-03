@@ -312,7 +312,7 @@ function lifecycle() {
       sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").fence + 1,
     });
     yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: "monitor", sessionId: "parent", parentId: null, kind: "alarm.arm",
+      id: "monitor", sessionId: "parent", parentId: null, kind: "alarm",
       intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
       effect: { encodingVersion: 1, value: { phase: "pending" } },
       ts: 1_000, irreversible: true,
@@ -320,7 +320,7 @@ function lifecycle() {
     const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
     const woke = committed("parent", "turn");
     yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm.fired",
+      id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm",
       intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
       effect: { encodingVersion: 1, value: { terminal: "executed" } },
       ts: 1_000, irreversible: true,
@@ -352,7 +352,7 @@ describe("action-based history and diagnostic projections", () => {
             expectedRevision: firstRevision, state: kernel.row("parent").state,
             actions: Array.from({ length: 300 }, (_, index) => ({
               id: `inspection-page-${index}`, sessionId: "parent", parentId: null,
-              kind: "alarm.arm" as const,
+              kind: "alarm" as const,
               intent: { encodingVersion: 1 as const, value: { alarmId: `inspect-${index}` } },
               effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
               ts: 1_000, irreversible: true,
@@ -423,7 +423,7 @@ describe("action-based history and diagnostic projections", () => {
                 break;
               case "root":
                 expect(transition.parentId).toBeNull();
-                expect(["session.configure", "alarm.arm"]).toContain(transition.kind);
+                expect(["session.configure", "alarm"]).toContain(transition.kind);
                 break;
               default:
                 throw new Error("unreachable cause");
@@ -435,11 +435,22 @@ describe("action-based history and diagnostic projections", () => {
                 entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
               ) => entry.op === op && entry.phase === phase,
             );
+          // #1252: attempts share the llm kind; an attempt intent is the llm
+          // row carrying its attempt ordinal.
+          const attemptActionIds = new Set(
+            tree
+              .filter(
+                (action: import("@openomni/protocol").LedgerAction.Node) =>
+                  action.kind === "llm" &&
+                  typeof (action.intent.value as { attempt?: number })?.attempt === "number",
+              )
+              .map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
+          );
           expect(
             byOp("chat", "intent").filter(
               (
                 entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-              ) => entry.kind === "attempt",
+              ) => entry.kind === "llm" && attemptActionIds.has(entry.actionId),
             ),
           ).toHaveLength(2);
           expect(
@@ -451,7 +462,8 @@ describe("action-based history and diagnostic projections", () => {
           ).toEqual(["executed", "executed", "executed"]);
           const attemptResults = tree.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "attempt" &&
+              action.kind === "llm" &&
+              attemptActionIds.has(action.parentId ?? "") &&
               action.effect.value !== null &&
               typeof action.effect.value === "object" &&
               !Array.isArray(action.effect.value) &&
@@ -499,7 +511,7 @@ describe("action-based history and diagnostic projections", () => {
                 entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
               ) => entry.kind,
             ),
-          ).toEqual(["alarm.fired"]);
+          ).toEqual(["alarm"]);
           const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
           expect(
             woke.map(
@@ -526,7 +538,7 @@ describe("action-based history and diagnostic projections", () => {
           ).toEqual(["child"]);
           const outbound = inspection.children[0]?.transitions.filter(
             (e: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number]) =>
-              e.kind === "outbound",
+              e.kind === "message",
           );
           expect(
             outbound?.map(

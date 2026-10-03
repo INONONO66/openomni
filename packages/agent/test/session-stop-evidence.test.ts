@@ -13,10 +13,10 @@ function approvalsWith(ids: readonly string[]): ExecutionApprovals {
     answer: () => Effect.void,
   };
 }
-function alarmAction(kind: "alarm.arm" | "alarm.fired", id: string, parentId: string, ts: number): LedgerAction.Append {
+function alarmAction(op: "arm" | "fired", id: string, parentId: string, ts: number): LedgerAction.Append {
   return {
-    id, parentId, sessionId: "evidence", kind, ts,
-    intent: { encodingVersion: 1, value: { phase: "intent", op: kind } },
+    id, parentId, sessionId: "evidence", kind: "alarm", ts,
+    intent: { encodingVersion: 1, value: { phase: "intent", op } },
     effect: { encodingVersion: 1, value: { phase: "result" } },
     irreversible: true,
   };
@@ -33,7 +33,7 @@ it("reports armed alarms of this turn and every open intent from obligations and
   const kernel = isolatedLedger().kernel;
   const fixture = yield* fencedTurnFixture(kernel, { id: "evidence", clock: () => 0 });
   const evidence = sessionStopEvidence(kernel, "evidence", fixture.turnId, () => approvalsWith(["approval-1"]), () => Effect.succeed([{ actionId: "obligation-1", kind: "message" as const }]));
-  yield* commitAlarm(fixture, alarmAction("alarm.arm", "alarm-1", fixture.turnId, 5_000));
+  yield* commitAlarm(fixture, alarmAction("arm", "alarm-1", fixture.turnId, 5_000));
   expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: ["obligation-1", "approval-1"], alarmIds: ["alarm-1"] });
 })));
 
@@ -41,8 +41,8 @@ it("ignores alarms that are no longer armed and reports nothing when no obligati
   const kernel = isolatedLedger().kernel;
   const fixture = yield* fencedTurnFixture(kernel, { id: "evidence", clock: () => 0 });
   const evidence = sessionStopEvidence(kernel, "evidence", fixture.turnId, () => undefined);
-  yield* commitAlarm(fixture, alarmAction("alarm.arm", "alarm-1", fixture.turnId, 5_000));
-  yield* commitAlarm(fixture, alarmAction("alarm.fired", "alarm-1:fired", "alarm-1", 5_000));
-  expect(sessionTree(kernel, "evidence").some((action: LedgerAction.Node) => action.kind === "alarm.arm")).toBe(true);
+  yield* commitAlarm(fixture, alarmAction("arm", "alarm-1", fixture.turnId, 5_000));
+  yield* commitAlarm(fixture, alarmAction("fired", "alarm-1:fired", "alarm-1", 5_000));
+  expect(sessionTree(kernel, "evidence").some((action: LedgerAction.Node) => action.kind === "alarm")).toBe(true);
   expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: [], alarmIds: [] });
 })));

@@ -22,9 +22,18 @@ function token(value: PlainValue | undefined): number | null {
 export function attemptUsage(actions: readonly LedgerAction.Node[]): AttemptUsage[] {
   const seen = new Set<string>();
   const usage: AttemptUsage[] = [];
+  // #1252: physical attempts share the `llm` kind with the logical llm action;
+  // an attempt intent is the row carrying the attempt ordinal in its intent.
+  const attemptIntents = new Set<string>();
   for (const action of actions) {
-    if (action.kind !== "attempt" || action.parentId === null) continue;
+    if (action.kind !== "llm") continue;
+    const intent = fields(action.intent.value);
+    if (intent.phase === "intent" && typeof intent.attempt === "number") attemptIntents.add(action.id);
+  }
+  for (const action of actions) {
+    if (action.kind !== "llm" || action.parentId === null) continue;
     const effect = fields(action.effect.value);
+    if (!attemptIntents.has(action.parentId) && effect.usageProvenance === undefined) continue;
     if (effect.phase !== "result" || seen.has(action.parentId)) continue;
     seen.add(action.parentId);
     const evidence = fields(effect.evidence);

@@ -574,7 +574,7 @@ function outboundOpen(
     id: `${message.sourceActionId}:outbound`,
     parentId: message.sourceActionId,
     sessionId: message.sourceSessionId,
-    kind: "outbound",
+    kind: "message",
     intent: { encodingVersion: 1, value: { op: "open", message: PlainValueSchema.parse(message) } },
     effect: {
       encodingVersion: 1,
@@ -625,7 +625,7 @@ function acknowledge(
     id: `${message.messageId}:ack`,
     parentId: `${message.sourceActionId}:outbound`,
     sessionId: message.sourceSessionId,
-    kind: "outbound",
+    kind: "message",
     intent: { encodingVersion: 1, value: { op: "ack", messageId: message.messageId } },
     effect: {
       encodingVersion: 1,
@@ -716,10 +716,17 @@ export function sessionStopEvidence(
 }
 
 /**
- * Live wait evidence is a chain fold (the alarm table is gone): every
- * `alarm.arm` action committed after this turn opened whose alarm no later
- * `alarm.fired`/`alarm.paused` child settled is still armed.
+ * Live wait evidence is a chain fold (the alarm table is gone): every armed
+ * `alarm` action committed after this turn opened whose alarm no later fired
+ * `alarm` child settled is still armed (#1252: one alarm kind, op arm|fired).
  */
+function alarmOp(action: LedgerAction.Node): "arm" | "fired" | undefined {
+  if (action.kind !== "alarm") return undefined;
+  const intent = action.intent.value;
+  if (intent === null || typeof intent !== "object" || Array.isArray(intent)) return undefined;
+  return intent.op === "arm" ? "arm" : intent.op === "fired" ? "fired" : undefined;
+}
+
 function openAlarmIds(
   kernel: SessionKernel,
   sessionId: string,
@@ -732,9 +739,8 @@ function openAlarmIds(
     const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
     for (const action of page.actions) {
       if (action.ordinal > revision) break;
-      if (action.kind === "alarm.arm") armed.set(action.id, action.id);
-      if ((action.kind === "alarm.fired" || action.kind === "alarm.paused") && action.parentId !== null)
-        armed.delete(action.parentId);
+      if (alarmOp(action) === "arm") armed.set(action.id, action.id);
+      if (alarmOp(action) === "fired" && action.parentId !== null) armed.delete(action.parentId);
       cursor = action.ordinal;
     }
     if (page.nextRevision === null) break;
@@ -750,7 +756,8 @@ function effectBlocked(action: LedgerAction.Node): boolean {
 }
 
 function effectChanged(action: LedgerAction.Node): boolean {
-  if (action.kind === "session.configure" || action.kind === "alarm.arm" || action.kind === "inbox.deliver") return true;
+  if (action.kind === "session.configure" || alarmOp(action) === "arm") return true;
+  if (SessionHandleStore.delivery(action) !== undefined) return true;
   const effect = action.effect.value;
   return effect !== null && typeof effect === "object" && !Array.isArray(effect) && effect.stateChanged === true;
 }

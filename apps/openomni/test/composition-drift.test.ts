@@ -118,7 +118,7 @@ test("#1276 drift: pinnedModelSelection — real and mirror read back the record
     id: "pin-attempt",
     parentId: "pin-llm",
     sessionId: row.id,
-    kind: "attempt",
+    kind: "llm",
     intent: {
       encodingVersion: 1,
       value: { phase: "intent", op: "chat", value: { provider: "anthropic", model: "fallback-1" } },

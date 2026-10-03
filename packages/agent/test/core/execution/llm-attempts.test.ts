@@ -57,17 +57,22 @@ function effectRecord(action: LedgerAction.Append): PlainObject {
 
 /** The attempt result rows whose recorded terminal is `terminal`. */
 function attemptResults(actions: readonly LedgerAction.Append[], terminal: string) {
-  return actions.filter((a: LedgerAction.Append) => a.kind === "attempt" && effectRecord(a).terminal === terminal);
+  return actions.filter((a: LedgerAction.Append) => a.kind === "llm" && effectRecord(a).terminal === terminal);
 }
 
-function intents(actions: readonly LedgerAction.Append[], kind: LedgerAction.Kind) {
+/**
+ * #1252: logical llm actions and physical attempts share the `llm` kind; an
+ * attempt intent is the row that pins its attempt ordinal in the intent.
+ */
+function intents(actions: readonly LedgerAction.Append[], which: "logical" | "attempt") {
   return actions.filter(
     (a: LedgerAction.Append) =>
-      a.kind === kind &&
+      a.kind === "llm" &&
       typeof a.intent.value === "object" &&
       a.intent.value !== null &&
       !Array.isArray(a.intent.value) &&
-      a.intent.value.phase === "intent",
+      a.intent.value.phase === "intent" &&
+      (which === "attempt") === (typeof a.intent.value.attempt === "number"),
   );
 }
 
@@ -91,7 +96,7 @@ test("executor admits ordered retry children and retains every failed billed usa
   expect(result).toMatchObject({ terminal: "executed", value: { type: "stop" } });
   expect(admissions).toEqual([1, 2, 3]);
   expect(waits).toEqual([0, 0]);
-  const parents = intents(committed, "llm");
+  const parents = intents(committed, "logical");
   const attempts = intents(committed, "attempt");
   expect(parents).toHaveLength(1);
   expect(attempts.map((a: LedgerAction.Append) => a.parentId)).toEqual(new Array(3).fill(parents[0]?.id));
@@ -307,7 +312,7 @@ test.each([
     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "PolicyDenied" } });
     expect(
       (sessionTree(isolatedLedger().kernel, recording.identity.sessionId))
-        .filter((action: LedgerAction.Node) => action.kind === "attempt")
+        .filter((action: LedgerAction.Node) => action.kind === "llm")
         .map((action: LedgerAction.Node) => action.effect.value),
     ).toContainEqual(
       expect.objectContaining({
@@ -318,7 +323,7 @@ test.each([
   }
   expect(calls).toBe(decision === "approve" ? 2 : 1);
   expect(prepared).toBe(2);
-  expect(intents(sessionTree(isolatedLedger().kernel, recording.identity.sessionId), "llm")).toHaveLength(1);
+  expect(intents(sessionTree(isolatedLedger().kernel, recording.identity.sessionId), "logical")).toHaveLength(1);
 }))));
 
 test("the default retry port commits the retry.scheduled alarm before the wait and consumes it exactly once", () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -340,7 +345,7 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   expect(attemptIntents).toHaveLength(2);
   const alarmId = `${attemptIntents[0]?.id}:retry:1`;
   const armed = LedgerAction.Node.parse(actions.find((action: LedgerAction.Node) => action.id === alarmId));
-  expect(armed.kind).toBe("alarm.arm");
+  expect(armed.kind).toBe("alarm");
   expect(Alarm.RetrySchedule.parse(effectRecord(armed).spec)).toEqual({
     kind: "retry.scheduled",
     attempt: 1,
@@ -352,5 +357,5 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   // cancel/settle plane is gone (supersede happens at delivery), so the single
   // armed row plus exactly one re-attempt is the consumed-once evidence.
   expect(armed.ordinal).toBeLessThan(secondIntent.ordinal);
-  expect(actions.filter((action: LedgerAction.Node) => action.kind === "alarm.arm")).toHaveLength(1);
+  expect(actions.filter((action: LedgerAction.Node) => action.kind === "alarm")).toHaveLength(1);
 }))));

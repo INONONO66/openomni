@@ -30,7 +30,7 @@ function hasNewerAttempt(reads: AlarmChainReads, attempt: LedgerAction.Node): bo
   let cursor = 0;
   for (;;) {
     const page = reads.operationChildrenPage(attempt.parentId, cursor);
-    if (page.some((child) => child.kind === "attempt" && child.ordinal > attempt.ordinal))
+    if (page.some((child) => child.kind === "llm" && child.ordinal > attempt.ordinal))
       return true;
     if (page.length < PAGE_LIMIT) return false;
     cursor = page.at(-1)?.ordinal ?? cursor;

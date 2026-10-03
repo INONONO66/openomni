@@ -151,7 +151,7 @@ test("watch state scans a full occurrence page before reading the next page", as
         id: `paged:occ:1:${index}`,
         parentId: "paged:arm:1",
         sessionId: SESSION,
-        kind: "alarm.fired",
+        kind: "alarm",
         intent: {
           encodingVersion: 1,
           value: { op: "fired", watchId: "paged", epoch: 1 },

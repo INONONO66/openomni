@@ -43,10 +43,11 @@ function action(
 const llm = (id: string, parentId: string) =>
   action(id, "llm", parentId, { phase: "intent", op: "chat", value: {} });
 const attempt = (id: string, parentId: string, provider: string, model: string) =>
-  action(id, "attempt", parentId, {
+  action(id, "llm", parentId, {
     phase: "intent",
     op: "chat",
-    value: { attempt: 1, provider, model },
+    attempt: 1,
+    value: { provider, model },
   });
 
 test("the last provider attempt of an earlier turn pins the selection", async () => {
@@ -54,7 +55,7 @@ test("the last provider attempt of an earlier turn pins the selection", async ()
     llm("llm-1", "turn-1"),
     attempt("a", "llm-1", "anthropic", "primary"),
     attempt("b", "llm-1", "openai", "fallback"),
-    action("r", "attempt", "b", { phase: "result", op: "chat", value: { model: "x" } }),
+    action("r", "llm", "b", { phase: "result", op: "chat", value: { model: "x" } }),
   ];
   expect(await selection(actions, "turn-2")).toEqual({ provider: "openai", id: "fallback" });
 });
@@ -76,12 +77,12 @@ test("this turn's own attempts, including those under its resume actions, are no
 test("non-chat attempts and malformed intents never pin", async () => {
   const actions = [
     llm("llm-1", "turn-1"),
-    action("other", "attempt", "llm-1", {
+    action("other", "llm", "llm-1", {
       phase: "intent",
       op: "summarize",
       value: { provider: "openai", model: "fallback" },
     }),
-    action("odd", "attempt", "llm-1", { phase: "intent", op: "chat", value: { provider: 1 } }),
+    action("odd", "llm", "llm-1", { phase: "intent", op: "chat", value: { provider: 1 } }),
   ];
   expect(await selection(actions, "turn-2")).toBeUndefined();
   expect(await selection([], "turn-2")).toBeUndefined();

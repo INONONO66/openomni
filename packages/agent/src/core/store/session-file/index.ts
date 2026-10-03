@@ -48,9 +48,9 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
     parent_id TEXT REFERENCES action(id),
     session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
     kind TEXT NOT NULL CHECK (kind IN (
-      'prompt', 'turn', 'llm', 'attempt', 'tool', 'message', 'inbox.deliver',
-      'compaction', 'fold.checkpoint', 'alarm.arm', 'alarm.fired', 'alarm.paused',
-      'session.configure', 'policy.decision', 'request', 'reply', 'outbound'
+      'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
+      'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
+      'fold.checkpoint'
     )),
     intent TEXT NOT NULL CHECK (json_valid(intent)),
     effect TEXT NOT NULL CHECK (json_valid(effect)),
@@ -74,14 +74,14 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_action_kind_revision ON action(session_id, kind, ordinal DESC)",
   `CREATE INDEX IF NOT EXISTS idx_action_outbound_state
      ON action(session_id, json_extract(effect, '$.outbound.message.messageId'), ordinal DESC)
-     WHERE kind = 'outbound'`,
+     WHERE kind = 'message' AND json_extract(intent, '$.op') IN ('open', 'ack')`,
   "CREATE INDEX IF NOT EXISTS idx_action_parent ON action(session_id, parent_id, ordinal)",
   `CREATE INDEX IF NOT EXISTS idx_action_request_state
      ON action(json_extract(effect, '$.request.requestId'))
      WHERE kind = 'request'`,
   `CREATE INDEX IF NOT EXISTS idx_action_turn_effect
      ON action(session_id, json_extract(effect, '$.turnId'), ordinal DESC)
-     WHERE kind IN ('turn', 'inbox.deliver')`,
+     WHERE kind IN ('turn', 'prompt', 'signal', 'action')`,
   `CREATE INDEX IF NOT EXISTS idx_action_turn_intent
      ON action(session_id, json_extract(intent, '$.phase'), ordinal DESC)
      WHERE kind = 'turn'`,
@@ -146,8 +146,9 @@ function createActionReads(db: Database): Reads {
           .query<ActionSqlRow, [string, string, string]>(`
         SELECT a.* FROM action a JOIN action llm ON llm.id = a.parent_id
         LEFT JOIN action turn ON turn.id = llm.parent_id
-        WHERE a.session_id = ? AND a.kind = 'attempt'
+        WHERE a.session_id = ? AND a.kind = 'llm'
           AND json_extract(a.intent, '$.phase') = 'intent'
+          AND json_extract(a.intent, '$.attempt') IS NOT NULL
           AND json_extract(a.intent, '$.op') = 'chat' AND llm.parent_id != ?
           AND coalesce(json_extract(turn.intent, '$.turnId'), '') != ?
         ORDER BY a.ordinal DESC LIMIT 1`)
@@ -220,7 +221,7 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string, number, number]>(`
-        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'inbox.deliver')
+        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'prompt', 'signal', 'action')
           AND ordinal > ?
         ORDER BY ordinal LIMIT ?`)
           .all(sessionId, cursor, pageSize.parse(limit)),
@@ -286,11 +287,12 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string, string, number]>(`
-        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'outbound'
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'message'
+          AND json_extract(a.intent, '$.op') IN ('open', 'ack')
           AND coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) > ?
           AND (json_extract(a.effect, '$.outbound.message.messageId') IS NULL
             OR a.ordinal = (SELECT max(b.ordinal) FROM action b WHERE b.session_id = a.session_id
-              AND b.kind = 'outbound' AND json_extract(b.effect, '$.outbound.message.messageId') =
+              AND b.kind = 'message' AND json_extract(b.effect, '$.outbound.message.messageId') =
                 json_extract(a.effect, '$.outbound.message.messageId')))
         ORDER BY coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) LIMIT ?`)
           .all(sessionId, cursor, pageSize.parse(limit)),
@@ -351,10 +353,11 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string]>(`
-        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'prompt'
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind IN ('prompt', 'signal')
           AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
-            AND d.kind = 'inbox.deliver' AND json_extract(d.intent, '$.inboxId') = a.id)
+            AND d.kind IN ('prompt', 'signal', 'action')
+            AND json_extract(d.intent, '$.inboxId') = a.id)
         ORDER BY a.ordinal`)
           .all(sessionId),
       );

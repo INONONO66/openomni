@@ -133,10 +133,14 @@ export const CATALOG_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_surface_key_session ON surface_key(session_id)",
   `CREATE TABLE IF NOT EXISTS policy (
     name TEXT NOT NULL,
+    -- Policy-row vocabulary, not the journal kind set (#1252): historical
+    -- generations keep their legacy kind tokens byte-for-byte (#1251 migration),
+    -- so the retired journal kinds stay admissible here.
     kind TEXT NOT NULL CHECK (kind IN (
-      'prompt', 'turn', 'llm', 'attempt', 'tool', 'message', 'inbox.deliver',
-      'compaction', 'fold.checkpoint', 'alarm.arm', 'alarm.fired', 'alarm.paused',
-      'session.configure', 'policy.decision', 'request', 'reply', 'outbound'
+      'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
+      'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
+      'fold.checkpoint', 'attempt', 'inbox.deliver', 'alarm.arm', 'alarm.fired',
+      'alarm.paused', 'reply', 'outbound'
     )),
     phase TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
     match TEXT NOT NULL CHECK (json_valid(match)),

@@ -69,7 +69,7 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
     .listSessions()
     .flatMap((row) =>
       sessionTree(row.id, plane.sessionStore(row.id).actions)
-        .filter((action) => action.kind === "alarm.arm")
+        .filter((action) => action.kind === "alarm" && action.id.includes(":arm:"))
         .map((action) => ({ sessionId: row.id, watchId: action.id.split(":arm:")[0] ?? "" })),
     )[0];
   if (arm === undefined) throw new Error("no created watch");
@@ -115,5 +115,5 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   if (prompt === undefined) throw new Error("missing watch prompt");
   expect((prompt.effect.value as { content?: string }).content).toContain("WAKE");
   expect(kernel.pendingMessages(arm.sessionId)).not.toContain(prompt.id);
-  expect(tree.filter((action) => action.kind === "alarm.fired")).toHaveLength(1);
+  expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
 });

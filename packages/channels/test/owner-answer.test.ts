@@ -218,7 +218,7 @@ test.each([
     decision === "approve" ? "resolved" : "refused",
   );
   const actions = sessionTree(request.sessionId, ledger().sessions.actions);
-  expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "reply")?.effect.value).toMatchObject({
+  expect(actions.find((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "request" && (action.effect.value as { phase?: string }).phase === "answered")?.effect.value).toMatchObject({
     answer: { receivedAt: 10, principal, decision, inputHash: request.inputHash },
   });
   expect(JSON.stringify(actions)).not.toContain(credential);

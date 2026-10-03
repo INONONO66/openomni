@@ -770,7 +770,7 @@ function usageProvenance(evidence: PlainValue, failure: ExecutionError | undefin
 
 /**
  * Default durable retry port over the timer plane (W5.2 plan D8): `arm`
- * commits the `retry.scheduled` fact as an `alarm.arm` chain action through
+ * commits the `retry.scheduled` fact as an armed `alarm` chain action through
  * the session ledger. Without a cluster client there is no DeliverAt sender:
  * the chain action is the durable evidence activation resume consumes, and
  * the live residual sleep carries the in-process wait. Composition injects
@@ -789,8 +789,8 @@ export function createLedgerRetryAlarmPort(
           id: input.id,
           parentId: null,
           sessionId,
-          kind: "alarm.arm",
-          intent: { encodingVersion: 1, value: { kind: "at", fireAt: input.notBefore } },
+          kind: "alarm",
+          intent: { encodingVersion: 1, value: { op: "arm", kind: "at", fireAt: input.notBefore } },
           effect: {
             encodingVersion: 1,
             value: {
@@ -827,7 +827,7 @@ function createAttemptRunner(
     return Effect.gen(function* () {
       const decision = yield* approve(request, intent, policy);
       if (decision === "approve") return;
-      yield* record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
+      yield* record.appendResult({ kind: "llm", op: request.op }, intent.action.id, {
         phase: "result", terminal: "blocked_pre", reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
       });
       return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
@@ -844,7 +844,7 @@ function createAttemptRunner(
         return prepared.admit().pipe(
           Effect.flatMap((): Effect.Effect<void, ExecutionError> => options.signal?.aborted ? Effect.interrupt : Effect.void),
           Effect.flatMap(() => record.appendIntent({
-            kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
+            kind: "llm", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
             invocation: {
               effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS,
               retryReason: failures.at(-1) ?? null,
@@ -864,7 +864,7 @@ function createAttemptRunner(
         Effect.flatMap((exit) => {
           const evidence = Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause);
           const failure = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
-          return record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+          return record.appendResult({ kind: "llm", op: prepared.request.op }, intent.action.id, {
             phase: "result", effect: prepared.request.effect,
             terminal: Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause) ? "interrupted" : "executed",
             usageProvenance: usageProvenance(evidence, failure),
@@ -1141,7 +1141,7 @@ function createExecutionRecovery(options: ExecutorOptions, record: RecoveryRecor
       let ambiguous = false;
       let lastSettled: LedgerAction.Node = action;
       for (const attempt of operationRecords(options.ledger.operationChildrenPage, action.id)) {
-        if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
+        if (attempt.kind !== "llm" || attempt.parentId !== action.id) continue;
         if (object(attempt.intent.value).phase !== "intent") continue;
         const settled = terminal(attempt.id);
         if (settled !== undefined) {

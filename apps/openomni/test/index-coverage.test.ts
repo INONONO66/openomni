@@ -212,7 +212,7 @@ test("a path watch timeout reaches the session entity", async () => {
   const plane = await planeOf(app.runtime);
   const fired = Promise.withResolvers<void>();
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.kind === "alarm.fired") fired.resolve();
+    if (event.kind === "alarm") fired.resolve();
   });
   suite.defer(unsubscribe);
   const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, [

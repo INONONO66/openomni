@@ -547,24 +547,24 @@ describe("T01-T15 real controller transition witnesses", () => {
         Effect.gen(function* () {
           seedPolicy();
           const runtime = fixture();
-          // W5.2: the alarms table is gone; an armed alarm is an `alarm.arm` chain
-          // action with no settling `alarm.fired` child (session-stop-evidence).
+          // W5.2: the alarms table is gone; an armed alarm is an armed `alarm` chain
+          // action with no settling fired `alarm` child (session-stop-evidence).
           const alarmAction = (
-            kind: "alarm.arm" | "alarm.fired",
+            op: "arm" | "fired",
             id: string,
             parentId: string | null,
           ): LedgerAction.Append => ({
             id,
             parentId,
             sessionId: "S",
-            kind,
+            kind: "alarm",
             ts: 20,
             irreversible: true,
-            intent: { encodingVersion: 1, value: { phase: "intent", op: kind } },
+            intent: { encodingVersion: 1, value: { phase: "intent", op } },
             effect: {
               encodingVersion: 1,
               value:
-                kind === "alarm.arm"
+                op === "arm"
                   ? { status: "armed", spec: { kind: "at", fireAt: 100 } }
                   : { status: "fired" },
             },
@@ -574,11 +574,11 @@ describe("T01-T15 real controller transition witnesses", () => {
               Effect.gen(function* () {
                 if (source !== "prior")
                   yield* input.ledger
-                    .commit(alarmAction("alarm.arm", "alarm", input.turnId))
+                    .commit(alarmAction("arm", "alarm", input.turnId))
                     .pipe(Effect.mapError((error) => new CommitFailed({ error })));
                 if (source === "cancelled")
                   yield* input.ledger
-                    .commit(alarmAction("alarm.fired", "alarm:fired", "alarm"))
+                    .commit(alarmAction("fired", "alarm:fired", "alarm"))
                     .pipe(Effect.mapError((error) => new CommitFailed({ error })));
                 const executor = yield* createExecutor({
                   ledger: input.ledger,
@@ -608,7 +608,7 @@ describe("T01-T15 real controller transition witnesses", () => {
             // Armed before this turn opened: an out-of-turn fence adoption commit,
             // before the handle activates (a live activation adopts strictly newer).
             yield* materializeS("prior-cfg");
-            yield* commitAsForeignOwner("prior-arm", { now: 20, actions: [alarmAction("alarm.arm", "alarm", null)] });
+            yield* commitAsForeignOwner("prior-arm", { now: 20, actions: [alarmAction("arm", "alarm", null)] });
           }
           const handle = yield* declare(runtime, runner);
           const result = yield* handle.prompt("start");

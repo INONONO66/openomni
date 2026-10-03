@@ -73,7 +73,7 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(sessionTree("sender", ledger().sessions.actions).filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm.arm")).toEqual(
+  expect(sessionTree("sender", ledger().sessions.actions).filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm")).toEqual(
     [],
   );
   expect(ledger().kernel.requestRows("sender")).toMatchObject([

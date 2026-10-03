@@ -483,7 +483,7 @@ const TURN_PREFIX = [
     "session.configure:configured",
     "prompt:-",
     "policy.decision:result",
-    "inbox.deliver:delivery",
+    "prompt:delivery",
     "turn:pending",
     "policy.decision:result",
 ];
@@ -578,7 +578,7 @@ describe("session lifecycle conformance", () => {
             "session.configure",
             "prompt",
             "policy.decision",
-            "inbox.deliver",
+            "prompt",
             "turn",
             "policy.decision",
             "policy.decision",
@@ -597,16 +597,16 @@ describe("session lifecycle conformance", () => {
             ],
         });
         const wait = result.named.get("WAIT")?.get("W");
-        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:state"]);
+        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:open"]);
         expect(wait?.requests.map((request: SessionTransition.Request) => request.state)).toEqual(["open"]);
         const approved = result.named.get("WAVE_APPROVED")?.get("W");
         expect(shape(approved)).toEqual([
             ...TURN_PREFIX,
             ...WAVE_PRE,
             ...WAVE_INTENT,
-            "request:state",
-            "reply:state",
-            "request:state",
+            "request:open",
+            "request:answered",
+            "request:resolved",
             ...WAVE.map(() => "tool:application"),
             ...WAVE.flatMap(() => ["policy.decision:result", "tool:result"]),
             ...TURN_SUFFIX,
@@ -715,8 +715,8 @@ describe("session lifecycle conformance", () => {
                 ...WAVE_PRE,
                 ...WAVE_INTENT,
                 ...(id === "REFUSED"
-                    ? ["request:state", "reply:state", "request:state"]
-                    : ["request:state", "request:state", "request:state"]),
+                    ? ["request:open", "request:answered", "request:resolved"]
+                    : ["request:open", "request:expired", "request:expired"]),
                 ...blockedTail,
             ]);
             expect(final?.row).toMatchObject({ revision: 29, state: "idle" });
@@ -747,12 +747,12 @@ describe("session lifecycle conformance", () => {
             ...TURN_PREFIX,
             ...WAVE_PRE,
             ...WAVE_INTENT,
-            "request:state",
-            "prompt:-",
-            "request:state",
-            "request:state",
+            "request:open",
+            "signal:-",
+            "request:resolved",
+            "request:resolved",
             ...WAVE.map(() => "tool:result"),
-            "inbox.deliver:delivery",
+            "signal:delivery",
             "turn:terminal",
         ]);
         expect(cancelled?.row).toMatchObject({ revision: 24, state: "interrupted" });
@@ -1152,7 +1152,7 @@ describe("session lifecycle conformance", () => {
         const facts = { notBefore: 1250, deadline: 2000, jitter: 0.375, remainingBudget: 3, route: "provider/model", provenance: "retry-after" };
         const handle = yield* withSessionServices(session({ id: "REPLAY", role: "resident", runner: (input) => Effect.gen(function* () {
             bodies += 1;
-            yield* input.ledger.commit({ id: "recorded-retry", sessionId: input.sessionId, parentId: input.turnId, kind: "attempt", ts: 1025,
+            yield* input.ledger.commit({ id: "recorded-retry", sessionId: input.sessionId, parentId: input.turnId, kind: "llm", ts: 1025,
                 intent: { encodingVersion: 1, value: { phase: "retry.scheduled", ...facts } },
                 effect: { encodingVersion: 1, value: { phase: "scheduled", ...facts } }, irreversible: true }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
             return { kind: "result", text: "recorded" };

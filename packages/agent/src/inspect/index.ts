@@ -201,7 +201,7 @@ function transitionOf(action: LedgerAction.Node, turnId: string | null): Session
 
 function ownTurnId(action: LedgerAction.Node): string | undefined {
   if (SessionHandleStore.turnIntent(action) !== undefined) return action.id;
-  if (action.kind !== "turn" && action.kind !== "inbox.deliver") return undefined;
+  if (action.kind !== "turn" && SessionHandleStore.delivery(action) === undefined) return undefined;
   return firstDefined(
     text(object(action.effect.value).turnId),
     text(object(action.intent.value).turnId),
@@ -210,7 +210,6 @@ function ownTurnId(action: LedgerAction.Node): string | undefined {
 
 const KIND_PHASES: Partial<Record<LedgerAction.Kind, SessionHistory.Phase>> = {
   "session.configure": "configure",
-  "inbox.deliver": "delivery",
   "policy.decision": "decision",
 };
 
@@ -218,6 +217,7 @@ const EFFECT_PHASES: ReadonlySet<PlainValue> = new Set([
   "checkpoint",
   "terminal",
   "state",
+  "delivery",
   "open",
   "answered",
   "resolved",
@@ -248,7 +248,7 @@ function alarmCause(
   intent: PlainObject,
 ): SessionHistory.Cause | undefined {
   const alarmId = text(intent.alarmId);
-  if (alarmId !== undefined && typeof intent.epoch === "number" && action.kind !== "alarm.arm")
+  if (alarmId !== undefined && typeof intent.epoch === "number" && !(action.kind === "alarm" && intent.op === "arm"))
     return { kind: "alarm", alarmId, epoch: intent.epoch };
   return undefined;
 }
@@ -258,7 +258,7 @@ function deliveryCause(
   effect: PlainObject,
 ): SessionHistory.Cause | undefined {
   const inboxId = text(effect.inboxId);
-  return action.kind === "inbox.deliver" && inboxId !== undefined
+  return SessionHandleStore.delivery(action) !== undefined && inboxId !== undefined
     ? { kind: "inbox", inboxIds: [inboxId] }
     : undefined;
 }

@@ -315,8 +315,17 @@ export function deliveryActions(
       id: `${item.id}:delivery`,
       parentId: parent,
       sessionId: item.sessionId,
-      kind: "inbox.deliver",
-      intent: { encodingVersion: 1, value: { inboxId: item.id } },
+      // #1252: a delivered input is a journal row of its own kind — `prompt`
+      // for turn inputs, `signal` for interrupt/resume control. The retired
+      // `inbox.deliver` kind had one writer here; this constructor keeps it.
+      kind: item.kind === "prompt" ? "prompt" : "signal",
+      intent: {
+        encodingVersion: 1,
+        value:
+          item.kind === "prompt"
+            ? { inboxId: item.id, delivery: "followUp" }
+            : { inboxId: item.id, control: item.kind },
+      },
       effect: {
         encodingVersion: 1,
         value: {
@@ -483,7 +492,8 @@ export function receivedMessageAction(input: {
     id: input.id,
     parentId: input.parentActionId,
     sessionId: input.sessionId,
-    kind: "prompt",
+    // #1252: control inputs (interrupt/resume) are signal rows; prompts are prompt rows.
+    kind: input.kind === "prompt" ? "prompt" : "signal",
     intent: input.origin,
     effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
     irreversible: true,
@@ -494,7 +504,7 @@ export function receivedMessageAction(input: {
 /**
  * Chain fold over received-message actions (W5.2 F1): every `prompt` action
  * carrying an inbox payload, projected to the historical inbox row shape.
- * Entries whose `<id>` a later `inbox.deliver` intent references are consumed.
+ * Entries whose `<id>` a later delivery row's intent references are consumed.
  */
 export function receivedMessages(
   kernel: SessionKernel,
@@ -506,10 +516,9 @@ export function receivedMessages(
   for (;;) {
     const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
     for (const action of page.actions) {
-      if (action.kind === "prompt") {
+      if (action.kind === "prompt" || action.kind === "signal") {
         const effect = ReceivedEffect.safeParse(action.effect.value);
         if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
-      } else if (action.kind === "inbox.deliver") {
         const intent = DeliverIntent.safeParse(action.intent.value);
         if (intent.success) delivered.add(intent.data.inboxId);
       }
