@@ -176,6 +176,33 @@ describe("TLS-over-TCP IPC transport", () => {
     expect(requestsSeen).toEqual(["machine.run_code"]);
   });
 
+  test("an oversize frame over TCP fails fast through the shared decoder guard, not by burning its timeout", async () => {
+    // The 16 MiB LineDecoder cap is transport-blind (#1270 F8): the TLS door
+    // condemns the flooding connection exactly like the unix door does.
+    const disconnected = deferred<string>();
+    const server = await createIpcTcpServer(
+      { host: "127.0.0.1", port: 0, tls: hostIdentity },
+      (_method, _params, respond) => respond({ ok: true }),
+      { onDisconnect: disconnected.resolve },
+    );
+    cleanups.push(server.close);
+    const client = await connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: server.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    });
+    cleanups.push(client.close);
+
+    const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);
+    // Observe rejection immediately: the server's FIN must fail the request
+    // long before the 30s call timeout would.
+    const rejected = captureError(call);
+    const [error] = await within(
+      Promise.all([rejected, disconnected.promise]), "oversize FIN and server disconnect", 12_000,
+    );
+    expect(error).toBeInstanceOf(IpcConnectionError);
+  });
+
   test("unix connections expose no peer fingerprint — the pin is a TLS-only fact", async () => {
     const fingerprints: (string | undefined)[] = [];
     let server!: Awaited<ReturnType<typeof createIpcServer>>;
