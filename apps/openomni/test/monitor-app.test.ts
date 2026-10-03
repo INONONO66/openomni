@@ -11,6 +11,7 @@ import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
 import { attachMachineDaemon } from "@openomni/machines";
 import { acquireEffect, runEffect } from "./helpers/scoped-effect";
 import { testIds } from "./helpers/test-entropy";
+import { testSelfMachine } from "./helpers/self-machine";
 
 const suite = residentSuite();
 
@@ -141,6 +142,7 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
       wsToken: "monitor-test",
       compactionSummarizer: false,
       machines: {
+        self: testSelfMachine(),
         listen: { unix: machinesSocket },
         enrolled: [{
           name: "workstation",
