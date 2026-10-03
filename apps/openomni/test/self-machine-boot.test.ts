@@ -1,4 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
@@ -8,8 +9,10 @@ import { startOpenOmni } from "../src";
 import * as Gateway from "../src/gateway";
 import { SelfAttachError } from "../src/composition/self-machine";
 import type { OpenOmniConfig } from "../src/config";
-import { runEffect } from "./helpers/effect";
+import { acquireEffect, runEffect } from "./helpers/effect";
 import { socketPath } from "./helpers/socket-path";
+import { testIds } from "./helpers/test-entropy";
+import { attachConfiguredMachine } from "../src/cli/machine";
 import { testSelfMachine } from "./helpers/self-machine";
 import { testBus } from "../../../packages/agent/test/helpers/isolated";
 
@@ -175,5 +178,67 @@ test("a self daemon closing after boot detaches the handle and surfaces the type
   } finally {
     await app.stop();
     bus.close();
+  }
+});
+
+test("openomni machine attach: a second daemon attaches alongside self and negotiates capabilities", async () => {
+  const createHost = Machines.createMachineHost;
+  let host: Machines.MachineHost | undefined;
+  track(
+    spyOn(Machines, "createMachineHost").mockImplementation((options) =>
+      createHost(options).pipe(Effect.tap((created) => Effect.sync(() => { host = created; }))),
+    ),
+  );
+  const socket = socketPath();
+  const remoteRoot = realpathSync(mkdtempSync(join(tmpdir(), "om-remote-")));
+  const self = testSelfMachine();
+  const app = await startOpenOmni({
+    config: fixtureConfig({
+      self,
+      listen: { unix: socket },
+      enrolled: [
+        {
+          machineId: "node-1",
+          name: "second",
+          allowedCapabilities: ["fs.read"],
+          allowedExports: ["data"],
+          publicKey: "ab".repeat(32),
+          enrolledAt: 1,
+        },
+      ],
+    }),
+  });
+  const configPath = join(mkdtempSync(join(tmpdir(), "om-attach-")), "machine.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      socketPath: socket,
+      offer: {
+        machineId: "node-1",
+        daemonVersion: "test",
+        platform: `${process.platform}-${process.arch}`,
+        offeredAt: 1,
+        // shell.exec is offered but not enrolled: negotiation must intersect it away.
+        offeredCapabilities: ["fs.read", "shell.exec"],
+        exports: [{ name: "data", path: remoteRoot }],
+      },
+    }),
+  );
+  const daemon = await acquireEffect(attachConfiguredMachine(configPath, testIds("remote-cli")));
+  try {
+    expect(daemon.attachment).toMatchObject({
+      status: "attached",
+      effectiveCapabilities: ["fs.read"],
+      effectiveExports: ["data"],
+    });
+    if (host === undefined) throw new Error("host was not captured");
+    expect(host.list().map((machine) => machine.machineId).sort()).toEqual(["node-1", "self"]);
+    // Both attachments serve requests side by side.
+    expect((await runEffect(host.get("node-1").fs.stat(remoteRoot))).kind).toBe("dir");
+    const exportPath = self.exports[0]?.path ?? "/";
+    expect((await runEffect(host.get("self").fs.stat(exportPath))).kind).toBe("dir");
+  } finally {
+    await runEffect(daemon.close());
+    await app.stop();
   }
 });
