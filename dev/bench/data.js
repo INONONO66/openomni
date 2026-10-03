@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791046411208,
+  "lastUpdate": 1791055468214,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77223,6 +77223,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 214139,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ecb41f383c4341b081cd29c5eb96308874995cc",
+          "message": "#1253 Expose four session entity RPCs and render all public journal kinds (#1279)\n\n* #1253 four entity RPCs: open draft (stamp #1252 merged 58b7f18d)\n\n* feat(agent): expose Deliver/Resolve/Alarm session entity RPCs (#1253 C1)\n\nFour-entity-RPC surface, step 1 of 4: typed schemas with required\nidempotencyKey as the cluster primary key, deliver admission pre-check\nwith the closed rejection set unknown_kind|missing_key|closed|denied,\nresolve with unknown_request|already_resolved, and alarm occurrences\nwhose superseded deliveries fold to recorded alarm{fired, outcome:\nstale} facts instead of waking the loop. Nine replaced RPC scenarios\ncovered in rpc-surface; idempotent replay in deliver-idempotency;\nstale settlement in resolve-stale.\n\n* feat(agent): boundary consumption rule with configure-pinned widths (#1253)\n\nInputs carry their delivery mode end to end: Inbox.Row and the received\neffect gain an optional delivery field, and the delivery action records the\nrow's own mode instead of the default. The loop consumes by rule — controls\nat every boundary, steer rows at tool.post and turn end, followUp rows only\nat turn end — with all|one widths folded from the latest session.configure\nsettings row (DEFAULT all/all preserves prior behavior). Checkpoint rows now\nrecord consumed inboxIds so every consumed seq lands in turn.consumed, and\nthe entity drain loop re-decides after a turn seals so a leftover followUp\nbacklog runs as its own follow-up turn before the ack.\n\n* feat(agent): read RPC serves nine inspect models from the journal fold (#1253 C3)\n\n* feat(agent): all session traffic rides the four entity RPCs; nine legacy RPCs deleted (#1253 C4)\n\n- gateway commits land through deliver{kind,body,source,idempotencyKey}; a\n  refused admission is a typed rejection (denied) with zero new facts\n- out-of-turn answers settle through resolve; watch fires/timeouts and request\n  deadlines arrive as alarm occurrences (DeliverAt = fireAt, stale -> fact)\n- Prompt/Interrupt/Resume/RequestResolve/RequestCancel/RetryScheduled/\n  Deadline/WatchFired/WatchTimeout, receive() and timerWake deleted\n- AlarmPurpose typed via Core for the app's occurrence builders (dead export\n  resolved); cluster/timers tokens swept; driveInbox renamed driveBacklog\n- deterministic Crypto layer test proves the host's Crypto.Crypto is injected\n\n* docs: #1253 receipts — AGENTS stamp + implementation-status section\n\n* fix(agent): read renderer and attempt-usage fold move to core — core never imports inspect (#1253)\n\ncheck-deps #1247 band: core/ may not import inspect/. inspect/read.ts and\ninspect/metrics.ts move to core/ (git mv); Inspect.attemptUsage/toolWallMs\nre-export from core/metrics, band ratchet stays 25.\n\n* test(openomni): approval-held prompts follow the #1253 turn-end rule into a follow-up turn\n\nDECISION: the issue text ('followUp rows only at turn end') contradicts the\nold after_tools expectation; the loop already consumes held prompts in order\ninto a follow-up turn (before_llm), nothing dropped or merged.\n\n* fix(openomni): typed Resolve refusal surfaces as the rejected resolution, not a dead receipt (#1253)\n\nA fresh-inputId answer to a settled request must still produce the\nrequest_answer.rejected receipt frame; ResolveRefused is the caller's stale\nanswer, not a runtime failure.\n\n* test(agent): cover settings-fold pagination; delete the unreachable closed fallback in deliver (#1253)\n\n- consumptionSettings multi-page fold pinned past one 256-action window\n- deliver's SessionNotFound catch was unreachable (activation reads the row\n  first, both planes refuse absent sessions — pinned in rpc-surface);\n  'closed' stays a reserved wire refusal code\n\n* test(openomni): in-process coverage for the entity-Resolve stale-answer arm (#1253)\n\nThe request-owner e2e exercises index.ts's ResolveRefused->rejected mapping\nonly in a spawned child, which records no coverage; this pins it in-process\nthrough the real ws request_answer surface.\n\n* docs(#1253): receipts cite core/read.ts after the band fix; PR #1279 is ready\n\n* ci: re-trigger PR checks for #1279 at 37875fae (no run was created for the last two pushes)",
+          "timestamp": "2026-10-03T19:20:58Z",
+          "tree_id": "28b5e15b1a63eddef9c99d2377e41908ba172a55",
+          "url": "https://github.com/INONONO66/openomni/commit/4ecb41f383c4341b081cd29c5eb96308874995cc"
+        },
+        "date": 1791055467572,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1071,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1565373,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 412061,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6764646,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 205785,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 858358,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 498405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 13203823,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1494456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19685,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 184535,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 890205,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 280652,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16784794,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 188858,
             "unit": "ns/op"
           }
         ]
