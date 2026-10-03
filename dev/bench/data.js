@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791041099923,
+  "lastUpdate": 1791046411208,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77089,6 +77089,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 140403,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a004bdb0c78e27baf146231fbb5ac38fe6f013ec",
+          "message": "#1274 screen.read / input.write capabilities via macOS shell-out adapter (#1282)\n\n* chore(#1274): open PR shell for screen.read/input.write\n\n* protocol(#1274): screen.read/input.write capability ids, machine.screen_read/machine.input_write wire contracts with protocol-owned PNG, accessibility and action ceilings\n\n* protocol(#1274): include the two computer-use wire methods in the ipc method census\n\n* machines(#1274): macOS computer-use adapter behind an injectable command runner, attach-time capability probes, latest-capture registry, daemon wire registration and host screen/input handle methods\n\n* codemode(#1274): m.screen/m.input handle methods and codemode.screen/codemode.input cell dispatch through the existing handle + authorization path; no model tool\n\n* machines+codemode(#1274): fake-runner adapter/wire tests (probes, bounds cache, crop, downscale, refusals, withdrawal), codemode SDK/python cell tests, systemCommandRunner unit test, opt-in real-surface capture test\n\n* docs(#1274): computer-use section in machines-and-delegation.md, implementation-status entry, AGENTS.md stamp\n\n* docs(#1274): packages/machines/AGENTS.md structure refresh\n\n* machines(#1274): cover mid-session screencapture spawn failure and tree-fetch withdrawal\n\n* machines+protocol(#1274) r1-F1: record the capture display in the latest-capture registry and refuse input typed (unsupported_action, message names the display) for non-main-display anchors; schema message field + main-display-only comment; docs sentence; fake-runner test\n\n* machines(#1274) r1-F2: dedupe computer-use test clones via latestCapture/expectRegionRefusedFromCache/expectNoCliclick helpers (jscpd: 0 clones in changed files)\n\n* machines(#1274) r1-F3: map cliclick stderr to permission_denied only when the run failed; a zero-exit run already executed and reports ok\n\n* machines+protocol(#1274) r1-F5: clamp crop offsets/extents to the pixel image; measure accessibility-tree caps in utf8 bytes (Buffer.byteLength adapter-side, TextEncoder schema-side)\n\n* machines(#1274) r1-F6: bounded deadline on attach-time probes (timeoutOption, injectable probeTimeoutMs) — a hung probe binary withholds the capability typed instead of stalling attach",
+          "timestamp": "2026-10-04T01:50:31+09:00",
+          "tree_id": "e670094f92b9c282c17ce981b19d3d6335e9cac6",
+          "url": "https://github.com/INONONO66/openomni/commit/a004bdb0c78e27baf146231fbb5ac38fe6f013ec"
+        },
+        "date": 1791046410284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1743,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1575555,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 417405,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6817201,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 158,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 204432,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 834144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 504139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3446,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 12903382,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1483152,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 181042,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 880519,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 279400,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15380384,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 214139,
             "unit": "ns/op"
           }
         ]
