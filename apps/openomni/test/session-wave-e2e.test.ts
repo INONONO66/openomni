@@ -874,16 +874,21 @@ test("approval-time prompts retain durable identities and enter the next model s
   );
   await bounded(response);
   // Then: canonical next-model admission names the original ordered prompt IDs.
+  // #1252: attempt rows share the llm kind and spread the invocation fields;
+  // only the logical intent (no attempt ordinal) names the admission.
   const modelIntent = z.object({
     phase: z.literal("intent"),
     op: z.literal("chat"),
+    attempt: z.number().optional(),
     value: z.object({ messageIds: z.array(z.string()) }),
   });
   const inputs = tree(handle.id)
     .filter((action) => action.kind === "llm")
     .flatMap((action) => {
       const parsed = modelIntent.safeParse(action.intent.value);
-      return parsed.success ? [parsed.data.value.messageIds] : [];
+      return parsed.success && parsed.data.attempt === undefined
+        ? [parsed.data.value.messageIds]
+        : [];
     });
   expect(inputs).toHaveLength(2);
   const promptIds = prompts.map((row) => row.id);

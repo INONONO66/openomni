@@ -203,7 +203,7 @@ test("a child session terminal commits exactly one parent reply with the origina
     (action) => action.id === outbound?.destinationReceipt?.id,
   );
   expect(receipt).toMatchObject({
-    kind: "reply",
+    kind: "request",
     effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },
   });
   // W5.2 consumed = no longer pending in the parent's kernel inbox.

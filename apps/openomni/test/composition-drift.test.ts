@@ -121,7 +121,7 @@ test("#1276 drift: pinnedModelSelection — real and mirror read back the record
     kind: "llm",
     intent: {
       encodingVersion: 1,
-      value: { phase: "intent", op: "chat", value: { provider: "anthropic", model: "fallback-1" } },
+      value: { phase: "intent", op: "chat", attempt: 1, value: { provider: "anthropic", model: "fallback-1" } },
     },
     effect: { encodingVersion: 1, value: { phase: "pending" } },
     irreversible: true,

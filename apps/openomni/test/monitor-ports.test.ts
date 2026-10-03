@@ -154,7 +154,7 @@ test("watch state scans a full occurrence page before reading the next page", as
         kind: "alarm",
         intent: {
           encodingVersion: 1,
-          value: { op: "fired", watchId: "paged", epoch: 1 },
+          value: { op: "fired", outcome: "delivered", watchId: "paged", epoch: 1 },
         },
         effect: {
           encodingVersion: 1,

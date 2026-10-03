@@ -88,12 +88,12 @@ for (const visible of ["none", "text", "tool"] as const) {
     try {
       const parents = db
         .query<{ id: string }, [string]>(
-          "SELECT id FROM action WHERE session_id=? AND kind='llm' AND json_extract(intent,'$.phase')='intent'",
+          "SELECT id FROM action WHERE session_id=? AND kind='llm' AND json_extract(intent,'$.phase')='intent' AND json_extract(intent,'$.attempt') IS NULL",
         )
         .all(sessionId);
       const attempts = db
         .query<{ parent_id: string | null }, [string]>(
-          "SELECT parent_id FROM action WHERE session_id=? AND kind='attempt' AND json_extract(intent,'$.phase')='intent' ORDER BY ordinal",
+          "SELECT parent_id FROM action WHERE session_id=? AND kind='llm' AND json_extract(intent,'$.phase')='intent' AND json_extract(intent,'$.attempt') IS NOT NULL ORDER BY ordinal",
         )
         .all(sessionId);
       expect(parents).toHaveLength(1);
@@ -109,7 +109,7 @@ for (const visible of ["none", "text", "tool"] as const) {
       // timer no-ops via the chain guard (supersede at delivery, not cancel).
       const retryAlarms = db
         .query(
-          "SELECT json_extract(effect,'$.status') AS status FROM action WHERE session_id=? AND kind='alarm.arm' AND json_extract(effect,'$.spec.kind')='retry.scheduled' ORDER BY ordinal",
+          "SELECT json_extract(effect,'$.status') AS status FROM action WHERE session_id=? AND kind='alarm' AND json_extract(intent,'$.op')='arm' AND json_extract(effect,'$.spec.kind')='retry.scheduled' ORDER BY ordinal",
         )
         .all(sessionId);
       expect(retryAlarms).toEqual(
@@ -118,7 +118,7 @@ for (const visible of ["none", "text", "tool"] as const) {
       expect(
         db
           .query(
-            "SELECT count(*) AS count FROM action WHERE kind='attempt' AND json_extract(effect,'$.evidence.failures[0].usage.inputTokens') IS NOT NULL",
+            "SELECT count(*) AS count FROM action a WHERE a.kind='llm' AND json_extract(a.effect,'$.evidence.failures[0].usage.inputTokens') IS NOT NULL AND EXISTS (SELECT 1 FROM action p WHERE p.id=a.parent_id AND json_extract(p.intent,'$.attempt') IS NOT NULL)",
           )
           .get(),
       ).toEqual({ count: visible === "none" ? 2 : 1 });
