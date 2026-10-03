@@ -84,6 +84,15 @@ describe("machines network listener config", () => {
     return { dir, cert, key };
   }
 
+  /** The complete, valid four-field tuple plus enrollment; tests then poke one field. */
+  function setTcpTuple(cert: string, key: string, port = "7643"): void {
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
+    process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
+    process.env.OPENOMNI_MACHINES_TCP_PORT = port;
+    process.env.OPENOMNI_MACHINES_TLS_CERT = cert;
+    process.env.OPENOMNI_MACHINES_TLS_KEY = key;
+  }
+
   it("absent tcp env keeps a unix-only listener set", () => {
     process.env.OPENOMNI_MACHINES_SOCKET = "/tmp/machines-config-test.sock";
     process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
@@ -95,11 +104,7 @@ describe("machines network listener config", () => {
   it("the full tuple yields the tcp endpoint with the PEM contents read at boot", () => {
     const { dir, cert, key } = tlsFiles();
     try {
-      process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
-      process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
-      process.env.OPENOMNI_MACHINES_TCP_PORT = "7643";
-      process.env.OPENOMNI_MACHINES_TLS_CERT = cert;
-      process.env.OPENOMNI_MACHINES_TLS_KEY = key;
+      setTcpTuple(cert, key);
       const machines = loadConfig().machines;
       expect(machines?.listen.tcp).toEqual({ host: "0.0.0.0", port: 7643 });
       expect(machines?.tls).toEqual({ certificate: "CERT-PEM", privateKey: "KEY-PEM" });
@@ -116,11 +121,7 @@ describe("machines network listener config", () => {
   ])("a tuple missing %s fails closed rather than binding unencrypted", (missing) => {
     const { dir, cert, key } = tlsFiles();
     try {
-      process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
-      process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
-      process.env.OPENOMNI_MACHINES_TCP_PORT = "7643";
-      process.env.OPENOMNI_MACHINES_TLS_CERT = cert;
-      process.env.OPENOMNI_MACHINES_TLS_KEY = key;
+      setTcpTuple(cert, key);
       delete process.env[missing];
       expect(() => loadConfig()).toThrow("must be set together");
     } finally {
@@ -131,11 +132,7 @@ describe("machines network listener config", () => {
   it("refuses a port outside 1-65535 and an unreadable PEM path", () => {
     const { dir, cert, key } = tlsFiles();
     try {
-      process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
-      process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
-      process.env.OPENOMNI_MACHINES_TCP_PORT = "70000";
-      process.env.OPENOMNI_MACHINES_TLS_CERT = cert;
-      process.env.OPENOMNI_MACHINES_TLS_KEY = key;
+      setTcpTuple(cert, key, "70000");
       expect(() => loadConfig()).toThrow("OPENOMNI_MACHINES_TCP_PORT is invalid");
       process.env.OPENOMNI_MACHINES_TCP_PORT = "7643";
       process.env.OPENOMNI_MACHINES_TLS_CERT = join(dir, "missing.pem");

@@ -1,48 +1,16 @@
 import { acquireEffect, closeAcquiredEffects, runEffect } from "./helpers/effect";
 import { expect, test } from "bun:test";
 import net from "node:net";
-import { once } from "node:events";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { X509Certificate } from "node:crypto";
 import { Effect, Scope, Exit, Result } from "effect";
-import { certificateKeyFingerprint, createMachineHost, MachinesFailure } from "@openomni/machines";
+import { createMachineHost, MachinesFailure } from "@openomni/machines";
 import { type BusEvent, Machine } from "@openomni/protocol";
 import { attachConfiguredMachine } from "../src/cli/machine";
 import { testIds } from "./helpers/test-entropy";
-
-const fixtures = join(import.meta.dir, "../../../packages/machines/test/ipc/fixtures");
-const fingerprint = (pem: string) => certificateKeyFingerprint(new X509Certificate(pem).raw);
-
-/** A severable TCP pipe standing in for the network between daemon and host. */
-async function startTcpProxy(targetPort: number) {
-  const pairs: Array<readonly [net.Socket, net.Socket]> = [];
-  const server = net.createServer((inbound) => {
-    const outbound = net.connect(targetPort, "127.0.0.1");
-    pairs.push([inbound, outbound] as const);
-    inbound.pipe(outbound);
-    outbound.pipe(inbound);
-    inbound.on("error", () => outbound.destroy());
-    outbound.on("error", () => inbound.destroy());
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address() as net.AddressInfo;
-  return {
-    port: address.port,
-    sever() {
-      for (const [inbound, outbound] of pairs.splice(0)) {
-        inbound.destroy();
-        outbound.destroy();
-      }
-    },
-    async stop() {
-      this.sever();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
-  };
-}
+import { startProxy } from "../../../packages/machines/test/helpers/proxy";
+import { hostFingerprint, pinnedTcpHostOptions, qaOffer, tlsFixturesDir } from "./helpers/machine-cli";
 
 /** Event-driven attach signal: no sleeps, no polling. */
 function attachSignal() {
@@ -69,41 +37,18 @@ test("attachConfiguredMachine dials a pinned network host in-process and redials
   mkdirSync(root);
   writeFileSync(join(root, "note"), "configured-over-tls");
   const events = attachSignal();
-  const host = await acquireEffect(createMachineHost({
-    listen: { tcp: { host: "127.0.0.1", port: 0 } },
-    tls: {
-      certificate: readFileSync(join(fixtures, "host-cert.pem"), "utf8"),
-      privateKey: readFileSync(join(fixtures, "host-key.pem"), "utf8"),
-    },
-    id: testIds("cfg-host"),
-    enrollment: (id) => ({
-      machineId: id,
-      name: id,
-      allowedCapabilities: ["fs.read"],
-      allowedExports: ["data"],
-      publicKey: fingerprint(readFileSync(join(fixtures, "daemon-cert.pem"), "utf8")),
-      enrolledAt: 1,
-    }),
-    events: events.sink,
-    now: () => 2,
-  }));
-  const proxy = await startTcpProxy(host.endpoints.tcp?.port ?? 0);
+  const host = await acquireEffect(createMachineHost(pinnedTcpHostOptions(testIds("cfg-host"), ["fs.read"], events.sink)));
+  const targetPort = host.endpoints.tcp?.port ?? 0;
+  const proxy = await startProxy({ port: 0 }, () => net.connect(targetPort, "127.0.0.1"));
   const configPath = join(base, "machine.json");
   writeFileSync(
     configPath,
     JSON.stringify({
       tcp: { host: "127.0.0.1", port: proxy.port },
-      hostPublicKey: fingerprint(readFileSync(join(fixtures, "host-cert.pem"), "utf8")),
-      tlsCertificate: join(fixtures, "daemon-cert.pem"),
-      tlsPrivateKey: join(fixtures, "daemon-key.pem"),
-      offer: {
-        machineId: "cfg-1",
-        offeredCapabilities: ["fs.read"],
-        exports: [{ name: "data", path: root }],
-        daemonVersion: "qa",
-        platform: `${process.platform}-${process.arch}`,
-        offeredAt: 2,
-      },
+      hostPublicKey: hostFingerprint,
+      tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
+      tlsPrivateKey: join(tlsFixturesDir, "daemon-key.pem"),
+      offer: qaOffer("cfg-1", root, ["fs.read"]),
     }),
   );
   try {
@@ -135,16 +80,10 @@ test("attachConfiguredMachine rejects an incomplete TLS configuration with a typ
     configPath,
     JSON.stringify({
       tcp: { host: "127.0.0.1", port: 4433 },
-      hostPublicKey: fingerprint(readFileSync(join(fixtures, "host-cert.pem"), "utf8")),
-      tlsCertificate: join(fixtures, "daemon-cert.pem"),
+      hostPublicKey: hostFingerprint,
+      tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
       // tlsPrivateKey is missing: the config union must refuse, never dial.
-      offer: {
-        machineId: "cfg-bad",
-        offeredCapabilities: ["fs.read"],
-        daemonVersion: "qa",
-        platform: `${process.platform}-${process.arch}`,
-        offeredAt: 2,
-      },
+      offer: qaOffer("cfg-bad", "/tmp", ["fs.read"]),
     }),
   );
   try {

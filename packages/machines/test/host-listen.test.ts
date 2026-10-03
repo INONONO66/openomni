@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { X509Certificate } from "node:crypto";
 import fs, { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import type { Machine } from "@openomni/protocol";
-import { certificateKeyFingerprint } from "../src";
 import { attachMachineDaemon as nativeDaemon } from "../src/daemon";
 import { createMachineHost as nativeHost } from "../src/host";
 import { createMachineHost } from "./helpers/native";
@@ -13,18 +11,7 @@ import { acquire } from "./ipc/helpers/effects";
 import { connectIpcTcpClient } from "./ipc/helpers/native";
 import { exit as runExit } from "./helpers/effect";
 import { socketPath } from "./helpers/socket-path";
-
-function fixture(name: string): string {
-  return fs.readFileSync(new URL(`./ipc/fixtures/${name}`, import.meta.url), "utf8");
-}
-function fingerprintOfPem(certPem: string): Machine.KeyFingerprint {
-  return certificateKeyFingerprint(new X509Certificate(certPem).raw);
-}
-const hostIdentity = { certificate: fixture("host-cert.pem"), privateKey: fixture("host-key.pem") };
-const daemonIdentity = { certificate: fixture("daemon-cert.pem"), privateKey: fixture("daemon-key.pem") };
-const wrongIdentity = { certificate: fixture("wrong-cert.pem"), privateKey: fixture("wrong-key.pem") };
-const hostFingerprint = fingerprintOfPem(hostIdentity.certificate);
-const daemonFingerprint = fingerprintOfPem(daemonIdentity.certificate);
+import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity } from "./ipc/helpers/tls-fixtures";
 
 const silent = { publish: () => undefined };
 function sequentialIds(prefix: string): () => string {

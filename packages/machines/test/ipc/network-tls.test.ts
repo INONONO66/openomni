@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { X509Certificate } from "node:crypto";
-import fs from "node:fs";
 import net from "node:net";
 import tls from "node:tls";
-import { certificateKeyFingerprint } from "../../src";
 import {
   IpcConnectionError,
   IpcPeerKeyMismatchError,
@@ -14,20 +11,7 @@ import {
 } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
-
-function fixture(name: string): string {
-  return fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
-}
-function fingerprintOfPem(certPem: string): string {
-  return certificateKeyFingerprint(new X509Certificate(certPem).raw);
-}
-
-const hostIdentity = { certificate: fixture("host-cert.pem"), privateKey: fixture("host-key.pem") };
-const daemonIdentity = { certificate: fixture("daemon-cert.pem"), privateKey: fixture("daemon-key.pem") };
-const wrongIdentity = { certificate: fixture("wrong-cert.pem"), privateKey: fixture("wrong-key.pem") };
-const hostFingerprint = fingerprintOfPem(hostIdentity.certificate);
-const daemonFingerprint = fingerprintOfPem(daemonIdentity.certificate);
-const wrongFingerprint = fingerprintOfPem(wrongIdentity.certificate);
+import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity, wrongFingerprint } from "./helpers/tls-fixtures";
 
 describe("TLS-over-TCP IPC transport", () => {
   const cleanups: (() => Promise<void> | void)[] = [];
@@ -87,6 +71,18 @@ describe("TLS-over-TCP IPC transport", () => {
     expect(fingerprintsSeen).toEqual([wrongFingerprint]);
   });
 
+  /** Bind a rogue listener, then dial it with the PINNED client; yields the typed failure. */
+  async function dialRogue(rogue: net.Server): Promise<unknown> {
+    await new Promise<void>((resolve) => rogue.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => rogue.close(() => resolve())));
+    const address = rogue.address() as net.AddressInfo;
+    return captureError(connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: address.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    }));
+  }
+
   test("a wrong host key fails the client with a typed peer_key_mismatch before any frame reaches the server", async () => {
     const framesReceived: Buffer[] = [];
     let connections = 0;
@@ -100,15 +96,7 @@ describe("TLS-over-TCP IPC transport", () => {
         socket.on("close", () => handshakeDone.resolve());
       },
     );
-    await new Promise<void>((resolve) => impostorHost.listen(0, "127.0.0.1", resolve));
-    cleanups.push(() => new Promise<void>((resolve) => impostorHost.close(() => resolve())));
-    const address = impostorHost.address() as net.AddressInfo;
-
-    const failure = await captureError(connectIpcTcpClient({
-      tcp: { host: "127.0.0.1", port: address.port },
-      tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
-    }));
+    const failure = await dialRogue(impostorHost);
     expect(failure).toBeInstanceOf(IpcPeerKeyMismatchError);
     const mismatch = failure as InstanceType<typeof IpcPeerKeyMismatchError>;
     expect(mismatch.expected).toBe(hostFingerprint);
@@ -134,15 +122,7 @@ describe("TLS-over-TCP IPC transport", () => {
       });
       socket.on("error", () => undefined);
     });
-    await new Promise<void>((resolve) => plaintext.listen(0, "127.0.0.1", resolve));
-    cleanups.push(() => new Promise<void>((resolve) => plaintext.close(() => resolve())));
-    const address = plaintext.address() as net.AddressInfo;
-
-    const failure = await captureError(connectIpcTcpClient({
-      tcp: { host: "127.0.0.1", port: address.port },
-      tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
-    }));
+    const failure = await dialRogue(plaintext);
     expect(failure).toBeInstanceOf(IpcConnectionError);
     // One connection attempt, and what arrived was a TLS ClientHello record
     // (0x16 handshake), never a plaintext NDJSON frame.

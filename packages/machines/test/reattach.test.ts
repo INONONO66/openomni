@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import net from "node:net";
 import { once } from "node:events";
-import { type BusEvent, Machine } from "@openomni/protocol";
+import type { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, createMachineHost, type CodeRunner } from "./helpers/native";
 import { captureError, within } from "./ipc/helpers/signal";
 import { socketPath } from "./helpers/socket-path";
+import { eventCollector } from "./helpers/events";
+import { startProxy } from "./helpers/proxy";
 
 /**
  * #1270 reconnect proof: time is driven ONLY through the injected scheduler
@@ -27,63 +29,6 @@ function fakeScheduler() {
     /** Resolves on the NEXT schedule() call (bounded by bun's test timeout). */
     nextScheduled(): Promise<Scheduled> {
       return new Promise((resolve) => waiters.push(resolve));
-    },
-  };
-}
-
-/** A severable unix-socket pipe: the network between daemon and host. */
-async function startProxy(listenPath: string, targetPath: string) {
-  const pairs: Array<readonly [net.Socket, net.Socket]> = [];
-  const server = net.createServer((inbound) => {
-    const outbound = net.connect(targetPath);
-    pairs.push([inbound, outbound] as const);
-    inbound.pipe(outbound);
-    outbound.pipe(inbound);
-    inbound.on("error", () => outbound.destroy());
-    outbound.on("error", () => inbound.destroy());
-  });
-  server.listen(listenPath);
-  await once(server, "listening");
-  return {
-    sever() {
-      for (const [inbound, outbound] of pairs.splice(0)) {
-        inbound.destroy();
-        outbound.destroy();
-      }
-    },
-    async stop() {
-      this.sever();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
-  };
-}
-
-type HostEvent = { readonly name: string; readonly machineId: string };
-function eventCollector() {
-  const events: HostEvent[] = [];
-  const waiters: Array<{ name: string; resolve: (event: HostEvent) => void }> = [];
-  const sink: BusEvent.Sink = {
-    publish(descriptor, payload) {
-      const parsed =
-        descriptor.name === Machine.Events.Attached.name
-          ? Machine.Events.Attached.schema.parse(payload)
-          : Machine.Events.Detached.schema.parse(payload);
-      const event = { name: descriptor.name, machineId: parsed.machineId };
-      events.push(event);
-      for (let i = waiters.length - 1; i >= 0; i -= 1) {
-        const waiter = waiters[i];
-        if (waiter && waiter.name === event.name) {
-          waiters.splice(i, 1);
-          waiter.resolve(event);
-        }
-      }
-    },
-  };
-  return {
-    sink,
-    events,
-    next(name: string): Promise<HostEvent> {
-      return new Promise((resolve) => waiters.push({ name, resolve }));
     },
   };
 }
@@ -139,6 +84,29 @@ function heldRunner() {
   };
 }
 
+/** One enrolled unix host and a reconnect-armed daemon driven by the fake clock. */
+async function reconnectFixture(options: {
+  readonly enroll?: () => Machine.Enrollment | undefined;
+  readonly events?: ReturnType<typeof eventCollector>["sink"];
+  readonly runner?: CodeRunner;
+} = {}) {
+  const hostPath = socketPath();
+  const host = await createMachineHost({
+    listen: { unix: hostPath },
+    enrollment: options.enroll ?? (() => enrollment),
+    events: options.events ?? { publish: () => undefined },
+    now: () => 7,
+  });
+  const clock = fakeScheduler();
+  const daemon = await attachMachineDaemon({
+    socketPath: hostPath,
+    offer: offer(),
+    ...(options.runner === undefined ? {} : { runner: options.runner }),
+    reconnect: { scheduler: clock, random: () => 1 },
+  });
+  return { host, clock, daemon };
+}
+
 describe("daemon reattach over a dropped transport", () => {
   test("drop fails pending once, jittered attempts reattach, old handle serves the replacement, refusal stops reconnect", async () => {
     const hostPath = socketPath();
@@ -151,7 +119,7 @@ describe("daemon reattach over a dropped transport", () => {
       events: collector.sink,
       now: () => 7,
     });
-    const proxy = await startProxy(proxyPath, hostPath);
+    const proxy = await startProxy(proxyPath, () => net.connect(hostPath));
     const clock = fakeScheduler();
     const randoms = [0.5, 1, 0.25, 1];
     const code = heldRunner();
@@ -201,7 +169,7 @@ describe("daemon reattach over a dropped transport", () => {
       expect((await within(third, "third schedule")).delay).toBe(Math.floor(0.25 * 1000));
 
       // The endpoint returns; the next attempt reattaches the SAME identity.
-      const revived = await startProxy(proxyPath, hostPath);
+      const revived = await startProxy(proxyPath, () => net.connect(hostPath));
       try {
         const reattached = collector.next("machine.attached");
         (await third).task();
@@ -245,19 +213,7 @@ describe("daemon reattach over a dropped transport", () => {
   });
 
   test("a refused initial attachment never schedules reconnect on disconnect", async () => {
-    const hostPath = socketPath();
-    const host = await createMachineHost({
-      listen: { unix: hostPath },
-      enrollment: () => undefined,
-      events: { publish: () => undefined },
-      now: () => 7,
-    });
-    const clock = fakeScheduler();
-    const daemon = await attachMachineDaemon({
-      socketPath: hostPath,
-      offer: offer(),
-      reconnect: { scheduler: clock, random: () => 1 },
-    });
+    const { host, clock, daemon } = await reconnectFixture({ enroll: () => undefined });
     expect(daemon.attachment).toEqual({ status: "refused", reason: "machine_not_enrolled" });
     const settled = daemon.closed;
     await host.close();
@@ -266,22 +222,8 @@ describe("daemon reattach over a dropped transport", () => {
   });
 
   test("explicit close during backoff cancels the scheduled attempt and releases drivers exactly once", async () => {
-    const hostPath = socketPath();
-    const collector = eventCollector();
-    const host = await createMachineHost({
-      listen: { unix: hostPath },
-      enrollment: () => enrollment,
-      events: collector.sink,
-      now: () => 7,
-    });
-    const clock = fakeScheduler();
     const code = heldRunner();
-    const daemon = await attachMachineDaemon({
-      socketPath: hostPath,
-      offer: offer(),
-      runner: code.runner,
-      reconnect: { scheduler: clock, random: () => 1 },
-    });
+    const { host, clock, daemon } = await reconnectFixture({ runner: code.runner });
     expect(daemon.attachment.status).toBe("attached");
     const scheduled = clock.nextScheduled();
     await host.close();
@@ -296,19 +238,7 @@ describe("daemon reattach over a dropped transport", () => {
   });
 
   test("backoff ceilings double from 250 ms and stay capped at 30 s", async () => {
-    const hostPath = socketPath();
-    const host = await createMachineHost({
-      listen: { unix: hostPath },
-      enrollment: () => enrollment,
-      events: { publish: () => undefined },
-      now: () => 7,
-    });
-    const clock = fakeScheduler();
-    const daemon = await attachMachineDaemon({
-      socketPath: hostPath,
-      offer: offer(),
-      reconnect: { scheduler: clock, random: () => 1 },
-    });
+    const { host, clock, daemon } = await reconnectFixture();
     try {
       expect(daemon.attachment.status).toBe("attached");
       let scheduled = clock.nextScheduled();

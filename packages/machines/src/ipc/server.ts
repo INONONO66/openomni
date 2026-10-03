@@ -338,6 +338,20 @@ function makeServerClose(core: ServerCore, stop: () => void): Effect.Effect<void
   }, catch: decodeIpcFailure("server.close") });
 }
 
+/** One Bun.listen door over the shared core: typed listen failure plus scoped idempotent close. */
+function bindDoor<T>(
+  core: ServerCore,
+  listen: () => T,
+  stop: (server: T) => void,
+): Effect.Effect<{ readonly server: T; readonly close: Effect.Effect<void, IpcError> }, IpcError, Scope.Scope> {
+  return Effect.gen(function* () {
+    const server = yield* Effect.try({ try: listen, catch: decodeIpcFailure("server.listen") });
+    const close = makeServerClose(core, () => stop(server));
+    yield* Effect.addFinalizer(() => Effect.orDie(close));
+    return { server, close };
+  });
+}
+
 export function createIpcServer(
   socketPath: string,
   handler: RequestHandler,
@@ -357,24 +371,19 @@ export function createIpcServer(
     }
 
     const core = makeServerCore(handler, options, dispatch);
-    const server = yield* Effect.try({ try: () => Bun.listen({
+    const door = yield* bindDoor(core, () => Bun.listen({
       unix: socketPath,
       socket: {
         open(socket: BunSocket) {
           core.open(socket);
         },
-        data: core.handlers.data,
-        drain: core.handlers.drain,
-        close: core.handlers.close,
+        ...core.handlers,
       },
-    }), catch: decodeIpcFailure("server.listen") });
-
-    const close = makeServerClose(core, () => {
+    }), (server) => {
       server.stop(true);
       unlinkIfExists(socketPath);
     });
-    yield* Effect.addFinalizer(() => Effect.orDie(close));
-    return { socketPath, ...core.api, close: () => close };
+    return { socketPath, ...core.api, close: () => door.close };
   });
 }
 
@@ -392,7 +401,7 @@ export function createIpcTcpServer(
   return Effect.gen(function* () {
     const dispatch = yield* makeDispatcher;
     const core = makeServerCore(handler, options, dispatch);
-    const server = yield* Effect.try({ try: () => Bun.listen({
+    const door = yield* bindDoor(core, () => Bun.listen({
       hostname: spec.host,
       port: spec.port,
       tls: {
@@ -415,15 +424,10 @@ export function createIpcTcpServer(
           }
           core.open(socket, certificateKeyFingerprint(raw));
         },
-        data: core.handlers.data,
-        drain: core.handlers.drain,
-        close: core.handlers.close,
+        ...core.handlers,
       },
-    }), catch: decodeIpcFailure("server.listen") });
-
-    const close = makeServerClose(core, () => server.stop(true));
-    yield* Effect.addFinalizer(() => Effect.orDie(close));
-    return { host: spec.host, port: server.port, ...core.api, close: () => close };
+    }), (server) => server.stop(true));
+    return { host: spec.host, port: door.server.port, ...core.api, close: () => door.close };
   });
 }
 
