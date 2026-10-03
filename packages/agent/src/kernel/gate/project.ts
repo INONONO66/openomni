@@ -1,9 +1,4 @@
-import {
-  canonicalDigest,
-  type GateRow,
-  type PlainValue,
-  type PointId,
-} from "@openomni/protocol";
+import type { GateRow, PlainValue, PointId } from "@openomni/protocol";
 import { matchesMessage, type MessagePolicyContext } from "./match";
 import { GateComposeError, type GatePointTable } from "../points";
 import { compileGateRows, type CompiledGate } from "./compose";
@@ -35,12 +30,19 @@ function projectedWhen(match: Match): Record<string, PlainValue> {
 
 /** A rewrite row's real fields: the first path segments its transform touches. */
 function transformFields(config: PlainValue | undefined): string[] {
-  if (config === null || typeof config !== "object" || Array.isArray(config) || config === undefined)
+  if (
+    config === null ||
+    typeof config !== "object" ||
+    Array.isArray(config) ||
+    config === undefined
+  )
     return [];
   const declared = Array.isArray(config.fields) ? config.fields : undefined;
   const paths = Array.isArray(config.paths) ? config.paths : undefined;
   const segments = (declared ?? paths ?? []).flatMap((entry) =>
-    typeof entry === "string" ? [declared === undefined ? (entry.split(".")[0] ?? entry) : entry] : [],
+    typeof entry === "string"
+      ? [declared === undefined ? (entry.split(".")[0] ?? entry) : entry]
+      : [],
   );
   return [...new Set(segments)];
 }
